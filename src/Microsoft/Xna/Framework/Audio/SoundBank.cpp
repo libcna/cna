@@ -184,12 +184,18 @@ namespace Microsoft::Xna::Framework::Audio
         SweepFireAndForget();
 
         std::unique_ptr<Cue> cue(GetCue(name));
-        cue->Play();
-        // FNA computes the 3D dsp settings before FACTSoundBank_Play3D, so the cue is already
-        // positioned from its very first output frame -- Apply3D() here runs synchronously,
-        // before this thread's next real audio callback, so there is no observable difference.
+        // AUDIO-ORDER-001 (external audit, 2026-07-16): Apply3D() before Play(), not after -- FNA
+        // computes the 3D dsp settings before FACTSoundBank_Play3D so the cue is positioned from
+        // its very first output frame; calling Apply3D() after Play() only matched that in
+        // spirit (synchronously, before the next real audio callback), not literally. Now that
+        // Cue::Apply3D() persists its result (has3D_/pending3DListener_/pending3DEmitter_) even
+        // with no active instances yet, and Cue::Play()'s per-wave loop seeds every new instance
+        // from it before that instance's own Play() call, calling this first means every instance
+        // this Play() creates starts already positioned, matching FNA's ordering exactly instead
+        // of approximately.
         if (listener && emitter)
             cue->Apply3D(*listener, *emitter);
+        cue->Play();
         // Keep the Cue alive so its SoundEffectInstances (and their SDL3_mixer
         // tracks) are not destroyed before the sound has had a chance to play.
         fireAndForget_.push_back({std::move(cue), std::chrono::steady_clock::now()});

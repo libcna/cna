@@ -55,13 +55,31 @@ namespace CNA::Internal::Audio
 
         void skip(std::size_t n)
         {
-            if (cur + n > end) throw std::runtime_error("XACT parse: skip past end");
+            // AUD-11-005: matches seek()'s own AUDIO-PARSER-001 fix below -- validate in the
+            // integer domain BEFORE ever forming `cur + n`. Computing that pointer first is
+            // undefined behavior for an adversarially large `n` (e.g. a caller-side field-size
+            // subtraction that underflowed to a huge uint32_t/size_t value), even though it
+            // doesn't reliably trip ASan/UBSan on a typical 64-bit target (the resulting pointer
+            // value usually still lands within the process's mapped address space, so neither the
+            // pointer-overflow nor address sanitizers have anything to flag unless it's actually
+            // dereferenced) -- it's still real UB per the standard, and defense-in-depth against a
+            // caller relying solely on this bounds check the way the compact XWB entry loop
+            // (XactParser.cpp) does.
+            const std::size_t remaining = static_cast<std::size_t>(end - cur);
+            if (n > remaining) throw std::runtime_error("XACT parse: skip past end");
             cur += n;
         }
 
         void seek(uint32_t absOffset)
         {
-            if (start + absOffset > end)
+            // AUDIO-PARSER-001 (external audit, 2026-07-16): validate against the buffer's own
+            // size as a plain integer comparison BEFORE ever forming `start + absOffset` --
+            // computing that pointer first (the old `if (start + absOffset > end)`) is undefined
+            // behavior for a corrupt/attacker-controlled absOffset large enough to send the
+            // pointer arithmetic outside the buffer, which a malformed .xsb/.xwb/.xgs offset
+            // field can trivially supply.
+            const std::size_t size = static_cast<std::size_t>(end - start);
+            if (static_cast<std::size_t>(absOffset) > size)
                 throw std::runtime_error("XACT parse: seek past end");
             cur = start + absOffset;
         }
@@ -71,9 +89,20 @@ namespace CNA::Internal::Audio
         /// Read a null-terminated string from the current position, advance past it.
         std::string cstr()
         {
+            // AUDIO-PARSER-001 (external audit, 2026-07-16): strnlen() returning exactly `maxlen`
+            // means no null terminator was found within the remaining buffer at all (a corrupt or
+            // truncated file) -- the old code didn't check for this and unconditionally advanced
+            // `cur += len + 1`, pushing `cur` one byte past `end`. That single overrun then made
+            // every later use of `end - cur` in this same function compute a negative
+            // std::ptrdiff_t that wraps to a huge std::size_t once cast to `maxlen`, turning the
+            // *next* cstr() call's strnlen() into a real out-of-bounds read over corrupt input.
+            // Throwing here instead matches every other Ctx accessor's own out-of-bounds
+            // contract (u8/u16/u32/skip/seek all already throw rather than silently continue).
             const char* p = reinterpret_cast<const char*>(cur);
             std::size_t maxlen = static_cast<std::size_t>(end - cur);
             std::size_t len = strnlen(p, maxlen);
+            if (len == maxlen)
+                throw std::runtime_error("XACT parse: unterminated string");
             std::string s(p, len);
             cur += len + 1;
             return s;
@@ -515,10 +544,39 @@ namespace CNA::Internal::Audio
         ctx.seek(segOffset[0]);
         uint32_t wbFlags             = ctx.u32();
         uint32_t entryCount          = ctx.u32();
+        // AUD-11-026 (found via fuzzing prep): every other count field this parser reads
+        // (categoryCount/variableCount/rpcCount/pointCount/wavebankCount/soundCount/totalCues)
+        // is naturally bounded by its own 8/16-bit field width, but entryCount is a full
+        // uint32_t (up to ~4.29 billion) fed straight into `result.entries.resize(entryCount)`
+        // below with no validation at all -- unlike a quick, clean std::bad_alloc, a resize this
+        // large can succeed via Linux's virtual-memory overcommit (reserving address space
+        // without committing physical pages) and then hang for a long time -- or trigger the OOM
+        // killer -- while default-constructing billions of entries, a real DoS-class defect, not
+        // just a theoretical one. A legitimate entryCount can never exceed the number of bytes
+        // actually left in the file (each entry needs at least 1 real byte to exist) -- this
+        // bound is deliberately generous (the real per-entry minimum is at least 4 bytes even for
+        // the most compact format) but cheap, exact, and sufficient to keep the allocation on the
+        // same order of magnitude as the file itself. Matches this plan's established D7 policy
+        // (throw rather than silently attempt a huge allocation) and XnbContainerFuzzTests.cpp's
+        // own explicit standard that an uncaught std::bad_alloc is "an allocation-bomb guard gap,
+        // not an acceptable outcome."
+        if (static_cast<uint64_t>(entryCount) > static_cast<uint64_t>(ctx.end - ctx.start))
+            throw std::runtime_error("XWB: corrupt wave bank (entryCount implausibly large for the file size)");
         {
-            // Bank name (64 bytes, null-terminated)
+            // AUD-11-017/018 (found via ASan): Bank name (64 bytes, null-terminated). The old
+            // `strnlen(p, 64)` scanned up to 64 bytes from `p` regardless of how many real bytes
+            // actually remained in the buffer -- for a truncated/corrupt file with fewer than 64
+            // bytes left here, this reads past the end of `fileData`'s heap allocation before the
+            // `ctx.skip(64)` right below ever gets a chance to catch the truncation. Confirmed as
+            // a genuine, empirically reproduced ASan heap-buffer-overflow (a standalone repro
+            // against a deliberately truncated fixture), not just a theoretical concern -- capping
+            // the scan to the real remaining bytes first, mirroring `cstr()`'s own established
+            // AUDIO-PARSER-001 pattern, means `strnlen` never reads past `ctx.end`; the `skip(64)`
+            // immediately after still throws cleanly on a genuinely truncated file, exactly as
+            // before, just without an OOB read on the way there.
             const char* p = reinterpret_cast<const char*>(ctx.cur);
-            result.bankName = std::string(p, strnlen(p, 64));
+            const std::size_t nameMaxLen = std::min<std::size_t>(64, static_cast<std::size_t>(ctx.end - ctx.cur));
+            result.bankName = std::string(p, strnlen(p, nameMaxLen));
             ctx.skip(64);
         }
         uint32_t entryMetaDataSize   = ctx.u32();
@@ -536,11 +594,50 @@ namespace CNA::Internal::Audio
 
         if (isCompact)
         {
+            // AUD-11-003 (2026-07-17 deep audit): `alignment` is an unvalidated uint32_t read
+            // straight from the file. Zero would silently make every compact entry's offset
+            // collapse to 0 (every entry claiming the same start, not a crash but genuinely wrong
+            // data -- a real "distorted/missing audio" symptom class, not just a theoretical
+            // hardening concern); an oversized value could overflow the `rawOffsetUnits[i] *
+            // alignment` multiplication below in 32-bit arithmetic and silently wrap to a wrong
+            // (but still in-bounds-looking) offset. D7: throw rather than silently produce wrong
+            // data, same policy already applied to the deviation/offset checks further down.
+            if (alignment == 0)
+                throw std::runtime_error("XWB: corrupt compact wave bank (zero alignment)");
+
+            // AUD-11-005: entryMetaDataSize must be at least 4 to hold the compact per-entry u32
+            // (offsetUnits:21, deviation:11) the loop below unconditionally reads via ctx.u32().
+            // Unlike the non-compact branch's carefully graduated conditional reads (which
+            // structurally guarantee the bytes consumed never exceed entryMetaDataSize, however
+            // small it is), this branch has no such guard: an adversarial/corrupt value smaller
+            // than 4 would make `entryMetaDataSize - 4` (both uint32_t) underflow to a huge value
+            // passed straight to ctx.skip(). ctx.skip()'s own bounds check already prevents this
+            // from ever reading/writing out of bounds (confirmed empirically: neither GCC's nor
+            // Clang's ASan+UBSan flag anything for this exact pattern, since the resulting pointer
+            // value stays within the process's mapped address space and is only ever compared,
+            // never dereferenced) -- but relying on that generic "skip past end" catch instead of
+            // failing right here, with a diagnostic naming the actual problem, is worse for
+            // anyone debugging a real corrupt file. D7: throw rather than silently produce wrong
+            // data, same policy as the alignment check just above.
+            if (entryMetaDataSize < 4)
+                throw std::runtime_error("XWB: corrupt compact wave bank (entryMetaDataSize too small)");
+
             // Compact format: 32-bit per entry: dwOffset (21 bits, units of `alignment`),
             // dwLengthDeviation (11 bits). The deviation is how many bytes shorter than the
-            // aligned span the real audio is, not the length itself, so the length must come
-            // from the gap to the next entry's offset (or to the end of the wave-data segment
-            // for the last entry) minus that deviation.
+            // aligned span the real audio is, not the length itself, so a non-last entry's
+            // length comes from the gap to the next entry's offset minus that deviation.
+            //
+            // A-12 (2026-07-17 deep audit): the LAST entry is different -- verified against the
+            // real, current, actively-maintained FAudio source (FACT_internal.c's compact-entry
+            // parsing, ~line 3106-3124): its length is the remainder of the wave-data segment
+            // with NO deviation subtracted at all, which is exactly what the `else` branch below
+            // already does. (FAudio's own non-last-entry computation in that same function
+            // reads as a genuine, long-standing bug -- it subtracts an entry's own
+            // just-computed offset from itself, always yielding zero, unchanged since at least a
+            // 2018-12-18 commit -- CNA deliberately does not replicate that, computing a real
+            // length from the gap to the next entry's offset instead; see
+            // CompactWaveBankComputesLengthsFromConsecutiveOffsets/
+            // CompactWaveBankLastEntryLengthIgnoresItsOwnDeviation in XactParserTests.cpp.)
             std::vector<uint32_t> rawOffsetUnits(entryCount);
             std::vector<uint32_t> deviations(entryCount);
             for (uint32_t i = 0; i < entryCount; ++i)
@@ -573,7 +670,14 @@ namespace CNA::Internal::Audio
 
             for (uint32_t i = 0; i < entryCount; ++i)
             {
-                uint32_t offset = rawOffsetUnits[i] * alignment;
+                // AUD-11-003: compute in 64-bit and validate before narrowing -- rawOffsetUnits[i]
+                // is up to 21 bits and alignment is a fully unconstrained uint32_t from the file,
+                // so their product can exceed UINT32_MAX and silently wrap in 32-bit arithmetic,
+                // producing a wrong-but-plausible-looking dataOffset instead of failing loudly.
+                const uint64_t offset64 = static_cast<uint64_t>(rawOffsetUnits[i]) * alignment;
+                if (offset64 > 0xFFFFFFFFu)
+                    throw std::runtime_error("XWB: corrupt compact entry (offset overflows 32 bits)");
+                uint32_t offset = static_cast<uint32_t>(offset64);
 
                 result.entries[i].format          = static_cast<XwbFormat>(compactFmtTag);
                 result.entries[i].channels        = compactChannels;
@@ -585,10 +689,10 @@ namespace CNA::Internal::Audio
                 result.entries[i].dataOffset    = segOffset[4] + offset;
 
                 // dwLengthDeviation is the aligned span's slack in bytes, not the length
-                // itself, so the real length must not exceed the gap to the next entry's
-                // offset (or to the end of the wave-data segment for the last entry). Check
-                // in 64-bit before narrowing so a corrupt/adversarial file can't underflow
-                // this into a huge uint32_t value (D7: throw rather than silently clamp).
+                // itself, so a non-last entry's real length must not exceed the gap to the next
+                // entry's offset. Check in 64-bit before narrowing so a corrupt/adversarial file
+                // can't underflow this into a huge uint32_t value (D7: throw rather than
+                // silently clamp).
                 if (i + 1 < entryCount)
                 {
                     const uint64_t nextOffset = static_cast<uint64_t>(rawOffsetUnits[i + 1]) * alignment;
@@ -599,6 +703,8 @@ namespace CNA::Internal::Audio
                 }
                 else
                 {
+                    // Last entry: remainder of the wave-data segment, deviation NOT subtracted --
+                    // confirmed to match real FAudio exactly (see the comment above this loop).
                     if (offset > segLength[4])
                         throw std::runtime_error("XWB: corrupt compact entry (offset exceeds wave-data segment)");
                     result.entries[i].dataLength = segLength[4] - offset;
@@ -679,8 +785,15 @@ namespace CNA::Internal::Audio
             ctx.seek(segOffset[3]);
             for (uint32_t i = 0; i < entryCount; ++i)
             {
+                // AUD-11-017/018: entryNameElemSize is a fully unvalidated uint32_t read straight
+                // from the file -- capping the strnlen scan to the real remaining bytes first
+                // (same fix and same reasoning as the bankName field above) means a corrupt/huge
+                // value can't drive an out-of-bounds read here either; the ctx.skip() right after
+                // still throws cleanly on a genuinely truncated file.
                 const char* p = reinterpret_cast<const char*>(ctx.cur);
-                result.entryNames[i] = std::string(p, strnlen(p, entryNameElemSize));
+                const std::size_t nameMaxLen = std::min<std::size_t>(
+                    entryNameElemSize, static_cast<std::size_t>(ctx.end - ctx.cur));
+                result.entryNames[i] = std::string(p, strnlen(p, nameMaxLen));
                 ctx.skip(entryNameElemSize);
             }
         }
@@ -784,8 +897,13 @@ namespace CNA::Internal::Audio
             wc.seek(static_cast<uint32_t>(wavebankNameOffset));
             for (uint8_t i = 0; i < wavebankCount; ++i)
             {
+                // AUD-11-017/018: same fix and reasoning as XWB's bankName/entryNames fields --
+                // cap the strnlen scan to the real remaining bytes first so a truncated/corrupt
+                // file can't drive an out-of-bounds read here; wc.skip(64) right after still
+                // throws cleanly on genuine truncation.
                 const char* p = reinterpret_cast<const char*>(wc.cur);
-                result.wavebankNames[i] = std::string(p, strnlen(p, 64));
+                const std::size_t nameMaxLen = std::min<std::size_t>(64, static_cast<std::size_t>(wc.end - wc.cur));
+                result.wavebankNames[i] = std::string(p, strnlen(p, nameMaxLen));
                 wc.skip(64);
             }
         }

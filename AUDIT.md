@@ -67,7 +67,7 @@ and corrected or confirmed as expected C++ adaptations.
 
 ## `Microsoft::Xna::Framework::Audio`
 
-> **Last synchronized against real code: 2026-07-06 (Phase 10 audit, `plan_audio.md`).** For the
+> **Last synchronized against real code: 2026-07-16 (Phase 13 audit, `plan_audio.md`).** For the
 > full, up-to-date compatibility table (implemented / approximate / intentionally unsupported /
 > not yet implemented) and the SDL3_mixer-vs-FAudio backend limitations behind these notes, see
 > `docs/xna-4-api-coverage.md`'s Audio section. This table is a per-class summary only.

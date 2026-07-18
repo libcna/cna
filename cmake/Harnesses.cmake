@@ -73,6 +73,73 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task AUD-04-008: standalone mixer-destroy-with-active-voice harness ---
+# A tiny standalone (non-GTest) executable that plays a SoundEffectInstance, then calls
+# CNA::Internal::Audio::DestroyMixer() directly while it's still alive, then exercises every
+# operation still reachable on the now-orphaned instance. Needs its own process so a genuine
+# use-after-free crash (if AudioMixer.hpp's documented "no way to know about a live instance's
+# lifetime" gap is real) is isolated from the shared CnaTests binary -- see the harness file's own
+# top-of-file comment / tools/audio/audio_no_hardware_harness.cpp for the same "needs its own
+# process" precedent.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_audio_mixer_destroy_active_static_voice_harness
+        tools/audio/mixer_destroy_active_static_voice_harness.cpp
+    )
+    target_link_libraries(cna_audio_mixer_destroy_active_static_voice_harness
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
+# --- Task AUD-04-009: standalone mixer-destroy-with-active-dynamic-voice harness ---
+# The DynamicSoundEffectInstance counterpart to cna_audio_mixer_destroy_active_static_voice_harness
+# just above -- same hazard/fix, but exercised through DynamicSoundEffectInstance's own independent
+# track_ access sites. See the harness file's own top-of-file comment for why this needs a separate
+# harness from the static-voice one, not just a shared one.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_audio_mixer_destroy_active_dynamic_voice_harness
+        tools/audio/mixer_destroy_active_dynamic_voice_harness.cpp
+    )
+    target_link_libraries(cna_audio_mixer_destroy_active_dynamic_voice_harness
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
+# --- plan_audio.md AUD-06-025: standalone XNB SoundEffect metadata inspection tool ---
+# A small standalone (non-GTest) executable that loads a .xnb SoundEffect asset through the real
+# production ContentManager::Load<SoundEffect>() path and emits its metadata (name, decoded
+# duration) as stable single-line JSON, without ever calling Play()/CreateInstance() -- for
+# debugging and CI manifests. See the tool's own top-of-file comment for its exact JSON shape.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_xnb_audio_metadata_dump
+        tools/audio/xnb_audio_metadata_dump.cpp
+    )
+    target_link_libraries(cna_xnb_audio_metadata_dump
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
+# --- plan_audio.md AUD-11-028: standalone XWB wave-bank inspection/extraction tool ---
+# A small standalone (non-GTest) executable that parses a .xwb wave bank via the real
+# CNA::Internal::Audio::ParseXwb() and emits every entry's metadata as stable JSON, optionally
+# also exporting each entry's real audio payload as a playable .wav file (via the same shared
+# WavWrapper technique WaveBank.cpp itself uses) for offline diagnosis. Never plays anything.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_xwb_inspect
+        tools/audio/xwb_inspect.cpp
+    )
+    target_link_libraries(cna_xwb_inspect
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
 # --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
 # Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see

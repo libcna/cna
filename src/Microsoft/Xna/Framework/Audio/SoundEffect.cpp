@@ -3,9 +3,12 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <cmath>
 #include <cstring>
+#include <iostream>
 #include <istream>
-#include <mutex>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
@@ -49,6 +52,11 @@ namespace Microsoft::Xna::Framework::Audio
         v.erase(std::remove(v.begin(), v.end(), instance), v.end());
     }
 
+    std::size_t SoundEffect::GetLiveInstanceCountInternal() const
+    {
+        return impl_ ? impl_->instances.size() : 0;
+    }
+
     // --- static members ---
 
     float SoundEffect::MasterVolume_   = 1.0f;
@@ -77,7 +85,53 @@ namespace Microsoft::Xna::Framework::Audio
         {
             bool  active = false; // false: pan == 0 at Play() time, matrix is the identity
             float ll = 1.0f, rl = 0.0f, lr = 0.0f, rr = 1.0f;
+
+            // AUD-15-008: intrusive link for PendingPanStateCleanup's lock-free queue below --
+            // reuses this already-heap-allocated object as its own queue node instead of a
+            // separate std::vector entry, so queuing one for cleanup never allocates.
+            FireAndForgetPanState* next = nullptr;
         };
+
+        // AUD-05-006: best-effort detection that the caller passed whole-file container bytes
+        // (a common misuse: WAV/RIFF, Ogg, MP3/ID3, or XNB) to a raw PCM16LE constructor instead
+        // of raw sample data. These constructors have no way to reject this outright -- a RIFF
+        // header, read as PCM16 samples, is still "valid" 16-bit data, just garbage -- so this
+        // only ever emits a diagnostic, never throws (see the constructor doc comment,
+        // AUD-05-005: the correct fix for real misuse is `SoundEffect(const std::string&)`
+        // instead, not a rejection here). Returns nullptr if no known signature is found.
+        const char* DetectLikelyContainerSignature(const SharpRuntime::bytecs* data, std::size_t len)
+        {
+            if (len >= 4 && std::memcmp(data, "RIFF", 4) == 0) return "RIFF/WAVE";
+            if (len >= 4 && std::memcmp(data, "OggS", 4) == 0) return "Ogg";
+            if (len >= 3 && std::memcmp(data, "ID3", 3) == 0) return "MP3 (ID3 tag)";
+            if (len >= 3 && data[0] == 'X' && data[1] == 'N' && data[2] == 'B') return "XNB";
+            return nullptr;
+        }
+
+        // AUD-05-007: best-effort detection that raw PCM16 statistics look implausible for real
+        // audio (e.g. float32 data byte-reinterpreted as PCM16, or Ogg/MP3-compressed data
+        // without a recognizable header). Compressed/encoded bitstreams are specifically designed
+        // to approach maximum byte-level entropy (~8 bits/byte, statistically close to random
+        // noise); real quantized 16-bit audio essentially never does, even for loud/percussive
+        // content -- adjacent samples/channels stay correlated, and typical byte-value
+        // distributions are skewed rather than uniform. Advisory only, like
+        // DetectLikelyContainerSignature above -- never throws, no release rejection, and the
+        // 7.9-bit threshold (out of a theoretical max of 8.0) is deliberately conservative to
+        // avoid flagging genuinely loud/noisy game audio.
+        bool LooksImplausiblyHighEntropyForPcm16(const SharpRuntime::bytecs* data, std::size_t len)
+        {
+            if (len < 256) return false; // too short to estimate entropy meaningfully
+            std::array<std::size_t, 256> histogram{};
+            for (std::size_t i = 0; i < len; ++i) histogram[data[i]]++;
+            double entropy = 0.0;
+            for (std::size_t count : histogram)
+            {
+                if (count == 0) continue;
+                double p = static_cast<double>(count) / static_cast<double>(len);
+                entropy -= p * std::log2(p);
+            }
+            return entropy > 7.9;
+        }
 
         // Applies the already-computed crossfeed matrix (see FireAndForgetPanState above) to
         // interleaved stereo PCM -- matches ApplyPanCrossfeed's identical transform in
@@ -120,16 +174,29 @@ namespace Microsoft::Xna::Framework::Audio
         // otherwise the last fire-and-forget sound(s) played before exit, with no later Play()
         // call to opportunistically drain them, would show up as a real (if tiny and harmless)
         // ASan leak report, which this project's testing culture treats as a bar worth clearing.
+        //
+        // AUD-15-008: Queue() runs from OnFireAndForgetStopped, a real SDL3_mixer track-stopped
+        // callback that fires on the mixer thread (see that function's own comment) -- real-time
+        // audio code must not block on a mutex or allocate. The original implementation did both
+        // (std::mutex + std::vector::push_back, which can reallocate). Rewritten as a classic
+        // lock-free Treiber-stack push: FireAndForgetPanState now carries its own intrusive
+        // `next` link (already heap-allocated at Play() time, so pushing it costs nothing but an
+        // atomic CAS), and Drain() atomically claims the whole chain in one exchange.
         struct PendingPanStateCleanup
         {
-            std::mutex mutex;
-            std::vector<FireAndForgetPanState*> pending;
+            std::atomic<FireAndForgetPanState*> head{nullptr};
 
             void Queue(FireAndForgetPanState* state)
             {
                 if (!state) return;
-                std::lock_guard<std::mutex> lock(mutex);
-                pending.push_back(state);
+                state->next = head.load(std::memory_order_relaxed);
+                while (!head.compare_exchange_weak(
+                    state->next, state,
+                    std::memory_order_release, std::memory_order_relaxed))
+                {
+                    // state->next is updated to the current head by compare_exchange_weak on
+                    // failure, so the retry always links onto the latest head.
+                }
             }
 
             // Called from Play() (main/calling thread) before creating a new fire-and-forget
@@ -138,13 +205,13 @@ namespace Microsoft::Xna::Framework::Audio
             // here is safe.
             void Drain()
             {
-                std::vector<FireAndForgetPanState*> toDelete;
+                FireAndForgetPanState* node = head.exchange(nullptr, std::memory_order_acquire);
+                while (node)
                 {
-                    std::lock_guard<std::mutex> lock(mutex);
-                    toDelete.swap(pending);
+                    FireAndForgetPanState* next = node->next;
+                    delete node;
+                    node = next;
                 }
-                for (auto* state : toDelete)
-                    delete state;
             }
 
             ~PendingPanStateCleanup()
@@ -266,6 +333,23 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
 #ifdef SOUND_ENABLED
+        if (const char* sig = DetectLikelyContainerSignature(buffer.data() + off, cnt))
+        {
+            std::cerr << "[SoundEffect] Warning: raw PCM buffer starts with a " << sig
+                      << " signature, not raw PCM16LE sample data -- passing whole-file bytes "
+                      << "to this constructor decodes the container's header as audio samples, "
+                      << "producing garbage output. Use SoundEffect(const std::string&) to load "
+                      << "a file instead.\n";
+        }
+        else if (LooksImplausiblyHighEntropyForPcm16(buffer.data() + off, cnt))
+        {
+            std::cerr << "[SoundEffect] Warning: raw PCM buffer has implausibly high byte-level "
+                      << "entropy for real 16-bit audio -- this often indicates compressed "
+                      << "(Ogg/MP3, without a recognizable header) or otherwise non-PCM16 data "
+                      << "(e.g. float32 samples byte-reinterpreted as PCM16) was passed to this "
+                      << "constructor instead of raw PCM16LE samples.\n";
+        }
+
         SDL_AudioSpec spec{};
         spec.format   = SDL_AUDIO_S16LE;
         spec.channels = static_cast<int>(channels);

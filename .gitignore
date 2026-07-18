@@ -33,6 +33,7 @@ cmake-build-devices-tsan/*
 cmake-build-devices-ubsan/*
 cmake-build-windows/*
 cmake-build-tests/*
+cmake-build-ubsan/*
 __pycache__/
 *.pyc
 

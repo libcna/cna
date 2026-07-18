@@ -2,6 +2,7 @@
 #pragma once
 #include "CNA/CNAHelper.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -98,11 +99,13 @@ namespace Microsoft::Xna::Framework::Audio
          */
         void Stop(bool immediate) override;
 
-        /** @brief Pauses playback of this instance. */
-        void Pause() override;
-
-        /** @brief Resumes a paused instance. */
-        void Resume() override;
+        // Pause()/Resume() are NOT overridden here (P13-DYNAMIC-001): now that this class shares
+        // the inherited `track_` with SoundEffectInstance instead of its own separate
+        // `dynamicTrack_`, the base class's own virtual Pause()/Resume() already operate on the
+        // right field and need no dynamic-specific override -- Resume()'s own `Play()` call
+        // dispatches virtually to this class's override regardless of which class's Resume() body
+        // runs it. Previously overridden here solely because of the old field split (CP-15); that
+        // reason no longer applies.
 
         /**
          * @brief Submits a complete 16-bit PCM byte buffer for playback.
@@ -114,9 +117,16 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Submits a range from a 16-bit PCM byte buffer for playback.
          *
+         * If SubmitFloatBufferEXT() was previously used on this instance while it is not
+         * currently Stopped, throws System::InvalidOperationException instead of feeding int16
+         * bytes into a live float-format stream (a NOXNA safety guard; real XNA has no float
+         * submission path at all).
+         *
          * @param buffer PCM audio data.
          * @param offset Byte offset into the buffer.
          * @param count  Number of bytes to submit.
+         * @throws System::InvalidOperationException if this instance is currently playing/paused
+         *         in float mode (see SubmitFloatBufferEXT()).
          */
         void SubmitBuffer(const std::vector<SharpRuntime::bytecs>& buffer,
                           SharpRuntime::intcs offset,
@@ -132,9 +142,15 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Submits a range from a float32 sample buffer for playback.
          *
+         * Switches this instance to float mode; throws System::InvalidOperationException if
+         * called while playing/paused in int16 mode. See SubmitBuffer()'s symmetric guard for
+         * switching back.
+         *
          * @param buffer Float32 audio samples.
          * @param offset Sample offset into the buffer.
          * @param count  Number of samples to submit.
+         * @throws System::InvalidOperationException if this instance is currently playing/paused
+         *         in int16 mode.
          */
         NOXNA void SubmitFloatBufferEXT(const std::vector<float>& buffer,
                                          SharpRuntime::intcs offset,
@@ -161,10 +177,16 @@ namespace Microsoft::Xna::Framework::Audio
     private:
         SharpRuntime::intcs sampleRate_;
         AudioChannels       channels_;
-        bool                isFloat_ = false;
-        bool                streamIsFloat_ = false; // format the live audioStream_ was created with
 
-        void* dynamicTrack_   = nullptr;
+        // AUD-15-006: written by SubmitBuffer()/SubmitFloatBufferEXT() (this class's own
+        // documented producer-thread-callable entry points) and read by EnsureStream() (called
+        // from Play(), the game thread) -- a real TSAN-confirmed data race as a plain bool, since
+        // neither side takes queueMutex_ for it (EnsureStream() runs before a track/stream
+        // exists to synchronize around, and this flag must be visible before that point).
+        std::atomic<bool>   isFloat_ = false;
+
+        bool                streamIsFloat_ = false; // format the live audioStream_ was created with; game-thread-only, no lock needed
+
         void* audioStream_    = nullptr; // SDL_AudioStream*
 
         mutable std::mutex queueMutex_;
@@ -183,6 +205,14 @@ namespace Microsoft::Xna::Framework::Audio
         void EnsureStream();
         void DestroyStream();
         void SubmitQueuedToStream();
+
+        // AUD-15-006: the actual submit logic, extracted so SubmitBuffer()/SubmitFloatBufferEXT()
+        // can drive it from within their own already-held queueMutex_ lock (matching FNA's real
+        // SubmitBuffer, which checks State and submits to the native voice atomically under its
+        // own queuedBuffers lock) without double-locking the non-recursive queueMutex_. Caller
+        // must already hold queueMutex_.
+        void SubmitQueuedToStreamLocked();
+
         void StopInternal();
     };
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <istream>
 #include <memory>
 #include <string>
@@ -20,6 +21,7 @@ namespace Microsoft::Xna::Framework::Audio
     class SoundEffect final : public System::Object, public System::IDisposable
     {
         friend class SoundEffectInstance;
+        NOXNA friend struct SoundEffectTestAccess;
 
     private:
         class Impl;
@@ -49,6 +51,12 @@ namespace Microsoft::Xna::Framework::Audio
         static void RegisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
         static void UnregisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
 
+        // AUD-15-005: test-only introspection into Impl::instances' real size, so a stress test
+        // can directly verify the live-instance registry actually shrinks back down instead of
+        // only inferring it indirectly (e.g. via wall-clock timing, which turned out not to
+        // reliably catch a deliberately-broken UnregisterInstance() at a few thousand entries).
+        [[nodiscard]] std::size_t GetLiveInstanceCountInternal() const;
+
     public:
         /**
          * @brief Constructs a SoundEffect by loading from a file path.
@@ -60,7 +68,15 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Constructs a SoundEffect from a raw 16-bit PCM buffer.
          *
-         * @param buffer     PCM audio data.
+         * AUD-05-005: `buffer` must be headerless, little-endian, signed 16-bit PCM samples --
+         * NOT a WAV/RIFF file, not Ogg/MP3-compressed data, and not an XNB asset. Passing an
+         * entire file's bytes here (rather than just its raw sample data) is a common mistake:
+         * the leading container header (e.g. a WAV `RIFF`/`WAVE`/`fmt ` chunk) is misread as
+         * audio samples, producing loud noise or silence rather than a clean failure. Use
+         * `SoundEffect(const std::string&)` (the file-path constructor) to load a real audio
+         * file, including WAV, instead.
+         *
+         * @param buffer     Raw signed 16-bit PCM sample data (no container/file header).
          * @param sampleRate Sample rate in Hz.
          * @param channels   Channel layout (Mono or Stereo).
          */
@@ -71,7 +87,11 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Constructs a SoundEffect from a range within a PCM buffer with loop points.
          *
-         * @param buffer      PCM audio data.
+         * AUD-05-005: see the other raw-buffer constructor's doc comment -- `buffer` (or rather,
+         * the `[offset, offset + count)` range within it) must be headerless, little-endian,
+         * signed 16-bit PCM samples, not a WAV/container file's raw bytes.
+         *
+         * @param buffer      Raw signed 16-bit PCM sample data (no container/file header).
          * @param offset      Byte offset into the buffer.
          * @param count       Number of bytes to use.
          * @param sampleRate  Sample rate in Hz.

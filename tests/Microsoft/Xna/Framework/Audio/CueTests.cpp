@@ -864,6 +864,86 @@ namespace
         return data;
     }
 
+    // AUD-11-016: same layout as BuildApply3DXsbFixtureBytes, but referencing a wave bank name
+    // that is deliberately never registered with any engine anywhere in this test binary
+    // (guaranteed-unique -- no other fixture in this file uses this name), so
+    // Cue::Play()'s `AudioEngine::FindWaveBank()` call is guaranteed to fail and take the
+    // "!wb" diagnostic path, regardless of what other tests have already run and registered
+    // their own wave banks as persistent function-local statics.
+    constexpr const char* kNeverRegisteredWaveBankName = "AUD11016NeverRegisteredWaveBank";
+
+    std::vector<uint8_t> BuildUnresolvableWaveBankXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "UnresolvableWaveBankCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "UnresolvableWaveBankSoundBank", bankNameSize);
+        AppendPadded(data, kNeverRegisteredWaveBankName, 64);
+
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    SoundBank& SharedUnresolvableWaveBankBank()
+    {
+        static SoundBank sb(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "unresolvable_wavebank.xsb", BuildUnresolvableWaveBankXsbFixtureBytes()));
+        return sb;
+    }
+
     WaveBank& SharedApply3DWaveBank()
     {
         static WaveBank wb(&SharedEngine(), WriteFixture(
@@ -2646,6 +2726,49 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
     }
 }
 
+// AUDIO-001 finding 4: Cue::Apply3D() called BEFORE the cue's first Play() has nothing in
+// active_ to forward to yet, so without Cue's own pending-3D cache this would be silently lost
+// -- Play() would create a brand-new instance with no spatial state at all until the next real
+// Apply3D() call.
+TEST(CueTest, Apply3DBeforePlaySeedsSpatialStateOntoNewlyCreatedInstance)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+
+        AudioListener listener; // default position: origin
+        AudioEmitter farEmitter;
+        farEmitter.setPositionProperty({10000.0f, 0.0f, 0.0f}); // far -> strong attenuation
+        cue->Apply3D(listener, farEmitter);
+
+        cue->Play();
+
+        SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!inst)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
+        ASSERT_NE(track, nullptr);
+
+        // The wave's authored volume clamps to a full-scale 1.0f gain with no Apply3D() in play
+        // (same fixture as AttenuatesActiveInstanceTrackGainWithDistance above) -- so a gain
+        // measurably below 1.0f here proves the pre-Play() Apply3D() call actually reached this
+        // brand-new instance's track, not just that Play() itself succeeded.
+        EXPECT_LT(MIX_GetTrackGain(track), 1.0f);
+
+        cue->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
 // XA-6: Stop(AsAuthored) must let the track keep playing (SoundEffectInstance::Stop(false) just
 // exits any loop) instead of hard-stopping it -- the old code called active_.clear() right after
 // pi.instance->Stop(immediate) unconditionally, destroying every instance (and thus hard-stopping
@@ -3789,6 +3912,12 @@ TEST(CueTest, PlayWiresEffectVariationVolumeIntoSpawnedInstance)
     EXPECT_NEAR(inst->getVolumeProperty(), expected, 1e-4f);
 }
 
+// P14-ORDER-002: Cue::Play()'s per-wave loop now calls INTERNAL_applyEffectVariationFilter()
+// BEFORE inst->Play() rather than after (the filter no longer requires a live track_ to establish
+// its pending state, only to register the real SDL3_mixer callback) -- this test's assertions
+// only pass if that pending-state path actually works, since by the time it runs here the base
+// filter/RPC-override calls above it already exercised the exact same no-track-yet code path this
+// task added.
 TEST(CueTest, PlayWiresEffectVariationFilterFrequencyAndQIntoSpawnedInstance)
 {
     auto cue = std::unique_ptr<Cue>(SharedEffectVariationBank().GetCue("EffectVarCue"));
@@ -3917,6 +4046,38 @@ TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch)
     ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks ReconcileState()'s continuous RPC re-eval
 
     EXPECT_NEAR(inst->getPitchProperty(), 0.5f, 0.001f); // +600/1200
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
+// AUD-10-013 (2026-07-17 deep audit): "Verify pitch does not get reapplied on repeated Update
+// calls -- stable parameter values cannot accumulate ratio exponentially." Confirmed by reading
+// Cue.cpp that ReconcileState()'s per-tick RPC re-evaluation always recomputes
+// `pitchCentsSum = basePitchCents_ + rpcPitchCents` fresh from the constant, once-per-Play()
+// `basePitchCents_` member (a plain assignment, never `+=`) plus a freshly re-evaluated RPC curve
+// value -- not an incremental delta applied on top of the previous tick's already-converted
+// result, so there is no code path that could compound. This test locks that down empirically:
+// many ReconcileState() ticks (via repeated getIsPlayingProperty() calls, matching how
+// AudioEngine::Update() drives it every real frame) with the bound variable held CONSTANT must
+// leave the pitch bit-for-bit identical across every tick, not drifting toward +-1.0 or beyond.
+TEST(CueTest, RepeatedReconcileStateTicksWithConstantVariableDoNotDriftPitch)
+{
+    auto cue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
+    cue->SetVariable("Volume", 0.75f); // curve -> +300 cents (some non-edge value)
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    const float firstTickPitch = inst->getPitchProperty();
+    EXPECT_NEAR(firstTickPitch, 0.25f, 0.001f); // +300/1200
+
+    for (int i = 0; i < 50; ++i)
+    {
+        ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks ReconcileState() each iteration
+        EXPECT_FLOAT_EQ(inst->getPitchProperty(), firstTickPitch)
+            << "pitch drifted after " << (i + 1) << " ReconcileState() tick(s) with no variable "
+               "change -- possible cents/ratio accumulation bug";
+    }
 
     cue->Stop(AudioStopOptions::Immediate);
 }
@@ -4156,6 +4317,14 @@ TEST(CueTest, Apply3DUpdatesOrientationAngleVariableToReflectLiveRelativeFacing)
 // (type=2, frequency=8000Hz, qfactor=6 -> oneOverQ=0.5). Play() must reach all the way from
 // XactParser's retained XsbWaveRef fields through Cue::Play()'s new
 // INTERNAL_applyXactTrackFilter() call into the spawned SoundEffectInstance's real filter state.
+// P14-ORDER-002: this call now happens BEFORE the spawned instance's own inst->Play() (see
+// Cue::Play()'s per-wave loop) instead of after -- this test's assertions only pass because
+// INTERNAL_applyXactTrackFilter() establishes the pending filter state in filterState_ regardless
+// of whether a live track exists yet, then Play() (via EnsureTrackDspState()) attaches the real
+// SDL3_mixer callback to that already-populated state. Reverting just the SoundEffectInstance-side
+// fix while keeping this ordering would make this filter call a no-op (its old `if (!track_)
+// return;` guard would trip, since track_ is still null at that point), so this test doubles as a
+// regression guard for the pending-state path, not just "the final result is correct".
 TEST(CueTest, PlayWiresRealXactTrackFilterIntoSpawnedInstance)
 {
     auto cue = std::unique_ptr<Cue>(SharedFilterBank().GetCue("FilterCue"));
@@ -4186,7 +4355,11 @@ TEST(CueTest, PlayWiresRealXactTrackFilterIntoSpawnedInstance)
 // Play() must apply the RPC's initial evaluation (variable defaults to 0.0 -> curve's 2000Hz
 // endpoint) on top of the track's own authored base filter -- proving the wiring reaches all the
 // way from Cue::Play()'s new INTERNAL_applyRpcFilterOverride() call into the spawned instance's
-// real filter state, not just the one-shot XACT-authored value.
+// real filter state, not just the one-shot XACT-authored value. P14-ORDER-002: both the base
+// filter and this RPC override now run BEFORE the spawned instance's inst->Play() (see
+// Cue::Play()'s per-wave loop) -- same pending-state-path regression coverage rationale as
+// PlayWiresRealXactTrackFilterIntoSpawnedInstance above, for the RPC-override entry point
+// specifically.
 TEST(CueTest, PlayAppliesInitialFilterFrequencyRpcEvaluationOverridingTrackBaseValue)
 {
     auto cue = std::unique_ptr<Cue>(FilterFreqRpcBank().GetCue("FilterFreqRpcCue"));
@@ -4425,4 +4598,22 @@ TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinit
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not exercise real playback";
     }
+}
+
+// AUD-11-016: confirmed real gap and fixed -- Cue::Play() previously `continue`d silently when
+// a wave reference's wave bank couldn't be found (or its SoundEffect failed to load), with zero
+// cue-level diagnostic naming which cue was affected. Verifies the new diagnostic actually names
+// the cue when its sole wave reference points at a wave bank that was never registered with the
+// engine.
+TEST(CueTest, PlayWithUnresolvableWaveBankLogsCueNameAndDoesNotCrash)
+{
+    std::unique_ptr<Cue> cue(SharedUnresolvableWaveBankBank().GetCue("UnresolvableWaveBankCue"));
+    ASSERT_NE(cue, nullptr);
+
+    testing::internal::CaptureStderr();
+    cue->Play();
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    EXPECT_NE(captured.find("UnresolvableWaveBankCue"), std::string::npos) << captured;
+    EXPECT_NE(captured.find(kNeverRegisteredWaveBankName), std::string::npos) << captured;
 }

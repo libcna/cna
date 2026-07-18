@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
 #include <cstdlib>
+#include <thread>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Environment.hpp"
@@ -15,10 +21,17 @@
 #include "System/EventArgs.hpp"
 #include "System/TimeSpan.hpp"
 #include "System/Environment.hpp"
+#include "SoundEffectInstanceTestAccess.hpp"
+#include "CNA/Internal/Audio/AudioMixer.hpp"
+
+#include <SDL3_mixer/SDL_mixer.h>
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
+using Microsoft::Xna::Framework::Audio::AudioEmitter;
+using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
+using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
 
 namespace
@@ -31,6 +44,24 @@ namespace
         System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
         d.SubmitBuffer(pcm);
+        try
+        {
+            d.Play();
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return d.getStateProperty() != SoundState::Stopped;
+    }
+
+    // AUD-07-001/002/A-03: mirror of tryStartHeadless() above, but submits a float buffer
+    // first so playback starts in float mode instead of int16 mode.
+    bool tryStartHeadlessFloat(DynamicSoundEffectInstance& d)
+    {
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+        std::vector<float> buf(4 * 256, 0.0f); // 256 stereo float frames of silence
+        d.SubmitFloatBufferEXT(buf);
         try
         {
             d.Play();
@@ -272,7 +303,7 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountWhi
 }
 
 // P9-VALIDATION-011: without this, a caller that keeps submitting after Dispose() would grow
-// queuedBuffers_ unboundedly (the buffers can never be consumed once dynamicTrack_ is gone).
+// queuedBuffers_ unboundedly (the buffers can never be consumed once track_ is gone).
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferAfterDisposeThrowsObjectDisposed)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -297,6 +328,101 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferBeforePlayingIsAllowed)
     EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
 }
 
+// AUD-07-001/002/A-03: confirmed code risk from the 2026-07-17 deep audit -- a stopped instance
+// that previously used SubmitFloatBufferEXT must be able to switch back to int16 mode via a
+// plain SubmitBuffer() while Stopped (EnsureStream() rebuilds the stream from scratch on the
+// next Play() anyway), rather than silently staying in float mode and feeding raw int16 bytes
+// into what becomes a float-format SDL_AudioStream.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhileStoppedSwitchesBackToIntModeAfterFloatSubmission)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    std::vector<float> floatBuf(4 * 256, 0.0f);
+    d.SubmitFloatBufferEXT(floatBuf);
+
+    // Still Stopped (never Played) -- committing back to int mode must be allowed.
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    EXPECT_NO_THROW(d.SubmitBuffer(pcm));
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_EQ(track, nullptr) << "still stopped -- no track should exist yet";
+
+    try
+    {
+        d.Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d.getStateProperty() == SoundState::Stopped)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+    SDL_AudioStream* stream = MIX_GetTrackAudioStream(track);
+    ASSERT_NE(stream, nullptr);
+    SDL_AudioSpec srcSpec{};
+    SDL_AudioSpec dstSpec{};
+    ASSERT_TRUE(SDL_GetAudioStreamFormat(stream, &srcSpec, &dstSpec));
+    EXPECT_EQ(srcSpec.format, SDL_AUDIO_S16LE)
+        << "stream must be int16, not left over as float from the earlier "
+           "SubmitFloatBufferEXT call";
+}
+
+// AUD-07-008 (2026-07-17 deep audit, A-07 "strong risk"): EnsureStream() creates the
+// SDL_AudioStream with a null destination spec (SDL3 uses the device's native format for output
+// conversion) -- the audit flagged that SDL_PutAudioStreamData/SDL_GetAudioStreamData require
+// valid specs at BOTH ends, and asked whether MIX_SetTrackAudioStream genuinely establishes the
+// destination side before any data flows. Empirically confirmed via a direct probe: a stream's
+// destination format is indeed invalid/absent immediately after SDL_CreateAudioStream(spec,
+// nullptr) (SDL_GetAudioStreamFormat fails, "Stream has no destination format"), but
+// MIX_SetTrackAudioStream immediately establishes it -- and Play()'s existing call order already
+// has MIX_SetTrackAudioStream run before the first SubmitQueuedToStream()/SDL_PutAudioStreamData
+// call (via QueueInitialBuffers(), itself called after MIX_SetTrackAudioStream succeeds). This
+// test locks that down: both the source AND destination specs must be valid immediately after
+// Play() returns, for a plain instance that never touched the float submission path at all.
+TEST(DynamicSoundEffectInstanceTest, StreamDestinationFormatIsValidImmediatelyAfterPlay)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+    SDL_AudioStream* stream = MIX_GetTrackAudioStream(track);
+    ASSERT_NE(stream, nullptr);
+
+    SDL_AudioSpec srcSpec{};
+    SDL_AudioSpec dstSpec{};
+    EXPECT_TRUE(SDL_GetAudioStreamFormat(stream, &srcSpec, &dstSpec))
+        << "both source and destination formats must be valid once Play() has returned -- "
+           "SDL_GetError(): " << SDL_GetError();
+    EXPECT_EQ(srcSpec.format, SDL_AUDIO_S16LE);
+    EXPECT_EQ(srcSpec.channels, 2);
+    EXPECT_EQ(srcSpec.freq, 44100);
+    EXPECT_NE(dstSpec.format, 0) << "destination format must not be left null/unset";
+}
+
+// AUD-07-001/002/A-03: symmetric to SubmitFloatAfterPlayingThrowsInvalidOperation below --
+// submitting a plain int16 buffer into a *live* float-mode stream must throw rather than
+// silently corrupt the stream's data with misinterpreted bytes.
+TEST(DynamicSoundEffectInstanceTest, SubmitIntBufferAfterPlayingInFloatModeThrowsInvalidOperation)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadlessFloat(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::vector<unsigned char> pcm(32, 0);
+    EXPECT_THROW(d.SubmitBuffer(pcm), System::InvalidOperationException);
+}
+
 TEST(DynamicSoundEffectInstanceTest, DisposeMarksDisposedAndIsIdempotent)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -312,9 +438,40 @@ TEST(DynamicSoundEffectInstanceTest, PlayAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW(d.Play(), System::ObjectDisposedException);
 }
 
-// P9-VALIDATION-010: Resume() delegates to Play() when there's no active dynamicTrack_, which is
+// AUD-02-007/AUD-07-007 (2026-07-17 deep audit, A-04): SDL_CreateAudioStream fails outright for
+// freq=0 (confirmed empirically: SDL reports "Parameter 'src_spec->freq' is invalid"). Per
+// P10-DYN-001/002/003 (resolved decision matching real FNA), the constructor itself must NOT
+// validate/reject sampleRate=0 -- but Play() must not report a false "Playing" state when the
+// resulting stream creation silently fails. Without EnsureStream()'s new audioStream_ check, this
+// used to fall through: MIX_SetTrackAudioStream(track, nullptr) is documented as legal (detaches
+// input), so the pre-fix code sailed past its own "if (!MIX_SetTrackAudioStream(...)) return;"
+// guard and reported Playing with a track that has no audio input at all.
+TEST(DynamicSoundEffectInstanceTest, PlayWithZeroSampleRateDoesNotReportPlayingOnStreamCreationFailure)
+{
+    DynamicSoundEffectInstance d(0, AudioChannels::Stereo);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    d.SubmitBuffer(pcm);
+
+    // GetMixerOrThrowXna() can still throw NoAudioHardwareException if there's truly no audio
+    // device at all (unrelated to this test's own freq=0 failure) -- skip in that unrelated case.
+    try
+    {
+        d.Play();
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    EXPECT_NE(d.getStateProperty(), SoundState::Playing);
+}
+
+// P9-VALIDATION-010: Resume() delegates to Play() when there's no active track_, which is
 // also how a disposed instance surfaces this instead of silently no-op'ing -- see
 // SoundEffectInstanceTests.cpp's identical base-class test for the full FNA-matching rationale.
+// Resume() itself is the inherited SoundEffectInstance::Resume() (P13-DYNAMIC-001), whose Play()
+// call dispatches virtually to this class's own Play() override.
 TEST(DynamicSoundEffectInstanceTest, ResumeAfterDisposeThrowsObjectDisposed)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -463,8 +620,10 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededDoesNotFireWhenStreamHasEnoughD
 }
 
 // CP-15: Pause()/Resume() used to be silent no-ops on DynamicSoundEffectInstance -- the base
-// class's (non-virtual, pre-fix) implementation only ever touched the protected `track_` member,
-// which a dynamic instance never populates (Play()/Stop() manage their own `dynamicTrack_`).
+// class's implementation only ever touched the protected `track_` member, which a dynamic
+// instance used to never populate (it managed its own separate `dynamicTrack_` instead). Fixed
+// at the root by P13-DYNAMIC-001: DynamicSoundEffectInstance now shares `track_` directly, so the
+// inherited (no longer overridden) Pause()/Resume() operate on the right field automatically.
 TEST(DynamicSoundEffectInstanceTest, PauseThenResumeActuallyPausesAndResumesDynamicTrack)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -482,8 +641,10 @@ TEST(DynamicSoundEffectInstanceTest, PauseThenResumeActuallyPausesAndResumesDyna
     EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
 }
 
-// Pausing via a SoundEffectInstance& base reference must resolve to the override (CP-15) --
-// confirms the fix relies on virtual dispatch, not on callers happening to use the derived type.
+// Pausing via a SoundEffectInstance& base reference must still work correctly (CP-15,
+// P13-DYNAMIC-001) -- confirms the shared-`track_` fix works through ordinary virtual dispatch to
+// the (now inherited, not overridden) base Pause()/Resume(), not just when a caller happens to
+// use the concrete DynamicSoundEffectInstance type directly.
 TEST(DynamicSoundEffectInstanceTest, PauseViaBaseRefResolvesToOverride)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -498,6 +659,83 @@ TEST(DynamicSoundEffectInstanceTest, PauseViaBaseRefResolvesToOverride)
 
     base.Resume();
     EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+}
+
+// ===================== P13-DYNAMIC-001: Volume/Pitch/Pan/Apply3D on a live dynamic track =====================
+//
+// Before this fix, these four were inherited unchanged from SoundEffectInstance and operated on
+// the protected `track_` member -- but DynamicSoundEffectInstance never populated `track_` at all,
+// managing its own separate `dynamicTrack_` instead (the same root cause CP-15 already fixed for
+// Pause()/Resume(), just never extended to these four). Calling any of them on a live, playing
+// DynamicSoundEffectInstance was a complete, silent no-op on the real track. Fixed by removing
+// `dynamicTrack_` entirely and sharing the inherited `track_`, matching FNA's own single-`handle`
+// model (DynamicSoundEffectInstance.cs has no such split).
+
+TEST(DynamicSoundEffectInstanceTest, SetVolumeAfterPlayActuallyChangesLiveTrackGain)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+
+    d.setVolumeProperty(0.25f);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.25f, 1e-5f);
+}
+
+TEST(DynamicSoundEffectInstanceTest, SetPitchAfterPlayActuallyChangesLiveTrackFrequencyRatio)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+
+    d.setPitchProperty(1.0f); // +1 octave -> ratio 2.0
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f, 1e-4f);
+}
+
+// Pitch set BEFORE Play() (while track_ is still null) must still be applied once the track is
+// actually created -- Play() now shares SoundEffectInstance::Play()'s own composed-properties
+// application instead of only ever setting the plain volume gain.
+TEST(DynamicSoundEffectInstanceTest, SetPitchBeforePlayIsAppliedOncePlaying)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.setPitchProperty(-1.0f); // -1 octave -> ratio 0.5, set before any Play() call
+
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 0.5f, 1e-4f);
+}
+
+TEST(DynamicSoundEffectInstanceTest, Apply3DOnPlayingInstanceAttenuatesLiveTrackGain)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+
+    AudioListener listener; // default position: origin
+    AudioEmitter farEmitter;
+    farEmitter.setPositionProperty({10000.0f, 0.0f, 0.0f}); // far -> strong attenuation
+    d.Apply3D(listener, farEmitter);
+
+    EXPECT_LT(MIX_GetTrackGain(track), 1.0f);
 }
 
 // P9-DYNAMIC-001: Pause() must not touch PendingBufferCount at all (matches FNA's Pause(), which
@@ -578,6 +816,51 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhilePlayingIncrementsPendingBu
     EXPECT_EQ(d.getPendingBufferCountProperty(), before + 1);
 }
 
+// AUDIO-BUFFER-001 (external audit, 2026-07-16): Update()'s byte-accounting loop used to pop an
+// entire submitted chunk from tracking the instant SDL reported ANY consumption at all (any
+// `total > queuedBytes`), not once that chunk's own full byte count had actually been played --
+// confirmed real by tracing the algorithm: `while (total > queuedBytes) { total -= front;
+// pop_front(); }` drops a WHOLE chunk per iteration regardless of how much of the drop in
+// `queuedBytes` actually came from that specific chunk, so two whole-second chunks could report
+// PendingBufferCount == 1 after only ~50ms of real playback (should still be 2), and == 0 after
+// ~1.2s (should still be about 1, since only the first chunk's second has actually elapsed).
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountOnlyDropsOnceAWholeChunkIsActuallyConsumed)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+
+    // Two whole-second, 16-bit stereo chunks: 44100 frames/sec * 2 channels * 2 bytes/sample.
+    std::vector<unsigned char> oneSecond(static_cast<std::size_t>(44100) * 2 * 2, 0);
+    d.SubmitBuffer(oneSecond);
+    d.SubmitBuffer(oneSecond);
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 2);
+
+    try
+    {
+        d.Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d.getStateProperty() == SoundState::Stopped)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    d.Update();
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 2)
+        << "only ~50ms of a full second-long chunk has played -- neither whole chunk should have "
+           "been dropped from tracking yet";
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1150)); // ~1.2s total real playback
+    d.Update();
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1)
+        << "about 1.2s has passed -- exactly the first whole one-second chunk should now be "
+           "confirmed consumed, leaving the second one still tracked";
+}
+
 // P9-DYNAMIC-001: BufferNeeded must fire once per every subscriber, not just the first --
 // multiple independent subscribers (e.g. separate systems both tracking buffer starvation) must
 // each observe every raise.
@@ -625,4 +908,233 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededSubscriberCanRemoveItselfDuring
     EXPECT_EQ(firedOnce, 1);
     EXPECT_GT(firedOther, 0);
     EXPECT_EQ(d.BufferNeeded.Size(), 1u); // only the still-subscribed "other" handler remains
+}
+
+// AUD-04-009: the DynamicSoundEffectInstance counterpart to SoundEffectInstanceTests.cpp's
+// MixerDestructionOrphansTrackWithoutUseAfterFree (AUD-04-008) -- same generation-check
+// mechanism (shared via the inherited track_/trackMixerGeneration_), but exercised through
+// DynamicSoundEffectInstance's own independent getStateProperty()/track_ access path, which does
+// not share code with the base class's. Deterministic and in-process (no subprocess needed): as
+// with the static-instance test, GetTrack() reads track_ raw (bypassing the check) to prove the
+// dangling pointer is untouched immediately after DestroyMixer(), then the first real accessor
+// call is shown to null it out as direct evidence the check ran.
+TEST(DynamicSoundEffectInstanceTest, MixerDestructionOrphansTrackWithoutUseAfterFree)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_EQ(d.getStateProperty(), SoundState::Playing);
+    ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(d), nullptr);
+
+    CNA::Internal::Audio::DestroyMixer();
+
+    // Still the same (now-dangling) raw pointer value -- DestroyMixer() itself has no way to
+    // reach into this instance, so nothing has cleared it yet.
+    EXPECT_NE(SoundEffectInstanceTestAccess::GetTrack(d), nullptr);
+
+    // getStateProperty() is the first real accessor call after DestroyMixer() -- it must detect
+    // the stale generation and report Stopped without ever touching the freed MIX_Track*.
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(d), nullptr);
+
+    // Every other operation a real caller could still reach must also be safe now that track_ is
+    // null.
+    EXPECT_NO_THROW(d.Pause());
+    EXPECT_NO_THROW(d.Stop());
+    EXPECT_NO_THROW(d.Dispose());
+}
+
+// AUD-15-006: a "producer" thread continuously calling SubmitBuffer() -- the class's own
+// documented cross-thread boundary (queueMutex_ exists specifically to guard queuedBuffers_/
+// submittedChunkSizes_ against concurrent producer submission vs. Update()'s drain; see
+// AUD-07-020's "untrusted/buggy producers" wording and AUD-15-003's lock-ordering survey) --
+// racing a "game" thread that randomly drives Play/Pause/Resume/Stop/Update, then Disposes the
+// instance while the producer may still be mid-submit. Acceptance (from the plan): no deadlock,
+// no data silently lost outside a documented Stop (Stop()/ClearBuffers() legitimately discard
+// queued data -- that is not a bug), and getPendingBufferCountProperty() never reports a corrupt
+// (implausibly large or negative) count.
+TEST(DynamicSoundEffectInstanceTest, StressProducerConsumerWithRandomPauseStopDispose)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    auto d = std::make_unique<DynamicSoundEffectInstance>(44100, AudioChannels::Stereo);
+
+    std::atomic<long long> chunksSubmitted{0};
+    std::atomic<bool> producerDone{false};
+
+    std::thread producer([&]() {
+        const std::vector<unsigned char> pcm(4 * 64, 0); // 64 stereo S16 frames of silence
+        for (int i = 0; i < 20000; ++i)
+        {
+            try
+            {
+                d->SubmitBuffer(pcm);
+                chunksSubmitted.fetch_add(1, std::memory_order_relaxed);
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+                // Expected once the "game" thread below disposes the instance while this
+                // thread is still mid-loop -- submitting after Dispose() is documented to
+                // throw (P9-VALIDATION-011), not a supported call pattern, so seeing it here
+                // is the correct, intended outcome, not a bug.
+                break;
+            }
+        }
+        producerDone.store(true, std::memory_order_relaxed);
+    });
+
+    // Deterministic LCG (matches this project's other deterministic-fuzz harnesses, e.g.
+    // XactParserFuzzTests.cpp) rather than <random>, so a failure is exactly reproducible.
+    uint32_t seed = 0x9E3779B9u;
+    auto nextRandom = [&seed]() {
+        seed = seed * 1103515245u + 12345u;
+        return (seed >> 16) & 0x7fffu;
+    };
+
+    // "Game" thread (this thread): randomly drive the public state-machine API while the
+    // producer above concurrently submits buffers from another thread.
+    for (int i = 0; i < 5000; ++i)
+    {
+        switch (nextRandom() % 5)
+        {
+            case 0: try { d->Play(); } catch (...) {} break;
+            case 1: try { d->Pause(); } catch (...) {} break;
+            case 2: try { d->Resume(); } catch (...) {} break;
+            case 3: try { d->Stop(); } catch (...) {} break;
+            case 4: d->Update(); break;
+        }
+
+        // A real corruption bug (e.g. a field the queue mutex doesn't actually cover) would
+        // show up here as an implausibly large or negative pending count, not necessarily a
+        // clean crash.
+        const SharpRuntime::intcs pending = d->getPendingBufferCountProperty();
+        ASSERT_GE(pending, 0) << "corrupt pending buffer count at iteration " << i;
+        ASSERT_LT(pending, 1'000'000) << "pending buffer count grew implausibly large at iteration " << i;
+    }
+
+    d->Dispose();
+    producer.join();
+
+    EXPECT_TRUE(producerDone.load());
+    EXPECT_TRUE(d->getIsDisposedProperty());
+    EXPECT_GT(chunksSubmitted.load(), 0)
+        << "producer thread never got a chance to submit anything before the instance was disposed";
+
+    // Not asserted as exactly 0: SubmitBuffer()'s disposed-check and Dispose()'s
+    // Stop()->ClearBuffers() aren't atomic with respect to each other (isDisposed_ only flips
+    // true at the very end of Dispose(), after ClearBuffers() already ran) -- a producer chunk
+    // can legitimately land in queuedBuffers_ in the window between those two steps, and under a
+    // slow/instrumented build (observed under ASan: up to single digits, vs. usually 0-1 under a
+    // normal build) that window can admit a handful more before the producer thread observes
+    // isDisposed_. That is a harmless, inherent consequence of disposing an instance while a
+    // foreign thread is still mid-submit (not a supported call pattern to begin with -- the
+    // caller is expected to stop its own producer before disposing) -- not memory-unsafe, and
+    // not "corrupt" in the sense this task's acceptance criteria means (implausibly large or
+    // negative). Bounded generously here to still catch genuine unbounded growth.
+    EXPECT_LT(d->getPendingBufferCountProperty(), 1000);
+}
+
+// AUD-07-003: T-2C's SubmitFloatAfterPlayingThrowsInvalidOperation above already locks down the
+// single-threaded case; this task's own acceptance explicitly calls for the guard (float
+// submission rejected while a live int stream is Playing/Paused) to be verified "under races and
+// repeated play cycles" too -- a producer thread hammers SubmitFloatBufferEXT() while a "game"
+// thread repeatedly cycles Play()->Stop(true)->Play()->Stop(true)..., the same field-level race
+// this session's AUD-15-006 fix closed for SubmitBuffer() (state-check-and-submit now atomic
+// under queueMutex_, isFloat_ now atomic<bool>) but verified there only via int submission --
+// this test independently exercises the SubmitFloatBufferEXT() side of that same fix. The
+// producer deliberately ALTERNATES SubmitBuffer()/SubmitFloatBufferEXT() calls rather than only
+// ever submitting float: isFloat_ latches true after the first successful float submission and
+// stays true forever unless something calls SubmitBuffer() to reset it back to false (see
+// SubmitBuffer()'s own `isFloat_ = false;` at the end) -- a float-only producer would only ever
+// exercise the `if (!isFloat_)` racy guard once, at the very start, then never again for the rest
+// of the run (confirmed empirically: an all-float version of this test did not catch a
+// deliberately-reintroduced pre-AUD-15-006 unlocked-guard regression under 5 ASan runs). Alternating
+// keeps isFloat_ toggling and the guard genuinely live throughout. Acceptance: every call either
+// succeeds cleanly or throws exactly InvalidOperationException/ObjectDisposedException -- never
+// any other exception, and never a crash -- across many interleavings with repeated real Play/Stop
+// cycles, not just one static state snapshot.
+TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    auto d = std::make_unique<DynamicSoundEffectInstance>(44100, AudioChannels::Stereo);
+    // Seed with an initial int16 buffer so the very first Play() has a real stream to attach to.
+    d->SubmitBuffer(std::vector<unsigned char>(4 * 64, 0));
+    try
+    {
+        d->Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d->getStateProperty() == SoundState::Stopped)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    d->Stop(true);
+
+    std::atomic<long long> callsAttempted{0};
+    std::atomic<long long> callsThrown{0};
+    std::atomic<bool> producerDone{false};
+
+    std::thread producer([&]() {
+        const std::vector<float> floatBuf(4 * 32, 0.0f); // 32 stereo float frames of silence
+        const std::vector<unsigned char> intBuf(4 * 64, 0); // 64 stereo S16 frames of silence
+        // Deliberately smaller than the other producer/consumer stress test above: each
+        // alternating call here can trigger a real EnsureStream() rebuild (SDL_CreateAudioStream/
+        // SDL_DestroyAudioStream), unlike that test's single fixed-format producer -- 3000 of
+        // these is already enough to reliably exercise the race (confirmed via the probe
+        // described above) without the run time exploding under a sanitizer build.
+        for (int i = 0; i < 3000; ++i)
+        {
+            callsAttempted.fetch_add(1, std::memory_order_relaxed);
+            try
+            {
+                if (i % 2 == 0) d->SubmitFloatBufferEXT(floatBuf);
+                else d->SubmitBuffer(intBuf);
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+                // Expected once the instance is disposed below while this thread is still mid-loop.
+                break;
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                // Expected: rejected because the live stream is currently in the OTHER format
+                // while Playing/Paused -- exactly the guard this test exists to verify, not a
+                // bug. ObjectDisposedException derives from InvalidOperationException, so it must
+                // be caught first, above.
+                callsThrown.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        producerDone.store(true, std::memory_order_relaxed);
+    });
+
+    // "Game" thread (this thread): repeated real Play()/Stop(true) cycles, the exact scenario
+    // named in this task's acceptance criteria, while the producer above concurrently hammers
+    // both submission entry points.
+    for (int i = 0; i < 3000; ++i)
+    {
+        try { d->Play(); } catch (...) {}
+        try { d->Stop(true); } catch (...) {}
+    }
+
+    d->Dispose();
+    producer.join();
+
+    EXPECT_TRUE(producerDone.load());
+    EXPECT_TRUE(d->getIsDisposedProperty());
+    EXPECT_GT(callsAttempted.load(), 0);
+    EXPECT_GT(callsThrown.load(), 0)
+        << "expected at least some submissions to genuinely race a live Play()'d stream in the "
+           "other format and be rejected -- zero here would mean this test never actually "
+           "exercised the guard it exists to verify";
+    // Not asserted that every call throws or that none do -- both are legitimate outcomes
+    // depending on exactly how Play()/Stop() and Submit*() happened to interleave; what matters
+    // is that calls were attempted, some were genuinely rejected by the guard, and none produced
+    // anything other than the two expected exception types above (any other exception, or a
+    // crash, would have already failed this test).
 }

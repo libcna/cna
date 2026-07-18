@@ -19,6 +19,7 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -637,6 +638,87 @@ TEST(AudioEngineTest, DisposeCascadesToWaveBankSoundBankAndCue)
     EXPECT_TRUE(wb.getIsDisposedProperty());
     EXPECT_TRUE(sb.getIsDisposedProperty());
     EXPECT_TRUE(cue->getIsDisposedProperty());
+}
+
+// AUD-15-007: exhaustively stress disposal ORDER across AudioEngine/WaveBank/SoundBank/Cue --
+// not just the single canonical "dispose the engine and let it cascade" order exercised above.
+// Each iteration builds a fresh, dedicated AudioEngine + WaveBank + SoundBank, a caller-held Cue
+// (via GetCue, put into a randomly chosen state: never played, playing, or stopped-but-
+// undisposed) and a fire-and-forget Cue (via PlayCue, registered with both the SoundBank and the
+// engine's active-cue list, per AUDIO-LIFECYCLE-001/P9-LIFECYCLE-008), then disposes AND FREES
+// (delete, matching this codebase's established caller-owns-a-GetCue()-Cue convention) the held
+// cue as one of four randomly shuffled steps alongside engine/wavebank/soundbank disposal.
+// Freeing the held cue mid-permutation (not always last) is deliberate: a caller in real code
+// disposes-then-deletes a Cue as soon as it's done with it, potentially well before the bank(s)
+// that still reference it via activeCues_ are themselves disposed -- if Cue::Dispose() ever
+// failed to unregister from every bank that still held a pointer to it, this is what would turn
+// that gap into a genuine, crashing use-after-free (a later bank Dispose() cascade dereferencing
+// already-freed memory) instead of a silently-harmless stale entry. Acceptance (from the plan):
+// no UAF, double unregister, or dangling cue -- checked via clean completion (no crash/ASan
+// finding) plus every surviving object correctly reporting IsDisposed==true afterward.
+TEST(AudioEngineTest, StressDisposalOrderPermutationsAcrossEngineWaveBankSoundBankAndCue)
+{
+    uint32_t seed = 0xC0FFEEu;
+    auto nextRandom = [&seed]() {
+        seed = seed * 1103515245u + 12345u;
+        return (seed >> 16) & 0x7fffu;
+    };
+
+    constexpr int kIterations = 200;
+    for (int i = 0; i < kIterations; ++i)
+    {
+        auto engine = std::make_unique<AudioEngine>(XgsFixturePath());
+        auto wb = std::make_unique<WaveBank>(
+            engine.get(),
+            WriteFixture("xa8_perm_" + std::to_string(i) + ".xwb", BuildXA8XwbFixtureBytes()));
+        ASSERT_TRUE(wb->getIsPreparedProperty());
+        auto sb = std::make_unique<SoundBank>(
+            engine.get(),
+            WriteFixture("xa8_perm_" + std::to_string(i) + ".xsb", BuildXA8XsbFixtureBytes()));
+
+        Cue* heldCue = sb->GetCue("XA8Cue"); // caller-owned, per this bank's own contract
+        switch (nextRandom() % 3)
+        {
+            case 0: break; // never played (still Prepared)
+            case 1: heldCue->Play(); break; // actively playing
+            case 2: heldCue->Play(); heldCue->Stop(AudioStopOptions::Immediate); break; // stopped, undisposed
+        }
+
+        sb->PlayCue("XA8Cue"); // a second, fire-and-forget cue also registered against both banks
+
+        // Fisher-Yates shuffle of the 4 dispose steps (0=engine, 1=wavebank, 2=soundbank,
+        // 3=heldCue -- disposed AND deleted here, not afterward) -- picks uniformly among all
+        // 24 orderings across enough iterations.
+        std::array<int, 4> order = {0, 1, 2, 3};
+        for (int k = 3; k > 0; --k)
+        {
+            const int j = static_cast<int>(nextRandom() % static_cast<unsigned>(k + 1));
+            std::swap(order[k], order[j]);
+        }
+
+        for (int step : order)
+        {
+            switch (step)
+            {
+                case 0: engine->Dispose(); break;
+                case 1: wb->Dispose(); break;
+                case 2: sb->Dispose(); break;
+                case 3:
+                    heldCue->Dispose();
+                    delete heldCue; // freed HERE -- mid-permutation, not after -- see rationale above
+                    heldCue = nullptr;
+                    break;
+            }
+        }
+
+        EXPECT_TRUE(engine->getIsDisposedProperty()) << "iteration " << i;
+        EXPECT_TRUE(wb->getIsDisposedProperty()) << "iteration " << i;
+        EXPECT_TRUE(sb->getIsDisposedProperty()) << "iteration " << i;
+        // engine/wb/sb destruct here (unique_ptr going out of scope) regardless of dispose order
+        // above -- exercising every object's destructor-triggered Dispose() as a no-op on top of
+        // whatever order already ran, every iteration, and (critically) running any remaining
+        // bank's Dispose() cascade AFTER heldCue has already been freed if step 3 ran early.
+    }
 }
 
 // ===================== RendererDetails =====================

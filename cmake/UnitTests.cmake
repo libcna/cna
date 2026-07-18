@@ -161,6 +161,22 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(TARGET cna_audio_mixer_destroy_active_static_voice_harness)
+        # Task AUD-04-008: same reasoning as cna_net_two_process_harness above.
+        add_dependencies(CnaTests cna_audio_mixer_destroy_active_static_voice_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_AUDIO_MIXER_DESTROY_ACTIVE_STATIC_VOICE_HARNESS_PATH="$<TARGET_FILE:cna_audio_mixer_destroy_active_static_voice_harness>"
+        )
+    endif()
+
+    if(TARGET cna_audio_mixer_destroy_active_dynamic_voice_harness)
+        # Task AUD-04-009: same reasoning as cna_net_two_process_harness above.
+        add_dependencies(CnaTests cna_audio_mixer_destroy_active_dynamic_voice_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_AUDIO_MIXER_DESTROY_ACTIVE_DYNAMIC_VOICE_HARNESS_PATH="$<TARGET_FILE:cna_audio_mixer_destroy_active_dynamic_voice_harness>"
+        )
+    endif()
+
     if(TARGET easy-gl)
         target_link_libraries(CnaTests PRIVATE easy-gl)
     endif()

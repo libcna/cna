@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <numbers>
 #include <utility>
 
@@ -165,14 +166,44 @@ namespace Microsoft::Xna::Framework::Audio
             return std::clamp(dopplerFactor, 0.5f, 4.0f);
         }
 
-        void DestroyTrackSafe(void*& trackPtr)
+        // AUD-04-008/009: trackGeneration is the CNA::Internal::Audio::GetMixerGeneration() value
+        // captured when trackPtr was created (SoundEffectInstance::trackMixerGeneration_) -- if it
+        // no longer matches the current generation, AudioMixer::DestroyMixer() has already freed
+        // this exact MIX_Track (and every other track its mixer owned), so touching it here via
+        // MIX_StopTrack/MIX_DestroyTrack would itself be a use-after-free/double-free. trackPtr is
+        // always cleared regardless: whether this call genuinely destroyed it or it was already
+        // gone, the caller has no live track either way.
+        void DestroyTrackSafe(void*& trackPtr, std::uint64_t trackGeneration)
         {
             MIX_Track* track = AsTrack(trackPtr);
-            if (track)
+            if (track && trackGeneration == CNA::Internal::Audio::GetMixerGeneration())
             {
                 MIX_StopTrack(track, 0);
                 MIX_DestroyTrack(track);
-                trackPtr = nullptr;
+            }
+            trackPtr = nullptr;
+        }
+
+        // P14-ORDER-002: CNA::Internal::Audio::GetMixer() throws a raw std::runtime_error on its
+        // very first-ever call if no audio hardware/device is available (P9-HARDWARE-002). Every
+        // INTERNAL_apply*Filter call site used to be reachable only after Play() had already
+        // called GetMixer() successfully at least once (gated by an `if (!track_) return;` guard
+        // this task removes), so a throw here was never actually observable. Now that filter
+        // setup can run before Play() too (order-independent, matching how FACT establishes a
+        // track's filter atomically alongside the voice itself), this may genuinely be the first
+        // GetMixer() call in the process. These are all NOXNA-internal, no-op-if-not-ready methods
+        // that never throw -- swallow the failure here rather than let a raw std::runtime_error
+        // escape into Cue::Play(), which isn't a sanctioned raw-exception boundary the way
+        // XactParser/SoundBank's constructor are.
+        MIX_Mixer* TryGetMixer()
+        {
+            try
+            {
+                return CNA::Internal::Audio::GetMixer();
+            }
+            catch (const std::exception&)
+            {
+                return nullptr;
             }
         }
 
@@ -330,6 +361,7 @@ namespace Microsoft::Xna::Framework::Audio
         , loopStart_(other.loopStart_)
         , loopLength_(other.loopLength_)
         , track_(other.track_)
+        , trackMixerGeneration_(other.trackMixerGeneration_)
         , playing_(other.playing_)
         , hasStarted_(other.hasStarted_)
         , State_(other.State_)
@@ -339,6 +371,10 @@ namespace Microsoft::Xna::Framework::Audio
         , Pan_(other.Pan_)
         , Pitch_(other.Pitch_)
         , is3D_(other.is3D_)
+        // AUDIO-001: persisted spatial state, same move-along-with-is3D_ rationale.
+        , attenuation_(other.attenuation_)
+        , dopplerFactor_(other.dopplerFactor_)
+        , spatialPan_(other.spatialPan_)
         // filterState_ is heap-owned; moving the unique_ptr transfers ownership without moving
         // the FilterState object's address, so the callback registered on `track_` (also just
         // transferred, unchanged) stays valid with no re-registration needed (T-4C).
@@ -367,7 +403,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (this != &other)
         {
 #ifdef SOUND_ENABLED
-            DestroyTrackSafe(track_);
+            DestroyTrackSafe(track_, trackMixerGeneration_);
 #endif
             // Unregister *this* from whatever SoundEffect it was previously tracked by --
             // once soundEffectKeepAlive_ is overwritten below, *this* address represents a
@@ -380,6 +416,7 @@ namespace Microsoft::Xna::Framework::Audio
             loopStart_   = other.loopStart_;
             loopLength_  = other.loopLength_;
             track_       = other.track_;
+            trackMixerGeneration_ = other.trackMixerGeneration_;
             playing_     = other.playing_;
             hasStarted_  = other.hasStarted_;
             State_       = other.State_;
@@ -389,6 +426,10 @@ namespace Microsoft::Xna::Framework::Audio
             Pan_         = other.Pan_;
             Pitch_       = other.Pitch_;
             is3D_        = other.is3D_;
+            // AUDIO-001: persisted spatial state, same move-along-with-is3D_ rationale.
+            attenuation_   = other.attenuation_;
+            dopplerFactor_ = other.dopplerFactor_;
+            spatialPan_    = other.spatialPan_;
             // See the move constructor's identical rationale for why no callback
             // re-registration is needed here (T-4C).
             filterState_ = std::move(other.filterState_);
@@ -411,12 +452,34 @@ namespace Microsoft::Xna::Framework::Audio
         return *this;
     }
 
+#ifdef SOUND_ENABLED
+    void* SoundEffectInstance::GetLiveTrackHandle() const
+    {
+        if (!track_)
+        {
+            return nullptr;
+        }
+        if (trackMixerGeneration_ != CNA::Internal::Audio::GetMixerGeneration())
+        {
+            // AUD-04-008/009: the mixer that owned this track was destroyed (AudioMixer::
+            // DestroyMixer(), which frees every MIX_Track it owns) since this track was
+            // created -- track_ is a dangling pointer. Clear it (mutating via const_cast, same
+            // pattern getStateProperty() already uses to lazily sync cached state from a const
+            // getter) so every other accessor sees the same "no track" state from here on,
+            // instead of dereferencing freed memory.
+            const_cast<SoundEffectInstance*>(this)->track_ = nullptr;
+            return nullptr;
+        }
+        return track_;
+    }
+#endif
+
     void SoundEffectInstance::Dispose()
     {
         if (!isDisposed_)
         {
 #ifdef SOUND_ENABLED
-            DestroyTrackSafe(track_);
+            DestroyTrackSafe(track_, trackMixerGeneration_);
 #endif
             if (soundEffectKeepAlive_)
             {
@@ -450,7 +513,7 @@ namespace Microsoft::Xna::Framework::Audio
         // If paused, resume instead of restarting.
         if (State_ == SoundState::Paused)
         {
-            MIX_Track* track = AsTrack(track_);
+            MIX_Track* track = AsTrack(GetLiveTrackHandle());
             if (track)
             {
                 MIX_ResumeTrack(track);
@@ -470,7 +533,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
 
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (!track)
         {
             track = MIX_CreateTrack(mixer);
@@ -481,6 +544,10 @@ namespace Microsoft::Xna::Framework::Audio
                 return;
             }
             track_ = track;
+            // AUD-04-008/009: captured at the exact moment this track is created, so
+            // GetLiveTrackHandle() can detect a later AudioMixer::DestroyMixer() call that
+            // frees it out from under this instance.
+            trackMixerGeneration_ = CNA::Internal::Audio::GetMixerGeneration();
         }
 
         if (!MIX_SetTrackAudio(track, audio))
@@ -490,8 +557,10 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        EnsureTrackDspState(); // P11-PAN-001: must exist before ApplyTrackProperties writes pan
-        ApplyTrackProperties(track, filterState_.get(), Volume_, Pan_, Pitch_);
+        // AUDIO-001: was `ApplyTrackProperties(track, filterState_.get(), Volume_, Pan_, Pitch_)`
+        // -- a plain re-Play() after Apply3D() must reapply the persisted spatial attenuation/
+        // pan/Doppler too, not just Volume_/Pan_/Pitch_ (see INTERNAL_applyComposedTrackProperties).
+        INTERNAL_applyComposedTrackProperties();
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props == 0)
@@ -554,7 +623,7 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Stop(bool immediate)
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (track)
         {
             if (immediate)
@@ -578,7 +647,7 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Pause()
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (track && getStateProperty() == SoundState::Playing)
         {
             MIX_PauseTrack(track);
@@ -591,7 +660,7 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Resume()
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (!track)
         {
             // P9-VALIDATION-010: matches FNA (SoundEffectInstance.cs Resume(): "XNA4 just plays
@@ -622,10 +691,17 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::INTERNAL_applyLowPassFilter(float cutoff, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return; // matches FNA's `handle == IntPtr.Zero` guard
+        // P14-ORDER-002: was `if (!track_) return;` -- now establishes/updates the pending filter
+        // state regardless of whether a live track exists yet, so a caller (Cue::Play()) can wire
+        // a filter before or after inst->Play() with an identical final result.
+        // EnsureTrackDspState()/INTERNAL_applyComposedTrackProperties() (called from Play()) picks
+        // up whatever kind/frequency/oneOverQ is already sitting in filterState_ from a call like
+        // this one and registers the real SDL3_mixer callback once a track actually exists.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return; // no audio hardware -- matches the prior no-track no-op exactly
+
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->kind         = FilterState::Kind::LowPass;
         filterState_->frequency    = cutoff;
@@ -634,7 +710,10 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        // Only registers the real callback once there's a track to attach it to (matches
+        // MIX_SetTrackCookedCallback's own "may be called... at any time" contract) -- otherwise
+        // this is deferred to EnsureTrackDspState(), called from Play() once a track is created.
+        if (MIX_Track* liveTrack = AsTrack(GetLiveTrackHandle())) MIX_SetTrackCookedCallback(liveTrack, FilterMixCallback, filterState_.get());
 #else
         (void)cutoff; (void)oneOverQ;
 #endif
@@ -643,10 +722,12 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::INTERNAL_applyHighPassFilter(float cutoff, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: see INTERNAL_applyLowPassFilter's identical comment above.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
+
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->kind         = FilterState::Kind::HighPass;
         filterState_->frequency    = cutoff;
@@ -655,7 +736,7 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        if (MIX_Track* liveTrack = AsTrack(GetLiveTrackHandle())) MIX_SetTrackCookedCallback(liveTrack, FilterMixCallback, filterState_.get());
 #else
         (void)cutoff; (void)oneOverQ;
 #endif
@@ -664,10 +745,12 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::INTERNAL_applyBandPassFilter(float center, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: see INTERNAL_applyLowPassFilter's identical comment above.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
+
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->kind         = FilterState::Kind::BandPass;
         filterState_->frequency    = center;
@@ -676,7 +759,7 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        if (MIX_Track* liveTrack = AsTrack(GetLiveTrackHandle())) MIX_SetTrackCookedCallback(liveTrack, FilterMixCallback, filterState_.get());
 #else
         (void)center; (void)oneOverQ;
 #endif
@@ -755,9 +838,13 @@ namespace Microsoft::Xna::Framework::Audio
         uint8_t filterType, float frequencyHz, uint8_t qfactorRaw)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: was `if (!track_) return;` -- the mixer's own format (sample rate) is a
+        // device-level property, available as soon as the mixer exists, independent of whether
+        // this particular instance has a track yet; see INTERNAL_applyLowPassFilter's comment for
+        // why the underlying filter state itself is now order-independent too.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         SDL_AudioSpec spec{};
         if (!MIX_GetMixerFormat(mixer, &spec) || spec.freq <= 0) return;
 
@@ -780,9 +867,10 @@ namespace Microsoft::Xna::Framework::Audio
         uint8_t filterType, float frequencyHz, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: see INTERNAL_applyXactTrackFilter's identical comment above.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         SDL_AudioSpec spec{};
         if (!MIX_GetMixerFormat(mixer, &spec) || spec.freq <= 0) return;
 
@@ -807,7 +895,14 @@ namespace Microsoft::Xna::Framework::Audio
         // 0xFF)`) -- an RPC targeting filter frequency/Q is a no-op for a track with no filter
         // at all, same as this method's caller (Cue::ReconcileState()) applying it uniformly to
         // every active wave reference regardless of whether that particular one has a filter.
-        if (!track_ || !filterState_ || filterState_->kind == FilterState::Kind::None) return;
+        // P14-ORDER-002: `!track_` removed from this guard -- an RPC override can now update the
+        // pending filter state before a track exists too, the same as the base filter above; a
+        // non-`None` kind already implies a base filter was established (which itself requires the
+        // mixer to already exist), so this is safe to apply regardless of `track_`.
+        if (!filterState_ || filterState_->kind == FilterState::Kind::None) return;
+
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
 
         // rpcFrequencyHz needs the real device sample rate to convert Hz -> SDL3_mixer's
         // normalized cutoff domain (same conversion INTERNAL_applyXactTrackFilter uses); if the
@@ -816,7 +911,6 @@ namespace Microsoft::Xna::Framework::Audio
         float frequency = filterState_->baseFrequency;
         if (rpcFrequencyHz >= 0.0f)
         {
-            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
             SDL_AudioSpec spec{};
             if (MIX_GetMixerFormat(mixer, &spec) && spec.freq > 0)
                 frequency = INTERNAL_calculateFilterCutoff(rpcFrequencyHz, static_cast<float>(spec.freq));
@@ -828,7 +922,6 @@ namespace Microsoft::Xna::Framework::Audio
         // own already-in-Q-units output).
         const float oneOverQ = (rpcQFactor >= 0.0f) ? (1.0f / rpcQFactor) : filterState_->baseOneOverQ;
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->frequency = frequency;
         filterState_->oneOverQ  = oneOverQ;
@@ -841,9 +934,22 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::EnsureTrackDspState()
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
+        if (!track) return;
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        MIX_SetTrackCookedCallback(track, FilterMixCallback, filterState_.get());
+#endif
+    }
+
+    void SoundEffectInstance::INTERNAL_applyComposedTrackProperties()
+    {
+#ifdef SOUND_ENABLED
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
+        if (!track) return;
+
+        EnsureTrackDspState(); // must exist before ApplyTrackProperties writes pan
+        const float pan = is3D_ ? spatialPan_ : Pan_;
+        ApplyTrackProperties(track, filterState_.get(), Volume_ * attenuation_, pan, Pitch_, dopplerFactor_);
 #endif
     }
 
@@ -960,19 +1066,21 @@ namespace Microsoft::Xna::Framework::Audio
                   emitter.getVelocityProperty()) * globalDopplerScale
             : 1.0f;
 
+        // AUDIO-001: persist the derived spatial state (was applied directly and only here,
+        // "one-shot" -- lost entirely on the very next Play()/Volume/Pitch call, and silently
+        // dropped altogether if there was no live track yet for this call to write into). Matches
+        // FNA's own persistent dspSettings/is3D state (SoundEffectInstance.cs), which Play() and
+        // UpdatePitch() both read back from on every later call, not just the Apply3D() call that
+        // first computed it. Combined multiplicatively with Volume_/Pitch_ by
+        // INTERNAL_applyComposedTrackProperties(), the same routine Play()/the setters now share,
+        // so this survives every one of those calls instead of being overwritten by whichever
+        // runs next.
+        attenuation_   = atten;
+        dopplerFactor_ = doppler;
+        spatialPan_    = pan;
+
 #ifdef SOUND_ENABLED
-        // Applied directly to the underlying track, not through setVolumeProperty()/
-        // setPanProperty()/setPitchProperty(): FNA computes a separate 3D output matrix
-        // (dspSettings) that combines multiplicatively with the voice's own Volume/Pitch at the
-        // audio-engine level and never touches INTERNAL_volume/INTERNAL_pan/INTERNAL_pitch, so
-        // Volume/Pan/Pitch continue to report exactly what the caller last set via the setters,
-        // unaffected by 3D positioning. One-shot at this call, like atten/pan above -- not
-        // persisted and reapplied by later setVolumeProperty()/setPitchProperty() calls, matching
-        // how those setters already overwrite the 3D-adjusted track gain/ratio outright (a real
-        // game calls Apply3D() every frame to keep 3D properties fresh, the same assumption
-        // atten/pan already rely on).
-        EnsureTrackDspState(); // P11-PAN-001: must exist before ApplyTrackProperties writes pan
-        ApplyTrackProperties(AsTrack(track_), filterState_.get(), atten * Volume_, pan, Pitch_, doppler);
+        INTERNAL_applyComposedTrackProperties();
 #endif
     }
 
@@ -1005,13 +1113,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         Volume_ = volume; // FNA passes the value straight through, without clamping
 
-#ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
-        if (track)
-        {
-            MIX_SetTrackGain(track, Volume_);
-        }
-#endif
+        // AUDIO-001: was a direct `MIX_SetTrackGain(track, Volume_)`, which erased any spatial
+        // attenuation Apply3D had established (FNA's Volume setter never touches the separate
+        // output-matrix voice stage that attenuation lives in; SDL3_mixer has only one gain
+        // scalar, so CNA must recompose the two explicitly on every write instead).
+        INTERNAL_applyComposedTrackProperties();
     }
 
     void SoundEffectInstance::setVolumeProperty(float&& volume)
@@ -1045,20 +1151,11 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-#ifdef SOUND_ENABLED
-        // P11-PAN-001 (RFC-1): unlike the old direct MIX_SetTrackStereo call this replaces, pan
-        // is written into the shared cooked-callback DSP state instead -- SDL3_mixer's own stereo
-        // gain was already fixed to unity by Play()/Apply3D's ApplyTrackProperties call, which
-        // also guarantees filterState_ is non-null for any track that's actually playing.
-        MIX_Track* track = AsTrack(track_);
-        if (track && filterState_)
-        {
-            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
-            MIX_LockMixer(mixer);
-            filterState_->pan = Pan_;
-            MIX_UnlockMixer(mixer);
-        }
-#endif
+        // AUDIO-001: routed through the same shared composition routine Play()/Apply3D()/the
+        // Volume/Pitch setters use (was a standalone `filterState_->pan = Pan_` write) -- since
+        // is3D_ is false on this path, INTERNAL_applyComposedTrackProperties() picks Pan_ for the
+        // live pan exactly as this used to write directly, just via one canonical call site.
+        INTERNAL_applyComposedTrackProperties();
     }
 
     void SoundEffectInstance::setPanProperty(float&& pan)
@@ -1075,14 +1172,12 @@ namespace Microsoft::Xna::Framework::Audio
     {
         Pitch_ = (pitch < -1.0f) ? -1.0f : ((pitch > 1.0f) ? 1.0f : pitch);
 
-#ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
-        if (track)
-        {
-            const float ratio = INTERNAL_calculatePitchRatio(Pitch_);
-            MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
-        }
-#endif
+        // AUDIO-001: was a direct ratio write with no Doppler term, which erased any Doppler
+        // shift Apply3D had established (FNA's UpdatePitch() always recombines pitch with the
+        // last-computed Doppler factor, matching FAudio's single combined frequency-ratio voice
+        // stage -- SDL3_mixer's ratio call is the same single combined stage, so CNA must
+        // recompose the two explicitly on every write instead).
+        INTERNAL_applyComposedTrackProperties();
     }
 
     void SoundEffectInstance::setPitchProperty(float&& pitch)
@@ -1112,7 +1207,7 @@ namespace Microsoft::Xna::Framework::Audio
     SoundState SoundEffectInstance::getStateProperty() const
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (!track)
         {
             return SoundState::Stopped;

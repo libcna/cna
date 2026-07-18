@@ -66,8 +66,9 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Returns a new Cue instance for the cue with the given name.
          *
          * The caller is responsible for disposing the returned Cue; however, if this bank is
-         * itself disposed while the cue is still playing, the bank will force-stop and dispose
-         * it first (matching FACTSoundBank_Destroy) so it never outlives the bank.
+         * itself disposed first -- whether the cue is still playing, has already stopped, or was
+         * never even played at all -- the bank will force-stop and dispose it so it never outlives
+         * the bank (matching FACTSoundBank_Destroy).
          *
          * @param name Cue name as defined in the .XSB file.
          * @return Pointer to the new Cue (caller is responsible for disposal).
@@ -133,12 +134,17 @@ namespace Microsoft::Xna::Framework::Audio
         // declaration above) instead of only sweeping on this bank's next PlayCue() call.
         void SweepFireAndForget();
 
-        // P12-BANK-001: mirrors WaveBank's activeCues_/RegisterCue/UnregisterCue -- tracks every
-        // cue currently associated with this bank, both caller-owned cues obtained via GetCue()
-        // and this bank's own fireAndForget_ cues (registered from the same Cue::Play() call
-        // site). Needed so Dispose() can force-stop a caller-owned GetCue() cue that outlives
-        // the bank instead of leaving it with a dangling bank_ pointer (matches
-        // FACTSoundBank_Destroy, FACT.c:1311-1327). fireAndForget_ entries self-unregister via
+        // P12-BANK-001/AUDIO-LIFECYCLE-001: mirrors WaveBank's activeCues_/RegisterCue/
+        // UnregisterCue -- tracks every cue associated with this bank for that cue's ENTIRE
+        // lifetime (registered in Cue's own constructor, unregistered only in Cue::Dispose()),
+        // both caller-owned cues obtained via GetCue() and this bank's own fireAndForget_ cues.
+        // Needed so Dispose() can force-stop ANY cue this bank ever handed out -- prepared but
+        // never played, currently playing, or already stopped but not yet disposed by its caller
+        // -- instead of leaving it with a dangling bank_ pointer (matches FACTSoundBank_Destroy,
+        // FACT.c:1311-1327). Originally (P12-BANK-001) this only registered/unregistered around
+        // Play()/a natural stop, which missed a cue that was constructed but never played at all
+        // (AUDIO-LIFECYCLE-001, found by an external audit) -- registration now happens once, at
+        // construction, independent of play state. fireAndForget_ entries self-unregister via
         // their own Cue destructor before Dispose() ever walks activeCues_ (see Dispose()), so by
         // the time the cascade below runs, only genuinely caller-owned cues remain in the list.
         void RegisterCue(Cue* cue);

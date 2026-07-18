@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
@@ -12,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -24,7 +26,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         CNA::Internal::Audio::XwbData data;
 
-        // Per-entry SoundEffect cache (optional: created on first request)
+        // Per-entry SoundEffect cache (optional: created on first request). Concurrency (both
+        // against other GetSoundEffect() calls and against Dispose()) is guarded by the owning
+        // WaveBank's own xactImplMutex_ (AUD-11-024/025), not a lock in here -- Dispose() needs
+        // to serialize against xactImpl_'s own destruction too, which a lock scoped to this
+        // pimpl's own lifetime could never do (see WaveBank.hpp's xactImplMutex_ comment).
         std::vector<std::optional<SoundEffect>> cache;
 
         explicit XactWaveBankImpl(CNA::Internal::Audio::XwbData d)
@@ -33,50 +39,30 @@ namespace Microsoft::Xna::Framework::Audio
         {}
     };
 
-    // ── WAV-file builders (for ADPCM wrapping) ────────────────────────────────
+    // ── WAV-file builders (for PCM8/ADPCM wrapping) ───────────────────────────
+    //
+    // AUDIO-ADPCM-001 (2026-07-17 deep audit follow-up): the previous local BuildAdpcmWav() wrote
+    // a "fmt " chunk with cbSize=2 (only wSamplesPerBlock, no coefficient table at all). SDL3's
+    // real MS-ADPCM decoder requires at least 7 coefficient pairs (SDL_wave.c's MS_ADPCM_Init:
+    // "Missing required coefficients in MS ADPCM format header") and validates them against the
+    // standard preset table -- confirmed empirically that the old wrapper's output was REJECTED
+    // outright by SDL_LoadWAV_IO ("Could not read MS ADPCM format header"), meaning every
+    // MS-ADPCM-compressed XACT WaveBank entry silently failed to load (WaveBank::GetSoundEffect
+    // caught the resulting exception and returned nullptr). Now shares the same corrected,
+    // tested WAV-assembly logic as the XNB SoundEffectReader (CNA::Internal::Audio::
+    // BuildWavFromWaveFormatEx/BuildStandardMsAdpcmExtension).
 
     namespace
     {
-        static void w16(std::vector<uint8_t>& v, uint16_t x)
-        {
-            v.push_back(static_cast<uint8_t>(x));
-            v.push_back(static_cast<uint8_t>(x >> 8));
-        }
-        static void w32(std::vector<uint8_t>& v, uint32_t x)
-        {
-            v.push_back(static_cast<uint8_t>(x));
-            v.push_back(static_cast<uint8_t>(x >>  8));
-            v.push_back(static_cast<uint8_t>(x >> 16));
-            v.push_back(static_cast<uint8_t>(x >> 24));
-        }
-        static void tag(std::vector<uint8_t>& v, const char* t)
-        {
-            v.push_back(static_cast<uint8_t>(t[0]));
-            v.push_back(static_cast<uint8_t>(t[1]));
-            v.push_back(static_cast<uint8_t>(t[2]));
-            v.push_back(static_cast<uint8_t>(t[3]));
-        }
-
         std::vector<uint8_t> BuildPcmWav(
             const uint8_t* audioData, uint32_t audioLen,
             uint16_t channels, uint32_t sampleRate, uint8_t bitsPerSample)
         {
-            uint16_t blockAlign      = static_cast<uint16_t>(channels * (bitsPerSample / 8));
-            uint32_t avgBytesPerSec  = sampleRate * blockAlign;
-            uint32_t riffPayload     = 4 + (8 + 16) + (8 + audioLen);
-
-            std::vector<uint8_t> wav;
-            wav.reserve(12 + 24 + 8 + audioLen);
-
-            tag(wav, "RIFF"); w32(wav, riffPayload);
-            tag(wav, "WAVE");
-            tag(wav, "fmt "); w32(wav, 16);
-            w16(wav, 1); w16(wav, channels);
-            w32(wav, sampleRate); w32(wav, avgBytesPerSec);
-            w16(wav, blockAlign); w16(wav, bitsPerSample);
-            tag(wav, "data"); w32(wav, audioLen);
-            wav.insert(wav.end(), audioData, audioData + audioLen);
-            return wav;
+            const uint16_t blockAlign = static_cast<uint16_t>(channels * (bitsPerSample / 8));
+            const uint32_t avgBytesPerSec = sampleRate * blockAlign;
+            return CNA::Internal::Audio::BuildWavFromWaveFormatEx(
+                audioData, audioLen, /*wFormatTag=*/1, channels, sampleRate, avgBytesPerSec,
+                blockAlign, bitsPerSample, /*extensionData=*/{}, /*factSampleFrames=*/0);
         }
 
         std::vector<uint8_t> BuildAdpcmWav(
@@ -84,33 +70,15 @@ namespace Microsoft::Xna::Framework::Audio
             uint16_t channels, uint32_t sampleRate,
             uint16_t blockAlign, uint16_t samplesPerBlock)
         {
-            // nAvgBytesPerSec
-            uint32_t avgBytesPerSec = (samplesPerBlock > 0)
+            const uint32_t avgBytesPerSec = (samplesPerBlock > 0)
                 ? (sampleRate * blockAlign / samplesPerBlock) : sampleRate;
-            uint32_t totalSamples   = (blockAlign > 0)
+            const uint32_t totalSamples = (blockAlign > 0)
                 ? (audioLen / blockAlign * samplesPerBlock) : 0;
-
-            // fmt chunk: 18 bytes (16 standard + 2 cbSize + 2 wSamplesPerBlock = 20)
-            uint32_t fmtSize = 20;
-            uint32_t riffPayload = 4 + (8 + fmtSize) + (8 + 4) + (8 + audioLen);
-
-            std::vector<uint8_t> wav;
-            wav.reserve(12 + 8 + fmtSize + 12 + 8 + audioLen);
-
-            tag(wav, "RIFF"); w32(wav, riffPayload);
-            tag(wav, "WAVE");
-            tag(wav, "fmt "); w32(wav, fmtSize);
-            w16(wav, 2);       // MS-ADPCM
-            w16(wav, channels);
-            w32(wav, sampleRate); w32(wav, avgBytesPerSec);
-            w16(wav, blockAlign); w16(wav, 4); // bitsPerSample=4
-            w16(wav, 2);       // cbSize = 2
-            w16(wav, samplesPerBlock);
-            tag(wav, "fact"); w32(wav, 4);
-            w32(wav, totalSamples);
-            tag(wav, "data"); w32(wav, audioLen);
-            wav.insert(wav.end(), audioData, audioData + audioLen);
-            return wav;
+            return CNA::Internal::Audio::BuildWavFromWaveFormatEx(
+                audioData, audioLen, /*wFormatTag=*/2, channels, sampleRate, avgBytesPerSec,
+                blockAlign, /*bitsPerSample=*/4,
+                CNA::Internal::Audio::BuildStandardMsAdpcmExtension(samplesPerBlock),
+                totalSamples);
         }
     }
 
@@ -249,6 +217,15 @@ namespace Microsoft::Xna::Framework::Audio
 
     const SoundEffect* WaveBank::GetSoundEffect(unsigned short waveIndex)
     {
+        // AUD-11-024/025: locked before the very first `xactImpl_` access (not just around the
+        // cache lookup-then-populate sequence) so this can never race Dispose()'s
+        // `xactImpl_.reset()` on another thread -- both the "is xactImpl_ still alive" check and
+        // everything that follows must happen under the same lock Dispose() takes, or a
+        // just-checked-non-null `xactImpl_` could be destroyed out from under this function
+        // between the check and its first real use. Also still serializes two threads racing to
+        // first-use the same entry against each other, exactly as before.
+        std::lock_guard<std::mutex> lock(xactImplMutex_);
+
         if (!xactImpl_ || waveIndex >= xactImpl_->data.entries.size())
             return nullptr;
 
@@ -325,6 +302,21 @@ namespace Microsoft::Xna::Framework::Audio
         {
             using CNA::Internal::Audio::XwbFormat;
 
+            // AUD-11-014: entry.loopStartSample/loopTotalSamples are parsed from the .xwb
+            // (FACTWaveBankEntry's LoopRegion, dwStartSample/dwTotalSamples -- expressed in
+            // decoded PCM sample frames, matching real FAudio's own FACT.c, which applies these
+            // exact fields to the playback buffer's LoopBegin/LoopLength whenever the cue's
+            // PlayWaveEvent requested looping) -- previously parsed but never wired into the
+            // constructed SoundEffect at all, so every WaveBank-sourced looping cue looped the
+            // *entire* track regardless of an authored intro-then-loop region. Baking the region
+            // into the cached SoundEffect here is safe regardless of whether any particular play
+            // actually loops: SoundEffectInstance::Play() only ever applies loopStart_/loopLength_
+            // while IsLooped_ is true (see CP-17/P10-LOOP-003/004), which Cue.cpp already sets
+            // per-instance from the PlayWaveEvent's own loopCount -- so this doesn't change
+            // playback for any non-looping cue referencing the same cached entry.
+            const int32_t loopStart  = static_cast<int32_t>(entry.loopStartSample);
+            const int32_t loopLength = static_cast<int32_t>(entry.loopTotalSamples);
+
             if (entry.format == XwbFormat::PCM)
             {
                 // 8-bit PCM: SDL expects unsigned 8-bit; we use raw approach for 16-bit
@@ -333,15 +325,16 @@ namespace Microsoft::Xna::Framework::Audio
                     std::vector<uint8_t> samples(audioData, audioData + audioLen);
                     AudioChannels ch = (entry.channels == 1)
                         ? AudioChannels::Mono : AudioChannels::Stereo;
-                    cached.emplace(samples,
+                    cached.emplace(samples, 0, static_cast<SharpRuntime::intcs>(samples.size()),
                                    static_cast<SharpRuntime::intcs>(entry.sampleRate),
-                                   ch);
+                                   ch, loopStart, loopLength);
                 }
                 else
                 {
                     // 8-bit PCM: wrap in WAV since MIX_LoadRawAudio expects S16
                     auto wav = BuildPcmWav(audioData, audioLen,
                                            entry.channels, entry.sampleRate, 8);
+                    CNA::Internal::Audio::AppendSmplChunkIfLooped(wav, loopStart, loopLength);
                     std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
                     std::istringstream ss(s);
                     // FromStream returns a heap SoundEffect* the caller owns; wrap it so the
@@ -355,6 +348,7 @@ namespace Microsoft::Xna::Framework::Audio
                 auto wav = BuildAdpcmWav(audioData, audioLen,
                                           entry.channels, entry.sampleRate,
                                           entry.blockAlign, entry.samplesPerBlock);
+                CNA::Internal::Audio::AppendSmplChunkIfLooped(wav, loopStart, loopLength);
                 std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
                 std::istringstream ss(s);
                 std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
@@ -362,8 +356,19 @@ namespace Microsoft::Xna::Framework::Audio
             }
             else
             {
-                std::cerr << "[WaveBank] Unsupported format " << static_cast<int>(entry.format)
-                          << " for wave " << waveIndex << "\n";
+                // AUD-11-010/011 (2026-07-17 deep audit, A-11): XMA/XMA2 and WMA have no decode
+                // path anywhere in this stack -- both are proprietary codecs SDL3 does not decode
+                // (unlike PCM/float/MS-ADPCM/IMA-ADPCM, which SDL3's own WAV loader handles
+                // natively, see WavWrapper.hpp). This is a genuine, permanent capability gap, not
+                // a bug to silently swallow -- name the bank and a human-readable format so a
+                // "missing sound" symptom is traceable to this exact cause from the log alone,
+                // matching CHECKLIST.md's documented accepted deviation.
+                const char* formatName =
+                    entry.format == XwbFormat::XMA ? "XMA/XMA2" :
+                    entry.format == XwbFormat::WMA ? "WMA" : "unknown";
+                std::cerr << "[WaveBank] Wave " << waveIndex << " in bank \"" << getBankName()
+                          << "\" uses " << formatName << " compression, which has no decode path "
+                          << "(CHECKLIST.md accepted deviation) -- sound will be missing\n";
                 return nullptr;
             }
         }
@@ -396,7 +401,14 @@ namespace Microsoft::Xna::Framework::Audio
                 if (cue) cue->Dispose(); // idempotent; safe even if already disposed elsewhere
             activeCues_.clear();
 
-            xactImpl_.reset();
+            // AUD-11-025: takes the same lock GetSoundEffect() takes before its own first
+            // xactImpl_ access, so a concurrent GetSoundEffect() call on another thread either
+            // completes entirely before this reset() runs, or blocks here until reset() (and the
+            // isDisposed_ update) has finished -- never observes a half-destroyed xactImpl_.
+            {
+                std::lock_guard<std::mutex> lock(xactImplMutex_);
+                xactImpl_.reset();
+            }
             isDisposed_ = true;
         }
     }

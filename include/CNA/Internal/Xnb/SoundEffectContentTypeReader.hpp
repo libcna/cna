@@ -15,13 +15,15 @@ namespace CNA::Internal::Xnb
      * @brief FNA's real `Microsoft.Xna.Framework.Content.SoundEffectReader`
      *        (`src/Content/ContentReaders/SoundEffectReader.cs`).
      *
-     * **Current coverage** (plan_xnb.md XNB-33's support matrix, scoped to reach the M3
-     * milestone with at least one working variant): only `WAVE_FORMAT_PCM` (`wFormatTag == 1`)
-     * at 16 bits per sample, mono or stereo, is supported -- CNA's own `SoundEffect` PCM
-     * constructors always assume 16-bit signed PCM (`SDL_AUDIO_S16LE`, see `SoundEffect.cpp`),
-     * with no format-conversion path for anything else yet. 8-bit PCM, IEEE float, MS-ADPCM,
-     * IMA-ADPCM, and XMA2 all parse correctly (the WAVEFORMATEX header and wave data are read
-     * byte-for-byte the same as FNA) but throw a clear
+     * **Current coverage** (`plan_audio.md` AUD-06 support matrix, widened 2026-07-17 from the
+     * original PCM16-only M3 baseline): 16-bit PCM uses CNA's own direct `SoundEffect` raw-buffer
+     * constructor (`SDL_AUDIO_S16LE`, unchanged fast path). 8-bit PCM, 32-bit IEEE float, and
+     * MS/IMA ADPCM are wrapped in a minimal synthetic in-memory WAV file
+     * (`CNA::Internal::Audio::BuildWavFromWaveFormatEx`, forwarding the real captured
+     * WAVEFORMATEX extension bytes verbatim) and decoded via `SoundEffect::FromStream`
+     * (`MIX_LoadAudio_IO`), reaching SDL3's own native WAV/ADPCM decoder instead of requiring CNA
+     * to implement a float/ADPCM decoder itself. XMA2 remains rejected -- no decode path exists
+     * anywhere in this stack (SDL3 doesn't decode XMA2 either) -- with a clear
      * `Microsoft::Xna::Framework::Content::ContentLoadException` naming the rejected format,
      * rather than silently constructing a `SoundEffect` that would play back as noise.
      */

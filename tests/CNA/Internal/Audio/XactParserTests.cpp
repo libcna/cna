@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "CNA/Internal/Audio/XactTypes.hpp"
 
+#include <chrono>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -253,6 +254,126 @@ namespace
         return data;
     }
 
+    // A-12 (2026-07-17 deep audit): compact .xwb with a SINGLE entry (so it is simultaneously the
+    // first and last entry) carrying a nonzero deviation field. Verified against the real,
+    // current, actively-maintained FAudio source (FACT_internal.c's compact-entry parsing loop,
+    // `~line 3106-3124`): the last entry's PlayRegion.dwLength is computed as
+    // `ENTRYWAVEDATA segment length - offset`, with NO deviation subtraction at all -- unlike the
+    // non-last-entry loop just above it, which (due to what reads as a genuine, long-standing
+    // FAudio bug -- it subtracts an entry's own just-computed offset from itself, always
+    // yielding zero, present unchanged since at least a 2018-12-18 commit in the locally
+    // available FAudio checkout) never produces a usable non-last-entry length at all. CNA
+    // deliberately does not replicate that non-last-entry bug (see
+    // CompactWaveBankComputesLengthsFromConsecutiveOffsets, which proves non-last entries get
+    // real, non-zero lengths derived from the gap to the next entry's offset) but DOES correctly
+    // match FAudio's last-entry behavior of never subtracting the deviation. This fixture proves
+    // that specific behavior with a deviation value that would change the answer if it were
+    // (incorrectly) subtracted.
+    std::vector<uint8_t> BuildCompactXwbFixtureWithNonzeroLastEntryDeviation()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 20;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "A-12", 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        // Single (last) entry: offset=2*4=8, deviation=5 -- if (incorrectly) subtracted, length
+        // would be (20-8)-5=7 instead of the correct 20-8=12.
+        AppendU32(data, (2u) | (5u << 21));
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    // AUD-11-003 (2026-07-17 deep audit): compact .xwb with a caller-specified `alignment` field
+    // (normally a small constant like 4) -- used to build both a zero-alignment fixture and an
+    // alignment value large enough to overflow the `rawOffsetUnits[i] * alignment` multiplication
+    // in 32-bit arithmetic.
+    std::vector<uint8_t> BuildCompactXwbFixtureWithAlignment(uint32_t alignment, uint32_t rawOffsetUnits)
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 20;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "AUD-11-003", 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        AppendU32(data, rawOffsetUnits & 0x1FFFFFu); // single (last) entry, deviation=0
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
     // Compact .xwb whose single (and therefore last) entry's offset lies past the end of the
     // wave-data segment -- the "remainder of segment" length computation must throw rather than
     // underflow (regression fixture for IN-3's second underflow site).
@@ -300,6 +421,64 @@ namespace
 
         // entry 0 (only/last): offset=10*4=40, past the 8-byte wave-data segment: underflow.
         AppendU32(data, (10u));
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    // AUD-11-005: a corrupt/adversarial entryMetaDataSize smaller than 4 (the size of the
+    // compact per-entry u32 the parser unconditionally reads) makes `entryMetaDataSize - 4`
+    // (both uint32_t) underflow to a huge value passed straight to ctx.skip() -- unlike the
+    // non-compact path's carefully graduated conditional reads (which structurally guarantee
+    // `ctx.cur - entryPtr` never exceeds entryMetaDataSize), the compact path has no such
+    // guard. Must fail cleanly, not with UB pointer arithmetic or a crash.
+    std::vector<uint8_t> BuildCompactXwbFixtureWithEntryMetaDataSizeTooSmall()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 2; // too small: the compact entry itself is 4 bytes
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 8;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "AUD-11-005", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // The one compact entry: a plausible, in-range offset/deviation -- the defect is in
+        // entryMetaDataSize itself, not this value.
+        AppendU32(data, (0u) | (0u << 21));
 
         for (uint32_t i = 0; i < waveDataLength; ++i)
             data.push_back(static_cast<uint8_t>(i));
@@ -1215,6 +1394,20 @@ TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
     EXPECT_EQ(first.dataLength / bytesPerSample, 5u);
 }
 
+// A-12 (2026-07-17 deep audit): confirmed NOT a defect after checking real FAudio source
+// (FACT_internal.c) directly -- the last compact entry's length must NOT subtract its own
+// deviation field, matching FAudio's own (verified) behavior exactly. See
+// BuildCompactXwbFixtureWithNonzeroLastEntryDeviation's own comment for the full citation.
+TEST(XactParserTest, CompactWaveBankLastEntryLengthIgnoresItsOwnDeviation)
+{
+    const XwbData wb = ParseXwb(BuildCompactXwbFixtureWithNonzeroLastEntryDeviation());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    EXPECT_EQ(wb.entries[0].dataOffset, 148u + 8u); // segOffset[4] (48+96+4) + offset(8)
+    EXPECT_EQ(wb.entries[0].dataLength, 12u)        // 20 - 8, deviation NOT subtracted
+        << "last entry must not subtract its own deviation (matches real FAudio's "
+           "FACT_internal.c compact-entry parsing exactly)";
+}
+
 TEST(XactParserTest, CompactWaveBankThrowsWhenDeviationExceedsGapToNextEntry)
 {
     EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithOversizedDeviation()), std::runtime_error);
@@ -1225,11 +1418,110 @@ TEST(XactParserTest, CompactWaveBankThrowsWhenLastEntryOffsetExceedsWaveDataSegm
     EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithOffsetPastSegment()), std::runtime_error);
 }
 
+// AUD-11-003 (2026-07-17 deep audit): a zero alignment would silently collapse every compact
+// entry's offset to 0 (every entry claiming the same start) instead of failing loudly.
+TEST(XactParserTest, CompactWaveBankThrowsOnZeroAlignment)
+{
+    EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithAlignment(0, 1)), std::runtime_error);
+}
+
+// AUD-11-003: rawOffsetUnits (up to 21 bits) times an unconstrained alignment can overflow
+// 32-bit arithmetic and silently wrap to a wrong-but-plausible offset instead of failing loudly.
+// Chosen so the WRAPPED 32-bit product is exactly 0 (0x100000 * 0x1000 == 2^32, wraps to 0) --
+// a small, entirely plausible-looking offset that would NOT trip the pre-existing "offset exceeds
+// wave-data segment" check on its own, unlike a wrap that happens to still land on a huge value.
+TEST(XactParserTest, CompactWaveBankThrowsWhenOffsetMultiplicationOverflows32Bits)
+{
+    EXPECT_THROW(
+        ParseXwb(BuildCompactXwbFixtureWithAlignment(0x1000u, 0x100000u)),
+        std::runtime_error);
+}
+
+// AUD-11-005: entryMetaDataSize < 4 must fail cleanly (a specific, diagnostic exception), not
+// via UB pointer arithmetic inside ctx.skip() reached only by luck of the bounds check catching
+// the resulting huge value after the fact.
+TEST(XactParserTest, CompactWaveBankThrowsWhenEntryMetaDataSizeTooSmall)
+{
+    try
+    {
+        ParseXwb(BuildCompactXwbFixtureWithEntryMetaDataSizeTooSmall());
+        FAIL() << "expected std::runtime_error";
+    }
+    catch (const std::runtime_error& ex)
+    {
+        // Checks the specific, diagnostic message naming the real problem -- not just any
+        // exception (the pre-fix code already threw a generic "skip past end" from deep inside
+        // Ctx::skip(), which would make a plain EXPECT_THROW pass even without this fix).
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("entryMetaDataSize"), std::string::npos) << what;
+    }
+}
+
 TEST(XactParserTest, CompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
 {
     const XwbData wb = ParseXwb(BuildCompactXwbFixtureStereo());
     ASSERT_EQ(wb.entries.size(), 1u);
     EXPECT_EQ(wb.entries[0].channels, 2);
+}
+
+// AUD-11-021: every other fixture in this file uses version=1 (<=43, no headerVersion field) --
+// the newer header format (version>43, WITH an extra 4-byte headerVersion field between version
+// and the segment table) had zero test coverage anywhere despite ReadXwbSegmentTable explicitly
+// branching on it. Confirms the segment table (and everything after it) is still read from the
+// correct offset when that extra field is present -- a real desync risk if the branch were ever
+// wrong, since every segOffset in the file is authored relative to this header's own true size.
+std::vector<uint8_t> BuildCompactXwbFixtureWithNewerHeaderVersion()
+{
+    constexpr uint32_t headerSize        = 52; // magic+version+headerVersion+5*{offset,length}
+    constexpr uint32_t bankDataSize      = 96;
+    constexpr uint32_t entryCount        = 1;
+    constexpr uint32_t entryMetaDataSize = 4;
+    constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+    constexpr uint32_t waveDataLength    = 20;
+
+    const uint32_t segOffset[5] = {
+        headerSize,
+        headerSize + bankDataSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+    };
+    const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'W', 'B', 'N', 'D' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU32(data, 44); // version: >43, exercises the headerVersion branch (still <=46, no
+                          // "may not be fully supported" warning)
+    AppendU32(data, 1);  // headerVersion -- only present because version>43
+    for (int i = 0; i < 5; ++i) { AppendU32(data, segOffset[i]); AppendU32(data, segLength[i]); }
+
+    AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+    AppendU32(data, entryCount);
+    AppendPadded(data, "AUD-11-021", 64);
+    AppendU32(data, entryMetaDataSize);
+    AppendU32(data, 0);
+    AppendU32(data, 4);
+    const uint32_t compactFormat = (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+    AppendU32(data, compactFormat);
+    for (int i = 0; i < 8; ++i) data.push_back(0);
+
+    AppendU32(data, 0u); // entry 0: offset=0, deviation=0
+
+    for (uint32_t i = 0; i < waveDataLength; ++i)
+        data.push_back(static_cast<uint8_t>(i));
+
+    return data;
+}
+
+TEST(XactParserTest, NewerHeaderVersionWithExtraFieldParsesSegmentsAtCorrectOffset)
+{
+    const XwbData wb = ParseXwb(BuildCompactXwbFixtureWithNewerHeaderVersion());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    EXPECT_EQ(wb.bankName, "AUD-11-021");
+    EXPECT_EQ(wb.entries[0].channels, 1);
+    EXPECT_EQ(wb.entries[0].sampleRate, 44100u);
+    EXPECT_EQ(wb.entries[0].dataLength, 20u);
 }
 
 TEST(XactParserTest, CompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock)
@@ -1600,6 +1892,90 @@ TEST(XactParserTest, NonCompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
     EXPECT_EQ(wb.entries[0].channels, 2);
 }
 
+namespace
+{
+    // AUD-11-012: distinctive, mutually-non-collidable values for every FACTWaveBankMiniWaveFormat
+    // bitfield (real layout confirmed against FAudio's own FACT.h: wFormatTag:2, nChannels:3,
+    // nSamplesPerSec:18, wBlockAlign:8, wBitsPerSample:1, packed LSB-first) -- unlike the
+    // channels-only fixture above, a bit-shift/mask bug that swapped two fields or was off by one
+    // bit would still be caught here, since no two chosen values could plausibly be confused for
+    // each other. Uses ADPCM (fmtTag=2) specifically so the raw wBlockAlign field's own extraction
+    // is verifiable through the derived blockAlign/samplesPerBlock formulas (for PCM, wBlockAlign
+    // is read but overridden by a channels-only formula, so it wouldn't exercise this field at all).
+    std::vector<uint8_t> BuildNonCompactXwbFixtureDistinctiveAdpcmFields()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 16;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u);
+        AppendU32(data, entryCount);
+        AppendPadded(data, "AUD-11-012-nc-distinctive", 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, 4);
+        AppendU32(data, 0);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        const uint32_t fmt =
+              (2u)              // fmtTag: ADPCM
+            | (5u << 2)         // channels: 5 (distinctive, not a real speaker layout)
+            | (12345u << 5)     // sample rate: distinctive, well within the 18-bit range
+            | (77u << 23)       // wBlockAlign raw field: distinctive
+            | (1u << 31);       // 16-bit
+        AppendU32(data, 0u);
+        AppendU32(data, fmt);
+        AppendU32(data, 0u);
+        AppendU32(data, waveDataLength);
+        AppendU32(data, 0u);
+        AppendU32(data, 0u);
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+}
+
+TEST(XactParserTest, NonCompactWaveBankMiniWaveFormatBitExtractionMatchesEveryFieldExactly)
+{
+    const XwbData wb = ParseXwb(BuildNonCompactXwbFixtureDistinctiveAdpcmFields());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    const auto& e = wb.entries[0];
+
+    EXPECT_EQ(e.channels, 5);
+    EXPECT_EQ(e.sampleRate, 12345u);
+    EXPECT_EQ(e.bitsPerSample, 16);
+    // ADPCM-derived formulas (FAudio's own): wSamplesPerBlock = (wBlockAlign_raw + 16) * 2,
+    // nBlockAlign = (wBlockAlign_raw + 22) * channels -- with wBlockAlign_raw=77, channels=5:
+    EXPECT_EQ(e.samplesPerBlock, (77 + 16) * 2);
+    EXPECT_EQ(e.blockAlign, (77 + 22) * 5);
+}
+
 // ===================== Truncated files / bad magic (IN-6) =====================
 
 TEST(XactParserTest, ParseXgsTruncatedFileThrows)
@@ -1612,6 +1988,111 @@ TEST(XactParserTest, ParseXwbTruncatedFileThrows)
 {
     std::vector<uint8_t> tiny(10, 0);
     EXPECT_THROW(ParseXwb(tiny), std::runtime_error);
+}
+
+// AUD-11-017/018: found via ASan, not just inspection -- a genuine heap-buffer-overflow, distinct
+// from the generic "too small to even have a header" truncation above. `wbFlags`/`entryCount`
+// (8 bytes total) are read via bounds-checked `ctx.u32()`, but the 64-byte bankName field right
+// after them used a raw `strnlen(p, 64)` with no check that 64 real bytes actually remained --
+// for a file truncated to end exactly there, this read past the buffer's real heap allocation
+// before the (bounds-checked) `ctx.skip(64)` immediately after it ever got a chance to catch the
+// truncation. A standalone repro against this exact fixture shape reproduced a real ASan
+// heap-buffer-overflow report before the fix (capping the strnlen scan to the real remaining
+// bytes first, mirroring cstr()'s own established AUDIO-PARSER-001 pattern); this test only
+// checks the resulting exception, since ASan itself (not a plain gtest assertion) is what proves
+// the absence of the OOB read -- see this session's ASan-verified investigation notes in
+// plan_audio.md's AUD-11-017 entry.
+TEST(XactParserTest, ParseXwbTruncatedExactlyAtBankNameFieldThrowsNotOob)
+{
+    constexpr uint32_t headerSize = 48;
+    std::vector<uint8_t> data;
+    auto w32 = [&data](uint32_t v) {
+        data.push_back(static_cast<uint8_t>(v)); data.push_back(static_cast<uint8_t>(v >> 8));
+        data.push_back(static_cast<uint8_t>(v >> 16)); data.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const char magic[4] = { 'W', 'B', 'N', 'D' };
+    data.insert(data.end(), magic, magic + 4);
+    w32(1); // version
+    for (int i = 0; i < 5; ++i)
+    {
+        w32(headerSize); // segOffset[i]: all point right after the header
+        w32(0);          // segLength[i]
+    }
+    w32(0u); // wbFlags
+    w32(1u); // entryCount
+    // File ends here -- exactly 0 bytes remain for the 64-byte bankName field that would follow.
+
+    EXPECT_THROW(ParseXwb(data), std::runtime_error);
+}
+
+// AUD-11-026 (found via fuzzing prep): entryCount is a full uint32_t (unlike every other count
+// field this parser reads, all naturally bounded by an 8/16-bit field width) fed straight into
+// `result.entries.resize(entryCount)` with no validation -- an implausibly large value (here,
+// near UINT32_MAX against a file that's really only ~72 bytes) must be rejected with a clean,
+// specific diagnostic instead of attempting a multi-hundred-gigabyte allocation. A plain
+// EXPECT_THROW wouldn't distinguish "rejected cleanly and fast" from "eventually got an unrelated
+// std::bad_alloc/std::length_error after actually starting a huge allocation" (both throw *some*
+// std::runtime_error-derived-or-not exception), which is exactly the class of gap
+// XnbContainerFuzzTests.cpp treats as a real failure, not an acceptable outcome -- so this checks
+// both the specific exception type and that it returns fast, not after a slow/huge allocation
+// attempt.
+TEST(XactParserTest, ParseXwbRejectsImplausiblyLargeEntryCountWithoutAllocationAttempt)
+{
+    // A COMPLETE, well-formed BANKDATA segment (144 real bytes total) is required so the parse
+    // genuinely reaches `result.entries.resize(entryCount)` -- a truncated file would already be
+    // rejected earlier (by AUD-11-018's bankName-field truncation check) for an unrelated reason,
+    // which would not actually exercise this guard at all.
+    constexpr uint32_t headerSize   = 48;
+    constexpr uint32_t bankDataSize = 96;
+    std::vector<uint8_t> data;
+    auto w32 = [&data](uint32_t v) {
+        data.push_back(static_cast<uint8_t>(v)); data.push_back(static_cast<uint8_t>(v >> 8));
+        data.push_back(static_cast<uint8_t>(v >> 16)); data.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const char magic[4] = { 'W', 'B', 'N', 'D' };
+    data.insert(data.end(), magic, magic + 4);
+    w32(1); // version
+    const uint32_t segOffset1 = headerSize + bankDataSize; // 144: right after BANKDATA
+    for (int i = 0; i < 5; ++i)
+    {
+        w32(i == 0 ? headerSize : segOffset1);
+        w32(0);
+    }
+
+    w32(0u);           // wbFlags: not compact, no names
+    // 5,000,000 entries against a real file that's really only 144 bytes total -- clearly
+    // implausible (each entry needs at least 1 real byte to exist), but a moderate enough
+    // magnitude (~a few hundred MB, not hundreds of GB) that even an *unguarded* resize would
+    // complete quickly and safely if this test ever needs to run against pre-fix code, rather
+    // than risking a genuinely dangerous multi-GB allocation attempt on a shared machine.
+    constexpr uint32_t kImplausibleEntryCount = 5000000u;
+    w32(kImplausibleEntryCount);
+    for (int i = 0; i < 64; ++i) data.push_back(0); // bankName
+    w32(24u); // entryMetaDataSize
+    w32(0u);  // entryNameElementSize
+    w32(4u);  // alignment
+    w32(0u);  // compactFormat
+    for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+    // File ends here -- segOffset[1] (144) is exactly at the file's real end, a valid seek
+    // target, but there is no real per-entry data behind it at all.
+
+    ASSERT_EQ(data.size(), headerSize + bankDataSize);
+
+    const auto start = std::chrono::steady_clock::now();
+    try
+    {
+        ParseXwb(data);
+        FAIL() << "expected std::runtime_error";
+    }
+    catch (const std::runtime_error& ex)
+    {
+        EXPECT_NE(std::string(ex.what()).find("entryCount"), std::string::npos) << ex.what();
+    }
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 500)
+        << "rejection must be fast -- a slow return here would mean an allocation was actually attempted";
 }
 
 TEST(XactParserTest, ParseXsbTruncatedFileThrows)
@@ -1658,6 +2139,53 @@ TEST(XactParserTest, ParseXwbTruncatedMidRecordThrows)
     ASSERT_GT(full.size(), 52u);
     std::vector<uint8_t> truncated(full.begin(), full.begin() + 52);
     EXPECT_THROW(ParseXwb(truncated), std::runtime_error);
+}
+
+// AUDIO-PARSER-001 (external audit, 2026-07-16): a string with no null terminator anywhere before
+// the buffer's end used to let Ctx::cstr() silently return the truncated content and advance its
+// cursor one byte PAST the buffer's end (`cur += len + 1` where `len == maxlen`) instead of
+// failing safely like every other Ctx accessor already does for an out-of-bounds condition. A
+// single such overrun is bad enough on its own (forming an invalid pointer one past `end`); if
+// this cursor were ever read from again (e.g. a category/variable list with more than one name),
+// the next cstr() call's own `end - cur` would underflow to a huge std::size_t, turning strnlen()
+// into a real out-of-bounds heap read over corrupt/truncated content -- exactly the class of bug
+// this branch's own established "any Ctx accessor throws on out-of-bounds" convention exists to
+// prevent. This fixture deliberately omits the category name's trailing null byte so the buffer
+// ends immediately after "Default" with nothing left to find a terminator in.
+TEST(XactParserTest, ParseXgsUnterminatedCategoryNameThrows)
+{
+    constexpr uint32_t headerSize       = 65;
+    constexpr uint32_t categoryDataSize = 10;
+
+    const uint32_t categoryOffset     = headerSize;
+    const uint32_t variableOffset     = categoryOffset + categoryDataSize;
+    const uint32_t categoryNameOffset = variableOffset; // no variable data segment needed (count=0)
+    const std::string categoryName    = "Default"; // deliberately left unterminated below
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'X', 'G', 'S', 'F' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); AppendU16(data, 0); AppendU16(data, 0);
+    for (int i = 0; i < 8; ++i) data.push_back(0);
+    AppendU8(data, 3);
+
+    AppendU16(data, 1); // categoryCount
+    AppendU16(data, 0); // variableCount -- zero, so nothing ever reads past the missing terminator
+    AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0);
+
+    AppendU32(data, categoryOffset);
+    AppendU32(data, variableOffset);
+    AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0);
+    AppendU32(data, categoryNameOffset);
+    AppendU32(data, categoryNameOffset); // variableNameOffset (unused, variableCount==0)
+
+    AppendU8(data, 255); AppendU16(data, 0); AppendU16(data, 0); AppendU8(data, 0);
+    AppendU16(data, 0xFFFF); AppendU8(data, 0xFF); AppendU8(data, 0); // 10-byte category record
+
+    // Category name with NO trailing null terminator -- the buffer ends right after it.
+    data.insert(data.end(), categoryName.begin(), categoryName.end());
+
+    EXPECT_THROW(ParseXgs(data), std::runtime_error);
 }
 
 TEST(XactParserTest, ParseXsbTruncatedMidRecordThrows)

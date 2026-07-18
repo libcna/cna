@@ -12,6 +12,7 @@
 // tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp for the same "needs a fresh process" problem.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -21,6 +22,11 @@
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
+
+#include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "System/Environment.hpp"
+
+#include <SDL3_mixer/SDL_mixer.h>
 
 extern char** environ;
 
@@ -35,7 +41,10 @@ namespace {
         int readFd{-1};
     };
 
-    SpawnedProcess SpawnHarness() {
+    // AUD-04-008/009: generalized to take an explicit path so the same spawn/watchdog/drain
+    // plumbing serves the no-hardware harness plus the two mixer-destroy-with-active-voice
+    // harnesses below, instead of duplicating it per harness.
+    SpawnedProcess SpawnHarness(const char* path) {
         int pipeFds[2];
         if (pipe(pipeFds) != 0) {
             ADD_FAILURE() << "pipe() failed: " << strerror(errno);
@@ -47,15 +56,15 @@ namespace {
         posix_spawn_file_actions_adddup2(&actions, pipeFds[1], STDERR_FILENO);
         posix_spawn_file_actions_addclose(&actions, pipeFds[0]);
 
-        char* argv[] = {const_cast<char*>(CNA_AUDIO_NO_HARDWARE_HARNESS_PATH), nullptr};
+        char* argv[] = {const_cast<char*>(path), nullptr};
 
         pid_t pid = -1;
-        int rc = posix_spawn(&pid, CNA_AUDIO_NO_HARDWARE_HARNESS_PATH, &actions, nullptr, argv, environ);
+        int rc = posix_spawn(&pid, path, &actions, nullptr, argv, environ);
         posix_spawn_file_actions_destroy(&actions);
         close(pipeFds[1]); // the child has its own dup'd copy; the parent only needs the read end
 
         if (rc != 0) {
-            ADD_FAILURE() << "posix_spawn(" << CNA_AUDIO_NO_HARDWARE_HARNESS_PATH << ") failed: " << strerror(rc);
+            ADD_FAILURE() << "posix_spawn(" << path << ") failed: " << strerror(rc);
             close(pipeFds[0]);
             return {};
         }
@@ -93,10 +102,212 @@ namespace {
     }
 }
 
+// AUD-04-001 (2026-07-17 deep audit): the actual negotiated mixer format must be queryable after
+// GetMixer() returns, not just the requested spec CNA itself asked for -- this is what
+// AudioMixer.cpp's own new diagnostic logging (requested vs. actual) depends on being real and
+// available, not merely printed once and forgotten. Also implicitly proves the SDL_AUDIO_S16
+// format actually round-trips through MIX_CreateMixerDevice under the dummy driver (this
+// environment's only available driver), since MIX_GetMixerFormat would otherwise report whatever
+// the (absent) physical device negotiated instead.
+TEST(AudioMixerTest, ActualMixerFormatIsQueryableAfterCreation) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try {
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(mixer, nullptr);
+
+        SDL_AudioSpec actual{};
+        ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
+        EXPECT_GT(actual.freq, 0);
+        EXPECT_GT(actual.channels, 0);
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+namespace {
+    // AUD-04-004: restores the production-default mixer spec on scope exit, regardless of how
+    // the scope is left (assertion failure or normal return) -- necessary because g_mixer is a
+    // single process-wide singleton shared by every other test in this binary; leaving an
+    // override or a destroyed mixer behind would silently corrupt unrelated later tests.
+    struct MixerSpecOverrideGuard {
+        ~MixerSpecOverrideGuard() {
+            CNA::Internal::Audio::ClearMixerSpecOverrideForTests();
+            CNA::Internal::Audio::DestroyMixer();
+        }
+    };
+}
+
+// AUD-04-004: production code always requests the fixed S16 stereo 44100 Hz default; this
+// proves the same GetMixer() path is override-able to other rates/channel counts (foundational
+// for later device-negotiation-adjacent tests, e.g. AUD-04-002/003), and that the SDL dummy
+// driver used throughout this suite actually honors an arbitrary requested spec rather than
+// silently clamping every mixer to one fixed rate regardless of what's requested.
+class AudioMixerSpecOverrideTest : public ::testing::TestWithParam<std::tuple<int, int>> {};
+
+TEST_P(AudioMixerSpecOverrideTest, OverriddenSpecIsActuallyNegotiated) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    const auto [freq, channels] = GetParam();
+
+    CNA::Internal::Audio::DestroyMixer();
+    MixerSpecOverrideGuard guard;
+
+    SDL_AudioSpec requested{};
+    requested.format = SDL_AUDIO_S16;
+    requested.channels = channels;
+    requested.freq = freq;
+    CNA::Internal::Audio::SetMixerSpecOverrideForTests(requested);
+
+    try {
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(mixer, nullptr);
+
+        SDL_AudioSpec actual{};
+        ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
+
+        // AUD-04-004 finding: SDL itself (OpenPhysicalAudioDevice, third_party/SDL/src/audio/
+        // SDL_audio.c) imposes a floor of S16 stereo 44100 Hz on every physical playback device
+        // it opens -- "We impose a simple minimum on device formats. This prevents something
+        // low quality ... from ruining a music thing playing at CD quality that tries to open
+        // later." (DEFAULT_AUDIO_PLAYBACK_CHANNELS=2, DEFAULT_AUDIO_PLAYBACK_FREQUENCY=44100,
+        // SDL_sysaudio.h). Requests at/above the floor pass through exactly; requests below it
+        // are raised to the floor. This is genuine, documented SDL3 device-open behavior, not a
+        // CNA bug or a resampling step -- CNA's own hard-coded production request (S16 stereo
+        // 44100 Hz) already sits exactly on this floor, so this confirms there is no
+        // *downward* device-negotiation risk in this SDL build; the only device-negotiation
+        // pitch risk direction is upward (e.g. an OS default device that only offers
+        // 48/96/192 kHz -- AUD-04-002/003 territory, still open).
+        EXPECT_EQ(actual.freq, std::max(freq, 44100));
+        EXPECT_EQ(actual.channels, std::max(channels, 2));
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AUD04004, AudioMixerSpecOverrideTest,
+    ::testing::Values(
+        std::make_tuple(22050, 1),
+        std::make_tuple(22050, 2),
+        std::make_tuple(44100, 1),
+        std::make_tuple(48000, 2),
+        std::make_tuple(96000, 2)));
+
+// AUD-04-006: a spec SDL considers genuinely invalid at the application-stream level --
+// freq <= 0, or a channel count outside SDL_IsSupportedChannelCount's documented 1-8 range
+// (third_party/SDL/src/audio/SDL_audiocvt.c) -- must fail mixer creation outright rather than
+// silently substituting some other rate/channel count the caller never asked for and would have
+// no way to detect. This is a DIFFERENT code path from AUD-04-004's device-open floor-clamp
+// (OpenPhysicalAudioDevice, which only raises too-small-but-still-positive/nonzero values): the
+// app-side stream validation runs against the ORIGINAL unclamped request and rejects it before
+// the floor-clamped physical-device spec ever becomes observable, so these values throw --
+// they do not quietly become 44100 Hz stereo the way e.g. 22050 Hz mono does (AUD-04-004).
+class AudioMixerInvalidSpecThrowsTest : public ::testing::TestWithParam<std::tuple<int, int>> {};
+
+TEST_P(AudioMixerInvalidSpecThrowsTest, RejectedOutrightRatherThanSilentlySubstituting) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    const auto [freq, channels] = GetParam();
+
+    CNA::Internal::Audio::DestroyMixer();
+    MixerSpecOverrideGuard guard;
+
+    SDL_AudioSpec requested{};
+    requested.format = SDL_AUDIO_S16;
+    requested.channels = channels;
+    requested.freq = freq;
+    CNA::Internal::Audio::SetMixerSpecOverrideForTests(requested);
+
+    EXPECT_THROW({ CNA::Internal::Audio::GetMixer(); }, std::runtime_error);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AUD04006, AudioMixerInvalidSpecThrowsTest,
+    ::testing::Values(
+        std::make_tuple(0, 2),      // freq == 0
+        std::make_tuple(-1, 2),     // freq negative
+        std::make_tuple(44100, 0),  // channels == 0
+        std::make_tuple(44100, -1), // channels negative
+        std::make_tuple(44100, 9))); // channels above SDL's 8-channel support ceiling
+
+// AUD-04-007: repeated device-open failures must not leak a MIX_Init()/MIX_Quit() refcount
+// imbalance -- GetMixer()'s failure branch (AudioMixer.cpp) pairs a MIX_Quit() with the MIX_Init()
+// it made moments earlier specifically so a failed retry never leaks a refcount (IN-11). If that
+// pairing were ever wrong, repeated failures would desynchronize SDL's audio subsystem refcount,
+// and a subsequent *valid* GetMixer() call would either fail unexpectedly or leave the subsystem
+// unable to ever fully shut down -- this test drives 5 consecutive failures on the same invalid
+// spec, then clears the override and confirms a completely ordinary GetMixer() call still succeeds
+// immediately afterward with the correct default spec, proving the failed attempts left no
+// residue behind.
+TEST(AudioMixerTest, RepeatedDeviceOpenFailuresLeaveBalancedLifecycleAndSubsequentSuccessIntact) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    CNA::Internal::Audio::DestroyMixer();
+    MixerSpecOverrideGuard guard;
+
+    SDL_AudioSpec invalid{};
+    invalid.format = SDL_AUDIO_S16;
+    invalid.channels = 0; // rejected outright, see AUD-04-006
+    invalid.freq = 44100;
+
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        CNA::Internal::Audio::SetMixerSpecOverrideForTests(invalid);
+        EXPECT_THROW({ CNA::Internal::Audio::GetMixer(); }, std::runtime_error)
+            << "attempt " << attempt;
+        // GetMixer() itself never caches a failed attempt (g_mixer stays null), so no explicit
+        // DestroyMixer() is needed between retries here -- each loop iteration re-enters the
+        // exact same lazy-init/failure branch from scratch, which is the real-world retry shape
+        // this test is verifying stays leak-free.
+    }
+
+    CNA::Internal::Audio::ClearMixerSpecOverrideForTests();
+    try {
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(mixer, nullptr);
+        SDL_AudioSpec actual{};
+        ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
+        EXPECT_EQ(actual.freq, 44100);
+        EXPECT_EQ(actual.channels, 2);
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// AUD-15-017: repeated GetMixer()/DestroyMixer() cycles must never leak a device, thread, handle,
+// or MIX_Init()/SDL_INIT_AUDIO refcount -- each cycle recreates the mixer "from scratch" (matches
+// DestroyMixer()'s own documented contract), and the AUD-04-008/009 subsystem pin (GetMixer()'s
+// one-time SDL_InitSubSystem(SDL_INIT_AUDIO)) must keep the audio subsystem itself alive across
+// every one of these destroy calls, not just the first. 20 cycles is far more than any single
+// test elsewhere in this suite exercises in a row; a leak would most plausibly show up as a
+// growing resource count or a failure partway through, not necessarily on cycle 1.
+TEST(AudioMixerTest, RepeatedInitDestroyCyclesLeaveNoLeakedStateAndFinalCallSucceeds) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try {
+        for (int i = 0; i < 20; ++i) {
+            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+            ASSERT_NE(mixer, nullptr) << "cycle " << i;
+            SDL_AudioSpec actual{};
+            ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << "cycle " << i << ": " << SDL_GetError();
+            EXPECT_EQ(actual.freq, 44100) << "cycle " << i;
+            EXPECT_EQ(actual.channels, 2) << "cycle " << i;
+            CNA::Internal::Audio::DestroyMixer();
+        }
+
+        // One more creation after the loop, to confirm the mixer is still fully functional (not
+        // degraded, e.g. by a slowly-exhausted resource) after 20 full cycles.
+        MIX_Mixer* finalMixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(finalMixer, nullptr);
+        SDL_AudioSpec finalSpec{};
+        ASSERT_TRUE(MIX_GetMixerFormat(finalMixer, &finalSpec)) << SDL_GetError();
+        EXPECT_EQ(finalSpec.freq, 44100);
+        EXPECT_EQ(finalSpec.channels, 2);
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
 TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsInvalid) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
 
-    SpawnedProcess proc = SpawnHarness();
+    SpawnedProcess proc = SpawnHarness(CNA_AUDIO_NO_HARDWARE_HARNESS_PATH);
     ASSERT_NE(proc.pid, -1);
 
     int exitCode = -1;
@@ -110,4 +321,57 @@ TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsI
     EXPECT_EQ(exitCode, 0)
         << "expected the harness to exit 0 (NoAudioHardwareException thrown); got " << exitCode
         << "; output: " << output;
+}
+
+// AUD-04-008: DestroyMixer() frees every MIX_Track the mixer owned (confirmed against real
+// SDL3_mixer source, MIX_DestroyMixer -> MIX_DestroyTrack -> SDL_aligned_free) -- a still-alive
+// SoundEffectInstance holding one of those tracks must detect the invalidation
+// (SoundEffectInstance::GetLiveTrackHandle()'s generation check) rather than dereference freed
+// memory on its next Pause()/Stop()/Dispose()/state-query/destructor call. Spawned as its own
+// process (see tools/audio/mixer_destroy_active_static_voice_harness.cpp's top-of-file comment)
+// so a crash here is caught by the watchdog/exit-status check below instead of taking down every
+// other test in this shared binary. Exit 0 = safe AND the state genuinely reflected the
+// generation check (not merely "didn't crash"); exit 2 = no crash but the check itself regressed.
+TEST(AudioMixerTest, MixerDestructionWithActiveStaticVoiceDoesNotCrashOrUseAfterFree) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+
+    SpawnedProcess proc = SpawnHarness(CNA_AUDIO_MIXER_DESTROY_ACTIVE_STATIC_VOICE_HARNESS_PATH);
+    ASSERT_NE(proc.pid, -1);
+
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(proc.pid, deadline, &exitCode);
+
+    std::string output;
+    DrainRemaining(proc.readFd, &output);
+    close(proc.readFd);
+
+    ASSERT_TRUE(finished) << "harness process did not exit before the watchdog deadline (hang?) and was killed; output: " << output;
+    EXPECT_EQ(exitCode, 0)
+        << "expected the harness to exit 0 (no crash, generation check correctly detected the "
+        << "orphaned track); got " << exitCode << " (-1 means the process crashed/was signaled, "
+        << "e.g. a real use-after-free -- see AudioMixerTests.cpp's AUD-04-008 note); output: " << output;
+}
+
+// AUD-04-009: the DynamicSoundEffectInstance counterpart to the AUD-04-008 test just above -- see
+// tools/audio/mixer_destroy_active_dynamic_voice_harness.cpp's top-of-file comment for why this
+// needs a separate harness (DynamicSoundEffectInstance has its own independent track_ access
+// sites, none of which share code with the base class's).
+TEST(AudioMixerTest, MixerDestructionWithActiveDynamicVoiceDoesNotCrashOrUseAfterFree) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+
+    SpawnedProcess proc = SpawnHarness(CNA_AUDIO_MIXER_DESTROY_ACTIVE_DYNAMIC_VOICE_HARNESS_PATH);
+    ASSERT_NE(proc.pid, -1);
+
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(proc.pid, deadline, &exitCode);
+
+    std::string output;
+    DrainRemaining(proc.readFd, &output);
+    close(proc.readFd);
+
+    ASSERT_TRUE(finished) << "harness process did not exit before the watchdog deadline (hang?) and was killed; output: " << output;
+    EXPECT_EQ(exitCode, 0)
+        << "expected the harness to exit 0 (no crash, generation check correctly detected the "
+        << "orphaned track); got " << exitCode << " (-1 means the process crashed/was signaled, "
+        << "e.g. a real use-after-free -- see AudioMixerTests.cpp's AUD-04-009 note); output: " << output;
 }

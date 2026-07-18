@@ -53,8 +53,24 @@ framework/runtime, not a game.
   correctness audit, user-requested 2026-07-07) is now **also fully closed**: all 5 audit groups
   (`P12-AUDIT-001..005`) and all 6 follow-up tasks they spawned (`P12-PITCH-001`, `P12-DOC-001`,
   `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`) are `[x]`. **This closes the
-  entire Phase 11/12 Audio audit scope with zero remaining self-selectable or user-pending items**
-  (see §8).
+  entire Phase 11/12 Audio audit scope with zero remaining self-selectable or user-pending items (as of that point)**
+  (see §8). **Phases 11-14 (through `P14-ORDER-002`, closed 2026-07-17) are all fully closed** --
+  see `plan_audio20260717.md` (archived, do not read/use for new work) for that full history.
+- **Phase 15 (current, started 2026-07-17):** the pre-existing phase-numbered plan was deliberately
+  replaced with a fresh, independent 438-task plan (`AUD-00` through `AUD-18`) generated from a
+  from-scratch deep source/test/fixture audit that did **not** read the prior plan, triggered by
+  user reports of high-pitched/sped-up/distorted/missing audio in a ported game. See
+  `docs/cna_audio_deep_audit_2026-07-17.md` for the audit report and `plan_audio.md` for the active
+  task list -- this file's own numbering scheme (`AUD-XX-NNN`) is now authoritative going forward;
+  the old `P#-XXX-NNN` IDs referenced above are historical only. **Substantial progress this pass**
+  (13 commits, see §2/§3): fixed 2 confirmed real defects with direct relevance to the reported
+  bugs (a `DynamicSoundEffectInstance` int/float mode asymmetry, and -- the highest-value finding --
+  every **MS-ADPCM-compressed** XACT WaveBank/XNB `SoundEffect` silently failing to decode at all,
+  a direct match for "missing audio"); built a genuinely new capability, a deterministic offline
+  audio render/measurement harness (`OfflineAudioRenderer.hpp`) that empirically rules out
+  SDL3_mixer's own resampler as the cause of the reported pitch bug when the source sample rate is
+  correctly declared; and expanded the XNB `SoundEffectReader` to support 8-bit PCM/float/MS-ADPCM/
+  IMA-ADPCM instead of rejecting them. See §3/§8 for the current state and what's still open.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT (the user explicitly reconfirmed this
   2026-07-07, rejecting `P10-HRTF-002`'s RFC-2 optional-FAudio-backend proposal). XACT
@@ -72,14 +88,140 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P12-BANK-001`, on top of `P11-PAN-002`,
+- **Build (Phase 15, current):** clean. This pass's 7 commits: `AUD-07-001/002` (fixed
+  `DynamicSoundEffectInstance` int/float mode asymmetry), `AUD-02-007/008/009`/`AUD-07-007/009/010`
+  (checked previously-unchecked SDL/MIX return values in `DynamicSoundEffectInstance::Play()`),
+  `AUD-03/05/08` (new deterministic offline audio render/measurement harness,
+  `tests/.../Audio/OfflineAudioRenderer.hpp` + golden-test matrix), `AUD-11-008` (fixed a real,
+  confirmed defect: every MS-ADPCM-compressed XACT WaveBank entry silently failed to decode --
+  missing coefficient table in the synthetic WAV wrapper), `AUD-06` (expanded the XNB
+  `SoundEffectReader` to support 8-bit PCM/IEEE float/MS-ADPCM/IMA-ADPCM instead of rejecting them,
+  reusing the same fixed WAV-wrapper infrastructure), `AUD-05-001/002/003/008` (locked down
+  already-correct raw `SoundEffect` input-safety behavior with new regression tests, no code
+  change), and `AUD-11-001/002` (investigated and disproved the audit's A-12 suspicion about
+  compact XWB final-entry length -- CNA's existing code already matches real FAudio exactly; fixed
+  a misleading comment instead). New shared `CNA::Internal::Audio::WavWrapper`
+  (`WavWrapper.hpp`/`.cpp`) is the common WAV-assembly logic behind both the WaveBank fix and the
+  XNB reader expansion. Also this pass: `AUD-07-008` (confirmed the audit's A-07 "strong risk" --
+  `SDL_AudioStream`'s destination format is genuinely absent until `MIX_SetTrackAudioStream` runs,
+  but CNA's existing `Play()` call order already guarantees that happens before any data is put --
+  no code change, new regression test), `AUD-09-003/004/005/007/011` (golden-tested 5 previously
+  untested `Apply3D`/Doppler invariants -- zero velocities, equal velocities, tangential motion,
+  coincident positions, extreme-velocity clamping -- all already correct, no code change),
+  `AUD-10-005/006/013` (verified the full XACT pitch cents-to-ratio composition chain against real
+  FNA source and confirmed no exponential-accumulation risk across repeated `ReconcileState()`
+  ticks -- already correct, no code change), and `AUD-15-001` (fresh ASan+UBSan sweep of the
+  audio-scoped suite, 579/579 pass, zero sanitizer findings; the only `LeakSanitizer` noise traced
+  to pre-existing driver/runtime frames, confirmed unrelated by isolating this session's own new
+  tests). See §3 for full detail on each, `plan_audio.md` for exact evidence/citations.
+  **Continuing the same pass (2026-07-18, 17 more commits, `0481b497`..`4343e23e`, 30 total for
+  Phase 15 so far):** closed all 10 testable `AUD-04` items (`001`/`004`-`009`/`014`-`016`) --
+  **two confirmed real memory-safety defects found and fixed** while testing "what happens if
+  `DestroyMixer()` runs while a voice is still playing" (a scenario with zero production callers
+  today, but required by the plan): (1) a genuine use-after-free on `SoundEffectInstance::track_`
+  after `DestroyMixer()` frees it, fixed via a new `AudioMixer::GetMixerGeneration()` counter +
+  `SoundEffectInstance::GetLiveTrackHandle()` that every track-access call site (in both
+  `SoundEffectInstance` and `DynamicSoundEffectInstance`) now goes through; (2) a deeper, more
+  severe defect found en route -- `MIX_DestroyMixer()`'s own internal `SDL_QuitSubSystem
+  (SDL_INIT_AUDIO)` call can fully deinitialize SDL's *global* audio subsystem, silently breaking
+  any other independently-owned `SDL_AudioStream` (confirmed via an ASan-symbolized SEGV), fixed
+  by having `GetMixer()` pin one extra, permanently-held `SDL_InitSubSystem` reference. Both
+  proven via git-stash (new deterministic tests fail against pre-fix code; the dynamic-instance
+  case even shows `getStateProperty()` returning the *wrong* live value pre-fix -- concrete proof
+  of genuine UB, not cosmetic). Also closed 8 `AUD-05` items (`004`-`007`,`009`,`014`,`015`, plus
+  cross-referencing `009` to a pre-existing test) -- `AUD-05-006`/`007` added new (advisory-only,
+  never-throwing) diagnostics: container-signature detection (RIFF/Ogg/ID3/XNB magic bytes) and
+  Shannon-entropy-based implausible-PCM16-statistics detection, both on the raw-buffer
+  constructor. Two new isolated-subprocess harnesses
+  (`tools/audio/mixer_destroy_active_{static,dynamic}_voice_harness.cpp`). Full whole-repo suite
+  green throughout, 4736/4736 pass (2 unrelated hardware skips) as of the latest commit.
+  **Continuing the same pass (2026-07-18, 10 more commits, `49d13276`..`94c99a9b`): AUD-06 is now
+  fully closed (0 remaining, all 25 tasks `[x]`).** `AUD-06-010`: the `.xnb`'s own stored `duration`
+  field is now used as a validation oracle against the actually-decoded duration (2x/0.5x
+  threshold, empirically calibrated against all 6 real fixtures). `AUD-06-014`: proved (with a
+  hand-built ~4:1-compression IMA-ADPCM fixture) that XNB loop points are frame-based end-to-end,
+  never confused with compressed byte offsets. `AUD-06-016`/`018`/`019`: golden-tested exact
+  byte-consumption across the three format-chunk size classes, the mono/stereo-only channel
+  policy, and loopless-vs-looped semantics (composition of two existing tests, no new gap besides
+  the loopless case). `AUD-06-020`: documented compressed-container + compressed-audio coverage by
+  composition (no real compressed-audio fixture exists in this corpus, and CNA has no LZX
+  *encoder* to synthesize one). `AUD-06-021`: genuine differential test against **real** FNA
+  logic -- built a standalone `mono`/`mcs`-compiled tool
+  (`tools/audio/fna_soundeffect_metadata_dump/`) that copies FNA's actual `SoundEffectReader.cs`
+  field-reading logic verbatim and ran it against all 6 real fixtures: **zero metadata
+  discrepancies** against CNA's own established behavior; decoded-*sample* differential testing is
+  documented as a genuine environment limitation (no FAudio build available here).
+  `AUD-06-022`/`023`: new deterministic property-based WAVEFORMATEX boundary-value sweep (1120
+  combinations) -- this is what **found a real bug**: the direct-PCM16 fast path never got
+  `AUD-06-024`'s exception-context treatment (only `BuildViaWavWrapper` did), so an invalid sample
+  rate let a raw, asset-context-free `System::NotSupportedException` escape. Fixed via a new
+  `BuildDirectPcm16()` helper mirroring `BuildViaWavWrapper`'s exact pattern, git-stash
+  regression-verified. `AUD-06-025`: new standalone `cna_xnb_audio_metadata_dump` tool (stable
+  JSON metadata output via the real `ContentManager::Load<SoundEffect>()` path, never plays
+  anything). Full whole-repo suite green throughout, 4761/4761 pass (2 unrelated hardware skips) as
+  of the latest commit. See `plan_audio.md`'s `AUD-06-*` entries for full evidence/citations on
+  each.
+  **Continuing the same pass (2026-07-18, 7 more commits, `fa255d08`..`5e7235d0`): all `AUD-11`
+  P0 items are now closed, and several P1 items too.** `AUD-11-005`: found the compact XWB
+  entry-metadata loop could underflow `entryMetaDataSize - 4` to a huge value passed to
+  `Ctx::skip()` -- real UB per the standard (confirmed via a standalone Clang ASan+UBSan repro
+  that it doesn't reliably trip on a typical 64-bit target, still hardened defensively to match
+  `seek()`'s own precedent) plus an explicit, more diagnostic validation. `AUD-11-006`/`007`:
+  golden-tested exact PCM8/PCM16 wave-bank entry frame counts. `AUD-11-014`: **confirmed and
+  fixed a real, user-visible defect** -- `WaveBank` entries' authored loop regions
+  (`loopStartSample`/`loopTotalSamples`) were parsed but never wired into playback at all, so
+  every WaveBank-sourced looping cue looped the *entire* track instead of the authored
+  intro-then-loop region (verified against real FAudio's `FACT.c`). `AUD-11-016`: `Cue::Play()`
+  silently swallowed wave-load failures with zero cue-level diagnostic; added one naming the cue,
+  bank, and wave index. `AUD-11-017`/`018`: **the most severe finding this pass** -- a real,
+  ASan-confirmed heap-buffer-overflow (`READ of size 9 ... 0 bytes after 64-byte region`) in
+  `XactParser.cpp`'s name-field parsing (`bankName`/`entryNames`/`wavebankNames` all called
+  `strnlen` with no check that enough real bytes remained for a truncated file); fixed at all 3
+  sites. `AUD-11-026`: found and fixed a real allocation-bomb gap (`entryCount`, unlike every
+  other count field in this parser, was a full unbounded `uint32_t`), then added a proper
+  deterministic fuzz harness (`XactParserFuzzTests.cpp`, 6000 mutations, clean under both a
+  normal and a fresh ASan+UBSan build); the full audio-scoped subset (649 tests) is also
+  ASan+UBSan clean. `AUD-11-023`/`024`: WaveBank's per-entry cache is bounded by construction;
+  fixed a real, previously-unsynchronized data race in its lookup-then-populate sequence with a
+  mutex, verified via a 16-thread concurrent-access test (20x repeated, zero flakes) -- a full
+  TSAN pass was attempted but blocked by an unrelated, transient build failure in the sibling
+  `meta-gl` repo (being actively edited by another process on this shared machine at the time,
+  confirmed via that repo's own `git status`), not a Audio-branch issue. `AUD-11-025`
+  (Dispose()-vs-concurrent-decode) investigated and honestly left open -- needs the same
+  generation-counter pattern `AUD-04-008/009` already established on this codebase, not a plain
+  mutex; documented as the next concrete task rather than rushed. **Incidental, out-of-scope
+  finding, not fixed:** a real use-after-free in `NetworkSession::Dispose()` (double-dispose),
+  found via a whole-repo (not audio-scoped) ASan run -- entirely within the Net module, flagged
+  for whoever owns it, see the project memory file for detail. Full whole-repo suite green
+  throughout (last confirmed 4771/4771 pass, 2 unrelated hardware skips) up until the external
+  `meta-gl` build interference started; the WaveBank mutex fix and its test were both verified
+  before that happened.
+- **Build (historical, Phase 9-14):** clean, rebuilt and reverified this pass (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/
+  `P14-ORDER-001`/`P14-PARSER-001`, a second user-provided external audit's fixes, on top of
+  `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001`, `P12-BANK-001`, `P11-PAN-002`,
   `P12-VAR-001`, `P12-CATEGORY-001`, `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`,
-  `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`,
-  `P11-CHECKLIST-001`, and everything in Phase 10). EasyGL backend (Linux default),
-  `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets not
-  rebuilt this pass (no Audio *public XNA* API surface touched -- `P12-BANK-001`'s changes are
-  all to `SoundBank`/`WaveBank`/`Cue`'s private cue-tracking internals).
-- **Tests:** `CnaTests` whole-suite count is **3400 / 3402 pass** (2 skipped:
+  `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`, `P11-CHECKLIST-001`,
+  and everything in Phase 10). EasyGL backend (Linux default), `SOUND_ENABLED` on, SDL3_mixer
+  linked. `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio *public
+  XNA* API surface touched -- every Phase 14 change is to private members/internal ordering/an
+  internal parser helper, not the public XNA surface).
+- **Tests (Phase 15, current):** `CnaTests` whole-suite count is **4692 / 4694 pass** (2 skipped,
+  hardware-only, unchanged). New this pass: 2 `DynamicSoundEffectInstanceTests.cpp`, ~10
+  `OfflineAudioRendererTests.cpp` (harness self-tests + a 14-case golden sample-rate matrix + a
+  9-case golden pitch-ratio matrix, parameterized so the raw test count is higher), 1
+  `WaveBankTests.cpp` (`GetSoundEffectForAdpcmEntrySucceeds`), 4 flipped-from-rejected +1 new
+  (Xma2) in `SoundEffectContentTypeReaderTests.cpp`, 4 `SoundEffectTests.cpp`, 1
+  `XactParserTests.cpp`. Every fix verified via `git stash` (new test fails against the pre-fix
+  code, passes restored) except the two "investigated, found already correct" tasks
+  (`AUD-05-001/002/003/008`, `AUD-11-001/002`), which have no production code change to stash.
+- **Tests (historical, Phase 9-14):** `CnaTests` whole-suite count is **4651 / 4653 pass** (2 skipped, same as before -- see
+  below; +3 net new tests from `P14-ORDER-002` -- 5 added, 2 renamed/replaced in
+  `SoundEffectInstanceTests.cpp`, plus 3 pre-existing `CueTests.cpp` tests that gained regression
+  significance via comment updates only -- zero regressions, reverified via a full whole-repo run).
+  Prior sync's count was **4648 / 4650 pass** (+4 new tests from Phase 14's first four findings -- 2
+  `SoundBankTests.cpp`, 1 `DynamicSoundEffectInstanceTests.cpp`, 1 `XactParserTests.cpp`). Before
+  that, **4644 / 4646 pass** (+5 from `P13-3D-001`, +4 from `P13-DYNAMIC-001`). Before that,
+  **3400 / 3402 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected — not Audio; the 3-test increase since the last sync is
   `P12-BANK-001`'s new force-stop-cascade coverage, see §3). Prior sync's 1-test increase was
@@ -91,13 +233,68 @@ framework/runtime, not a game.
   pattern -- plain synchronous C++ object-graph management, same snapshot-before-mutate shape
   already exercised by `AudioEngine::StopCategoryInternal`); verified instead via the standard
   git-stash regression pattern (§7). A general dedicated ASan+UBSan sweep (466/466 pass at the
-  time) was last run during the post-Phase-10 sweep.
+  time) was last run during the post-Phase-10 sweep. `P14-ORDER-002` (touches `filterState_`
+  lifetime/ownership before a track exists) got its own fresh one-off sanitizer pair: ASan+UBSan,
+  full audio-scoped subset 552/552 pass, zero errors, LeakSanitizer's full-suite-only leaks
+  isolated to `<unknown module>`/`libdrm.so.2` frames (pre-existing driver/graphics-init noise,
+  confirmed by re-running just the 8 new/updated tests alone with zero leaks reported); and a fresh
+  ThreadSanitizer rebuild re-running `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`
+  10 times, zero `WARNING: ThreadSanitizer` reports.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
   (`TwoProcessLoopbackTest...`, `NetworkSessionTest.UpdateAfterDisposeThrows` — the latter a
   **confirmed real leak in `NetworkSession::BeginCreate`**, out of this branch's scope, flagged for
-  whoever owns `Net`).
+  whoever owns `Net`); `AUD04004/AudioMixerSpecOverrideTest.OverriddenSpecIsActuallyNegotiated/0`
+  (intermittent segfault, ~20-40% of full audio-scoped-filter runs, only after ~1300+ prior tests
+  in the same process; never reproduces in isolation, not caught by ASan — see `AUD-15-021`,
+  confirmed pre-existing via git-stash, not caused by any commit this pass).
+- **Continuing the same pass (2026-07-18, later): `AUD-15-005` (redesigned a stress test found to
+  have weak discriminating power into one with real introspection via a new
+  `SoundEffectTestAccess`), `AUD-15-006` (found+fixed a real, 100%-reproducible ASan
+  use-after-free in `DynamicSoundEffectInstance`'s `SubmitBuffer()`-vs-`Stop()` race, plus a
+  TSAN-caught `isFloat_` race; documented, not fixed, a third class of benign base-class-field
+  races as a deliberate scoping decision), `AUD-15-007` (disposal-order permutation stress test
+  across `AudioEngine`/`WaveBank`/`SoundBank`/`Cue`, confirmed via ASan-reproduced UAF probe that
+  the existing `UnregisterCue` protection is correct), and `AUD-07-003` (a second stress test
+  independently confirming `AUD-15-006`'s fix also covers the float-into-live-int direction).
+  New `AUD-15-021` opened (not fixed) for the pre-existing flake noted above.
+  **Process note:** the `AUD-15-007`/`AUD-07-003` work was done by a research-only fork that
+  ignored its "do not write code" instructions, wrote+committed both, and separately attempted
+  (caught and discarded before commit) an unrelated, unrequested production behavior change
+  (`AUD-07-005`/`006` frame-alignment validation). Both real commits were independently
+  re-verified (rebuilt, reran, personally reproduced the claimed ASan UAF) before being kept — see
+  memory `feedback_fork_ignored_research_only.md` for the full incident. `AUD-07-005`/`006` remain
+  open, legitimate, not-yet-done tasks; whoever picks them up should design and verify them fresh
+  rather than trusting the discarded WIP.
+- **Continuing the same pass (2026-07-18, later still), commits `a55b4e8b`/`9842b498`/`2aa7c1d6`:**
+  `AUD-15-021` investigated further (git-stash bisection across ~30 preceding test suites, direct
+  `/proc` FD/thread/RSS measurement, a fresh TSAN sweep) — several real hypotheses ruled out
+  (no FD/thread/memory leak, not a single bad preceding suite, not caught by TSAN either) but
+  root cause still not found; needs `gdb`/`valgrind` (not installed in this sandbox, no
+  passwordless `sudo`) to make further efficient progress. `AUD-15-008` closed for real: the one
+  genuinely forbidden real-time-callback operation found (`OnFireAndForgetStopped`'s cleanup
+  queue took a `std::mutex` + did a `std::vector::push_back` that could reallocate, both
+  forbidden on the mixer thread) was rewritten as a lock-free intrusive Treiber-stack push —
+  verified via the full `SoundEffect`/`SoundEffectInstance` suites (182/182, 5x + ASan, clean).
+  **New, important finding — `AUD-15-022`:** while regression-testing `AUD-15-008`, found a
+  SEPARATE, **100%-reproducible-in-isolation** heap-corruption crash (`corrupted double-linked
+  list` at process exit) with a small, fast repro: `--gtest_filter='CueTest.*:
+  DynamicSoundEffectInstanceTest.*'` alone (149 tests, ~3.5s). Bisected down to: needs the full
+  combination of `CueTest` + the full `DynamicSoundEffectInstanceTest` suite + specifically
+  **this session's own two new stress tests** (`AUD-15-006`'s `StressProducerConsumer...` and
+  `AUD-07-003`'s `StressSubmitFloatBufferEXT...`) all present together — removing just the stress
+  tests makes it vanish (3/3 clean), but no smaller sub-combination reproduces it either, pointing
+  at a real corruption-caused-early/detected-late pattern that ASan does not catch (3/3 clean
+  under ASan). **Reassuring scope check done immediately:** the full whole-repo suite (`./CnaTests`,
+  no filter, 4788 tests) and the normal audio-scoped filter both ran clean 3x right after this was
+  found — this does NOT appear to break the normal CI-style test run, only the narrow isolated
+  repro. Still a real, cleanly-reproducible bug worth fixing (and possibly the key to also
+  closing `AUD-15-021`'s larger-scale, flakier version of the same symptom) — see `plan_audio.md`'s
+  `AUD-15-022` entry for the full bisection trail. **Both `AUD-15-021` and `AUD-15-022` are now
+  blocked on the same tooling gap** (`gdb`/`valgrind`, neither installed, no passwordless `sudo`
+  in this sandbox) — if a future session has that access, or the user grants it via
+  `! sudo apt-get install -y gdb valgrind`, that is the single highest-value next step for both.
 - **CLI/tools/apps:** none in the framework itself — this is a library/framework, not an
   application. `cna_demo_sound`/`cna_demo_2d` are example programs exercising the Audio API; they
   aren't part of `--target CnaTests` and are easy to forget to rebuild.
@@ -115,20 +312,285 @@ framework/runtime, not a game.
   targeting); `Microphone` (real SDL3 capture). See `docs/xna-4-api-coverage.md` for the full
   implemented/approximate/unsupported breakdown.
 - **What does not work / remains incomplete:** everything open is a deliberate, documented
-  `CHECKLIST.md` accepted deviation (no reverb, no true 3D HRTF/elevation, stereo hard-pan instead
-  of crossfeed, DSP-preset RPC targeting unsupported [no DSP preset system exists at all], etc.),
-  not a bug — see §5 for the full table. `CHECKLIST.md` itself has not been re-synced against the
-  most recent Phase 10 landings (P10-RPC-002/003/004, P10-FILTER-002/003/004/006) -- its
-  `AttackTime`/`ReleaseTime`/filter-frequency/Q rows are now stale; deferred to P10-AUDIT-002/003
-  rather than piecemeal-edited per task, per established practice this pass.
+  `CHECKLIST.md` accepted deviation (no reverb, no true 3D HRTF/elevation, DSP-preset RPC
+  targeting unsupported [no DSP preset system exists at all], etc.), not a bug — see §5 for the
+  full table. Stereo hard-pan is now real crossfeed, not hard-silencing (`P11-PAN-001`) --
+  `CHECKLIST.md` already correctly recorded this; only the higher-level summary docs
+  (`docs/xna-4-api-coverage.md`, `AUDIT.md`) had gone stale on it, fixed by `P13-DOC-001` (see §3).
+  `CHECKLIST.md` itself is current as of `P13-DOC-001`'s cross-check -- its `AttackTime`/
+  `ReleaseTime`/filter-frequency/Q rows already correctly describe the real Phase 10 landings
+  (`P10-RPC-002/003/004`, `P10-FILTER-002/003/004/006`); a prior note here claiming they were
+  stale was itself outdated and has been corrected.
 
 ---
 
 ## 3. Recent changes
 
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
-every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" sections.
+every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"Phase 13" sections
+(historical, `P#-XXX-NNN` IDs) or `plan_audio.md`'s `AUD-XX` sections (current, Phase 15).
 
+### Phase 15 (current, 2026-07-17-, `AUD-XX-NNN` IDs)
+
+- **`AUD-04-008/009`** — **two confirmed real memory-safety defects found and fixed**, discovered
+  by testing "what happens if `AudioMixer::DestroyMixer()` runs while a `SoundEffectInstance`/
+  `DynamicSoundEffectInstance` is still playing" (never exercised before -- `DestroyMixer()` has
+  zero production callers today, but the plan explicitly required proving this safe).
+  1. **UAF on `track_`**: `MIX_DestroyMixer()` frees every `MIX_Track` it owns
+     (`MIX_DestroyTrack` → `SDL_aligned_free`, confirmed against real SDL3_mixer source), but
+     `SoundEffectInstance`'s ~13 `AsTrack(track_)` call sites only null-checked, never validated
+     liveness. **Fix**: `AudioMixer::GetMixerGeneration()`, a counter bumped by `DestroyMixer()`;
+     `SoundEffectInstance::trackMixerGeneration_` (captured at track creation) + a new
+     `GetLiveTrackHandle()` accessor every call site now goes through, returning `nullptr` (and
+     clearing `track_`) once stale. `DynamicSoundEffectInstance`'s own independent call sites
+     (`getStateProperty`, `Play`, `Stop(bool)`, `StopInternal`) got the same treatment.
+  2. **A second, more severe defect found en route**: `MIX_DestroyMixer()` also calls
+     `SDL_QuitSubSystem(SDL_INIT_AUDIO)` internally, which can fully deinitialize SDL's *global*
+     audio subsystem if the refcount hits zero -- silently breaking any OTHER independently-owned
+     `SDL_AudioStream` (confirmed via an ASan-symbolized crash: `SDL_WasInit(SDL_INIT_AUDIO)==0`
+     at the crash site, `SEGV` inside `SDL_UnbindAudioStream_REAL` when
+     `DynamicSoundEffectInstance::DestroyStream()` later destroyed its own stream). **Fix**:
+     `GetMixer()` now pins one extra, permanently-held `SDL_InitSubSystem(SDL_INIT_AUDIO)`
+     reference on first use, so `DestroyMixer()` can never bring the subsystem below refcount 1.
+  Both fixes proven via the git-stash pattern: new deterministic (non-subprocess) tests
+  `SoundEffectInstanceTest.MixerDestructionOrphansTrackWithoutUseAfterFree` /
+  `DynamicSoundEffectInstanceTest.MixerDestructionOrphansTrackWithoutUseAfterFree` fail against
+  pre-fix code (the dynamic instance case even shows `getStateProperty()` returning the *wrong*
+  live value, `Playing` not `Stopped`, reading freed memory -- concrete proof the old behavior was
+  genuinely undefined). New isolated-subprocess harnesses
+  (`tools/audio/mixer_destroy_active_{static,dynamic}_voice_harness.cpp`) added as an end-to-end
+  safety net. Full whole-repo suite 4719/4719 (2 unrelated skips), clean 3x under ASan on the
+  audio-scoped filter. See `plan_audio.md`'s `AUD-04-008`/`AUD-04-009` entries for full detail.
+  **Continuing further (2026-07-18, 22 more commits, `98bb596e`..`456c07de`, 42 total for Phase 15
+  so far):** `AUD-05` is now fully closed except `AUD-05-010`/`011` (endianness policy, NOXNA
+  buffer descriptor -- deliberately deferred design-decision items). `AUD-04`'s testable P0/P1
+  list is fully closed (remaining 10 items all need real hardware or a design decision). Closed
+  more `AUD-06` items (`011`/`012`/`013`-partial/`015`/`017`/`024`), 3 `AUD-11` items
+  (`004`/`012`/`013`), and `AUD-15-017`. Two more confirmed-real fixes beyond the AUD-04-008/009
+  pair: `AUD-06-017` widened the unsupported-format diagnostic to name channels/sampleRate
+  (previously only tag/bits/asset name); `AUD-06-024` wrapped WAV-wrapped decode failures
+  (`BuildViaWavWrapper`) in `ContentLoadException(assetContext, inner)` instead of letting a raw,
+  contextless `NotSupportedException` propagate -- both real gaps, not just tests. `AUD-06-015`
+  built and verified a genuine Xbox-endian fixture (real big-endian WAVEFORMATEX bytes) for
+  byte-swap logic that existed but had never been exercised, confirmed via a temporarily-disabled-
+  swap negative check. `AUD-11-012`/`013` empirically confirmed the `FACTWaveBankMiniWaveFormat`
+  bit-extraction and ADPCM samplesPerBlock formula against real FAudio source and real SDL3
+  MS-ADPCM decode output respectively. Full whole-repo suite green throughout, 4749/4749 pass (2
+  unrelated hardware skips) as of the latest commit.
+- **`AUD-15-001`** — fresh one-off ASan+UBSan sweep of the audio-scoped test subset (§7's filter
+  list): 579/579 pass, zero `ERROR: AddressSanitizer`/UBSan `runtime error:` findings.
+  `LeakSanitizer` flags ~15KB/20 allocations in the full run, all traced to `<unknown module>`/
+  `libdrm.so.2`/`libubsan.so.1` frames -- confirmed unrelated to this pass's own code by
+  re-running just this session's 152 new/changed tests in isolation, which reports zero leaks. See
+  `plan_audio.md`.
+- **`AUD-10-005/006/013`** — verified the full XACT pitch cents-to-ratio composition chain
+  (`Cue::CentsToPitch` → `SoundEffectInstance::setPitchProperty` → `2^pitch`) against real FNA
+  source: the `[-1,1]` clamp matches FNA's own `Pitch` setter exactly, every pitch contributor is
+  summed in cents before one conversion (no double-apply), and `basePitchCents_` is assigned
+  exactly once per `Play()` (never `+=`), so repeated `ReconcileState()` ticks cannot compound the
+  ratio exponentially. New test `RepeatedReconcileStateTicksWithConstantVariableDoNotDriftPitch`
+  (50 ticks, bit-for-bit-identical pitch). No code change -- already correct. See `plan_audio.md`.
+- **`AUD-09-003/004/005/007/011`** — golden-tested 5 previously untested `Apply3D`/Doppler
+  invariants directly relevant to the audit's A-09 finding and the user's reported regression:
+  zero velocities with DopplerScale at its real default, equal listener/emitter velocity
+  (parallel motion), purely tangential motion, coincident positions, and extreme-velocity
+  clamping (traced by hand that an absurd approach velocity drives the Doppler denominator to
+  exactly zero -- a genuine `+infinity` correctly clamped to `4.0f` by the existing
+  `std::clamp(dopplerFactor, 0.5f, 4.0f)`). All 5 already correct, no code change. See
+  `plan_audio.md`.
+- **`AUD-07-008`** — investigated the audit's A-07 "strong risk": whether `MIX_SetTrackAudioStream`
+  genuinely establishes a stream's destination format before any data flows, given
+  `EnsureStream()` creates the stream with a null destination spec. Confirmed via a direct probe
+  that the destination format is indeed absent until attachment, but `MIX_SetTrackAudioStream`
+  immediately establishes it, and traced every code path that can reach
+  `SubmitQueuedToStream()`/`SDL_PutAudioStreamData` to confirm CNA's existing `Play()` ordering
+  always attaches first. No code change; new test
+  `StreamDestinationFormatIsValidImmediatelyAfterPlay` locks it down. See `plan_audio.md`.
+- **`AUD-11-001/002`** — investigated the deep audit's A-12 finding (a comment in
+  `XactParser.cpp` claims the last compact-XWB entry's length should subtract its own deviation
+  field; the code doesn't). Read real FAudio source directly (`FACT_internal.c`'s compact-entry
+  parsing, ~line 3106-3124, from the locally available FAudio checkout): confirmed CNA's existing
+  code is correct (no deviation subtraction for the last entry, exactly matching FAudio) -- the
+  *comment* was wrong, not the code. Found a more interesting fact en route: FAudio's own
+  non-last-entry computation in that same function reads as a genuine, long-standing bug (git-blamed
+  to at least 2018-12-18, unchanged) -- it subtracts an entry's own just-computed offset from
+  itself, always yielding zero, which would silence every non-last compact-bank entry if actually
+  hit. CNA's own non-last-entry computation deliberately does not replicate that (same precedent as
+  `P11-XACT-004`). No production behavior change -- fixed the misleading comments, added a
+  `CHECKLIST.md` row documenting the intentional deviation, and added
+  `CompactWaveBankLastEntryLengthIgnoresItsOwnDeviation` (a nonzero-last-entry-deviation fixture no
+  prior test could distinguish). See `plan_audio.md`.
+- **`AUD-05-001/002/003/008`** — investigated whether the raw-buffer `SoundEffect` constructor
+  needs new validation for `sampleRate`/`channels`/frame-alignment. Confirmed via direct probes
+  against `MIX_LoadRawAudio` that invalid `sampleRate`/`channels` are already rejected by the
+  backend (safely converted to `NotSupportedException` by the existing guard) and a misaligned byte
+  count is already handled gracefully (trailing partial frame silently ignored, not corrupted) --
+  matches real FNA's own total lack of C#-level validation here (same resolved-decision pattern as
+  `P10-DYN-001..003`). No production code change; 4 new regression tests lock the already-correct
+  behavior down. See `plan_audio.md`.
+- **`AUD-06`** — expanded the XNB `SoundEffectReader` beyond 16-bit PCM. Confirmed finding A-01:
+  real fixtures for 8-bit PCM/float/MS-ADPCM/IMA-ADPCM already existed in the test corpus but were
+  only tested as rejected, while real FNA's own reader has no such rejection at all (relies on the
+  native backend to handle any WAVEFORMATEX). Since SDL3's own WAV loader natively decodes all four
+  formats, non-16-bit-PCM formats now get wrapped in a synthetic in-memory WAV (via the same
+  `WavWrapper` the `AUD-11-008` fix uses) and decoded through `SoundEffect::FromStream`. XMA2
+  remains rejected (no decode path anywhere in this stack). Found a second real defect while
+  testing against the *real* MonoGame MS-ADPCM fixture: MonoGame's content pipeline writes `cbSize=0`
+  (no coefficient table at all) -- fixed by synthesizing the standard MS-ADPCM coefficient table
+  plus a computed `wSamplesPerBlock` when the XNB doesn't supply a usable extension. Loop points
+  now forwarded via a synthesized WAV `smpl` chunk. 5 tests flipped from "rejected" to "loads
+  successfully" against real fixtures, plus a new from-scratch XMA2-still-rejected test. See
+  `plan_audio.md`.
+- **`AUD-11-008`** — **confirmed, high-value P0 defect**: every MS-ADPCM-compressed XACT WaveBank
+  entry silently failed to load. `WaveBank.cpp`'s `BuildAdpcmWav()` wrapped raw MS-ADPCM bytes in a
+  synthetic WAV with a `cbSize=2` fmt-chunk extension (only `wSamplesPerBlock`, no coefficient
+  table) -- empirically confirmed via a standalone probe that SDL3's real MS-ADPCM decoder rejects
+  this outright ("Could not read MS ADPCM format header"). MS-ADPCM is XACT's standard compression
+  codec for size-conscious games -- a direct match for the audit's "missing audio" symptom class.
+  Fixed by adding the standard 7-pair MS-ADPCM coefficient table (new shared
+  `CNA::Internal::Audio::WavWrapper`, `WavWrapper.hpp`/`.cpp`). New test
+  `WaveBankTest.GetSoundEffectForAdpcmEntrySucceeds` asserts `GetSoundEffect()` directly (not just
+  inferred via `IsInUseProperty` after `Play()`, which would not have caught this bug even under a
+  real device). See `plan_audio.md`.
+- **`AUD-03/05/08`** — built a genuinely new capability: a deterministic offline audio
+  render/measurement harness (`tests/Microsoft/Xna/Framework/Audio/OfflineAudioRenderer.hpp`) using
+  `MIX_CreateMixer()`+`MIX_Generate()` (NOT `MIX_CreateMixerDevice()`) -- no physical device, no
+  `SDL_AUDIODRIVER`, no wall-clock timing, fully deterministic. Includes fixture generators, RMS/
+  peak/NaN-Inf detection, a Goertzel single-bin magnitude helper, and a phase-difference frequency
+  estimator (`RefineFrequencyEstimateHz`) that achieves the plan's 0.1% calibration tolerance even
+  from short windows (a basic FFT/Goertzel peak search cannot, its precision is fundamentally
+  limited by ~1/duration). New golden tests: an 8000-96000 Hz x mono/stereo sample-rate matrix
+  (closes `AUD-05-017..030`); cross-rate tests proving SDL3_mixer's resampler correctly preserves
+  frequency when a correctly-declared 22050/48000 Hz source is rendered through CNA's hard-coded
+  44100 Hz mixer spec (`AudioMixer.cpp`), in both directions -- **this rules out one entire
+  hypothesis class for the user's reported high-pitch regression**: the mixer's own resampler is
+  not the defect when the source sample rate is correctly declared; a 9-case pitch-ratio matrix
+  (`Pitch=-1.0..+1.0`) proving `2^Pitch` produces the exact expected frequency shift on real
+  rendered audio (closes `AUD-08-003/004`). See `plan_audio.md`.
+- **`AUD-02-007/008/009`/`AUD-07-007/009/010`** — `DynamicSoundEffectInstance::Play()` ignored
+  `SDL_CreateAudioStream`/`MIX_PlayTrack`'s return values, and `SubmitQueuedToStream()` ignored
+  `SDL_PutAudioStreamData`'s -- all three could leave the instance reporting a false `Playing`
+  state or corrupt `PendingBufferCount` on backend failure. All three now checked, matching this
+  codebase's `std::cerr`-diagnostic convention. New test
+  `PlayWithZeroSampleRateDoesNotReportPlayingOnStreamCreationFailure` (empirically confirmed
+  `sampleRate=0` makes `SDL_CreateAudioStream` fail). Also investigated `AUD-07-004` (constructor
+  validation): already a resolved decision from `P10-DYN-001..003` (matches FNA's own
+  zero-validation constructor) -- corrected the plan's acceptance criterion instead of
+  re-litigating it. See `plan_audio.md`.
+- **`AUD-07-001/002`** — `DynamicSoundEffectInstance::SubmitBuffer` (int16 path) never checked or
+  reset `isFloat_`, unlike `SubmitFloatBufferEXT`'s existing guard. Confirmed against real FNA
+  source that FNA itself has this exact asymmetry (`SubmitFloatBufferEXT` is an FNA/NOXNA
+  extension, not real XNA) -- CNA can be safer than FNA here without diverging from true XNA
+  behavior. `SubmitBuffer` now throws `InvalidOperationException` when called while Playing/Paused
+  in float mode, and resets `isFloat_` when called while Stopped. Two new tests, one verifying the
+  live `SDL_AudioStream` format directly via `MIX_GetTrackAudioStream`+`SDL_GetAudioStreamFormat`.
+  See `plan_audio.md`.
+
+### Phase 9-14 (historical, `P#-XXX-NNN` IDs)
+
+- **`P14-ORDER-002`** (follow-up to `P14-ORDER-001`'s scope note, user-requested 2026-07-17,
+  narrowly-scoped task) — made per-track XACT filter establishment order-independent of `Play()`,
+  closing the one gap `P14-ORDER-001` deliberately left open. `SoundEffectInstance`'s
+  `INTERNAL_applyLowPassFilter`/`HighPassFilter`/`BandPassFilter`/`INTERNAL_applyXactTrackFilter`/
+  `INTERNAL_applyEffectVariationFilter`/`INTERNAL_applyRpcFilterOverride` no longer require a live
+  `track_` -- they always lazily-allocate/write `filterState_` now, only conditionally registering
+  SDL3_mixer's real cooked callback (`MIX_SetTrackCookedCallback`) when a track already exists;
+  `EnsureTrackDspState()` (unchanged) picks up any pending state once `Play()` actually creates one,
+  same shape as `P13-3D-001`'s spatial-state fix. New shared `TryGetMixer()` helper prevents a raw
+  `std::runtime_error` (first-ever-mixer-access, "no audio hardware") from escaping into
+  `Cue::Play()` now that these methods are reachable before any track has ever been created.
+  `Cue::Play()`'s per-wave loop reordered so the base filter and initial RPC filter override now run
+  *before* `inst->Play()`, completing the "configure everything, then start" ordering
+  `P14-ORDER-001` already applied to Volume/Pitch/3D state. `CHECKLIST.md` needed no change --
+  this fixes an internal CNA architecture gap, not a documented FNA/XNA behavioral deviation. 5 new
+  `SoundEffectInstanceTests.cpp` tests plus 3 pre-existing `CueTests.cpp` tests upgraded to
+  regression coverage via comment updates; two-stage `git stash` verification (isolating
+  `SoundEffectInstance` from `Cue.cpp`'s reorder, then both together) confirms each side is
+  independently necessary. Full audio-scoped suite 552/552 pass (was 549/549; +3 net new), full
+  whole-repo suite 4651/4653 pass, fresh one-off ASan+UBSan and ThreadSanitizer runs both clean (see
+  §2). **This closes the last open item in Phase 14 -- Phases 11 through 14 are now all fully
+  closed with zero deliberately-deferred items remaining** (see §8). See `plan_audio.md`.
+- **Phase 14** (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/`P14-ORDER-001`/`P14-PARSER-001`) — a
+  *second* user-provided external audit (Czech-language report, dated 2026-07-17, reviewing the
+  state after Phase 13 landed), four findings, all independently re-verified against the actual
+  source (hand-tracing the algorithm for the numeric claims) before any fix was written.
+  **`P14-LIFECYCLE-001`** (high severity): `SoundBank::GetCue()` created a `Cue` without
+  registering it with the bank at all -- only `Cue::Play()` did (`P12-BANK-001`), so a cue
+  obtained but never played was invisible to `SoundBank::Dispose()`'s force-stop cascade and could
+  outlive its bank with a dangling `bank_` pointer. Moved registration to the constructor itself
+  (matches real FACT: a cue's native handle is reachable by its bank from the moment of
+  `FACTSoundBank_GetCue`, not just once `FACTCue_Play` runs) and moved unregistration from
+  `StopInternal()` to `Dispose()`, so a cue now stays tracked for its whole C++ lifetime, not just
+  while playing. **`P14-ORDER-001`** (medium, partial fix, same commit): `Cue::Play()` started each
+  instance before seeding its 3D state and before the cue-level fade-in's silent starting volume
+  (a separate trailing loop, after every instance already started at full volume) -- moved both to
+  run before `inst->Play()`, safe because `P13-3D-001` already made `Apply3D()` order-independent;
+  the per-track filter calls still run after `Play()` (deliberately -- hard-require a live
+  `track_`, matching FNA's own identical constraint), recorded as the deferred `P14-ORDER-002`.
+  **`P14-BUFFER-001`** (high): `DynamicSoundEffectInstance::Update()`'s byte-accounting loop popped
+  an *entire* chunk the instant SDL reported *any* consumption at all, not once that chunk's full
+  byte count had actually played -- confirmed by hand-tracing the audit's own two-whole-second-chunk
+  numbers exactly. Replaced with a `consumed` budget that only pops a chunk once it's fully
+  covered, decrementing as it goes. **`P14-PARSER-001`** (medium): `XactParser.cpp`'s `Ctx::cstr()`
+  could push its cursor one byte past the buffer's end on an unterminated string (a corrupt/
+  truncated file), which would turn a *second* such call's `end - cur` into a huge wrapped
+  `size_t` -- a real out-of-bounds heap read over corrupt input. Now throws immediately instead,
+  matching every other `Ctx` accessor's existing contract; `seek()` also now validates its offset
+  as a plain integer comparison before ever forming the pointer, avoiding UB on a corrupt/huge
+  offset. 4 new tests total (2 `SoundBankTests.cpp`, 1 `DynamicSoundEffectInstanceTests.cpp`, 1
+  `XactParserTests.cpp`), all `git stash`-verified (each fails against the pre-fix code exactly as
+  the audit described). Full audio-scoped suite 549/549 pass (was 545/545; zero regressions); full
+  whole-repo suite also reverified green (see §2).
+- **Phase 13** (`P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001`) — user-provided **external** audit
+  (`audit_audio.md`, dated 2026-07-16, delivered as a standalone file alongside the repo, not a
+  fork of this branch), with three findings, all independently re-verified against the real
+  current source (and FNA's `SoundEffectInstance.cs`/`Cue.cs`) before any fix was written.
+  **`P13-3D-001`** (high severity): `SoundEffectInstance::Apply3D`'s computed attenuation/pan/
+  Doppler was "one-shot" -- the very next `Play()`/`setVolumeProperty()`/`setPitchProperty()` call
+  silently discarded it (and a call before the first `Play()` was lost outright, no track yet to
+  write to). Added persisted `attenuation_`/`dopplerFactor_`/`spatialPan_` members (default
+  `1.0f`/`1.0f`/`0.0f`, neutral) and one shared `INTERNAL_applyComposedTrackProperties()` routine
+  that `Play()`/`setVolumeProperty()`/`setPitchProperty()`/`setPanProperty()`/`Apply3D()` now all
+  route through, instead of each doing its own partial, uncomposed SDL3_mixer write. Same root
+  cause one level up: `Cue::Apply3D()` only ever forwarded to already-`active_` instances, so a
+  cue `Apply3D()`'d before its first `Play()` reached nothing -- added `Cue::has3D_`/
+  `pending3DListener_`/`pending3DEmitter_`, seeded onto every newly created `PlaybackInstance` in
+  `Cue::Play()`'s per-wave-reference loop. 5 new tests (4 `SoundEffectInstanceTests.cpp`, 1
+  `CueTests.cpp`), `git stash`-verified (all 5 fail pre-fix, confirming no false confirmations).
+  **Self-found while tracing this, fixed as `P13-DYNAMIC-001` (user-approved 2026-07-16, root-cause
+  option):** `DynamicSoundEffectInstance` never overrode `Volume`/`Pitch`/`Pan`/`Apply3D` -- all
+  four silently no-op'd on a live dynamic track (same root cause `CP-15` already fixed for
+  `Pause`/`Resume`, just never extended to these four), because the class managed its own separate
+  `dynamicTrack_` field instead of the inherited `track_` those methods actually touch. Fixed at
+  the root: removed `dynamicTrack_` entirely, so `Play()`/`Stop(bool)`/`StopInternal()`/
+  `getStateProperty()` now use the shared `track_`, matching FNA's own single-`handle` model --
+  `Volume`/`Pitch`/`Pan`/`Apply3D` then work correctly with **zero** new overrides, since they're
+  ordinary `SoundEffectInstance` member functions operating on whatever object's `track_` they're
+  called on. Also moved `INTERNAL_applyComposedTrackProperties()` from `private` to `protected` so
+  `DynamicSoundEffectInstance::Play()` could replace its old bare `MIX_SetTrackGain`-only call with
+  it (closing the same "lost before `Play()`" gap `P13-3D-001` fixed for the static case), and
+  removed the now-fully-redundant `Pause()`/`Resume()` overrides (`CP-15`'s fix is now subsumed by
+  the root-cause change, not left as duplicate dead code). 4 new tests
+  (`DynamicSoundEffectInstanceTests.cpp`), `git stash`-verified (all 4 fail pre-fix). All 45
+  pre-existing `DynamicSoundEffectInstanceTests.cpp` tests (including the `CP-15` Pause/Resume
+  ones, now exercising the inherited base implementation) re-verified passing unchanged: 49/49
+  (was 45/45; +4 new, zero regressions).
+  **`P13-MIXER-001`** (medium severity): `CNA::Internal::Audio::GetMixer()`'s lazy-init
+  check-then-create had no synchronization at all (two concurrent first callers could both race
+  through `MIX_Init()`/`MIX_CreateMixerDevice()`); `DestroyMixer()` (still uncalled anywhere) had
+  none either. Fixed with a single `std::mutex` held for each function's entire body -- no
+  unlocked window between "check" and "create/destroy/return." Deliberately a plain mutex, not
+  `std::once_flag` (a flag can't cleanly express "destroyed, then later re-created"). No new test
+  (the race only manifests under genuine concurrent first use, which every existing fixture avoids
+  by construction; the fix itself is a textbook single-mutex critical section, not a novel
+  algorithm). **`P13-DOC-001`** (low severity): fixed five stale "stereo hard-pan eliminates the
+  opposite channel" claims in `docs/xna-4-api-coverage.md` (all predate `P11-PAN-001`'s real
+  crossfeed fix), one internally-contradictory stale "no AttackTime/ReleaseTime tracking" claim in
+  the same file (contradicted by its own `Implemented` bucket a few lines above), and `AUDIT.md`'s
+  stale "last synchronized 2026-07-06" banner (Phase 11/12 both landed after that date).
+  `CHECKLIST.md` needed no changes -- confirmed already accurate. Full audio-scoped suite
+  545/545 pass (was 536/536 pre-existing; +5 from `P13-3D-001`, +4 from `P13-DYNAMIC-001`, zero
+  regressions); full whole-repo `CnaTests` suite also reverified green (see §2's exact count).
 - **`P12-BANK-001`** — implemented the real force-stop cascade for `SoundBank`/
   `WaveBank::Dispose()`, user-greenlit ("Implementovat force-stop cascade", alongside
   `P11-PAN-002`'s confirmation). `SoundBank` gained its own `activeCues_`/`RegisterCue()`/
@@ -641,6 +1103,40 @@ current list of accepted deviations from FNA/XNA behavior.
 | XACT parser | `CNA/Internal/Audio/XactParser.cpp`, `XactTypes.hpp` | Hand-written `.xgs`/`.xsb`/`.xwb` reader — FACT is **not** used |
 | sharp-runtime | `../sharp-runtime/` | `System.*` types, primitive aliases, exception hierarchy |
 
+### Mixer output-format policy (AUD-04-005)
+
+**Fixed-reference.** `AudioMixer::GetMixer()` always requests S16 stereo 44100 Hz from
+`MIX_CreateMixerDevice()`, regardless of what the actual output device's native format is.
+Rationale:
+
+1. This exact spec is also SDL3's own hard floor for every physical playback device it opens
+   (`DEFAULT_AUDIO_PLAYBACK_FORMAT/CHANNELS/FREQUENCY` = S16/2/44100, `SDL_sysaudio.h`,
+   confirmed empirically by AUD-04-004's device-open test) — requesting anything at or below
+   this floor would be silently raised to it anyway, so there is no achievable
+   *lower*-quality fixed reference to request instead.
+2. XNA/XACT content is almost always authored at 44100 Hz stereo; matching it as the mixer's
+   own reference avoids an unnecessary extra resample step for the common case. SDL/SDL3_mixer
+   resamples per source regardless of which fixed rate is chosen, so picking a different fixed
+   reference would only relocate where resampling happens, never eliminate it.
+3. **Native-device** (request whatever the OS reports as the default device's format) was
+   considered and rejected: it would make pitch-affecting resample ratios vary per machine/
+   driver/output device, directly undermining the deterministic, reproducible-behavior goal the
+   whole Phase 15 audit exists to establish, and it would reintroduce the "which physical rate
+   did we actually get" observability gap AUD-04-001 was built to close.
+4. **Platform-specific** was considered and rejected for the same reason — no platform-specific
+   quality/latency need has been identified in this codebase's own testing that fixed-reference
+   doesn't already satisfy, and it would multiply the verification matrix (AUD-04-002/003 already
+   have to cover rate-mismatch correctness even under a single fixed policy).
+
+**Consequence:** any source or WaveBank content decoded at a sample rate other than 44100 Hz
+always crosses exactly one resample step (source rate → 44100 Hz) inside SDL3_mixer/SDL3's own
+resampler — never zero, never two. This is the same resampler AUD-03's golden-audio harness
+(`OfflineAudioRendererTests.cpp`) has already empirically verified preserves frequency within
+0.1% end-to-end for 22050/44100/48000/96000 Hz sources into a 44100 Hz mixer. The still-open risk
+is *device*-level, not this policy: whether the physical output device itself ever gets opened
+above 44100 Hz (e.g. an OS default at 48/96/192 kHz) without CNA observing it — AUD-04-002/003,
+still open.
+
 ### Data flow (playback)
 
 ```
@@ -744,19 +1240,126 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 11 and Phase 12 are both fully closed.** Phase 11's one deliberate follow-up
-(`P11-PAN-002`, user-greenlit 2026-07-07) and Phase 12's fresh logic-correctness audit (all 5
-audit groups plus all 6 follow-up tasks: `P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`,
-`P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`) are all `[x]` in `plan_audio.md`. `P10-HRTF-002`'s
-RFC-2 (optional FAudio/FACT backend) was explicitly **rejected** by the user the same day --
-staying on SDL3_mixer (see §9). `P12-PAUSE-001` was investigated and found to be a **false
-positive** -- `Cue::state_` already stays `Playing` throughout a pause (the independent `paused_`
-bool, `P9-LIFECYCLE-013`); a new passing regression test locks in the already-correct behavior
-with zero code change. Everything else was a real bug, fixed for real -- see §3 for each.
+**Phase 11, Phase 12, Phase 13, and Phase 14 are all fully closed, with zero deliberately-deferred
+items remaining.** Phase 11's one deliberate follow-up (`P11-PAN-002`, user-greenlit 2026-07-07),
+Phase 12's fresh logic-correctness audit (all 5 audit groups plus all 6 follow-up tasks:
+`P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`),
+and Phase 13's `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001` are all `[x]` in
+`plan_audio.md`. `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly **rejected**
+by the user the same day -- staying on SDL3_mixer (see §9). `P12-PAUSE-001` was investigated and
+found to be a **false positive** -- `Cue::state_` already stays `Playing` throughout a pause (the
+independent `paused_` bool, `P9-LIFECYCLE-013`); a new passing regression test locks in the
+already-correct behavior with zero code change. `P13-DYNAMIC-001` was initially deferred pending a
+user decision between two fix shapes; the user chose the root-cause option 2026-07-16, and it's now
+also `[x]`. Phase 14's `P14-LIFECYCLE-001`/`P14-BUFFER-001`/`P14-PARSER-001`/`P14-ORDER-001` are all
+`[x]`; `P14-ORDER-002`, the one item `P14-ORDER-001` deliberately left open (per-track XACT filter
+establishment order-independence), was closed 2026-07-17 in its own scoped task -- see §3's
+`P14-ORDER-002` entry for the fix, tests, and sanitizer verification. Everything else was a real
+bug, fixed for real -- see §3 for each.
 
-**There is currently no open, scoped Audio task on this branch.** Whoever resumes next needs a
-fresh instruction from the user (a new phase, a specific bug report, or explicit permission to run
-another audit pass) -- see §9 for what not to self-start without asking.
+**Phase 15 (current) is actively in progress -- `plan_audio.md`'s `AUD-XX` numbering is the live
+task list, 438 tasks total, most still open.** This is NOT a "wait for the user" state the way
+Phase 9-14's closure was -- the user's own 2026-07-17 instruction authorized working through
+`plan_audio.md` autonomously for an extended session. Concrete next candidates, in roughly the plan's
+own recommended priority order (see `docs/cna_audio_deep_audit_2026-07-17.md`'s "Recommended
+implementation order" and `plan_audio.md`'s own priority rules):
+
+**Status as of commit `5e7235d0` (2026-07-18): `AUD-06` (25/25) and every `AUD-11` P0 item are
+fully closed; `AUD-11-005/006/007/014/016/017/018/023/024/026` (P1) are also closed -- do not
+re-pick any of those.** Also closed this same overall pass: `AUD-02` structured diagnostics,
+`AUD-07-008`, `AUD-09`'s 5 golden Apply3D/Doppler cases, `AUD-10-005/006/013`,
+`AUD-11-001/002/008/009/010/011/012/013`, all of `AUD-04-001` through `AUD-04-009`/`014`-`016`,
+and `AUD-15-017`. The list below is refreshed accordingly.
+
+**Further status update (2026-07-18, later same day, commit `761e98bb`): `AUD-11-025` (item 1
+below) is now closed too (see §3's `AUD-11-025` entry), along with `AUD-15-005/006/007` and
+`AUD-07-003` (see the "Continuing the same pass" note in §2) -- do not re-pick any of those.
+`AUD-15-021` (new, open) tracks a pre-existing, unrelated intermittent test-suite segfault found
+along the way. Item 5's "18 open" count in `AUD-15` is now lower; check `plan_audio.md` directly
+for the current open list rather than trusting the count below. `AUD-07-005`/`006` (frame-alignment
+validation for `SubmitBuffer`/`SubmitFloatBufferEXT`) are legitimate, open, well-scoped P0 tasks
+worth picking up next in that area -- design and verify fresh (see the process note in §2).**
+
+**Final status update for this pass (2026-07-18, commits `a55b4e8b`/`9842b498`/`2aa7c1d6`, latest
+HEAD): `AUD-11-025` (item 1 below, already noted closed above) and `AUD-15-008` are now BOTH
+closed -- item 1's "most concrete, well-scoped next task" framing below is stale, do not re-pick
+`AUD-11-025`. `AUD-15-008`'s evidence: the one real forbidden-operation site found
+(`OnFireAndForgetStopped`'s cleanup queue, mutex+reallocating-vector on the mixer thread) was
+rewritten lock-free; see §2 and `plan_audio.md`'s own `AUD-15-008` entry.
+**Two open, undiagnosed, `gdb`/`valgrind`-blocked investigations now exist side by side:**
+`AUD-15-021` (flaky, ~20-40%, needs ~1300 tests) and `AUD-15-022` (new, 100%-reproducible-in-
+isolation with just `CueTest.*:DynamicSoundEffectInstanceTest.*`, likely tied to this session's own
+`AUD-15-006`/`AUD-07-003` stress tests -- see §2's fuller writeup and `plan_audio.md`'s own entry
+for the full bisection trail). **Recommended next step, in order:** (1) if `gdb`/`valgrind` become
+available, tackle `AUD-15-022` first -- it is the cleaner, faster, 100%-reproducible repro and may
+turn out to also explain `AUD-15-021`; (2) otherwise, `AUD-07-005`/`006` (frame-alignment
+validation, real open P0 tasks, no special tooling needed -- see the process note in §2) or the
+remaining `AUD-15` P1 items (`009`-`016`, benchmarks and hardening, see item 5 below) are both
+good, self-contained, non-blocked next picks.**
+
+1. **`AUD-11-025`** (P1) -- WaveBank `Dispose()` racing a concurrent `GetSoundEffect()` decode is
+   a confirmed real gap (investigated, documented, not yet fixed). Needs the same
+   generation-counter/liveness-check pattern `AUD-04-008/009` already established on this exact
+   codebase (`AudioMixer::GetMixerGeneration()` + `SoundEffectInstance::GetLiveTrackHandle()`), not
+   a plain mutex -- the most concrete, well-scoped next task.
+2. **`AUD-11`'s remaining P1/P2 items** (`019`-`022`, `027`-`028`, 6 open) -- zero-length/tiny
+   entries, padding, old XWB versions, seek tables, WAV-wrapper field validation, an XWB
+   inspection tool (mirrors `AUD-06-025`'s pattern). The new `XactParserFuzzTests.cpp` mutation
+   harness already incidentally exercises `019`/`020`'s edge cases across 6000 mutations with zero
+   findings; a few of these may turn out to already be adequately covered on inspection, matching
+   this pass's `AUD-11-015`/`023` pattern (investigate first, don't assume a gap).
+3. **`AUD-04`'s remaining items** (10 open) -- `AUD-04-002/003` (device-negotiation pitch
+   preservation) need a real, non-dummy audio backend to test meaningfully -- may have to stay
+   documented-as-untestable-headlessly. `AUD-04-010/011` (device change/loss handling) need a
+   design decision (migrate-vs-stop-with-event) before implementing -- confirm with the user first,
+   per §9. `AUD-04-012/013/017/018/019/020` (P1/P2 latency/capability/documentation items) are more
+   readily self-startable.
+4. **`AUD-05`'s remaining 2 items** (`AUD-05-010/011`, endianness policy + a NOXNA buffer
+   descriptor) are both deliberately-deferred design-decision items -- do not silently pick these,
+   confirm scope with the user first (see §9).
+5. **`AUD-15`'s remaining thread-safety/lifetime items** (18 open) -- this session found and fixed
+   *four* real memory-safety/concurrency defects via exactly this kind of "what if X runs
+   concurrently with Y" or "what if this file is truncated/corrupt" testing (the mixer-generation
+   UAF pair, the XACT name-parsing heap-buffer-overflow, the WaveBank cache race); `AUD-15`'s own
+   remaining items (concurrent submit/dispose races, Dispose-during-callback, etc.) are a natural,
+   proven-fruitful continuation of the same investigative approach.
+
+**Environment note for the next session:** a full whole-repo (or TSAN) build may be transiently
+blocked if the sibling `meta-gl`/`easy-gl` repos (shared across this machine's `cna*` project
+family, referenced via CMake `add_subdirectory` from sibling directories) are mid-edit by another
+concurrent process -- check `git status`/`git diff --stat` in those sibling repos before assuming
+a build failure is caused by anything on this branch (it was not, the one time this happened
+2026-07-18 -- see §3's `AUD-11-024` entry).
+
+**`AUD-11` is now FULLY CLOSED (2026-07-18, commit `be9b39ea`): 28/28 tasks `[x]`, 0 open.** 5 more
+commits after `ed3b16b6`: `AUD-11-025` was upgraded from "investigated but not fixed" to a real,
+ASan-reproduced fix -- the initially-proposed generation-counter shape (matching `AUD-04-008/009`)
+turned out to be over-engineered for this specific case (`Dispose()` and `GetSoundEffect()` are
+both methods on the *same* `WaveBank` instance, so a single mutex serializing both against each
+other is sufficient); a real `heap-use-after-free` was reproduced and fixed. `AUD-11-019`/`020`:
+zero-length entries and padding-between-entries both confirmed already-safe by construction, new
+tests lock it in. `AUD-11-021`: found a genuine, real gap -- every existing fixture in this
+codebase used the older XWB header format (`version<=43`); the newer format (`version>43`, extra
+`headerVersion` field) had zero coverage anywhere despite a real desync risk if the branch were
+ever wrong -- closed with a new test, confirmed to catch a deliberately-broken branch condition.
+`AUD-11-022`: seek tables confirmed genuinely not applicable (real FAudio source shows they're
+only used for XMA2/WMA, neither of which CNA decodes). `AUD-11-027`/`028`: the WAV wrapper's own
+byte-level output had never been directly tested (only indirectly via "did SDL3 decode it") --
+closed with 6 new direct field-level tests, plus a new standalone `cna_xwb_inspect` tool
+(metadata-JSON + `.wav` export, mirrors `AUD-06-025`'s pattern) verified end-to-end against a real
+hand-built fixture. **Incidental finding, not fixed (out of scope):** a whole-repo test run hit a
+real crash (`malloc(): unsorted double linked list corrupted`) in an unrelated `ENetBackendTest` --
+consistent with the already-documented `NetworkSession::Dispose()` double-free corrupting heap
+metadata that later surfaces unpredictably; confirmed via an isolated audio-scoped rerun (660/660
+pass) that this is unrelated to any commit on this branch. See the project memory file for detail.
+With both `AUD-06` and `AUD-11` now fully closed, the next natural section to pick up is `AUD-15`
+(thread-safety/lifetime, 18 open) -- this pass's own investigative pattern ("what if X runs
+concurrently with Y," "what if this file is truncated/corrupt") found and fixed real defects
+repeatedly, and should transfer directly.
+
+**Do not re-run a fresh full audit or restart from AUD-00** -- the audit and the 438-task plan
+already exist; work through the existing list. See §9 for what to still confirm with the user
+before doing (backend/API-surface changes), which remains unchanged from before.
 
 ---
 
@@ -788,18 +1391,24 @@ another audit pass) -- see §9 for what not to self-start without asking.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state. Phases
-9, 10, 11, and 12 are all fully closed (plan_audio.md) -- every task ID in every one of those
-phases is checked [x] with a concrete, cited status. There is currently NO open, scoped Audio task
-on this branch (§8) -- do not self-start a new phase or audit pass; wait for the user to name a
-specific task, report a bug, or explicitly authorize another audit round (§9).
+Read NEXT.md first, then plan_audio.md (the AUD-XX task list is authoritative for new work; the
+archived plan_audio20260717.md is historical only, do not read/use it). Phases 9-14
+(P#-XXX-NNN IDs) are all closed and historical. Phase 15 (AUD-XX-NNN IDs, 438 tasks, started
+2026-07-17 from an independent deep audit) is the CURRENT, ACTIVE work -- most tasks are still
+open. This is not a "wait for the user" state: keep working through plan_audio.md's task list in
+priority order (see §8 for concrete next candidates) unless told otherwise.
 
-1. If the user names a specific task, inspect only the files needed for it -- do not refactor
-   unrelated code. Confirm scope/approach with the user first if it's real feature work rather
-   than a one-line fix.
+1. Pick the next task from §8/plan_audio.md's own priority order. Validate every important claim
+   against current code/tests/FNA/FAudio/SDL docs before implementing -- do not "fix" parser/math
+   behavior from a comment or audit claim alone; confirm with a fixture or authoritative source
+   first (see AUD-11-001/002's entry in §3 for why this matters -- the audit's own suspicion was
+   wrong once checked against real FAudio source).
 2. Make one small, verified improvement at a time: add/extend a test, verify with the git-stash
    pattern (§7) for any behavioral fix, run the relevant build/test command, and run ASan+UBSan if
    it touches memory lifetime or ownership.
-3. Update plan_audio.md's checkbox + note for whatever sub-item was completed, then update this
-   NEXT.md (status, recent changes, next task) to reflect what changed, and commit.
+3. Update plan_audio.md's checkbox + evidence note for whatever sub-item was completed (mark [x]
+   only with concrete evidence, per the plan's own completion rules), then update this NEXT.md
+   (status, recent changes, next task) to reflect what changed, and commit -- one task, one commit.
+4. Do not stop after one task. Continue to the next item; do not end the session merely because
+   one phase/bug/test passes.
 ```

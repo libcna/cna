@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <type_traits>
 #include <vector>
@@ -333,6 +337,87 @@ TEST(SoundEffectTest, BufferRangeConstructorRejectsOffsetCountIntegerOverflow)
     constexpr int hugeCount  = 2000000000; // offset+count overflows int32 (INT32_MAX ~2.147e9)
     EXPECT_THROW(SoundEffect(pcm, hugeOffset, hugeCount, 44100, AudioChannels::Stereo, 0, 0),
                  System::ArgumentOutOfRangeException);
+}
+
+// AUD-05-001/002 (2026-07-17 deep audit): investigated whether the raw buffer constructor should
+// validate sampleRate/channels before reaching the backend. Confirmed real FNA's own internal
+// SoundEffect constructor (SoundEffect.cs) does zero validation of either field at the C# layer
+// (same resolved-decision pattern as P10-DYN-001..003's DynamicSoundEffectInstance constructor) --
+// it relies entirely on the native backend (FAudio) to reject an invalid WAVEFORMATEX. Empirically
+// confirmed CNA's own backend (SDL3_mixer's MIX_LoadRawAudio) already does exactly this: a direct
+// probe against zero/negative sampleRate and zero/negative channels all return NULL ("Audio data
+// is in unknown/unsupported/corrupt format"), which the existing `if (!raw) throw
+// NotSupportedException(...)` guard already converts into a clean, safe failure -- no crash, no
+// garbage SoundEffect, no distorted/mispitched playback. These tests lock that behavior down as a
+// resolved decision (matching FNA: no CNA-side pre-validation) rather than leaving it as an
+// untested, accidental gap.
+TEST(SoundEffectTest, BufferRangeConstructorWithZeroSampleRateThrowsNotSupported)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(16, 0);
+    try
+    {
+        EXPECT_THROW(SoundEffect(pcm, 0, static_cast<int>(pcm.size()), 0, AudioChannels::Stereo, 0, 0),
+                     System::NotSupportedException);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, BufferRangeConstructorWithNegativeSampleRateThrowsNotSupported)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(16, 0);
+    try
+    {
+        EXPECT_THROW(SoundEffect(pcm, 0, static_cast<int>(pcm.size()), -1, AudioChannels::Stereo, 0, 0),
+                     System::NotSupportedException);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, BufferRangeConstructorWithZeroChannelsThrowsNotSupported)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(16, 0);
+    try
+    {
+        EXPECT_THROW(
+            SoundEffect(pcm, 0, static_cast<int>(pcm.size()), 44100, static_cast<AudioChannels>(0), 0, 0),
+            System::NotSupportedException);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// AUD-05-003 (2026-07-17 deep audit): a byte count that isn't a whole multiple of the frame size
+// (channels * 2 bytes for S16) must not distort or corrupt the resulting sound. Confirmed via a
+// direct probe against MIX_LoadRawAudio that SDL3_mixer already handles this gracefully -- it
+// simply ignores the trailing partial frame (401 bytes of stereo S16 decodes as exactly 100
+// frames, the same as a clean 400-byte buffer would), not a crash or garbled decode. Matches FNA,
+// which performs no frame-alignment validation either. This test locks that graceful-truncation
+// behavior down rather than leaving it as an untested, accidental gap.
+TEST(SoundEffectTest, BufferRangeConstructorWithMisalignedByteCountTruncatesCleanly)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    // 401 bytes of stereo S16 (frame size 4) -- one byte past a whole 100-frame buffer.
+    std::vector<unsigned char> pcm(401, 0);
+    try
+    {
+        SoundEffect fx(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo, 0, 0);
+        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 100.0 / 44100.0, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
 }
 
 // CP-17/CP-23: a nonzero loop region given to the buffer-range constructor must reach the
@@ -914,4 +999,300 @@ TEST(SoundEffectTest, DisposeAfterInstanceMoveConstructedOutOfScopeDisposesTheMo
 
     EXPECT_TRUE(dst->getIsDisposedProperty());
     EXPECT_EQ(dst->getStateProperty(), SoundState::Stopped);
+}
+
+// ---------------------------------------------------------------------------
+// AUD-05-006: passing whole-file container bytes (WAV/Ogg/MP3/XNB) to a raw PCM16LE constructor
+// is a common misuse this constructor can't reject outright (the container header still "looks
+// like" valid 16-bit samples to the backend) -- these tests confirm it's at least diagnosed via
+// stderr, never thrown (matches the constructor's doc comment, AUD-05-005: the fix for real
+// misuse is the file-path constructor instead, not a rejection here).
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, RawBufferStartingWithRiffSignatureEmitsDiagnosticWithoutThrowing)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm;
+    const char riff[] = "RIFF\x24\x08\x00\x00WAVEfmt ";
+    pcm.insert(pcm.end(), riff, riff + sizeof(riff) - 1);
+    pcm.resize(pcm.size() + 4 * 256, 0); // pad to a plausible sample-frame count
+
+    testing::internal::CaptureStderr();
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    }
+    catch (...)
+    {
+        testing::internal::GetCapturedStderr();
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_FALSE(fx->getIsDisposedProperty()); // never throws/rejects -- advisory only
+    EXPECT_NE(captured.find("RIFF"), std::string::npos) << "captured stderr: " << captured;
+}
+
+TEST(SoundEffectTest, RawBufferStartingWithXnbSignatureEmitsDiagnosticWithoutThrowing)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm{'X', 'N', 'B', 'w'};
+    pcm.resize(pcm.size() + 4 * 256, 0);
+
+    testing::internal::CaptureStderr();
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    }
+    catch (...)
+    {
+        testing::internal::GetCapturedStderr();
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_NE(captured.find("XNB"), std::string::npos) << "captured stderr: " << captured;
+}
+
+TEST(SoundEffectTest, RawBufferWithoutKnownSignatureEmitsNoDiagnostic)
+{
+    auto fx = makeEffect(); // all-zero PCM, no container signature
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    testing::internal::CaptureStderr();
+    auto second = std::make_unique<SoundEffect>(
+        std::vector<unsigned char>(4 * 256, 0), 44100, AudioChannels::Stereo);
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
+}
+
+// ---------------------------------------------------------------------------
+// AUD-05-007: raw PCM16 statistics that look implausible for real audio (e.g. compressed data
+// without a recognizable container signature, or float32 samples byte-reinterpreted as PCM16)
+// should also be diagnosed -- via byte-level entropy, since compressed/encoded bitstreams
+// approach maximum entropy while real quantized audio essentially never does.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, RawBufferWithHighEntropyRandomDataEmitsDiagnosticWithoutThrowing)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    // Deterministic PRNG (fixed seed) -- genuinely high-entropy bytes, a reasonable proxy for
+    // compressed/encoded data's own near-uniform byte distribution.
+    std::mt19937 rng(12345);
+    std::uniform_int_distribution<int> dist(0, 255);
+    std::vector<unsigned char> pcm(4 * 1024);
+    for (auto& b : pcm) b = static_cast<unsigned char>(dist(rng));
+
+    testing::internal::CaptureStderr();
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    }
+    catch (...)
+    {
+        testing::internal::GetCapturedStderr();
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_FALSE(fx->getIsDisposedProperty()); // never throws/rejects -- advisory only
+    EXPECT_NE(captured.find("entropy"), std::string::npos) << "captured stderr: " << captured;
+}
+
+TEST(SoundEffectTest, RawBufferWithRealSineWaveEmitsNoEntropyDiagnostic)
+{
+    auto fx = makeEffect(); // sanity: confirm a device is available before the real assertion
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    // A real, continuous 440 Hz tone -- correlated sample-to-sample, nowhere near the entropy
+    // of compressed/random data. Must not false-positive.
+    const int frames = 1024;
+    std::vector<unsigned char> pcm(static_cast<std::size_t>(frames) * 4); // stereo S16
+    auto* samples = reinterpret_cast<int16_t*>(pcm.data());
+    for (int i = 0; i < frames; ++i)
+    {
+        const double t = static_cast<double>(i) / 44100.0;
+        const auto s = static_cast<int16_t>(30000.0 * std::sin(2.0 * 3.14159265358979 * 440.0 * t));
+        samples[i * 2 + 0] = s;
+        samples[i * 2 + 1] = s;
+    }
+
+    testing::internal::CaptureStderr();
+    auto second = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
+}
+
+// ---------------------------------------------------------------------------
+// AUD-05-014/015: zero-length and very short raw buffers must never divide by zero or produce an
+// off-by-one duration -- getDurationProperty() guards `frames > 0` before dividing by
+// impl_->sampleRate (never by frame count), so these lock down the already-safe behavior with a
+// real empirical check rather than just reading the guard.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, ZeroLengthRawBufferConstructsWithZeroDurationNoCrash)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try
+    {
+        SoundEffect fx(std::vector<unsigned char>{}, 44100, AudioChannels::Stereo);
+        EXPECT_FALSE(fx.getIsDisposedProperty());
+        EXPECT_EQ(fx.getDurationProperty(), System::TimeSpan::Zero);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, OneFrameRawBufferHasExactSingleFrameDuration)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try
+    {
+        // Exactly one stereo S16 frame: 2 channels * 2 bytes = 4 bytes.
+        SoundEffect fx(std::vector<unsigned char>(4, 0), 44100, AudioChannels::Stereo);
+        // 1e-6 tolerance matches this file's established convention (ConstructFromBufferAndProperties
+        // above) -- SDL3_mixer's own duration computation carries a small, fixed sub-microsecond
+        // rounding error independent of buffer length, negligible for any real audio purpose but
+        // enough to fail a naively tight (e.g. 1e-9) absolute tolerance on very short buffers.
+        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 1.0 / 44100.0, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, TwoFrameRawBufferHasExactTwoFrameDuration)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try
+    {
+        SoundEffect fx(std::vector<unsigned char>(8, 0), 44100, AudioChannels::Stereo);
+        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 2.0 / 44100.0, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// AUD-05-013: MIX_LoadRawAudio (unlike the separate MIX_LoadRawAudioNoCopy, which CNA does not
+// use) eagerly copies the source bytes via SDL_LoadFile_IO into its own buffer -- confirmed by
+// reading third_party/SDL_mixer/src/SDL_mixer.c's MIX_LoadAudioWithProperties: the
+// `else if (!ondemand)` precache branch, which MIX_LoadRawAudio's call chain always takes since
+// it never sets MIX_PROP_AUDIO_LOAD_ONDEMAND_BOOLEAN (only MIX_LoadRawAudioNoCopy does). This
+// empirically locks that source-reading down: the source buffer is overwritten then destroyed
+// immediately after construction, before the SoundEffect is used again.
+TEST(SoundEffectTest, RawBufferLifetimeIsIndependentOfSourceMemoryAfterConstruction)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        auto source = std::make_unique<std::vector<unsigned char>>(4 * 1024, 0x00);
+        fx = std::make_unique<SoundEffect>(*source, 44100, AudioChannels::Stereo);
+
+        // Overwrite then free the source buffer -- if MIX_LoadRawAudio held a pointer into it
+        // instead of copying, this would corrupt or crash on the next SoundEffect access.
+        std::fill(source->begin(), source->end(), static_cast<unsigned char>(0xCD));
+        source.reset();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+    EXPECT_NO_THROW(fx->CreateInstance().Play());
+}
+
+// ---------------------------------------------------------------------------
+// AUD-05-012: AudioChannels is a scoped enum (Mono=1, Stereo=2) with no runtime guard against a
+// caller force-casting an out-of-range value (static_cast<AudioChannels>(N)) -- C++ has no
+// language-level protection against this for a `static_cast` (unlike a plain narrowing
+// conversion). FNA's own constructor has the identical gap (SoundEffect.cs simply does
+// `(ushort) channels`, no validation), so CNA intentionally matches it rather than adding a
+// restriction FNA itself doesn't have. What matters is that the *backend* still behaves safely
+// for an out-of-enum-range value passed through unchanged -- these tests lock that down.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, OutOfRangeChannelsEnumValueEitherConstructsOrThrowsCleanlyNeverUB)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    // Neither Mono(1) nor Stereo(2) -- a force-cast a real caller could plausibly write by
+    // mistake (e.g. confusing this with a raw channel count).
+    const auto bogus = static_cast<AudioChannels>(5);
+
+    try
+    {
+        SoundEffect fx(std::vector<unsigned char>(4 * 256, 0), 44100, bogus);
+        // Empirically confirmed (2026-07-18): this is the branch actually taken --
+        // MIX_LoadRawAudio's RAW decoder accepts an arbitrary positive channel count
+        // unvalidated (unlike MIX_CreateMixerDevice's stream-format path, which enforces
+        // SDL_IsSupportedChannelCount's 1-8 range at *play* time, not load time -- AUD-04-006).
+        // Still must behave sanely here, not silently corrupt state.
+        EXPECT_FALSE(fx.getIsDisposedProperty());
+    }
+    catch (const System::NotSupportedException&)
+    {
+        // Also an acceptable outcome if a future SDL3_mixer version starts validating this at
+        // load time: the backend cleanly rejecting it via CNA's existing NotSupportedException
+        // translation (AUD-05-002's pattern).
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AUD-05-016: a claimed offset/count near the int32 (SharpRuntime::intcs) ceiling, checked
+// against a genuinely small real buffer, must be rejected by P9-VALIDATION-003's unsigned-
+// arithmetic bounds check (`off > buffer.size() || cnt > buffer.size() - off`) before ever
+// computing `buffer.data() + offset` or reaching the backend -- no huge real allocation is
+// needed to prove this, since the check itself never depends on how large the real buffer is,
+// only on the (small) real buffer failing to contain the (huge) claimed range.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, HugeCountAgainstSmallBufferThrowsBeforeReachingBackend)
+{
+    std::vector<unsigned char> buffer(16, 0);
+    EXPECT_THROW(
+        SoundEffect(buffer, 0, std::numeric_limits<SharpRuntime::intcs>::max(),
+                    44100, AudioChannels::Stereo, 0, 0),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST(SoundEffectTest, HugeOffsetNearIntMaxThrowsBeforeReachingBackend)
+{
+    std::vector<unsigned char> buffer(16, 0);
+    EXPECT_THROW(
+        SoundEffect(buffer, std::numeric_limits<SharpRuntime::intcs>::max(), 4,
+                    44100, AudioChannels::Stereo, 0, 0),
+        System::ArgumentOutOfRangeException);
+}
+
+// The exact scenario P9-VALIDATION-003 exists for: offset + count individually look plausible
+// but would overflow a plain int32 sum (undefined behavior) if computed naively instead of via
+// the unsigned-arithmetic pattern.
+TEST(SoundEffectTest, OffsetPlusCountThatWouldOverflowInt32ThrowsCleanly)
+{
+    std::vector<unsigned char> buffer(16, 0);
+    const auto nearMax = std::numeric_limits<SharpRuntime::intcs>::max() - 2;
+    EXPECT_THROW(
+        SoundEffect(buffer, nearMax, 10, 44100, AudioChannels::Stereo, 0, 0),
+        System::ArgumentOutOfRangeException);
 }

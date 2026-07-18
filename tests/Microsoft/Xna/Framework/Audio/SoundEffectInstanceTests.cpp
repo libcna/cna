@@ -24,6 +24,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "SoundEffectTestAccess.hpp"
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
@@ -35,6 +36,7 @@ using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
+using Microsoft::Xna::Framework::Audio::SoundEffectTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
 using Microsoft::Xna::Framework::Vector3;
 
@@ -779,6 +781,118 @@ TEST_F(SoundEffectInstanceTest, Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero
     EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
 }
 
+// AUD-09-003 (2026-07-17 deep audit): distinct from Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero
+// above -- this leaves DopplerScale at its real XNA default (1.0f) and instead zeroes out both
+// listener and emitter velocity. A stationary source/listener pair must never shift pitch purely
+// from being positioned in 3D space (position-only, no motion).
+TEST_F(SoundEffectInstanceTest, Apply3DZeroVelocitiesYieldNeutralDopplerRegardlessOfDefaultScale)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener; // velocity defaults to zero
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 5.0f, -3.0f}); // position only, no motion
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
+}
+
+// AUD-09-005: equal listener/emitter velocity (parallel motion, e.g. both riding the same moving
+// platform) must produce no *relative* Doppler shift -- both velocity components project onto the
+// same emitter-to-listener axis identically, so the ratio's numerator and denominator must cancel
+// to exactly 1.0 by construction (ComputeDopplerFactor's own math), not just approximately.
+TEST_F(SoundEffectInstanceTest, Apply3DEqualListenerAndEmitterVelocityYieldsNeutralDoppler)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    listener.setVelocityProperty({50.0f, 0.0f, 0.0f});
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({50.0f, 0.0f, 0.0f}); // identical velocity -- moving together
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-4f);
+}
+
+// AUD-09-007: tangential motion (perpendicular to the emitter-to-listener axis) must not shift
+// pitch -- only the *radial* velocity component (along that axis) matters for Doppler. Emitter at
+// (10,0,0) moving in +Y (straight "sideways" relative to the listener at the origin) has zero
+// radial component: dot((-10,0,0),(0,100,0)) == 0.
+TEST_F(SoundEffectInstanceTest, Apply3DTangentialMotionYieldsNeutralDoppler)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({0.0f, 100.0f, 0.0f}); // purely tangential, no radial component
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-4f);
+}
+
+// AUD-09-011: coincident listener/emitter positions (distance == 0) must not produce NaN/Inf --
+// ComputeDopplerFactor's own distance!=0.0f guard should leave both velocity components at zero
+// (undefined direction, matches FAudio's own div-by-zero avoidance), yielding a neutral ratio
+// rather than propagating a NaN into MIX_SetTrackFrequencyRatio.
+TEST_F(SoundEffectInstanceTest, Apply3DCoincidentPositionsDoesNotProduceNaNOrInf)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    listener.setVelocityProperty({100.0f, 0.0f, 0.0f});
+    AudioEmitter emitter;
+    emitter.setPositionProperty({0.0f, 0.0f, 0.0f}); // same position as the listener
+    emitter.setVelocityProperty({-100.0f, 0.0f, 0.0f});
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    const float ratio = MIX_GetTrackFrequencyRatio(track);
+    EXPECT_FALSE(std::isnan(ratio));
+    EXPECT_FALSE(std::isinf(ratio));
+    EXPECT_NEAR(ratio, 1.0f, 1e-5f);
+}
+
+// AUD-09-011: extreme (unrealistically large) velocities must clamp, not overflow/NaN. Real
+// F3DAudio.c documents "limit the pitch shifting to 2 octaves up and 1 octave down"
+// (ComputeDopplerFactor's own clamp to [0.5, 4.0]).
+TEST_F(SoundEffectInstanceTest, Apply3DExtremeVelocityClampsToDocumentedRange)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({-1.0e9f, 0.0f, 0.0f}); // absurdly fast approach
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    const float ratio = MIX_GetTrackFrequencyRatio(track);
+    EXPECT_FALSE(std::isnan(ratio));
+    EXPECT_FALSE(std::isinf(ratio));
+    EXPECT_LE(ratio, 4.0f);
+    EXPECT_GE(ratio, 0.5f);
+}
+
 // CP-20: matches FNA's `is3D` latch (SoundEffectInstance.cs) -- once Apply3D has run, it (not
 // setPanProperty) should keep governing the real track output. SDL3_mixer has no stereo-pan
 // getter to directly observe the output matrix (same limitation as CP-3/T-4B's Apply3D
@@ -802,6 +916,114 @@ TEST_F(SoundEffectInstanceTest, SetPanAfterApply3DDoesNotClearIs3DLatch)
     inst.setPanProperty(0.9f);
     EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.9f);
     EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+}
+
+// ===================== AUDIO-001: persistent spatial state =====================
+//
+// Before this fix, Apply3D()'s computed attenuation/pan/Doppler were applied directly to the
+// live track and nowhere else -- "one-shot" per the removed source comment. The four sequences
+// below were each a real, previously-untested gap (the pre-existing Apply3D tests above only ever
+// call Apply3D() AFTER Play(), and never call Play()/setVolumeProperty()/setPitchProperty() again
+// afterward).
+
+// Scenario 1 (AUDIO-001 observable failure #1): Apply3D() called before the very first Play()
+// had nothing to write to yet (track_ was still null, so EnsureTrackDspState() no-op'd) and
+// nothing was persisted to reapply once Play() actually created the track -- the whole call was
+// silently lost.
+TEST_F(SoundEffectInstanceTest, Apply3DBeforePlayPersistsSpatialStateOntoLiveTrack)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // 2x DistanceScale -> atten == 0.5
+    inst.Apply3D(listener, emitter);
+
+    inst.Play();
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 1.0f, 1e-5f); // hard right
+}
+
+// Scenario 2 (AUDIO-001 observable failure #2, Volume): setVolumeProperty() used to write
+// MIX_SetTrackGain(track, Volume_) directly, discarding whatever distance attenuation the last
+// Apply3D() call had established.
+TEST_F(SoundEffectInstanceTest, SetVolumeAfterApply3DPreservesDistanceAttenuation)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // atten == 0.5
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    ASSERT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f);
+
+    inst.setVolumeProperty(0.4f);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.2f, 1e-5f); // 0.4 * 0.5, not a bare 0.4
+}
+
+// Scenario 2 (AUDIO-001 observable failure #2, Pitch): setPitchProperty() used to write
+// MIX_SetTrackFrequencyRatio(track, pow(2, Pitch_)) directly, with no Doppler term at all,
+// discarding whatever Doppler shift the last Apply3D() call had established.
+TEST_F(SoundEffectInstanceTest, SetPitchAfterApply3DPreservesDopplerFactor)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // receding -> doppler == 2/3
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    ASSERT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f / 3.0f, 1e-4f);
+
+    inst.setPitchProperty(0.5f);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), std::pow(2.0f, 0.5f) * (2.0f / 3.0f), 1e-4f);
+}
+
+// Related to observable failure #3 (Pan already retains its own latch via is3D_/CP-20, see
+// SetPanAfterApply3DDoesNotClearIs3DLatch above) -- this instead covers a Stop()/replay cycle:
+// FNA's dspSettings/is3D persist on the instance across a Stop()->Play() cycle (only Dispose()
+// releases them), so a replay with no fresh Apply3D() call must still reapply the last one.
+TEST_F(SoundEffectInstanceTest, StopThenReplayReappliesLastApply3DState)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // atten == 0.5
+    inst.Apply3D(listener, emitter);
+
+    inst.Stop();
+    inst.Play(); // replay -- no new Apply3D() call
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f);
 }
 
 TEST_F(SoundEffectInstanceTest, Apply3DAfterDisposeThrows)
@@ -831,6 +1053,42 @@ TEST_F(SoundEffectInstanceTest, PlayAfterDisposeThrows)
     EXPECT_THROW(inst.Play(), System::ObjectDisposedException);
 }
 
+// AUD-04-008: DestroyMixer() frees every MIX_Track the mixer owned (confirmed against real
+// SDL3_mixer source, MIX_DestroyMixer -> MIX_DestroyTrack -> SDL_aligned_free) -- a live
+// SoundEffectInstance's track_ becomes a dangling pointer the instant that runs. This test proves
+// SoundEffectInstance::GetLiveTrackHandle()'s generation check (AUD-04-008/009) actually detects
+// that and clears track_ BEFORE any accessor can dereference it -- directly, deterministically,
+// and in-process (no subprocess/crash-detection needed, unlike
+// tools/audio/mixer_destroy_active_static_voice_harness.cpp's end-to-end safety net): GetTrack()
+// reads track_ raw (bypassing the check) to prove the pointer is still the same dangling value
+// immediately after DestroyMixer(), then the first real accessor call is shown to null it out as
+// a side effect, which is direct evidence the check ran rather than merely "nothing crashed."
+TEST_F(SoundEffectInstanceTest, MixerDestructionOrphansTrackWithoutUseAfterFree)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
+
+    CNA::Internal::Audio::DestroyMixer();
+
+    // Still the same (now-dangling) raw pointer value -- DestroyMixer() itself has no way to
+    // reach into this instance, so nothing has cleared it yet.
+    EXPECT_NE(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
+
+    // getStateProperty() is the first real accessor call after DestroyMixer() -- it must detect
+    // the stale generation and report Stopped without ever touching the freed MIX_Track*.
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
+
+    // Every other operation a real caller could still reach must also be safe now that track_ is
+    // null.
+    EXPECT_NO_THROW(inst.Pause());
+    EXPECT_NO_THROW(inst.Stop());
+    EXPECT_NO_THROW(inst.Dispose());
+}
+
 TEST_F(SoundEffectInstanceTest, GetTypeName)
 {
     REQUIRE_DEVICE();
@@ -850,18 +1108,76 @@ TEST_F(SoundEffectInstanceTest, ApplyReverbDoesNotThrow)
     EXPECT_NO_THROW(SoundEffectInstanceTestAccess::ApplyReverb(inst, 0.5f));
 }
 
-// Matches FNA's `handle == IntPtr.Zero` guard: applying a filter before the track exists must
-// not create filter state that later processes samples.
-TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayIsNoOp)
+// P14-ORDER-002: applying a filter BEFORE Play() now establishes the pending filter state
+// immediately (in filterState_) instead of being a no-op -- matches FACT's own atomic
+// track-plus-filter creation, instead of copying FNA's `handle == IntPtr.Zero` guard on its own
+// dead-code (never actually called for the XACT path) equivalent. Same first-sample
+// state-variable filter math as LowPassFilterFirstSampleMatchesStateVariableFilterMath below
+// proves the filter is genuinely live, not just recorded -- the recursion doesn't depend on
+// whether a live track exists at all.
+TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayPersistsAndProcessesSamplesImmediately)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass
+    EXPECT_FLOAT_EQ(frequency, 0.5f);
+
+    float pcm[2] = {2.0f, 2.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 0.0f, 1e-6f);
+    EXPECT_NEAR(pcm[1], 0.0f, 1e-6f);
+}
+
+// P14-ORDER-002: the pending filter state established before Play() must still be correctly
+// attached (not lost/reset) once the real track is actually created -- proves order-independence
+// end to end, not just that the state getter reports something immediately after the pre-Play()
+// call above.
+TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayAttachesOncePlaying)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
     SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
 
-    float pcm[2] = {2.0f, 2.0f};
-    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
-    EXPECT_FLOAT_EQ(pcm[0], 2.0f);
-    EXPECT_FLOAT_EQ(pcm[1], 2.0f);
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass -- still established, not reset by Play()
+    EXPECT_FLOAT_EQ(frequency, 0.5f);
+}
+
+// P14-ORDER-002: a NEW scenario the pending-filter-state fix makes meaningful for the first time
+// -- previously, applying a filter before Play() was a no-op, so there was nothing for a move to
+// carry over. filterState_ can now hold a real pending filter even with no live track at all;
+// verify the move constructor correctly transfers that heap-owned pending state (not just an
+// already-registered callback, the scenario LowPassFilterSurvivesMoveConstruction below already
+// covers) and that Play() on the MOVED-TO instance still correctly attaches it.
+TEST_F(SoundEffectInstanceTest, LowPassFilterAppliedBeforePlaySurvivesMoveConstructionThenAttaches)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance src = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(src), nullptr); // no Play() yet
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(src, 0.5f);
+
+    SoundEffectInstance dst(std::move(src));
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(dst), nullptr); // still no track after the move
+
+    dst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(dst);
+    ASSERT_NE(track, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(dst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass -- survived the move and attached on Play()
+    EXPECT_FLOAT_EQ(frequency, 0.5f);
 }
 
 // Regression coverage for the exact state-variable filter FAudio uses (FAudio_internal.c's
@@ -1443,17 +1759,62 @@ TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterIgnoresUnrecognizedType)
     EXPECT_EQ(kind, 0); // FilterState::Kind::None
 }
 
-// Matches every other INTERNAL_apply*Filter's `handle == IntPtr.Zero` guard -- no track means no
-// filter state gets created at all.
-TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterBeforePlayIsNoOp)
+// P14-ORDER-002: calling this before Play() now persists the XACT-authored filter too (the mixer's
+// own format, needed to convert frequencyHz -> a normalized cutoff, is a device-level property
+// available as soon as the shared mixer exists, independent of whether THIS instance has a track
+// yet) -- matches ApplyXactTrackFilterDispatchesHighPassWithConvertedOneOverQ's own fixture
+// values, just called before Play() instead of after, to prove the result is identical either way.
+TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterBeforePlayPersistsAndAttachesOncePlaying)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, 2, 8000.0f, 6);
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/2, 8000.0f, /*qfactorRaw=*/6);
 
     int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
     SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
-    EXPECT_EQ(kind, 0); // FilterState::Kind::None
+    EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass
+    EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f);
+
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    int kind2 = -1; float frequency2 = -1.0f, oneOverQ2 = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind2, frequency2, oneOverQ2);
+    EXPECT_EQ(kind2, kind); // still HighPass -- not reset by Play()
+    EXPECT_NEAR(frequency2, frequency, 1e-6f);
+    EXPECT_NEAR(oneOverQ2, oneOverQ, 1e-6f);
+}
+
+// P14-ORDER-002: the continuous RPC filter override (P10-FILTER-002/003) is also order-independent
+// of Play() now -- a non-`None` filter kind already implies a base filter was established (which
+// itself requires the mixer to already exist), so overriding frequency/Q before a track exists is
+// safe and correctly persists into filterState_, the same way the base filter does above.
+TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideBeforePlayPersistsAndAttachesOncePlaying)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0, 4000.0f, /*qfactorRaw=*/3);
+    SoundEffectInstanceTestAccess::ApplyRpcFilterOverride(inst, /*rpcFrequencyHz=*/8000.0f, /*rpcQFactor=*/4.0f);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass, unchanged by the RPC override
+    EXPECT_NEAR(oneOverQ, 0.25f, 1e-6f); // matches FAudio's plain `1.0f / rpcResult`
+
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    int kind2 = -1; float frequency2 = -1.0f, oneOverQ2 = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind2, frequency2, oneOverQ2);
+    EXPECT_EQ(kind2, kind);
+    EXPECT_NEAR(frequency2, frequency, 1e-6f); // the 8000Hz override, not the 4000Hz base
+    EXPECT_NEAR(oneOverQ2, oneOverQ, 1e-6f);
 }
 
 // ===================== INTERNAL_applyRpcFilterOverride (P10-FILTER-002/003) =====================
@@ -1701,4 +2062,61 @@ TEST_F(SoundEffectInstanceTest, BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTh
            "started playing -- it must play exactly once, then only the loop region repeats";
     EXPECT_GT(ctx.totalFrames.load(), static_cast<long long>(loopFrames) * 5)
         << "expected several real wraps of the loop region within the observation window";
+}
+
+// AUD-15-005: stress test creating/playing/destroying thousands of short-lived instances from a
+// shared SoundEffect, checking for leaks or unbounded internal registry growth
+// (SoundEffect::Impl::instances, the per-effect live-instance list used for the Dispose cascade,
+// T-3G) -- not just "does it crash," but "does the bookkeeping actually stay bounded." Real games
+// commonly create-play-discard many short SoundEffectInstances per frame (footsteps, impacts,
+// UI blips) from a small set of shared SoundEffect assets, exactly this pattern.
+//
+// This test was originally written using only indirect signals (wall-clock timing over 5000
+// iterations, plus "does one more instance still work afterwards"). Verified by deliberately
+// breaking SoundEffect::UnregisterInstance() into a no-op and re-running: the test still PASSED
+// (12ms, no crash) with the registry silently leaking 5000 stale pointers. Root cause: 5000 plain
+// vector push_backs are trivially fast even while "leaking" (no super-linear blowup at this
+// scale), and each loop iteration's SoundEffectInstance reuses the same stack slot, so a stale
+// pointer left in the registry doesn't reliably fault when the registry is later walked -- unlike
+// a heap-based use-after-free, this is not something ASan reliably catches either. Replaced with a
+// direct introspection check (SoundEffectTestAccess::GetLiveInstanceCount) that asserts the
+// registry size directly, both mid-stress (bounded, not accumulating without limit) and at zero
+// once every instance has gone out of scope -- re-verified to genuinely fail against the same
+// broken UnregisterInstance() probe before this fix was accepted.
+TEST_F(SoundEffectInstanceTest, StressCreatePlayDisposeThousandsOfShortLivedInstancesFromSharedEffect)
+{
+    REQUIRE_DEVICE();
+
+    ASSERT_EQ(SoundEffectTestAccess::GetLiveInstanceCount(*effect_), 0u)
+        << "registry should start empty before the stress loop";
+
+    constexpr int kIterations = 5000;
+
+    for (int i = 0; i < kIterations; ++i)
+    {
+        SoundEffectInstance inst = instance();
+        inst.Play();
+        // Deliberately destroyed (via scope exit) without an explicit Stop()/Dispose() call --
+        // the destructor's own Dispose() cascade must handle a still-"playing" instance cleanly,
+        // exactly like a real game dropping a fire-and-forget sound's instance handle.
+
+        // Each instance is registered on construction and must be unregistered again by the time
+        // its scope exits -- the registry must never accumulate more than the single in-flight
+        // instance from this iteration. A leaking UnregisterInstance() would show up here as a
+        // monotonically growing count (1, 2, 3, ... 5000), not a bounded one.
+        ASSERT_LE(SoundEffectTestAccess::GetLiveInstanceCount(*effect_), 1u)
+            << "live-instance registry grew unboundedly at iteration " << i
+            << " -- UnregisterInstance() is not removing disposed instances";
+    }
+
+    // After all 5000 instances have gone out of scope, the registry must be back to exactly zero.
+    EXPECT_EQ(SoundEffectTestAccess::GetLiveInstanceCount(*effect_), 0u)
+        << "live-instance registry did not shrink back to zero after all instances were destroyed";
+
+    // The shared SoundEffect itself must still work correctly after all that churn -- proving
+    // Impl::instances wasn't left corrupted (e.g. containing dangling pointers from improperly
+    // unregistered instances) by the high-churn create/destroy cycle.
+    SoundEffectInstance finalInstance = instance();
+    finalInstance.Play();
+    EXPECT_EQ(finalInstance.getStateProperty(), SoundState::Playing);
 }
