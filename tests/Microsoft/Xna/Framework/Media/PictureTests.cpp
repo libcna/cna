@@ -161,3 +161,9 @@ TEST_F(MediaLibraryTestFixture, PictureCollectionDisposeFlipsIsDisposed)
 
     EXPECT_TRUE(pics->getIsDisposedProperty());
 }
+
+// plan_media.md MEDIA-121 (found by external code review): PictureCollection's own GetTypeName().
+TEST_F(MediaLibraryTestFixture, PictureCollectionGetTypeNameIsFullyQualified)
+{
+    EXPECT_EQ(library->getPicturesProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.PictureCollection");
+}

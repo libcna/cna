@@ -80,11 +80,18 @@ TEST_F(MediaLibraryTestFixture, PlaylistEqualsReturnsFalseForNullOther)
 // plan_media.md MEDIA-108: Duration -- sum of song durations, all TimeSpan.Zero for
 // library-scanned songs until actually played (§4 D9), so a freshly-scanned Playlist's Duration
 // is zero too.
-TEST_F(MediaLibraryTestFixture, PlaylistDurationIsZeroForUnplayedLibraryScannedSongs)
+// plan_media.md MEDIA-68 (corrected -- found by external code review): Duration is now a real,
+// eagerly-probed sum of member Song.Duration, not a placeholder that stays zero forever.
+// Favorites resolves to 3 real songs (~2.0s/~2.04s/~2.04s per their own fixture manifest, roughly
+// 6.08s total) -- assert a real, non-zero value in the right ballpark rather than an exact
+// millisecond count, since the probed values depend on each real encoder's own rounding.
+TEST_F(MediaLibraryTestFixture, PlaylistDurationIsARealNonZeroSumOfMemberSongDurations)
 {
     Playlist* favorites = FindPlaylist(library->getPlaylistsProperty(), "Favorites");
     ASSERT_NE(favorites, nullptr);
-    EXPECT_EQ(favorites->getDurationProperty(), System::TimeSpan::Zero);
+    const double ms = favorites->getDurationProperty().getTotalMillisecondsProperty();
+    EXPECT_GT(ms, 4000.0);
+    EXPECT_LT(ms, 8000.0);
 }
 
 // plan_media.md MEDIA-108: IsDisposed, not exercised anywhere else in this file.
@@ -119,4 +126,10 @@ TEST_F(MediaLibraryTestFixture, PlaylistCollectionDisposeFlipsIsDisposed)
     playlists->Dispose();
 
     EXPECT_TRUE(playlists->getIsDisposedProperty());
+}
+
+// plan_media.md MEDIA-121 (found by external code review): PlaylistCollection's own GetTypeName().
+TEST_F(MediaLibraryTestFixture, PlaylistCollectionGetTypeNameIsFullyQualified)
+{
+    EXPECT_EQ(library->getPlaylistsProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.PlaylistCollection");
 }

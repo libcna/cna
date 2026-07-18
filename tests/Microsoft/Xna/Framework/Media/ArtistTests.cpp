@@ -107,3 +107,9 @@ TEST_F(MediaLibraryTestFixture, ArtistCollectionDisposeFlipsIsDisposed)
 
     EXPECT_TRUE(artists->getIsDisposedProperty());
 }
+
+// plan_media.md MEDIA-121 (found by external code review): ArtistCollection's own GetTypeName().
+TEST_F(MediaLibraryTestFixture, ArtistCollectionGetTypeNameIsFullyQualified)
+{
+    EXPECT_EQ(library->getArtistsProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.ArtistCollection");
+}

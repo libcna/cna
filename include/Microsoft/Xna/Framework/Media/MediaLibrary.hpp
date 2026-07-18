@@ -155,6 +155,15 @@ namespace Microsoft::Xna::Framework::Media
         PictureAlbum* BuildPictureAlbumTree(const CNA::Internal::Media::PictureLibraryIndex& pictureIndex,
                                              const std::string& nodePath, PictureAlbum* parent);
 
+        // Lazily creates the real "Saved Pictures" PictureAlbum tree node (and its child
+        // PictureAlbumCollection registration under rootPictureAlbum_) the first time a picture
+        // is actually saved, if it didn't already exist from a previous session's scan. Idempotent
+        // -- a no-op if savedPicturesAlbum_ is already set. Returns the (possibly newly-created)
+        // album, or rootPictureAlbum_ if there is nowhere to attach a new node (plan_media.md
+        // MEDIA-59/D7, a real gap found by external code review: SavePicture() used to silently
+        // fall back to rootPictureAlbum_ forever instead of ever creating this node).
+        PictureAlbum* EnsureSavedPicturesAlbum();
+
         bool isDisposed_ = false;
         std::string pictureRoot_;
 

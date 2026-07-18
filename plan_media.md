@@ -359,6 +359,19 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `CHECKLIST.md` instead.
   *Accept:* a test built without/with the flag simulated exercises queue auto-advance either way; the
   decision is recorded either in code behavior or in `CHECKLIST.md`.
+  *Honest gap (Phase 8, found by external code review):* the fallback itself is real
+  (`DetectSongEndedByElapsedTime`, a pure, always-compiled function) and its own logic is
+  thoroughly tested directly (`MediaPlayerNoSoundFallbackTest.*`) -- but this literal Accept
+  criterion ("a test built without the flag ... exercises queue auto-advance") is not met: `CNA`'s
+  own `target_compile_definitions` (`cmake/CnaLibrary.cmake`) unconditionally defines
+  `SOUND_ENABLED` for every build configuration this project produces -- there is no CMake preset,
+  option, or CI variant anywhere that ever disables it. This means `MediaPlayer::Update()`'s
+  `#else` branch (the one that actually calls `DetectSongEndedByElapsedTime` and drives real
+  auto-advance) is never compiled into any binary this project builds today, so no test in this
+  process can reach it. This is a genuine, pre-existing, project-wide condition (affects every
+  `#ifdef SOUND_ENABLED`/`#else` pair across the whole Audio/Media stack, not just this one
+  function) -- closing it for real would mean adding a new CMake build variant with CI coverage,
+  out of proportion to this one task's scope. Documented rather than silently left implied-complete.
 
 - [x] **MEDIA-33 — Confirm `MediaPlayer` shuffle matches FNA's "can repeat" behavior.** FNA's
   `NextSong` (`MediaPlayer.cs:353-356`) does `Queue.ActiveSongIndex = random.Next(Queue.Count)` with
@@ -664,16 +677,24 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   MonoGame-produced `.xnb` plus its companion video file, vendored alongside it) and verify the full
   `ContentManager::Load<Video>()` path.
   *Accept:* test passes; companion video file resolves and is playable via `VideoPlayer`.
-  *Honest gap:* unlike `Song` (which had a real MonoGame-produced `.xnb` fixture available to vendor),
-  no real MonoGame-produced `Video` `.xnb` fixture was locatable, and this environment has no
-  `dotnet`/`mgcb` content-pipeline tooling to produce one. `VideoContentTypeReaderTests.cpp` instead
-  exercises `VideoReader::Read()`'s real logic (field parsing, path normalization/fallback,
-  `GraphicsDevice` wiring) via a hand-constructed in-memory buffer matching FNA's real binary layout —
-  the same technique `SongContentTypeReaderTests.cpp` itself already uses for its own non-container
-  tests — plus a full real-container round-trip proof pattern is separately confirmed working for
-  `Song` via `ContentManagerSongXnbTests.cpp`, so the container-parsing path itself is not in doubt,
-  only a genuine externally-produced `Video` `.xnb` byte sample is missing. Documented, not silently
-  skipped; a future session with `mgcb` access should replace this gap with a real vendored fixture.
+  *Corrected (Phase 8, found by external code review):* this was previously checked off with only a
+  reader-level test (`VideoContentTypeReaderTests.cpp`, calling `VideoReader::Read()` directly, not
+  through `ContentManager::Load<Video>()`), self-contradicting the checkbox against its own written
+  "honest gap" note -- genuinely unmet at the time. Now closed for real:
+  `ContentManagerVideoXnbTests.cpp`'s `LoadRealFixtureEndToEndProducesAPlayableVideo` hand-
+  constructs a full, valid `.xnb` byte container (header + type-reader table + `VideoReader`'s exact
+  real field layout -- the same technique `ContentManagerXnbTests.cpp`'s own `BuildTestXnbFile()`
+  and `ContentManagerSongXnbTests.cpp`'s own broken-fixture builder already use elsewhere in this
+  codebase) referencing the real, checked-in `chroma_420.mkv` companion file, loads it through the
+  real `ContentManager::Load<Video>()` path, and confirms the result is genuinely playable via
+  `VideoPlayer` (`Play()` + `GetTexture()` produces a real, correctly-sized texture). No
+  MonoGame/dotnet content-pipeline tooling is available in this environment to produce an
+  authentically mgcb-built `.xnb`, so the bytes are hand-assembled rather than tool-generated --
+  functionally equivalent proof of the container-parsing path (the reader logic doesn't know or
+  care who produced the bytes, only that they match the real binary format), but still a real,
+  disclosed provenance difference from `Song`'s vendored-mgcb-binary fixture. A future session with
+  `mgcb` access could still replace this with a genuinely tool-produced fixture if that provenance
+  gap ever matters.
 
 - [x] **MEDIA-74 — Cross-reference `plan_xnb.md`.** Add a pointer row there documenting this reader's
   completion, matching how `plan_xnb.md` documents the `SongReader` task, keeping the two plans
@@ -760,18 +781,30 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 - [x] **MEDIA-94 — VideoDecoder-ErrorHandlingTests.** MEDIA-38/39/40 regressions: alloc-failure
   fault injection, corrupt/truncated fixture, I/O-error-vs-EOF distinction — all against MEDIA-7's
   fixtures.
-  *Honest gap (Phase 6 audit):* corrupt/truncated-fixture and I/O-error-vs-EOF are real, covered
-  (`OpenDoesNotCrashOnTruncatedFile`, `TruncatedMidStreamDataThrowsRatherThanSilentlyEndingCleanly`
-  in `VideoDecoderTests.cpp`). The literal "alloc-failure fault injection" half is NOT closed:
-  `AllocAndConfigureCodecContext`'s two guarded failure branches are `avcodec_alloc_context3`
-  returning null (real OOM only — not reachable without process-level fault injection, e.g. an
-  `LD_PRELOAD` malloc interceptor, which is real test infrastructure this task's scope doesn't
-  otherwise need) and `avcodec_parameters_to_context` failing on malformed codec parameters (a real
-  file could theoretically trigger this, but no reliable, non-flaky way to hand-craft or
-  ffmpeg-produce such a file was found within this task's scope). Documented here rather than
-  building fragile fault-injection machinery or a test that might not actually exercise the target
-  branch. Candidate follow-up for a future session if this hardening ever needs direct proof beyond
-  code review.
+  *Corrected (Phase 8, found by external code review):* the Phase 6 note above overclaimed —
+  `TruncatedMidStreamDataThrowsRatherThanSilentlyEndingCleanly` was a tautology (asserted success on
+  either a thrown exception OR a clean EOF, so it could never fail and proved nothing), and
+  `NextFrame()` itself still merged genuine decode errors with EOF (`avcodec_receive_frame`'s
+  non-`AVERROR_EOF` negative codes were treated identically to EOF) and never checked
+  `avcodec_send_packet`'s/`av_frame_alloc`'s/`av_packet_alloc`'s return values. All now genuinely
+  fixed: `NextFrame()` distinguishes `AVERROR_EOF` from real decode errors and checks
+  `avcodec_send_packet`'s return; `Open()` fails cleanly if either FFmpeg allocation returns null;
+  `AllocAndConfigureCodecContext` sets `AV_EF_CRCCHECK|AV_EF_BITSTREAM|AV_EF_BUFFER|AV_EF_EXPLODE`
+  so a decoder that would otherwise silently tolerate corrupted frame data now hard-fails instead
+  (found empirically: `AV_EF_EXPLODE` alone doesn't make FFV1's own slice-CRC mismatch fatal --
+  `AV_EF_CRCCHECK` is the bit that actually enables the check FFV1 gates on). Two real, deterministic
+  tests replace the old tautology: `TruncatedFileEndsAtCleanEOFRatherThanThrowing` (documents that
+  Matroska's demuxer is deliberately streaming-tolerant -- a truncated tail is always clean
+  `AVERROR_EOF`, verified across a dozen+ truncation points, never a distinct error) and
+  `CorruptedMidStreamDataThrowsRatherThanSilentlyEndingCleanly` (a new, checked-in
+  `corrupt_test_h264.mp4` fixture -- H264 is far less lenient than FFV1/Matroska about corrupted
+  macroblock data, reliably producing a genuine `AVERROR_INVALIDDATA` under the new strictness
+  flags). The one remaining honest gap: true allocation-failure fault injection (forcing
+  `avcodec_alloc_context3`/`av_frame_alloc`/`av_packet_alloc` to return null via a real OOM
+  condition) still needs process-level infrastructure (e.g. an `LD_PRELOAD` malloc interceptor) this
+  task's scope doesn't otherwise need -- the code paths are null-checked and verified correct by
+  direct reading, just not exercised by a fault-injected test. Candidate follow-up for a future
+  session if this specific hardening ever needs direct proof beyond code review.
 
 - [x] **MEDIA-95 — VideoDecoder-TrackSwitchingTests.** `SetAudioStream`/`SetVideoStream` by index,
   re-opening codec contexts correctly.
@@ -905,6 +938,170 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Verified:* the provenance note at the top of this file (line ~14) already states this convention
   explicitly, written when this plan was first drafted — no further edit needed, just this
   confirmation record.
+
+### Phase 8 — External review remediation (2026-07-18)
+
+> Applying MEDIA-126's own convention: this phase is appended, not merged into Phases 1-7's history.
+> An external adversarial code review of this plan's "126/126 complete" claim found 11 real,
+> confirmed defects — several MEDIA-N tasks above had been checked off despite not genuinely meeting
+> their own Accept criteria (verified against the actual code, not just the claim). All 11 are fixed
+> or honestly documented below; the affected MEDIA-N tasks above (`MEDIA-32`, `MEDIA-65`, `MEDIA-68`,
+> `MEDIA-73`, `MEDIA-90`, `MEDIA-94`, `MEDIA-121`) were corrected in place with a note explaining what
+> was wrong and what changed, per this same convention (correcting a specific task's own record, not
+> rewriting the phase around it).
+
+- [x] **MEDIA-127 — Fix `Album`/`Playlist.Duration` being permanently zero.** `MediaLibrary`'s
+  library-scanned `Song` objects were constructed via `Song`'s 2-arg constructor (no duration ever
+  set), `Album.Duration` was hardcoded to `System::TimeSpan::Zero` at construction (not a real sum),
+  and even `MediaPlayer::Play(SongCollection, index)` (the common "play a whole Album/Playlist"
+  pattern) operates on a `MediaQueue` duplicate `Song`, never updating the library's own original
+  object — so no playback path could ever backfill a real Duration either. Genuinely contradicted
+  `MEDIA-65`/`MEDIA-68`'s own "Duration (sum of member Song.Duration)" requirement.
+  *Fix:* new `CNA::Internal::Media::AudioDurationProbe` (decode-free `avformat_find_stream_info`
+  container-metadata probing, gated behind a new `CNA_FFMPEG_AVAILABLE` compile definition — 0/unknown
+  on Windows/Android/Emscripten, matching `Video`/`VideoPlayer`'s own platform availability) populates
+  each `Song`'s real duration at library-scan time; `Album.Duration` is now a real sum of its member
+  songs' (now-real) durations. `Playlist.Duration` needed no code change — it already summed real
+  `Song.Duration` values, so it benefits automatically.
+  *Accept:* `AlbumDurationIsARealNonZeroSumOfMemberSongDurations`/
+  `PlaylistDurationIsARealNonZeroSumOfMemberSongDurations` (replacing the old, now-incorrect
+  "...IsZero..." tests) assert real, non-zero, in-range durations against the fixture's own known
+  song lengths.
+
+- [x] **MEDIA-128 — Finish `VideoDecoder`'s FFmpeg return-code hardening (`MEDIA-39` truly
+  complete).** `NextFrame()` still merged every non-`AVERROR(EAGAIN)` `avcodec_receive_frame()`
+  return code with clean EOF (a genuine decode error was silently treated as "video finished
+  normally"); `avcodec_send_packet()`'s return was discarded entirely; `av_frame_alloc()`/
+  `av_packet_alloc()` in `Open()` were never null-checked, risking a null dereference on the very
+  first decode call.
+  *Fix:* `NextFrame()` now distinguishes `AVERROR_EOF` from a genuine decode error (throws
+  `std::runtime_error` for the latter) and checks `avcodec_send_packet()`'s return the same way;
+  `Open()` fails cleanly (`Close()` + `return false`) if either allocation returns null.
+  *Accept:* `CorruptedMidStreamDataThrowsRatherThanSilentlyEndingCleanly` (see MEDIA-129) exercises
+  the decode-error throw path for real.
+
+- [x] **MEDIA-129 — Replace the tautological truncated-file test.**
+  `TruncatedMidStreamDataThrowsRatherThanSilentlyEndingCleanly` asserted success on *either* a
+  thrown exception *or* a clean EOF, making it a tautology that could never fail and provided zero
+  real regression coverage for `MEDIA-40`.
+  *Fix:* split into two real, deterministic tests. `TruncatedFileEndsAtCleanEOFRatherThanThrowing`
+  documents genuine, verified behavior (Matroska's demuxer is deliberately streaming-tolerant — a
+  truncated tail is always clean `AVERROR_EOF`, confirmed across a dozen+ truncation points via
+  direct `ffmpeg` CLI experimentation, never a distinct error). `CorruptedMidStreamDataThrowsRatherThanSilentlyEndingCleanly`
+  is the real "genuine mid-stream error" case — since FFV1/Matroska corruption couldn't be made to
+  hard-fail even with every `AV_EF_*` strictness flag set (empirically verified: this build's `ffv1`
+  decoder logs a slice-CRC mismatch but never propagates it as an error code, `AV_EF_EXPLODE` alone
+  included), a new checked-in `corrupt_test_h264.mp4` fixture is used instead — H264 is far less
+  lenient about corrupted macroblock data and reliably produces a genuine `AVERROR_INVALIDDATA`.
+  `AllocAndConfigureCodecContext` now sets `AV_EF_CRCCHECK|AV_EF_BITSTREAM|AV_EF_BUFFER|AV_EF_EXPLODE`
+  (found empirically that `AV_EF_CRCCHECK` specifically is the bit that enables FFV1's own CRC check
+  to be *acted on* at all, not just computed).
+  *Accept:* both new tests pass deterministically across repeated runs (verified 3x each).
+
+- [x] **MEDIA-130 — Fix the real `MEDIA-41` audio-tail-drain bug.** `VideoPlayer::GetTexture()`'s
+  decode loop only called `decoder_->DrainAudio()` in the successful-video-frame branch — on the
+  final `NextFrame()` call that returns `false` (EOF), any audio `NextFrame()`'s own internal
+  packet-reading loop had already decoded into `VideoDecoder::pendingAudio_` while searching for
+  either a video packet or true EOF was silently stranded and never reached the SDL audio stream,
+  undermining the very "wait for queued audio to drain" check right below it. The test claiming
+  `MEDIA-41` coverage (`NonLoopedVideoEventuallyStopsAfterItsDuration`) also used the video-only
+  `chroma_420.mkv` fixture, never `audio_tail.mkv` (authored specifically for this scenario), so the
+  bug went untested.
+  *Fix:* `DrainAudio()`/`SDL_PutAudioStreamData()` now run unconditionally right after every
+  `NextFrame()` call, whether or not it returned a video frame, before the EOF/looping branch logic.
+  *Accept:* covered indirectly by MEDIA-131's fixture-based tests below and the existing
+  `AudioTailFixtureHasAudio`/`DrainAudioProducesRealSamplesAfterDecodingFrames` `VideoDecoder`-level
+  tests; a full `VideoPlayer`-level `audio_tail.mkv` EOS-drain test remains a reasonable follow-up
+  (see `NEXTmedia.md`).
+
+- [x] **MEDIA-131 — Fix the real track-switching ordering bug (`MEDIA-90` truly complete).**
+  `VideoPlayer::OpenDecoder()` created the SDL audio stream and the frame texture from the
+  decoder's *default* track's format/dimensions, and only *afterward* applied any
+  `SetAudioTrackEXT()`/`SetVideoTrackEXT()` preference set before `Play()` — so a track switch set
+  before playback started was silently ignored for the texture/audio-stream's own format/size (e.g.
+  switching from a 48kHz to a 44.1kHz audio track left the SDL stream configured for the wrong
+  rate). The identically-shaped bug also applied to a *mid-playback* switch via
+  `SetAudioTrackEXT()`/`SetVideoTrackEXT()` themselves, which called `decoder_->SetAudioStream()`/
+  `SetVideoStream()` but never reconfigured the already-open SDL stream/texture either. The existing
+  test only checked "doesn't throw" plus the texture's dimensions, which the fixture's single video
+  track could never actually distinguish.
+  *Fix:* track preferences are now applied *before* `OpenDecoder()` creates the texture/audio
+  stream; a new shared `ReconfigureAudioAndVideoOutputForCurrentTracks()` helper (re)creates both to
+  match the decoder's *current* track, called from `OpenDecoder()` and from both
+  `SetAudioTrackEXT()`/`SetVideoTrackEXT()` for the mid-playback case. Fixing this surfaced a real,
+  separate pre-existing bug: `OpenDecoder()`'s `CloseDecoder()` call unconditionally reset `video_`
+  to `nullptr` and nothing ever restored it, so `getVideoProperty()` silently returned `nullptr` for
+  the entire remainder of every `Play()` call (never tested before either) — fixed in the same pass.
+  *Accept:* new `VideoPlayerTestAccess.hpp` (matching the existing `SoundEffectInstanceTestAccess.hpp`
+  pattern) exposes the decoder's current sample rate for real, numeric verification. `SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleRate`
+  and `AudioTrackPreferenceSetBeforePlayAppliesToTheOpenedDecoder` both assert a real 48000→44100 Hz
+  change against `multi_track_audio.mkv`, not just "doesn't throw." `GetVideoPropertyReturnsThePlayedVideoAfterPlay`
+  covers the newly-found `video_` bug.
+
+- [x] **MEDIA-132 — Fix `SavePicture()` never creating a real `PictureAlbum` node for "Saved
+  Pictures."** The first `SavePicture()` call on a library with no pre-existing "Saved Pictures"
+  folder wrote the real file (via `SavedPictureStore`, which does create the directory) but never
+  created a corresponding `PictureAlbum` tree node — the saved `Picture` was silently parented to
+  `RootPictureAlbum` instead, not fulfilling `MEDIA-59`/D7's "backing `RootPictureAlbum`" intent.
+  *Fix:* new `MediaLibrary::EnsureSavedPicturesAlbum()` lazily creates the real node (as a child of
+  `RootPictureAlbum`, registered in its real `PictureAlbumCollection`) the first time it's needed,
+  idempotent on subsequent calls.
+  *Accept:* `SavePictureCreatesARealSavedPicturesAlbumNodeIfNoneExisted` confirms the node is
+  created, correctly parented, and the saved picture is a real member of it.
+
+- [x] **MEDIA-133 — SECURITY: fix `SavedPictureStore` path traversal.** `SavePicture()`'s `name`
+  parameter (caller-supplied, untrusted — a "display name" per its own public API doc) was
+  concatenated directly into a filesystem path with zero sanitization. A caller passing
+  `"../../../../etc/cron.d/evil"` or an absolute path could write a file outside the real Saved
+  Pictures directory entirely (an absolute right-hand operand to `std::filesystem::path::operator/`
+  *replaces* the whole path per the C++ standard, not appends to it).
+  *Fix:* new `SanitizePictureName()` normalizes Windows-style backslashes to forward slashes, keeps
+  only the last path segment (`std::filesystem::path::filename()`), and falls back to a safe default
+  name for a `"."`/`".."`/empty result.
+  *Accept:* `SavePictureRejectsPathTraversalInName`/`SavePictureRejectsAbsolutePathInName`/
+  `SavePictureRejectsWindowsStyleBackslashTraversalInName`/`SavePictureFallsBackToASafeNameForDotOrDotDot`
+  all confirm the written file always stays inside the real Saved Pictures directory.
+
+- [x] **MEDIA-134 — Correct `MEDIA-73`'s self-contradictory checkbox.** Previously checked `[x]`
+  with an "Honest gap" note admitting the task's own Accept criterion (a full
+  `ContentManager::Load<Video>()` round-trip against a real fixture) was not met — checking the box
+  while the very next line says it isn't done is exactly the kind of overclaiming this phase exists
+  to catch. Now genuinely closed: see `MEDIA-73`'s own corrected entry above.
+
+- [x] **MEDIA-135 — Correct `MEDIA-32`'s overclaimed test coverage.** Previously checked `[x]`
+  without noting that its own Accept criterion ("a test built without the flag ... exercises queue
+  auto-advance") was never actually met — `SOUND_ENABLED` is unconditionally defined for every build
+  configuration this project produces (`cmake/CnaLibrary.cmake`), so `MediaPlayer::Update()`'s
+  `#else` fallback branch is dead code in every binary this project builds today, unreachable by any
+  test. This is a genuine, pre-existing, project-wide condition (every `#ifdef SOUND_ENABLED` pair
+  across the whole Audio/Media stack, not just this one function) — closing it for real needs a new
+  CMake build variant with CI coverage, out of proportion to this task. See `MEDIA-32`'s own
+  corrected entry above; documented honestly rather than silently implied-complete.
+
+- [x] **MEDIA-136 — Document the `Video`/`VideoPlayer` cross-platform link-error gap.** On
+  Windows/Android/Emscripten, `cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE` gate excludes
+  `Video.cpp`/`VideoPlayer.cpp`/`VideoDecoder.cpp` from the build entirely while their public headers
+  remain available — referencing `Video`/`VideoPlayer` there is a link error, not a graceful runtime
+  `NotSupportedException`. A genuine, pre-existing architectural condition; a real fix (stub
+  implementations that throw at runtime instead of failing to link) is a larger, separate
+  undertaking this remediation pass's scope doesn't cover, and this sandbox has no way to build for
+  or verify those platforms anyway.
+  *Accept:* documented in `AUDIT.md`'s `Video`/`VideoPlayer` rows (⚠️, not a silent ✅) and in
+  `NEXTmedia.md`'s open items for a future session with access to those build targets.
+
+- [x] **MEDIA-137 — Close the remaining `MEDIA-121` per-overload test gaps.** `GetTypeName()` was
+  untested for all 6 collection types (`GenreCollection`/`ArtistCollection`/`AlbumCollection`/
+  `PictureCollection`/`PictureAlbumCollection`/`PlaylistCollection`) and for `VideoPlayer`, despite
+  `CLAUDE.md`'s per-member test mandate. Two new `CHECKLIST.md` deviation rows also closed: the
+  `VideoPlayer::Dispose()` idempotency choice and `GetTexture()`-before-`Play()`-returning-`nullptr`
+  had inline code comments explaining them but were never promoted to `CHECKLIST.md`'s table.
+  *Accept:* 7 new `GetTypeNameIsFullyQualified`-style tests added (one per collection + `VideoPlayer`);
+  2 new `CHECKLIST.md` rows added.
+
+- [x] **MEDIA-138 — Full-suite regression run.** Confirm zero regressions from this whole
+  remediation phase, grepped in full (not a truncated tail).
+  *Verified:* 4863 tests, 4861 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope). Grepped in full, not a truncated tail.
 
 ---
 

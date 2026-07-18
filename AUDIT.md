@@ -1444,8 +1444,8 @@ never reached `GestureDetector`) to real and gesture-tested (`plan_input.md` Pha
 | PlaylistCollection | ✅ | Real; backed by `MediaCollectionBase<Playlist>` |
 | Song | ✅ | API complete |
 | SongCollection | ✅ | API complete |
-| Video | ✅ | API complete |
-| VideoPlayer | ✅ | Implemented (FFmpeg) |
+| Video | ⚠️ | API complete on Linux/macOS (FFmpeg-backed). On Windows/Android/Emscripten, `Video.cpp` itself is excluded from the build (`cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE` gate) while the public header stays available -- referencing this class there is a link error, not a graceful runtime `NotSupportedException` (found by external code review, `plan_media.md` §10) |
+| VideoPlayer | ⚠️ | Implemented (FFmpeg) on Linux/macOS; same Windows/Android/Emscripten link-error caveat as `Video` above |
 | VideoSoundtrackType (enum) | ✅ | Complete |
 | VisualizationData | ✅ | API complete |
 

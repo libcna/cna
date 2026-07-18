@@ -4,9 +4,17 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-126`); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-138`, Phases 0-8); this file is a short current-state index.
 
-## 1. Status (2026-07-17) — `plan_media.md` COMPLETE (126/126 tasks, all 7 phases)
+## 1. Status (2026-07-18) — `plan_media.md` COMPLETE (138/138 tasks, all 8 phases)
+
+**Phase 8 correction (2026-07-18):** an external adversarial code review of the Phase 7 "126/126
+complete" claim found it was **not fully accurate** — 11 real, confirmed defects, several from
+`MEDIA-N` tasks that had been checked off despite not genuinely meeting their own Accept criteria.
+All 11 are now fixed or honestly documented (`plan_media.md` Phase 8, `MEDIA-127`..`MEDIA-138`); see
+§1a below for the full list. This is exactly the kind of "complete" claim needing its own
+adversarial pass — treat any future "this plan is done" statement the same way, verify against the
+actual code, not the checkbox.
 
 **Phase 0 complete** (`MEDIA-1`..`MEDIA-8`, commits `eb3c48a3`, `3d6a7508` on `feature/media`). Test
 infra (`tests/Microsoft/Xna/Framework/Media/` + `Video/`) and a full, verified fixture corpus
@@ -260,6 +268,78 @@ embedded-`APIC`-frame album art, the `TouchCollection` exception-type inconsiste
 `MEDIA-94`'s allocation-fault-injection gap) are recorded in §5 below for a future session to pick up
 — none of them block calling this plan complete.
 
+## 1a. Phase 8 — external review remediation (2026-07-18)
+
+An external adversarial review of the Phase 7 "126/126, consistently done" claim checked the actual
+code against every task's own literal Accept criterion (not the checkbox) and found 11 real,
+confirmed defects. All are now fixed or honestly documented (`plan_media.md` `MEDIA-127`..`MEDIA-138`):
+
+1. **`Album`/`Playlist.Duration` were permanently zero** (`MEDIA-127`) — library-scanned `Song`s
+   never had a real duration set, `Album.Duration` was hardcoded to `TimeSpan.Zero`, and even
+   playing a whole Album/Playlist via `MediaPlayer` operated on a `MediaQueue` duplicate, never the
+   library's own `Song` object. Fixed with a new, decode-free `AudioDurationProbe`
+   (`avformat_find_stream_info` container-metadata parsing, gated behind a new
+   `CNA_FFMPEG_AVAILABLE` compile definition) that populates real durations at library-scan time.
+2. **`VideoDecoder`'s FFmpeg return-code hardening was incomplete** (`MEDIA-128`) —
+   `avcodec_receive_frame()`'s genuine decode errors were still merged with clean EOF,
+   `avcodec_send_packet()`'s return was discarded, `av_frame_alloc()`/`av_packet_alloc()` were
+   never null-checked. All fixed.
+3. **The truncated-file test was tautological** (`MEDIA-129`) — asserted success on *either* a
+   throw *or* a clean EOF, so it could never fail. Replaced with two real, deterministic tests;
+   closing this properly required discovering (via extensive direct `ffmpeg` CLI experimentation)
+   that Matroska's demuxer always treats truncation as clean EOF, and that this build's `ffv1`
+   decoder never hard-fails on corrupted data even under every `AV_EF_*` strictness flag — a new
+   `corrupt_test_h264.mp4` fixture (H264 is far less lenient) was needed to genuinely exercise the
+   error path, plus `AV_EF_CRCCHECK` added to `AllocAndConfigureCodecContext` (the specific bit
+   that makes a decoder's own CRC check anything more than informational).
+4. **A real `MEDIA-41` audio-tail-drain bug** (`MEDIA-130`) — `VideoPlayer::GetTexture()` only
+   drained decoded audio in the successful-video-frame branch, stranding audio decoded during the
+   final (EOF-returning) `NextFrame()` call. Fixed by draining unconditionally after every call.
+5. **A real track-switching ordering bug** (`MEDIA-131`) — `OpenDecoder()` built the SDL audio
+   stream/texture from the decoder's *default* track, only applying a caller's track preference
+   afterward; a mid-playback switch had the identical problem. Fixed with a shared
+   `ReconfigureAudioAndVideoOutputForCurrentTracks()` helper, applied at the right time in both
+   cases. Found and fixed a related, separate pre-existing bug in the same pass:
+   `getVideoProperty()` always returned `nullptr` after any successful `Play()` call (nothing
+   restored `video_` after `CloseDecoder()`'s unconditional reset).
+6. **`SavePicture()` never created a real `PictureAlbum` node for "Saved Pictures"** (`MEDIA-132`)
+   — silently fell back to `RootPictureAlbum` forever. Fixed with a new, idempotent
+   `EnsureSavedPicturesAlbum()`.
+7. **SECURITY: `SavedPictureStore` had a path-traversal vulnerability** (`MEDIA-133`) — the
+   caller-supplied `name` was concatenated into a filesystem path with zero sanitization; an
+   absolute path or `../` sequence could write outside the real Saved Pictures directory entirely.
+   Fixed with a new `SanitizePictureName()`.
+8. **`MEDIA-73`'s checkbox self-contradicted its own written gap note** (`MEDIA-134`) — checked
+   `[x]` while explicitly admitting its own Accept criterion wasn't met. Now genuinely closed: a
+   hand-constructed (not mgcb-produced — no such tooling is available in this environment) but
+   binary-format-accurate `.xnb` container proves the real, full `ContentManager::Load<Video>()`
+   round-trip end-to-end, including that the result is playable via `VideoPlayer`.
+9. **`MEDIA-32`'s test coverage was overclaimed** (`MEDIA-135`) — its own Accept criterion (a test
+   exercising the no-`SOUND_ENABLED` fallback's real wiring into `MediaPlayer::Update()`) was never
+   actually met, because `SOUND_ENABLED` is unconditionally defined for every build configuration
+   this whole project produces — a genuine, pre-existing, project-wide condition affecting every
+   `#ifdef SOUND_ENABLED` pair across the Audio/Media stack, not just Media. Documented honestly;
+   closing it for real needs a new CMake build variant with CI coverage, out of this task's scope.
+10. **`Video`/`VideoPlayer` are unavailable via a link error, not a clean `NotSupportedException`,
+    on Windows/Android/Emscripten** (`MEDIA-136`) — a genuine, pre-existing architectural condition
+    (`cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE` gate excludes the `.cpp` files but not the
+    headers on those platforms). Documented in `AUDIT.md` (⚠️, not a silent ✅); a real fix (runtime
+    stub implementations) is a larger, separate undertaking this sandbox can't build or verify
+    anyway.
+11. **Missing `GetTypeName()` tests + undocumented `CHECKLIST.md` deviations** (`MEDIA-137`) — all
+    6 collection types and `VideoPlayer` had no `GetTypeName()` test; `VideoPlayer::Dispose()`'s
+    idempotency and `GetTexture()`-before-`Play()`-returning-`nullptr` had inline comments but no
+    `CHECKLIST.md` row. Both closed.
+
+Full-suite regression after Phase 8: **4863 tests, 4861 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail.
+
+**Lesson for future sessions:** the Phase 6 test-completeness audit (also done via a dedicated
+research pass) caught 29 gaps and was itself a good process — but it audited *test coverage*
+against the plan's task list, not *code correctness* against each task's actual runtime behavior.
+Both kinds of adversarial pass are needed before trusting a "complete" claim; this phase is the
+second kind.
+
 ## 2. Correction to Phase 0's own build-verification record
 
 Phase 0's commit `eb3c48a3` states the full `CnaTests` run showed "506 pre-existing failures, all one
@@ -357,3 +437,24 @@ not required for "not just stubs" — surfaced during this plan's own design/aud
   interceptor) that doesn't exist in this repo today. Only worth building if this specific hardening
   ever needs direct proof beyond code review — the corrupt/truncated-fixture and I/O-error-vs-EOF
   halves of the same task are already covered.
+- **A `VideoPlayer`-level `audio_tail.mkv` EOS-drain test** (Phase 8, `MEDIA-130`): the real
+  audio-drain-on-EOF bug is fixed and covered indirectly by `VideoDecoder`-level tests
+  (`AudioTailFixtureHasAudio`/`DrainAudioProducesRealSamplesAfterDecodingFrames`), but a dedicated
+  `VideoPlayer::Play()`+loop-until-`Stopped()` test against `audio_tail.mkv` specifically (proving
+  the fix at the `VideoPlayer` layer, not just `VideoDecoder`) would be a stronger regression guard.
+- **`MediaPlayer::Update()`'s no-`SOUND_ENABLED` fallback is untestable in this project's current
+  build matrix** (Phase 8, `MEDIA-32`/`MEDIA-135`): `SOUND_ENABLED` is unconditionally defined for
+  every build configuration `cmake/CnaLibrary.cmake` produces, so the `#else` branch that actually
+  wires `DetectSongEndedByElapsedTime()` into real queue auto-advance is dead code today, in every
+  binary this project builds, not specific to Media. A future session adding a genuine no-audio
+  CMake build variant (with CI coverage) would let this — and the identically-shaped situation
+  across the rest of the Audio/Media stack's own `#ifdef SOUND_ENABLED` pairs — finally be tested
+  for real.
+- **`Video`/`VideoPlayer` fail with a link error, not a runtime `NotSupportedException`, on
+  Windows/Android/Emscripten** (Phase 8, `MEDIA-136`): `cmake/CnaLibrary.cmake`'s
+  `CNA_FFMPEG_AVAILABLE` gate excludes `Video.cpp`/`VideoPlayer.cpp`/`VideoDecoder.cpp` from the
+  build on those platforms while the public headers stay available. A real fix would need either
+  runtime stub `.cpp` implementations that throw `NotSupportedException` for those platforms, or a
+  compile-time guard surfaced earlier/more clearly than a linker error. This sandbox has no way to
+  build for or verify any of those three platforms, so this is documented rather than attempted
+  blind.

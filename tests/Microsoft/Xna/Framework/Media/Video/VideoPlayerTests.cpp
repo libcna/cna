@@ -11,11 +11,13 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
+#include "VideoPlayerTestAccess.hpp"
 
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Media::MediaState;
 using Microsoft::Xna::Framework::Media::Video;
 using Microsoft::Xna::Framework::Media::VideoPlayer;
+using Microsoft::Xna::Framework::Media::VideoPlayerTestAccess;
 
 namespace
 {
@@ -35,6 +37,30 @@ TEST(VideoPlayerTest, DefaultConstructionMatchesFna)
     EXPECT_FLOAT_EQ(player.getVolumeProperty(), 1.0f);
     EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
     EXPECT_EQ(player.getVideoProperty(), nullptr);
+}
+
+// plan_media.md MEDIA-121/MEDIA-27 (found by external code review): VideoPlayer::GetTypeName(),
+// not exercised anywhere in this file at all before this.
+TEST(VideoPlayerTest, GetTypeNameIsFullyQualified)
+{
+    VideoPlayer player;
+    EXPECT_EQ(player.GetTypeName(), "Microsoft.Xna.Framework.Media.VideoPlayer");
+}
+
+// plan_media.md MEDIA-121 (found by external code review): getVideoProperty() after a successful
+// Play() -- previously untested (only the default/never-played nullptr case was), and this
+// specific gap masked a real bug during Phase 8's own track-switching fix: OpenDecoder()'s
+// CloseDecoder() call unconditionally resets video_ to nullptr and nothing restored it, so
+// getVideoProperty() would have silently returned nullptr for the entire remainder of every
+// Play() call.
+TEST(VideoPlayerTest, GetVideoPropertyReturnsThePlayedVideoAfterPlay)
+{
+    GraphicsDevice gd;
+    Video video(kFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    EXPECT_EQ(player.getVideoProperty(), &video);
 }
 
 // plan_media.md MEDIA-43: every public method throws once disposed.
@@ -243,4 +269,39 @@ TEST(VideoPlayerTest, SetAudioTrackEXTAndSetVideoTrackEXTDoNotBreakPlaybackAfter
     ASSERT_NE(texture, nullptr);
     EXPECT_EQ(texture->getWidthProperty(), 160);
     EXPECT_EQ(texture->getHeightProperty(), 90);
+}
+
+// plan_media.md MEDIA-90: a real, numeric regression test for the track-switching bug found by
+// external code review -- the previous version of this test only checked "doesn't throw" and the
+// texture's dimensions, which the fixture's single video track could never actually distinguish.
+// multi_track_audio.mkv's two audio tracks deliberately use different sample rates (48000 Hz vs
+// 44100 Hz -- see its manifest.json), so this can directly prove SetAudioTrackEXT() mid-playback
+// actually reconfigures the real decoder-facing sample rate, not just that the call succeeds.
+TEST(VideoPlayerTest, SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleRate)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    ASSERT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 48000); // track 0, the default
+
+    player.SetAudioTrackEXT(1);
+    EXPECT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 44100); // track 1
+}
+
+// plan_media.md MEDIA-90: the ordering half of the same bug -- a track preference set BEFORE
+// Play() (not just mid-playback, as the test above covers) must still apply to the real decoder
+// used for the SDL audio stream/texture created inside Play() -> OpenDecoder(), not just be
+// silently ignored because it wasn't there yet when OpenDecoder() first built them.
+TEST(VideoPlayerTest, AudioTrackPreferenceSetBeforePlayAppliesToTheOpenedDecoder)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+
+    player.SetAudioTrackEXT(1); // set before Play() -- decoder_ doesn't exist yet
+    player.Play(&video);
+
+    EXPECT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 44100); // track 1, not the default
 }

@@ -112,6 +112,15 @@ namespace CNA::Internal::Media
 
         frame_ = av_frame_alloc();
         pkt_   = av_packet_alloc();
+        if (!frame_ || !pkt_)
+        {
+            // A real (if rare) OOM path -- NextFrame()/ProcessAudioPacket() both dereference
+            // frame_/pkt_ unconditionally, so leaving either null here and returning success would
+            // be a guaranteed null-pointer dereference on the very first decode call
+            // (plan_media.md MEDIA-38/94 hardening).
+            Close();
+            return false;
+        }
 
         return true;
     }
@@ -150,6 +159,18 @@ namespace CNA::Internal::Media
             avcodec_free_context(&ctx);
             return nullptr;
         }
+        // MEDIA-39's own accept criterion is "a clear exception rather than garbage output" for
+        // corrupted frame data -- by default, most FFmpeg decoders are lenient and silently try to
+        // conceal/recover from minor stream corruption (e.g. a per-slice CRC mismatch), returning
+        // a decoded-but-possibly-glitched frame with just a log warning, no error return code for
+        // NextFrame() to surface. AV_EF_CRCCHECK actually enables CRC verification at all (several
+        // decoders, e.g. ffv1, otherwise compute but never *act on* a checksum mismatch);
+        // AV_EF_EXPLODE then turns any detected inconsistency (CRC or otherwise) into a hard
+        // decode error instead of a tolerated one -- so corrupted input is never silently
+        // displayed as if it decoded correctly (plan_media.md MEDIA-39/40, confirmed via a real
+        // corrupted-ffv1-slice fixture during external code review: AV_EF_EXPLODE alone was not
+        // sufficient on its own to make a CRC mismatch fatal).
+        ctx->err_recognition = AV_EF_CRCCHECK | AV_EF_BITSTREAM | AV_EF_BUFFER | AV_EF_EXPLODE;
         return ctx;
     }
 
@@ -466,8 +487,19 @@ namespace CNA::Internal::Media
                 ConvertFrameToRGBA(rgbaOut);
                 return true;
             }
+            if (ret == AVERROR_EOF)
+                return false; // clean end of stream
             if (ret != AVERROR(EAGAIN))
-                return false; // EOF or error
+            {
+                // A genuine decode error (corrupt/truncated frame data reaching the codec, an
+                // unsupported bitstream feature, etc.) -- previously merged with the EOF case
+                // above, silently treating a decode failure as "video finished normally"
+                // (plan_media.md MEDIA-39/40).
+                char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                av_strerror(ret, errBuf, sizeof(errBuf));
+                throw std::runtime_error(
+                    std::string("VideoDecoder: video decode error: ") + errBuf);
+            }
 
             // Read packets until we find a video packet to send
             while (true)
@@ -497,8 +529,18 @@ namespace CNA::Internal::Media
                 }
                 if (pkt_->stream_index == videoStream_)
                 {
-                    avcodec_send_packet(videoCtx_, pkt_);
+                    int sendRet = avcodec_send_packet(videoCtx_, pkt_);
                     av_packet_unref(pkt_);
+                    if (sendRet < 0 && sendRet != AVERROR(EAGAIN))
+                    {
+                        // A malformed/corrupt packet the codec outright rejects -- surface it
+                        // distinctly rather than silently discarding it and looping as if nothing
+                        // happened (plan_media.md MEDIA-39/40).
+                        char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                        av_strerror(sendRet, errBuf, sizeof(errBuf));
+                        throw std::runtime_error(
+                            std::string("VideoDecoder: failed to send packet to decoder: ") + errBuf);
+                    }
                     break;
                 }
                 av_packet_unref(pkt_);

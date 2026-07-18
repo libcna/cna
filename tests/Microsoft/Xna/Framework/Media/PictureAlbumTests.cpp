@@ -125,3 +125,11 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionDisposeFlipsIsDisposed)
 
     EXPECT_TRUE(albums->getIsDisposedProperty());
 }
+
+// plan_media.md MEDIA-121 (found by external code review): PictureAlbumCollection's own
+// GetTypeName().
+TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionGetTypeNameIsFullyQualified)
+{
+    auto* albums = library->getRootPictureAlbumProperty()->getAlbumsProperty();
+    EXPECT_EQ(albums->GetTypeName(), "Microsoft.Xna.Framework.Media.PictureAlbumCollection");
+}

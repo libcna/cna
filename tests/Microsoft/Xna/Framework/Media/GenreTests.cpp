@@ -86,6 +86,13 @@ TEST_F(MediaLibraryTestFixture, GenreCollectionIndexerAndIterationWork)
     EXPECT_EQ(count, 2);
 }
 
+// plan_media.md MEDIA-121 (found by external code review): GenreCollection's own GetTypeName(),
+// not exercised anywhere else in this file (only Genre's own was tested).
+TEST_F(MediaLibraryTestFixture, GenreCollectionGetTypeNameIsFullyQualified)
+{
+    EXPECT_EQ(library->getGenresProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.GenreCollection");
+}
+
 // plan_media.md MEDIA-98: Albums property, not exercised by any other test above.
 TEST_F(MediaLibraryTestFixture, RockGenreAlbumsPropertyContainsRockAlbums)
 {

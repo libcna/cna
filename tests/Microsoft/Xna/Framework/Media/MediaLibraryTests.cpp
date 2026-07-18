@@ -230,6 +230,46 @@ TEST_F(MediaLibrarySavePictureTest, SavePictureFromBufferCreatesARealReadablePic
     EXPECT_EQ(library.GetPictureFromToken(saved->getTokenEXT()), saved);
 }
 
+// plan_media.md MEDIA-59/D7 (corrected -- found by external code review): the first SavePicture()
+// call on a library with no pre-existing "Saved Pictures" folder must create a real PictureAlbum
+// tree node for it (as a child of RootPictureAlbum), not silently leave the saved Picture parented
+// to the root album with no dedicated node at all.
+TEST_F(MediaLibrarySavePictureTest, SavePictureCreatesARealSavedPicturesAlbumNodeIfNoneExisted)
+{
+    MediaLibrary library;
+    PictureAlbum* root = library.getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
+
+    bool hadSavedPicturesAlbumBefore = false;
+    for (PictureAlbum* a : *root->getAlbumsProperty())
+    {
+        if (a->getNameProperty() == "Saved Pictures") hadSavedPicturesAlbumBefore = true;
+    }
+    ASSERT_FALSE(hadSavedPicturesAlbumBefore);
+
+    std::ifstream src("tests/assets/media/pictures/Family/portrait.png", std::ios::binary);
+    ASSERT_TRUE(src.is_open());
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+    Picture* saved = library.SavePicture("newly_created_album_picture", bytes);
+    ASSERT_NE(saved, nullptr);
+
+    PictureAlbum* savedPicturesAlbum = nullptr;
+    for (PictureAlbum* a : *root->getAlbumsProperty())
+    {
+        if (a->getNameProperty() == "Saved Pictures") savedPicturesAlbum = a;
+    }
+    ASSERT_NE(savedPicturesAlbum, nullptr);
+    EXPECT_EQ(savedPicturesAlbum->getParentProperty(), root);
+    EXPECT_EQ(saved->getAlbumProperty(), savedPicturesAlbum);
+
+    bool foundInAlbum = false;
+    for (Picture* p : *savedPicturesAlbum->getPicturesProperty())
+    {
+        if (p == saved) foundInAlbum = true;
+    }
+    EXPECT_TRUE(foundInAlbum);
+}
+
 TEST_F(MediaLibrarySavePictureTest, SavePictureFromStreamProducesTheSameResultAsFromBuffer)
 {
     auto* stream = new System::IO::FileStream("tests/assets/media/pictures/Vacation/beach.jpg");

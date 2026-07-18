@@ -26,6 +26,28 @@ namespace CNA::Internal::Media
             }
             return ".png"; // unrecognized -- default to a supported, rescan-visible extension
         }
+
+        // `name` is caller-supplied and untrusted -- reduces it to a single, safe path *segment*
+        // (no directory traversal, no absolute-path escape) before it's ever used to build a real
+        // filesystem path. A caller passing "../../etc/passwd" or an absolute path like
+        // "/etc/cron.d/evil" must not be able to write outside the Saved Pictures directory.
+        // Normalizes backslashes to forward slashes first (Windows-style separators are also a
+        // real traversal vector there, even though std::filesystem::path only treats '/' as a
+        // separator by default on this platform), keeps only the last path segment, and rejects
+        // "."/".."/empty results in favor of a safe fallback name.
+        std::string SanitizePictureName(const std::string& name)
+        {
+            std::string normalized = name;
+            std::replace(normalized.begin(), normalized.end(), '\\', '/');
+
+            std::filesystem::path segment = std::filesystem::path(normalized).filename();
+            std::string result = segment.string();
+            if (result.empty() || result == "." || result == "..")
+            {
+                return "picture";
+            }
+            return result;
+        }
     }
 
     std::string SavedPictureStore::GetSavedPicturesDirectory(const std::string& picturesRoot)
@@ -54,7 +76,8 @@ namespace CNA::Internal::Media
             return {};
         }
 
-        std::filesystem::path outPath = std::filesystem::path(dir) / (name + SniffImageExtension(data));
+        std::filesystem::path outPath =
+            std::filesystem::path(dir) / (SanitizePictureName(name) + SniffImageExtension(data));
         std::ofstream out(outPath, std::ios::binary);
         if (!out.is_open())
         {

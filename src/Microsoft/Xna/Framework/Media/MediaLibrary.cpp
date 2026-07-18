@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/Media/AudioDurationProbe.hpp"
 #include "CNA/Internal/Media/MediaLibraryIndex.hpp"
 #include "CNA/Internal/Media/MediaLibraryPaths.hpp"
 #include "CNA/Internal/Media/PictureLibraryIndex.hpp"
@@ -68,10 +69,22 @@ namespace Microsoft::Xna::Framework::Media
         pictureRoot_ = pictureRoot;
 
         // --- Songs ---
+        // Real Duration (plan_media.md MEDIA-65/68's "Duration (sum of member Song.Duration)")
+        // needs each Song's own duration populated for real -- a lightweight, decode-free
+        // container-metadata probe (AudioDurationProbe, FFmpeg's avformat_find_stream_info only)
+        // rather than the deferred "stays zero until actually played via MediaPlayer" design this
+        // used to rely on, which never actually backfilled the library's own Song/Album/Playlist
+        // objects even when a song *was* played (MediaPlayer::Play() operates on a duplicate --
+        // see MediaPlayer::LoadSong() -- not the library's original Song instance). Found by
+        // external code review.
         CNA::Internal::Media::MediaLibraryIndex musicIndex(musicRoot);
         for (const auto& indexed : musicIndex.GetSongs())
         {
-            auto song = std::make_unique<Song>(indexed.path, indexed.title);
+            const SharpRuntime::intcs durationMs =
+                CNA::Internal::Media::AudioDurationProbe::ProbeDurationMS(indexed.path);
+            auto song = durationMs > 0
+                ? std::make_unique<Song>(indexed.path, indexed.title, durationMs)
+                : std::make_unique<Song>(indexed.path, indexed.title);
             songByPath_[indexed.path] = song.get();
             ownedSongs_.push_back(std::move(song));
         }
@@ -163,9 +176,17 @@ namespace Microsoft::Xna::Framework::Media
             std::string genreName = albumGenreByKey[key];
             Genre* genre = genreName.empty() ? nullptr : genreByName[genreName];
 
+            // plan_media.md MEDIA-65: Duration is the real sum of member Song.Duration (now
+            // populated for real by AudioDurationProbe above), not a hardcoded zero.
+            System::TimeSpan albumDuration = System::TimeSpan::Zero;
+            for (Song* memberSong : songsByAlbumKey[key])
+            {
+                albumDuration = albumDuration + memberSong->getDurationProperty();
+            }
+
             auto albumSongs = std::make_unique<SongCollection>(songsByAlbumKey[key]);
             std::unique_ptr<Album> album(new Album(
-                albumName, artist, genre, System::TimeSpan::Zero,
+                albumName, artist, genre, albumDuration,
                 albumArtPathByKey[key], albumSongs.get()));
             ownedGroupSongCollections_.push_back(std::move(albumSongs));
             allAlbums.push_back(album.get());
@@ -367,6 +388,45 @@ namespace Microsoft::Xna::Framework::Media
         return nullptr;
     }
 
+    PictureAlbum* MediaLibrary::EnsureSavedPicturesAlbum()
+    {
+        if (savedPicturesAlbum_ != nullptr)
+        {
+            return savedPicturesAlbum_;
+        }
+        if (rootPictureAlbum_ == nullptr)
+        {
+            // No Pictures root/tree exists at all (e.g. an empty/inaccessible Pictures folder) --
+            // nowhere to attach a new node. SavePicture() itself still succeeds (the file is
+            // written for real); it just isn't represented in any PictureAlbum tree.
+            return nullptr;
+        }
+
+        std::error_code ec;
+        std::string path = (std::filesystem::path(pictureRoot_) / "Saved Pictures").string();
+        std::unique_ptr<PictureAlbum> album(new PictureAlbum("Saved Pictures", rootPictureAlbum_, path));
+        PictureAlbum* raw = album.get();
+        ownedPictureAlbums_.push_back(std::move(album));
+
+        std::unique_ptr<PictureAlbumCollection> emptyChildAlbums(new PictureAlbumCollection({}));
+        std::unique_ptr<PictureCollection> emptyPictures(new PictureCollection({}));
+        raw->SetChildAlbumsAndPictures(emptyChildAlbums.get(), emptyPictures.get());
+        ownedPictureAlbumChildCollections_.push_back(std::move(emptyChildAlbums));
+        ownedPictureAlbumPictureCollections_.push_back(std::move(emptyPictures));
+
+        // Register as a real child of the root album -- MediaLibrary is a friend of
+        // PictureAlbumCollection, so base_ (the underlying MediaCollectionBase<PictureAlbum>) is
+        // directly reachable for the runtime append the read-only public API doesn't expose (same
+        // pattern SavePicture() itself already uses for PictureCollection below).
+        if (rootPictureAlbum_->getAlbumsProperty() != nullptr)
+        {
+            rootPictureAlbum_->getAlbumsProperty()->base_.Add(raw);
+        }
+
+        savedPicturesAlbum_ = raw;
+        return raw;
+    }
+
     Picture* MediaLibrary::SavePicture(std::string name, const std::vector<uint8_t>& imageBuffer)
     {
         std::string savedPath = CNA::Internal::Media::SavedPictureStore::SavePicture(
@@ -388,7 +448,7 @@ namespace Microsoft::Xna::Framework::Media
         }
 
         auto now = std::chrono::system_clock::now();
-        PictureAlbum* parentAlbum = savedPicturesAlbum_ != nullptr ? savedPicturesAlbum_ : rootPictureAlbum_;
+        PictureAlbum* parentAlbum = EnsureSavedPicturesAlbum();
         std::unique_ptr<Picture> pic(new Picture(name, parentAlbum, img.width, img.height, now, savedPath));
         Picture* raw = pic.get();
         ownedPictures_.push_back(std::move(pic));

@@ -154,11 +154,20 @@ TEST_F(MediaLibraryTestFixture, AlbumGetTypeNameIsFullyQualified)
 // plan_media.md MEDIA-102: Duration -- library-scanned songs stay TimeSpan.Zero until actually
 // played (§4 D9, deliberate design choice recorded in NEXTmedia.md), so a freshly-scanned Album's
 // Duration is zero too; this asserts that documented behavior rather than leaving it untested.
-TEST_F(MediaLibraryTestFixture, AlbumDurationIsZeroForUnplayedLibraryScannedSongs)
+// plan_media.md MEDIA-65 (corrected -- found by external code review): Duration is now a real,
+// eagerly-probed sum of member Song.Duration (CNA::Internal::Media::AudioDurationProbe, decode-
+// free container-metadata parsing at library-scan time), not a placeholder that stays zero
+// forever. Album Alpha has exactly one member song (Sunrise.ogg, ~2.0s per its own fixture
+// manifest) -- assert a real, non-zero value in the right ballpark rather than an exact
+// millisecond count, since the probed value depends on the real encoder's own frame/container
+// rounding.
+TEST_F(MediaLibraryTestFixture, AlbumDurationIsARealNonZeroSumOfMemberSongDurations)
 {
     Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
     ASSERT_NE(alpha, nullptr);
-    EXPECT_EQ(alpha->getDurationProperty(), System::TimeSpan::Zero);
+    const double ms = alpha->getDurationProperty().getTotalMillisecondsProperty();
+    EXPECT_GT(ms, 1000.0);
+    EXPECT_LT(ms, 3000.0);
 }
 
 // plan_media.md MEDIA-102: GetThumbnail() -- both the has-art and no-art branches, not just
@@ -213,4 +222,10 @@ TEST_F(MediaLibraryTestFixture, AlbumCollectionDisposeFlipsIsDisposed)
     albums->Dispose();
 
     EXPECT_TRUE(albums->getIsDisposedProperty());
+}
+
+// plan_media.md MEDIA-121 (found by external code review): AlbumCollection's own GetTypeName().
+TEST_F(MediaLibraryTestFixture, AlbumCollectionGetTypeNameIsFullyQualified)
+{
+    EXPECT_EQ(library->getAlbumsProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.AlbumCollection");
 }

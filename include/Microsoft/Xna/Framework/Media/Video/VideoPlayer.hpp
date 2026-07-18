@@ -38,6 +38,8 @@ namespace Microsoft::Xna::Framework::Media
     class VideoPlayer final : public System::Object, public System::IDisposable
     {
     public:
+        NOXNA friend struct VideoPlayerTestAccess;
+
         /** @brief Constructs a VideoPlayer in the stopped state. */
         VideoPlayer();
 
@@ -197,6 +199,15 @@ namespace Microsoft::Xna::Framework::Media
         void CloseDecoder();
         void ApplyVolume();
         [[nodiscard]] double GetElapsedSeconds() const;
+
+        // (Re)creates the SDL audio stream and the frame texture to match whatever track is
+        // currently active on `decoder_`. Called once from OpenDecoder() after track preferences
+        // are applied, and again from SetAudioTrackEXT()/SetVideoTrackEXT() when a track is
+        // switched mid-playback -- a track switch can change sample rate/channel count or video
+        // dimensions, and an already-open SDL stream/texture sized for the previous track would
+        // otherwise silently keep the stale format/size (plan_media.md MEDIA-90, a real bug found
+        // by external code review).
+        void ReconfigureAudioAndVideoOutputForCurrentTracks();
 
         bool isDisposed_ = false;
         bool isLooped_   = false;

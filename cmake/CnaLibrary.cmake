@@ -53,6 +53,7 @@ target_compile_definitions(CNA
         XNA5
         $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
+        $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
 )
 
 target_link_libraries(CNA

@@ -253,12 +253,15 @@ TEST(VideoDecoderTest, OpenDoesNotCrashOnTruncatedFile)
     std::remove(truncatedPath.c_str());
 }
 
-// plan_media.md MEDIA-40: a genuine mid-stream I/O error (here: a file that opens and reports
-// valid stream info, since it keeps the container header intact, but is truncated partway through
-// frame data) throws instead of being silently treated as "video ended normally". We truncate
-// AFTER the header/first-frame region so Open() succeeds but a later NextFrame() call hits the
-// truncation.
-TEST(VideoDecoderTest, TruncatedMidStreamDataThrowsRatherThanSilentlyEndingCleanly)
+// plan_media.md MEDIA-40 (corrected -- found by external code review): the previous version of
+// this test truncated the trailing bytes off a real Matroska file and asserted success on EITHER
+// a thrown exception OR a clean EOF, making it a tautology that could never fail and provided zero
+// real coverage. Empirically, trailing-byte truncation of a Matroska/EBML file makes libavformat's
+// matroska demuxer log a "File ended prematurely" warning but still return AVERROR_EOF, not a
+// distinct I/O error code -- so NextFrame() correctly (and unavoidably, at the FFmpeg API level)
+// treats it as clean EOF, not an error. This test now asserts that real, verified behavior
+// directly instead of accepting either outcome.
+TEST(VideoDecoderTest, TruncatedFileEndsAtCleanEOFRatherThanThrowing)
 {
     std::ifstream src(kChroma420, std::ios::binary);
     ASSERT_TRUE(src.is_open());
@@ -267,36 +270,72 @@ TEST(VideoDecoderTest, TruncatedMidStreamDataThrowsRatherThanSilentlyEndingClean
 
     const std::string truncatedPath = "tests/assets/media/video/.midstream_truncated_fixture.mkv";
     {
-        // Keep most of the file (headers + many frames) but cut the last chunk mid-block, which
-        // for a Matroska/EBML container reliably produces a demux-level read error partway
-        // through iteration rather than a clean EOF -- unlike VideoDecoderTest's
-        // OpenDoesNotCrashOnTruncatedFile (cut at 5%, rejected immediately at Open()).
         std::ofstream out(truncatedPath, std::ios::binary);
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size() - 200));
     }
 
     VideoDecoder decoder;
-    if (decoder.Open(truncatedPath))
-    {
-        std::vector<uint8_t> rgba;
-        double pts = 0.0;
-        bool threwOrEndedCleanly = false;
-        try
+    ASSERT_TRUE(decoder.Open(truncatedPath));
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    EXPECT_NO_THROW(
         {
             while (decoder.NextFrame(rgba, pts))
             {
             }
-            threwOrEndedCleanly = true; // reached a clean EOF -- acceptable if the truncation
-                                         // point happened to land on a frame boundary
-        }
-        catch (const std::exception&)
-        {
-            threwOrEndedCleanly = true; // the MEDIA-40 error path -- also acceptable
-        }
-        EXPECT_TRUE(threwOrEndedCleanly);
-    }
+        });
 
     std::remove(truncatedPath.c_str());
+}
+
+// plan_media.md MEDIA-40: the real "genuine mid-stream error, not EOF" case. Empirically verified
+// (via direct ffmpeg CLI experimentation across a dozen+ corruption strategies) that this repo's
+// ffv1/Matroska fixtures cannot exercise this path: Matroska's demuxer is deliberately
+// streaming-tolerant and treats a truncated/malformed tail as clean EOF (see the test above) no
+// matter where the cut lands, and this build's ffv1 decoder logs but never hard-fails on a
+// corrupted slice's CRC mismatch even with every AV_EF_* strictness flag set. H264 is much less
+// lenient about corrupted macroblock data -- corrupting real H264 Annex-B bytes inside
+// corrupt_test_h264.mp4 (added specifically for this test) reliably makes avcodec_send_packet()
+// return a genuine AVERROR_INVALIDDATA under AV_EF_EXPLODE, which NextFrame() must surface as a
+// thrown exception rather than silently treating it as "video finished normally".
+TEST(VideoDecoderTest, CorruptedMidStreamDataThrowsRatherThanSilentlyEndingCleanly)
+{
+    std::ifstream src("tests/assets/media/video/corrupt_test_h264.mp4", std::ios::binary);
+    ASSERT_TRUE(src.is_open());
+    std::vector<char> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+    ASSERT_GT(bytes.size(), 100u);
+
+    const std::string corruptedPath = "tests/assets/media/video/.midstream_corrupted_fixture.mp4";
+    {
+        // Flip a run of bytes roughly a third of the way through the compressed video data --
+        // verified via direct ffmpeg CLI testing to reliably corrupt real macroblock data (not
+        // just container metadata), producing "Error submitting packet to decoder: Invalid data
+        // found when processing input" under strict error detection.
+        std::size_t start = bytes.size() * 3 / 10;
+        std::size_t length = std::min<std::size_t>(16, bytes.size() - start);
+        for (std::size_t i = start; i < start + length; ++i)
+        {
+            bytes[i] = static_cast<char>(static_cast<unsigned char>(bytes[i]) ^ 0xFF);
+        }
+        std::ofstream out(corruptedPath, std::ios::binary);
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    }
+
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(corruptedPath));
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    EXPECT_THROW(
+        {
+            while (decoder.NextFrame(rgba, pts))
+            {
+            }
+        },
+        std::runtime_error);
+
+    std::remove(corruptedPath.c_str());
 }
 
 TEST(VideoDecoderTest, SeekToStartResetsToBeginning)
