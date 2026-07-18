@@ -86,6 +86,22 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
+# --- plan_audio.md AUD-06-025: standalone XNB SoundEffect metadata inspection tool ---
+# A small standalone (non-GTest) executable that loads a .xnb SoundEffect asset through the real
+# production ContentManager::Load<SoundEffect>() path and emits its metadata (name, decoded
+# duration) as stable single-line JSON, without ever calling Play()/CreateInstance() -- for
+# debugging and CI manifests. See the tool's own top-of-file comment for its exact JSON shape.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_xnb_audio_metadata_dump
+        tools/audio/xnb_audio_metadata_dump.cpp
+    )
+    target_link_libraries(cna_xnb_audio_metadata_dump
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
 # --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
 # Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see
