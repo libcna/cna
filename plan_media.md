@@ -1896,7 +1896,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 #### Group B — `Song` metadata that is hardcoded or silently dropped
   *Done:* `CHECKLIST.md`'s "API surface" section rewritten -- FNA authoritative for behavior, XNA reference assemblies authoritative for API surface, with the exact `grep` recipe and the C++ idiom equivalences (`op_Equality`->`operator==`, `Item`->`operator[]`, `GetEnumerator`->`begin()/end()`) so they are not misreported as gaps.
 
-- [ ] **MEDIA-181 — Pass `TrackNumber` from the index into `Song` (a real dropped-data bug).**
+- [x] **MEDIA-181 — Pass `TrackNumber` from the index into `Song` (a real dropped-data bug).**
   `src/CNA/Internal/Media/MediaLibraryIndex.cpp:109` genuinely parses and stores
   `song.trackNumber = tags.trackNumber`, but `MediaLibrary.cpp:80` constructs `Song` with only
   `(path, title)` or `(path, title, durationMs)` — the value is **parsed and then thrown away**, and
@@ -1907,6 +1907,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `Song::getTrackNumberProperty()` after a library scan. Test must use a fixture whose tag value is
   independently confirmed (via `ffprobe`/the manifest) — **and must be mutation-verified**: with the
   wiring removed, the test must fail.
+  *Done + MUTATION-VERIFIED:* `trackNumber_` added to `Song`, set by `MediaLibrary` in the same friend-scoped pass as the back-references (no new ctor overload needed). New `LibrarySongsCarryTheirRealTrackNumberFromTags` asserts distinct manifest-verified values (Sunrise=1, Twilight=1, Daybreak=2, Étoile=3) so an all-zero or all-one implementation cannot accidentally pass; removing the wiring fails all four. `SongTest.TrackNumberIsAlwaysZero` renamed to `TrackNumberIsZeroForAStandaloneSong` -- it uses a standalone Song, for which 0 is genuinely correct, but its old name asserted stub semantics.
 
 - [ ] **MEDIA-182 — Parse ID3v2 `POPM` (Popularimeter) into a real rating.** Extend
   `CNA::Internal::Media::AudioTagParser` (`TryReadId3v2`) to read the `POPM` frame: email/identifier
@@ -1935,7 +1936,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* a rated fixture reports `IsRated == true` and the correct 0-10 `Rating`; an unrated
   fixture reports `false`/`0`. Mutation-verified.
 
-- [ ] **MEDIA-185 — Decide and document `Song::IsProtected` formally.** XNA: *"Gets a value that
+- [x] **MEDIA-185 — Decide and document `Song::IsProtected` formally.** XNA: *"Gets a value that
   indicates whether the song is DRM protected content."* CNA scans plain local files with no DRM
   container support, so `false` is the *correct* answer for everything CNA can currently index — but
   it is currently an undocumented hardcoded literal that reads like an unfinished stub. Either (a)
@@ -1953,6 +1954,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 > *asserts the stub behavior*, i.e. it locks the gap in as expected behavior. `VisualizationData`
 > itself is already correct and complete: `Size = 256`, public `freq`/`samp` arrays, and
 > `getFrequenciesProperty()`/`getSamplesProperty()` matching the XNA reference exactly.
+  *Done (documentation, no code change -- option (a)):* `IsProtected` returning false is **correct for everything CNA can index**, not an unfinished stub: the scan only accepts plain unencrypted containers, so a DRM-wrapped file (e.g. FairPlay `.m4p`) is not indexable in the first place and no indexed song can ever be protected. Documented in the header with the condition that would require revisiting it (a future format expansion making DRM-wrapped files reachable).
 
 - [ ] **MEDIA-186 — Add `CNA::Internal::Media::VisualizationCapture`: a lock-free PCM ring buffer
   fed by `Mix_SetPostMix`.** New `include/CNA/Internal/Media/VisualizationCapture.hpp` + `.cpp`.

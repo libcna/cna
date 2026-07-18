@@ -225,6 +225,11 @@ namespace Microsoft::Xna::Framework::Media
             Song* song = songByPath_[indexed.path];
             if (song == nullptr) continue;
 
+            // MediaLibraryIndex already parsed this from the file's own tags; it just was never
+            // handed to Song, so getTrackNumberProperty() returned a hardcoded 0 for every library
+            // song -- real data parsed and then dropped (plan_media.md MEDIA-181).
+            song->trackNumber_ = static_cast<SharpRuntime::intcs>(indexed.trackNumber);
+
             if (!indexed.genre.empty())
             {
                 auto it = genreByName.find(indexed.genre);

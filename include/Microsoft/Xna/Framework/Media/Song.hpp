@@ -93,12 +93,15 @@ namespace Microsoft::Xna::Framework::Media
         NOXNA void setDurationProperty(System::TimeSpan value);
 
         /**
-         * @brief Gets whether this song has DRM copy protection.
+         * @brief Gets a value that indicates whether the song is DRM protected content.
          *
-         * Always returns false; matches FNA, which never varies this value on desktop
-         * (Song.cs hardcodes the same constant, since there is no real DRM-protection source).
+         * Always returns false. This is the *correct* answer for everything CNA can index rather
+         * than an unimplemented stub: the library scan only accepts plain, unencrypted container
+         * formats, and a DRM-wrapped file (e.g. FairPlay .m4p) is not indexable in the first
+         * place, so no indexed song can ever be protected. Revisit only if a future format
+         * expansion makes DRM-wrapped files reachable (plan_media.md MEDIA-185).
          *
-         * @return true if protected; otherwise false.
+         * @return Always false.
          */
         [[nodiscard]] bool getIsProtectedProperty() const;
 
@@ -135,11 +138,14 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] SharpRuntime::intcs getRatingProperty() const;
 
         /**
-         * @brief Gets the track number of this song within its album.
+         * @brief Gets the track number of the song on the song's Album.
          *
-         * Always returns 0; matches FNA, which never varies this value on desktop.
+         * Populated from the file's own tags when the song comes from a MediaLibrary scan.
+         * A song constructed directly from a file path has no scanned tag data and returns 0,
+         * which also matches the "unknown track number" convention used by the tag formats
+         * themselves.
          *
-         * @return Track number.
+         * @return Track number, or 0 if unknown.
          */
         [[nodiscard]] SharpRuntime::intcs getTrackNumberProperty() const;
 
@@ -222,6 +228,11 @@ namespace Microsoft::Xna::Framework::Media
         Album*  album_  = nullptr;
         Artist* artist_ = nullptr;
         Genre*  genre_  = nullptr;
+
+        // Populated by MediaLibrary from the file's own tags (plan_media.md MEDIA-181). The index
+        // already parsed the track number; it simply was never handed to Song, so this property
+        // returned a hardcoded 0 for every song in the library.
+        SharpRuntime::intcs trackNumber_ = 0;
 
         std::string name_;
         System::TimeSpan duration_;

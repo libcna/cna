@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <map>
 
 #include "MediaLibraryTestFixture.hpp"
 #include "Microsoft/Xna/Framework/Media/Album.hpp"
@@ -455,4 +456,35 @@ TEST(SongLibraryBackReferenceTest, ToStringReturnsTheSongName)
 {
     Song song("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", "My Song Name");
     EXPECT_EQ(song.ToString(), "My Song Name");
+}
+
+// plan_media.md MEDIA-181: MediaLibraryIndex genuinely parsed each song's track number and stored
+// it in IndexedSong::trackNumber, but MediaLibrary never passed it to the Song it constructed, so
+// getTrackNumberProperty() returned a hardcoded 0 for every song in the library -- real data
+// parsed and then silently dropped. Ground truth is tests/assets/media/music/manifest.json, whose
+// values were cross-checked with ffprobe (e.g. "Daybreak" track=2, "Etoile" tracknumber=3), so the
+// expectations below are distinct values rather than an all-ones set that a broken implementation
+// could accidentally satisfy.
+TEST_F(MediaLibraryTestFixture, LibrarySongsCarryTheirRealTrackNumberFromTags)
+{
+    std::map<std::string, int> expected = {
+        {"Sunrise",  1},
+        {"Twilight", 1},
+        {"Daybreak", 2},
+        {"\xC3\x89toile", 3}, // "Étoile", UTF-8
+    };
+
+    int checked = 0;
+    for (Song* song : *library->getSongsProperty())
+    {
+        ASSERT_NE(song, nullptr);
+        auto it = expected.find(song->getNameProperty());
+        if (it == expected.end()) continue;
+        EXPECT_EQ(song->getTrackNumberProperty(), it->second)
+            << "wrong track number for '" << song->getNameProperty() << "'";
+        ++checked;
+    }
+    // Anti-vacuity: if none of the named songs were found the loop above proves nothing.
+    EXPECT_EQ(checked, static_cast<int>(expected.size()))
+        << "did not find every expected fixture song in the library";
 }

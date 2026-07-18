@@ -37,6 +37,8 @@ TEST(SongTest, NameAndDurationFromThreeArgConstructor)
 
 // plan_media.md MEDIA-13: these four getters are FNA-faithful hardcoded constants, not
 // unfinished stubs -- asserted explicitly so a future audit doesn't "fix" correct behavior.
+// Correct for every indexable file, not a stub -- DRM-wrapped containers are not
+// indexable at all (plan_media.md MEDIA-185).
 TEST(SongTest, IsProtectedIsAlwaysFalse)
 {
     Song song(kRealFixture);
@@ -55,7 +57,10 @@ TEST(SongTest, RatingIsAlwaysZero)
     EXPECT_EQ(song.getRatingProperty(), 0);
 }
 
-TEST(SongTest, TrackNumberIsAlwaysZero)
+// A standalone Song has no scanned tag data, so 0 ("unknown") is correct here. Library
+// songs DO carry their real track number -- see MediaLibraryTests'
+// LibrarySongsCarryTheirRealTrackNumberFromTags (plan_media.md MEDIA-181).
+TEST(SongTest, TrackNumberIsZeroForAStandaloneSong)
 {
     Song song(kRealFixture);
     EXPECT_EQ(song.getTrackNumberProperty(), 0);

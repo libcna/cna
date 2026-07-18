@@ -93,7 +93,7 @@ namespace Microsoft::Xna::Framework::Media
 
     SharpRuntime::intcs Song::getTrackNumberProperty() const
     {
-        return 0;
+        return trackNumber_;
     }
 
     bool Song::getIsDisposedProperty() const
