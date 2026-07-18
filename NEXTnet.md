@@ -10,10 +10,13 @@ fidelity to FNA (`/rv/data/library/github.com/FNA-XNA/FNA` for most namespaces,
 `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/` for GamerServices), backed by
 unit tests.
 
-**Current phase:** `plan_net.md` ("2026-07-07 Re-Audit and Hardening"), covering `Net`,
-`GamerServices`, and Avatar. **All 11 phases are done** (every task `[x]` with a write-up) except
-Task 11.7 itself (the final user-facing summary — write it, then this plan is fully closed out).
-The prior first-implementation pass (132/132 tasks) is complete; its own archive file
+**Current phase:** `plan_net.md` ("2026-07-07 Re-Audit and Hardening") is fully checked off
+(104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **However, an
+independent post-completion audit (2026-07-18) found that several of the plan's own "done" claims
+overstated what was actually delivered** — see section 3 below for the specifics and section 6 for
+the active remediation work now in progress. Treat `plan_net.md`'s checkmarks as "this task's
+described work was completed," not as "the underlying feature is fully correct/polished" — several
+were not. The prior first-implementation pass (132/132 tasks) is complete; its own archive file
 (`plan_net_20260707.md`) no longer exists in the working tree (deleted by a later, separate,
 deliberate repo-wide cleanup commit, `e86b7cba` — still fully recoverable via git history, see
 Task 11.3's write-up in `plan_net.md`).
@@ -93,6 +96,36 @@ Task 11.3's write-up in `plan_net.md`).
 
 ## 3. Known gaps (honest, not glossed over)
 
+### Confirmed by an independent post-completion audit (2026-07-18) — active remediation, see section 6
+
+- **F1 overlay text is not actually readable.** `MakeSimpleFont`'s Phase 8 fix (section 2) stopped
+  every character from rendering as an invisible sub-pixel dot, but it still renders every
+  character as an *identical solid rectangle* — there is no letterform differentiation at all. A
+  player pressing F1 can see word/line structure but cannot read a single actual word. Confirmed
+  by direct fresh screenshot inspection, not just the audit's claim. This was a real overclaim in
+  Phase 8's own write-up ("legible blocky text") — the rendering *bug* was fixed, the underlying
+  *feature* (readable help text) was not delivered. **Remediation in progress** — needs a real
+  embedded bitmap-font glyph table, not more rectangle-tuning.
+- **`Guide.cpp`'s Phase 3 work is genuinely incomplete**, confirmed by direct code read:
+  `BeginShowKeyboardInput`'s `title`/`description` parameters are unused (commented out in the
+  signature itself); `getIsVisibleProperty()` is hardcoded `return false;` and the setter is a
+  no-op; `UsePasswordMode` is stored on the action object but never read anywhere in the file (no
+  masking behavior); there is no cancel path (only Enter completes the pending input). Phase 3's
+  own `plan_net.md` write-up did not disclose these as remaining gaps.
+- **Avatar visual quality has more real artifacts than Phase 7 disclosed.** Fresh screenshots
+  (male, female, and mid-`Wave`) confirm the core proportions are genuinely fixed (no more
+  stick-thin limbs / too-small head), but there are visible dark shading/seam artifacts at the
+  neck, both shoulder-to-upper-arm junctions, the groin, and — worst — a large dark mass across
+  the chest during `Wave`, not just the single "residual shoe-area artifact" and "chest-band
+  artifact" the Phase 7 write-up described. Likely a flat-recomputed-normals-at-CSG-union-seams
+  shading issue (a known, disclosed limitation of the mesh-craft merge, per
+  `docs/avatar-real-rendering-ext.md`), but the *visual extent* was understated. **Needs deeper
+  diagnosis before a fix can be scoped** — see section 6.
+- **`NEXTnet.md`'s own example command was broken** when followed from the repo root (see the
+  working-directory note in section 5) — fixed in this same pass that added this subsection.
+
+### Pre-existing gaps, already known (lower severity, most already disclosed elsewhere)
+
 - **`SignedInGamer::GetFriends()`** always returns an empty `FriendCollection` — no friend-list
   population source exists at all (found during Phase 11's final audit; self-documented in
   `FriendCollection.hpp`'s own comment, out of Phase 4's specific persistence scope, a real
@@ -151,44 +184,61 @@ Task 11.3's write-up in `plan_net.md`).
 
 ## 5. Useful commands
 
+All commands below are run from the **repo root** except the demo executables themselves, which
+**must be run with `cmake-build-debug/` as the working directory** — every demo's `ContentManager`
+resolves asset paths (e.g. `Content/avatar/male/avatar`) relative to the process's current working
+directory, not relative to the executable's own location. Running a demo binary directly from the
+repo root (`./cmake-build-debug/cna_demo_avatar`) crashes with `Cannot open file:
+Content/avatar/male/avatar` — confirmed by direct reproduction, not a hypothetical. `cd
+cmake-build-debug` first, or `(cd cmake-build-debug && ./cna_demo_avatar ...)` in a subshell.
+
 ```sh
-# Confirm/configure build
+# Confirm/configure build (from repo root)
 cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=ON
 
-# Full rebuild (keep going past the known cna_demo_xact failure)
+# Full rebuild (from repo root; keep going past the known cna_demo_xact failure)
 cmake --build cmake-build-debug -j$(nproc) -- -k 0
 
-# Full test suite
+# Full test suite (from repo root)
 ctest --test-dir cmake-build-debug -j$(nproc)
 
-# Build + run an avatar demo with its F1 help overlay forced on, non-interactively
+# Build (from repo root) + run an avatar demo with its F1 help overlay forced on, non-interactively
+# (cd into cmake-build-debug/ first - see the working-directory note above)
 cmake --build cmake-build-debug --target cna_demo_avatar -j$(nproc)
-SDL_AUDIODRIVER=dummy xvfb-run -a ./cmake-build-debug/cna_demo_avatar --show-help --smoke 30 --screenshot /tmp/out.png
+cd cmake-build-debug
+SDL_AUDIODRIVER=dummy xvfb-run -a ./cna_demo_avatar --show-help --smoke 30 --screenshot /tmp/out.png
+cd ..
 
-# Two-process real Net test (host + join)
-./cmake-build-debug/cna_demo_net_avatar_sync --host --smoke 150 &
-./cmake-build-debug/cna_demo_net_avatar_sync --join --smoke 150 &
-wait
+# Two-process real Net test (host + join), from inside cmake-build-debug/
+(cd cmake-build-debug && ./cna_demo_net_avatar_sync --host --smoke 150 &
+ cd cmake-build-debug && ./cna_demo_net_avatar_sync --join --smoke 150 &
+ wait)
 ```
 
 No `.clang-format` or other lint/format config was found in the repo — none is currently enforced.
 
 ## 6. Next smallest tasks
 
-1. **Write `plan_net.md`'s own Task 11.7** — the final user-facing summary (what changed, tests
-   run/results, remaining gaps, recommended next steps). This is the one remaining unchecked task
-   in the whole plan.
-2. **Optional follow-up, not started, not scoped to this plan:** fix the same `MakeSimpleFont`
-   glyph-bounds bug (section 3) in the 10 other pre-existing demos it also affects. Each fix is
-   the same 3-line change already applied 8 times in Phase 8 — low risk, but touches 10 files
-   across unrelated subsystems, so treat as its own small task/commit per demo, same as Phase 8
-   did, rather than one giant commit.
-3. **Optional follow-up, not started:** real friend-list population for
-   `SignedInGamer::GetFriends()` (section 3) — needs its own design decision (a local-fake-friends
-   catalog? Always-empty is arguably correct off-Xbox?), not just a mechanical fix.
-4. **Optional follow-up, not started:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap
-   (`plan_net.md` Task 7.8/7.10) and the residual shoe-area/`Wave`-chest-band avatar artifacts
-   (Phase 7's own honest "still open" list).
+**Active remediation (user-prioritized, 2026-07-18, all 4 items) — in progress:**
+
+1. **F1 overlay real readable font** (highest priority) — replace `MakeSimpleFont`'s
+   uniform-rectangle-per-character approach with a real embedded bitmap-font glyph table so help
+   text is actually readable, across all 8 avatar demos.
+2. **Guide.cpp Phase 3 completion** — wire up `title`/`description` in the keyboard-input overlay,
+   make `UsePasswordMode` actually mask displayed input, add a real cancel path, make
+   `IsVisible`/its setter reflect actual overlay state.
+3. **Avatar visual seam/shading artifacts** — diagnose and fix the neck/shoulder/groin/chest dark
+   shading found by fresh screenshot inspection (section 3), likely a CSG-merge flat-normals issue.
+
+**Not yet started, not this session's active scope:**
+
+4. **Optional follow-up:** fix the same `MakeSimpleFont` glyph-bounds bug (section 3) in the 10
+   other pre-existing demos it also affects (unrelated plans/subsystems, large blast radius —
+   check in before starting, per section 7).
+5. **Optional follow-up:** real friend-list population for `SignedInGamer::GetFriends()` (section
+   3) — needs its own design decision, not just a mechanical fix.
+6. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
+   7.8/7.10).
 
 ## 7. Do not do yet
 
@@ -198,16 +248,20 @@ No `.clang-format` or other lint/format config was found in the repo — none is
   first checking the real FNA source (`FNA`/`FNA.NetStub`) first.
 - Do not build or test against any backend other than EASYGL, or any build directory other than
   `cmake-build-debug`, for this plan's own scope (explicit user decision).
-- Do not fix the 10-other-demos `MakeSimpleFont` bug (section 6, item 2) without checking in first
+- Do not fix the 10-other-demos `MakeSimpleFont` bug (section 6, item 4) without checking in first
   — it's real and worth doing, but it's outside `plan_net.md`'s own stated scope (avatar demos
   only) and touches files across multiple unrelated plans.
 - No mass rewrites, no speculative architecture changes, no unrelated cleanup.
+- Before claiming any of section 6's active remediation items (1-3) "done," re-verify with fresh
+  eyes (a fresh screenshot, a fresh read of the actual code) — this exact document previously
+  described the F1 overlay as "legible" when it genuinely wasn't; don't repeat that mistake on the
+  next round of fixes either.
 
 ## 8. Resume prompt
 
 ```text
-Read NEXT.md first. plan_net.md is fully done except Task 11.7 (final user summary) - write that
-first if it's still missing. After that, this plan is closed out; check with the user before
-starting any of the "optional follow-up" items in section 6, since none of them are in
-plan_net.md's own original scope.
+Read NEXT.md first, section 3's "Confirmed by an independent post-completion audit" subsection and
+section 6's active remediation list. Continue whichever of the 3 active items (F1 font, Guide.cpp,
+avatar seams) is least complete. Before marking any of them done, verify with fresh
+screenshots/code reads, not just re-reading your own prior claims about them.
 ```

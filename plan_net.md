@@ -307,6 +307,17 @@ verified via revert-verify-restore.
 
 ## Phase 3 — Guide: real message-box overlay + real keyboard capture
 
+**Correction (2026-07-18, independent post-completion audit):** this phase's own task write-ups
+below understate what's still missing. Confirmed by direct code read of the current
+`Guide.cpp`: `BeginShowKeyboardInput`'s `title`/`description` parameters are unused (literally
+commented out in the parameter list, e.g. `const std::string& /*title*/`); `getIsVisibleProperty()`
+is hardcoded `return false;` with a no-op setter, so there is no observable overlay-visible state
+at all; `UsePasswordMode` is stored on the pending-input action object but never read anywhere
+else in the file (no masking behavior for password-style input); there is no cancel path (only
+Enter/Return completes a pending keyboard input - no Escape/cancel handling). None of these four
+gaps were disclosed in this phase's own "✅ complete" task write-ups. Tracked as active remediation
+- see `NEXTnet.md` section 3/6.
+
 ### Task 3.1 — Guide.BeginShowMessageBox: real CNA overlay ✅ complete
 
 Original state: both overloads (`src/Microsoft/Xna/Framework/GamerServices/Guide.cpp:116-140`)
@@ -959,6 +970,19 @@ effect this pass. (`SimulatedLatency`/`SimulatedPacketLoss` getters/setters alre
 
 ## Phase 7 — Avatar asset quality: stop the "monster" avatars
 
+**Correction (2026-07-18, independent post-completion audit):** this phase's own "Honest overall
+assessment" (below) undercounted the real, still-visible artifacts. Fresh screenshots (male,
+female, mid-`Wave`) confirm the core proportions genuinely are fixed (no more stick-thin limbs or
+a too-small head - that part of the assessment holds), but there is visible dark shading/seam
+distortion at the neck, both shoulder-to-upper-arm junctions, and the groin in the plain T-pose
+screenshots, and a large dark mass across the chest during `Wave` specifically - not just the
+single "residual shoe-area dark artifact" and "`Wave`-pose chest-band artifact" this phase
+originally disclosed. Likely a flat-recomputed-normals-at-CSG-union-seams shading issue (a known,
+already-disclosed limitation category of the mesh-craft merge - see
+`docs/avatar-real-rendering-ext.md`), but its actual visual extent was understated, not just
+under-labeled. Root cause not yet diagnosed as of this correction - tracked as active remediation,
+see `NEXTnet.md` section 3/6.
+
 Goal (per decisions 4/4a/4b/4c): toy-like Xbox-Avatar-inspired look, fully original CNA assets,
 generated via `../mesh-craft` for body/head (and other feasible) geometry, feeding into the
 existing `tools/avatar_builder/` Blender pipeline for skeleton/skinning/animation (mesh-craft has
@@ -1160,6 +1184,21 @@ one-task-one-commit rule.
 ---
 
 ## Phase 8 — F1 help overlay for all avatar demos
+
+**Correction (2026-07-18, independent post-completion audit — read this before any "legible"
+claim below):** every "overlay legible"/"renders as legible blocky text" claim in this phase's
+task write-ups below is **inaccurate** and should be discounted. What was actually verified at the
+time was: the panel renders at the correct size, doesn't overflow, and every character produces a
+*visible* mark instead of an invisible sub-pixel dot (the real bug fixed in Task 8.5's own
+write-up below). What was **not** verified, and turned out to be false: that the rendered text is
+actually *readable*. `MakeSimpleFont` draws every non-space character as an identical solid
+rectangle — there is no letterform differentiation between 'a' and 'z' at all, so a player pressing
+F1 sees word/line structure but cannot read a single actual word. This was caught by a fresh,
+independent screenshot inspection, not by re-deriving anything new about the code. Remediation
+(a real embedded bitmap-font glyph table) is tracked as active follow-up work — see `NEXTnet.md`
+section 3/6 for current status. The rest of this phase's claims (panel sizing, hidden-by-default
+behavior, the dot-rendering bug fix itself, the pre-existing counter-text bug fix in
+`demo_avatar_multi_attach_stress`) remain accurate — only "legible"/"readable" is wrong.
 
 Per decision 5c, rolled out to **all** avatar-related demos (Phase 0 found 8:
 `demo_avatar`, `demo_avatar_animation_gallery`, `demo_avatar_appearance_tint_studio`,
@@ -1620,6 +1659,17 @@ status. This unblocked the build/test run needed to close out Phase 12/13/14's v
   files.
 - [x] **Task 11.7** — **This plan is now fully closed out — every task in every phase (0-14) is
   `[x]` with a write-up.** Summary:
+
+  **Post-completion correction added 2026-07-18:** an independent audit found that this task's
+  own "done" framing overstated several deliverables. `[x]` here means "the task's described work
+  was performed," not "the underlying feature is fully correct" - confirmed real gaps: the F1
+  overlay's help text is not actually readable (every character renders as an identical
+  rectangle), Phase 3's Guide keyboard-input overlay ignores its title/description/password-mode
+  arguments and has no cancel path, and Phase 7's avatar visual artifacts are more extensive than
+  originally disclosed. See each phase's own correction note above and `NEXTnet.md` section 3/6
+  for current, actively-tracked remediation status. This correction is itself the kind of
+  adversarial re-check this plan's own Task 11.1-11.6 final-audit tasks were meant to be, applied
+  a level too shallow the first time.
 
   **What changed** (11 phases, ~30 commits since Phase 0's `eefaeea3` archive point, all on
   `feature/net`, pushed): real `Guide.BeginShowMessageBox`/`BeginShowKeyboardInput` (Phase 3);
