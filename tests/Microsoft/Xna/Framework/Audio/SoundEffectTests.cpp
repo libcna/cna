@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <random>
@@ -1255,4 +1256,43 @@ TEST(SoundEffectTest, OutOfRangeChannelsEnumValueEitherConstructsOrThrowsCleanly
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
+}
+
+// ---------------------------------------------------------------------------
+// AUD-05-016: a claimed offset/count near the int32 (SharpRuntime::intcs) ceiling, checked
+// against a genuinely small real buffer, must be rejected by P9-VALIDATION-003's unsigned-
+// arithmetic bounds check (`off > buffer.size() || cnt > buffer.size() - off`) before ever
+// computing `buffer.data() + offset` or reaching the backend -- no huge real allocation is
+// needed to prove this, since the check itself never depends on how large the real buffer is,
+// only on the (small) real buffer failing to contain the (huge) claimed range.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, HugeCountAgainstSmallBufferThrowsBeforeReachingBackend)
+{
+    std::vector<unsigned char> buffer(16, 0);
+    EXPECT_THROW(
+        SoundEffect(buffer, 0, std::numeric_limits<SharpRuntime::intcs>::max(),
+                    44100, AudioChannels::Stereo, 0, 0),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST(SoundEffectTest, HugeOffsetNearIntMaxThrowsBeforeReachingBackend)
+{
+    std::vector<unsigned char> buffer(16, 0);
+    EXPECT_THROW(
+        SoundEffect(buffer, std::numeric_limits<SharpRuntime::intcs>::max(), 4,
+                    44100, AudioChannels::Stereo, 0, 0),
+        System::ArgumentOutOfRangeException);
+}
+
+// The exact scenario P9-VALIDATION-003 exists for: offset + count individually look plausible
+// but would overflow a plain int32 sum (undefined behavior) if computed naively instead of via
+// the unsigned-arithmetic pattern.
+TEST(SoundEffectTest, OffsetPlusCountThatWouldOverflowInt32ThrowsCleanly)
+{
+    std::vector<unsigned char> buffer(16, 0);
+    const auto nearMax = std::numeric_limits<SharpRuntime::intcs>::max() - 2;
+    EXPECT_THROW(
+        SoundEffect(buffer, nearMax, 10, 44100, AudioChannels::Stereo, 0, 0),
+        System::ArgumentOutOfRangeException);
 }
