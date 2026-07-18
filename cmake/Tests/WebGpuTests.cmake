@@ -108,4 +108,28 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_graphicsstate examples/webgpu_graphicsstate_test.cpp)
     cna_register_backend_test(NAME WebGPU_GraphicsState COMMAND cna_test_webgpu_graphicsstate
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-53/54: WebGPURenderTargetBackend / CreateRenderTarget2D() / SetRenderTarget2D() --
+    # this backend's first real RenderTarget2D support (Clear-only, real BasicEffect 3D draw, and
+    # depth+stencil-tested round trips via GetData(), sampling a RenderTarget2D back through
+    # SpriteBatch, and the critical "an intervening RT-targeted Clear() must not leak into the
+    # backbuffer's own render pass" architecture check).
+    cna_webgpu_test(cna_test_webgpu_rendertarget2d examples/webgpu_rendertarget2d_test.cpp)
+    cna_register_backend_test(NAME WebGPU_RenderTarget2D COMMAND cna_test_webgpu_rendertarget2d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-58: MSAA infrastructure for both the swapchain backbuffer and RenderTarget2D --
+    # backbuffer MultiSampleCount=0 vs. PreferMultiSampling+ApplyChanges() (the real runtime
+    # ApplyMultiSampleCount() reconfigure path, mirroring vulkan_msaa_test.cpp's own Task 902
+    # verification), ApplyMultiSampleCount()'s clamped-return-value contract (8 -> 0 or 4, never
+    # the raw unsupported request), and a RenderTarget2D created after backbuffer MSAA is engaged
+    # unconditionally mirroring that same real sample count. KNOWN OPEN ISSUE, intentionally left
+    # registered and failing rather than hidden: 3 of 6 checks in this test currently FAIL because
+    # genuine multisample-resolved rendering does not yet work end-to-end through the real
+    # GraphicsDevice/BasicEffect draw path, despite the infrastructure above being real and
+    # individually verified -- see this test's own top-of-file comment and plan_webgpu.md's
+    # WEBGPU-58 row for the full investigation.
+    cna_webgpu_test(cna_test_webgpu_msaa examples/webgpu_msaa_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Msaa COMMAND cna_test_webgpu_msaa
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
