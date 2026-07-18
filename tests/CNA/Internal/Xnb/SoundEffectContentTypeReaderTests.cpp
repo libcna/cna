@@ -996,3 +996,58 @@ TEST_F(SoundEffectContentTypeReaderTest, ZeroChannelsXnbIsExplicitlyRejectedWith
         EXPECT_NE(what.find("mono and stereo"), std::string::npos) << what;
     }
 }
+
+// ---------------------------------------------------------------------------
+// AUD-06-019: loop start/length semantics for a *looped* XNB effect are already end-to-end
+// verified by the combination of two existing tests: AUD-06-014's
+// ImaAdpcmLoopPointsSurviveAsDecodedFramesNotCompressedBytes proves the XNB reader propagates
+// loopStart/loopLength to the resulting SoundEffectInstance frame-exact and unmodified, and
+// SoundEffectInstanceTests.cpp's BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion
+// (P10-LOOP-003/004) proves that those same instance-level fields, however they got there, drive
+// correct real playback (intro once, then only the loop region repeats) -- Play() reads
+// loopStart_/loopLength_ directly and has no notion of whether the originating SoundEffect came
+// from the XNB reader or the raw-buffer constructor. What's still untested is the *loopless* case
+// specifically through the XNB path: does an XNB with loopStart=loopLength=0 (the common case --
+// every "LoadsSuccessfully" fixture above has this) leave the resulting instance with no loop
+// region at all, rather than e.g. a spurious zero-length region that could be misread downstream?
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectContentTypeReaderTest, LooplessXnbEffectHasNoLoopRegionOnInstance)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);
+    w16(1);   // wFormatTag: PCM
+    w16(1);   // nChannels: mono
+    w32(44100);
+    w32(88200);
+    w16(2);
+    w16(16);
+    w32(200); // 100 frames of real S16 mono audio
+    for (int i = 0; i < 200; ++i) bytes.push_back(static_cast<uint8_t>(i));
+    w32(0); // loopStart: 0
+    w32(0); // loopLength: 0 -- no loop region authored, matches every real-fixture-backed
+            // LoadsSuccessfully test above
+    w32(0); // stored duration: 0, skip the AUD-06-010 oracle
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+
+    auto instance = effect.CreateInstance();
+    EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
+    EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopLength(instance), 0u);
+}
