@@ -2,6 +2,7 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #ifdef SOUND_ENABLED
+#include <iostream>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -46,6 +47,25 @@ namespace CNA::Internal::Audio
                 // refcount that's never balanced by a matching MIX_Quit().
                 MIX_Quit();
                 throw std::runtime_error(std::string("MIX_CreateMixerDevice failed: ") + SDL_GetError());
+            }
+
+            // AUD-04-001 (2026-07-17 deep audit, A-06): log the requested vs. actually negotiated
+            // mixer format once, at first creation -- CNA requests S16 stereo 44100 Hz, but SDL
+            // may internally convert to whatever the physical device actually uses, and this was
+            // previously completely unobservable (a real diagnostic gap when investigating a
+            // 44.1/48 kHz-family pitch report). Not fatal if the query itself fails (best-effort
+            // diagnostic only, matching this codebase's established std::cerr convention).
+            SDL_AudioSpec actual{};
+            if (MIX_GetMixerFormat(g_mixer, &actual))
+            {
+                std::cerr << "[AudioMixer] Requested S16 stereo 44100 Hz; negotiated format=0x"
+                          << std::hex << actual.format << std::dec
+                          << " channels=" << actual.channels << " freq=" << actual.freq << "\n";
+            }
+            else
+            {
+                std::cerr << "[AudioMixer] MIX_GetMixerFormat failed after mixer creation: "
+                          << SDL_GetError() << "\n";
             }
         }
         return g_mixer;

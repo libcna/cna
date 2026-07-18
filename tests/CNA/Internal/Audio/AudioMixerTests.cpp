@@ -22,6 +22,11 @@
 #include <thread>
 #include <unistd.h>
 
+#include "CNA/Internal/Audio/AudioMixer.hpp"
+#include "System/Environment.hpp"
+
+#include <SDL3_mixer/SDL_mixer.h>
+
 extern char** environ;
 
 namespace {
@@ -90,6 +95,28 @@ namespace {
             }
             out->append(buffer, static_cast<std::size_t>(n));
         }
+    }
+}
+
+// AUD-04-001 (2026-07-17 deep audit): the actual negotiated mixer format must be queryable after
+// GetMixer() returns, not just the requested spec CNA itself asked for -- this is what
+// AudioMixer.cpp's own new diagnostic logging (requested vs. actual) depends on being real and
+// available, not merely printed once and forgotten. Also implicitly proves the SDL_AUDIO_S16
+// format actually round-trips through MIX_CreateMixerDevice under the dummy driver (this
+// environment's only available driver), since MIX_GetMixerFormat would otherwise report whatever
+// the (absent) physical device negotiated instead.
+TEST(AudioMixerTest, ActualMixerFormatIsQueryableAfterCreation) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try {
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(mixer, nullptr);
+
+        SDL_AudioSpec actual{};
+        ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
+        EXPECT_GT(actual.freq, 0);
+        EXPECT_GT(actual.channels, 0);
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
 }
 

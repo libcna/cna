@@ -15,6 +15,11 @@ namespace CNA::Internal::Audio
     /// longer observe a half-destroyed pointer. On a create failure, throws std::runtime_error
     /// and leaves the mixer uncreated, so a later call (from any thread) retries from scratch --
     /// unchanged from this function's pre-existing single-threaded retry behavior.
+    ///
+    /// AUD-04-001 (2026-07-17 deep audit): the requested spec (S16 stereo 44100 Hz) and the
+    /// actually negotiated device format (queried via MIX_GetMixerFormat right after creation)
+    /// are logged to stderr once, at first creation -- previously completely unobservable, a real
+    /// diagnostic gap when investigating a reported 44.1/48 kHz-family pitch/speed symptom.
     MIX_Mixer* GetMixer();
 
     /// Destroys the shared SDL3_mixer device.
