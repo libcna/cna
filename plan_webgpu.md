@@ -2,23 +2,47 @@
 
 > WebGPU is an authorized, experimental workstream. Its first goal, a **verified native 2D backend
 > on Linux desktop**, was reached 2026-07-12 (`WEBGPU-124`–`WEBGPU-131`, all ✅ — see Phase 56.1).
-> This does not mean feature parity with Vulkan, Android support, or browser WebGPU: those remain
-> future work (Phase 57 onward), now open per `WEBGPU-131`'s own acceptance criteria — and, as of
-> 2026-07-12, well underway: `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/
-> `alpha_test3d`/`dual_texture3d` (strides 16/20/24/32) all work end-to-end through real
-> `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `GpuDrawParams` dispatch, including real depth
-> testing, real Blinn-Phong lighting (3 directional lights, ambient, specular, emissive),
-> AlphaTestEffect's per-pixel discard, and DualTextureEffect's two-layer sampling, verified by
-> `WebGPU_Colored3D`/`WebGPU_DrawPrimitivesEx`/`WebGPU_Textured3D`/`WebGPU_ColoredTextured3D`/
-> `WebGPU_LitTextured3D`/`WebGPU_AlphaTest3D`/`WebGPU_DualTexture3D`. `PbrEffect` (`pbr3d.wgsl`,
-> unskinned) and — plan_cnj.md Phase 14J, closing this backend's former "no skinning shader at
-> all" gap — `SkinnedEffect`/`SkinnedPbrEffect` (`skinned3d.wgsl`/`skinned_pbr3d.wgsl`, strides
-> 52/56/68, both `PreferPerPixelLighting` variants, `VertexColorEnabled`) are now implemented too,
-> verified by `WebGPU_Pbr3D`/`WebGPU_Skinned3D`/`WebGPU_SkinnedPbr3D`. Only env-map dispatch and
-> its WGSL shader remain open — see the Active execution order below.
+> Since then (through 2026-07-18) this backend has grown real 3D coverage close to the other
+> established backends: `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/
+> `alpha_test3d`/`dual_texture3d` (strides 16/20/24/32), `PbrEffect`/`SkinnedPbrEffect`/
+> `SkinnedEffect` (unskinned + skinned + `VertexColorEnabled`, both `PreferPerPixelLighting`
+> variants), `EnvironmentMapEffect` (cube-map reflections, flat and Fresnel-weighted), and real
+> instancing (`DrawInstancedPrimitivesEx`, per-instance vertex stream) all work end-to-end through
+> real `GpuDrawParams` dispatch. Render state (blend/rasterizer/cull/wireframe/scissor/viewport/
+> per-slot sampler/depth-stencil), `RenderTarget2D` and `RenderTargetCube` (real render-into,
+> eager-flush-on-target-switch), MSAA (backbuffer + both render-target kinds, device-probed
+> clamping — this machine's adapter supports exactly 4x), `Texture3D`, and real linear-filtered
+> mip generation (`Texture2D` and `TextureCube`) are all implemented and tested. This is NOT full
+> parity with Vulkan yet — see "Remaining work" immediately below for exactly what's still open.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
+>
+> **Remaining work (as of 2026-07-18 — check this section first before re-deriving it from the
+> full row table below; update it whenever a row's status changes):**
+> - **Compressed textures (`WEBGPU-111`)** — deliberately NOT a backend-local fix. The real
+>   adapter here does support BC/DXT (confirmed via `wgpuAdapterHasFeature`), but no CNA backend
+>   anywhere does real native compressed-texture upload — `Texture2D.cpp` always CPU-decompresses
+>   DXT to RGBA8 first, and the shared `ImageData` struct has no compressed-format field at all.
+>   Needs a cross-backend `ImageData`/`Texture2D.cpp` design change before any backend (WebGPU
+>   included) can close this for real.
+> - **MRT — multiple simultaneous render targets (`WEBGPU-85`/`86`/`87`)** — no work started.
+> - **Instancing/occlusion-query/buffer-disposal/vertex-format tests (`WEBGPU-99`)**,
+>   **`SetDataWithOptions`/disposed guards (`WEBGPU-44`/`47`)**, **`vertexStart`/`baseVertex` draw
+>   sub-ranging (`WEBGPU-70`)**, **`OcclusionQuery` (`WEBGPU-84`)** — smaller device/buffer-API gaps,
+>   none blocking real game code today (no current caller needs them), all still `⬜`.
+> - **`ShaderEffect` custom WGSL (`WEBGPU-76`)** — NOXNA extension, not started.
+> - **Misc small items**: `WEBGPU-28` (compile-time WGSL validation), `WEBGPU-106`/`107`/`109`
+>   (debug marker no-op doc, simulated context loss, `IsFullScreen`), `WEBGPU-115`/`116` (wireframe
+>   deviation doc, vertex-format-from-`VertexElementFormat` helper), `WEBGPU-118`
+>   (Vulkan-deviations doc) — all `⬜`, all small/standalone.
+> - **Emscripten/browser target (`WEBGPU-119`–`122`)** — a distinct, large future initiative (real
+>   browser WASM build), not started; treat as its own separate workstream, not a "next task" pick.
+> - **Cross-backend pixel-parity test (`WEBGPU-123`)** — same scene on EasyGL/Vulkan/Bgfx/WebGPU,
+>   not started.
+> - Everything else in the row table below not listed here is ✅ or an honestly-scoped 🟨 (read
+>   that row's own note for the specific remaining gap — e.g. `WEBGPU-52`/`56`/`113`/`114` mip/cube
+>   work is done but MSAA-on-cube-faces and a few other narrow edges stay documented-not-done).
 
 > **History:** this content originally lived inline in `plan_graphics.md` as Phases 56–69,
 > numbered `501`–`661`, then renumbered to `10001`+ (2026-07-02) to free up the low task-ID
