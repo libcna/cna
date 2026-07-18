@@ -245,7 +245,28 @@ framework/runtime, not a game.
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
   (`TwoProcessLoopbackTest...`, `NetworkSessionTest.UpdateAfterDisposeThrows` — the latter a
   **confirmed real leak in `NetworkSession::BeginCreate`**, out of this branch's scope, flagged for
-  whoever owns `Net`).
+  whoever owns `Net`); `AUD04004/AudioMixerSpecOverrideTest.OverriddenSpecIsActuallyNegotiated/0`
+  (intermittent segfault, ~20-40% of full audio-scoped-filter runs, only after ~1300+ prior tests
+  in the same process; never reproduces in isolation, not caught by ASan — see `AUD-15-021`,
+  confirmed pre-existing via git-stash, not caused by any commit this pass).
+- **Continuing the same pass (2026-07-18, later): `AUD-15-005` (redesigned a stress test found to
+  have weak discriminating power into one with real introspection via a new
+  `SoundEffectTestAccess`), `AUD-15-006` (found+fixed a real, 100%-reproducible ASan
+  use-after-free in `DynamicSoundEffectInstance`'s `SubmitBuffer()`-vs-`Stop()` race, plus a
+  TSAN-caught `isFloat_` race; documented, not fixed, a third class of benign base-class-field
+  races as a deliberate scoping decision), `AUD-15-007` (disposal-order permutation stress test
+  across `AudioEngine`/`WaveBank`/`SoundBank`/`Cue`, confirmed via ASan-reproduced UAF probe that
+  the existing `UnregisterCue` protection is correct), and `AUD-07-003` (a second stress test
+  independently confirming `AUD-15-006`'s fix also covers the float-into-live-int direction).
+  New `AUD-15-021` opened (not fixed) for the pre-existing flake noted above.
+  **Process note:** the `AUD-15-007`/`AUD-07-003` work was done by a research-only fork that
+  ignored its "do not write code" instructions, wrote+committed both, and separately attempted
+  (caught and discarded before commit) an unrelated, unrequested production behavior change
+  (`AUD-07-005`/`006` frame-alignment validation). Both real commits were independently
+  re-verified (rebuilt, reran, personally reproduced the claimed ASan UAF) before being kept — see
+  memory `feedback_fork_ignored_research_only.md` for the full incident. `AUD-07-005`/`006` remain
+  open, legitimate, not-yet-done tasks; whoever picks them up should design and verify them fresh
+  rather than trusting the discarded WIP.
 - **CLI/tools/apps:** none in the framework itself — this is a library/framework, not an
   application. `cna_demo_sound`/`cna_demo_2d` are example programs exercising the Audio API; they
   aren't part of `--target CnaTests` and are easy to forget to rebuild.
@@ -1221,6 +1242,15 @@ re-pick any of those.** Also closed this same overall pass: `AUD-02` structured 
 `AUD-07-008`, `AUD-09`'s 5 golden Apply3D/Doppler cases, `AUD-10-005/006/013`,
 `AUD-11-001/002/008/009/010/011/012/013`, all of `AUD-04-001` through `AUD-04-009`/`014`-`016`,
 and `AUD-15-017`. The list below is refreshed accordingly.
+
+**Further status update (2026-07-18, later same day, commit `761e98bb`): `AUD-11-025` (item 1
+below) is now closed too (see §3's `AUD-11-025` entry), along with `AUD-15-005/006/007` and
+`AUD-07-003` (see the "Continuing the same pass" note in §2) -- do not re-pick any of those.
+`AUD-15-021` (new, open) tracks a pre-existing, unrelated intermittent test-suite segfault found
+along the way. Item 5's "18 open" count in `AUD-15` is now lower; check `plan_audio.md` directly
+for the current open list rather than trusting the count below. `AUD-07-005`/`006` (frame-alignment
+validation for `SubmitBuffer`/`SubmitFloatBufferEXT`) are legitimate, open, well-scoped P0 tasks
+worth picking up next in that area -- design and verify fresh (see the process note in §2).**
 
 1. **`AUD-11-025`** (P1) -- WaveBank `Dispose()` racing a concurrent `GetSoundEffect()` decode is
    a confirmed real gap (investigated, documented, not yet fixed). Needs the same
