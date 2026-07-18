@@ -99,4 +99,22 @@ namespace CNA::Internal::Audio
         }
         return ext;
     }
+
+    void AppendSmplChunkIfLooped(std::vector<uint8_t>& wav, int32_t loopStart, int32_t loopLength)
+    {
+        if (loopLength <= 0) return;
+
+        constexpr uint32_t kSmplChunkSize = 36 + 24; // header + one loop entry
+        wav.push_back('s'); wav.push_back('m'); wav.push_back('p'); wav.push_back('l');
+        w32(wav, kSmplChunkSize);
+        for (int i = 0; i < 7; ++i) w32(wav, 0); // Manufacturer..SMPTEOffset
+        w32(wav, 1); // numSampleLoops
+        w32(wav, 0); // samplerData
+        w32(wav, 0); // CuePointID
+        w32(wav, 0); // Type (loop forward)
+        w32(wav, static_cast<uint32_t>(loopStart));
+        w32(wav, static_cast<uint32_t>(loopStart + loopLength));
+        w32(wav, 0); // Fraction
+        w32(wav, 0); // PlayCount (0 = infinite, matches XNA's own loop semantics)
+    }
 }

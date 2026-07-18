@@ -41,37 +41,6 @@ namespace CNA::Internal::Xnb
         constexpr uint16_t kWaveFormatImaAdpcm = 0x0011;
         constexpr uint16_t kWaveFormatXma2 = 0x0166;
 
-        // AUD-06-004/006/007/008 (2026-07-17 deep audit, A-01): appends a minimal "smpl" chunk
-        // encoding one loop point so SoundEffect::FromStream's own TryParseWavSmplChunk (CP-17)
-        // picks it up automatically -- the synthetic WAV built here has no other way to carry the
-        // XNB's authored loopStart/loopLength through to the resulting SoundEffect, since
-        // FromStream constructs via MIX_LoadAudio_IO, not the raw-buffer constructor that takes
-        // loop points directly.
-        void AppendSmplChunkIfLooped(std::vector<uint8_t>& wav, int32_t loopStart, int32_t loopLength)
-        {
-            if (loopLength <= 0) return;
-
-            auto w32 = [&wav](uint32_t v) {
-                wav.push_back(static_cast<uint8_t>(v));
-                wav.push_back(static_cast<uint8_t>(v >> 8));
-                wav.push_back(static_cast<uint8_t>(v >> 16));
-                wav.push_back(static_cast<uint8_t>(v >> 24));
-            };
-
-            constexpr uint32_t kSmplChunkSize = 36 + 24; // header + one loop entry
-            wav.push_back('s'); wav.push_back('m'); wav.push_back('p'); wav.push_back('l');
-            w32(kSmplChunkSize);
-            for (int i = 0; i < 7; ++i) w32(0); // Manufacturer..SMPTEOffset
-            w32(1); // numSampleLoops
-            w32(0); // samplerData
-            w32(0); // CuePointID
-            w32(0); // Type (loop forward)
-            w32(static_cast<uint32_t>(loopStart));
-            w32(static_cast<uint32_t>(loopStart + loopLength));
-            w32(0); // Fraction
-            w32(0); // PlayCount (0 = infinite, matches XNA's own loop semantics)
-        }
-
         // AUDIO-XNB-ADPCM-001 (2026-07-17 deep audit follow-up): empirically confirmed against a
         // *real*, externally-produced MonoGame XNB fixture
         // (tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_msadpcm.xnb) that
@@ -189,7 +158,7 @@ namespace CNA::Internal::Xnb
                           ComputeMsAdpcmSamplesPerBlock(nBlockAlign, nChannels))
                     : extensionData,
                 /*factSampleFrames=*/0);
-            AppendSmplChunkIfLooped(wav, loopStart, loopLength);
+            CNA::Internal::Audio::AppendSmplChunkIfLooped(wav, loopStart, loopLength);
 
             std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
             std::istringstream ss(s);

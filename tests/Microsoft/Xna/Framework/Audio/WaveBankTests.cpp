@@ -12,6 +12,8 @@
 #include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"
 
+#include "SoundEffectInstanceTestAccess.hpp"
+
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -543,6 +545,78 @@ namespace
         return path;
     }
 
+    constexpr const char* kLoopedWaveBankName = "LoopedWaveBank";
+
+    // AUD-11-014: a non-compact (entryMetaDataSize=24, so real LoopRegion fields are present --
+    // compact-format entries have no room for loop fields at all, only offsetUnits:21+deviation:11
+    // packed into a single u32) .xwb entry with a genuine, non-degenerate intro-then-loop region:
+    // 100 real frames total, loop covers [20, 70) -- neither the whole track nor starting at 0, so
+    // a "loop the entire track instead of just the authored region" bug is distinguishable from
+    // correct behavior.
+    std::vector<uint8_t> BuildLoopedXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 200; // 100 mono 16-bit frames
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u); // wbFlags: not compact, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, kLoopedWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, 4); // alignment (unused, non-compact)
+        AppendU32(data, 0); // compactFormat (unused, non-compact)
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        const uint32_t fmt =
+              (0u)          // fmtTag: PCM
+            | (1u << 2)     // channels: mono
+            | (44100u << 5) // sample rate
+            | (2u << 23)    // wBlockAlign: 2 bytes/sample
+            | (1u << 31);   // 16-bit
+
+        AppendU32(data, 0u);            // flagsAndDuration (unused by CNA)
+        AppendU32(data, fmt);
+        AppendU32(data, 0u);            // playOffset
+        AppendU32(data, waveDataLength); // playLength
+        AppendU32(data, 20u);           // loopStart: 20 frames
+        AppendU32(data, 50u);           // loopTotal: 50 frames -> region [20, 70)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
+    const std::string& LoopedXwbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "loopedfixture.xwb", BuildLoopedXwbFixtureBytes());
+        return path;
+    }
+
     constexpr const char* kOversizedWaveBankName = "OversizedEntryWaveBank";
 
     // Non-compact .xwb with one entry whose dataLength (1,000,000 bytes) claims far more data
@@ -1055,6 +1129,40 @@ TEST(WaveBankTest, GetSoundEffectForPcm8EntryHasExactFrameCount)
         // (1 byte/frame).
         constexpr double expectedSeconds = 200.0 / 44100.0;
         EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), expectedSeconds, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not construct WaveBank/AudioEngine";
+    }
+}
+
+// AUD-11-014: confirmed real gap and fixed -- WaveBank::GetSoundEffect() previously parsed
+// entry.loopStartSample/loopTotalSamples (FACTWaveBankEntry's LoopRegion) but never wired them
+// into the constructed SoundEffect at all, so every WaveBank-sourced looping cue looped the
+// *entire* track regardless of an authored intro-then-loop region -- unlike real FAudio (FACT.c),
+// which applies these exact fields to the playback buffer's LoopBegin/LoopLength whenever the
+// cue's PlayWaveEvent requests looping. Verifies the authored [20, 70) sub-region survives to the
+// SoundEffectInstance exactly, via the same SoundEffectInstanceTestAccess mechanism the XNB-reader
+// loop tests use (AUD-06-014/019) -- SDL_mixer exposes no way to read back the applied
+// loop-start/max-frame play options, so this checks the cached value Play() would apply, matching
+// this project's established pattern for verifying loop state without a real device.
+TEST(WaveBankTest, GetSoundEffectForNonCompactEntryHonorsAuthoredLoopRegion)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, LoopedXwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+
+        const SoundEffect* effect = WaveBankTestAccess::GetSoundEffect(wb, 0);
+        ASSERT_NE(effect, nullptr);
+
+        Microsoft::Xna::Framework::Audio::SoundEffectInstance instance = effect->CreateInstance();
+        EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopStart(instance), 20u);
+        EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopLength(instance), 50u);
     }
     catch (...)
     {

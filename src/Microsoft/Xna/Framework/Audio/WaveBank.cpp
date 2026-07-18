@@ -288,6 +288,21 @@ namespace Microsoft::Xna::Framework::Audio
         {
             using CNA::Internal::Audio::XwbFormat;
 
+            // AUD-11-014: entry.loopStartSample/loopTotalSamples are parsed from the .xwb
+            // (FACTWaveBankEntry's LoopRegion, dwStartSample/dwTotalSamples -- expressed in
+            // decoded PCM sample frames, matching real FAudio's own FACT.c, which applies these
+            // exact fields to the playback buffer's LoopBegin/LoopLength whenever the cue's
+            // PlayWaveEvent requested looping) -- previously parsed but never wired into the
+            // constructed SoundEffect at all, so every WaveBank-sourced looping cue looped the
+            // *entire* track regardless of an authored intro-then-loop region. Baking the region
+            // into the cached SoundEffect here is safe regardless of whether any particular play
+            // actually loops: SoundEffectInstance::Play() only ever applies loopStart_/loopLength_
+            // while IsLooped_ is true (see CP-17/P10-LOOP-003/004), which Cue.cpp already sets
+            // per-instance from the PlayWaveEvent's own loopCount -- so this doesn't change
+            // playback for any non-looping cue referencing the same cached entry.
+            const int32_t loopStart  = static_cast<int32_t>(entry.loopStartSample);
+            const int32_t loopLength = static_cast<int32_t>(entry.loopTotalSamples);
+
             if (entry.format == XwbFormat::PCM)
             {
                 // 8-bit PCM: SDL expects unsigned 8-bit; we use raw approach for 16-bit
@@ -296,15 +311,16 @@ namespace Microsoft::Xna::Framework::Audio
                     std::vector<uint8_t> samples(audioData, audioData + audioLen);
                     AudioChannels ch = (entry.channels == 1)
                         ? AudioChannels::Mono : AudioChannels::Stereo;
-                    cached.emplace(samples,
+                    cached.emplace(samples, 0, static_cast<SharpRuntime::intcs>(samples.size()),
                                    static_cast<SharpRuntime::intcs>(entry.sampleRate),
-                                   ch);
+                                   ch, loopStart, loopLength);
                 }
                 else
                 {
                     // 8-bit PCM: wrap in WAV since MIX_LoadRawAudio expects S16
                     auto wav = BuildPcmWav(audioData, audioLen,
                                            entry.channels, entry.sampleRate, 8);
+                    CNA::Internal::Audio::AppendSmplChunkIfLooped(wav, loopStart, loopLength);
                     std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
                     std::istringstream ss(s);
                     // FromStream returns a heap SoundEffect* the caller owns; wrap it so the
@@ -318,6 +334,7 @@ namespace Microsoft::Xna::Framework::Audio
                 auto wav = BuildAdpcmWav(audioData, audioLen,
                                           entry.channels, entry.sampleRate,
                                           entry.blockAlign, entry.samplesPerBlock);
+                CNA::Internal::Audio::AppendSmplChunkIfLooped(wav, loopStart, loopLength);
                 std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
                 std::istringstream ss(s);
                 std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));

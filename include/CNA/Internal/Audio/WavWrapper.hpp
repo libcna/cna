@@ -41,4 +41,17 @@ namespace CNA::Internal::Audio
      * derived from the container format, not a real per-file WAVEFORMATEX extension to forward.
      */
     std::vector<uint8_t> BuildStandardMsAdpcmExtension(uint16_t samplesPerBlock);
+
+    /**
+     * Appends a minimal "smpl" chunk encoding one loop point (start/end, in decoded PCM sample
+     * frames) to an already-built WAV file, so `SoundEffect::FromStream`'s own
+     * `TryParseWavSmplChunk` picks it up automatically. This is the only way to carry an
+     * authored loop region through `SoundEffect::FromStream` (which decodes via
+     * `MIX_LoadAudio_IO`, not a raw-buffer constructor that takes loop points directly) -- shared
+     * by both the XNB `SoundEffectReader` and XACT `WaveBank` entries, whose WAV-wrapped formats
+     * (PCM8/float/MS-ADPCM/IMA-ADPCM) both need this to honor an authored loop region.
+     *
+     * No-op if `loopLength <= 0` (nothing to encode).
+     */
+    void AppendSmplChunkIfLooped(std::vector<uint8_t>& wav, int32_t loopStart, int32_t loopLength);
 }
