@@ -275,13 +275,19 @@ helper everywhere a texture pointer is stored, so an incompatible type now safel
 "unbound" instead of undefined behaviour.
 
 Mip-chain regeneration is deliberately deferred, not silently under-delivered:
-`CreateRenderTarget2D()` throws a clear error for `mipMap=true`. MSAA (`WEBGPU-58`) was attempted
-2026-07-18: the backend-global `sampleCount_`, `ApplyMultiSampleCount()`'s empirically-probed
-clamped-return-value contract, and `WebGPURenderTargetBackend`'s unconditional mirroring of that
-global sample count are all implemented and verified (`WebGPU_Msaa` Checks A/C/D-1-of-2), but a
-genuine multisample-resolved render does **not** yet work end-to-end through the real
-`GraphicsDevice`/`BasicEffect` draw path (`WebGPU_Msaa` Checks B/D-2-of-2/E FAIL) — see `WEBGPU-58`'s
-`plan_webgpu.md` row for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
+`CreateRenderTarget2D()` throws a clear error for `mipMap=true`. MSAA (`WEBGPU-58`) is implemented
+and verified end-to-end as of 2026-07-18: the backend-global `sampleCount_`,
+`ApplyMultiSampleCount()`'s empirically-probed clamped-return-value contract, and
+`WebGPURenderTargetBackend`'s unconditional mirroring of that global sample count all work, and a
+genuine multisample-resolved render now works through the real `GraphicsDevice`/`BasicEffect` draw
+path for both the backbuffer and a `RenderTarget2D` (`WebGPU_Msaa`, 6/6). The initial investigation
+found the MSAA infrastructure itself was already correct; the reported failures (Checks B/D-2/E)
+turned out to be a test-authoring defect in `examples/webgpu_msaa_test.cpp` — its diagonal triangle
+relied on `BasicEffect`'s default `RasterizerState` (`CullCounterClockwiseFace`) without the
+`RasterizerState::CullNone` override every other WebGPU 3D test in this suite sets, and the
+triangle's winding is a genuine XNA back face under this backend's (independently correct)
+`ToWGPUCullMode()` mapping, so it was being legitimately backface-culled regardless of MSAA. See
+`WEBGPU-58`'s `plan_webgpu.md` row for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
 trip and a real `BasicEffect` draw round trip via `GetData()`, a depth+stencil-tested target (a
 farther red quad loses to a nearer green one, with a genuine `ClearOptions::Stencil` clear — this
 also closed `WEBGPU-8`/`9`'s previously-unexercised stencil-attachment gap), sampling all 3 targets
@@ -318,10 +324,12 @@ open in `plan_webgpu.md`:
   dispatch are all now implemented, see above);
 - single-target `RenderTarget2D` (colour + depth/stencil round trip, real 3D-draw dispatch,
   sampling back through `SpriteBatch`) is now implemented, see below; `RenderTargetCube`, 3D
-  textures, compressed formats and multiple simultaneous render targets (MRT) remain open; MSAA
-  (backbuffer or render target) has real infrastructure (global sample count, clamped
-  `ApplyMultiSampleCount()`, RT mirroring) but genuine multisample-resolved rendering is not yet
-  working end-to-end — see `WEBGPU-58`;
+  textures, compressed formats and multiple simultaneous render targets (MRT) remain open. MSAA
+  (backbuffer and render target) is now implemented and verified end-to-end — global sample count,
+  clamped `ApplyMultiSampleCount()`, RT mirroring, and genuine multisample-resolved rendering all
+  work (`WebGPU_Msaa`, 6/6) — see `WEBGPU-58`. A `RenderTarget2D`'s own per-instance
+  `multiSampleCount` constructor parameter is still intentionally ignored (it always mirrors the
+  backend's global sample count instead);
 - `Texture2D.GetData()` (arbitrary-texture readback — distinct from the now-implemented backbuffer
   readback, `WEBGPU-51`);
 - full BlendState, RasterizerState (cull mode/wireframe), viewport, scissor and stencil-operation

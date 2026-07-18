@@ -48,26 +48,30 @@
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 //
-// KNOWN OPEN ISSUE (2026-07-18, WEBGPU-58): Checks B, D (2/2) and E currently FAIL on this
-// implementation and are a tracked, real bug, not a stale/aspirational assertion left behind by
-// mistake -- see plan_webgpu.md's WEBGPU-58 row for the full investigation. Summary: every piece of
-// the MSAA *infrastructure* is real and verified (ApplyMultiSampleCount()'s clamped-return-value
-// contract -- Check C; PickSampleCount()/Supports4xMsaa()'s genuine device-capability probe, which
-// empirically found this device supports exactly 4x, never assumed; RenderTarget2D's unconditional
-// mirroring of the backend's global sample count -- Check D (1/2); a genuine multisampled colour
-// texture + resolveTarget wired into both the backbuffer and RenderTarget2D render passes; every
-// GetOrCreatePipeline*3D() reading the same global sampleCount_). Standalone reproductions using the
-// exact same device/queue/pipeline shapes (bypassing GraphicsDevice/SpriteBatch entirely) show
-// correct multisample resolve in isolation, and the same Xvfb/llvmpipe environment produces correct
-// blending via the existing Vulkan backend (vulkan_msaa_test.cpp), ruling out "this environment
-// cannot do MSAA" as the explanation. The remaining gap is specifically that the real end-to-end
-// EnsureFrameRendered()/RenderColoredDraws()/GetOrCreatePipelineColored3D() path renders blank/flat
-// (no triangle content at all reaching the resolve target) when driven through the actual
-// ApplyMultiSampleCount() reconfigure + GraphicsDevice/BasicEffect call chain, despite every layer
-// checked individually (pipeline creation, vertex/uniform data, bind group, viewport/scissor,
-// blend/cull state, depth-clear timing, resource freshness after a full shader/layout/pipeline
-// recreation) matching a working standalone reproduction. This is left as an honest, open,
-// documented gap rather than declared fixed or silently removed.
+// RESOLVED (2026-07-18, WEBGPU-58): Checks B, D (2/2) and E previously FAILed on this
+// implementation (3/6). Extensive investigation of the MSAA *infrastructure* itself found nothing
+// wrong there -- ApplyMultiSampleCount()'s clamped-return-value contract (Check C),
+// PickSampleCount()/Supports4xMsaa()'s genuine device-capability probe (empirically found this
+// device supports exactly 4x, never assumed), RenderTarget2D's unconditional mirroring of the
+// backend's global sample count (Check D 1/2), and the multisampled colour texture + resolveTarget
+// wiring on both the backbuffer and RenderTarget2D render passes were all independently confirmed
+// correct. The real root cause was in THIS TEST, not the backend: BasicEffect.Apply() leaves
+// whatever RasterizerState the device already has (the XNA default, CullCounterClockwiseFace), and
+// this test's diagonal triangle -- unlike every other WebGPU 3D test in this suite
+// (webgpu_colored3d_test.cpp, webgpu_graphicsstate_test.cpp, etc., all of which explicitly set
+// RasterizerState::CullNone before drawing) -- never overrode that default. The triangle's winding
+// is a genuine XNA BACK face under WebGPUGraphicsBackend::ToWGPUCullMode()'s mapping (independently
+// verified correct by WebGPU_GraphicsState's own non-vacuous, real differential cull-mode checks),
+// so it was being legitimately backface-culled on EVERY sample count, not just under MSAA -- this
+// has nothing to do with MSAA at all. Check A's own assertion (IsBinary(), which only rejects
+// intermediate/antialiased pixel values) could not detect this: an entirely-background row (nothing
+// drawn) is trivially "binary", so Check A was passing vacuously the whole time, masking the real
+// defect until Check B/D2's stronger HasIntermediate() assertion (which requires real content)
+// exposed it. The fix: both RenderBackbufferRow() and RenderRTRow() now explicitly set
+// RasterizerState::CullNone before drawing, matching the established pattern of every other WebGPU
+// 3D test -- this test's actual subject is MSAA resolve quality, not backface culling (already
+// covered by WebGPU_GraphicsState). No production backend code changed; WebGPUGraphicsBackend.cpp
+// is untouched by this fix. See plan_webgpu.md's WEBGPU-58 row for the full investigation writeup.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -82,6 +86,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -148,6 +153,17 @@ class WebGpuMsaaTest : public Game
 
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
         device.setBlendStateProperty(BlendState::Opaque);
+        // WEBGPU-58 root-cause fix: this test's diagonal triangle is wound as a genuine XNA
+        // BACK face (verified against WebGPUGraphicsBackend::ToWGPUCullMode()'s own
+        // empirically-correct, independently-tested mapping in webgpu_graphicsstate_test.cpp --
+        // see that test's DrawWindingQuad() derivation). BasicEffect.Apply() otherwise leaves
+        // whatever RasterizerState the device already has (default CullCounterClockwiseFace),
+        // which would legitimately cull this triangle regardless of MSAA -- exactly like every
+        // other WebGPU 3D test in this suite (webgpu_colored3d_test.cpp,
+        // webgpu_graphicsstate_test.cpp, etc.), explicitly disable culling since this test's own
+        // subject is MSAA resolve quality, not backface culling (already covered by
+        // WebGPU_GraphicsState).
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.Clear(Color(0, 0, 0, 255));
 
         BasicEffect fx(device);
@@ -180,6 +196,10 @@ class WebGpuMsaaTest : public Game
     {
         device.SetRenderTarget(&rt);
         device.setBlendStateProperty(BlendState::Opaque);
+        // See RenderBackbufferRow()'s identical comment: this triangle's winding is a genuine
+        // XNA back face, unrelated to MSAA -- disable culling so this test isolates MSAA resolve
+        // behaviour only.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
         device.Clear(Color(0, 0, 0, 255));
 
         BasicEffect fx(device);
