@@ -563,8 +563,28 @@ honestly open:**
     3) — needs its own design decision, not just a mechanical fix.
 15. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
     7.8/7.10).
-16. **The one remaining avatar defect class — still open, and the two obvious fixes are now
-    DISPROVEN.** Garment shells still interpenetrate the body because each garment capsule's
+16. **The one remaining avatar defect class — still open; FOUR approaches now disproven by
+    measurement.** New in round 7, and it reframes the problem: with `pose=Wave` measurement
+    (added to `diagnose_avatar_mesh.py` this round) the garment-vs-body crossing counts are
+    **essentially identical between Stand0 and Wave** — Shirt 64/228 in both, Pants 21/285,
+    Shoes 51/270; only the attribution shifts from `LowerArm.R` to `UpperArm.R`, i.e. onto the
+    raised arm. So garment and body now deform *together* (the round-5 weight fix worked), and the
+    Wave artifact is **not** extra deformation-induced interpenetration — it is the *same*
+    interpenetration that exists at rest, rotated into camera view. Any fix must therefore reduce
+    the interpenetration itself, not the skinning.
+
+    Where the interpenetration actually is (measured, `pose=Stand0`): Shirt→Head 19 verts at
+    worst -0.131m (the `Spine1` shell's top cap, i.e. the collar), Shirt→LowerArm 24 (the sleeve
+    cuffs), Shirt→Hips 7 (the hem), Pants→Spine1 13 at -0.135m (the waistband). Note the waist
+    pair is mutually hidden — the Pants' `Hips` shell (0.186) is wider than the Shirt's `Spine`
+    shell (0.176), so each buries inside the other and neither shows. The **visible** offenders are
+    only the collar and the cuffs, where nothing covers the emerging cap.
+
+    A spherical cap at a joint extends in *every* direction while neighbouring shells cover only
+    *some* of them — which is why "is this end an interior joint?" is not the right question and
+    the round-6 classifier could not help.
+
+    **Do not retry any of these — all four were implemented, measured, and reverted:** Garment shells still interpenetrate the body because each garment capsule's
     *hemispherical end cap* burrows into whichever adjacent body segment that garment does not
     itself cover, which is what leaves the ragged blue fragments at the Wave-pose shoulder/chest.
     **Do not simply retry either approach below — both were fully implemented, measured, and
@@ -572,6 +592,15 @@ honestly open:**
     - *Round 5 — trim boundary caps by one radius* (pull each boundary end in so the cap apex
       lands on the bone end). Measured: made Pants burial **worse**, 21 → 39 vertices inside the
       body. Reverted.
+    - *Round 7 — raise garment/body tessellation 12 → 32 segments.* Rationale: make the
+      intersection curve smooth rather than a low-poly sawtooth. Visually it **did** work - the
+      needle-like spiky fragments become smooth rounded shapes (crops kept during the session) -
+      but it does not remove the fragments, only tidies their edges, and it costs **4.2x the
+      vertex data** (body+shirt `verts.bin` 66KB → 277KB). Metrics were ambiguous: region speckle
+      120 → 134 (worse - it measures dark/bright boundary *length*, which a smooth curve increases)
+      while a "spike" variant counting dark pixels with 2+ bright neighbours went 14 → 11. Reverted
+      as a size-vs-smoothness tradeoff the project owner should decide, not a fix. **If you want it,
+      it is a one-line change to `segments="…"` in both meshcraft generators.**
     - *Round 6 — the flat-capped `cylinder` redesign this file previously recommended.*
       Implemented in full: `<cylinder>` shells spanning exactly each bone, plus explicit
       `<sphere>`s at interior joints and skeleton terminals, with ends classified by position
