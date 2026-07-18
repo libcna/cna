@@ -6179,7 +6179,40 @@ test is not sufficient for an Android coordinate/fusion claim.
     `Gyroscope.cpp` re-verified via NDK cross-compile (both compile clean —
     confirms `SdlSensorSubsystem.hpp`'s new `NativeDiagnostic.hpp` include
     doesn't break the Android build of these two SDL-backed sensor classes).
-    **Remaining migrations, still open**: `VIB2-003`/`004`, `SDLCORE-005`,
+  - **2026-07-18, second follow-up migration completed**: `VIB2-003`'s four
+    debug-only `SDL_Log()` diagnostics in `SdlHapticVibrateBackend.cpp`
+    (`SDL_PlayHapticRumble`/`SDL_StopHapticEffects`/`SDL_StopHapticRumble`/
+    `SDL_RunHapticEffect` failures) now route through a new local
+    `RecordHapticDiagnostic(haptic, operation)` helper →
+    `NativeDiagnosticSink::Record()` (`Backend="SDL"`, `DeviceId` =
+    `SDL_GetHapticID(haptic)`). **Replaced, not supplemented**, unlike the
+    `SDLCORE-009` migration above: no existing test reads this file's raw
+    `SDL_Log()` text, so there was nothing to preserve alongside — VIB2-003
+    had zero test-visible observability before this, only a debug log line.
+    **Intentional behavior change, not a regression**: the previous
+    `#ifndef NDEBUG`-guarded blocks meant a release build produced *no*
+    diagnostic trace at all on failure — `NativeDiagnosticSink::Record()`
+    always increments the counter and can always invoke a registered
+    callback, in *any* build configuration; only its own internal `SDL_Log()`
+    call stays `NDEBUG`-gated. This matches `DEVPERF-005`'s own stated intent
+    ("expose it through logging **and** an optional diagnostic
+    callback/counter") more completely than the code it replaces did.
+    **Not independently host-tested**: confirmed by reading
+    `VibrateControllerTests.cpp` directly that every test there swaps in a
+    `FakeVibrateBackend` (`ScopedFakeVibrateBackend`), so `SdlHapticVibrateBackend`'s
+    real SDL calls — and therefore this new diagnostic path — are never
+    actually exercised by any host test, the same "needs real hardware, no
+    haptic device ever opened in this container" limitation `VIB2-003`'s own
+    original entry already carries; not newly introduced by this migration,
+    and not claimed as newly resolved either. All 59 `VibrateControllerTests`
+    re-verified still passing (proving the *fake*-backend path is
+    unaffected, not the real-SDL path this migration actually touched).
+    `SdlHapticVibrateBackend.cpp` re-verified via NDK cross-compile (compiles
+    clean — this file is not itself Android-gated, serves both platforms).
+    Full precise filter (347 tests) clean under `devices-ubsan` (343 passed,
+    4 hardware skips, 0 failures) and `devices-tsan` (3 runs, 0 `WARNING:
+    ThreadSanitizer`).
+    **Remaining migrations, still open**: `VIB2-004`, `SDLCORE-005`,
     `ANDR2-006` — same one-call-site-at-a-time approach.
 
 ### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)

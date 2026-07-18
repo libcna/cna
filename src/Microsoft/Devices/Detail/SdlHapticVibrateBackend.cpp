@@ -2,8 +2,11 @@
 
 #include "Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp"
 
+#include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
+
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_init.h>
@@ -13,6 +16,31 @@ namespace Microsoft::Devices::Detail
 {
     namespace
     {
+        // Task DEVPERF-005 (2026-07-18, external audit
+        // `audit_devices_2026-07-17.md`): centralizes what every VIB2-003
+        // debug-only SDL_Log() call below used to do individually, now also
+        // routed through the shared Detail::NativeDiagnosticSink so these
+        // failures are test-observable, not just visible in a debug-build
+        // log stream. Replaces the raw SDL_Log() calls rather than
+        // supplementing them (unlike SdlSensorSubsystem's SDLCORE-009
+        // migration) -- no existing test reads this file's SDL_Log() text,
+        // so there is nothing to preserve alongside.
+        void RecordHapticDiagnostic(SDL_Haptic* haptic, const std::string& operation)
+        {
+            using Microsoft::Devices::Sensors::Detail::NativeDiagnosticRecord;
+            using Microsoft::Devices::Sensors::Detail::NativeDiagnosticSeverity;
+            using Microsoft::Devices::Sensors::Detail::NativeDiagnosticSink;
+
+            NativeDiagnosticRecord record;
+            record.Backend = "SDL";
+            record.Operation = operation;
+            record.NativeMessage = SDL_GetError();
+            record.DeviceId = std::to_string(static_cast<long long>(SDL_GetHapticID(haptic)));
+            record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+            record.Severity = NativeDiagnosticSeverity::Warning;
+            NativeDiagnosticSink::Record(record);
+        }
+
         // Returns true if hapticId is a currently-connected joystick/gamepad's
         // own haptic motor.
         //
@@ -344,9 +372,7 @@ namespace Microsoft::Devices::Detail
         // way to notice "vibration silently did nothing" during development.
         if (!SDL_PlayHapticRumble(haptic_, SanitizeSdlHapticInput(intensity), durationMs))
         {
-#ifndef NDEBUG
-            SDL_Log("SdlHapticVibrateBackend: SDL_PlayHapticRumble failed: %s", SDL_GetError());
-#endif
+            RecordHapticDiagnostic(haptic_, "SDL_PlayHapticRumble");
         }
     }
 
@@ -369,9 +395,7 @@ namespace Microsoft::Devices::Detail
             // identical treatment of SDL_PlayHapticRumble() above.
             if (!SDL_StopHapticEffects(haptic_))
             {
-#ifndef NDEBUG
-                SDL_Log("SdlHapticVibrateBackend: SDL_StopHapticEffects failed: %s", SDL_GetError());
-#endif
+                RecordHapticDiagnostic(haptic_, "SDL_StopHapticEffects");
             }
             DestroyLeftRightEffectIfAny();
         }
@@ -494,9 +518,7 @@ namespace Microsoft::Devices::Detail
         // contract is `void`.
         if (!SDL_StopHapticRumble(haptic_))
         {
-#ifndef NDEBUG
-            SDL_Log("SdlHapticVibrateBackend: SDL_StopHapticRumble failed: %s", SDL_GetError());
-#endif
+            RecordHapticDiagnostic(haptic_, "SDL_StopHapticRumble");
         }
 
         // Replaces any previous StartLeftRight() effect (re-entry case).
@@ -525,9 +547,7 @@ namespace Microsoft::Devices::Detail
         // linger for however long the controller stays otherwise idle.
         if (!SDL_RunHapticEffect(haptic_, leftRightEffectId_, 1))
         {
-#ifndef NDEBUG
-            SDL_Log("SdlHapticVibrateBackend: SDL_RunHapticEffect failed: %s", SDL_GetError());
-#endif
+            RecordHapticDiagnostic(haptic_, "SDL_RunHapticEffect");
             DestroyLeftRightEffectIfAny();
         }
     }
