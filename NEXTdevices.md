@@ -279,6 +279,29 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
 - Confirmed 2 claims as accurate, no fix needed: `docs/hardware-qa-reports/` genuinely
   doesn't exist; "no physical Android device used" is already honestly stated.
 
+24. `BASE2-002` (`4081dece`) — **found and fixed a second real bug this pass** using the
+    same "investigate before assuming oracle-blocked" methodology `BASE2-001` proved
+    valuable: every one of the four sensor classes dispatched a new reading via
+    `setIsDataValidProperty(true)` then `setCurrentValueProperty(reading)` as two
+    *independently*-locked calls — a concurrent reader could observe the window between
+    them (`IsDataValid` already `true`, `CurrentValue` still the previous/default value).
+    `Accelerometer`'s own dispatch had an especially wide window (69 lines between the
+    two calls). Added `SensorBase<T>::SetCurrentValueAndMarkDataValid()` (one lock scope
+    for both fields); all four classes now use it. Also removed a redundant
+    `getIsDataValidProperty()` round-trip in `Accelerometer`/`Gyroscope` (checking a
+    known-locally `bool` via a mutex-guarded getter). **Real regression proof, not just
+    reasoning**: a writer/reader thread pair stress test that would have failed before
+    this fix — 3 consecutive clean `devices-tsan` runs. **Left OPEN** — same reasoning
+    as `BASE2-001`: the atomicity fix is real and complete, but testing each lifecycle
+    transition (Stop, failed Start, restart, source/permission loss) against real WP7
+    behavior remains blocked on `DEVPERF-002`/`003`.
+
+**Emerging pattern to remember:** `BASE2-001`/`002` both looked, at first glance, like
+tasks fully blocked on the not-yet-built behavioral oracle — but both had a concrete,
+oracle-*independent* bug hiding in their own problem statement, found only by actually
+tracing the code instead of deferring on sight. Apply this to `BASE2-003`/`004`/`005`
+(and any other "needs an oracle" task) before concluding there's nothing actionable.
+
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
 NDK cross-compile of the exact translation unit each time (`cmake-build-android`,
@@ -550,16 +573,23 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 23 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 24 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
-MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008 -- see Section 2 for
-commit hashes and a one-line summary of each). Read Section 1's "labeling convention" note
-carefully before closing anything -- it distinguishes tasks provable by code
-inspection (CLOSED, e.g. SDLCORE-009) from tasks whose acceptance criteria
-name an empirical/hardware result (stays OPEN even once implemented, e.g.
-VIB2-003/004, ANDR2-002, SDLCORE-005, COMP2-001, MOT2-005, ANDR2-009/010).
+MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002 -- see Section
+2 for commit hashes and a one-line summary of each), plus a separate, unrelated
+re-verification round of the *older* `audit_devices.md` (6 `DEV-AUD-*`
+findings, commit `422ed4c4` -- see Section 2's own dated entry). Read Section
+1's "labeling convention" note carefully before closing anything -- it
+distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009)
+from tasks whose acceptance criteria name an empirical/hardware result (stays
+OPEN even once implemented, e.g. VIB2-003/004, ANDR2-002, SDLCORE-005,
+COMP2-001, MOT2-005, ANDR2-009/010). `BASE2-001`/`002` are a *third* "why
+OPEN" pattern worth remembering: both looked oracle-blocked at first glance
+but each had a real, oracle-independent bug (a UBSan-caught overflow, then a
+TSan-proven atomicity race) hiding in their own problem statement -- apply
+the same "investigate before deferring" approach to `BASE2-003`/`004`/`005`.
 MOT2-003 is a special case: only its narrowest sub-bullet was implemented,
 its acceptance criteria remain genuinely unmet (not just hardware-unverified)
 -- don't mistake it for a near-complete fix. BASE2-001 is a different special
