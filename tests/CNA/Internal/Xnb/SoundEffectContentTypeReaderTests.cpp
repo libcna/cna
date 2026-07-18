@@ -740,3 +740,159 @@ TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFrame
     EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopStart(instance), 1500u);
     EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopLength(instance), 400u);
 }
+
+// ---------------------------------------------------------------------------
+// AUD-06-016: the three format-chunk size classes the reader distinguishes (`formatLength <= 16`:
+// no cbSize at all; `formatLength == 18`: WAVEFORMATEX with cbSize present but zero extension
+// bytes; `formatLength > 18`: a real extension payload) each exercise a different branch in
+// `SoundEffectReader::Read()`. Each test below proves the reader consumes EXACTLY the declared
+// format bytes and lands correctly on the data-length field afterward -- not by inspection, but by
+// asserting the resulting SoundEffect's decoded frame count matches a value that could only be
+// right if every subsequent field (data length, loop points) was read from the correct offset; any
+// off-by-N desync would either misread the data length (caught cleanly by AUD-06-012's guard,
+// producing a thrown exception instead of a loaded SoundEffect) or silently decode a wrong-length
+// payload (producing a decoded frame count that doesn't match).
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectContentTypeReaderTest, FormatLength16BareWaveFormatConsumesExactlyDeclaredBytes)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    // PCM8 (WAV-wrapped path -- distinct code path from the direct PCM16 fast path already
+    // covered by dozens of other tests in this file, e.g. Pcm16BitMonoLoadsSuccessfully).
+    w32(16);        // formatLength -- bare WAVEFORMAT, no cbSize field read at all
+    w16(1);         // wFormatTag: PCM
+    w16(1);         // nChannels: mono
+    w32(44100);     // nSamplesPerSec
+    w32(44100);     // nAvgBytesPerSec
+    w16(1);         // nBlockAlign
+    w16(8);         // wBitsPerSample
+    constexpr int kFrames = 2205; // exactly 50ms at 44100 Hz, 8-bit PCM: 1 byte/frame
+    w32(kFrames);
+    for (int i = 0; i < kFrames; ++i) bytes.push_back(static_cast<uint8_t>(i));
+    w32(0); w32(0); w32(0);
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+
+    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    EXPECT_NEAR(decodedFrames, kFrames, 1.0);
+}
+
+TEST_F(SoundEffectContentTypeReaderTest, FormatLength18WithZeroCbSizeConsumesExactlyDeclaredBytes)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    constexpr uint16_t kBlockAlign = 256;
+    constexpr int kBlockCount = 4;
+    constexpr int kCompressedBytes = kBlockAlign * kBlockCount;
+    constexpr int kSamplesPerBlock = (kBlockAlign - 4) * 8 / 4 + 1; // 505, same IMA-ADPCM formula
+    constexpr int kDecodedFrames = kSamplesPerBlock * kBlockCount;  // 2020
+
+    w32(18);         // formatLength == 18: WAVEFORMATEX with cbSize present, but zero -- exercises
+                      // the `formatLength > 16` branch (reads cbSize) with `skip == 0` (reads zero
+                      // extension bytes), distinct from both formatLength==16 (no cbSize read at
+                      // all) and a real nonzero extension below.
+    w16(0x0011);      // wFormatTag: IMA-ADPCM
+    w16(1);           // nChannels: mono
+    w32(44100);
+    w32(22343);
+    w16(kBlockAlign);
+    w16(4);           // wBitsPerSample
+    w16(0);           // cbSize == 0 -- explicitly present, declares no extension bytes follow
+    w32(kCompressedBytes);
+    for (int i = 0; i < kCompressedBytes; ++i) bytes.push_back(0);
+    w32(0); w32(0); w32(0);
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+
+    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0);
+}
+
+TEST_F(SoundEffectContentTypeReaderTest, ExtendedFormatLengthWithRealCoefficientTableConsumesExactlyDeclaredBytes)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    constexpr uint16_t kBlockAlign = 256;
+    constexpr int kBlockCount = 4;
+    constexpr int kCompressedBytes = kBlockAlign * kBlockCount;
+    // Matches SoundEffectContentTypeReader.cpp's own ComputeMsAdpcmSamplesPerBlock(256, 1):
+    // blockHeaderBits=56, blockBits=2048, availableBits=1992, blockDataSamples=498, +2 = 500.
+    constexpr int kSamplesPerBlock = 500;
+    constexpr int kDecodedFrames = kSamplesPerBlock * kBlockCount; // 2000
+    constexpr uint16_t kExtensionSize = 32; // wSamplesPerBlock(2) + wNumCoef(2) + 7 coeff pairs(28)
+
+    w32(18 + kExtensionSize); // formatLength: a real, nonzero extension payload follows cbSize
+    w16(2);            // wFormatTag: MS-ADPCM
+    w16(1);             // nChannels: mono
+    w32(44100);
+    w32(22343);
+    w16(kBlockAlign);
+    w16(4);             // wBitsPerSample
+    w16(kExtensionSize); // cbSize
+    w16(kSamplesPerBlock);
+    w16(7); // wNumCoef
+    // The exact 7 industry-standard MS-ADPCM coefficient pairs -- SDL3's decoder validates the
+    // first 14 int16 values against this exact table and rejects anything else (matches
+    // BuildStandardMsAdpcmExtension's kPresetCoeffs in WavWrapper.cpp).
+    for (int16_t c : {256, 0, 512, -256, 0, 0, 192, 64, 240, 0, 460, -208, 392, -232})
+    {
+        w16(static_cast<uint16_t>(c));
+    }
+    w32(kCompressedBytes);
+    // All-zero block data: coefficient index 0 (the first, always-valid preset pair) and an
+    // initial delta of 0 (clamped to SDL's minimum of 16 on the first nibble, per
+    // MS_ADPCM_ProcessNibble) -- decodes deterministically without needing a "real" waveform.
+    for (int i = 0; i < kCompressedBytes; ++i) bytes.push_back(0);
+    w32(0); w32(0); w32(0);
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+
+    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0);
+}
