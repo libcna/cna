@@ -3044,7 +3044,10 @@ void main()
 "    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
 "    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+// Same FNA-fidelity fix as EnsureSkinnedProgram below - EnvironmentMapEffect.fx routes its own
+// lighting through the identical Lighting.fxh ComputeLights() in FNA, so it composes emissive
+// exactly the same way (added after the diffuse multiply, not multiplied by it).
+"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
 "    vec3 reflDir=reflect(-E,N);\n"
 "    vec4 envSample=texture(uEnvMap,reflDir);\n"
@@ -3172,7 +3175,19 @@ void main()
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+// audit_net.md remediation (2026-07-18, fourth round): EmissiveColor is ADDED after the
+// diffuse multiply, never multiplied by it - matches FNA's own Lighting.fxh ComputeLights()
+// verbatim (`mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor`), and matches what
+// EnsureLit3DProgram/EnsureLit3DVertexLitProgram in this same file already did correctly.
+// This shader had `(uEmissiveColor+lightSum)*uDiffuseColor.rgb`, which multiplied the emissive
+// term by DiffuseColor a second time. Since FillGpuDrawParams pre-folds ambient into emissive
+// (`emissive + ambient*diffuse`, itself correct and FNA-faithful), the old form computed
+// ambient*diffuse^2 - a quadratic suppression that crushed DARK materials specifically: the
+// avatar's shoes (diffuse 0.14) got an ambient floor of 0.5*0.14*0.14 = 0.0098 -> 2.5/255
+// (confirmed by direct pixel sampling: the darkest foot pixels read exactly (3,3,3)) instead
+// of the correct 0.5*0.14 = 0.07 -> 18/255. This is the real reason raising ambient kept
+// giving diminishing returns on the dark regions.
+"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
@@ -3292,7 +3307,9 @@ void main()
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vLitRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+// Same FNA-fidelity fix as EnsureSkinnedProgram above - see its own comment for the full
+// reasoning; this vertex-lit sibling had the identical emissive-multiplied-twice bug.
+"    vLitRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
