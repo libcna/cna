@@ -113,8 +113,28 @@ framework/runtime, not a game.
   ticks -- already correct, no code change), and `AUD-15-001` (fresh ASan+UBSan sweep of the
   audio-scoped suite, 579/579 pass, zero sanitizer findings; the only `LeakSanitizer` noise traced
   to pre-existing driver/runtime frames, confirmed unrelated by isolating this session's own new
-  tests). **13 commits total this pass** (`5023cf05`..`7edc397d`). See §3 for full detail on each,
-  `plan_audio.md` for exact evidence/citations.
+  tests). See §3 for full detail on each, `plan_audio.md` for exact evidence/citations.
+  **Continuing the same pass (2026-07-18, 17 more commits, `0481b497`..`4343e23e`, 30 total for
+  Phase 15 so far):** closed all 10 testable `AUD-04` items (`001`/`004`-`009`/`014`-`016`) --
+  **two confirmed real memory-safety defects found and fixed** while testing "what happens if
+  `DestroyMixer()` runs while a voice is still playing" (a scenario with zero production callers
+  today, but required by the plan): (1) a genuine use-after-free on `SoundEffectInstance::track_`
+  after `DestroyMixer()` frees it, fixed via a new `AudioMixer::GetMixerGeneration()` counter +
+  `SoundEffectInstance::GetLiveTrackHandle()` that every track-access call site (in both
+  `SoundEffectInstance` and `DynamicSoundEffectInstance`) now goes through; (2) a deeper, more
+  severe defect found en route -- `MIX_DestroyMixer()`'s own internal `SDL_QuitSubSystem
+  (SDL_INIT_AUDIO)` call can fully deinitialize SDL's *global* audio subsystem, silently breaking
+  any other independently-owned `SDL_AudioStream` (confirmed via an ASan-symbolized SEGV), fixed
+  by having `GetMixer()` pin one extra, permanently-held `SDL_InitSubSystem` reference. Both
+  proven via git-stash (new deterministic tests fail against pre-fix code; the dynamic-instance
+  case even shows `getStateProperty()` returning the *wrong* live value pre-fix -- concrete proof
+  of genuine UB, not cosmetic). Also closed 8 `AUD-05` items (`004`-`007`,`009`,`014`,`015`, plus
+  cross-referencing `009` to a pre-existing test) -- `AUD-05-006`/`007` added new (advisory-only,
+  never-throwing) diagnostics: container-signature detection (RIFF/Ogg/ID3/XNB magic bytes) and
+  Shannon-entropy-based implausible-PCM16-statistics detection, both on the raw-buffer
+  constructor. Two new isolated-subprocess harnesses
+  (`tools/audio/mixer_destroy_active_{static,dynamic}_voice_harness.cpp`). Full whole-repo suite
+  green throughout, 4736/4736 pass (2 unrelated hardware skips) as of the latest commit.
 - **Build (historical, Phase 9-14):** clean, rebuilt and reverified this pass (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/
   `P14-ORDER-001`/`P14-PARSER-001`, a second user-provided external audit's fixes, on top of
   `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001`, `P12-BANK-001`, `P11-PAN-002`,
