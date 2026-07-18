@@ -400,10 +400,11 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     dispatch-time is likely small per `READINGS-003`'s own "dispatch happens
     promptly" reasoning; and the full clock-step-safe bridge this task's acceptance
     criteria demand is comparable in scope/risk to `LIFE-007`/`010`/`011`/`ANDR2-011`.
-    **Left as a genuine product/architecture decision for explicit human input**
-    (accept the cross-class inconsistency and build it SDL-only, build an equivalent
-    Android-side bridge too, or treat `READINGS-003` as superseding this task) —
-    not picked unilaterally. Added to Section 9's "Do not do yet" below.
+    Presented as a genuine product/architecture decision via `AskUserQuestion` rather
+    than picked unilaterally — **decided 2026-07-18: leave deferred, `READINGS-003`
+    stands as the supersedeing policy.** Settled, not a re-open candidate absent a
+    new concrete reason (e.g. a real reported timestamp-accuracy problem) — see
+    Section 9's "Do not do yet" below.
 31. `SDLCORE-011` (`3e93860a`) — confirmed the problem statement directly:
     `VibrateController::getDefaultProperty()`'s function-local static singleton's
     destructor (via `SdlHapticVibrateBackend`) makes real `SDL_CloseHaptic()`/
@@ -723,13 +724,14 @@ whether a finished implementation should be marked CLOSED or left OPEN.
   compliant with the letter of this rule (verified building clean on Android both
   before and after), not an exception to it; don't add a *new*, second raw SDL call
   to this file on the theory that one already snuck in.
-- `SDLCORE-007` ("use acquisition timestamps from SDL sensor events"): do not
-  implement the calibrated monotonic-to-wall-clock bridge this task's required work
-  asks for without explicit human input first — it's in direct, confirmed conflict
-  with `READINGS-003`'s already-settled, cross-sensor-class-consistent "always
-  wall-clock-at-dispatch" policy (see Section 2's own dated entry for the full
-  investigation). Implementing it only for `Accelerometer`/`Gyroscope` would silently
-  break that consistency guarantee several existing `Compass`/`Motion` tests rely on.
+- `SDLCORE-007` ("use acquisition timestamps from SDL sensor events"): **decided
+  2026-07-18, via explicit `AskUserQuestion` — leave deferred.** Do not implement
+  the calibrated monotonic-to-wall-clock bridge this task's required work asks for;
+  `READINGS-003`'s already-settled, cross-sensor-class-consistent "always
+  wall-clock-at-dispatch" policy stands (see Section 2's own dated entry for the
+  full investigation and decision). Settled, not open for autonomous
+  re-litigation — would need a new, concrete reason (e.g. a real reported
+  timestamp-accuracy problem) to revisit.
 - Do not mark a task fully `CLOSED` just because `ANDR2-004`/`005`/`006` were, if its
   own acceptance criteria name an empirical/dynamic result those three didn't — see
   Section 1's labeling convention. Check the literal wording every time.

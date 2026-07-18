@@ -6658,7 +6658,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Selection survives enumeration-order changes or explicitly documents them.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### SDLCORE-007 — Use acquisition timestamps from SDL sensor events — OPEN (real, deliberately-not-implemented conflict with READINGS-003 documented; small verified sub-finding included)
+### SDLCORE-007 — Use acquisition timestamps from SDL sensor events — OPEN (deliberately not implemented — superseded by READINGS-003, confirmed via explicit human decision 2026-07-18)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6728,15 +6728,15 @@ test is not sufficient for an Android coordinate/fusion claim.
        subsystem), not a bounded bug fix — deliberately set aside rather
        than picked up as a quick continuation item, consistent with how
        those other large tasks were handled.
-  - **Recommendation, not a unilateral decision**: whether to (a) accept the
-    cross-class timestamp-policy inconsistency and build the SDL-only
-    calibrated bridge, (b) also build an equivalent Android-side bridge to
-    preserve consistency (a substantially larger task), or (c) treat this
-    task as superseded by `READINGS-003`'s own already-settled, well-tested
-    decision and close it as "intentionally not done, rationale documented in
-    `READINGS-003`" is a genuine product/architecture call this session
-    deliberately left for explicit human input rather than picking a side
-    autonomously — see `NEXTdevices.md`'s "Do not do yet" section.
+  - **Decision (2026-07-18, explicit human input via `AskUserQuestion`)**: option
+    (c) — leave deferred. `READINGS-003` remains the standing, cross-class policy;
+    `SDLCORE-007` is treated as superseded/lower-priority given the likely-small
+    real-world accuracy gain versus the complexity of a clock-step-safe calibrated
+    bridge. No source change. This is now a settled decision, not an open
+    question — do not re-litigate without a new, concrete reason surfacing (e.g. a
+    real, reported timestamp-accuracy problem), matching how `BASE2-007`/`LIFE-008`'s
+    "no RAII quota token" decision is already treated in `NEXTdevices.md`'s "Do not
+    do yet" section.
 
 ### SDLCORE-008 — Remove avoidable allocation and linear work from SDL event dispatch — OPEN
 
