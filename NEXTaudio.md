@@ -1118,24 +1118,38 @@ Phase 9-14's closure was -- the user's own 2026-07-17 instruction authorized wor
 own recommended priority order (see `docs/cna_audio_deep_audit_2026-07-17.md`'s "Recommended
 implementation order" and `plan_audio.md`'s own priority rules):
 
-1. **`AUD-02` structured diagnostics** (`AudioDiagnosticEvent`, a runtime trace switch, logging
-   negotiated mixer/device specs and final pitch-ratio composition) -- foundational infrastructure
-   the later pitch/XACT tracing work (`AUD-08`/`AUD-09`/`AUD-10`) will want to build on. Only
-   ad-hoc `std::cerr` checks exist so far (this pass's `AUD-02-007/008/009` fixes), not the
-   structured event model.
-2. **`AUD-07-008`** -- query both `SDL_AudioStream` specs after `MIX_SetTrackAudioStream` in
-   `DynamicSoundEffectInstance::Play()` (a strong risk the audit flagged, A-07, not yet verified
-   either way this pass).
-3. **`AUD-09` (Apply3D/Doppler)** -- directly relevant to the user's reported regressions (A-09:
-   "Doppler can create a large pitch increase when ported velocity units are wrong"). Not audited
-   this pass at all.
-4. **`AUD-10` (XACT pitch/RPC/variation composition)** -- directly relevant to the reported pitch
-   bug (A-10: "no XNA capture corpus proves the resulting voice parameters over time"). A large
-   section; start with `AUD-10-005/006/013` (cents-to-ratio, composition-order, no-double-apply).
-5. **`AUD-11`'s remaining items** -- IMA-ADPCM/XMA/WMA WaveBank entry handling
-   (`AUD-11-009/010/011`), streaming offset/alignment validation (`AUD-11-015/016`).
-6. **`AUD-06-010/013/014/015`** -- XNB duration-as-validation-oracle, WAVEFORMATEX coherence
-   checks, loop-point-vs-decoded-frames validation, Xbox-endian fixtures (all left open this pass).
+**Status as of the `AUD-04-008/009` close (2026-07-18): `AUD-02` structured diagnostics,
+`AUD-07-008`, `AUD-09`'s 5 golden Apply3D/Doppler cases, `AUD-10-005/006/013`, `AUD-11-001/002/
+008/009/010/011`, and all of `AUD-04-001` through `AUD-04-009` are now `[x]` -- the list below is
+refreshed accordingly; do not re-pick any of those.**
+
+1. **`AUD-04-002/003`** -- verify pitch is preserved when the requested mixer spec (44.1 kHz) and
+   the *physical device's own* native rate differ (48 kHz device, 44.1 kHz device, etc.). Still
+   genuinely open: `AUD-04-004`'s device-open floor-clamp test proved SDL3's OWN device-open floor
+   behavior but cannot exercise a real physical device offering something *other* than the floor
+   (the dummy driver has no independent native format of its own -- see `AUD-04-004`'s evidence
+   note). May need a real (non-dummy) audio backend in CI, or may have to stay documented-as-
+   untestable-headlessly if no such environment is available.
+2. **`AUD-04-010/011`** (P1) -- output-device change / device-loss-reopen handling. No code exists
+   for either today; needs a design decision on migration-vs-stop-with-event before implementing.
+3. **`AUD-04-014/015/016`** (P1) -- master-volume-applied-exactly-once, mixer-gain-consistency,
+   and extreme-aggregate-gain-NaN/clipping tests. Likely straightforward to verify/lock down given
+   the existing `MIX_SetMixerGain`/`MIX_SetTrackGain` composition (CP-16) is already understood
+   from this session's `AUD-04` work.
+4. **`AUD-05`'s remaining validation items** (`AUD-05-004/005/006/007/009/010-016`) -- loop-region
+   bounds validation, raw-PCM16LE-not-a-container documentation, RIFF/Ogg/XNB-signature misuse
+   detection, mono/stereo interleaving verification, endianness policy. The golden sample-rate
+   matrix (017-030) is already fully closed; these are the format-contract/validation items, a
+   different half of AUD-05 not yet started.
+5. **`AUD-06`'s remaining items** (`AUD-06-010/013/014/015`) -- XNB duration-as-validation-oracle,
+   WAVEFORMATEX coherence checks, loop-point-vs-decoded-frames validation, Xbox-endian fixtures.
+6. **`AUD-11`'s remaining items** -- streaming offset/alignment validation (`AUD-11-015/016`),
+   seek tables, wave caching; the WaveBank format-handling items (IMA-ADPCM/XMA/WMA/compact-XWB)
+   are all closed.
+7. **`AUD-15`'s remaining thread-safety/lifetime items** -- this session's `AUD-04-008/009` work
+   found two real memory-safety defects via exactly this kind of "what if X runs concurrently with
+   Y" testing; `AUD-15`'s own remaining 19 open items (concurrent submit/dispose races, Dispose-
+   during-callback, etc.) are a natural continuation of the same investigative approach.
 
 **Do not re-run a fresh full audit or restart from AUD-00** -- the audit and the 438-task plan
 already exist; work through the existing list. See §9 for what to still confirm with the user
