@@ -341,22 +341,25 @@ namespace CNA::Internal::Net
             state.PendingPreHandshakeSends = std::move(stillPending);
         }
 
-        // audit_net.md remediation (2026-07-18): drops any PendingPreHandshakeSends entries that
-        // reference gamer, called wherever GamerToWireId loses an entry for a gamer that will
-        // never resolve now (HandleDisconnect, host-migration reset) - without this, a queued send
-        // naming a gamer that left before the handshake ever completed would sit in the queue
-        // until evicted by kMaxPendingPreHandshakeAppData churn, or reference a NetworkGamer* that
-        // becomes dangling once its owning SessionState::OwnedRemoteGamers entry is freed.
+        // audit_net.md remediation (2026-07-18, third round): drops any PendingPreHandshakeSends
+        // entries that reference gamer, called wherever GamerToWireId loses an entry for a gamer
+        // that will never resolve now (HandleDisconnect, HandleGamerLeaveBroadcast, host-migration
+        // reset) - without this, a queued send naming a gamer that left before the handshake ever
+        // completed would sit in the queue until evicted by kMaxPendingPreHandshakeAppData churn,
+        // or reference a NetworkGamer* that becomes dangling once its owning
+        // SessionState::OwnedRemoteGamers entry is freed. Each entry removed here genuinely can
+        // never be delivered now (its sender or target is gone), so it counts via
+        // droppedAppDataCount_ same as a queue-overflow eviction - GetDroppedAppDataCount()'s own
+        // contract is "could not eventually be delivered" for any reason, not just overflow.
         void PurgePendingPreHandshakeSendsFor(SessionState& state, NetworkGamer* gamer)
         {
             auto& pending = state.PendingPreHandshakeSends;
-            pending.erase(
-                std::remove_if(
-                    pending.begin(), pending.end(),
-                    [gamer](const PendingPreHandshakeAppData& p) { return p.Sender == gamer || p.Target == gamer; }
-                ),
-                pending.end()
+            auto removedBegin = std::remove_if(
+                pending.begin(), pending.end(),
+                [gamer](const PendingPreHandshakeAppData& p) { return p.Sender == gamer || p.Target == gamer; }
             );
+            droppedAppDataCount_ += static_cast<std::size_t>(std::distance(removedBegin, pending.end()));
+            pending.erase(removedBegin, pending.end());
         }
 
         void HandleClientHello(NetworkSession* session, SessionState& state, ENetPeer* peer, const ClientHelloMessage& hello)
@@ -635,6 +638,12 @@ namespace CNA::Internal::Net
                 session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
+                // audit_net.md remediation (2026-07-18, third round): this path was missing the
+                // same purge HandleDisconnect's own per-gamer removal already does - a pending
+                // send naming a gamer who left via this broadcast (not a direct disconnect of
+                // *our* connection) would otherwise sit unresolved in the queue until evicted by
+                // unrelated churn, since GamerToWireId can never gain an entry for it again.
+                PurgePendingPreHandshakeSendsFor(state, gamer);
             }
         }
 
@@ -744,7 +753,10 @@ namespace CNA::Internal::Net
             // remote NetworkGamer this peer knew about - any PendingPreHandshakeSends entry still
             // naming one of them would otherwise dangle. The new topology after migration makes a
             // pre-migration cross-machine send meaningless regardless, so the whole queue is
-            // dropped rather than selectively purged.
+            // dropped rather than selectively purged. Counted (third-round remediation): every
+            // entry here genuinely can never be delivered now, matching
+            // GetDroppedAppDataCount()'s "could not eventually be delivered" contract.
+            droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
             state.PendingPreHandshakeSends.clear();
             state.HostPeer = nullptr;
 
@@ -844,7 +856,9 @@ namespace CNA::Internal::Net
                 state.HostPeer = nullptr;
                 // audit_net.md remediation (2026-07-18): this client's whole view of the session
                 // just ended - any send still queued for a not-yet-resolved target can never be
-                // delivered into a roster that's about to be gone regardless.
+                // delivered into a roster that's about to be gone regardless. Counted (third-round
+                // remediation) - see the host-migration reset's own identical comment above.
+                droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
                 state.PendingPreHandshakeSends.clear();
                 return;
             }
@@ -917,7 +931,6 @@ namespace CNA::Internal::Net
             {
                 return;
             }
-
             // Task 1.4: this packet arrived over an already-open ENet channel, but nothing else
             // validates its payload — a truncated/corrupted packet from any connected peer makes
             // any Decode* call below throw std::runtime_error (BinaryReader::ReadBytes/ReadString

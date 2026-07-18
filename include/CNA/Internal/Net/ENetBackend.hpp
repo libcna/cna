@@ -120,7 +120,13 @@ namespace CNA::Internal::Net
          * `Join()`/`ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
          * `ServerWelcome` round-trip - see audit_net.md remediation, 2026-07-18), the call is
          * queued (bounded, oldest evicted first - see `GetDroppedAppDataCount()`) and delivered
-         * automatically, preserving payload/target/order/options, the moment both sides resolve.
+         * automatically the moment both sides resolve, preserving each entry's own
+         * payload/target/options exactly. Order is preserved for multiple queued calls sharing
+         * the same (sender, target) pair (they always resolve together, and are drained in
+         * original enqueue order) - across *different* pairs, delivery order follows whenever
+         * each pair happens to resolve, not necessarily original `SendAppData` call order (a
+         * pair that resolves later is queued longer, by definition; nothing here reorders once
+         * two pairs are both resolvable at the same flush).
          *
          * @param session The local session sending the data.
          * @param sender The local gamer sending the data.
@@ -137,15 +143,23 @@ namespace CNA::Internal::Net
         );
 
         /**
-         * @brief Task 2.13: how many `SendAppData` calls could not eventually be delivered.
+         * @brief Task 2.13: how many queued `SendAppData` calls could not eventually be
+         * delivered, for any reason - counts every case, not just queue overflow.
          *
          * A `SendAppData` call whose sender and/or target aren't yet known to ENetBackend's
          * wire-id map (see `SendAppData`'s own doc comment) is queued rather than dropped
-         * outright, and delivered automatically once both resolve. This counter now only
-         * increments when that queue itself overflows its bound (a caller queuing sends far
-         * faster than `Update()` is ever called to resolve them) - a genuinely unresolvable send
-         * is still counted, never silently discarded with no trace. Not part of real XNA; exists
-         * purely for observability (e.g. by tests, or a game's own diagnostics).
+         * outright, and delivered automatically once both resolve. This counter increments once
+         * per queued entry that turns out to never be deliverable: the queue itself overflowing
+         * its bound (a caller queuing sends far faster than `Update()` is ever called to resolve
+         * them, oldest evicted); a queued entry's sender or target gamer leaving before it ever
+         * resolved (`HandleDisconnect`/`HandleGamerLeaveBroadcast` purge it by name); or the
+         * whole queue being invalidated at once (host migration's full wire-id-map reset, or this
+         * peer's own session ending as a client) - every one of these is a real "could not
+         * eventually be delivered" outcome, counted the same way, never silently discarded with
+         * no trace (third-round remediation, 2026-07-18 - the second round's own version of this
+         * comment claimed this already but the purge/full-reset paths didn't actually count yet).
+         * Not part of real XNA; exists purely for observability (e.g. by tests, or a game's own
+         * diagnostics).
          *
          * @return The number of drops observed so far, process-wide, since startup or the last
          * `ResetDroppedAppDataCount()` call.

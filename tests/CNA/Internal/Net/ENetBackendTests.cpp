@@ -374,15 +374,20 @@ TEST(ENetBackendTest, AppDataQueuedBeforeSecondLocalGamerIsWiredIsDeliveredOnceR
     // with the process-wide signed-in-gamers registry seeded to just one gamer, the same
     // "maxLocalGamers=2, only 1 signed in" pattern NetworkSessionTests.cpp's own
     // DisposeFreesEveryGamerTheSessionEverOwned test uses for the identical reason.
-    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
     SignedInGamer hostSignedIn = SignedInGamer::CreateInternal("HostPlayer");
     Gamer::setSignedInGamersProperty(
         new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&hostSignedIn}))
     );
+    // setSignedInGamersProperty() deletes whatever it's currently pointing at before assigning
+    // the new value (confirmed by reading Gamer.cpp directly) - restoring to a fresh *empty*
+    // collection here, rather than a captured "previous" pointer this test's own
+    // setSignedInGamersProperty() call above already deleted, avoids a real double-free.
+    // Matches NetworkSessionTests.cpp's own DisposeFreesEveryGamerTheSessionEverOwned pattern.
     struct RestoreGlobalGuard {
-        SignedInGamerCollection* saved;
-        ~RestoreGlobalGuard() { Gamer::setSignedInGamersProperty(saved); }
-    } restoreGuard{previousGlobal};
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
 
     NetworkSession* hostSession = NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
     struct DisposeGuard {
@@ -460,6 +465,82 @@ TEST(ENetBackendTest, AppDataQueuedBeforeSecondLocalGamerIsWiredIsDeliveredOnceR
     EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before);
 }
 
+// audit_net.md remediation (2026-07-18, third round): order preservation was only ever implied,
+// never actually tested. Queues several ReliableInOrder sends from the same still-unresolved
+// sender to the same already-resolved target, then proves they arrive over the real wire in
+// exactly their original send order once the sender resolves - not just "all eventually
+// delivered," but delivered *in order*.
+TEST(ENetBackendTest, MultiplePendingAppDataSendsForSameSenderTargetPairDeliverInOriginalOrder) {
+    // SystemLinkSessionFixture's own vector-based Create() sizes maxLocalGamers_ exactly to its
+    // initial gamer list, leaving no room for AddLocalGamer below - see
+    // AppDataQueuedBeforeSecondLocalGamerIsWiredIsDeliveredOnceResolved's own identical comment.
+    SignedInGamer hostSignedIn = SignedInGamer::CreateInternal("HostPlayer");
+    Gamer::setSignedInGamersProperty(
+        new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&hostSignedIn}))
+    );
+    // setSignedInGamersProperty() deletes whatever it's currently pointing at before assigning
+    // the new value (confirmed by reading Gamer.cpp directly) - restoring to a fresh *empty*
+    // collection here, rather than a captured "previous" pointer this test's own
+    // setSignedInGamersProperty() call above already deleted, avoids a real double-free.
+    // Matches NetworkSessionTests.cpp's own DisposeFreesEveryGamerTheSessionEverOwned pattern.
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    NetworkSession* hostSession = NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
+    struct DisposeGuard {
+        NetworkSession* s;
+        ~DisposeGuard() { s->Dispose(); }
+    } disposeGuard{hostSession};
+    ASSERT_EQ(hostSession->getLocalGamersProperty().getCountProperty(), 1);
+    hostSession->Update();
+
+    ENetHostHandle fakeClient1 = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromHostSide1 = nullptr;
+    uint8_t remoteWireId1 = ConnectFakeClientAndCompleteHandshake(fakeClient1, hostSession, &peerFromHostSide1);
+
+    NetworkGamer* remoteGamer1 = nullptr;
+    for (NetworkGamer* g : hostSession->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "RemotePlayer") remoteGamer1 = g;
+    }
+    ASSERT_NE(remoteGamer1, nullptr);
+
+    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("HostPlayer2");
+    hostSession->AddLocalGamer(&secondSignedIn);
+    LocalNetworkGamer* secondLocal = hostSession->getLocalGamersProperty()[1];
+
+    constexpr int kSendCount = 5;
+    for (int i = 0; i < kSendCount; ++i) {
+        secondLocal->SendData(
+            std::vector<SharpRuntime::bytecs>{static_cast<SharpRuntime::bytecs>(i)}, SendDataOptions::Reliable, remoteGamer1
+        );
+    }
+    hostSession->Update(); // enqueues all kSendCount, in order (single Update() drains all 5 PacketSend events)
+
+    ENetHostHandle fakeClient2 = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromHostSide2 = nullptr;
+    ConnectFakeClientAndCompleteHandshake(fakeClient2, hostSession, &peerFromHostSide2);
+
+    std::vector<SharpRuntime::bytecs> receivedOrder;
+    for (int i = 0; i < 200 && static_cast<int>(receivedOrder.size()) < kSendCount; ++i, PollYield()) {
+        hostSession->Update();
+        ENetEvent evt{};
+        if (fakeClient1.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_RECEIVE) {
+            std::vector<SharpRuntime::bytecs> data(evt.packet->data, evt.packet->data + evt.packet->dataLength);
+            if (NetPacketCodec::PeekTag(data) == MessageTag::AppData) {
+                AppDataMessage appData = NetPacketCodec::DecodeAppData(data);
+                ASSERT_EQ(appData.Payload.size(), 1u);
+                receivedOrder.push_back(appData.Payload[0]);
+            }
+            enet_packet_destroy(evt.packet);
+        }
+    }
+    ASSERT_EQ(static_cast<int>(receivedOrder.size()), kSendCount);
+    EXPECT_EQ(receivedOrder, (std::vector<SharpRuntime::bytecs>{0, 1, 2, 3, 4}));
+}
+
 // audit_net.md remediation (2026-07-18): the bounded side of the same contract - a caller that
 // keeps calling SendData on an unresolved sender/target faster than the queue can ever drain
 // (kMaxPendingPreHandshakeAppData reached) must not grow the queue without limit; the oldest
@@ -493,6 +574,308 @@ TEST(ENetBackendTest, PendingAppDataQueueEvictsOldestOnceBoundIsReached) {
     client.session->Update();
 
     EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + kSendsBeyondBound);
+}
+
+// audit_net.md remediation (2026-07-18, third round): a real gap the second round's own queue
+// missed - HandleGamerLeaveBroadcast (a client learning a *third* peer left, distinct from
+// HandleDisconnect's own direct-connection-lost path) never purged PendingPreHandshakeSends,
+// so a pending send naming that departed gamer as its target would sit in the queue
+// indefinitely (GamerToWireId can never regain an entry for a gamer who left). Proves the fix:
+// queue a send whose sender is a still-unresolved second local gamer (AddLocalGamer, same
+// naturally-reachable gap as the delivery test above) targeting an already-resolved remote
+// gamer, then have that remote gamer "leave" via a real GamerLeaveBroadcastMessage - the pending
+// entry must be purged (counted, not silently vanish) rather than linger forever.
+TEST(ENetBackendTest, GamerLeaveBroadcastPurgesPendingAppDataNamingTheDepartedGamer) {
+    std::size_t before = ENetBackend::GetDroppedAppDataCount();
+
+    SignedInGamer clientSignedIn = SignedInGamer::CreateInternal("ClientPlayer");
+    Gamer::setSignedInGamersProperty(
+        new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&clientSignedIn}))
+    );
+    // setSignedInGamersProperty() deletes whatever it's currently pointing at before assigning
+    // the new value (confirmed by reading Gamer.cpp directly) - restoring to a fresh *empty*
+    // collection here, rather than a captured "previous" pointer this test's own
+    // setSignedInGamersProperty() call above already deleted, avoids a real double-free.
+    // Matches NetworkSessionTests.cpp's own DisposeFreesEveryGamerTheSessionEverOwned pattern.
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    NetworkSession* clientSession =
+        NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
+    struct DisposeGuard {
+        NetworkSession* s;
+        ~DisposeGuard() { s->Dispose(); }
+    } disposeGuard{clientSession};
+    ASSERT_EQ(clientSession->getLocalGamersProperty().getCountProperty(), 1);
+    clientSession->Update();
+
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+    ENetBackend::ConnectToHost(clientSession, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        clientSession->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "OtherPlayer", true}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && clientSession->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        clientSession->Update();
+    }
+    ASSERT_EQ(clientSession->getAllGamersProperty().getCountProperty(), 2);
+
+    NetworkGamer* otherPlayer = nullptr;
+    for (NetworkGamer* g : clientSession->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "OtherPlayer") otherPlayer = g;
+    }
+    ASSERT_NE(otherPlayer, nullptr);
+
+    // A second local gamer added after the handshake already completed - AddLocalGamer only
+    // assigns a NetworkSession-level placeholder id, never an ENetBackend wire-id, so this
+    // client has no path to ever resolve it (nothing re-sends ClientHello after AddLocalGamer) -
+    // a permanently-unresolved sender is exactly what's needed here, not just a temporary one.
+    // AddLocalGamer also adds the new gamer to getAllGamersProperty() itself (not just
+    // getLocalGamersProperty()), so the "all gamers" count below is 3 from here on, not 2.
+    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("ClientPlayer2");
+    clientSession->AddLocalGamer(&secondSignedIn);
+    ASSERT_EQ(clientSession->getLocalGamersProperty().getCountProperty(), 2);
+    ASSERT_EQ(clientSession->getAllGamersProperty().getCountProperty(), 3);
+    LocalNetworkGamer* secondLocal = clientSession->getLocalGamersProperty()[1];
+
+    secondLocal->SendData(std::vector<SharpRuntime::bytecs>{4, 2}, SendDataOptions::None, otherPlayer);
+    clientSession->Update(); // drains the PacketSend event -> SendAppData -> enqueue (sender unresolved)
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before) << "should be queued, not yet dropped";
+
+    GamerLeaveBroadcastMessage leave;
+    leave.WireIds = {0}; // OtherPlayer
+    auto leaveBytes = NetPacketCodec::Encode(leave);
+    fakeHost.Send(clientPeerFromHostSide, 0, leaveBytes.data(), leaveBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && clientSession->getAllGamersProperty().getCountProperty() > 2; ++i, PollYield()) {
+        clientSession->Update();
+    }
+    // OtherPlayer left: 3 -> 2 (ClientPlayer's own local gamer + the never-resolved ClientPlayer2).
+    ASSERT_EQ(clientSession->getAllGamersProperty().getCountProperty(), 2);
+
+    // The pending send named OtherPlayer as its target - now gone, it must have been purged and
+    // counted, not left to linger in the queue forever.
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + 1);
+}
+
+// audit_net.md remediation (2026-07-18, third round): the direct-disconnect sibling of the test
+// above - HandleDisconnect's own per-gamer removal loop (the host losing one of its clients)
+// already called PurgePendingPreHandshakeSendsFor in production code, but had no dedicated test
+// proving it. Same shape as the delivery test's own setup, but the remote gamer disconnects
+// before the second local gamer's own wire id ever resolves, instead of a third join resolving it.
+TEST(ENetBackendTest, ClientDisconnectPurgesPendingAppDataNamingThatGamer) {
+    std::size_t before = ENetBackend::GetDroppedAppDataCount();
+
+    SignedInGamer hostSignedIn = SignedInGamer::CreateInternal("HostPlayer");
+    Gamer::setSignedInGamersProperty(
+        new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({&hostSignedIn}))
+    );
+    // setSignedInGamersProperty() deletes whatever it's currently pointing at before assigning
+    // the new value (confirmed by reading Gamer.cpp directly) - restoring to a fresh *empty*
+    // collection here, rather than a captured "previous" pointer this test's own
+    // setSignedInGamersProperty() call above already deleted, avoids a real double-free.
+    // Matches NetworkSessionTests.cpp's own DisposeFreesEveryGamerTheSessionEverOwned pattern.
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    NetworkSession* hostSession = NetworkSession::Create(NetworkSessionType::SystemLink, 2, 8, 0, NetworkSessionProperties{});
+    struct DisposeGuard {
+        NetworkSession* s;
+        ~DisposeGuard() { s->Dispose(); }
+    } disposeGuard{hostSession};
+    ASSERT_EQ(hostSession->getLocalGamersProperty().getCountProperty(), 1);
+    hostSession->Update();
+
+    ENetHostHandle fakeClient = ENetHostHandle::CreateClient(2);
+    ENetPeer* peerFromHostSide = nullptr;
+    uint8_t remoteWireId = ConnectFakeClientAndCompleteHandshake(fakeClient, hostSession, &peerFromHostSide);
+
+    NetworkGamer* remoteGamer = nullptr;
+    for (NetworkGamer* g : hostSession->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "RemotePlayer") remoteGamer = g;
+    }
+    ASSERT_NE(remoteGamer, nullptr);
+    ASSERT_EQ(remoteGamer->getIdProperty(), remoteWireId);
+
+    SignedInGamer secondSignedIn = SignedInGamer::CreateInternal("HostPlayer2");
+    hostSession->AddLocalGamer(&secondSignedIn);
+    ASSERT_EQ(hostSession->getLocalGamersProperty().getCountProperty(), 2);
+    LocalNetworkGamer* secondLocal = hostSession->getLocalGamersProperty()[1];
+
+    secondLocal->SendData(std::vector<SharpRuntime::bytecs>{1}, SendDataOptions::None, remoteGamer);
+    hostSession->Update();
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before) << "should be queued, not yet dropped";
+
+    int leftCount = 0;
+    hostSession->GamerLeft += [&leftCount](System::Object*, const GamerLeftEventArgs&) { ++leftCount; };
+    fakeClient.Disconnect(peerFromHostSide, 0);
+    fakeClient.Flush();
+    for (int i = 0; i < 200 && leftCount == 0; ++i, PollYield()) {
+        hostSession->Update();
+    }
+    ASSERT_EQ(leftCount, 1);
+
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + 1);
+}
+
+// audit_net.md remediation (2026-07-18, third round): the whole-queue-invalidation sibling -
+// this peer's own connection to the host being lost (no migration configured) must discard
+// every still-pending send, counted, not just the ones naming a specific departed gamer.
+TEST(ENetBackendTest, ClientSessionEndedOnHostDisconnectDropsAndCountsEveryPendingSend) {
+    std::size_t before = ENetBackend::GetDroppedAppDataCount();
+
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    // Never completes the handshake (no ServerWelcome sent) - every queued send below stays
+    // unresolved right up until the disconnect.
+    LocalNetworkGamer* localGamer = client.session->getLocalGamersProperty()[0];
+    NetworkGamer notYetKnownRemote = NetworkGamer::CreateInternal(client.session, "SomeRemotePlayer");
+    constexpr int kQueuedSends = 3;
+    for (int i = 0; i < kQueuedSends; ++i) {
+        localGamer->SendData(
+            std::vector<SharpRuntime::bytecs>{static_cast<SharpRuntime::bytecs>(i)}, SendDataOptions::None, &notYetKnownRemote
+        );
+    }
+    client.session->Update();
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before) << "should be queued, not yet dropped";
+
+    int sessionEndedCount = 0;
+    client.session->SessionEnded +=
+        [&sessionEndedCount](System::Object*, const NetworkSessionEndedEventArgs&) { ++sessionEndedCount; };
+    fakeHost.Disconnect(clientPeerFromHostSide, 0);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && sessionEndedCount == 0; ++i, PollYield()) {
+        client.session->Update();
+    }
+    ASSERT_EQ(sessionEndedCount, 1);
+
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + kQueuedSends);
+}
+
+// audit_net.md remediation (2026-07-18, third round): the same whole-queue-invalidation, but via
+// the host-migration reset path instead of a plain client-side session-ended path (distinct code
+// path in ENetBackend.cpp - see AttemptHostMigration's own shared cleanup block).
+TEST(ENetBackendTest, HostMigrationResetDropsAndCountsEveryPendingSend) {
+    std::size_t before = ENetBackend::GetDroppedAppDataCount();
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    client.session->setAllowHostMigrationProperty(true);
+
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "OtherPlayer", true}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        client.session->Update();
+    }
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+
+    NetworkGamer* otherPlayer = nullptr;
+    for (NetworkGamer* g : client.session->getAllGamersProperty()) {
+        if (g->getGamertagProperty() == "OtherPlayer") otherPlayer = g;
+    }
+    ASSERT_NE(otherPlayer, nullptr);
+    // otherPlayer is the only other known gamer - AttemptHostMigration will promote this client
+    // itself once the host connection drops (ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor's
+    // own established scenario), which still runs the same shared wire-id-map reset this test
+    // is about, regardless of which specific migration outcome is chosen.
+    NetworkGamer notYetKnownRemote = NetworkGamer::CreateInternal(client.session, "NeverJoins");
+    client.session->getLocalGamersProperty()[0]->SendData(
+        std::vector<SharpRuntime::bytecs>{7}, SendDataOptions::None, &notYetKnownRemote
+    );
+    client.session->Update();
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before) << "should be queued, not yet dropped";
+
+    int hostChangedCount = 0;
+    client.session->HostChanged += [&hostChangedCount](System::Object*, const HostChangedEventArgs&) { ++hostChangedCount; };
+    fakeHost.Disconnect(clientPeerFromHostSide, 0);
+    fakeHost.Flush();
+    for (int i = 0; i < 200 && hostChangedCount == 0; ++i, PollYield()) {
+        client.session->Update();
+    }
+    ASSERT_EQ(hostChangedCount, 1);
+
+    EXPECT_EQ(ENetBackend::GetDroppedAppDataCount(), before + 1);
+}
+
+// audit_net.md remediation (2026-07-18, third round): Dispose() itself needs no explicit purge -
+// TeardownSession's Sessions().erase(session) destroys the whole SessionState (including
+// PendingPreHandshakeSends) in one step, and nothing reads it afterward - but that safety claim
+// had no test. Proves a pending, permanently-unresolved send survives to Dispose() without
+// crashing (would show up as a real ASan use-after-free/leak under CHECKLIST.md's ASan build if
+// this were actually broken, not just this plain build).
+TEST(ENetBackendTest, DisposeWithPendingAppDataInQueueIsSafe) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    auto* signedIn = new SignedInGamer(SignedInGamer::CreateInternal("ClientPlayer"));
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::SystemLink, std::vector<SignedInGamer*>{signedIn}, 8, 0, NetworkSessionProperties{}
+    );
+    session->Update();
+    ENetBackend::ConnectToHost(session, "127.0.0.1", fakeHostPort);
+
+    LocalNetworkGamer* localGamer = session->getLocalGamersProperty()[0];
+    NetworkGamer notYetKnownRemote = NetworkGamer::CreateInternal(session, "SomeRemotePlayer");
+    localGamer->SendData(std::vector<SharpRuntime::bytecs>{1, 2, 3}, SendDataOptions::None, &notYetKnownRemote);
+    session->Update(); // enqueues - fakeHost never replies, so it's still pending at Dispose() below
+
+    EXPECT_NO_THROW(session->Dispose());
+    delete signedIn;
 }
 
 // --- Task 5.5: AppData relay (real SendData/ReceiveData) ---
