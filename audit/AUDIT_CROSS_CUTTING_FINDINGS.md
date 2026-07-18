@@ -169,6 +169,14 @@ Organize by category as entries accumulate.
   features completely non-functional) makes this one of the most significant single-backend findings in this
   audit. No test found exercising `ScissorRectangle`/`StencilState` on D3D12 that would surface this (unsurprising
   given this codebase currently has no Windows-native CI for D3D12 per D-P4).
+  **UPDATE — positive cross-backend contrast confirmed: SdlGpu does NOT share this gap.**
+  `SdlGpuGraphicsBackend::ApplyDepthStencilState()`/`ApplyRasterizerState()` correctly track all stencil fields
+  and `scissorTestEnable`, and both are confirmed genuinely consumed — `scissorEnabled_` gates a real
+  `SDL_SetGPUScissor()` call, and the full stencil parameter set is threaded into `CaptureRenderState()`'s
+  `RenderStateSnapshot`, which drives real pipeline selection. SdlGpu's only narrower, honestly-disclosed gap in
+  this area is `DepthBias`/`SlopeScaleDepthBias` ("stored but deliberately not yet applied," since SDL_GPU has no
+  per-draw-dynamic depth-bias equivalent to Vulkan's `vkCmdSetDepthBias`) — a real but much narrower gap than
+  D3D12's complete Stencil+Scissor non-functionality.
 
 - **MEDIUM-HIGH, D3D12-specific: `OcclusionQuery` only captures the LAST draw call when multiple draws occur
   between `Begin()`/`End()`, not the cumulative/combined total XNA's real semantics require.**
@@ -188,6 +196,23 @@ Organize by category as entries accumulate.
   the same command-list submission as the draw(s) they bracket (a Vulkan/vkd3d-proton requirement) — confirmed via
   the comment's own account of reproducing a real bug (`PixelCount()` reporting 0 for a visible full-viewport
   triangle) before this constraint was understood and fixed.
+
+- **HIGH, SdlGpu-specific: fog is completely unimplemented across all 10 stock-effect shader families — not a
+  wrong formula, a total absence.** Confirmed exhaustively: `grep`ing every one of the 23 `.glsl` files in
+  `src/CNA/Internal/Backends/SdlGpu/shaders/` for real fog identifiers (`fogFactor`/`FogColor`/`fogEnabled`/
+  `fogStart`/`fogEnd`) returns **zero matches** — not even in `skinned3d.vert.glsl`, the shader most likely to
+  carry it given every other backend's equivalent does. `colored3d.vert.glsl`'s own header comment confirms this
+  is deliberate: "No fog (deliberately deferred, same as this codebase's WebGPU backend's own initial 3D vertical
+  slice)." Cross-checked `SdlGpuGraphicsBackend.cpp` itself for any `fogColor`/`fogEnabled`/`fogStart`/`fogEnd`
+  reference — also zero matches, confirming the gap runs top-to-bottom (the C++ layer never even attempts to
+  send fog parameters, let alone the shader consuming them incorrectly). **This makes SdlGpu a categorically
+  different (and arguably more severe) instance than the already-confirmed mirrored-fog-formula bug shared by
+  Bgfx/Vulkan/D3D11+D3D12** — those backends at least attempt fog, just with the wrong formula (so `FogEnabled`
+  visibly does *something*, just the wrong distance falloff); on SdlGpu, `GraphicsDevice.FogEnable`/
+  `BasicEffect.FogEnabled`/`FogColor`/`FogStart`/`FogEnd` have **zero visible effect at all** — any XNA game
+  relying on fog (distance culling, atmospheric effects, a common technique) renders identically whether fog is
+  enabled or not. No test found anywhere in `examples-tests-sdlgpu` (already audited this session) that would
+  have caught this, since none of those 22 files exercise fog on this backend.
 
 ## Duplicated backend logic
 
@@ -337,6 +362,17 @@ _(pending)_
   draw-param-fill code) to see whether the value is computed and discarded, or never plumbed through at all. Not
   shared by `SkinnedPbrEffect`'s `pbr_skinned3d.frag.hlsl`, whose cbuffer layout is copied wholesale from the
   already-correct unskinned `pbr3d.frag.hlsl` and does carry `EmissiveRoughness.xyz`.
+  **UPDATE — genuine positive counter-example: SdlGpu does NOT share this gap.** Confirmed via direct source
+  reading: `skinned3d.vert.glsl`'s fragment stage explicitly reuses `lit_textured3d.frag.glsl` **unchanged**
+  (verified — both declare a byte-identical `SkinnedLightParams`/`LitLightParams` uniform block, including
+  `emissiveColor_pad`), and the C++ fill code confirms this at the call-site level:
+  `SdlGpuGraphicsBackend.cpp`'s `FillSkinnedLightUniforms()` calls `FillLitLightUniforms()` directly (adding only
+  the `WeightsPerVertex` packing on top) — the exact same function that fills `EmissiveColor` for the unskinned
+  lit path. `AmbientColor` is likewise correctly forwarded via the shared primary uniform block
+  (`FillExtUniforms()`). **SdlGpu's SkinnedEffect correctly forwards both `AmbientColor` and `EmissiveColor`** —
+  its "reuse one identical uniform layout for both Skinned and unskinned lit paths" architecture choice happens
+  to structurally prevent the bug that affects D3D11/D3D12 (whose separate, incomplete
+  `D3DSkinnedExtraConstants` struct is what actually drops the field) and Vulkan (which drops both fields).
 - **NEW, Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip present in every other core Vulkan 3D vertex
   shader**, causing `EnvironmentMapEffect` scenes to render vertically mirrored on Vulkan. Confirmed across 4 test
   files (`vulkan_env_map_test.cpp`, `_amount_one_test.cpp`, `_amount_zero_test.cpp`, `_combined_test.cpp`,

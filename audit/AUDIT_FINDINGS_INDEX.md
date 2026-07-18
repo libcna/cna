@@ -14,6 +14,11 @@ _(none recorded yet)_
 
 ### HIGH
 
+- **SdlGpu-specific: fog is completely unimplemented across all 10 stock-effect shader families** — not a wrong
+  formula (like Bgfx/Vulkan/D3D11+D3D12), a total absence, confirmed by exhaustively grepping every `.glsl` file
+  and the C++ backend file for any fog identifier (zero matches anywhere). `GraphicsDevice.FogEnable`/
+  `BasicEffect.FogEnabled`/`FogColor`/`FogStart`/`FogEnd` have zero visible effect on this backend. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **D3D12-specific: `StencilState` (all fields) and `RasterizerState.ScissorTestEnable`/`DepthBias`/
   `SlopeScaleDepthBias` are completely non-functional.** `ApplyDepthStencilState()`/`ApplyRasterizerState()`
   receive these parameters as literally-commented-out unused (`/*stencilEnable*/`, etc.) and never forward them;

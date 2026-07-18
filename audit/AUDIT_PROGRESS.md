@@ -12,7 +12,7 @@ the audit must continue fully autonomously per the original prompt's instruction
 Microsoft.Xna/Devices public API are audited **directly** by the main agent (judgment-heavy, FNA-parity/
 cross-backend work); large mechanical batches (examples, tests, tools) are fanned out via the Workflow tool.
 
-### Direct-audit backend work: 12 of 16 backend shards fully AUDITED
+### Direct-audit backend work: 13 of 16 backend shards fully AUDITED
 
 `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2), `backend-sdlrenderer` (2/2, the
 backend itself, not the example-test shard), `backend-dx3` (2/2, static-only per D-P4), `backend-easygl` (2/2,
@@ -30,16 +30,17 @@ defer registration until construction can no longer fail. `SdlGpu`, however, has
 resource-leak risk in the same area (see Findings below) — flagged in the cross-cutting doc but **not yet written
 up as a formal per-file finding**, since `backend-sdlgpu`'s own 27-file direct audit has not started yet.
 
-### Remaining backend shards — NOT YET STARTED (4 of 16)
+### Remaining backend shards — NOT YET STARTED (3 of 16)
 
-`backend-sdlgpu` (27 — priority: formalize the resource-leak finding already spotted in its constructor),
 `backend-bgfx` (34 — priority: confirm/refute whether Bgfx's own skinned shader shares the normal-transform bug,
 the last backend not yet confirmed at the source level for that bug; also check whether it shares the
 Vulkan-specific `SpriteBatch.Begin(transformMatrix)` no-op bug — Bgfx was already confirmed to correctly implement
-`SetTransformMatrix`, so likely not, but double-check), `backend-vulkan` (40 — priority: full source audit of the
-already-confirmed `SetTransformMatrix` no-op bug's surrounding code, plus the already-known fog-formula/skinned-
-normal/ambient-emissive/Y-flip bugs), `backend-d3d9` (50, note D-5 vendored-shader boundary — the 12 vendored
-`.fx`/`.fxh` files are EXEMPT, only the C++ consumer code is in-scope).
+`SetTransformMatrix`, so likely not, but double-check; also check whether it shares SdlGpu's newly-confirmed
+total-fog-absence gap or Bgfx's own already-known wrong-formula variant), `backend-vulkan` (40 — priority: full
+source audit of the already-confirmed `SetTransformMatrix` no-op bug's surrounding code, plus the already-known
+fog-formula/skinned-normal/ambient-emissive/Y-flip bugs), `backend-d3d9` (50, note D-5 vendored-shader boundary —
+the 12 vendored `.fx`/`.fxh` files are EXEMPT, only the C++ consumer code is in-scope; this is the last backend
+needed to complete the full D3D family).
 
 **For each of these, specifically check**: (1) does its SkinnedEffect/SkinnedPbrEffect shader share the
 world-space-normal-transform bug (now confirmed at the shader-source level in 5 of 14 backends: EasyGL, WebGPU,
@@ -88,16 +89,32 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **655** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **682** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
-  backend-d3d11 ×20, backend-d3d12 ×26, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67,
+  backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67,
   examples-tests-bgfx ×98, examples-tests-vulkan ×70, examples-tests-webgpu ×22, examples-tests-d3d9 ×14,
   examples-tests-sdlgpu ×22, examples-tests-generic ×24)
-- PENDING: **1642**
+- PENDING: **1615**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~28.5% AUDITED so far** (655/2297).
+**~29.7% AUDITED so far** (682/2297).
+
+`backend-sdlgpu` (27 files) is now fully audited — all 23 `.glsl` shaders individually read, plus the
+1578+5105-line main backend files (scoped-depth) and the compile script/generated-header pair. Key results: (1)
+**a major new HIGH finding: fog is completely unimplemented across all 10 stock-effect shader families** — not a
+wrong formula (like Bgfx/Vulkan/D3D11+D3D12), a total absence, confirmed exhaustively via grep across every
+shader file AND the C++ backend file (zero fog identifiers anywhere); (2) the constructor resource-leak risk
+already flagged via the `examples-tests-sdlgpu` batch is now formally confirmed with exact line numbers
+(`SdlGpuGraphicsBackend.cpp:521-531`, ~12 unwrapped fallible calls); (3) confirmed, at the shader-source level,
+the already-known skinned-normal-transform bug (`skinned3d.vert.glsl`/`skinned_colored3d.vert.glsl`: complete
+omission; `pbr_skinned3d.vert.glsl`: raw-World variant) and the `EnvironmentMapEffect` emissive-remultiply bug
+(`env_map3d.frag.glsl`). Two genuine positive findings: (a) **Stencil AND Scissor state are both genuinely
+functional on this backend** (tracked all the way to a real `RenderStateSnapshot` pipeline-selection key and a
+real `SDL_SetGPUScissor()` call) — unlike D3D12's confirmed complete non-functionality of both; (b)
+**`SkinnedEffect` correctly forwards both `AmbientColor` and `EmissiveColor`**, because this backend's own
+architecture literally reuses `lit_textured3d.frag.glsl` unchanged as `skinned3d`'s fragment stage — unlike
+D3D11/D3D12 (separate, incomplete struct) and Vulkan (drops both fields entirely).
 
 `backend-d3d12` (26 files) is now fully audited. Key results — the most significant single-backend finding in
 this audit so far: **`StencilState` (all fields) and `RasterizerState.ScissorTestEnable`/`DepthBias`/
@@ -257,34 +274,38 @@ audits) to confirm whether they share the same pattern.
     real DX-119 dynamic-sampler upgrade; stale "Cube/3D not implemented" claim contradicted by real
     `TextureCube`/`Texture3D` implementations in the same shard) — bringing this pattern's confirmed-instance
     count to 8.
+23. **SdlGpu-specific (HIGH): fog is completely unimplemented across all 10 stock-effect shader families** — not
+    a wrong formula, a total absence, confirmed exhaustively at both the shader-source and C++ levels.
+24. SdlGpu's constructor resource-leak risk (previously spotted via the `examples-tests-sdlgpu` batch) is now
+    formally confirmed with exact line numbers (`SdlGpuGraphicsBackend.cpp:521-531`).
+25. Two genuine positive findings for SdlGpu: Stencil AND Scissor state are both genuinely functional (unlike
+    D3D12's confirmed complete non-functionality of both); `SkinnedEffect` correctly forwards both `AmbientColor`
+    and `EmissiveColor` (unlike D3D11/D3D12's partial gap and Vulkan's complete gap) because this backend's
+    architecture literally reuses the unskinned lit fragment shader unchanged for the skinned path.
 
 ## Last completed file
 
-`backend-d3d12` shard — all 26 files (the backend's own non-shader `.cpp`/`.hpp` files) fully audited and written
-up, marked AUDITED. `D3D12GraphicsBackend.cpp` (2331 lines, largest in this backend) given a scoped-depth review
-(constructor, `RegisterForWindow` absence, `Apply*State` parameter-discarding confirming the Stencil/Scissor gap,
-all 4 draw methods' occlusion-query bracket recording confirming the multi-draw gap, skinned/PBR ambient-vs-
-emissive constant-buffer fill all verified in full; the remaining non-skinned draw-dispatch variants, device-lost
-recovery, and resize handling were not exhaustively traced). This closes out `backend-d3d12` entirely and, with
-it, the entire D3D9/D3D11/D3D12/D3DCommon family's C++ (non-vendored-shader) infrastructure except D3D9 itself.
+`backend-sdlgpu` shard — all 27 files (23 `.glsl` shaders, individually read in full; the 1578+5105-line main
+backend header/cpp given a scoped-depth review; the compile script + generated SPIR-V header) fully audited and
+written up, marked AUDITED. This closes out `backend-sdlgpu` entirely.
 
 ## Next exact action
 
 1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_FINDINGS_INDEX.md`, `AUDIT_PROGRESS.md`, the
-   26 new `.audit.md` reports under `audit/include/.../D3D12/` and `audit/src/.../D3D12/`, and the updated
-   `backend-d3d12` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
-2. Move to `backend-sdlgpu` (27 files — formalize the constructor resource-leak finding already spotted, as a
-   proper per-file report; then continue through the rest of the backend). Priority checks given everything
-   already known: does its own skinned/PBR shader source share the ambient-vs-emissive `EmissiveColor` gap
-   pattern; does it correctly implement `SetTransformMatrix`/render-target-relative `SpriteBatch` sizing (already
-   suspected correct from the earlier constructor spot-check, but confirm from its own shard); does it share any
-   Stencil/Scissor-style scope cut.
-3. Then `backend-bgfx` (34, backend source itself — priority: confirm/refute whether Bgfx's own skinned shader
-   shares the normal-transform bug, the one backend not yet confirmed at the source level), `backend-vulkan` (40,
-   priority: full source audit of the already-confirmed `SetTransformMatrix` no-op bug's surrounding code, plus
-   the already-known fog-formula/skinned-normal/ambient-emissive/Y-flip bugs), `backend-d3d9` (50, note D-5
-   vendored shader boundary — the 12 vendored `.fx`/`.fxh` files are EXEMPT, only the C++ consumer code is
-   in-scope; this is the last backend to complete the full D3D family).
+   27 new `.audit.md` reports under `audit/include/.../SdlGpu/` and `audit/src/.../SdlGpu/`, and the updated
+   `backend-sdlgpu` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
+2. Move to `backend-bgfx` (34 files, backend source itself — priority checks given everything already known):
+   (a) confirm/refute whether Bgfx's own skinned shader shares the normal-transform bug — the one remaining
+   backend not yet confirmed at the shader-source level for that bug (only inferred from masked test behavior so
+   far); (b) does it correctly implement `SetTransformMatrix` (already confirmed via a real override found while
+   auditing D3D11, so likely yes, but confirm from source); (c) does it share SdlGpu's newly-confirmed total-fog-
+   absence, or does it have its own already-known wrong-formula variant (both are real possibilities — check
+   which); (d) does it implement Stencil/Scissor fully (like SdlGpu) or partially/not at all (like D3D12).
+3. Then `backend-vulkan` (40, priority: full source audit of the already-confirmed `SetTransformMatrix` no-op
+   bug's surrounding code, plus the already-known fog-formula/skinned-normal/ambient-emissive/Y-flip bugs),
+   `backend-d3d9` (50, note D-5 vendored shader boundary — the 12 vendored `.fx`/`.fxh` files are EXEMPT, only the
+   C++ consumer code is in-scope; this is the last backend needed to complete the full D3D family and all 16
+   backend shards).
 4. After all remaining backend shards: Task #3 (CNA core), Task #4 (Microsoft.Xna areas — start with
    `xna-framework-core` 78, then `xna-graphics` 191 the largest, prioritizing `SpriteFont.cpp`/`SpriteBatch.cpp`
    given the UB finding above, and `BlendState`/`SamplerState`/`RasterizerState`/`DepthStencilState`/
@@ -305,7 +326,7 @@ it, the entire D3D9/D3D11/D3D12/D3DCommon family's C++ (non-vendored-shader) inf
 | Dx3 | backend-dx3 | **AUDITED** (static-only, D-P4) |
 | EasyGL | backend-easygl | **AUDITED** |
 | Headless | backend-headless | **AUDITED** |
-| SdlGpu | backend-sdlgpu | PENDING (examples audited, confirmed env-map + skinned-normal bugs; constructor spot-checked — see Findings #7) |
+| SdlGpu | backend-sdlgpu | **AUDITED** (27/27; confirmed HIGH: no fog at all; formalized constructor resource-leak; positive: functional Stencil+Scissor, correct SkinnedEffect Ambient+EmissiveColor forwarding) |
 | SdlRenderer | backend-sdlrenderer | **AUDITED** |
 | Software | backend-software | **AUDITED** |
 | Vulkan | backend-vulkan | PENDING (examples audited; backend source not yet) |
@@ -365,7 +386,8 @@ consolidating what's already known rather than re-deriving it.
 16. `audit: review D3DCommon backend (46 files, shared D3D11/D3D12 shader + layout infrastructure)`
 17. `audit: review D3D11 backend (20 files, own non-shader implementation)`
 18. `audit: review D3D12 backend (26 files, own non-shader implementation)`
-19. *(next commit: continue backend-sdlgpu direct audit)*
+19. `audit: review SdlGpu backend (27 files: main backend + 23 GLSL shaders + tooling)`
+20. *(next commit: continue backend-bgfx direct audit)*
 
 ## Self-check log
 
