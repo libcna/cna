@@ -232,3 +232,60 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRathe
         reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
         System::NotSupportedException);
 }
+
+// AUD-06-015: Swap16/Swap32 (SoundEffectContentTypeReader.cpp) exist and are already wired to
+// `input.getPlatformProperty() == 'x'`, but no fixture -- real or hand-built -- has ever actually
+// exercised them; every other test in this file uses platform='w'. This builds a WAVEFORMATEX
+// with every swapped field (wFormatTag/nChannels/nSamplesPerSec/nAvgBytesPerSec/nBlockAlign/
+// wBitsPerSample) written in REAL big-endian byte order -- matching how a genuine Xbox 360
+// (big-endian PowerPC)-produced XNB stores them -- while everything else in the XNB container
+// (type-reader table, formatLength, data length, loop points, and the raw PCM sample data itself)
+// stays little-endian, exactly matching real FNA's SoundEffectReader.Swap() calls, which only
+// ever wrap the WAVEFORMATEX structure's own fields. If the swap were silently disabled, the
+// resulting nSamplesPerSec (44100 written big-endian, misread as a little-endian uint32 without
+// swapping) would decode as 1,151,051,776 Hz -- wildly different from the correct duration this
+// test asserts, giving this real discriminating power, not just "didn't crash".
+TEST_F(SoundEffectContentTypeReaderTest, XboxPlatformByteSwapsWaveFormatFieldsCorrectly)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+    auto w16be = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v >> 8)); bytes.push_back(static_cast<uint8_t>(v)); };
+    auto w32be = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v >> 24)); bytes.push_back(static_cast<uint8_t>(v >> 16));
+        bytes.push_back(static_cast<uint8_t>(v >> 8)); bytes.push_back(static_cast<uint8_t>(v));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    // PCM16 mono @ 44100 Hz -- every WAVEFORMATEX field big-endian, container fields unchanged.
+    w32(16);          // formatLength -- NOT swapped, plain little-endian container field
+    w16be(1);         // wFormatTag: PCM
+    w16be(1);         // nChannels: mono
+    w32be(44100);     // nSamplesPerSec
+    w32be(44100 * 2); // nAvgBytesPerSec (mono, 16-bit: rate * 1 channel * 2 bytes)
+    w16be(2);         // nBlockAlign (1 channel * 2 bytes)
+    w16be(16);        // wBitsPerSample
+
+    std::vector<uint8_t> pcm(2 * 1024, 0); // 1024 mono S16 frames, little-endian samples (never swapped)
+    w32(static_cast<uint32_t>(pcm.size())); // data length -- NOT swapped
+    bytes.insert(bytes.end(), pcm.begin(), pcm.end());
+    w32(0); // loopStart
+    w32(0); // loopLength
+    w32(0); // duration
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'x'); // platform='x': Xbox 360
+    auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+
+    EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+}
