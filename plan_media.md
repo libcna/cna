@@ -2415,6 +2415,94 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   no-mixer and failed-uninstall branches are unreachable from this suite; Group D
   (`MEDIA-192`..`198`) remains deferred by the project owner.
 
+- [x] **MEDIA-228 — Actually make the file-URI tests portable; `MEDIA-225` only fixed half of it.**
+  `MEDIA-225` correctly replaced the illegal `q?.ogg` fixture name, but a thirteenth review noticed
+  the tests still **built the URI itself non-portably**: `"file://" + path.string()`. On Windows
+  that yields `file://C:\project\...` -- backslashes are not valid in a URI at all, and even
+  after converting them, `file://C:/...` parses **`C:` as the AUTHORITY**, i.e. a remote host. The
+  correct Windows spelling needs a third slash: `file:///C:/...`. So the "portable test" claim from
+  `MEDIA-225` was still wrong, just for a different reason -- the *filename* was fixed while the
+  *URI construction* was not.
+  *Fix:* a single `MakeFileUri()` helper now builds every URI in these tests: it resolves to
+  absolute, uses `generic_string()` (normalising separators to `/` on all platforms), and prefixes
+  `/` when the path does not already start with one, turning `C:/x` into `/C:/x`. Every hand-built
+  `"file://" + ...` in the file was routed through it, including the localhost, no-authority and
+  UNC spellings, which had the same latent problem.
+  *Accept:* the helper's output was **verified experimentally, not asserted**: compiling the same
+  logic standalone and feeding it Windows-shaped inputs produces `file:///C:/proj/s.ogg` for both
+  `C:\proj\s.ogg` and `C:/proj/s.ogg`, and `file:///home/u/s.ogg` on POSIX. All 23 `SongTest`
+  cases pass.
+  *A mistake made and caught during this fix:* the first version of the helper did not resolve to
+  absolute, so a relative fixture path became `/tests/assets/...` -- an absolute path that does not
+  exist -- and three tests failed. Fixed by absolutising inside the helper.
+
+- [x] **MEDIA-229 — Explain the 4919-vs-4921 test-count difference instead of hand-waving it.**
+  The previous round dismissed the reviewer's differing count as "test registration differing
+  between build configurations" **without evidence** -- an unsupported claim of exactly the kind
+  this plan keeps being caught by.
+  **This task's own conclusion was WRONG and is retracted -- see `MEDIA-232`.** It blamed the
+  4919-vs-4921 gap on Draco, but Draco gates **four** tests, and four cannot explain a difference of
+  two. The arithmetic never worked; the explanation only looked plausible because the count was also
+  wrong at the time (`MEDIA-230`). What is factually true is only the Draco inventory below -- not
+  that it explains that particular gap.
+  *Draco inventory (accurate):* **four** tests are gated behind `#ifdef CNA_DRACO_AVAILABLE`:
+  `RuntimeGltfModelTest.LoadsDracoCompressedTriangleDirectlyFromGltf`,
+  `GltfImportCoreTest.ExtractMeshDecodesDracoCompressedTriangle`,
+  `GltfImportCoreTest.ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWithNoTangentAccessor`
+  and `GltfToCnjToolTest.ConvertsDracoCompressedTriangleAndLoadsBackThroughContentManager`.
+  Draco 1.5.6 **is** installed on this machine, but the `cmake-build-tests` directory predated the
+  Draco integration, so its cached configuration had it off. Re-running CMake detects it
+  (`CNA: Draco found (1.5.6)`) and the counts line up.
+  *Note:* this is also why the earlier "4919 tests" figures in this plan are lower than a
+  freshly-configured build reports -- they were measured in that stale build directory. The results
+  themselves were unaffected (zero Media failures either way), but the counts should be read with
+  that caveat rather than treated as canonical.
+
+- [x] **MEDIA-230 — Correct `MEDIA-229`'s own count, and stop citing pre-merge regression numbers.**
+  A fourteenth review found two errors in `MEDIA-229` -- the task whose entire point was to replace
+  a hand-waved claim with evidence. Both were mine:
+  * **It said three Draco-gated tests; there are four.** The one missed is
+    `GltfToCnjToolTest.ConvertsDracoCompressedTriangleAndLoadsBackThroughContentManager`. The cause
+    was a sloppy search: I grepped for `#ifdef` within three lines *before* a `TEST`, which silently
+    skips any file where the guard sits further away. Re-counted by walking `#ifdef`..`#endif`
+    across **every** test file, which finds all four.
+  * **Every "4919 tests" figure in this plan predates the `36ac9656` merge** and was measured in a
+    stale build directory. Those numbers verified the Media branch in isolation -- they never
+    verified the current merged HEAD, so quoting them as full-suite evidence for HEAD was wrong.
+  *Corrected evidence, measured on the actual current HEAD (`52fe5835`) with a freshly configured
+  build:* **5312 tests, 5308 passed, 0 failed, 4 pre-existing hardware skips** (Accelerometer/
+  Gyroscope × 2). All four Draco tests genuinely ran.
+  *Lesson worth keeping:* a task written specifically to be rigorous about a number still got the
+  number wrong, because the *method* (a proximity grep) was never checked. Counting something is
+  not evidence unless the counting method is itself verified.
+
+- [x] **MEDIA-231 — Re-baseline the plan's regression figures on the merged tree.**
+  Earlier phases legitimately measured `feature/media` alone; after `a3f88c94`/`36ac9656` merged it
+  into `develop`, the meaningful figure is the merged one. Recorded here once rather than
+  rewriting every historical phase note (which would falsify what was actually observed at the
+  time): **historical per-phase counts are branch-only and pre-merge; the current merged HEAD
+  measures 5312/5308/0.** Future rounds should quote the merged number.
+  **Unchanged and still open:** no TSAN/threaded or end-to-end audio test for visualization; the
+  no-mixer and failed-uninstall branches remain unreachable from this suite; Group D
+  (`MEDIA-192`..`198`) remains deferred by the project owner.
+
+- [x] **MEDIA-232 — Retract `MEDIA-229`'s explanation instead of leaving a plausible-but-false one
+  in place.** A fifteenth review noted the residual inconsistency: `MEDIA-229` still asserted Draco
+  caused the 4919-vs-4921 gap, while `MEDIA-230` had corrected the Draco count to four. **Four
+  cannot produce a difference of two**, so the explanation was arithmetically impossible.
+  *What is actually known:* the Draco inventory (four gated tests, named in `MEDIA-229`) is correct
+  and independently verified. **The two-test gap itself was never explained**, and can no longer be
+  reconstructed -- both builds have since moved (`36ac9656` merged develop in, and the stale build
+  directory was reconfigured), so the two figures being compared no longer exist to compare.
+  *Fix:* `MEDIA-229`'s conclusion is retracted in place rather than quietly patched, since the
+  earlier wording would otherwise keep reading as a settled finding. **No replacement explanation is
+  offered, because none is known** -- inventing a second plausible-sounding cause would repeat the
+  exact mistake this whole thread of tasks exists to correct.
+  *Current baseline, unaffected:* HEAD `9033a2fd` measures **5312 tests, 5308 passed, 0 failed, 4
+  pre-existing hardware skips** (two Accelerometer, two Gyroscope), independently reproduced by the
+  reviewer under a real Wayland session with ENet loopback, with all four Draco tests registered and
+  completing.
+
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
 

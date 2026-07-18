@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <cstring>
 #include <filesystem>
 
 #include <gtest/gtest.h>
@@ -121,6 +122,33 @@ TEST(SongTest, DisposeSetsIsDisposed)
     EXPECT_TRUE(song.getIsDisposedProperty());
 }
 
+namespace
+{
+    // Builds an RFC 8089 file URI from a real path, correctly on BOTH platforms.
+    //
+    // Hand-concatenating "file://" + path.string() is NOT portable, which is how an earlier version
+    // of these tests got it wrong (plan_media.md MEDIA-228):
+    //   * on Windows, string() yields backslashes ("C:\\x"), which are not valid in a URI at all;
+    //   * even after converting to forward slashes, "file://C:/x" parses "C:" as the AUTHORITY,
+    //     making it look like a remote host rather than a local drive.
+    // The correct Windows spelling needs a third slash: "file:///C:/x".
+    //
+    // generic_string() normalises separators to '/', and prefixing '/' when the path does not
+    // already start with one turns "C:/x" into "/C:/x", yielding "file:///C:/x". On POSIX the path
+    // already starts with '/', so the result is the usual "file:///home/...".
+    std::string MakeFileUri(const std::filesystem::path& p)
+    {
+        // Always resolve to absolute first: a file URI names an absolute location, and the test
+        // fixtures are given as paths relative to the working directory.
+        std::string generic = std::filesystem::absolute(p).generic_string();
+        if (generic.empty() || generic.front() != '/')
+        {
+            generic.insert(generic.begin(), '/');
+        }
+        return "file://" + generic;
+    }
+}
+
 TEST(SongTest, FromUriConstructsFromLocalPath)
 {
     Song* song = Song::FromUri("Sunrise", kRealFixture);
@@ -143,14 +171,14 @@ TEST(SongTest, FromUriAcceptsARealFileUri)
 {
     // A file URI names an ABSOLUTE path ("file://<authority>/<path>"), so build it from the
     // fixture's real absolute location rather than a relative one.
-    const std::string abs = std::filesystem::absolute(kRealFixture).string();
 
-    // NOTE: `abs` already begins with '/', so "file://" + abs IS the empty-authority spelling
-    // "file:///path". An earlier version of this test claimed to check "two forms" but built the
-    // identical string twice -- caught by external code review (plan_media.md MEDIA-219). The
-    // genuinely distinct forms are asserted separately below.
+    // MakeFileUri() produces the empty-authority spelling ("file:///path") on both platforms.
+    // Two earlier versions of this test got this wrong: one built the identical string twice while
+    // claiming to check "two forms" (MEDIA-219), and one hand-concatenated the native path, which
+    // is invalid on Windows (MEDIA-228). The genuinely distinct spellings are asserted separately
+    // in FromUriAcceptsEveryLocalFileUriSpelling below.
     Song* song = nullptr;
-    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", "file://" + abs));
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", MakeFileUri(kRealFixture)));
     ASSERT_NE(song, nullptr);
     EXPECT_EQ(song->getNameProperty(), "Sunrise");
     delete song;
@@ -159,14 +187,14 @@ TEST(SongTest, FromUriAcceptsARealFileUri)
 // Percent-escapes must be decoded, or any path containing a space fails.
 TEST(SongTest, FromUriPercentDecodesEscapedCharacters)
 {
-    // Percent-escape every space in the real absolute path; without decoding, the file is not found.
-    std::string abs = std::filesystem::absolute(kRealFixture).string();
+    // Percent-escape every space in the real URI; without decoding, the file is not found.
+    const std::string uri = MakeFileUri(kRealFixture);
     std::string escaped;
-    for (char c : abs) { if (c == ' ') escaped += "%20"; else escaped += c; }
-    ASSERT_NE(escaped, abs) << "fixture path must contain a space for this test to mean anything";
+    for (char c : uri) { if (c == ' ') escaped += "%20"; else escaped += c; }
+    ASSERT_NE(escaped, uri) << "fixture path must contain a space for this test to mean anything";
 
     Song* song = nullptr;
-    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", "file://" + escaped));
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", escaped));
     ASSERT_NE(song, nullptr);
     delete song;
 }
@@ -195,23 +223,26 @@ TEST(SongTest, FromUriStillAcceptsAPlainPath)
 // only handled one of them.
 TEST(SongTest, FromUriAcceptsEveryLocalFileUriSpelling)
 {
-    const std::string abs = std::filesystem::absolute(kRealFixture).string();
 
     // 1. Empty authority: file:///path
     Song* a = nullptr;
-    ASSERT_NO_THROW(a = Song::FromUri("S", "file://" + abs));
+    ASSERT_NO_THROW(a = Song::FromUri("S", MakeFileUri(kRealFixture)));
     ASSERT_NE(a, nullptr);
     delete a;
 
+    // The path portion, always '/'-separated and always leading with '/' (so a Windows drive
+    // becomes "/C:/..."), shared by the two remaining spellings.
+    const std::string uriPath = MakeFileUri(kRealFixture).substr(std::strlen("file://"));
+
     // 2. Explicit localhost authority: file://localhost/path
     Song* b = nullptr;
-    ASSERT_NO_THROW(b = Song::FromUri("S", "file://localhost" + abs));
+    ASSERT_NO_THROW(b = Song::FromUri("S", "file://localhost" + uriPath));
     ASSERT_NE(b, nullptr);
     delete b;
 
     // 3. No authority component at all: file:/path
     Song* c = nullptr;
-    ASSERT_NO_THROW(c = Song::FromUri("S", "file:" + abs));
+    ASSERT_NO_THROW(c = Song::FromUri("S", "file:" + uriPath));
     ASSERT_NE(c, nullptr);
     delete c;
 }
@@ -230,9 +261,10 @@ TEST(SongTest, FromUriTreatsARemoteAuthorityAsUncRatherThanSilentlyDroppingIt)
     // Here the path after the authority is a REAL, existing file:
     //   correct (UNC)          -> "//remotehost/<abs>"  -> does not exist -> throws
     //   buggy (authority lost) -> "<abs>"               -> exists         -> succeeds
-    const std::string abs = std::filesystem::absolute(kRealFixture).string();
 
-    EXPECT_THROW((void)Song::FromUri("S", "file://remotehost" + abs),
+    EXPECT_THROW((void)Song::FromUri(
+                     "S", "file://remotehost" +
+                          MakeFileUri(kRealFixture).substr(std::strlen("file://"))),
                  System::IO::FileNotFoundException)
         << "a remote authority was silently dropped, resolving a remote URI to a LOCAL file";
 }
@@ -250,22 +282,21 @@ TEST(SongTest, FromUriDoesNotMistakeAWindowsDriveLetterForAScheme)
 // path, so this failed with a FileNotFoundException naming a file nobody asked for.
 TEST(SongTest, FromUriIgnoresQueryAndFragment)
 {
-    const std::string abs = std::filesystem::absolute(kRealFixture).string();
 
     Song* withQuery = nullptr;
-    ASSERT_NO_THROW(withQuery = Song::FromUri("S", "file://" + abs + "?version=1"))
+    ASSERT_NO_THROW(withQuery = Song::FromUri("S", MakeFileUri(kRealFixture) + "?version=1"))
         << "a query string was treated as part of the filename";
     ASSERT_NE(withQuery, nullptr);
     delete withQuery;
 
     Song* withFragment = nullptr;
-    ASSERT_NO_THROW(withFragment = Song::FromUri("S", "file://" + abs + "#intro"))
+    ASSERT_NO_THROW(withFragment = Song::FromUri("S", MakeFileUri(kRealFixture) + "#intro"))
         << "a fragment was treated as part of the filename";
     ASSERT_NE(withFragment, nullptr);
     delete withFragment;
 
     Song* withBoth = nullptr;
-    ASSERT_NO_THROW(withBoth = Song::FromUri("S", "file://" + abs + "?version=1#intro"));
+    ASSERT_NO_THROW(withBoth = Song::FromUri("S", MakeFileUri(kRealFixture) + "?version=1#intro"));
     ASSERT_NE(withBoth, nullptr);
     delete withBoth;
 }
@@ -289,7 +320,7 @@ TEST(SongTest, FromUriTreatsPercentEncodedDelimitersAsLiteralFilenameCharacters)
 
     Song* song = nullptr;
     // %23 is an encoded '#', so the real filename contains it -- the path must NOT be cut there.
-    EXPECT_NO_THROW(song = Song::FromUri("S", "file://" + dir.string() + "/q%23.ogg"))
+    EXPECT_NO_THROW(song = Song::FromUri("S", MakeFileUri(dir) + "/q%23.ogg"))
         << "an encoded '#' was treated as a fragment delimiter and truncated the filename";
     delete song;
 
