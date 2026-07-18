@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -185,4 +186,49 @@ TEST_F(SoundEffectContentTypeReaderTest, Xma2IsRejected)
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     EXPECT_THROW(reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(), ContentLoadException);
+}
+
+// AUD-06-013 (2026-07-17 deep audit): a malformed XNB claiming nSamplesPerSec=0 for one of the
+// newly-supported WAV-wrapped formats (PCM8/float/MS-ADPCM/IMA-ADPCM, AUD-06) must not crash or
+// silently construct a garbage SoundEffect -- it must fail deterministically. CNA's reader itself
+// doesn't add a new sample-rate check (SoundEffectReader.Read() has none in real FNA either, and
+// AUD-05-001's own investigation confirmed CNA deliberately doesn't add C#-level validation FNA
+// itself lacks), but SDL3's own WAV loader validates this ("Invalid sample rate") -- confirmed
+// here that the failure propagates as a clean, catchable exception all the way through
+// SoundEffect::FromStream/BuildViaWavWrapper, not a crash or hang.
+TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRatherThanCrashing)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);            // formatLength (no extension)
+    w16(1);              // wFormatTag: PCM
+    w16(1);               // nChannels: mono
+    w32(0);               // nSamplesPerSec: malformed, zero
+    w32(0);               // nAvgBytesPerSec
+    w16(1);                // nBlockAlign
+    w16(8);                // wBitsPerSample
+    w32(16);              // data length
+    for (int i = 0; i < 16; ++i) bytes.push_back(static_cast<uint8_t>(0x80)); // 8-bit PCM silence
+    w32(0);               // loopStart
+    w32(0);               // loopLength
+    w32(0);               // duration
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    EXPECT_THROW(
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
+        System::NotSupportedException);
 }
