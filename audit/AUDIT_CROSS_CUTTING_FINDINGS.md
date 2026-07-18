@@ -706,3 +706,24 @@ _(pending)_
   real behavior is to throw `KeyNotFoundException`** — this is a real, non-backend-specific FNA-parity gap in
   `Microsoft::Xna::Framework::Graphics::SpriteFont`/`SpriteBatch` themselves (not a rendering-backend bug), and
   should be flagged prominently when the `xna-graphics` shard reaches these two files.
+- **HIGH: `CNA::Logger::ToSDLPriority()` (`src/CNA/Logger.cpp`) mistags every `Fatal`/`Error`/`Warn` log call
+  with `SDL_LOG_PRIORITY_INFO`, not their real SDL priorities — found while auditing `cna-root-utilities`.**
+  The switch's `FATAL`/`ERROR`/`WARN`/`INFO` cases are all commented out with a literal `//todo` marker left in
+  place, so all 4 fall through to `default: return SDL_LOG_PRIORITY_INFO;` (only `DEBUG`/`TRACE`/`EXPERIMENT`
+  have real, uncommented cases, mapping to `SDL_LOG_PRIORITY_DEBUG`). This is unambiguously incomplete,
+  abandoned work — the correct implementation is visible, commented out, immediately above the bug. Impact is
+  two-fold: (1) every individual `Logger::Fatal()`/`Error()`/`Warn()` (and their `*If()` variants) call reports
+  the wrong SDL priority to any consumer that inspects it (a custom `SDL_LogOutputFunction`, SDL's own
+  priority-based coloring); (2) `Logger::SetMinimumLevel()` routes through this SAME function to call
+  `SDL_SetLogPriorities()`, so setting the minimum level to `WARN` (intending "show WARN and more severe")
+  actually sets SDL's own native threshold to `INFO` instead. Unlike every other finding in this audit so far,
+  `Logger` is foundational, always-compiled (not gated behind `CNA_NOXNA` or any backend selection) code used
+  project-wide — this is not a rendering-backend-specific bug, but a core-infrastructure one with the widest
+  possible blast radius of any single bug found in this audit.
+- **`CNA::Runtime` (`include/CNA/Misc.hpp`) is a fully public, Doxygen-documented class with ZERO
+  implementation anywhere in the codebase** — found while auditing `cna-root-utilities`. Its 5 declared
+  methods (`Initialize`/`Shutdown`/`IsGraphicsEnabled`/`IsAudioEnabled`/`IsInputEnabled`) have no `.cpp`
+  definition anywhere (confirmed: no `Misc.cpp` exists at all), and the class has zero consumers anywhere in
+  the repository either. Any code that instantiates `CNA::Runtime` and calls any of its methods would fail to
+  link. Distinct from (and more severe than) the `cna-graphics` NOXNA shard's own "implemented but unconsumed"
+  scaffold pattern — this one isn't even implemented.

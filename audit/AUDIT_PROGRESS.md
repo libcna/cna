@@ -57,8 +57,23 @@ render-pipeline settings scaffold (`PbrMaterial`/`RenderPipelineSettings`/`Rende
 documentation-rot instance (`RenderPipelineSettings.hpp` references a nonexistent
 `GraphicsDevice::GetRenderPipelineSettings()`) and confirmed zero production consumers of any setting in this
 shard (honestly disclosed as forward-looking scaffolding in the shard's own comments) and zero GTest coverage
-(only a manual-assert compile example). Remaining Task #3 shards: `cna-internal-core` (113), `cna-devices`
-(39), `cna-input` (31), `cna-root-utilities` (15).
+(only a manual-assert compile example).
+
+`cna-root-utilities` (15/15, **AUDITED**) — CNA's foundational, always-compiled infrastructure (exception
+type, platform/OS detection, logging, entrypoint glue, backend/capability enums). **Found 2 significant,
+confirmed defects, both distinct from the graphics-backend-layer findings so far**: (1) `Logger::
+ToSDLPriority()` mistags every `Fatal`/`Error`/`Warn` log call with `SDL_LOG_PRIORITY_INFO` instead of their
+real SDL priorities (the correct cases are visibly commented out with a `//todo` marker) — this is
+foundational, always-compiled code with the widest blast radius of any single bug found in this audit so far,
+since it's not gated behind any opt-in flag and is used project-wide; (2) `CNA::Runtime` (`Misc.hpp`) is a
+fully public, documented class with ZERO implementation anywhere in the codebase (would fail to link if ever
+used) and zero consumers. Also found a 9th documentation-rot instance was already counted above; this shard
+adds: `CNAHelper.hpp` is the only file in `include/CNA/` using an old-style include guard with an unrelated
+leftover project name ("WINDOWSPHONESPEEDYBLUPI"); `Entrypoint.hpp` checks a preprocessor macro
+(`CNA_BACKEND_SDL`) that the build system never actually defines (real macros are `CNA_BACKEND_SDL_RENDERER`/
+`_GPU`) and has zero consumers anywhere in this repository.
+
+Remaining Task #3 shards: `cna-internal-core` (113, largest), `cna-devices` (39), `cna-input` (31).
 
 **Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
 `EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
@@ -115,17 +130,18 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **813** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **828** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
   backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, backend-bgfx ×34, backend-vulkan ×40, backend-d3d9 ×50,
-  cna-graphics ×7, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98,
-  examples-tests-vulkan ×70, examples-tests-webgpu ×22, examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22,
-  examples-tests-generic ×24)
-- PENDING: **1484**
+  cna-graphics ×7, cna-root-utilities ×15, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67,
+  examples-tests-bgfx ×98, examples-tests-vulkan ×70, examples-tests-webgpu ×22, examples-tests-d3d9 ×14,
+  examples-tests-sdlgpu ×22, examples-tests-generic ×24)
+- PENDING: **1469**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~35.4% AUDITED so far** (813/2297). **All 16 backend shards now fully audited; Task #3 (CNA core) started.**
+**~36.0% AUDITED so far** (828/2297). **All 16 backend shards fully audited; Task #3 (CNA core) in progress
+(2 of 5 shards done).**
 
 `backend-bgfx` (34 files) is now fully audited — all 28 `.sc` shaders individually read, plus a scoped-depth
 review of the 695+3443-line main backend header/cpp, the vertex-format-helper header, the renderer-selection
@@ -386,21 +402,26 @@ audits) to confirm whether they share the same pattern.
 
 ## Last completed file
 
-`cna-graphics` shard — all 7 files (the smallest Task #3 shard: `PbrMaterial`, `RenderPipelineSettings`,
-`RenderQuality`, `ShadowQuality`, `TonemappingMode` — CNA's own NOXNA extended render-pipeline settings
-scaffold, gated behind `CNA_NOXNA`, default OFF) fully audited and written up, marked AUDITED. Found a 9th
-documentation-rot instance (`RenderPipelineSettings.hpp` references a nonexistent
-`GraphicsDevice::GetRenderPipelineSettings()`). This follows immediately after completing all 16 backend shards
-(`backend-d3d9`, the last one, closed out in the prior commit) and the Pass 4 cross-cutting-defect-matrix
-population. Overall audit is at 813/2297 (~35.4%).
+`cna-root-utilities` shard — all 15 files (foundational, always-compiled infrastructure: `CNAException`,
+`CNAHelper` (the `NOXNA` macro), `DesktopOS`, `Entrypoint`, `GraphicsBackendType`, `GraphicsCapability`,
+`LogCategory`, `LogLevel`, `Logger`, `Misc`, `Platform`) fully audited and written up, marked AUDITED. Found 2
+significant, confirmed defects distinct from every graphics-backend-layer finding so far: `Logger::
+ToSDLPriority()` mistags every `Fatal`/`Error`/`Warn` call with `SDL_LOG_PRIORITY_INFO` (foundational,
+always-compiled, project-wide blast radius — the widest of any single bug in this audit); `CNA::Runtime`
+(`Misc.hpp`) is fully declared but 100% unimplemented anywhere in the codebase, with zero consumers. Also
+found `CNAHelper.hpp` is the only file in `include/CNA/` with an old-style include guard bearing an unrelated
+leftover project name, and `Entrypoint.hpp` checks a preprocessor macro the build system never defines and has
+zero consumers itself.
 
 ## Next exact action
 
-1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_PROGRESS.md`, the 7 new `.audit.md` reports
-   under `audit/include/.../CNA/Graphics/` and `audit/src/.../CNA/Graphics/`, and the updated `cna-graphics`
-   manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
-2. Continue Task #3 (CNA core shards): `cna-root-utilities` (15, next-smallest), then `cna-input` (31),
-   `cna-devices` (39), `cna-internal-core` (113, largest of the 5). Task #4 (Microsoft.Xna areas — start with
+1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_FINDINGS_INDEX.md`, `AUDIT_PROGRESS.md`,
+   the 15 new `.audit.md` reports under `audit/include/CNA/` and `audit/src/CNA/`, and the updated
+   `cna-root-utilities` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only
+   first.
+2. Continue Task #3: `cna-input` (31 files, next-smallest), then `cna-devices` (39), then `cna-internal-core`
+   (113, largest of the 5 Task #3 shards).
+3. Then Task #4 (Microsoft.Xna areas — start with
    `xna-framework-core` 78, then `xna-graphics` 191 the largest, prioritizing `SpriteFont.cpp`/`SpriteBatch.cpp`
    given the UB finding above, and `BlendState`/`SamplerState`/`RasterizerState`/`DepthStencilState`/
    `StencilState` given the newly-confirmed `IGraphicsBackend` interface gaps and the D3D12 Stencil/Scissor
@@ -492,7 +513,8 @@ consolidating what's already known rather than re-deriving it.
 22. `audit: review D3D9 backend (50 files, the LAST backend shard — completes all 16)`
 23. `audit: populate Pass 4 cross-cutting defect matrix in AUDIT_GRAPHICS_BACKEND_MATRIX.md`
 24. `audit: review cna-graphics shard (7 files, Task #3 started)`
-25. *(next commit: cna-root-utilities shard)*
+25. `audit: review cna-root-utilities shard (15 files) — Logger SDL-priority bug, unimplemented Runtime class`
+26. *(next commit: cna-input shard)*
 
 ## Self-check log
 

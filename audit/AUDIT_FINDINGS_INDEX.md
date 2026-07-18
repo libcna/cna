@@ -46,6 +46,12 @@ _(none recorded yet)_
   `skinned3d.vert.glsl` line 59 does flip, with its own comment confirming it's deliberate. Net effect: 4 of
   Vulkan's effect-shader families (env-map, PBR, skinned-PBR, instanced) render vertically mirrored versus XNA/FNA
   and versus every other effect type in the same Vulkan-rendered scene. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`CNA::Logger::ToSDLPriority()` (`src/CNA/Logger.cpp`) mistags every `Fatal`/`Error`/`Warn` log call with
+  `SDL_LOG_PRIORITY_INFO`** — the switch's cases for these 3 levels (plus `INFO`, which lands correctly by
+  coincidence) are commented out with a literal `//todo` marker; only `DEBUG`/`TRACE`/`EXPERIMENT` have real
+  cases. Also breaks `SetMinimumLevel()`'s `SDL_SetLogPriorities()` call, which routes through the same
+  function. Unlike every other finding in this audit, `Logger` is foundational, always-compiled, project-wide
+  infrastructure — not backend-specific. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **`EasyGL_AvatarRenderer_TintRouting` is a currently-failing CTest, registered with no `WILL_FAIL` annotation —
   independently re-confirmed by direct build+execution during synthesis (not just relayed from the audit
   subagent).** `ctest -R EasyGL_AvatarRenderer_TintRouting`: **Failed**, `left=(81,51,31) right=(41,181,255);
