@@ -6,6 +6,7 @@
 #include <thread>
 #include <vector>
 
+#include "Detail/ProcSelfResourceCounters.hpp"
 #include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
 #include "Microsoft/Devices/VibrateController.hpp"
 #include "System/ArgumentException.hpp"
@@ -819,4 +820,60 @@ TEST(VibrateControllerTests, StopAfterStartForwardsBothCallsIndependently)
 
     EXPECT_EQ(fake->StartCallCount, 1);
     EXPECT_EQ(fake->StopCallCount, 1);
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): at least 100,000
+// probe/Start/Stop cycles against the real Detail::SdlHapticVibrateBackend (not a fake -- this
+// specifically exercises the real native SDL call path, unlike every other test in this file),
+// checking this process's own open-file-descriptor and thread counts return to baseline
+// afterward. See AccelerometerTests's own version of this test for the full rationale
+// (LeakSanitizer non-functional in this container). Adapted from PERF2-002's own "construct/
+// probe/Start/Stop/Dispose" wording: VibrateController has no public constructor and no
+// per-cycle Dispose -- getDefaultProperty() returns one process-lifetime singleton, real
+// disposal only ever happens once, at process-exit static teardown (see
+// Detail::DevicesShutdownCoordinator's own doc comment) -- so probe/Start/Stop against that one
+// singleton, repeated, is this class's actual analogous lifecycle stress.
+TEST(VibrateControllerTests, OneHundredThousandProbeStartStopCyclesAgainstTheRealBackendLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    VibrateController* controller = VibrateController::getDefaultProperty();
+    // Ensures the real backend is in place regardless of what an earlier test in this shared
+    // binary left behind -- SetBackendForTesting(nullptr) restores a fresh
+    // Detail::SdlHapticVibrateBackend (see VibrateController::SetBackendForTesting()'s own body).
+    controller->SetBackendForTesting(nullptr);
+
+    // Warm-up cycle outside the measured window, same reasoning as the sensor classes' own
+    // versions of this test.
+    {
+        (void)controller->getIsSupportedProperty();
+        controller->Start(TimeSpan::FromMilliseconds(1));
+        controller->Stop();
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        (void)controller->getIsSupportedProperty();
+        EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(1)));
+        EXPECT_NO_THROW(controller->Stop());
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+
+    // Restores a fresh real backend for whatever test runs next in this shared binary --
+    // matches ScopedFakeVibrateBackend's own RAII-restore convention, just done manually here
+    // since this test never installs a fake to begin with.
+    controller->SetBackendForTesting(nullptr);
+#endif
 }

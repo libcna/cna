@@ -6,6 +6,7 @@
 #include <thread>
 #include <vector>
 
+#include "../Detail/ProcSelfResourceCounters.hpp"
 #include "Microsoft/Devices/Sensors/AttitudeReading.hpp"
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp"
@@ -999,4 +1000,40 @@ TEST(MotionTests, DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoesN
     EXPECT_NO_THROW(calibrationCallback());
 
     EXPECT_FALSE(calibrateInvoked);
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): mirrors
+// CompassTests.OneHundredThousandConstructBackendInjectStartStopDisposeCyclesLeaveNoResourceLeak
+// -- see that test (and AccelerometerTests's own version) for the full rationale.
+TEST(MotionTests, OneHundredThousandConstructBackendInjectStartStopDisposeCyclesLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    {
+        Motion warmup;
+        warmup.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        Motion m;
+        m.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
+        EXPECT_NO_THROW(m.Start());
+        EXPECT_NO_THROW(m.Stop());
+        // m's destructor (Dispose(bool)) runs here, at the end of each iteration's scope.
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+#endif
 }

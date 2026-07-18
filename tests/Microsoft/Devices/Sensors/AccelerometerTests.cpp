@@ -14,6 +14,7 @@
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp"
+#include "../Detail/ProcSelfResourceCounters.hpp"
 #include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
@@ -1448,4 +1449,56 @@ TEST(AccelerometerTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRea
     EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(0));
     EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(-1));
     EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(123456789));
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): at least 100,000
+// construct/probe/Start/Stop/Dispose cycles, checking this process's own open-file-descriptor and
+// thread counts return to baseline afterward -- a real, host-testable signal for a leaked native
+// resource (SDL sensor handle, worker thread, etc.) no existing test in this file runs at this
+// scale (the largest prior stress test, ConcurrentConstructDestroyKeepsInstanceCountBalanced,
+// covers only 8*50=400 iterations). LeakSanitizer (ASan's own built-in leak detector) does not
+// work in this specific container (needs ptrace, unavailable here -- see this task's own
+// plan_devices.md resolution note), so this /proc-based tracking is the primary host-available
+// leak signal for this task, not a substitute for a real LSan run.
+TEST(AccelerometerTests, OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    // Warm-up cycle outside the measured window -- the very first Accelerometer construction in
+    // this process lazily initializes SdlSensorSubsystem<Accelerometer>'s function-local static
+    // and may touch one-time-cached OS/libc state that legitimately stays open for the rest of
+    // the process's life by design, not a per-cycle leak this loop should flag.
+    {
+        const Accelerometer warmup;
+        (void)warmup;
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        Accelerometer a;
+        if (Accelerometer::getIsSupportedProperty())
+        {
+            EXPECT_NO_THROW(a.Start());
+            EXPECT_NO_THROW(a.Stop());
+        }
+        else
+        {
+            EXPECT_THROW(a.Start(), AccelerometerFailedException);
+        }
+        // a's destructor (Dispose(bool)) runs here, at the end of each iteration's scope.
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+#endif
 }

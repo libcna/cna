@@ -6,6 +6,7 @@
 #include <thread>
 #include <vector>
 
+#include "../Detail/ProcSelfResourceCounters.hpp"
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/Compass.hpp"
 #include "Microsoft/Devices/Sensors/CompassReading.hpp"
@@ -974,4 +975,45 @@ TEST(CompassTests, DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoes
     EXPECT_NO_THROW(calibrationCallback());
 
     EXPECT_FALSE(calibrateInvoked); // the owner was already gone before this fired
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): at least 100,000
+// construct/backend-inject/Start/Stop/Dispose cycles, checking this process's own
+// open-file-descriptor and thread counts return to baseline afterward -- see
+// AccelerometerTests.OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak
+// for the full rationale (LeakSanitizer non-functional in this container, no existing test in
+// this file runs anywhere near this scale). Uses FakeCompassBackend (SupportedResult/StartResult
+// both true by default) rather than a real backend, matching every other host-runnable Compass
+// test in this file -- Compass has no real backend on this host at all (Android-NDK-only).
+TEST(CompassTests, OneHundredThousandConstructBackendInjectStartStopDisposeCyclesLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    {
+        Compass warmup;
+        warmup.SetBackendForTesting(std::make_unique<FakeCompassBackend>());
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        Compass c;
+        c.SetBackendForTesting(std::make_unique<FakeCompassBackend>());
+        EXPECT_NO_THROW(c.Start());
+        EXPECT_NO_THROW(c.Stop());
+        // c's destructor (Dispose(bool)) runs here, at the end of each iteration's scope.
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+#endif
 }

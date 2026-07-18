@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "../Detail/ProcSelfResourceCounters.hpp"
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 #include "Microsoft/Devices/Sensors/GyroscopeReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
@@ -980,4 +981,46 @@ TEST(GyroscopeTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSen
     EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(0));
     EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(-1));
     EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(123456789));
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): mirrors
+// AccelerometerTests.OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak --
+// see that test for the full rationale (LeakSanitizer non-functional in this container, no
+// existing test in this file runs anywhere near this scale).
+TEST(GyroscopeTests, OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    {
+        const Gyroscope warmup;
+        (void)warmup;
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        Gyroscope g;
+        if (Gyroscope::getIsSupportedProperty())
+        {
+            EXPECT_NO_THROW(g.Start());
+            EXPECT_NO_THROW(g.Stop());
+        }
+        else
+        {
+            EXPECT_THROW(g.Start(), SensorFailedException);
+        }
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+#endif
 }

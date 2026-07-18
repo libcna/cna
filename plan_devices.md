@@ -9442,7 +9442,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Results distinguish host fake paths from real devices.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### PERF2-002 — Add repeated lifecycle leak tests — OPEN
+### PERF2-002 — Add repeated lifecycle leak tests — OPEN (implementation done; LSan itself non-functional in this container)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -9454,6 +9454,56 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Resource counts return to baseline after every batch.
   - ASan/LSan and platform tools report no leak.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):** existing stress
+  tests in this codebase run at most 50–400 iterations (`AccelerometerTests.
+  ConcurrentConstructDestroyKeepsInstanceCountBalanced`: 8×50=400;
+  `VibrateControllerTests.RepeatedStartStopSequencesDoNotDegrade`: 50) — nowhere near
+  this task's own "at least 100k" acceptance threshold. Added exactly that: one new
+  100,000-cycle construct/probe/Start/Stop/Dispose test per class —
+  `AccelerometerTests`/`GyroscopeTests` (real backend; unsupported on this host, so
+  each cycle exercises construct→probe→throw-on-`Start()`→`Dispose()`, still real SDL
+  subsystem/enumeration interaction on every cycle), `CompassTests`/`MotionTests`
+  (`FakeCompassBackend`/`FakeMotionBackend`, matching every other host-runnable test
+  for those two Android-NDK-only classes), and `VibrateControllerTests` (the **real**
+  `Detail::SdlHapticVibrateBackend`, not a fake — the one class this environment can
+  exercise a genuine native backend against repeatedly, since `VibrateController` has
+  no per-cycle construct/`Dispose` — it's a process-lifetime singleton — adapted to
+  100k probe/`Start`/`Stop` cycles against that one singleton instead, explicitly
+  noted as the adapted-but-equivalent lifecycle for this specific class).
+  - **New shared `tests/Microsoft/Devices/Detail/ProcSelfResourceCounters.hpp`**:
+    Linux-only `/proc/self/fd` open-file-descriptor counter and `/proc/self/status`
+    thread counter — the "track threads, file descriptors/handles" half of this
+    task's required work, achievable without any new production-code
+    instrumentation. Every new test captures a baseline after one warm-up cycle
+    (avoiding misattributing legitimate one-time process/library initialization
+    cost to a per-cycle leak), then asserts an *exact* return to that baseline after
+    100,000 more cycles — not a loose "doesn't grow much" tolerance.
+  - **What could not be tracked, and why, named honestly rather than silently
+    skipped**: "SDL subsystem refs" and "haptic effects" have no existing public test
+    hook to read directly (would need new production-code instrumentation, out of
+    this task's own "add tests" scope); "heap snapshots" is exactly what `ASan`/`LSan`
+    exist for — see below for why `LSan` specifically remains unavailable.
+    "Fault injection" (this task's own required-work wording) was not layered on top
+    — `TEST2-005`'s native fault-injection layer (not yet built) is the honestly-scoped
+    place for that, not a from-scratch addition inside this task.
+  - **Tests:** all 5 new tests pass, 0 FD/thread growth detected, under
+    `devices-ubsan` (357 tests total, 353 passed, 4 hardware skips, 0 failures),
+    `devices-tsan` (clean, 0 `WARNING: ThreadSanitizer`; `GyroscopeTests`'s own
+    100k-cycle test takes ~10.7s under TSan's instrumentation, still well within a
+    normal test-suite budget), and `devices-asan` (clean, exit code 0, no
+    `AddressSanitizer`/heap-corruption report of any kind across all 5 tests).
+  - **Remaining limitations (why this stays OPEN):** this task's own second
+    acceptance criterion explicitly names `LSan` — **re-confirmed in this pass, not
+    just cited from an earlier session's finding**: `ASAN_OPTIONS=detect_leaks=1`
+    explicitly set and re-run against the new `VibrateControllerTests` leak test
+    produces no `LeakSanitizer`-specific output at all (neither a leak report nor its
+    own "requires ptrace" failure message), consistent with `LSan` remaining
+    non-functional in this specific container (needs `ptrace`, unavailable here — see
+    `VERIFY-001`/`002`'s own resolution notes for where this was first established).
+    The new `/proc`-based FD/thread tracking is therefore this task's **primary**
+    host-available leak signal, not a substitute for the literal `LSan` run its own
+    acceptance criteria name — genuinely blocked on this container's own
+    `ptrace` restriction, not on unfinished implementation work.
 
 ### PERF2-003 — Run long-duration concurrent soak tests — OPEN
 
