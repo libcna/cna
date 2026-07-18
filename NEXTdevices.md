@@ -465,6 +465,28 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     convention of recording exact counts/commands/revisions in `plan_devices.md`
     itself rather than checking in raw build/run output). **Left OPEN**: only the
     `LSan` half of "`ASan/LSan`" is unachievable here; everything else fully delivered.
+34. `COMP2-003` (`77f8e0ec`) — the flat/upright heading formulas themselves were
+    already carefully derived in an earlier task (`COMPASS-009`); this task's own
+    three specific gaps were investigated and closed. **"Display orientation" —
+    found a real, citation-backed answer, not guessed**: traced
+    `docs/devices-api-coverage.md`'s existing `MagnetometerReading` citation (an
+    archived MSDN Magazine article specifically about the WP7 Compass) confirming
+    real WP7 sensor readings "are the same whether... running in portrait or
+    landscape mode" — `AndroidCompassMath.hpp` correctly has **no** landscape remap,
+    now documented as confirmed-correct rather than silently absent. **"Compare with
+    Android reference APIs"**: new `IndependentReferenceCrossCheckTests` reconstructs
+    Android's own documented quaternion→matrix→azimuth algorithm from scratch (all
+    nine matrix elements) and cross-checks against the production formulas across 6
+    quaternions — a regression-proof comparison, not a one-time claim.
+    **"Cardinal headings"**: completed 180°/270° coverage for both flat and upright
+    modes (previously incomplete in both) — hand-derived quaternions were
+    numerically cross-checked with an independent script before committing, which
+    **caught and fixed a real arithmetic error** in the first draft of the
+    upright-mode 180°/270° values. No production `.cpp` changed — header doc-comment
+    + tests only. Full precise filter (363 tests) clean under `devices-ubsan` (359
+    passed, 4 hardware skips, 0 failures); `AndroidCompassBackend.cpp` re-verified
+    via NDK cross-compile. **Left OPEN**: this task's own problem statement names
+    "hardware-unverified" as the starting state, which remains true.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -741,12 +763,17 @@ tractability):
   would let their acceptance criteria actually be verified — highest cross-task value,
   but "abstract every native call" is large; a scoped subset (e.g. just the SDL
   haptic calls) is more realistic for one pass than the full thing.
-- `COMP2-003`/`MOT2-001` — deriving the Android→WP compass basis / Android
-  rotation-vector→XNA attitude transform mathematically is genuinely hardware-independent
-  (only the final "hardware report" confirmation is gated) — same tractable shape as
-  `COMP2-001` earlier this session. `COMP2-004`/`005`/`MOT2-009`/`010` need physical
-  devices/measurements. `MOT2-006` is genuinely unimplemented state-machine work,
-  comparable in scope to `LIFE-007`/`010` — do not pick up as a quick continuation.
+- `MOT2-001` — `COMP2-003` is done this pass (see Section 2): the closely-related
+  Android rotation-vector→XNA attitude transform derivation for `Motion` is the
+  natural next pick, same tractable shape and shares the same underlying quaternion
+  math/Android sensor documentation just investigated for Compass. Also directly
+  relevant: `docs/devices-native-backend-design.md`'s own note that `Motion.Attitude`'s
+  `ConvertRotationVectorToXnaQuaternion()` mapping is a "direct, unremapped
+  passthrough" and `MOTION-002`'s own still-open question — read that context first,
+  it may already answer part of what `MOT2-001` asks. `COMP2-004`/`005`/`MOT2-009`/`010`
+  need physical devices/measurements. `MOT2-006` is genuinely unimplemented
+  state-machine work, comparable in scope to `LIFE-007`/`010` — do not pick up as a
+  quick continuation.
   `MOT2-008` (canonical timestamp semantics) likely intersects `READINGS-003`/
   `SDLCORE-007` territory — scope carefully before starting, don't assume it's separate.
   `ANDR2-007` is Android's own version of the `READINGS-003`/`SDLCORE-007` conflict
@@ -808,15 +835,17 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 33 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 34 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
 BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011,
-PERF2-002, TEST2-002 -- see Section 2 for commit hashes and a one-line summary
-of each, including PERF2-002's own new 100k-cycle lifecycle leak tests and
-TEST2-002's own consolidated clean-checkout sanitizer sweep), plus a
+PERF2-002, TEST2-002, COMP2-003 -- see Section 2 for commit hashes and a
+one-line summary of each, including PERF2-002's own new 100k-cycle lifecycle
+leak tests, TEST2-002's own consolidated clean-checkout sanitizer sweep, and
+COMP2-003's citation-backed display-orientation finding plus independent
+reference cross-check tests), plus a
 separate, unrelated re-verification round of the *older* `audit_devices.md`
 (6 `DEV-AUD-*` findings, commit `422ed4c4` -- see Section 2's own dated
 entry). All five `BASE2-*` P1 tasks are now done. `DEVPERF-004` found a real,
