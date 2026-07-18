@@ -55,14 +55,19 @@ normally supply (see the Android Compass section below).
 
 **Update (2026-07-05): `ICompassBackend`/`IMotionBackend` below are now real, compiled
 headers** — `include/Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp` and
-`include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp` — with one shape
-difference from the original sketch: `IMotionBackend` has no calibration callback at
-all (only `IsSupported()`/`Start(TimeSpan, ReadingCallback)`/`Stop()`), since
-`AndroidMotionBackend` never detects a calibration-needed condition itself; only
-`ICompassBackend::Start()` takes a `CalibrationCallback` in addition to a
-`ReadingCallback`. `IDeviceSensorBackend`/`IAccelerometerBackend`/`IGyroscopeBackend`
-below remain sketch-only, unimplemented, exactly as originally intended (see "SDL
-backend scope, unchanged" — still true).
+`include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp`. `IDeviceSensorBackend`/
+`IAccelerometerBackend`/`IGyroscopeBackend` below remain sketch-only, unimplemented,
+exactly as originally intended (see "SDL backend scope, unchanged" — still true).
+
+**Update (2026-07-16, Task MOTION-011): the two interfaces' shapes are now identical.**
+`IMotionBackend::Start()` originally had no `CalibrationCallback` parameter at all,
+since `AndroidMotionBackend` never detected a calibration-needed condition itself — an
+independent audit (`../audit_devices.md`, `DEV-AUD-002`) confirmed this left
+`Motion::Calibrate` a permanent no-op with no possible producer, despite being a real,
+documented WP7 event (archived MSDN `hh239189(v=vs.105)`). `IMotionBackend::Start()`
+now takes a `CalibrationCallback onCalibrationNeeded` in addition to `ReadingCallback`,
+matching `ICompassBackend::Start()` exactly — see the Android backend section below for
+how `AndroidMotionBackend` now drives it.
 
 The shape below extends `plan_devices_phase6.md` Task P6-8's `ICompassBackend`/
 `IMotionBackend` sketch with a common base and the two sensors that already have a real
@@ -193,19 +198,35 @@ fields as "in g," so both are now divided by the same `StandardGravity` constant
 `Accelerometer.cpp` already uses. `TYPE_GYROSCOPE` for `DeviceRotationRate`, registered
 independently of any live `Gyroscope` C++ instance (confirmed no conflict — Android
 supports multiple listeners per sensor, and `Gyroscope::MaxSensorCount`/`instanceCount_`
-tracking is per-class).
+tracking is per-class). **Task MOTION-011 (2026-07-16):** also independently registers
+`TYPE_MAGNETIC_FIELD` — purely to monitor its accuracy status and drive
+`Motion::Calibrate` via `IMotionBackend::CalibrationCallback`, reusing
+`Detail::ShouldRaiseCalibrateForAccuracyStatus()`, the exact same policy
+`AndroidCompassBackend` already uses. Best-effort and optional: unlike the four bridges
+above, `IsSupported()`/`Start()`'s overall success never depends on this sensor being
+available, and its data is never stored or exposed through `MotionReading` (which has no
+magnetometer field) — this bridge exists solely to make the previously-permanent
+`Motion::Calibrate` no-op (`../audit_devices.md`, `DEV-AUD-002`) fire under a real
+condition.
 
-**Coordinate-system remap status (Task DEVICES-0111), an open question, not resolved
-either way:** unlike `Accelerometer`/`Gyroscope`, `Motion`'s `Gravity`/`DeviceAcceleration`/
-`DeviceRotationRate` are **not** run through `Detail::ConvertAndroidPortraitToXnaLandscape()`
-— that remap is keyed to the `sensorLandscape` display-orientation convention those two
-classes already handle, and applying it silently to `Motion`'s independent sensor
-registrations without being sure it's the right convention risked introducing an
-unverifiable, possibly-wrong remap. Left as raw Android sensor-frame axes; flagged in
-`docs/devices-hardware-checklist.md` §8 for real-hardware testing. The `Attitude`
-quaternion mapping (`ConvertRotationVectorToXnaQuaternion()`) is, for the same reason, a
-direct, unremapped passthrough — both are explicit, documented, unverified-until-hardware
-choices, not oversights.
+**Coordinate-system remap status (Task DEVICES-0111 → `MOTION-012`, resolved 2026-07-16):**
+`Motion`'s `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are now run through
+`Detail::ConvertAndroidPortraitToXnaLandscape()` (respecting
+`Detail::IsAndroidLandscapeRemapEnabled()`), the same remap `Accelerometer`/`Gyroscope`
+already apply — confirmed correct via Android's own public developer documentation
+(`developer.android.com/guide/topics/sensors/sensors_motion`/`sensors_overview`: the
+gravity, linear-acceleration, and gyroscope sensors all explicitly share the
+accelerometer's own coordinate system, which is fixed to the device's natural
+orientation and never adjusted by the OS for display rotation), not by guessing or by
+analogy alone — an independent audit (`../audit_devices.md`, `DEV-AUD-003`) prompted
+closing this out rather than leaving it open. **What remains unverified is the remap's
+sign/axis correctness on real hardware** (the same still-open gap `Accelerometer`/
+`Gyroscope` themselves carry, `docs/devices-hardware-checklist.md` §1/§2/§8), not
+whether a remap should exist at all. The `Attitude` quaternion mapping
+(`ConvertRotationVectorToXnaQuaternion()`) remains, for a different reason (a
+quaternion is not a plain vector — the same sign-flip logic does not apply), a direct,
+unremapped passthrough — still `MOTION-002`'s own open question, explicitly out of
+scope for `MOTION-012`.
 
 ---
 

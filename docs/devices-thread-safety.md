@@ -52,6 +52,15 @@ verified empirically under `devices-tsan`, not just reasoned about statically.
   `devices-tsan`, which reported the race at `Compass.cpp`'s `Start()`/
   `Stop()` writes racing `getStateProperty()`'s read before the fix, and
   reported nothing at those locations afterward.
+- **`Compass`/`Motion`'s internal `TimeBetweenUpdatesChanged` handler** (forwards a
+  live interval change to `backend_`, Task ANDROID-BRIDGE-002) is also safe to run
+  concurrently with `SetBackendForTesting()` on the same instance (Task
+  SENSORBASE-009, 2026-07-16, external audit `audit_devices.md` finding
+  `DEV-AUD-006`) — the handler previously read `backend_` without holding the same
+  `mutex_` `SetBackendForTesting()` replaces it under; now guarded identically,
+  confirmed by
+  `CompassTests`/`MotionTests.ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash`
+  under `devices-tsan`.
 - **Concurrent `Dispose()` calls on the same instance**, across all four
   sensor classes and `VibrateController`, are safe: exactly one caller runs
   cleanup, the rest block in `WaitForDisposalToComplete()` until it finishes
@@ -78,11 +87,23 @@ another `Dispose()` is fully safe (see above).
 
 ## What is still just the WP7 floor, not strengthened
 
-- `CurrentValueChanged`/`Calibrate` event-handler invocation ordering and
-  reentrancy: subscribing/unsubscribing concurrently with an in-flight raise
-  is not specifically guaranteed beyond "does not crash" (covered by each
-  class's `DisposeFromWithinOwnCallbackDoesNotDeadlock`-style tests, not a
-  broader ordering contract).
+- Subscribing/unsubscribing `CurrentValueChanged`/`Calibrate` **from a
+  different thread** while a raise is in flight (as opposed to from within a
+  handler of that same raise, which now has a documented, tested contract —
+  see below) is not specifically guaranteed beyond "does not crash".
+
+## Event dispatch semantics — see `docs/devices-event-contract.md`
+
+Task `DEVPERF-004` (2026-07-18) formalized what was previously only "does not
+crash": dispatch thread identity, ordering (`CurrentValueChanged` before
+`ReadingChanged`, `Calibrate` independent of both), handler-list mutation
+during dispatch, reentrancy (a handler triggering a new dispatch from within
+itself), destruction-during-dispatch, and exception-swallowing policy for all
+five events (`CurrentValueChanged`, `TimeBetweenUpdatesChanged`,
+`ReadingChanged`, and both `Calibrate` events) are now each explicitly
+documented and backed by a passing test, in `docs/devices-event-contract.md`
+— read that file rather than this one for anything dispatch-related; this
+file remains the source of truth for cross-thread *method*-call safety only.
 - `VibrateController`'s own instance methods follow the same static-vs-instance
   split as the sensors; see `VibrateControllerTests.
   ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock` for its equivalent

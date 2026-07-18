@@ -203,20 +203,115 @@ namespace Microsoft::Devices::Sensors
          * Dispose(bool) override returns only after the object is *actually*
          * fully disposed.
          *
-         * Assumes the winning caller's cleanup path does not throw once it
-         * has claimed disposal — matching this codebase's existing
-         * assumption that Stop()/native-resource cleanup do not throw once
-         * their disposed-state precondition is satisfied. If that
-         * assumption were ever violated, a concurrent loser would wait here
-         * indefinitely; this mirrors the same no-timeout wait convention
-         * already used by Dispose(bool)'s own callbackFinished_ wait in
-         * Accelerometer/Gyroscope.
+         * Task LIFE-006 (2026-07-17): no longer assumes the winning caller's
+         * cleanup path cannot throw — every derived class now constructs a
+         * DisposalTerminalStateGuard immediately after winning
+         * ClaimDisposalOnce(), which unconditionally publishes disposed_ =
+         * true (and notifies the condition variable this waits on) even if
+         * that cleanup throws, closing what was previously a documented,
+         * accepted "a concurrent loser would wait here indefinitely" gap —
+         * see that guard's own doc comment for the full design, including
+         * the explicit decision that a losing caller's own Dispose(bool)
+         * still simply returns (never observes or rethrows the winner's
+         * specific failure) once this wait unblocks.
          */
         void WaitForDisposalToComplete()
         {
             std::unique_lock<std::mutex> lock(mutex_);
             disposalFinishedCv_.wait(lock, [this] { return disposed_; });
         }
+
+        /**
+         * @brief RAII guard that unconditionally publishes the `disposed_`
+         * terminal state, even if the derived class's own cleanup between
+         * winning `ClaimDisposalOnce()` and reaching the base `Dispose(bool)`
+         * call throws (Task LIFE-006, 2026-07-17, external audit
+         * `audit_devices_2026-07-17.md`).
+         *
+         * Previously (see `WaitForDisposalToComplete()`'s own doc comment,
+         * which already documented this as a known, accepted assumption
+         * rather than something actually enforced): if the winning caller's
+         * cleanup — `Stop()`, native resource release, instance-count
+         * bookkeeping, whatever a derived class's `Dispose(bool)` override
+         * does between claiming disposal and calling `SensorBase::Dispose(bool)`
+         * below — threw, `disposed_` never became `true` and
+         * `disposalFinishedCv_` never fired, stranding every concurrent
+         * losing `Dispose()` caller (blocked in `WaitForDisposalToComplete()`)
+         * forever.
+         *
+         * Construct this immediately after `ClaimDisposalOnce()` returns
+         * `true`, before running any derived cleanup. Its destructor sets
+         * `disposed_ = true` (if not already) and notifies
+         * `disposalFinishedCv_` — idempotent with the normal-completion path
+         * (the base `Dispose(bool)` override below already does the same
+         * thing on success), so on a normal, non-throwing cleanup this
+         * guard's own action is a harmless no-op; it only matters on the
+         * exceptional path.
+         *
+         * **Explicit decision (required by this task): what a concurrent
+         * losing `Dispose()` call does after the winner's cleanup fails.**
+         * `WaitForDisposalToComplete()` unblocks once `disposed_` becomes
+         * `true` (via this guard, whether the winner's cleanup succeeded or
+         * threw) and the losing caller's own `Dispose(bool)` override then
+         * simply returns, `void`, exactly as it already does today — it
+         * does **not** observe, rethrow, or otherwise learn that the winner's
+         * cleanup specifically failed. This matches `IDisposable.Dispose()`'s
+         * established, conventional contract (never throw from `Dispose()`),
+         * and this codebase has no other precedent for propagating one
+         * thread's exception into an unrelated thread's call — inventing
+         * cross-thread exception propagation for this one corner case, with
+         * no WP7 reference behavior to justify a specific shape for it, was
+         * judged unwarranted complexity. The *winning* caller's own
+         * `Dispose(bool)` call still lets the original cleanup exception
+         * propagate out normally (unchanged) — only the losing side's
+         * behavior is being defined here.
+         */
+        class DisposalTerminalStateGuard
+        {
+        public:
+            explicit DisposalTerminalStateGuard(SensorBase& owner)
+                : owner_(owner)
+            {
+            }
+
+            DisposalTerminalStateGuard(const DisposalTerminalStateGuard&) = delete;
+            DisposalTerminalStateGuard& operator=(const DisposalTerminalStateGuard&) = delete;
+
+            ~DisposalTerminalStateGuard()
+            {
+                try
+                {
+                    bool needsNotify = false;
+                    {
+                        std::lock_guard<std::mutex> lock(owner_.mutex_);
+                        if (!owner_.disposed_)
+                        {
+                            owner_.disposed_ = true;
+                            needsNotify = true;
+                        }
+                    }
+                    if (needsNotify)
+                    {
+                        owner_.disposalFinishedCv_.notify_all();
+                    }
+                }
+                catch (...)
+                {
+                    // Swallowed deliberately -- this destructor's own body
+                    // is implicitly noexcept (a user-provided destructor
+                    // with no explicit exception specification is
+                    // noexcept(true) by default); letting anything escape
+                    // (in practice, only std::mutex::lock() throwing
+                    // std::system_error for a genuine OS-level failure)
+                    // would call std::terminate() instead of achieving this
+                    // guard's whole purpose (see Task ANDR2-004's identical
+                    // reasoning for AndroidSensorBridge's own RunExitGuard).
+                }
+            }
+
+        private:
+            SensorBase& owner_;
+        };
 
         /**
          * @brief Sets the current sensor reading and raises CurrentValueChanged.
@@ -270,6 +365,52 @@ namespace Microsoft::Devices::Sensors
             if (shouldRaise)
             {
                 SensorReadingEventArgs<TSensorReading> args(std::move(valueForEvent));
+                CurrentValueChanged.Raise(static_cast<System::Object*>(this), args);
+            }
+        }
+
+        /**
+         * @brief Atomically stores a new reading and marks data valid, then raises CurrentValueChanged (Task BASE2-002).
+         *
+         * Every derived sensor class's own dispatch path previously called
+         * `setIsDataValidProperty(true)` and `setCurrentValueProperty(value)`
+         * as two independently-locked calls (`Accelerometer`/`Gyroscope`/
+         * `Compass`/`Motion` all did this identically) — each call is itself
+         * race-free (`docs/devices-thread-safety.md`'s existing guarantee),
+         * but nothing prevented a concurrent reader on another thread from
+         * observing the window *between* the two calls, where
+         * `getIsDataValidProperty()` had already flipped to `true` while
+         * `getCurrentValueProperty()` still returned the previous (or, for a
+         * sensor's very first ever reading, still default-constructed)
+         * value — an inconsistent, misleading snapshot a caller checking
+         * "if valid, use CurrentValue" could genuinely observe. Combining
+         * both assignments into one lock scope closes that window entirely:
+         * a concurrent reader now always sees either the state from before
+         * this call or the fully-updated state after it, never a mix of the
+         * two. Derived classes should prefer this over the two separate
+         * calls whenever a new reading is what makes data valid (the
+         * overwhelmingly common case) — the separate `setIsDataValidProperty()`/
+         * `setCurrentValueProperty()` setters remain available for the rarer
+         * case of changing one without the other (e.g. explicitly
+         * invalidating data with no new reading to publish).
+         *
+         * @param value New sensor reading; also becomes the new CurrentValue.
+         */
+        void SetCurrentValueAndMarkDataValid(const TSensorReading& value)
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                currentValue_ = value;
+                isDataValid_ = true;
+            }
+
+            if (!CurrentValueChanged.Empty())
+            {
+                // Same discipline as setCurrentValueProperty() above: a
+                // local, per-dispatch event-args instance, never held under
+                // mutex_ while raising (a subscriber's handler may
+                // legitimately call back into this sensor).
+                SensorReadingEventArgs<TSensorReading> args(value);
                 CurrentValueChanged.Raise(static_cast<System::Object*>(this), args);
             }
         }
@@ -359,10 +500,30 @@ namespace Microsoft::Devices::Sensors
         {
             std::lock_guard<std::mutex> lock(mutex_);
 
-            const std::chrono::duration<std::int64_t, std::ratio<1, 10000000>> interval(
-                timeBetweenUpdates_.getTicksProperty());
+            using Ticks = std::chrono::duration<std::int64_t, std::ratio<1, 10000000>>;
+            const Ticks interval(timeBetweenUpdates_.getTicksProperty());
 
-            if (!hasAcceptedUpdate_ || (now - lastAcceptedUpdateTime_) >= interval)
+            // Task BASE2-001 (2026-07-17, external audit
+            // `audit_devices_2026-07-17.md`): explicitly casts the *elapsed*
+            // duration down to `interval`'s own (coarser, 100ns-tick) period
+            // before comparing, rather than comparing the two durations
+            // directly. A direct `(now - lastAcceptedUpdateTime_) >= interval`
+            // comparison implicitly promotes both operands to their
+            // std::chrono::common_type -- here, the *finer* of the two
+            // periods (steady_clock's own, typically nanoseconds) -- which
+            // converts `interval` by multiplying its count by 100. For
+            // TimeSpan::MaxValue (its own tick count already near INT64_MAX),
+            // that multiplication itself overflows a signed 64-bit integer --
+            // confirmed by UBSan under devices-ubsan ("signed integer
+            // overflow: 9223372036854775807 * 100..."), a real, previously
+            // undetected bug, not a theoretical one. Casting the elapsed
+            // duration down to ticks instead is always safe: an int64 count
+            // of 100ns ticks can represent roughly 29,000 years, far beyond
+            // any realistic elapsed wall-clock time, so this direction of
+            // cast never approaches the same overflow.
+            const Ticks elapsedTicks = std::chrono::duration_cast<Ticks>(now - lastAcceptedUpdateTime_);
+
+            if (!hasAcceptedUpdate_ || elapsedTicks >= interval)
             {
                 hasAcceptedUpdate_ = true;
                 lastAcceptedUpdateTime_ = now;

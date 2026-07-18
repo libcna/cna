@@ -3,9 +3,11 @@
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <utility>
 
 #include <SDL3/SDL.h>
@@ -171,6 +173,25 @@ namespace Microsoft::Devices::Sensors
             }
         }
 
+        // Task SDLCORE-003 (2026-07-17): see Accelerometer::Start()'s
+        // identical fix for the full rationale.
+        if (!subsystem.RegisterEventWatchIfNeededLocked())
+        {
+            state_ = SensorState::NotSupported;
+
+            if (acquiredSubsystemThisCall)
+            {
+                std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                subsystemHeld_ = false;
+            }
+
+            const std::string message =
+                "Failed to start gyroscope data acquisition. Failed to register the sensor event watch: "
+                + subsystem.lastEventWatchError_;
+            throw SensorFailedException(message.c_str());
+        }
+
         started_ = true;
         state_ = SensorState::Ready;
 
@@ -180,7 +201,6 @@ namespace Microsoft::Devices::Sensors
         ResetUpdateThrottle();
 
         subsystem.RegisterStartedInstanceLocked(this);
-        subsystem.RegisterEventWatchIfNeededLocked();
     }
 
     void Gyroscope::Stop()
@@ -218,6 +238,10 @@ namespace Microsoft::Devices::Sensors
             WaitForDisposalToComplete();
             return;
         }
+
+        // Task LIFE-006: see Accelerometer::Dispose(bool)'s identical fix
+        // for the full rationale.
+        DisposalTerminalStateGuard terminalStateGuard(*this);
 
         if (disposalTestHook_)
         {
@@ -261,10 +285,10 @@ namespace Microsoft::Devices::Sensors
             });
 
             --subsystem.instanceCount_;
-            if (subsystem.instanceCount_ < 0)
-            {
-                subsystem.instanceCount_ = 0;
-            }
+            // Task BASE2-007: see Accelerometer::Dispose(bool)'s identical
+            // fix for the full rationale.
+            assert(subsystem.instanceCount_ >= 0
+                && "Gyroscope::instanceCount_ underflowed -- Dispose(bool) ran more than once for one instance");
 
             // Task P7-1: see Accelerometer::Dispose(bool)'s identical fix
             // for the full rationale.
@@ -413,10 +437,14 @@ namespace Microsoft::Devices::Sensors
         // values to values[0]/[1]/[2] in the same X/Y/Z order, only scaling
         // degrees-per-second to radians-per-second -- neither backend
         // reorders or negates axes.
+        // Task BASE2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // see Accelerometer::DispatchSensorReading()'s identical fix for the
+        // full rationale -- checked directly as the local `valid` from here
+        // on, instead of an early setIsDataValidProperty(valid) call
+        // immediately re-read back via getIsDataValidProperty().
         const bool valid = true;
-        setIsDataValidProperty(valid);
 
-        if (getIsDataValidProperty())
+        if (valid)
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
@@ -444,7 +472,10 @@ namespace Microsoft::Devices::Sensors
             gyroscopeReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 
-        setCurrentValueProperty(gyroscopeReading);
+        // Task BASE2-002: atomically publishes the new reading and marks
+        // IsDataValid true together -- see
+        // SetCurrentValueAndMarkDataValid()'s own doc comment.
+        SetCurrentValueAndMarkDataValid(gyroscopeReading);
     }
 
     void Gyroscope::InjectSyntheticSensorUpdate(float x, float y, float z)
@@ -535,10 +566,58 @@ namespace Microsoft::Devices::Sensors
     void Gyroscope::DispatchToInstancesForTesting(
         const std::vector<Gyroscope*>& instances, float x, float y, float z)
     {
-        GetSubsystem().DispatchToInstances(instances, [x, y, z](Gyroscope* instance)
+        // Task SDLCORE-004: see Accelerometer::DispatchToInstancesForTesting()'s
+        // identical comment -- DispatchToInstances() now takes a snapshot of
+        // DispatchRegistration nodes, not raw pointers.
+        auto& subsystem = GetSubsystem();
+
+        std::vector<std::shared_ptr<Detail::SdlSensorSubsystem<Gyroscope>::DispatchRegistration>> registrations;
+        {
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            for (Gyroscope* instance : instances)
+            {
+                for (const auto& registration : subsystem.startedInstances_)
+                {
+                    if (registration->owner == instance)
+                    {
+                        registrations.push_back(registration);
+                        break;
+                    }
+                }
+            }
+        }
+
+        subsystem.DispatchToInstances(registrations, [x, y, z](Gyroscope* instance)
         {
             instance->DispatchSensorReading(x, y, z);
         });
+    }
+
+    void Gyroscope::SetEventWatchRegistrationFailureForTesting(bool shouldFail)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.forceEventWatchRegistrationFailureForTesting_ = shouldFail;
+    }
+
+    int Gyroscope::GetDispatchExceptionCountForTesting()
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        return subsystem.dispatchExceptionCountForTesting_;
+    }
+
+    std::string Gyroscope::GetLastDispatchExceptionMessageForTesting()
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        return subsystem.lastDispatchExceptionMessageForTesting_;
+    }
+
+    bool Gyroscope::IsSensorConnectedForTesting(std::int64_t sensorId)
+    {
+        std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+        return Detail::SdlSensorSubsystem<Gyroscope>::IsSensorConnected(sensorId, sdlLock);
     }
 
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")

@@ -77,9 +77,20 @@ namespace Microsoft::Devices::Sensors
         [[nodiscard]] const System::DateTimeOffset& getTimestampProperty() const override;
 
         /**
-         * @brief Gets the heading, in degrees, measured relative to true north.
+         * @brief Gets the heading, in degrees, measured relative to true (geographic) north.
          *
-         * @return True heading, in degrees.
+         * Task COMP2-008 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+         * every backend in this codebase currently reports the same value as
+         * `MagneticHeadingProperty` — computing a genuine true-north
+         * correction requires magnetic declination, which depends on
+         * geographic location (`System.Device.Location`, a separate WP7
+         * assembly `Microsoft::Devices::Sensors` does not implement — see
+         * `docs/location-future-plan.md`). This never fabricates an assumed
+         * declination: absent real location data, magnetic heading is the
+         * most accurate honest answer available, not geographic heading
+         * silently presented as if it were.
+         *
+         * @return True heading, in degrees — currently identical to `MagneticHeadingProperty` on every backend, pending real declination data.
          */
         [[nodiscard]] double getTrueHeadingProperty() const;
 

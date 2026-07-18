@@ -51,6 +51,28 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task SDLCORE-011: standalone SDL_Quit()-ordering harness ---
+# A tiny standalone (non-GTest) executable that touches
+# VibrateController::getDefaultProperty()'s function-local static singleton, then calls the real
+# SDL_Quit() before main() returns (which is when that singleton's destructor actually runs, as
+# part of process-exit static teardown) -- reproducing the exact ordering hazard
+# Detail::DevicesShutdownCoordinator exists to close. The shared CnaTests binary cannot exercise
+# this: calling the real SDL_Quit() there would tear down SDL process-wide for every other test
+# sharing that binary. See tools/devices/shutdown_ordering_harness.cpp's own top-of-file comment
+# for the "--skip-shutdown-call" flag used to confirm under ASan that this reproduces a genuine
+# heap-use-after-free when the fix's guard is bypassed.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_devices_shutdown_ordering_harness
+        tools/devices/shutdown_ordering_harness.cpp
+    )
+    target_link_libraries(cna_devices_shutdown_ordering_harness
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+        SDL3::SDL3
+    )
+endif()
+
 # --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
 # Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see
@@ -77,4 +99,42 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     target_compile_definitions(cna_strict_xna_api_check PRIVATE CNA_STRICT_XNA_API)
     target_compile_options(cna_strict_xna_api_check PRIVATE -Werror=deprecated-declarations)
     add_test(NAME StrictXnaApiSurfaceCheck_Compile_Run COMMAND cna_strict_xna_api_check)
+
+    # --- Task TEST2-010: negative counterpart -- a deliberately leaked NOXNA call must fail ---
+    # EXCLUDE_FROM_ALL: this target's whole point is to fail to compile, so it must never be
+    # part of the normal `cmake --build .`/`--target all` (or CnaTests' own dependency graph) --
+    # only the ctest below ever builds it, on purpose, expecting that build to fail.
+    add_executable(cna_strict_xna_api_leak_check EXCLUDE_FROM_ALL
+        tools/devices/StrictXnaApiSurfaceLeakCheck.cpp
+    )
+    target_link_libraries(cna_strict_xna_api_leak_check PRIVATE CNA)
+    target_compile_definitions(cna_strict_xna_api_leak_check PRIVATE CNA_STRICT_XNA_API)
+    target_compile_options(cna_strict_xna_api_leak_check PRIVATE -Werror=deprecated-declarations)
+
+    # Invokes the actual build of the EXCLUDE_FROM_ALL target above as this test's own command
+    # -- WILL_FAIL TRUE means ctest reports this test as PASSING only if that build command
+    # itself exits non-zero (i.e. only if the deliberate NOXNA call above genuinely fails to
+    # compile, exactly as it must). If a future NOXNA/CNA_STRICT_XNA_API regression ever let
+    # this target build successfully, this test would flip to FAILING, catching it.
+    add_test(NAME StrictXnaApiSurfaceLeakCheck_MustFailToCompile
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target cna_strict_xna_api_leak_check --config $<CONFIG>
+    )
+    set_tests_properties(StrictXnaApiSurfaceLeakCheck_MustFailToCompile PROPERTIES WILL_FAIL TRUE)
+endif()
+
+# --- Task PERF2-001: Devices microbenchmark suite ---
+# A tiny standalone (non-GTest) executable emitting JSON-Lines latency-percentile results for
+# this task's own named categories. Not registered as a ctest (its output is meant to be
+# captured/compared, not pass/failed on its own exit code) -- run manually or via
+# tools/devices/compare_devices_microbenchmark.py, see that file and
+# devices_microbenchmark.cpp's own top-of-file comment.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_devices_microbenchmark
+        tools/devices/devices_microbenchmark.cpp
+    )
+    target_link_libraries(cna_devices_microbenchmark
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
 endif()

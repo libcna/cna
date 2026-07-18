@@ -1,4 +1,19 @@
 if(CNA_BUILD_TESTS)
+    # Task DEVPERF-001: fail fast with an actionable message rather than
+    # CMake's own generic "add_subdirectory given source ... which is not an
+    # existing directory" if this submodule was never initialized (e.g. a
+    # plain ZIP/tarball export of this source tree, which cannot contain
+    # submodule content at all, or a clone that skipped
+    # `git submodule update --init`) -- mirrors the equivalent guard for
+    # third_party/SDL/SDL_image/SDL_mixer in cmake/ThirdPartySDL.cmake.
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/googletest/CMakeLists.txt")
+        message(FATAL_ERROR
+            "Missing vendored 'googletest' in ${CMAKE_CURRENT_SOURCE_DIR}/vendor. "
+            "Run: git submodule update --init "
+            "(a plain ZIP/tarball export of this repository cannot contain "
+            "submodule content -- clone with git and initialize submodules instead)")
+    endif()
+
     add_subdirectory(vendor/googletest)
 
     enable_testing()
@@ -38,6 +53,14 @@ if(CNA_BUILD_TESTS)
     # reasons as the harness-spawning tests above.
     if(WIN32 OR EMSCRIPTEN OR ANDROID)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Content/GltfToCnjToolTests\\.cpp$")
+    endif()
+
+    # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
+    # (posix_spawn, poll, sys/wait.h) to spawn tools/devices/shutdown_ordering_harness.cpp as an
+    # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
+    # Excluded on the same platforms and for the same reasons.
+    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
     add_executable(CnaTests
@@ -125,6 +148,16 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_tool_gltf_to_cnj)
         target_compile_definitions(CnaTests PRIVATE
             CNA_GLTF_TO_CNJ_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnj>"
+        )
+    endif()
+
+    if(TARGET cna_devices_shutdown_ordering_harness)
+        # Same reasoning as cna_net_two_process_harness above, for
+        # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) -- calls the real SDL_Quit(),
+        # which must not run inside the shared CnaTests process itself.
+        add_dependencies(CnaTests cna_devices_shutdown_ordering_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH="$<TARGET_FILE:cna_devices_shutdown_ordering_harness>"
         )
     endif()
 

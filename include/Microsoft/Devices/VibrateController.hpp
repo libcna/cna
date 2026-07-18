@@ -83,7 +83,22 @@ namespace Microsoft::Devices
          * the full duration. In practice this is inert (zero strength has no
          * physical effect), but it is not equivalent to skipping the call
          * entirely; call Stop() directly if that distinction matters to a
-         * caller (Task DEVICES-0030).
+         * caller (Task DEVICES-0030). Task VIB2-006 (2026-07-18, external
+         * audit `audit_devices_2026-07-17.md`) re-confirmed this choice is
+         * well-founded, not merely convenient: `SDL_PlayHapticRumble()`'s
+         * own documented contract (`third_party/SDL/include/SDL3/SDL_haptic.h`)
+         * states its `strength` parameter is "a 0-1 float value" — `0` is
+         * explicitly inside that documented valid range, not a special or
+         * invalid case SDL itself treats differently — and its actual
+         * implementation (`third_party/SDL/src/haptic/SDL_haptic.c`)
+         * confirms a repeated call while an effect is already playing simply
+         * updates and restarts it (no "already playing" rejection), so this
+         * intensity-zero policy composes correctly with repeated/overlapping
+         * `Start()` calls too. `VibrateControllerTests.
+         * StartWithIntensityZeroForwardsAsAnActiveZeroStrengthStartNotAnImplicitStop`
+         * now verifies this is what actually happens, not just what is
+         * documented — the previous test at this exact scenario only
+         * checked that the call did not throw.
          *
          * @throws System::ArgumentOutOfRangeException If duration is
          * negative or greater than 5 seconds.
@@ -168,6 +183,12 @@ namespace Microsoft::Devices
          * it's a fire-and-forget static design), but not tagged since it's
          * not a new *public API surface* addition a game would ever call
          * directly.
+         *
+         * Runs at process-exit static teardown, a point this codebase does
+         * not control relative to the application's own SDL_Quit() call —
+         * see Detail::DevicesShutdownCoordinator's own doc comment (Task
+         * SDLCORE-011) for why that matters and what the application must
+         * do about it.
          */
         ~VibrateController();
 

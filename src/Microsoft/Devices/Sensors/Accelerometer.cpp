@@ -6,9 +6,11 @@
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <utility>
 
 #include <SDL3/SDL.h>
@@ -238,6 +240,37 @@ namespace Microsoft::Devices::Sensors
             }
         }
 
+        // Task SDLCORE-003 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // register the event watch *before* committing started_/state_ to
+        // Ready -- previously this ran last, and its (unconditionally
+        // ignored) result could never stop this instance from claiming
+        // Ready even if `SDL_AddEventWatch()` genuinely failed, leaving an
+        // instance permanently "Ready" with no possible way for a real
+        // sensor event to ever reach it. Does not touch the subsystem's
+        // shared, cached `sensor_`/`sensorId_` handle on this failure path
+        // -- that handle is subsystem-wide (potentially already relied on
+        // by another started instance of this same sensor type) and
+        // opening it is itself harmless to leave in place; only what *this*
+        // call itself freshly acquired (the subsystem hold) is rolled back,
+        // mirroring the identical, already-established discipline the
+        // "no default sensor found" failure path above already follows.
+        if (!subsystem.RegisterEventWatchIfNeededLocked())
+        {
+            state_ = SensorState::NotSupported;
+
+            if (acquiredSubsystemThisCall)
+            {
+                std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                subsystemHeld_ = false;
+            }
+
+            const std::string message =
+                "Failed to start accelerometer data acquisition. Failed to register the sensor event watch: "
+                + subsystem.lastEventWatchError_;
+            throw AccelerometerFailedException(message.c_str());
+        }
+
         started_ = true;
         state_ = SensorState::Ready;
 
@@ -247,7 +280,6 @@ namespace Microsoft::Devices::Sensors
         ResetUpdateThrottle();
 
         subsystem.RegisterStartedInstanceLocked(this);
-        subsystem.RegisterEventWatchIfNeededLocked();
     }
 
     void Accelerometer::Stop()
@@ -293,6 +325,13 @@ namespace Microsoft::Devices::Sensors
             WaitForDisposalToComplete();
             return;
         }
+
+        // Task LIFE-006 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): see DisposalTerminalStateGuard's
+        // own doc comment -- guarantees disposed_ is published and every
+        // concurrent losing Dispose() caller's WaitForDisposalToComplete()
+        // unblocks, even if the cleanup below throws.
+        DisposalTerminalStateGuard terminalStateGuard(*this);
 
         if (disposalTestHook_)
         {
@@ -344,10 +383,20 @@ namespace Microsoft::Devices::Sensors
             });
 
             --subsystem.instanceCount_;
-            if (subsystem.instanceCount_ < 0)
-            {
-                subsystem.instanceCount_ = 0;
-            }
+            // Task BASE2-007 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+            // instanceCount_ going negative would mean this instance's own
+            // Dispose(bool) cleanup ran more than once despite
+            // ClaimDisposalOnce() (see above) supposedly guaranteeing
+            // exactly one winner -- i.e. a real bug in that guarantee, not a
+            // recoverable condition. Silently clamping back to zero (the
+            // prior behavior) would mask exactly that bug instead of
+            // surfacing it. `ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount`/
+            // `EleventhSimultaneousInstanceThrows`/`DisposingOneOfTenAllowsAnotherConstruction`
+            // already provide strong behavioral evidence this invariant
+            // holds today; this assert is defense-in-depth against a future
+            // regression, not a fix for a currently-reproducible defect.
+            assert(subsystem.instanceCount_ >= 0
+                && "Accelerometer::instanceCount_ underflowed -- Dispose(bool) ran more than once for one instance");
 
             // Task P7-1: SDL_CloseSensor()/SDL_QuitSubSystem() below are
             // real SDL sensor-subsystem calls — serialize them against
@@ -567,10 +616,17 @@ namespace Microsoft::Devices::Sensors
         // SDL_STANDARD_GRAVITY -- neither backend reorders or negates axes,
         // so this method's x/y/z parameters are exactly SDL's documented
         // natural-orientation axes on every platform this project builds for.
+        // Task BASE2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // previously set via an early setIsDataValidProperty(valid) call,
+        // then immediately re-read back via getIsDataValidProperty() below --
+        // a redundant round-trip through mutex_-guarded shared state for a
+        // value already known locally, and one that let IsDataValid become
+        // observably true well before CurrentValue actually held this new
+        // reading (SetCurrentValueAndMarkDataValid() below closes that
+        // window). Checked directly as the local `valid` from here on.
         const bool valid = true;
-        setIsDataValidProperty(valid);
 
-        if (getIsDataValidProperty())
+        if (valid)
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
@@ -607,18 +663,53 @@ namespace Microsoft::Devices::Sensors
             accelerometerReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 
-        setCurrentValueProperty(accelerometerReading);
-
-        if (getIsDataValidProperty() && !ReadingChanged.Empty())
+        // Task LIFE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // decide *before* raising CurrentValueChanged whether ReadingChanged
+        // must also fire, and take a local copy of the ReadingChanged
+        // event-handler collection itself -- System::EventHandler<T> is a
+        // plain copyable value (a std::vector of subscriber callbacks, no
+        // pointer back to its owner), so this copy is completely independent
+        // of `this` from this point on. Previously, the code below called
+        // getIsDataValidProperty() and ReadingChanged.Raise() *after*
+        // setCurrentValueProperty() (which raises CurrentValueChanged) had
+        // already returned -- if a CurrentValueChanged handler destroyed
+        // this Accelerometer, both of those calls would dereference an
+        // already-freed `this`. The real WP7 firing order (CurrentValueChanged
+        // always first, ReadingChanged second, Task ACCEL-002) is unchanged;
+        // only *how* the second event survives the first potentially
+        // destroying the sender is what changed.
+        System::EventHandler<AccelerometerReadingEventArgs> readingChangedSnapshot;
+        AccelerometerReadingEventArgs readingChangedArgs;
+        bool shouldRaiseReadingChanged = false;
+        if (valid && !ReadingChanged.Empty())
         {
+            readingChangedSnapshot = ReadingChanged;
             const Microsoft::Xna::Framework::Vector3& acceleration = accelerometerReading.getAccelerationProperty();
-            const AccelerometerReadingEventArgs eventArgs(
+            readingChangedArgs = AccelerometerReadingEventArgs(
                 acceleration.X,
                 acceleration.Y,
                 acceleration.Z,
                 accelerometerReading.getTimestampProperty());
+            shouldRaiseReadingChanged = true;
+        }
 
-            ReadingChanged.Raise(static_cast<System::Object*>(this), eventArgs);
+        // Task BASE2-002: atomically publishes the new reading and marks
+        // IsDataValid true together -- see SetCurrentValueAndMarkDataValid()'s
+        // own doc comment for the race this closes (previously two separate
+        // calls, one at the very top of this method).
+        SetCurrentValueAndMarkDataValid(accelerometerReading);
+
+        if (shouldRaiseReadingChanged)
+        {
+            // Raised through the local snapshot, not `this->ReadingChanged`
+            // -- safe even if `this` no longer exists. `sender` is still
+            // `this` itself, matching the real WP7 contract that every
+            // event's sender is the raising Accelerometer instance; passing
+            // a possibly-by-now-dangling `this` as an opaque sender value is
+            // a pointer-arithmetic-only operation (no dereference) and is
+            // already the same accepted contract every other event in this
+            // codebase relies on when its own handler destroys the sender.
+            readingChangedSnapshot.Raise(static_cast<System::Object*>(this), readingChangedArgs);
         }
     }
 
@@ -728,10 +819,62 @@ namespace Microsoft::Devices::Sensors
     void Accelerometer::DispatchToInstancesForTesting(
         const std::vector<Accelerometer*>& instances, float x, float y, float z)
     {
-        GetSubsystem().DispatchToInstances(instances, [x, y, z](Accelerometer* instance)
+        // Task SDLCORE-004: DispatchToInstances() now takes a snapshot of
+        // DispatchRegistration nodes, not raw pointers -- reconstruct that
+        // snapshot from the *currently* active registration for each raw
+        // test pointer, exactly as SensorEventWatch() itself does from the
+        // live startedInstances_ list, before any dispatch (and thus any
+        // test callback that might dispose/destroy one of these instances)
+        // has had a chance to run.
+        auto& subsystem = GetSubsystem();
+
+        std::vector<std::shared_ptr<Detail::SdlSensorSubsystem<Accelerometer>::DispatchRegistration>> registrations;
+        {
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            for (Accelerometer* instance : instances)
+            {
+                for (const auto& registration : subsystem.startedInstances_)
+                {
+                    if (registration->owner == instance)
+                    {
+                        registrations.push_back(registration);
+                        break;
+                    }
+                }
+            }
+        }
+
+        subsystem.DispatchToInstances(registrations, [x, y, z](Accelerometer* instance)
         {
             instance->DispatchSensorReading(x, y, z);
         });
+    }
+
+    void Accelerometer::SetEventWatchRegistrationFailureForTesting(bool shouldFail)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.forceEventWatchRegistrationFailureForTesting_ = shouldFail;
+    }
+
+    int Accelerometer::GetDispatchExceptionCountForTesting()
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        return subsystem.dispatchExceptionCountForTesting_;
+    }
+
+    std::string Accelerometer::GetLastDispatchExceptionMessageForTesting()
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        return subsystem.lastDispatchExceptionMessageForTesting_;
+    }
+
+    bool Accelerometer::IsSensorConnectedForTesting(std::int64_t sensorId)
+    {
+        std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+        return Detail::SdlSensorSubsystem<Accelerometer>::IsSensorConnected(sensorId, sdlLock);
     }
 
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")

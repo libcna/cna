@@ -137,7 +137,12 @@ if(ANDROID)
     # those symbols live in libandroid.so, not libc/libc++. PUBLIC so any
     # executable linking CNA (e.g. cna_demo_devices) picks up the transitive
     # dependency automatically (plan_devices.md Task DEVICES-0121).
-    target_link_libraries(CNA PUBLIC android)
+    #
+    # Task ANDR2-006 (2026-07-17): the same file's debug-only
+    # __android_log_print() diagnostic (disable/destroy failure reporting)
+    # needs liblog.so -- a separate NDK system library from libandroid.so,
+    # not pulled in transitively by it.
+    target_link_libraries(CNA PUBLIC android log)
 endif()
 
 if(CNA_FFMPEG_AVAILABLE)

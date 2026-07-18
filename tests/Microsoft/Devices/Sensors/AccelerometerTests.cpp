@@ -14,6 +14,8 @@
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp"
+#include "../Detail/ProcSelfResourceCounters.hpp"
+#include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
@@ -27,6 +29,7 @@ using Microsoft::Devices::Sensors::Accelerometer;
 using Microsoft::Devices::Sensors::AccelerometerFailedException;
 using Microsoft::Devices::Sensors::AccelerometerReading;
 using Microsoft::Devices::Sensors::AccelerometerReadingEventArgs;
+using Microsoft::Devices::Sensors::Detail::NativeDiagnosticSink;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
@@ -164,6 +167,37 @@ TEST(AccelerometerTests, FailedStartReleasesSubsystemHoldItAcquired)
     EXPECT_FALSE(a.GetSubsystemHeldForTesting());
     EXPECT_THROW(a.Start(), AccelerometerFailedException);
     EXPECT_FALSE(a.GetSubsystemHeldForTesting());
+}
+
+// Task SDLCORE-003 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// a failed SDL_AddEventWatch() registration must not leave this instance
+// claiming Ready with no possible way for a real sensor event to ever
+// reach it, and must release a subsystem hold this Start() call itself
+// just acquired. The real SDL_AddEventWatch() call offers no way to force
+// it to fail on demand, so SetEventWatchRegistrationFailureForTesting()
+// bypasses it entirely for this one, deterministic test. Requires reaching
+// *past* the "no default sensor" check FailedStartReleasesSubsystemHoldItAcquired
+// above exercises, so (unlike that test) this one needs real accelerometer
+// hardware to be present -- skips on an unsupported platform, same
+// discipline as every other supported-path-only test in this file.
+TEST(AccelerometerTests, FailedEventWatchRegistrationRollsBackAndReportsFailure)
+{
+    if (!Accelerometer::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Accelerometer is not supported on this platform; supported-path test not applicable.";
+    }
+
+    Accelerometer::SetEventWatchRegistrationFailureForTesting(true);
+    struct ResetGuard
+    {
+        ~ResetGuard() { Accelerometer::SetEventWatchRegistrationFailureForTesting(false); }
+    } resetGuard;
+
+    Accelerometer a;
+    EXPECT_FALSE(a.GetSubsystemHeldForTesting());
+    EXPECT_THROW(a.Start(), AccelerometerFailedException);
+    EXPECT_FALSE(a.GetSubsystemHeldForTesting());
+    EXPECT_EQ(a.getStateProperty(), SensorState::NotSupported);
 }
 
 TEST(AccelerometerTests, StopDoesNotCrash)
@@ -593,6 +627,40 @@ TEST(AccelerometerTests, NoDispatchAfterStop)
     EXPECT_EQ(invokeCount, 1); // No new dispatch.
 }
 
+// Task LIFE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// a CurrentValueChanged handler that fully destroys (not just Dispose()s)
+// the owning Accelerometer must not crash the subsequent, already-decided
+// ReadingChanged dispatch for the same update. DispatchSensorReading() now
+// raises ReadingChanged through a local System::EventHandler<T> snapshot
+// taken *before* CurrentValueChanged fires, never through
+// `this->ReadingChanged` -- previously, the code checked
+// getIsDataValidProperty() and read ReadingChanged directly *after*
+// CurrentValueChanged had already returned, which would dereference an
+// already-freed `this` in exactly this scenario.
+TEST(AccelerometerTests, DestroyingOwnerFromCurrentValueChangedStillFiresReadingChangedSafely)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetSupportedForTesting(true);
+    a->SetStartedForTesting(true);
+
+    bool readingChangedInvoked = false;
+    a->ReadingChanged += [&readingChangedInvoked](System::Object*, const AccelerometerReadingEventArgs&)
+    {
+        readingChangedInvoked = true;
+    };
+
+    bool currentValueHandlerRan = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        currentValueHandlerRan = true;
+        a.reset(); // full destruction, not just Dispose(), from within this callback
+    };
+
+    EXPECT_NO_THROW(a->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(currentValueHandlerRan);
+    EXPECT_TRUE(readingChangedInvoked);
+}
+
 // Task DEVICES-0059: InjectSyntheticSensorUpdate() itself checks
 // getIsDisposedProperty() first (mirrors the real event path) — confirms no
 // dispatch AND no crash/use-after-free once disposed.
@@ -616,18 +684,25 @@ TEST(AccelerometerTests, NoDispatchAfterDispose)
     EXPECT_EQ(invokeCount, 1); // No new dispatch.
 }
 
-// Task DEVICES-0057: System::EventHandler<T>::Raise() (sharp-runtime)
-// iterates its live handlers_ vector directly (`for (auto& entry : handlers_)`)
-// rather than over a snapshot/copy — Add()/Remove() called reentrantly from
-// within a handler mutate that same vector while Raise()'s loop is still
-// using cached begin()/end() iterators over it. This is a sharp-runtime
-// concern, not something Microsoft::Devices can fix (see NEXT.md's "do not
-// fix bugs discovered in sharp-runtime" rule) — this test exists only to
-// confirm whether the specific pattern a real sensor callback might
-// plausibly do (unsubscribe a handler that hasn't run yet, from within an
-// earlier handler in the same dispatch) is actually reachable/dangerous in
-// this namespace's own usage, not to fix EventHandler<T> itself.
-TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNotThrow)
+// Task BASE2-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// this test's own comment and assertion were stale relative to
+// sharp-runtime's *current* System::EventHandler<T>::Raise() (re-read
+// directly, not assumed): `void Raise(...) { auto snapshot = handlers_; for
+// (auto& entry : snapshot) { ... } }` — it already takes a full copy of
+// handlers_ before iterating, matching C# multicast delegate semantics
+// (Add()/Remove()/Clear() during a Raise() only affect the *next* Raise()
+// call, per that method's own doc comment). The `DEVICES-0057`-era concern
+// this test originally named — Raise() iterating the *live* handlers_
+// vector directly, risking iterator invalidation from a reentrant
+// Add()/Remove() — no longer describes the current implementation; this is
+// not a sharp-runtime bug to defer to that project, it is a stale
+// description of already-fixed behavior in a cnadevices-side test. The
+// previously-observational-only outcome is therefore now a real,
+// deterministic guarantee, tightened into an actual assertion: a handler
+// mid-dispatch removing a different, not-yet-invoked handler in the same
+// batch does not stop that handler from running in *this* dispatch (its
+// removal only takes effect for the next one).
+TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt)
 {
     Accelerometer a;
     a.SetStartedForTesting(true);
@@ -656,12 +731,13 @@ TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNo
 
     EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
 
-    // Documents, rather than asserts a specific "correct" outcome: whether
-    // the removed handler still ran depends on sharp-runtime's
-    // EventHandler<T>::Raise() iterator-invalidation behavior, which this
-    // test does not fix. Recorded here as an honest observation for
-    // whoever reads this test next, not a pass/fail contract.
-    (void)secondHandlerInvoked;
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    // Confirms the removal itself did take effect, just not until the next
+    // Raise() -- a second dispatch must not invoke the removed handler again.
+    secondHandlerInvoked = false;
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f));
+    EXPECT_FALSE(secondHandlerInvoked);
 }
 
 TEST(AccelerometerTests, CurrentValueChangedReceivesExpectedReading)
@@ -720,6 +796,62 @@ TEST(AccelerometerTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarke
     EXPECT_TRUE(a.getIsDataValidProperty());
     const Vector3 expectedAcceleration(rawX / StandardGravity, rawY / StandardGravity, rawZ / StandardGravity);
     EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
+}
+
+// Task BASE2-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// "reentrant update" -- a handler that triggers a *new* dispatch from
+// within itself (as opposed to destroying the owner, or removing a
+// different handler, both already covered by other tests above) -- had no
+// test anywhere in this file. Safe by construction:
+// System::EventHandler<T>::Raise()'s own `snapshot` is a local variable,
+// not shared/member state, so a nested Raise() call (triggered by this
+// handler calling InjectSyntheticSensorUpdate() again) gets its own
+// independent snapshot with no shared iteration state to corrupt. This
+// test proves that reasoning holds in practice, not just in theory: guards
+// against infinite recursion with a one-shot flag, and confirms both the
+// outer and the reentrant inner dispatch are correctly observed, in the
+// right order (inner completes fully before the outer handler returns,
+// since the reentrant call is synchronous).
+TEST(AccelerometerTests, HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState)
+{
+    Accelerometer a;
+    a.SetSupportedForTesting(true);
+    a.SetStartedForTesting(true);
+
+    constexpr float StandardGravity = 9.80665f;
+    bool reentered = false;
+    std::vector<float> observedXValues;
+
+    a.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<AccelerometerReading>& args)
+    {
+        observedXValues.push_back(args.getSensorReadingProperty().getAccelerationProperty().X * StandardGravity);
+
+        if (!reentered)
+        {
+            reentered = true;
+            // Triggers a second, nested dispatch from within the first
+            // dispatch's own handler -- the actual reentrancy this test
+            // exists to exercise.
+            a.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f);
+        }
+    };
+
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    // The inner (reentrant) dispatch runs to completion — including this
+    // same handler observing its own value — before the outer call's
+    // InjectSyntheticSensorUpdate(1.0f, ...) itself returns, so the inner
+    // value (2.0f) is observed first, then the outer handler's own
+    // remaining work resumes and finishes with the outer value (1.0f)
+    // already having been what triggered this whole chain.
+    ASSERT_EQ(observedXValues.size(), 2u);
+    EXPECT_FLOAT_EQ(observedXValues[0], 1.0f);
+    EXPECT_FLOAT_EQ(observedXValues[1], 2.0f);
+
+    // Final CurrentValue must reflect whichever update was dispatched last
+    // (the inner, reentrant one) — not the outer one that triggered it, and
+    // not some corrupted mix of both.
+    EXPECT_FLOAT_EQ(a.getCurrentValueProperty().getAccelerationProperty().X * StandardGravity, 2.0f);
 }
 
 // Task SENSORBASE-005: Stop() only clears started_/state_ bookkeeping
@@ -1072,6 +1204,137 @@ TEST(AccelerometerTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNo
     EXPECT_NO_THROW(a->Dispose());
 }
 
+// Task SDLCORE-009 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent
+// (below) already extends this file's exact std::exception-throwing batch
+// scenario with GetDispatchExceptionCountForTesting()/
+// GetLastDispatchExceptionMessageForTesting() assertions -- this test covers
+// the one distinct scenario that one does not: a thrown value that is not a
+// std::exception at all, confirming the plain catch (...) fallback also
+// records a message (a fixed placeholder, since a non-std::exception value
+// has no portable way to extract a description from) rather than only the
+// std::exception-typed catch clause doing so.
+TEST(AccelerometerTests, ThrowingNonStdExceptionDuringDispatchToInstancesForTestingIsObservable)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+
+    a->CurrentValueChanged += [](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        throw 42; // NOLINT(hicpp-exception-baseclass) -- deliberately not a std::exception.
+    };
+
+    const int countBefore = Accelerometer::GetDispatchExceptionCountForTesting();
+
+    const std::vector<Accelerometer*> batch{a.get()};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_EQ(Accelerometer::GetDispatchExceptionCountForTesting(), countBefore + 1);
+    EXPECT_EQ(Accelerometer::GetLastDispatchExceptionMessageForTesting(), "non-std::exception value");
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
+// Task DEVPERF-005 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// SdlSensorSubsystem<TSensor>::LogAndRecordDispatchException() was migrated to
+// also route through the shared Detail::NativeDiagnosticSink, alongside (not
+// instead of) the pre-existing per-subsystem counter/message pair the two
+// tests above already assert on. NativeDiagnosticSink's own state is
+// process-wide, so this checks a relative delta and the *last* record's
+// fields, not an absolute count -- any other test anywhere in this binary
+// that also triggers a throwing dispatch could otherwise make an absolute
+// count assertion flaky depending on run order.
+TEST(AccelerometerTests, ThrowingHandlerDuringDispatchIsAlsoRecordedByTheSharedNativeDiagnosticSink)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+
+    a->CurrentValueChanged += [](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        throw std::runtime_error("shared sink migration test");
+    };
+
+    const std::size_t countBefore = NativeDiagnosticSink::GetRecordCountForTesting();
+
+    const std::vector<Accelerometer*> batch{a.get()};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_EQ(NativeDiagnosticSink::GetRecordCountForTesting(), countBefore + 1);
+    const auto last = NativeDiagnosticSink::GetLastRecordForTesting();
+    EXPECT_EQ(last.Backend, "SDL");
+    EXPECT_EQ(last.Operation, "SdlSensorSubsystem dispatch callback");
+    EXPECT_EQ(last.NativeMessage, "shared sink migration test");
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
+// Task SDLCORE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// deterministic address-reuse (ABA) regression test. Reproduces the exact
+// hazard SDLCORE-004 fixes via placement-new -- rather than relying on the
+// allocator naturally reusing freed memory, which is common in practice but
+// not portably guaranteed -- so this test is deterministic on any platform.
+//
+// b is disposed AND destroyed mid-batch (same setup as
+// DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree
+// above), but instead of merely freeing b's memory, a's callback then
+// placement-constructs a brand-new, logically unrelated Accelerometer `c`
+// at that *exact* freed address and starts it, before the dispatch loop
+// reaches its already-snapshotted (stale) second batch entry (which was
+// captured for b's address before any of this happened). A raw-pointer-
+// identity-based revalidation (`std::find(startedInstances_, instance)`)
+// would wrongly find that address "still present" in the live list --
+// because `c` freshly registered itself there -- and deliver this stale
+// event, meant for the moment b was disposed, into `c`. DispatchRegistration
+// gives each Start() its own distinct, never-reused heap identity, so this
+// must not happen regardless of what raw address `c` occupies.
+TEST(AccelerometerTests, DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReusingSameAddress)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+
+    alignas(Accelerometer) unsigned char storage[sizeof(Accelerometer)];
+    Accelerometer* b = new (static_cast<void*>(storage)) Accelerometer();
+    b->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*b);
+
+    Accelerometer* c = nullptr;
+    bool cCallbackCalled = false;
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        aCallbackCalled = true;
+
+        // Destroy b, then construct a brand-new, unrelated Accelerometer at
+        // the *exact* same address, and start it -- before the dispatch
+        // loop reaches its already-snapshotted (stale) entry for b.
+        b->~Accelerometer();
+        c = new (static_cast<void*>(storage)) Accelerometer();
+        c->SetStartedForTesting(true);
+        Accelerometer::RegisterStartedInstanceForTesting(*c);
+
+        c->CurrentValueChanged += [&cCallbackCalled](
+            System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+        {
+            cCallbackCalled = true;
+        };
+    };
+
+    const std::vector<Accelerometer*> batch{a.get(), b};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_FALSE(cCallbackCalled);
+
+    ASSERT_NE(c, nullptr);
+    c->~Accelerometer();
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
 // Task P8-1: DispatchSensorReading() raises CurrentValueChanged, then
 // unconditionally touches `this` again (getIsDataValidProperty()) before deciding
 // whether to also raise the legacy ReadingChanged event — so destroying this same
@@ -1108,6 +1371,15 @@ TEST(AccelerometerTests, SelfDestroyingFromOwnReadingChangedCallbackDuringInject
 // proves a single instance's own dispatch survives its own handler throwing; it
 // says nothing about whether a *different*, later instance in the same batch still
 // gets dispatched to.
+//
+// Task SDLCORE-009 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// extended with GetDispatchExceptionCountForTesting()/
+// GetLastDispatchExceptionMessageForTesting() assertions -- this was already
+// the exact scenario ("a throwing handler never corrupts bookkeeping") that
+// task's acceptance criteria describe; it only needed the new observability
+// hooks added to it, not a new near-duplicate test. Counts are compared as a
+// delta (before vs. after), not an absolute value: the counter is backed by
+// a process-wide field shared by every AccelerometerTests case in this binary.
 TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent)
 {
     auto a = std::make_unique<Accelerometer>();
@@ -1133,14 +1405,100 @@ TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanc
         bCallbackCalled = true;
     };
 
+    const int countBefore = Accelerometer::GetDispatchExceptionCountForTesting();
+
     const std::vector<Accelerometer*> batch{a.get(), b.get()};
     EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
 
     EXPECT_TRUE(aCallbackCalled);
     EXPECT_TRUE(bCallbackCalled);
+    EXPECT_EQ(Accelerometer::GetDispatchExceptionCountForTesting(), countBefore + 1);
+    EXPECT_EQ(Accelerometer::GetLastDispatchExceptionMessageForTesting(), "a's handler deliberately fails");
+
+    // "Subsequent instances/updates behave according to the documented
+    // policy" (this task's own acceptance criterion): a second dispatch
+    // batch right after the first threw must still work normally.
+    aCallbackCalled = false;
+    bCallbackCalled = false;
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 4.0f, 5.0f, 6.0f));
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_TRUE(bCallbackCalled);
+    EXPECT_EQ(Accelerometer::GetDispatchExceptionCountForTesting(), countBefore + 2);
 
     // Also confirms A's own dispatch-tracking state was cleaned up despite the
     // throw (no hang, matching Task P6-4's single-instance guarantee).
     EXPECT_NO_THROW(a->Dispose());
     EXPECT_NO_THROW(b->Dispose());
+}
+
+// Task SDLCORE-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// this container never has a real SDL sensor open (SDL_GetSensors() always
+// returns an empty list here), so any id at all -- real-looking or not -- is
+// necessarily "not currently connected". This proves the plumbing/logic of
+// IsSensorConnectedForTesting() itself (it reaches the real SDL_GetSensors()
+// call and correctly reports "not found" rather than throwing, crashing, or
+// trivially returning true), not a genuine remove/re-add/default-device-change
+// scenario -- that would require either real hardware or a native
+// fault-injection layer capable of safely mocking SDL_GetSensors()/
+// SDL_OpenSensor()/SDL_CloseSensor() (Task TEST2-005's own separate scope),
+// neither of which exists in this environment. See this task's own
+// plan_devices.md resolution note and docs/devices-hardware-checklist.md for
+// the full, honest accounting of what remains unexercised.
+TEST(AccelerometerTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen)
+{
+    EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(0));
+    EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(-1));
+    EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(123456789));
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): at least 100,000
+// construct/probe/Start/Stop/Dispose cycles, checking this process's own open-file-descriptor and
+// thread counts return to baseline afterward -- a real, host-testable signal for a leaked native
+// resource (SDL sensor handle, worker thread, etc.) no existing test in this file runs at this
+// scale (the largest prior stress test, ConcurrentConstructDestroyKeepsInstanceCountBalanced,
+// covers only 8*50=400 iterations). LeakSanitizer (ASan's own built-in leak detector) does not
+// work in this specific container (needs ptrace, unavailable here -- see this task's own
+// plan_devices.md resolution note), so this /proc-based tracking is the primary host-available
+// leak signal for this task, not a substitute for a real LSan run.
+TEST(AccelerometerTests, OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    // Warm-up cycle outside the measured window -- the very first Accelerometer construction in
+    // this process lazily initializes SdlSensorSubsystem<Accelerometer>'s function-local static
+    // and may touch one-time-cached OS/libc state that legitimately stays open for the rest of
+    // the process's life by design, not a per-cycle leak this loop should flag.
+    {
+        const Accelerometer warmup;
+        (void)warmup;
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        Accelerometer a;
+        if (Accelerometer::getIsSupportedProperty())
+        {
+            EXPECT_NO_THROW(a.Start());
+            EXPECT_NO_THROW(a.Stop());
+        }
+        else
+        {
+            EXPECT_THROW(a.Start(), AccelerometerFailedException);
+        }
+        // a's destructor (Dispose(bool)) runs here, at the end of each iteration's scope.
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+#endif
 }

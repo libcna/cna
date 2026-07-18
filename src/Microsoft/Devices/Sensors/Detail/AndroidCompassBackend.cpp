@@ -44,6 +44,13 @@ namespace Microsoft::Devices::Sensors::Detail
             onCalibrationNeeded_ = std::move(onCalibrationNeeded);
             hasRotationVectorSample_ = false;
             hasMagneticFieldSample_ = false;
+            // Task COMP2-001: "Reset freshness on Start/resume" -- a fresh
+            // Start() must not let a stale timestamp survive from a
+            // previous run and immediately make the first new sample of
+            // *this* run look stale relative to it.
+            rotationVectorTimestamp_ = System::DateTimeOffset::getUtcNowProperty();
+            magneticFieldTimestamp_ = rotationVectorTimestamp_;
+            maxSampleSkew_ = ComputeCompassMaxSampleSkew(timeBetweenUpdates);
         }
 
         const bool rotationStarted = rotationVectorBridge_.Start(
@@ -96,6 +103,12 @@ namespace Microsoft::Devices::Sensors::Detail
             std::lock_guard<std::mutex> lock(stateMutex_);
             magneticHeadingDegrees_ = heading;
             hasRotationVectorSample_ = true;
+            // Task COMP2-001: sample.Timestamp (see AndroidSensorSample's
+            // own doc comment) is this sample's real delivery time --
+            // PublishReading() compares it against the magnetic-field
+            // stream's own last-delivery time to decide whether the two are
+            // still close enough together to fuse.
+            rotationVectorTimestamp_ = sample.Timestamp;
         }
         PublishReading();
     }
@@ -111,6 +124,8 @@ namespace Microsoft::Devices::Sensors::Detail
             magnetometerReading_ = Vector3(sample.Values[0], sample.Values[1], sample.Values[2]);
             headingAccuracyDegrees_ = accuracyDegrees;
             hasMagneticFieldSample_ = true;
+            // Task COMP2-001: see HandleRotationVectorSample()'s identical comment.
+            magneticFieldTimestamp_ = sample.Timestamp;
 
             if (ShouldRaiseCalibrateForAccuracyStatus(status))
             {
@@ -152,10 +167,32 @@ namespace Microsoft::Devices::Sensors::Detail
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
 
+            const System::DateTimeOffset now = System::DateTimeOffset::getUtcNowProperty();
+
             // Only publish once both sensors have delivered at least one
             // sample -- a reading built from only one of the two would be
             // half-default data, not a real fused reading.
-            if (!hasRotationVectorSample_ || !hasMagneticFieldSample_)
+            //
+            // Task COMP2-001 (2026-07-17, external audit
+            // `audit_devices_2026-07-17.md`): also requires both streams'
+            // last sample to still be fresh relative to `now`. Without
+            // this, a stream that silently stopped delivering (its own
+            // AndroidSensorBridge worker died, or the underlying device
+            // disappeared) would keep its last, now-stale value fused with
+            // the other, still-live stream's fresh samples indefinitely --
+            // producing readings that *look* fresh (a brand-new
+            // CompassReading.Timestamp every time) but are actually built
+            // from arbitrarily-stale data for one of the two fused
+            // quantities. "Drop rather than fuse indefinitely stale data"
+            // (this task's own required-work wording): a stale pairing
+            // simply skips this publish, exactly as if the required sample
+            // had never arrived at all -- the still-live stream's *next*
+            // fresh sample re-attempts the same check, so this recovers on
+            // its own the moment the stalled stream (if it ever does)
+            // delivers again, with no separate "recovery" logic needed.
+            if (!hasRotationVectorSample_ || !hasMagneticFieldSample_
+                || !IsCompassSampleFresh(rotationVectorTimestamp_, now, maxSampleSkew_)
+                || !IsCompassSampleFresh(magneticFieldTimestamp_, now, maxSampleSkew_))
             {
                 return;
             }
@@ -177,7 +214,7 @@ namespace Microsoft::Devices::Sensors::Detail
                 headingAccuracyDegrees_,
                 magneticHeadingDegrees_,
                 magnetometerReading_,
-                System::DateTimeOffset::getUtcNowProperty(),
+                now,
                 magneticHeadingDegrees_);
         }
 

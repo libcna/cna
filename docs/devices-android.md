@@ -139,8 +139,26 @@ container's resource constraints.
 
 - Real declination-based `Compass.TrueHeading` (needs `System.Device.Location`, a
   separate, unstarted plan — see `docs/location-future-plan.md`).
-- Any coordinate-system remap for `Motion`'s `Gravity`/`DeviceAcceleration`/
-  `DeviceRotationRate`/`Attitude` beyond a direct, unremapped passthrough — an explicit,
-  documented open question (Task DEVICES-0111), not an oversight.
-- CI for any of this — no CI infrastructure exists anywhere in this repo (Task
-  DEVICES-0127); `docs/devices-build.md`'s reproducible commands are the current gate.
+- **Corrected 2026-07-18 (independent re-verification of `audit_devices.md` finding
+  `DEV-AUD-003`) — this line previously claimed no remap existed at all for any of
+  `Motion`'s vector fields, which was stale/false:** `Task MOTION-012` (2026-07-16)
+  applies the same landscape remap `Accelerometer`/`Gyroscope` already use to
+  `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` (`AndroidMotionBackend.cpp`'s
+  `ApplyLandscapeRemapIfEnabled()`, respecting the shared
+  `Detail::IsAndroidLandscapeRemapEnabled()` opt-out) — that part **is** implemented,
+  only unverified on real hardware (see `docs/devices-hardware-checklist.md` Section 8,
+  step 7). What remains genuinely unimplemented is `Motion.Attitude` (the quaternion)
+  specifically — a quaternion isn't a plain vector, so the same remap logic doesn't
+  apply, and any correction there needs its own change-of-basis derivation (`MOTION-002`
+  — the stale `DEVICES-0111` task ID this line previously cited no longer exists in
+  `plan_devices.md`; `MOTION-002` is the current, correct reference).
+- CI for any of this — **corrected 2026-07-18 (same re-verification, same finding):**
+  a GitHub Actions workflow (`.github/workflows/devices-tests.yml`, `Task DEVPERF-001`,
+  2026-07-17) now exists and runs the Devices/Sensors filtered suite plus the strict-XNA
+  API surface check — this line previously claimed "no CI infrastructure exists
+  anywhere in this repo" at all, which is now false. What remains genuinely unconfirmed
+  is whether that workflow has actually run **green on a real GitHub-hosted runner** —
+  no push to a remote branch has triggered it yet (see `docs/devices-build.md`'s own
+  "This CI job has not yet actually executed on GitHub Actions" note) — `Task
+  DEVICES-0127`'s original "no CI at all" framing is stale; the current gap is narrower
+  ("exists but unconfirmed"), not "does not exist".

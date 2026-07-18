@@ -304,5 +304,42 @@ namespace Microsoft::Devices::Sensors
          */
         NOXNA static void DispatchToInstancesForTesting(
             const std::vector<Gyroscope*>& instances, float x, float y, float z);
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-003): see
+         * Accelerometer::SetEventWatchRegistrationFailureForTesting()'s
+         * identical hook for the full rationale.
+         *
+         * @param shouldFail true to force the next registration attempt to fail.
+         */
+        NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): see
+         * Accelerometer::GetDispatchExceptionCountForTesting()'s identical
+         * hook for the full rationale.
+         *
+         * @return The number of exceptions Detail::SdlSensorSubsystem<Gyroscope>::DispatchToInstances() has ever swallowed.
+         */
+        NOXNA static int GetDispatchExceptionCountForTesting();
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): see
+         * Accelerometer::GetLastDispatchExceptionMessageForTesting()'s
+         * identical hook for the full rationale.
+         *
+         * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
+         */
+        NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-005): see
+         * Accelerometer::IsSensorConnectedForTesting()'s identical hook for
+         * the full rationale.
+         *
+         * @param sensorId The SDL sensor id to check.
+         * @return true if still present in the current SDL_GetSensors() list.
+         */
+        NOXNA static bool IsSensorConnectedForTesting(std::int64_t sensorId);
     };
 } // namespace Microsoft::Devices::Sensors

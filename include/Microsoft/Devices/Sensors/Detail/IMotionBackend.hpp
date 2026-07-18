@@ -18,16 +18,17 @@ namespace Microsoft::Devices::Sensors::Detail
      * permanent `NotSupported`/throws-`SensorFailedException` stub behavior
      * unchanged. This interface itself has no platform-specific `#include`
      * — it compiles and is mockable on every platform. Mirrors
-     * `ICompassBackend`'s shape for architectural symmetry (per the design
-     * doc), minus a calibration callback — `Motion` shares `Compass`'s
-     * `Calibrate` event conceptually, but this backend interface only ever
-     * needs to report readings; `AndroidMotionBackend` does not itself
-     * raise calibration (see `docs/devices-native-backend-design.md`).
+     * `ICompassBackend`'s shape, including its calibration callback (Task
+     * MOTION-011, 2026-07-16) — `Motion`'s own fused attitude depends on the
+     * same magnetometer data `Compass`'s `Calibrate` logic reacts to, so a
+     * real backend can detect and report the identical calibration-needed
+     * condition through this interface.
      */
     class IMotionBackend
     {
     public:
         using ReadingCallback = std::function<void(const MotionReading&)>;
+        using CalibrationCallback = std::function<void()>;
 
         virtual ~IMotionBackend() = default;
 
@@ -47,6 +48,12 @@ namespace Microsoft::Devices::Sensors::Detail
          * may call this from a background thread — callers must treat it as
          * running on an unknown thread, same as
          * Accelerometer/Gyroscope's existing CurrentValueChanged contract.
+         * @param onCalibrationNeeded Invoked when the backend detects the
+         * device's compass needs calibration (Task MOTION-011). An
+         * implementation that cannot detect this condition at all (no
+         * magnetometer source available) simply never invokes it — this is
+         * not an error, and Start() must still succeed for the rest of the
+         * reading data.
          * @return true if delivery actually started; false if unsupported
          * or if delivery could not actually be started (e.g. the platform
          * sensor queue failed to initialize) — implementations must not
@@ -55,7 +62,10 @@ namespace Microsoft::Devices::Sensors::Detail
          * defined but must never crash or corrupt state; `Motion` itself
          * guards against calling this twice (see `Motion::Start()`).
          */
-        virtual bool Start(const System::TimeSpan& timeBetweenUpdates, ReadingCallback onReading) = 0;
+        virtual bool Start(
+            const System::TimeSpan& timeBetweenUpdates,
+            ReadingCallback onReading,
+            CalibrationCallback onCalibrationNeeded) = 0;
 
         /** @brief Stops delivery. Safe to call even if never started. */
         virtual void Stop() = 0;
@@ -68,5 +78,26 @@ namespace Microsoft::Devices::Sensors::Detail
          * @param timeBetweenUpdates New requested sample interval.
          */
         virtual void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) = 0;
+
+        /**
+         * @brief Whether the currently-active attitude source is referenced to true/magnetic north (Task MOT2-005).
+         *
+         * A real Android backend prefers `TYPE_ROTATION_VECTOR` (fused with
+         * the magnetometer, north-referenced, matching the real WP7
+         * `Motion.Attitude` documentation's implicit assumption) but falls
+         * back to `TYPE_GAME_ROTATION_VECTOR` (gyroscope/accelerometer only,
+         * no magnetometer reference, free to drift in yaw over time) if the
+         * former is unavailable on this device — see
+         * `AndroidMotionBackend::Start()`'s own doc comment (Task
+         * DEVICES-0104). Before this task, nothing exposed *which* of the
+         * two was actually in use to a caller — "Expose fallback
+         * diagnostics" (this task's own required work) is what this method
+         * answers. Meaningless before the first successful `Start()`;
+         * implementations should return `true` (the "nothing to warn about
+         * yet" default) until then.
+         *
+         * @return true if the active attitude source is north-referenced (or no backend has started yet); false if it is the drift-prone fallback.
+         */
+        [[nodiscard]] virtual bool IsUsingNorthReferencedAttitudeSource() = 0;
     };
 } // namespace Microsoft::Devices::Sensors::Detail

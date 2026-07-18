@@ -41,6 +41,16 @@ namespace Microsoft::Devices::Sensors::Detail
      * combining raw accelerometer+magnetometer) in this bridge — always
      * consumes Android's own OS-fused rotation-vector/game-rotation-vector
      * output directly (Task DEVICES-0119's gate).
+     *
+     * Task MOTION-011 (2026-07-16): also independently registers
+     * `TYPE_MAGNETIC_FIELD`, purely to monitor its accuracy status and
+     * drive `IMotionBackend::CalibrationCallback` — reusing
+     * `Detail::ShouldRaiseCalibrateForAccuracyStatus()`, the same accuracy
+     * policy `AndroidCompassBackend` already uses. This is best-effort and
+     * optional: `IsSupported()`/`Start()`'s overall success never depends
+     * on the magnetic-field sensor being available, since `MotionReading`
+     * has no magnetometer field to expose and calibration is an additional
+     * signal, not part of Motion's core reading data.
      */
     class AndroidMotionBackend final : public IMotionBackend
     {
@@ -53,17 +63,32 @@ namespace Microsoft::Devices::Sensors::Detail
 
         [[nodiscard]] bool IsSupported() override;
 
-        bool Start(const System::TimeSpan& timeBetweenUpdates, ReadingCallback onReading) override;
+        bool Start(
+            const System::TimeSpan& timeBetweenUpdates,
+            ReadingCallback onReading,
+            CalibrationCallback onCalibrationNeeded) override;
 
         void Stop() override;
 
         void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override;
+
+        [[nodiscard]] bool IsUsingNorthReferencedAttitudeSource() override;
+
+        /**
+         * @brief Test-only hook (Task MOT2-003): total fused frames dropped for exceeding `MaxFusionAgeWindow`.
+         *
+         * @return The number of times `PublishReading()` has skipped
+         * publishing because the four fused sources' most recent samples
+         * spanned more than `MaxFusionAgeWindow`.
+         */
+        [[nodiscard]] int GetDroppedFusionFrameCountForTesting();
 
     private:
         void HandleAttitudeSample(const AndroidSensorSample& sample);
         void HandleGravitySample(const AndroidSensorSample& sample);
         void HandleLinearAccelerationSample(const AndroidSensorSample& sample);
         void HandleGyroscopeSample(const AndroidSensorSample& sample);
+        void HandleMagneticFieldSample(const AndroidSensorSample& sample);
         void PublishReading();
 
         AndroidSensorBridge rotationVectorBridge_;
@@ -72,7 +97,21 @@ namespace Microsoft::Devices::Sensors::Detail
         AndroidSensorBridge linearAccelerationBridge_;
         AndroidSensorBridge gyroscopeBridge_;
 
-        /** @brief Set once Start() picks which of rotationVectorBridge_/gameRotationVectorBridge_ is actually in use. */
+        /** @brief Task MOTION-011: calibration-only -- never exposed through MotionReading, see this class's own doc comment. */
+        AndroidSensorBridge magneticFieldBridge_;
+
+        /**
+         * @brief Set once Start() picks which of rotationVectorBridge_/gameRotationVectorBridge_ is actually in use.
+         *
+         * Task MOT2-005 (2026-07-17, external audit
+         * `audit_devices_2026-07-17.md`): now read by
+         * `IsUsingNorthReferencedAttitudeSource()`, so — unlike before this
+         * task, when nothing ever read it and an unsynchronized write from
+         * `Start()` was harmless — this is now guarded by `stateMutex_`
+         * (`Start()` computes the value locally first, then stores it under
+         * the lock, matching this class's own established discipline for
+         * every other field a public method can read from another thread).
+         */
         bool usingGameRotationVector_ = false;
 
         std::mutex stateMutex_;
@@ -112,7 +151,25 @@ namespace Microsoft::Devices::Sensors::Detail
          */
         static const System::TimeSpan MaxFusionAgeWindow;
 
+        /**
+         * @brief Test-only hook (Task MOT2-003): total fused frames dropped for exceeding `MaxFusionAgeWindow`.
+         *
+         * Satisfies the required work's "expose counters" bullet for the
+         * drop path that already existed (`MOTION-007`) before this task —
+         * see this class's own `.cpp` `PublishReading()` and
+         * `plan_devices.md`'s `MOT2-003` resolution note for what this task
+         * does and, just as importantly, does *not* yet implement (bounded
+         * per-source sample queues and nearest/interpolated selection
+         * within a tight, hardware-measured skew — deliberately deferred as
+         * its own, larger design task, not rushed here). Guarded by
+         * `stateMutex_`, same as every other field in this class.
+         */
+        int droppedFusionFrameCountForTesting_ = 0;
+
         ReadingCallback onReading_;
+
+        /** @brief Task MOTION-011: invoked from HandleMagneticFieldSample(), guarded by stateMutex_ same as onReading_. */
+        CalibrationCallback onCalibrationNeeded_;
     };
 } // namespace Microsoft::Devices::Sensors::Detail
 

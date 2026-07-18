@@ -366,6 +366,65 @@ namespace Microsoft::Devices::Sensors
             const std::vector<Accelerometer*>& instances, float x, float y, float z);
 
         /**
+         * @brief Test-only hook (Task SDLCORE-003): forces the next
+         * SDL event-watch registration attempt (inside Start()) to report
+         * failure, without attempting the real SDL_AddEventWatch() call at
+         * all -- the real SDL API offers no way to force it to fail on
+         * demand. Lets a test deterministically exercise Start()'s
+         * rollback path (release a freshly-acquired subsystem hold, throw,
+         * and leave started_/state_/the shared started-instance registry
+         * untouched) rather than merely asserting the failure is "possible
+         * in principle."
+         *
+         * Affects every Accelerometer instance (the underlying flag is
+         * process-wide, shared with the underlying subsystem all instances
+         * of this class use) -- a test that sets this to true must reset it
+         * to false afterward, even on failure, so it cannot leak into a
+         * later, unrelated test.
+         *
+         * @param shouldFail true to force the next registration attempt to fail.
+         */
+        NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): total callback exceptions swallowed so far.
+         *
+         * Forwards to the shared
+         * Detail::SdlSensorSubsystem<Accelerometer>::dispatchExceptionCountForTesting_
+         * -- process-wide and never reset, so a test must compare against
+         * this value from *before* its own throwing-callback action, not
+         * assume it starts at zero.
+         *
+         * @return The number of exceptions Detail::SdlSensorSubsystem<Accelerometer>::DispatchToInstances() has ever swallowed.
+         */
+        NOXNA static int GetDispatchExceptionCountForTesting();
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): message from the most recently swallowed callback exception.
+         *
+         * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
+         */
+        NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-005): true if `sensorId` is still enumerated by `SDL_GetSensors()`.
+         *
+         * Forwards to the shared, private
+         * Detail::SdlSensorSubsystem<Accelerometer>::IsSensorConnected() so
+         * its staleness-detection logic (used by
+         * Detail::SdlSensorSubsystem<Accelerometer>::OpenDefaultSensorLocked()
+         * to invalidate a cached handle whose device has disappeared) has at
+         * least one direct, automated test — this container never has a
+         * real SDL sensor open, so every real id this returns for is
+         * necessarily "not connected"; this hook exists to prove the
+         * plumbing/logic itself, not to simulate a genuine live device.
+         *
+         * @param sensorId The SDL sensor id to check.
+         * @return true if still present in the current SDL_GetSensors() list.
+         */
+        NOXNA static bool IsSensorConnectedForTesting(std::int64_t sensorId);
+
+        /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1

@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+#include "../Detail/ProcSelfResourceCounters.hpp"
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 #include "Microsoft/Devices/Sensors/GyroscopeReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
@@ -121,6 +122,29 @@ TEST(GyroscopeTests, FailedStartReleasesSubsystemHoldItAcquired)
     EXPECT_FALSE(g.GetSubsystemHeldForTesting());
     EXPECT_THROW(g.Start(), SensorFailedException);
     EXPECT_FALSE(g.GetSubsystemHeldForTesting());
+}
+
+// Task SDLCORE-003 (2026-07-17): see AccelerometerTests.cpp's identical test
+// (FailedEventWatchRegistrationRollsBackAndReportsFailure) for the full
+// rationale.
+TEST(GyroscopeTests, FailedEventWatchRegistrationRollsBackAndReportsFailure)
+{
+    if (!Gyroscope::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Gyroscope is not supported on this platform; supported-path test not applicable.";
+    }
+
+    Gyroscope::SetEventWatchRegistrationFailureForTesting(true);
+    struct ResetGuard
+    {
+        ~ResetGuard() { Gyroscope::SetEventWatchRegistrationFailureForTesting(false); }
+    } resetGuard;
+
+    Gyroscope g;
+    EXPECT_FALSE(g.GetSubsystemHeldForTesting());
+    EXPECT_THROW(g.Start(), SensorFailedException);
+    EXPECT_FALSE(g.GetSubsystemHeldForTesting());
+    EXPECT_EQ(g.getStateProperty(), SensorState::NotSupported);
 }
 
 TEST(GyroscopeTests, StopDoesNotCrash)
@@ -488,6 +512,78 @@ TEST(GyroscopeTests, CurrentValueChangedReceivesExpectedReading)
     EXPECT_EQ(receivedReading.getRotationRateProperty(), expectedRotationRate);
 }
 
+// Task DEVPERF-004 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// mirrors AccelerometerTests.RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt
+// -- Gyroscope dispatches CurrentValueChanged through the same
+// SensorBase<T>::SetCurrentValueAndMarkDataValid()/System::EventHandler<T>::Raise()
+// path as Accelerometer, so it must honor the same snapshot-based handler-list
+// mutation guarantee: a handler mid-dispatch removing a different, not-yet-invoked
+// handler in the same batch does not stop that handler from running in *this*
+// dispatch (its removal only takes effect for the next one).
+TEST(GyroscopeTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt)
+{
+    Gyroscope g;
+    g.SetStartedForTesting(true);
+
+    using Args = SensorReadingEventArgs<GyroscopeReading>;
+    using Token = System::EventHandler<Args>::Token;
+
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    g.CurrentValueChanged.Add(
+        [&g, &secondToken](System::Object*, const Args&)
+        {
+            g.CurrentValueChanged.Remove(secondToken);
+        });
+
+    secondToken = g.CurrentValueChanged.Add(
+        [&secondHandlerInvoked](System::Object*, const Args&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    EXPECT_NO_THROW(g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    secondHandlerInvoked = false;
+    EXPECT_NO_THROW(g.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f));
+    EXPECT_FALSE(secondHandlerInvoked);
+}
+
+// Task DEVPERF-004: mirrors AccelerometerTests.HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState
+// -- proves the same reentrancy guarantee holds for Gyroscope's CurrentValueChanged
+// dispatch: a handler that triggers a brand-new dispatch from within itself does not
+// deadlock or corrupt state, and the inner (reentrant) dispatch completes fully
+// before the outer handler returns.
+TEST(GyroscopeTests, HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState)
+{
+    Gyroscope g;
+    g.SetSupportedForTesting(true);
+    g.SetStartedForTesting(true);
+
+    bool reentered = false;
+    std::vector<float> observedXValues;
+
+    g.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<GyroscopeReading>& args)
+    {
+        observedXValues.push_back(args.getSensorReadingProperty().getRotationRateProperty().X);
+        if (!reentered)
+        {
+            reentered = true;
+            g.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f);
+        }
+    };
+
+    EXPECT_NO_THROW(g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    ASSERT_EQ(observedXValues.size(), 2u);
+    EXPECT_FLOAT_EQ(observedXValues[0], 1.0f);
+    EXPECT_FLOAT_EQ(observedXValues[1], 2.0f);
+    EXPECT_FLOAT_EQ(g.getCurrentValueProperty().getRotationRateProperty().X, 2.0f);
+}
+
 // Task P5-6: mirrors AccelerometerTests.InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported
 // — see that test for the full rationale.
 TEST(GyroscopeTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported)
@@ -722,6 +818,57 @@ TEST(GyroscopeTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUse
     EXPECT_NO_THROW(a->Dispose());
 }
 
+// Task SDLCORE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// see AccelerometerTests's identical test for the full rationale — a
+// deterministic (placement-new-based) address-reuse (ABA) regression test.
+// b is disposed AND destroyed mid-batch, then a brand-new, unrelated
+// Gyroscope `c` is placement-constructed at b's exact freed address and
+// started, before the dispatch loop reaches its already-snapshotted (stale)
+// entry for b. DispatchRegistration must prevent that stale entry from
+// being delivered to `c`, regardless of the shared address.
+TEST(GyroscopeTests, DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReusingSameAddress)
+{
+    auto a = std::make_unique<Gyroscope>();
+    a->SetStartedForTesting(true);
+    Gyroscope::RegisterStartedInstanceForTesting(*a);
+
+    alignas(Gyroscope) unsigned char storage[sizeof(Gyroscope)];
+    Gyroscope* b = new (static_cast<void*>(storage)) Gyroscope();
+    b->SetStartedForTesting(true);
+    Gyroscope::RegisterStartedInstanceForTesting(*b);
+
+    Gyroscope* c = nullptr;
+    bool cCallbackCalled = false;
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        aCallbackCalled = true;
+
+        b->~Gyroscope();
+        c = new (static_cast<void*>(storage)) Gyroscope();
+        c->SetStartedForTesting(true);
+        Gyroscope::RegisterStartedInstanceForTesting(*c);
+
+        c->CurrentValueChanged += [&cCallbackCalled](
+            System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+        {
+            cCallbackCalled = true;
+        };
+    };
+
+    const std::vector<Gyroscope*> batch{a.get(), b};
+    EXPECT_NO_THROW(Gyroscope::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_FALSE(cCallbackCalled);
+
+    ASSERT_NE(c, nullptr);
+    c->~Gyroscope();
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
 // Task P8-1: Gyroscope::DispatchSensorReading() raises CurrentValueChanged as its
 // last statement and touches `this` for nothing afterward, so — with the
 // dispatchToken_ fix — a handler that destroys (not just Dispose()s) this exact
@@ -775,6 +922,15 @@ TEST(GyroscopeTests, SelfDestroyingFromOwnCallbackDuringBatchDispatchDoesNotUseA
 // Task P8-5: see AccelerometerTests's identical test for the full rationale —
 // DispatchToInstances()'s own doc comment claims a throwing handler doesn't prevent
 // the next instance in the same batch from being dispatched to; this proves it.
+//
+// Task SDLCORE-009 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// extended with GetDispatchExceptionCountForTesting()/
+// GetLastDispatchExceptionMessageForTesting() assertions — see
+// AccelerometerTests's identically-extended test for the full rationale; this
+// gives Gyroscope's own public static test hooks at least one direct test
+// each, per this project's own per-method test coverage rule, rather than
+// relying solely on Accelerometer's coverage of the shared underlying
+// Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances() template logic.
 TEST(GyroscopeTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent)
 {
     auto a = std::make_unique<Gyroscope>();
@@ -800,12 +956,71 @@ TEST(GyroscopeTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFro
         bCallbackCalled = true;
     };
 
+    const int countBefore = Gyroscope::GetDispatchExceptionCountForTesting();
+
     const std::vector<Gyroscope*> batch{a.get(), b.get()};
     EXPECT_NO_THROW(Gyroscope::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
 
     EXPECT_TRUE(aCallbackCalled);
     EXPECT_TRUE(bCallbackCalled);
+    EXPECT_EQ(Gyroscope::GetDispatchExceptionCountForTesting(), countBefore + 1);
+    EXPECT_EQ(Gyroscope::GetLastDispatchExceptionMessageForTesting(), "a's handler deliberately fails");
 
     EXPECT_NO_THROW(a->Dispose());
     EXPECT_NO_THROW(b->Dispose());
+}
+
+// Task SDLCORE-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// see AccelerometerTests's identical test for the full rationale — this
+// container never has a real SDL sensor open, so this only proves
+// IsSensorConnectedForTesting()'s plumbing/logic (reaches SDL_GetSensors()
+// and correctly reports "not found"), not a genuine hardware
+// remove/re-add/default-device-change scenario.
+TEST(GyroscopeTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen)
+{
+    EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(0));
+    EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(-1));
+    EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(123456789));
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): mirrors
+// AccelerometerTests.OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak --
+// see that test for the full rationale (LeakSanitizer non-functional in this container, no
+// existing test in this file runs anywhere near this scale).
+TEST(GyroscopeTests, OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    {
+        const Gyroscope warmup;
+        (void)warmup;
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        Gyroscope g;
+        if (Gyroscope::getIsSupportedProperty())
+        {
+            EXPECT_NO_THROW(g.Start());
+            EXPECT_NO_THROW(g.Stop());
+        }
+        else
+        {
+            EXPECT_THROW(g.Start(), SensorFailedException);
+        }
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+#endif
 }

@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/VibrateController.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include "Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -22,6 +23,33 @@ namespace Microsoft::Devices
                     duration.ToString(),
                     "'duration' must be between TimeSpan.Zero and TimeSpan.FromSeconds(5).");
             }
+        }
+
+        /**
+         * @brief Clamps a vibration intensity/motor-magnitude value to `[0, 1]`, canonicalizing NaN.
+         *
+         * Task VIB2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+         * `std::clamp(v, 0.0f, 1.0f)` alone leaves NaN unchanged -- every
+         * comparison against NaN is `false`, so `std::clamp`'s own
+         * `v < lo ? lo : (hi < v ? hi : v)` falls through to returning `v`
+         * itself. A NaN then reaching `SdlHapticVibrateBackend::StartLeftRight()`'s
+         * `static_cast<Uint16>(magnitude * 65535.0f)` conversion is
+         * undefined behavior (converting a value not representable in the
+         * destination integer type). True +/-infinity need no special
+         * handling: both comparisons against a finite bound are
+         * well-defined for infinity, so `std::clamp` already correctly
+         * saturates it to `0.0f`/`1.0f`. Canonicalizes NaN to `0.0f`
+         * ("no vibration") rather than throwing, matching this API's own
+         * established policy of silently correcting out-of-range input
+         * (see `StartWithOutOfRangeIntensityIsClampedSilentlyAndDoesNotThrow`).
+         */
+        [[nodiscard]] float CanonicalizeVibrationMagnitude(float value)
+        {
+            if (std::isnan(value))
+            {
+                return 0.0f;
+            }
+            return std::clamp(value, 0.0f, 1.0f);
         }
     } // namespace
 
@@ -60,7 +88,7 @@ namespace Microsoft::Devices
     void VibrateController::Start(const System::TimeSpan& duration, float intensity)
     {
         ValidateVibrationDuration(duration);
-        const float clampedIntensity = std::clamp(intensity, 0.0f, 1.0f);
+        const float clampedIntensity = CanonicalizeVibrationMagnitude(intensity);
 
         std::lock_guard<std::mutex> lock(backendMutex_);
         backend_->Start(duration, clampedIntensity);
@@ -87,8 +115,8 @@ namespace Microsoft::Devices
     void VibrateController::StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration)
     {
         ValidateVibrationDuration(duration);
-        const float clampedLarge = std::clamp(largeMotor, 0.0f, 1.0f);
-        const float clampedSmall = std::clamp(smallMotor, 0.0f, 1.0f);
+        const float clampedLarge = CanonicalizeVibrationMagnitude(largeMotor);
+        const float clampedSmall = CanonicalizeVibrationMagnitude(smallMotor);
 
         std::lock_guard<std::mutex> lock(backendMutex_);
         backend_->StartLeftRight(clampedLarge, clampedSmall, duration);

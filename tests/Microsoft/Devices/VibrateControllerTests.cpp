@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <limits>
 #include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "Detail/ProcSelfResourceCounters.hpp"
 #include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
 #include "Microsoft/Devices/VibrateController.hpp"
 #include "System/ArgumentException.hpp"
@@ -252,6 +254,25 @@ TEST(VibrateControllerTests, StartWithIntensityOneDoesNotThrow)
     EXPECT_NO_THROW(VibrateController::getDefaultProperty()->Start(TimeSpan::FromMilliseconds(50), 1.0f));
 }
 
+// Task VIB2-002: exercises the *real* SdlHapticVibrateBackend (no fake
+// installed) -- confirms SanitizeSdlHapticInput()/ToSdlHapticMagnitude()
+// prevent undefined behavior in the actual SDL_PlayHapticRumble()/
+// static_cast<Uint16>() call sites, not just VibrateController's own
+// upstream clamp (VibrateControllerTests.StartWith*CanonicalizesToZero...
+// below prove the latter via the fake).
+TEST(VibrateControllerTests, StartWithNaNIntensityOnRealBackendDoesNotCrash)
+{
+    EXPECT_NO_THROW(VibrateController::getDefaultProperty()->Start(
+        TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::quiet_NaN()));
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithNaNMagnitudesOnRealBackendDoesNotCrash)
+{
+    EXPECT_NO_THROW(VibrateController::getDefaultProperty()->StartLeftRight(
+        std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN(),
+        TimeSpan::FromMilliseconds(10)));
+}
+
 TEST(VibrateControllerTests, StartWithOutOfRangeIntensityIsClampedSilentlyAndDoesNotThrow)
 {
     // Unlike duration, out-of-range intensity is clamped, not rejected —
@@ -469,6 +490,27 @@ TEST(VibrateControllerTests, RepeatedStartStopSequencesDoNotDegrade)
     }
 }
 
+// Task VIB2-003: regression coverage for the SDL_PlayHapticRumble()/
+// SDL_StopHapticEffects()/SDL_StopHapticRumble()/SDL_RunHapticEffect() return
+// value checks added to Detail::SdlHapticVibrateBackend. In this environment
+// (no haptic device present) every one of those calls is unreachable --
+// StartLeftRight() always returns early at the "no haptic device found"
+// guard -- so this cannot exercise the new failure/cleanup branches
+// (see docs/devices-hardware-checklist.md Section 4a for the still-open
+// hardware validation procedure for that). What this does verify: the added
+// checks don't change observable behavior for the repeated
+// StartLeftRight()/Stop() cycle every existing test already exercises.
+TEST(VibrateControllerTests, RepeatedStartLeftRightStopSequencesDoNotDegrade)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    for (int i = 0; i < 50; ++i)
+    {
+        EXPECT_NO_THROW(controller->StartLeftRight(1.0f, 0.5f, TimeSpan::FromMilliseconds(1)));
+        EXPECT_NO_THROW(controller->Stop());
+    }
+}
+
 // Task DEVICES-0028: every prior test above touches one facet of the
 // no-haptic-hardware contract independently (IsSupported, DeviceName, no
 // crash on Start/Stop/StartLeftRight). This test asserts the whole contract
@@ -536,6 +578,69 @@ TEST(VibrateControllerTests, StartClampsOutOfRangeIntensityBeforeReachingBackend
 
     controller->Start(TimeSpan::FromMilliseconds(10), -5.0f);
     EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+// Task VIB2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// std::clamp(v, 0.0f, 1.0f) alone leaves NaN unchanged -- every comparison
+// against NaN is false, so std::clamp's own `v < lo ? lo : (hi < v ? hi : v)`
+// falls through to returning v itself. A NaN intensity/motor value reaching
+// SdlHapticVibrateBackend's real SDL_PlayHapticRumble() call or its
+// static_cast<Uint16>(magnitude * 65535.0f) conversion would be undefined
+// behavior. Canonicalized to 0.0f ("no vibration"), matching this API's own
+// established silent-correction policy for out-of-range input.
+TEST(VibrateControllerTests, StartWithNaNIntensityCanonicalizesToZeroBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::quiet_NaN());
+
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+// True +/-infinity need no special handling -- both comparisons against a
+// finite bound are well-defined for infinity, so std::clamp already
+// saturates it correctly. This pins that down as a permanent regression test
+// alongside the NaN case above, rather than leaving it merely implied.
+TEST(VibrateControllerTests, StartWithInfiniteIntensitySaturatesBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 1.0f);
+
+    controller->Start(TimeSpan::FromMilliseconds(10), -std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+// Subnormals and signed zero need no special canonicalization -- both are
+// already finite, in-[0,1]-range (or clamp-to-range) values with no UB risk
+// in std::clamp or the Uint16 cast; this pins that down as a permanent
+// regression test rather than leaving it merely asserted.
+TEST(VibrateControllerTests, StartWithSubnormalOrSignedZeroIntensityDoesNotThrowAndForwardsAsIs)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::denorm_min());
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, std::numeric_limits<float>::denorm_min());
+
+    controller->Start(TimeSpan::FromMilliseconds(10), -0.0f);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithNaNMagnitudesCanonicalizesToZeroBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->StartLeftRight(
+        std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN(),
+        TimeSpan::FromMilliseconds(10));
+
+    EXPECT_FLOAT_EQ(fake->LastLargeMotor, 0.0f);
+    EXPECT_FLOAT_EQ(fake->LastSmallMotor, 0.0f);
 }
 
 TEST(VibrateControllerTests, StartWithOutOfRangeDurationThrowsAndNeverReachesBackend)
@@ -616,6 +721,68 @@ TEST(VibrateControllerTests, StartLeftRightWithOutOfRangeDurationThrowsAndNeverR
     EXPECT_THROW(controller->StartLeftRight(0.5f, 0.5f, TimeSpan::FromSeconds(6)), System::ArgumentOutOfRangeException);
 
     EXPECT_EQ(fake->StartLeftRightCallCount, 0);
+}
+
+// Task VIB2-006 (2026-07-18, external audit `audit_devices_2026-07-17.md`): closes the gap the
+// existing StartWithIntensityZeroDoesNotThrow test (above) leaves open -- that test only proves
+// intensity 0.0 doesn't throw, not what actually happens to it. Confirms Start(duration, 0.0f)
+// genuinely forwards as an active zero-strength Start() call (StartCallCount increments,
+// LastStartIntensity is exactly 0.0f) -- **not** silently translated into an implicit Stop()
+// call (StopCallCount stays 0). This is the deliberate policy VibrateController.hpp's own
+// Start(TimeSpan, float) doc comment now states explicitly, backed by SDL's own documented
+// SDL_PlayHapticRumble() contract ("strength of the rumble to play as a 0-1 float value" --
+// third_party/SDL/include/SDL3/SDL_haptic.h -- 0 is explicitly inside that documented valid
+// range, not a special/invalid case SDL itself treats differently).
+TEST(VibrateControllerTests, StartWithIntensityZeroForwardsAsAnActiveZeroStrengthStartNotAnImplicitStop)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(50), 0.0f);
+
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+    EXPECT_EQ(fake->StopCallCount, 0);
+}
+
+// Task VIB2-006: "Stop when idle" -- Stop() before any Start()/StartLeftRight() call must still
+// forward cleanly to the backend (a real haptic backend's own Stop() is expected to be a safe
+// no-op against a device that was never started -- SDL's own SDL_StopHapticRumble() doc comment
+// carries no "must already be playing" precondition), not throw or silently no-op at the
+// VibrateController layer itself.
+TEST(VibrateControllerTests, StopWhenIdleForwardsToBackendWithoutThrowing)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    EXPECT_NO_THROW(controller->Stop());
+
+    EXPECT_EQ(fake->StopCallCount, 1);
+    EXPECT_EQ(fake->StartCallCount, 0);
+}
+
+// Task VIB2-006: "Start while active" -- a second Start() call while a first is still nominally
+// active (no Stop()/duration-elapsed between them) must forward as its own independent Start()
+// call, replacing (not queuing behind, not rejecting) the previous one -- matches
+// SdlHapticVibrateBackend::Start()'s own real behavior (SDL_PlayHapticRumble() on an
+// already-playing rumble effect simply restarts it with the new parameters, confirmed by
+// reading third_party/SDL/src/haptic/SDL_haptic.c directly: SDL_PlayHapticRumble() does not
+// check or reject a still-playing rumble state before calling through to the platform effect
+// API). Verified at the VibrateController layer via the fake backend (the real backend's own
+// exact restart semantics remain hardware-unverified, matching every other VIB2-* real-SDL-call
+// finding this pass).
+TEST(VibrateControllerTests, StartWhileAlreadyActiveForwardsAsANewIndependentStartCall)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(500), 0.3f);
+    controller->Start(TimeSpan::FromMilliseconds(100), 0.9f);
+
+    EXPECT_EQ(fake->StartCallCount, 2);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.9f);
+    EXPECT_EQ(fake->LastStartDuration, TimeSpan::FromMilliseconds(100));
+    EXPECT_EQ(fake->StopCallCount, 0); // Replacement, not an implicit stop-then-start.
 }
 
 TEST(VibrateControllerTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
@@ -715,4 +882,60 @@ TEST(VibrateControllerTests, StopAfterStartForwardsBothCallsIndependently)
 
     EXPECT_EQ(fake->StartCallCount, 1);
     EXPECT_EQ(fake->StopCallCount, 1);
+}
+
+// Task PERF2-002 (2026-07-18, external audit `audit_devices_2026-07-17.md`): at least 100,000
+// probe/Start/Stop cycles against the real Detail::SdlHapticVibrateBackend (not a fake -- this
+// specifically exercises the real native SDL call path, unlike every other test in this file),
+// checking this process's own open-file-descriptor and thread counts return to baseline
+// afterward. See AccelerometerTests's own version of this test for the full rationale
+// (LeakSanitizer non-functional in this container). Adapted from PERF2-002's own "construct/
+// probe/Start/Stop/Dispose" wording: VibrateController has no public constructor and no
+// per-cycle Dispose -- getDefaultProperty() returns one process-lifetime singleton, real
+// disposal only ever happens once, at process-exit static teardown (see
+// Detail::DevicesShutdownCoordinator's own doc comment) -- so probe/Start/Stop against that one
+// singleton, repeated, is this class's actual analogous lifecycle stress.
+TEST(VibrateControllerTests, OneHundredThousandProbeStartStopCyclesAgainstTheRealBackendLeaveNoResourceLeak)
+{
+#if !defined(__linux__)
+    GTEST_SKIP() << "FD/thread leak tracking is Linux-specific (/proc/self/fd, /proc/self/status)";
+#else
+    constexpr int Cycles = 100000;
+
+    VibrateController* controller = VibrateController::getDefaultProperty();
+    // Ensures the real backend is in place regardless of what an earlier test in this shared
+    // binary left behind -- SetBackendForTesting(nullptr) restores a fresh
+    // Detail::SdlHapticVibrateBackend (see VibrateController::SetBackendForTesting()'s own body).
+    controller->SetBackendForTesting(nullptr);
+
+    // Warm-up cycle outside the measured window, same reasoning as the sensor classes' own
+    // versions of this test.
+    {
+        (void)controller->getIsSupportedProperty();
+        controller->Start(TimeSpan::FromMilliseconds(1));
+        controller->Stop();
+    }
+
+    const int fdBefore = CnaTestSupport::CountOpenFileDescriptors();
+    const int threadsBefore = CnaTestSupport::GetThreadCount();
+    ASSERT_GE(fdBefore, 0);
+    ASSERT_GE(threadsBefore, 0);
+
+    for (int i = 0; i < Cycles; ++i)
+    {
+        (void)controller->getIsSupportedProperty();
+        EXPECT_NO_THROW(controller->Start(TimeSpan::FromMilliseconds(1)));
+        EXPECT_NO_THROW(controller->Stop());
+    }
+
+    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+        << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
+    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+        << "thread count grew after " << Cycles << " cycles -- possible leak";
+
+    // Restores a fresh real backend for whatever test runs next in this shared binary --
+    // matches ScopedFakeVibrateBackend's own RAII-restore convention, just done manually here
+    // since this test never installs a fake to begin with.
+    controller->SetBackendForTesting(nullptr);
+#endif
 }

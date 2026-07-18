@@ -209,6 +209,71 @@ there are no separate portrait rotation cases to test here either):**
    produces the same sign, regardless of which rotation state the device is in) as the
    primary correctness bar.
 
+## 2a. SDL sensor disconnect/reconnect and default-device change (Task SDLCORE-005, 2026-07-17)
+
+**Code under test:** `Detail::SdlSensorSubsystem<TSensor>::IsSensorConnected()`/
+`OpenDefaultSensorLocked()` (shared by `Accelerometer` and `Gyroscope` — one fix, one
+template, both classes). Before this fix, once `sensor_`/`sensorId_` were cached by the
+first successful `OpenDefaultSensorLocked()` call, they were reused **indefinitely** —
+for the rest of this subsystem's process-wide lifetime, no matter how long the
+underlying device had been physically disconnected, and with no way for a different
+default device (or the same device reappearing with a new SDL-assigned id) to ever be
+picked up again short of the whole process restarting. The fix re-validates the cached
+id against a fresh `SDL_GetSensors()` call every time `OpenDefaultSensorLocked()` runs,
+closing and discarding a stale handle so the existing deterministic-selection loop runs
+again instead.
+
+**Why this needs real hardware:** SDL3 has no sensor-specific hotplug event (confirmed
+by reading `third_party/SDL/include/SDL3/SDL_events.h` — only `SDL_EVENT_SENSOR_UPDATE`
+exists), so `IsSensorConnected()`'s only way to detect a disconnect is re-querying the
+live device list. This container never has a real SDL sensor open at all
+(`SDL_GetSensors()` always returns an empty list here), so
+`OpenDefaultSensorLocked()`'s actual staleness branch
+(`sensor_ != nullptr && !IsSensorConnected(...)`) is never taken by any test — every run
+here only exercises the "nothing cached yet" path.
+`IsSensorConnectedForTesting()` (`Accelerometer`/`Gyroscope`'s own test-only wrappers)
+proves the underlying `SDL_GetSensors()` query itself works and correctly reports "not
+found," but a genuine remove/re-add/default-device-change scenario — this task's own
+acceptance criteria's literal ask — would need either real hardware or a native
+fault-injection layer capable of safely mocking `SDL_GetSensors()`/`SDL_OpenSensor()`/
+`SDL_CloseSensor()` (`plan_devices.md` Task `TEST2-005`'s own separate scope; building
+one ad hoc here to fake-inject a full device lifecycle was judged out of scope for this
+task, the same call made for `ANDR2-002`'s identical gap). **Status: NOT RUN — hardware
+or TEST2-005 validation open.**
+
+**Separately not addressed by this fix, and flagged rather than silently dropped:** this
+task's required work also asks that a device disappearing **while an instance is
+already started** stop delivery, invalidate `CurrentValue`/`IsDataValid`, transition
+`SensorState` appropriately, and attempt policy-driven reacquisition. The SDL sensor path
+is entirely event-driven (`SDL_EventFilter`, no polling loop the way
+`AndroidSensorBridge::Run()` has) — there is no natural trigger point today to detect a
+disconnect *mid-session* for an instance that is not itself calling `Start()` again. This
+fix only closes the "cached indefinitely, reused forever" gap for the *next* `Start()`
+call (any instance, new or restarting) — it does not add live, continuous
+disconnect-monitoring for an already-running instance. That would need a genuinely new
+architectural piece (e.g. checking every already-started instance's `sensorId_` liveness
+opportunistically whenever any `SDL_EVENT_SENSOR_UPDATE` of the same `TSensor` type
+fires) and is significant enough design work that it was not attempted as part of this
+task — a candidate for its own future task if picked up, not a silently-abandoned piece
+of this one.
+
+**Steps:**
+1. On a real device/emulator with an accelerometer or gyroscope, `Start()` an instance
+   and confirm readings arrive normally.
+2. If the device can be simulated as disconnected (e.g. an emulator's sensor panel, or a
+   USB sensor peripheral that can be unplugged), disconnect it, then construct and
+   `Start()` a **second**, independent instance of the same sensor class — confirm the
+   second `Start()` correctly detects the first's cached handle is stale, discards it,
+   and either fails cleanly (`SensorState::NotSupported`, if nothing else is available)
+   or picks up a different available device, rather than reusing the dead cached handle.
+3. Reconnect the original device (or connect a different one of the same type) and
+   repeat step 2 — confirm the same instance/class can recover without any process
+   restart.
+4. Separately confirm (or, more likely, document as an accepted gap per the note above)
+   whether an **already-started, still-running** instance ever notices a mid-session
+   disconnect on its own, without a fresh `Start()` call from elsewhere prompting the
+   re-validation.
+
 ## 3. `VibrateController::Start()` actually vibrates the phone motor
 
 **Code under test:** `VibrateController.cpp`'s `OpenFirstHapticDevice()`/
@@ -254,6 +319,80 @@ effect upload.
    small-only), not both simultaneously — i.e. `largeMotor`/`smallMotor` really map to
    independent physical actuators, not just independent intensity scalars on the same
    motor.
+
+## 4a. `StartLeftRight()` cleans up an effect whose `SDL_RunHapticEffect()` fails (Task VIB2-003, 2026-07-17)
+
+**Code under test:** `Detail::SdlHapticVibrateBackend::StartLeftRight()`'s handling of a
+successfully-uploaded (`SDL_CreateHapticEffect()` succeeds) but then failing
+`SDL_RunHapticEffect()` call — the fix destroys the just-uploaded effect
+(`SDL_DestroyHapticEffect()`) and resets `leftRightEffectId_` immediately, rather than
+leaving an uploaded-but-never-playing effect slot allocated until the next
+`Start()`/`StartLeftRight()`/`Stop()`/destructor call happens to reclaim it.
+
+**Why this needs real hardware:** in this dev container no haptic device is ever opened
+(`OpenFirstHapticDevice()` returns `nullptr`), so `StartLeftRight()` always returns at the
+earlier "no haptic device found" guard — `SDL_CreateHapticEffect()`/`SDL_RunHapticEffect()`
+are never reached at all, let alone the specific case of the former succeeding while the
+latter fails. There is no mockable SDL boundary in this codebase for haptics (unlike
+`Detail::IVibrateBackend`'s own fake used by `VibrateControllerTests`' fake-backend suite,
+which only exercises `VibrateController`'s forwarding/clamping logic, not
+`SdlHapticVibrateBackend`'s internal SDL call sequence), so this specific failure path has
+only been reasoned about from SDL3's own `SDL_RunHapticEffect()` documented failure modes
+(e.g. device removed between create and run), not exercised. **Status: NOT RUN — hardware
+validation open.**
+
+**Steps:**
+1. On a real haptic device, call `StartLeftRight(1.0f, 1.0f, TimeSpan::FromSeconds(2))` in
+   a loop while physically disconnecting/reconnecting the device (or otherwise forcing
+   `SDL_RunHapticEffect()` to fail after a successful `SDL_CreateHapticEffect()` — e.g. via
+   a debugger breakpoint between the two calls that unplugs the device) to try to trigger
+   the failing-`Run()` path.
+2. Confirm (via a debug build, so the new `SDL_Log("SdlHapticVibrateBackend:
+   SDL_RunHapticEffect failed: ...")` diagnostic is compiled in) that a failure is actually
+   observed and logged.
+3. Confirm no effect id is leaked: repeat step 1 many times and check (via SDL's own
+   haptic effect count, if exposed by the platform, or simply that subsequent
+   `StartLeftRight()`/`Start()`/`Stop()` calls keep behaving normally with no growing
+   resource usage) that each failed `Run()` is followed by a clean `leftRightEffectId_`
+   reset rather than an accumulating series of orphaned uploaded effects.
+
+## 4b. Haptic device disconnect/reconnect mid-session (Task VIB2-004, 2026-07-17)
+
+**Code under test:** `Detail::SdlHapticVibrateBackend`'s new `ReleaseHapticDeviceIfStale()` /
+`IsHapticDeviceStillConnected()` pair, called from `Start()`, `Stop()`, `StartLeftRight()`, and
+`AcquireHapticDeviceForProbe()` (so `IsSupported()`/`GetDeviceName()` are covered too). Before
+this fix, `haptic_` was opened once and reused forever — a device unplugged mid-session left a
+cached (but no-longer-live) `SDL_Haptic*` in place, and there was no path back to a working
+device even if the same or a different one reconnected, short of destroying and recreating the
+whole `SdlHapticVibrateBackend` (which the `VibrateController` singleton never does).
+
+**Why this needs real hardware:** SDL3 has no haptic-specific hotplug event, so this fix detects
+disconnect by re-querying `SDL_GetHaptics()` and comparing instance IDs before every operation —
+this container never has a haptic device open in the first place (`OpenFirstHapticDevice()`
+always returns `nullptr`), so `ReleaseHapticDeviceIfStale()`'s actual staleness branch
+(`haptic_ != nullptr && !IsHapticDeviceStillConnected(haptic_)`) is never taken; every test run
+here only exercises the no-op path where `haptic_` stays `nullptr` throughout. **Status: NOT
+RUN — hardware validation open.**
+
+**Steps:**
+1. Connect a real haptic-capable device (phone motor via Android, USB force-feedback wheel, or
+   any non-gamepad-excluded rumble device — see `IsConnectedGamepadHapticDevice()`). Confirm
+   `VibrateController::getDefaultProperty()->getIsSupportedProperty()` returns `true` and
+   `Start(TimeSpan::FromSeconds(1))` actually vibrates it.
+2. Physically disconnect the device. Immediately call `Start()`, `Stop()`, and
+   `StartLeftRight()` again — confirm none crash (VIB2-003 already makes the underlying SDL
+   calls fail gracefully; this task additionally expects the stale handle to be closed and
+   discarded on the very first post-disconnect call).
+3. Call `getIsSupportedProperty()` after the disconnect — confirm it now returns `false` (not a
+   stale cached `true`), and `getDeviceNameProperty()` returns an empty string, matching the
+   "no device" contract `UnsupportedEnvironmentFullContract` already asserts for the
+   never-had-a-device case.
+4. Reconnect the same device (or connect a different rumble-capable one). Call
+   `getIsSupportedProperty()` again — confirm it returns `true` again, and `Start()` actually
+   vibrates the (re)connected device — all without recreating `VibrateController`'s singleton or
+   restarting the process.
+5. Repeat steps 2-4 a few times in a row to confirm the release-and-retry cycle is stable, not
+   just a one-shot recovery.
 
 ## 5. Gamepad-exclusion filter doesn't compete with `GamePad::SetVibration()`
 
@@ -328,6 +467,132 @@ sensor-subsystem resource leak?) has never been observed on a real device.
 3. Confirm no crash/use-after-free on subsequent readings (there should be none, since
    the instance is disposed) or on process exit.
 
+## 6a. `AndroidSensorBridge` Probe cache locking and invalidation (Task ANDR2-002, 2026-07-17)
+
+**Code under test:** `AndroidSensorBridge::Impl::Probe()`/`InvalidateProbeCache()` and
+`IsAvailable()`'s now-locked call to `Probe()`. Before this fix, `IsAvailable()` called
+`Probe()` (which reads/writes `manager_`/`sensor_`, plain pointers with no atomics) with no
+lock at all, while `Start()` already called the same `Probe()` under `stateMutex_` — a
+genuine, TSan-detectable data race between a concurrent `IsAvailable()` and `Start()` call
+(or two concurrent `IsAvailable()` calls, before the fields are first populated). The fix
+also adds `InvalidateProbeCache()`, called from three points in `Run()` (a failed
+`ASensorManager_createEventQueue()`, a failed `ASensorEventQueue_enableSensor()`, and a run
+of `MaxConsecutiveGetEventsFailures` consecutive `ASensorEventQueue_getEvents()` errors) —
+each is this bridge's strongest available signal that the cached `manager_`/`sensor_`,
+despite `Probe()` reporting them usable, may no longer be tied to a live sensor service.
+
+**Why this needs real hardware:** confirmed the lock-discipline fix is correct by direct
+code reasoning (the same mutex now serializes every access to `manager_`/`sensor_`,
+matching `Start()`'s pre-existing discipline) and verified via a successful Android NDK
+cross-compile of this exact translation unit. **Neither acceptance criterion could actually
+be run in this environment:**
+- "Concurrent IsAvailable/Start/Stop stress is TSan-clean" — this bridge's `#ifdef
+  __ANDROID__` code (including `manager_`/`sensor_`/`Probe()` themselves) does not exist at
+  all in the non-Android stub `Impl`, so it cannot even compile into a desktop TSan build,
+  let alone run under one. Running an actual TSan-instrumented stress test requires either
+  real Android hardware/an emulator with TSan support, or a future native fault-injection
+  seam (`plan_devices.md` Task `TEST2-005`) that can host this logic off-device.
+- "A fake service restart re-probes successfully" — there is no seam in this codebase today
+  to make `ASensorManager_createEventQueue()`/`ASensorEventQueue_enableSensor()`/
+  `ASensorEventQueue_getEvents()` fail on demand to simulate a service restart; that also
+  depends on `TEST2-005`'s planned fault-injection layer, or a real device/emulator run
+  where the sensor service can genuinely be killed and restarted (e.g. `adb shell` service
+  manipulation, where available) mid-session. **Status: NOT RUN — hardware/TEST2-005
+  validation open.**
+
+**Steps:**
+1. On a real Android device/emulator, call `IsAvailable()`/`getIsSupportedProperty()` and
+   `Start()`/`Stop()` concurrently from several threads in a tight loop (e.g. 30+ seconds)
+   under a TSan-instrumented build, if one can be produced for this target — confirm no
+   race is reported on `manager_`/`sensor_`.
+2. If the device/emulator allows forcibly restarting the sensor service (e.g. via `adb
+   shell`), do so while this bridge is started, and confirm `Run()` observes one of the
+   three failure signals above, `InvalidateProbeCache()` fires, and a subsequent `Start()`
+   call successfully re-probes and resumes delivering samples rather than silently reusing
+   a now-dead cached `manager_`/`sensor_` forever.
+
+## 6b. `AndroidSensorBridge` bounded event drain and backpressure counter (Task ANDR2-009, 2026-07-17)
+
+**Code under test:** `AndroidSensorBridge::Impl::Run()`'s inner drain loop now caps how
+many events it processes per outer-loop pass (`MaxEventsPerDrainBatch = 64`) before
+yielding back to the outer loop, which re-polls the looper and re-checks
+`rateChangeRequested_` immediately — previously the inner loop could, in principle, drain
+a continuous high-rate event flood indefinitely without ever returning to the outer loop,
+delaying a pending `SetSampleInterval()` request far longer than reasonable.
+`GetDrainBatchLimitHitCountForTesting()` counts how often this cap actually fires.
+
+**Important nuance found while investigating (do not re-litigate without re-checking the
+code):** the required work's "starve Stop" framing is only partially accurate —
+`stopRequested_` was **already** re-checked at the top of every single inner-loop
+iteration (confirmed by reading `Run()` before this task), so `Stop()` itself was never
+literally starved by this loop. What actually was unbounded was `rateChangeRequested_`.
+
+**What is already verified, without hardware:** `GetDrainBatchLimitHitCountForTesting()`
+itself (the getter, and its `0` default on a never-started/non-Android bridge) is
+host-tested — 2 new tests in `AndroidSensorBridgeTests.cpp`. This does **not** exercise
+the actual cap-hitting logic, which only fires from inside `Run()`'s real drain loop
+(Android-only, and only reachable under a genuine high-rate event flood).
+
+**Why this needs real hardware:** confirming the cap actually triggers under sustained
+high-rate delivery, and that a pending rate-change request is applied measurably sooner
+than it would have been without this cap, requires either a real high-rate Android sensor
+or a native fault-injection layer that can simulate one (`TEST2-005`'s own scope) — this
+container has neither. **Status: NOT RUN — hardware/TEST2-005 validation open.**
+
+**Steps:**
+1. On a real Android device, start a high-rate sensor stream (e.g. a game/demo requesting
+   the fastest supported `TimeBetweenUpdates`) and, while it is under sustained load, call
+   `SetSampleInterval()` with a different value — measure the delay before the new rate
+   actually takes effect (observable via a change in delivered sample cadence).
+2. If feasible, temporarily lower `MaxEventsPerDrainBatch` (or add ad hoc logging) to
+   confirm `GetDrainBatchLimitHitCountForTesting()` actually increments under this load,
+   and that the measured rate-change delay from step 1 improves relative to an unbounded
+   drain loop (e.g. by temporarily reverting this fix for an A/B comparison).
+
+## 6c. `AndroidSensorBridge` rate-set result and min-delay diagnostics (Task ANDR2-010, 2026-07-17)
+
+**Code under test:** `Run()`'s two `ASensorEventQueue_setEventRate()` call sites (the
+initial `Start()`-time rate and every subsequent live `SetSampleInterval()` update) now
+record whether the platform accepted or rejected the requested rate
+(`lastSetEventRateSucceededForTesting_`, reset to `true` by every `Start()` call so a
+stale result never leaks across runs), exposed via
+`AndroidSensorBridge::GetLastSetEventRateSucceededForTesting()`. Separately,
+`GetMinDelayMicrosecondsForTesting()` exposes `ASensor_getMinDelay()` — the sensor's own
+hardware/driver-documented minimum delay between events, independent of what was actually
+requested.
+
+**What is already verified, without hardware:** both getters' plumbing and their
+sensible defaults (`true`/`0`) when no Android worker has ever run are host-tested (4 new
+tests, `AndroidSensorBridgeTests.cpp`).
+
+**Why this needs real hardware:** confirming a real device's sensor driver actually
+*rejects* a requested rate under some realistic condition (so
+`GetLastSetEventRateSucceededForTesting()` can be observed returning `false`, not just its
+default `true`), and confirming `GetMinDelayMicrosecondsForTesting()` reports a sane,
+sensor-type-appropriate value (e.g. matching a known device's published sensor
+specifications) both require a real Android device — this container has neither a real
+sensor driver to reject a rate nor real hardware specs to cross-check a min-delay value
+against. "Continue delivery on nonfatal rejection" (required work) needed no code change
+— confirmed already correct by reading `Run()`'s existing comments/logic, not assumed.
+"Keep software throttling if required" (required work) was **not** attempted — whether
+native rate-limiting is unreliable enough in practice to need a software backstop is a
+question only answerable with real hardware measurements, not guessed at. **Status: NOT
+RUN — hardware validation open.**
+
+**Steps:**
+1. On a real Android device, request a rate faster than a given sensor's own documented
+   minimum (e.g. via a very small `TimeBetweenUpdates`) and confirm
+   `GetLastSetEventRateSucceededForTesting()` correctly reports `false` if/when the
+   platform rejects it, while delivery still continues at whatever rate was already in
+   effect (not stopped).
+2. Confirm `GetMinDelayMicrosecondsForTesting()`'s reported value for a known sensor type
+   on a known device roughly matches that device's published sensor specifications (or,
+   at minimum, is a plausible microsecond value, not obviously wrong).
+3. If step 1 reveals the platform rejects requested rates often enough in practice to be
+   a real concern (not just a theoretical possibility), that is the evidence needed to
+   decide whether "keep software throttling if required" should actually be implemented —
+   record the finding either way.
+
 ## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
 
 **Code under test:** `Detail::AndroidCompassBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`)
@@ -378,6 +643,53 @@ If step 2 or 3 reveals a wrong sign/zero-point, the fix belongs in
 new self-consistency test case should be added for whatever convention turns out correct,
 matching Section 1's own reporting convention.
 
+## 7a. Compass fusion freshness/skew handling (Task COMP2-001, 2026-07-17)
+
+**Code under test:** `AndroidCompassBackend::PublishReading()`'s new freshness check —
+before fusing the rotation-vector stream's heading with the magnetic-field stream's
+magnetometer/accuracy, both streams' most recent sample must be no older than
+`ComputeCompassMaxSampleSkew(timeBetweenUpdates)` relative to "now" (`IsCompassSampleFresh()`,
+`AndroidCompassMath.hpp`) — otherwise the publish is skipped entirely, rather than fusing a
+fresh sample from one stream with an arbitrarily-stale one from the other.
+
+**What is already verified, without hardware:** `ComputeCompassMaxSampleSkew()`/
+`IsCompassSampleFresh()` are pure functions with no Android/sensor dependency, unlike the
+rest of `AndroidCompassBackend`/`AndroidCompassMath.hpp` (entirely `#ifdef __ANDROID__`- or
+hardware-behavior-dependent) — 9 new host-run unit tests
+(`AndroidCompassMathTests.cpp`) directly prove the skew-threshold derivation (floored at
+500ms, scales to 5x a larger requested interval) and the freshness boundary itself
+(exactly-at-threshold is fresh, one unit beyond is stale, a future-dated sample is treated
+as fresh, a multi-minute-old sample is correctly rejected). This is a **stronger**
+evidentiary position than most other Section 16 fixes this pass (e.g. `VIB2-004`,
+`SDLCORE-005`) — the underlying decision logic is directly tested, not merely reasoned
+about.
+
+**What is NOT verified without hardware:** the actual wiring inside
+`AndroidCompassBackend::PublishReading()` — confirmed correct by code review and a
+successful Android NDK cross-compile of this exact translation unit, but never run. This
+container has no way to start a real `AndroidCompassBackend` (no Android device/emulator),
+so the specific runtime scenario the required work and acceptance criteria describe — one
+underlying `AndroidSensorBridge` (rotation-vector or magnetic-field) silently stopping mid-session
+while the other keeps delivering, and confirming `Compass.CurrentValue` genuinely stops
+advancing rather than continuing to report a fused-but-half-stale reading — has not been
+observed. **Status: NOT RUN — hardware validation open** (matching this pass's
+`VIB2-003`/`004`/`ANDR2-002`/`SDLCORE-005` precedent).
+
+**Steps (once real hardware is available):**
+1. Start `Compass` on a real device and confirm normal fused readings arrive.
+2. Force one of the two underlying Android sensors (rotation vector or magnetic field) to
+   stop delivering mid-session without the other stopping — e.g. via whatever
+   emulator/ADB-level sensor control is available, or physically shielding a magnetometer
+   from all magnetic fields for an extended period to trigger persistent read errors
+   (`ANDR2-006`'s `MaxConsecutiveGetEventsFailures` path in the underlying bridge).
+3. Confirm `Compass.CurrentValueChanged` stops firing (or `Compass.CurrentValue` stops
+   changing) once the stalled stream's last sample exceeds `ComputeCompassMaxSampleSkew()`'s
+   threshold — rather than continuing to publish readings that combine the still-live
+   stream's fresh values with the stalled stream's frozen ones.
+4. Let the stalled sensor resume (if possible) and confirm fused readings resume
+   automatically, with no special recovery action needed (per `PublishReading()`'s own
+   "self-heals once the stalled stream delivers again" design).
+
 ## 8. `Motion` real Android backend (`plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
 
 **Code under test:** `Detail::AndroidMotionBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`)
@@ -395,19 +707,27 @@ basis between Android's world frame and XNA's. Whether this needs the same kind 
 remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
 `Accelerometer`/`Gyroscope` is genuinely unknown until tested on a real device.
 
-**Cross-reference (2026-07-07, Task `ACCEL-008` → new Task `MOTION-012`):** `ACCEL-008`
-decided to keep (and now explicitly document + make opt-out-able) the landscape remap for
-`Accelerometer`/`Gyroscope`. `Motion.Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are
-plain device-frame vectors of the same shape (gravity/linear-acceleration/angular-rate),
-so the same remap likely applies to them for consistency — but this was deliberately
-**not** implemented as part of `ACCEL-008` itself: it needs its own fresh verification that
-these particular Android sensor outputs are genuinely portrait-frame-fixed the same way
-the raw accelerometer/gyroscope are (not already partially orientation-corrected by
-Android's own sensor fusion), before blindly reusing the same formula. `Motion.Attitude`
-(the quaternion) is a separate, harder question — a quaternion isn't a plain vector, so
-the same sign-flip remap does not apply to it at all; any fix there needs a real change-
-of-basis derivation, tracked as part of the same open question above, not this checklist
-item. See `plan_devices.md` Task `MOTION-012` for the tracked follow-up.
+**Cross-reference (2026-07-07, Task `ACCEL-008` → `MOTION-012`; resolved 2026-07-16):**
+`ACCEL-008` decided to keep (and document + make opt-out-able) the landscape remap for
+`Accelerometer`/`Gyroscope`. `MOTION-012` (`../audit_devices.md` `DEV-AUD-003`) has now
+confirmed, via Android's own public developer documentation (`developer.android.com/guide/
+topics/sensors/sensors_motion`: gravity/linear-acceleration/gyroscope sensors each
+"use... the same [coordinate system as]... the acceleration sensor"; `sensors_overview`:
+that coordinate system "never changes as the device moves") that `TYPE_GRAVITY`/
+`TYPE_LINEAR_ACCELERATION`/`TYPE_GYROSCOPE` report in the exact same raw, device-fixed,
+natural-orientation frame as `TYPE_ACCELEROMETER` — not already partially
+orientation-corrected by Android's own sensor fusion, so there is no double-correction
+risk. `AndroidMotionBackend.cpp` now applies the same
+`Detail::ConvertAndroidPortraitToXnaLandscape()` remap (respecting the shared
+`Detail::IsAndroidLandscapeRemapEnabled()` opt-out) to `Gravity`/`DeviceAcceleration`/
+`DeviceRotationRate`, mirroring `Accelerometer.cpp`/`Gyroscope.cpp`'s own call sites.
+**What remains unverified is the same thing Sections 1/2 already flag for
+`Accelerometer`/`Gyroscope` themselves: the remap's *sign/axis* correctness on real
+hardware**, not whether a remap should exist at all (that question is now closed).
+`Motion.Attitude` (the quaternion) remains explicitly out of scope for this remap — a
+quaternion isn't a plain vector, so the same sign-flip logic does not apply to it; any
+fix there needs a real change-of-basis derivation, still `MOTION-002`'s own open
+question.
 
 **Steps:**
 1. On a real Android device, run a game/demo using `Motion`, holding the device flat and
@@ -431,11 +751,103 @@ item. See `plan_devices.md` Task `MOTION-012` for the tracked follow-up.
    `TYPE_GAME_ROTATION_VECTOR` (yaw will drift slowly over time with no true-north
    correction — expected, not a bug, per this backend's own documented drift-difference
    note) rather than failing entirely.
+7. **(Task `MOTION-012`, 2026-07-16)** Confirm steps 3-5 above still hold with the device
+   physically rotated between the two supported landscape orientations (matching Section
+   1's `Accelerometer` steps) — `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are now
+   remapped the same way `Acceleration`/`RotationRate` already are. Also confirm
+   `Detail::SetAndroidLandscapeRemapEnabled(false)` makes all three report Android's raw,
+   unremapped portrait-frame axes instead, matching Section 1's equivalent opt-out check.
+8. **(Task `MOTION-011`, 2026-07-16)** Cover the magnetometer with a hand or move to a
+   location with magnetic interference; confirm `Motion.Calibrate` fires, matching
+   `Compass.Calibrate`'s own already-verified-on-emulator-only behavior (Section 7).
 
 If any step reveals a wrong sign/axis, the fix belongs in `ConvertRotationVectorToXnaQuaternion()`
 (or `AndroidMotionBackend`'s vector handling for `Gravity`/`DeviceAcceleration`/
 `DeviceRotationRate`) — never in downstream game code — and a new round-trip/self-consistency
 test case should be added for whatever convention turns out correct.
+
+## 8a. Motion fusion drop-frame counter and its deliberately-deferred redesign (Task MOT2-003, 2026-07-17)
+
+**Code under test:** `AndroidMotionBackend::PublishReading()`'s existing `MOTION-007`
+freshness check (fixed 500ms `MaxFusionAgeWindow` across all four fused sources'
+timestamps) now also increments a new `droppedFusionFrameCountForTesting_` counter,
+exposed via `GetDroppedFusionFrameCountForTesting()`, every time it fires.
+
+**What this task does NOT implement, and why:** the required work's larger ask — bounded
+per-source sample queues keyed by native timestamp, choosing the attitude sample as an
+anchor and selecting/interpolating the nearest gravity/linear-acceleration/gyroscope
+samples within a *tight, measured* skew (replacing the current fixed 500ms
+latest-value-across-all-four bound), and proving lower fusion error than the current
+logic against synthetic fast-motion fixtures — was investigated and deliberately
+**deferred as its own, larger design task**, not rushed as part of this pass. Reasons:
+1. "A tight, *measured* skew" literally requires empirical jitter measurement between
+   Android's four independently-rated sensor streams on real hardware — there is no way
+   to responsibly choose a specific tighter number without that measurement; guessing one
+   would not actually satisfy the requirement's own wording.
+2. The interpolation/nearest-sample-selection machinery itself is a genuine architecture
+   change (bounded queues per source, a real interpolation algorithm for
+   gravity/acceleration/gyro vectors bracketing the attitude sample's timestamp) — this is
+   comparable in scope to `LIFE-007`/`010`/`011` (this backlog's other explicitly-deferred,
+   large design tasks), not an isolated bug fix.
+3. Only the counter (the required work's third, clearly-scoped bullet) could be added
+   safely and immediately, without pretending to have solved the harder two.
+
+**Why the counter needs real hardware to be meaningful:** this container never runs a
+real `AndroidMotionBackend` (no Android device/emulator), so
+`droppedFusionFrameCountForTesting_` has never actually incremented outside of code
+reading — confirmed correct by inspection and a successful Android NDK cross-compile of
+this exact translation unit, never observed incrementing at runtime.
+
+**Steps (for whoever picks up the full redesign, not just the counter):**
+1. On a real Android device, run `Motion` under normal use and log
+   `GetDroppedFusionFrameCountForTesting()` periodically — confirm it stays at (or very
+   near) zero under normal, gentle device handling, establishing a baseline.
+2. Perform deliberately fast, jerky motion (a hard shake, a fast flick-rotation) and watch
+   whether the counter increments — if MOTION-007's existing 500ms bound never trips even
+   under fast motion, that is itself useful evidence about how urgent the full
+   queue/interpolation redesign actually is in practice (as opposed to only in theory).
+3. If picking up the full redesign: measure the *actual* inter-sample timestamp skew
+   between the four streams during steps 1-2 above (via ad hoc logging) to derive a real,
+   evidence-based "tight" threshold, rather than picking one arbitrarily — the required
+   work's own "measured" wording is a literal instruction, not a suggestion.
+
+## 8b. Motion attitude-source fallback diagnostic (Task MOT2-005, 2026-07-17)
+
+**Code under test:** `Motion::getIsAttitudeNorthReferencedProperty()` (new `NOXNA`
+property) / `Detail::AndroidMotionBackend::IsUsingNorthReferencedAttitudeSource()` (new
+`IMotionBackend` method) — reports whether the real Android backend's currently-active
+attitude source is the magnetometer-fused, north-referenced `TYPE_ROTATION_VECTOR`, or
+the drift-prone `TYPE_GAME_ROTATION_VECTOR` fallback (`usingGameRotationVector_`, set once
+by `Start()`, per Task DEVICES-0104's original fallback logic). Before this task, nothing
+exposed which of the two was actually in effect at all.
+
+**What is already verified, without hardware:** the delegation plumbing itself
+(`Motion` → `IMotionBackend` → `AndroidMotionBackend`) is fully host-testable via
+`MotionTests.cpp`'s `FakeMotionBackend` (unlike most other Android-only fixes this pass)
+— 4 new tests confirm the property returns `true` with no backend at all, correctly
+mirrors a fake backend reporting either `true` or `false`, and throws
+`ObjectDisposedException` after disposal, matching this class's other properties'
+convention.
+
+**Why this needs real hardware:** whether `AndroidMotionBackend::Start()` actually picks
+`TYPE_GAME_ROTATION_VECTOR` in the expected circumstance (the device genuinely lacking a
+usable `TYPE_ROTATION_VECTOR` — usually meaning no magnetometer, or one currently
+uncalibrated/unavailable) — and whether the property then correctly reports `false` end
+to end — has never been observed on a real device/emulator. **Status: NOT RUN — hardware
+validation open**, matching this pass's established precedent for Android-only runtime
+behavior.
+
+**Steps:**
+1. On a real Android device with a working magnetometer, start `Motion` and confirm
+   `getIsAttitudeNorthReferencedProperty()` reports `true`.
+2. If possible, disable/cover the magnetometer (or use a device/emulator profile known to
+   lack `TYPE_ROTATION_VECTOR`) and confirm `AndroidMotionBackend` falls back to
+   `TYPE_GAME_ROTATION_VECTOR` and the property correctly reports `false`.
+3. With the fallback active, let the device sit still for an extended period (several
+   minutes) and confirm `Motion.CurrentValue.Attitude`'s yaw visibly drifts over time
+   (the expected, documented behavior of the game rotation vector with no absolute
+   reference) — this is the concrete symptom the property exists to let an application
+   detect and react to.
 
 ---
 

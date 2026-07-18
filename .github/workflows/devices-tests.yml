@@ -110,3 +110,19 @@ jobs:
         working-directory: cna_devices
         run: |
           ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${DEVICES_GTEST_FILTER}"
+
+      # Task DEVPERF-001: this job is this project's clean-room reproducibility
+      # evidence -- a fresh actions/checkout (no access to any contributor's
+      # own working tree), submodules initialized via the checkout step above,
+      # configuring every step CMake itself would refuse to skip (both
+      # cmake/ThirdPartySDL.cmake and cmake/UnitTests.cmake now hard-fail with
+      # an actionable FATAL_ERROR if a required vendored directory is empty --
+      # e.g. from a plain ZIP/tarball export, which structurally cannot
+      # contain submodule content at all). Building and running the strict
+      # XNA API surface check here, in addition to the gtest suite above, is
+      # the other half of the required work this task calls for.
+      - name: Build and run strict XNA API surface check
+        working-directory: cna_devices
+        run: |
+          cmake --build --preset devices-ubsan --target cna_strict_xna_api_check --parallel
+          ./cmake-build-devices-ubsan/cna_strict_xna_api_check

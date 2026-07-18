@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 
@@ -9,6 +10,7 @@
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp"
+#include "Microsoft/Devices/Sensors/Detail/SensorOwnerControlBlock.hpp"
 #include "Microsoft/Devices/Sensors/MotionReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
@@ -48,34 +50,62 @@ namespace Microsoft::Devices::Sensors
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
 
         /**
-         * @brief Guards state_/started_ (Task SENSORBASE-004).
+         * @brief Shared-ownership control block (Tasks LIFE-001/LIFE-002/LIFE-003/LIFE-005).
          *
          * Motion is structurally identical to Compass, which a real
-         * ThreadSanitizer run confirmed had an unguarded data race on these
-         * same two fields — unlike Accelerometer/Gyroscope, whose
-         * equivalent fields are guarded by their shared
-         * `Detail::SdlSensorSubsystem<TSensor>::mutex_`. Held for each of
-         * `Start()`/`Stop()`/`getStateProperty()`'s entire body, including
-         * the actual `backend_->Start()`/`Stop()` call — safe to do so
-         * because neither ever synchronously re-enters `Motion` (the real
-         * `Detail::AndroidMotionBackend::Start()` only spawns worker
-         * threads and waits for a startup handshake; sample/calibration
-         * callbacks are only ever invoked later, asynchronously, from those
-         * threads — never during the `Start()`/`Stop()` call itself).
+         * ThreadSanitizer run confirmed had an unguarded data race on
+         * `state_`/`started_` (Task SENSORBASE-004) — unlike Accelerometer/
+         * Gyroscope, whose equivalent fields are guarded by their shared
+         * `Detail::SdlSensorSubsystem<TSensor>::mutex_`. `control_->mutex`
+         * is *the* lock guarding `state_`/`started_`/`transitioning_`/
+         * `stopClaimed_`/`backendCallsInFlight_`/`backend_` — replaces this
+         * class's previous plain `mutex_` member. Living in a separately
+         * heap-allocated, `shared_ptr`-held block (not a direct member) is
+         * what lets a native backend callback safely detect "the owner is
+         * gone" without ever dereferencing a possibly-destroyed `Motion` —
+         * see `Detail::SensorOwnerControlBlock`'s own doc comment for the
+         * full rationale, and `Compass::Start()`/`Stop()`/`Dispose(bool)`'s
+         * own comments (mirrored exactly here) for how each field is used.
+         *
+         * Unlike the prior single-critical-section design, `control_->mutex`
+         * is now **never** held across a call into `backend_` (Task
+         * LIFE-001) — `Detail::AndroidMotionBackend::Start()`/`Stop()` can
+         * block (spawn/join worker threads) and, per Task LIFE-002, may
+         * synchronously invoke a reading/calibration callback before
+         * returning.
          *
          * See `docs/devices-thread-safety.md` for the full, consolidated
          * thread-safety contract this member is part of.
          */
-        mutable std::mutex mutex_;
+        std::shared_ptr<Detail::SensorOwnerControlBlock<Motion>> control_ =
+            std::make_shared<Detail::SensorOwnerControlBlock<Motion>>();
 
         SensorState state_;
         bool started_;
+
+        /** @brief See Compass::transitioning_'s identical doc comment (Task LIFE-001). */
+        bool transitioning_ = false;
+
+        /** @brief See Compass::stopClaimed_'s identical doc comment (Task LIFE-001). */
+        bool stopClaimed_ = false;
+
+        /** @brief See Compass::backendCallsInFlight_'s identical doc comment (Task LIFE-003). */
+        int backendCallsInFlight_ = 0;
+
+        /** @brief Notified when transitioning_ becomes false (Task LIFE-001). */
+        std::condition_variable transitionFinished_;
+
+        /** @brief Notified when backendCallsInFlight_ reaches zero (Task LIFE-003). */
+        std::condition_variable backendQuiescent_;
 
         /**
          * @brief Native backend, selected at construction time by a
          * compile-time platform switch. Null on any platform without one —
          * Start()/Stop() fall back to the permanent NotSupported stub in
-         * that case, unchanged from before this backend existed.
+         * that case, unchanged from before this backend existed. Guarded by
+         * control_->mutex; never read/called without it (Task LIFE-001)
+         * except for the specific, captured raw pointer a single
+         * Start()/Stop() call carries across its own unlocked backend call.
          */
         std::unique_ptr<Detail::IMotionBackend> backend_;
 
@@ -99,6 +129,30 @@ namespace Microsoft::Devices::Sensors
          * @return Current sensor state.
          */
         NOXNA [[nodiscard]] SensorState getStateProperty() const;
+
+        /**
+         * @brief Gets whether `CurrentValue.Attitude`'s yaw is currently referenced to true/magnetic north.
+         *
+         * CNA extension beyond the documented WP7 API (Task MOT2-005,
+         * 2026-07-17, external audit `audit_devices_2026-07-17.md`): a real
+         * Android backend prefers the magnetometer-fused, north-referenced
+         * rotation vector, but falls back to the gyroscope/accelerometer-only
+         * game rotation vector (free to drift in yaw over time, with no
+         * absolute reference) if the former is unavailable on this device —
+         * see `Detail::AndroidMotionBackend::Start()`'s own doc comment.
+         * There was previously no way for a caller to discover which of the
+         * two is actually in effect; this closes that gap ("expose fallback
+         * diagnostics", this task's own required work) so an application can
+         * choose to warn the player, disable a north-dependent feature, or
+         * otherwise react, rather than silently trusting a drifting yaw as
+         * if it were absolute.
+         *
+         * @return true if the active attitude source is north-referenced
+         * (including when unsupported/not yet started, or on any platform
+         * with no native backend at all — nothing to warn about in either
+         * case); false if it is the drift-prone fallback.
+         */
+        NOXNA [[nodiscard]] bool getIsAttitudeNorthReferencedProperty() const;
 
     public:
         /**
@@ -153,7 +207,7 @@ namespace Microsoft::Devices::Sensors
         GetTypeNameHPP()
 
         /**
-         * @brief Event raised when the compass component detects that it requires calibration.
+         * @brief Event raised when the motion sensor's underlying magnetometer detects that it requires calibration.
          */
         System::EventHandler<CalibrationEventArgs> Calibrate;
 
