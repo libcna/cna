@@ -513,6 +513,25 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     precise filter (364 tests) clean under `devices-ubsan` (360 passed, 4 hardware
     skips, 0 failures); `AndroidMotionBackend.cpp` re-verified via NDK cross-compile.
     **Left OPEN**: axis correspondence itself remains hardware-unverified.
+36. `TEST2-010` (`4411533b`) — the existing `cna_strict_xna_api_check` only ever proved
+    the *positive* direction; "a deliberately leaked extension fails every check" had
+    zero coverage. New `tools/devices/StrictXnaApiSurfaceLeakCheck.cpp` deliberately
+    calls a `NOXNA` member under the same strict-mode flags, wired as a new
+    `EXCLUDE_FROM_ALL` CMake target plus a `WILL_FAIL TRUE` ctest that verifies the
+    build genuinely fails — confirmed end-to-end through the real CMake/ctest pipeline
+    (not just a manual invocation). Ran **both** checks independently across **every**
+    toolchain available in this environment: `GCC` 14.2.0, host `Clang` 19.1.7 (never
+    previously exercised against this codebase this session), and Android NDK `Clang`
+    (via direct compile-only invocation — a full Clang project reconfigure was
+    unnecessary, and `cmake-build-android` only supports single-TU compiles anyway).
+    All three: positive compiles clean, negative fails with **genuinely different**
+    diagnostic formats (GCC's `cc1plus: some warnings being treated as errors` vs.
+    Clang's `[-Werror,-Wdeprecated-declarations]`) — satisfies "without relying on one
+    warning spelling" by construction, since `WILL_FAIL` only checks the exit code,
+    never the message text. Full precise filter (364 tests) clean under
+    `devices-ubsan` after the change. **Left OPEN**: `MSVC` remains genuinely
+    unavailable — this is a Linux container with no Windows/MSVC toolchain at all, a
+    pre-existing environment-wide limitation, not a gap in effort.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -878,13 +897,13 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 35 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 36 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
 BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011,
-PERF2-002, TEST2-002, COMP2-003, MOT2-001 -- see Section 2 for commit hashes
+PERF2-002, TEST2-002, COMP2-003, MOT2-001, TEST2-010 -- see Section 2 for commit hashes
 and a one-line summary of each, including PERF2-002's own new 100k-cycle
 lifecycle leak tests, TEST2-002's own consolidated clean-checkout sanitizer
 sweep, COMP2-003's citation-backed display-orientation finding plus
