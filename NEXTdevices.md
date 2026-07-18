@@ -239,6 +239,19 @@ resolution notes as the template.
     entries this pass: blocked on other unstarted work (an oracle), not on hardware.
     Re-verified clean under `devices-tsan` (shared, concurrency-relevant method on the
     real `Accelerometer`/`Gyroscope` dispatch path).
+23. `COMP2-008` (`9b4277b0`) — confirmed production behavior already never fabricates a
+    declination-corrected `TrueHeading` (`AndroidCompassBackend.cpp` passes the identical
+    `magneticHeadingDegrees_` value for both fields — the correct honest fallback).
+    **Found a real public-API documentation gap**: `CompassReading::getTrueHeadingProperty()`'s
+    Doxygen comment never disclosed this — a caller reading only the public doc could
+    reasonably expect a real declination-corrected value. Fixed the doc comment.
+    Deliberately did **not** stub a speculative "declination provider" extension point —
+    `docs/location-future-plan.md` (re-read, still accurate) already establishes any
+    future location support belongs in a separate `System::Device::Location` namespace,
+    not bolted onto `Microsoft::Devices::Sensors`. **Left OPEN**: doc fix is real and
+    complete, but the declination-provider integration itself is correctly blocked on
+    separately-scoped, out-of-scope location work, not merely unverified — a fourth
+    distinct "why OPEN" flavor this pass (documentation-complete, feature-blocked).
 
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
@@ -511,12 +524,12 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 22 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 23 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
-MOT2-005, ANDR2-009, ANDR2-010, BASE2-001 -- see Section 2 for commit hashes
-and a one-line summary of each). Read Section 1's "labeling convention" note
+MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008 -- see Section 2 for
+commit hashes and a one-line summary of each). Read Section 1's "labeling convention" note
 carefully before closing anything -- it distinguishes tasks provable by code
 inspection (CLOSED, e.g. SDLCORE-009) from tasks whose acceptance criteria
 name an empirical/hardware result (stays OPEN even once implemented, e.g.
