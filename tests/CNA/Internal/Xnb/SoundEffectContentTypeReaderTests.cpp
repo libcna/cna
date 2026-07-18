@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -288,4 +289,87 @@ TEST_F(SoundEffectContentTypeReaderTest, XboxPlatformByteSwapsWaveFormatFieldsCo
     auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
 
     EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+}
+
+// ---------------------------------------------------------------------------
+// AUD-06-012: SoundEffectReader::Read() passes its declared audio-data length straight to
+// input.ReadBytesExactOrThrow() with no length check of its own -- this is safe because that
+// shared helper (ContentReader.cpp) already rejects a negative count outright, and
+// BinaryReader::ReadBytes() (sharp-runtime) already clamps its eager allocation to the stream's
+// own real remaining length before ever allocating, so a corrupt/adversarial declared length can
+// never force an allocation for bytes that could never be read anyway. These tests exercise that
+// existing protection specifically through the SoundEffectReader's own data-length field, not
+// just the shared helper in isolation.
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectContentTypeReaderTest, NegativeDataLengthFailsCleanlyRatherThanCrashing)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);   // formatLength (no extension)
+    w16(1);    // wFormatTag: PCM
+    w16(1);    // nChannels: mono
+    w32(44100); // nSamplesPerSec
+    w32(88200); // nAvgBytesPerSec
+    w16(2);    // nBlockAlign
+    w16(16);   // wBitsPerSample
+    w32(static_cast<uint32_t>(-100)); // data length: negative
+    w32(0);    // loopStart
+    w32(0);    // loopLength
+    w32(0);    // duration
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    EXPECT_THROW(
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
+        ContentLoadException);
+}
+
+TEST_F(SoundEffectContentTypeReaderTest, OversizedDataLengthAgainstTruncatedStreamFailsCleanlyNotWithHugeAllocation)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);   // formatLength (no extension)
+    w16(1);    // wFormatTag: PCM
+    w16(1);    // nChannels: mono
+    w32(44100); // nSamplesPerSec
+    w32(88200); // nAvgBytesPerSec
+    w16(2);    // nBlockAlign
+    w16(16);   // wBitsPerSample
+    // Claims 100 MB of audio data, but the stream actually ends here -- BinaryReader::ReadBytes's
+    // allocation-clamp (sharp-runtime) must never attempt a 100 MB allocation for bytes that
+    // provably cannot exist; the fixture simply ends, no loop points/duration trailer follow.
+    w32(100u * 1024u * 1024u);
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    EXPECT_THROW(
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
+        System::IO::EndOfStreamException);
 }
