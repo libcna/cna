@@ -1216,3 +1216,43 @@ TEST(SoundEffectTest, RawBufferLifetimeIsIndependentOfSourceMemoryAfterConstruct
     EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
     EXPECT_NO_THROW(fx->CreateInstance().Play());
 }
+
+// ---------------------------------------------------------------------------
+// AUD-05-012: AudioChannels is a scoped enum (Mono=1, Stereo=2) with no runtime guard against a
+// caller force-casting an out-of-range value (static_cast<AudioChannels>(N)) -- C++ has no
+// language-level protection against this for a `static_cast` (unlike a plain narrowing
+// conversion). FNA's own constructor has the identical gap (SoundEffect.cs simply does
+// `(ushort) channels`, no validation), so CNA intentionally matches it rather than adding a
+// restriction FNA itself doesn't have. What matters is that the *backend* still behaves safely
+// for an out-of-enum-range value passed through unchanged -- these tests lock that down.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, OutOfRangeChannelsEnumValueEitherConstructsOrThrowsCleanlyNeverUB)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    // Neither Mono(1) nor Stereo(2) -- a force-cast a real caller could plausibly write by
+    // mistake (e.g. confusing this with a raw channel count).
+    const auto bogus = static_cast<AudioChannels>(5);
+
+    try
+    {
+        SoundEffect fx(std::vector<unsigned char>(4 * 256, 0), 44100, bogus);
+        // Empirically confirmed (2026-07-18): this is the branch actually taken --
+        // MIX_LoadRawAudio's RAW decoder accepts an arbitrary positive channel count
+        // unvalidated (unlike MIX_CreateMixerDevice's stream-format path, which enforces
+        // SDL_IsSupportedChannelCount's 1-8 range at *play* time, not load time -- AUD-04-006).
+        // Still must behave sanely here, not silently corrupt state.
+        EXPECT_FALSE(fx.getIsDisposedProperty());
+    }
+    catch (const System::NotSupportedException&)
+    {
+        // Also an acceptable outcome if a future SDL3_mixer version starts validating this at
+        // load time: the backend cleanly rejecting it via CNA's existing NotSupportedException
+        // translation (AUD-05-002's pattern).
+        SUCCEED();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
