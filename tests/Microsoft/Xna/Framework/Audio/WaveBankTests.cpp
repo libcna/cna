@@ -673,6 +673,79 @@ namespace
         return path;
     }
 
+    constexpr const char* kPaddedWaveBankName = "PaddedWaveBank";
+
+    // AUD-11-020: two entries with deliberate padding bytes *between* them in the wave-data
+    // segment (unlike BuildMultiEntryXwbFixtureBytes, whose two entries are byte-adjacent with no
+    // gap at all) -- each entry's dwOffset/dwLength are explicit, authored fields, not inferred
+    // from gaps between entries, so padding must never leak into either entry's decoded audio.
+    // Entry 0 (0xAA bytes, 50 bytes) and entry 1 (0xBB bytes, 70 bytes) deliberately have
+    // DIFFERENT lengths -- proving offset correctness, not just length correctness: if entry 1's
+    // read accidentally started from the gap or from entry 0's tail instead of its own authored
+    // offset, its decoded duration would come out wrong, not just its content.
+    std::vector<uint8_t> BuildPaddedXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 2;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t entry0Length      = 50;
+        constexpr uint32_t entry1Length      = 70;
+        constexpr uint32_t gapLength         = 30;
+        constexpr uint32_t entry1Offset      = entry0Length + gapLength; // 80
+        constexpr uint32_t waveDataLength    = entry1Offset + entry1Length; // 150, includes the gap
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i) { AppendU32(data, segOffset[i]); AppendU32(data, segLength[i]); }
+
+        AppendU32(data, 0u);
+        AppendU32(data, entryCount);
+        AppendPadded(data, kPaddedWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, 4);
+        AppendU32(data, 0);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        const uint32_t fmt = (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+
+        AppendU32(data, 0u); AppendU32(data, fmt);
+        AppendU32(data, 0u);            // entry 0 playOffset
+        AppendU32(data, entry0Length);  // entry 0 playLength -- does NOT include the gap
+        AppendU32(data, 0u); AppendU32(data, 0u);
+
+        AppendU32(data, 0u); AppendU32(data, fmt);
+        AppendU32(data, entry1Offset);  // entry 1 playOffset -- starts AFTER the gap
+        AppendU32(data, entry1Length);
+        AppendU32(data, 0u); AppendU32(data, 0u);
+
+        for (uint32_t i = 0; i < entry0Length; ++i) data.push_back(0xAA); // entry 0's real data
+        for (uint32_t i = 0; i < gapLength; ++i) data.push_back(0xCC);   // padding gap
+        for (uint32_t i = 0; i < entry1Length; ++i) data.push_back(0xBB); // entry 1's real data
+
+        return data;
+    }
+
+    const std::string& PaddedXwbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "paddedfixture.xwb", BuildPaddedXwbFixtureBytes());
+        return path;
+    }
+
     constexpr const char* kOversizedWaveBankName = "OversizedEntryWaveBank";
 
     // Non-compact .xwb with one entry whose dataLength (1,000,000 bytes) claims far more data
@@ -1479,4 +1552,40 @@ TEST(WaveBankTest, GetSoundEffectForZeroLengthEntryDoesNotCrash)
     // A null result (decode declined a zero-byte buffer) is equally acceptable -- this test's
     // real assertion is that reaching this line at all means no crash happened.
     SUCCEED();
+}
+
+// AUD-11-020: verifies padding bytes *between* entries in the wave-data segment never become
+// part of either entry's decoded audio. Entry 0 (50 bytes) and entry 1 (70 bytes) are separated
+// by a 30-byte gap, with deliberately DIFFERENT lengths -- proving offset correctness, not just
+// length correctness: if entry 1 ever started reading from the gap or from entry 0's tail
+// instead of its own authored offset, its decoded duration would come out wrong, not just its
+// content (which this direct-PCM16 raw-buffer path doesn't otherwise expose for inspection).
+TEST(WaveBankTest, GetSoundEffectEntriesSeparatedByPaddingHaveExactLengthsNotLeakingTheGap)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, PaddedXwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+
+        const SoundEffect* entry0 = WaveBankTestAccess::GetSoundEffect(wb, 0);
+        const SoundEffect* entry1 = WaveBankTestAccess::GetSoundEffect(wb, 1);
+        ASSERT_NE(entry0, nullptr);
+        ASSERT_NE(entry1, nullptr);
+
+        // 50 bytes / 70 bytes, 16-bit mono -> 25 / 35 frames exactly. Either value coming out
+        // wrong (e.g. 25+15=40 frames if the gap leaked into entry 0, or entry 1 starting from
+        // the gap instead of its own offset) would fail these exact checks.
+        constexpr double expectedSeconds0 = 25.0 / 44100.0;
+        constexpr double expectedSeconds1 = 35.0 / 44100.0;
+        EXPECT_NEAR(entry0->getDurationProperty().getTotalSecondsProperty(), expectedSeconds0, 1e-6);
+        EXPECT_NEAR(entry1->getDurationProperty().getTotalSecondsProperty(), expectedSeconds1, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not construct WaveBank/AudioEngine";
+    }
 }
