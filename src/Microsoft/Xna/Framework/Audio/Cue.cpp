@@ -1079,11 +1079,31 @@ namespace Microsoft::Xna::Framework::Audio
             const std::string& wbName = (effectiveWavebankIndex < xsb->wavebankNames.size())
                 ? xsb->wavebankNames[effectiveWavebankIndex] : "";
 
+            // AUD-11-016: previously a silent `continue` with zero cue-level context on either
+            // failure path -- WaveBank::GetSoundEffect() logs its own wave-index-only diagnostic
+            // (no cue identity, no wave-bank name in most of its messages), but nothing here ever
+            // named *which cue* tried to play the missing/failed wave, the actual "truthful state"
+            // gap this task's acceptance criterion is about (a game developer debugging a missing
+            // sound has no way to trace it back to the cue that requested it from these logs
+            // alone). Both branches below are genuinely reachable in practice: an authored .xsb
+            // referencing a wave bank that was never loaded/registered (a real content-authoring
+            // mistake, not just theoretical), and a wave bank that loaded but a specific entry
+            // failed to decode (AUDIO-ADPCM-001's exact original symptom).
             WaveBank* wb = wbName.empty() ? nullptr : eng->FindWaveBank(wbName);
-            if (!wb) continue;
+            if (!wb)
+            {
+                std::cerr << "[Cue] \"" << getNameProperty() << "\" could not find wave bank \""
+                          << wbName << "\" for wave " << effectiveWaveIndex << " -- skipping\n";
+                continue;
+            }
 
             const SoundEffect* sf = wb->GetSoundEffect(effectiveWaveIndex);
-            if (!sf) continue;
+            if (!sf)
+            {
+                std::cerr << "[Cue] \"" << getNameProperty() << "\" wave " << effectiveWaveIndex
+                          << " in bank \"" << wbName << "\" failed to load -- skipping\n";
+                continue;
+            }
 
             // P11-XACT-003: PlayWaveEffectVariation-family per-play pitch/volume/filter
             // randomization, drawn once per fresh Play() (see ApplyEffectVariation's own comment

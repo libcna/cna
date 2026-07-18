@@ -864,6 +864,86 @@ namespace
         return data;
     }
 
+    // AUD-11-016: same layout as BuildApply3DXsbFixtureBytes, but referencing a wave bank name
+    // that is deliberately never registered with any engine anywhere in this test binary
+    // (guaranteed-unique -- no other fixture in this file uses this name), so
+    // Cue::Play()'s `AudioEngine::FindWaveBank()` call is guaranteed to fail and take the
+    // "!wb" diagnostic path, regardless of what other tests have already run and registered
+    // their own wave banks as persistent function-local statics.
+    constexpr const char* kNeverRegisteredWaveBankName = "AUD11016NeverRegisteredWaveBank";
+
+    std::vector<uint8_t> BuildUnresolvableWaveBankXsbFixtureBytes()
+    {
+        constexpr uint32_t headerSize   = 74;
+        constexpr uint32_t bankNameSize = 64;
+        constexpr uint32_t baseOffset   = headerSize + bankNameSize;
+
+        const uint32_t wavebankNameOffset = baseOffset;
+        const uint32_t soundOffset        = wavebankNameOffset + 64;
+        const uint32_t cueSimpleOffset    = soundOffset + 12;
+        const uint32_t cueNameIndexOffset = cueSimpleOffset + 5;
+        const uint32_t cueNameStrOffset   = cueNameIndexOffset + 6;
+        const std::string cueName = "UnresolvableWaveBankCue";
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'S', 'D', 'B', 'K' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU16(data, 46); // contentVersion
+        AppendU16(data, 0);  // toolVersion
+        AppendU16(data, 0);  // CRC
+        for (int i = 0; i < 8; ++i) data.push_back(0); // lastModified
+        AppendU8(data, 0);   // platform
+
+        AppendU16(data, 1); // cueSimpleCount
+        AppendU16(data, 0); // cueComplexCount
+        AppendU16(data, 0); // unknown
+        AppendU16(data, 0); // cueTotalAlign
+        AppendU8(data, 1);  // wavebankCount
+        AppendU16(data, 1); // soundCount
+        AppendU16(data, 0); // cueNameLength
+        AppendU16(data, 0); // unknown
+
+        AppendS32(data, static_cast<int32_t>(cueSimpleOffset));
+        AppendS32(data, -1); // cueComplexOffset
+        AppendS32(data, -1); // cueNameOffset (unused by the parser)
+        AppendS32(data, 0);  // unknown
+        AppendS32(data, -1); // variationOffset
+        AppendS32(data, 0);  // transitionOffset (unused)
+        AppendS32(data, static_cast<int32_t>(wavebankNameOffset));
+        AppendS32(data, 0);  // cueHashOffset (unused)
+        AppendS32(data, static_cast<int32_t>(cueNameIndexOffset));
+        AppendS32(data, static_cast<int32_t>(soundOffset));
+
+        AppendPadded(data, "UnresolvableWaveBankSoundBank", bankNameSize);
+        AppendPadded(data, kNeverRegisteredWaveBankName, 64);
+
+        AppendU8(data, 0);    // flags
+        AppendU16(data, 0);   // categoryIndex
+        AppendU8(data, 0xFF); // volume raw byte
+        AppendU16(data, 0);   // pitchCents
+        AppendU8(data, 0);    // priority
+        AppendU16(data, 0);   // soundLength (skipped)
+        AppendU16(data, 0);   // waveIdx
+        AppendU8(data, 0);    // wbIdx
+
+        AppendU8(data, 0);
+        AppendU32(data, soundOffset);
+
+        AppendU32(data, cueNameStrOffset);
+        AppendU16(data, 0);
+
+        AppendCStr(data, cueName);
+
+        return data;
+    }
+
+    SoundBank& SharedUnresolvableWaveBankBank()
+    {
+        static SoundBank sb(&SharedEngine(), WriteFixture(
+            "cna_cue_test", "unresolvable_wavebank.xsb", BuildUnresolvableWaveBankXsbFixtureBytes()));
+        return sb;
+    }
+
     WaveBank& SharedApply3DWaveBank()
     {
         static WaveBank wb(&SharedEngine(), WriteFixture(
@@ -4518,4 +4598,22 @@ TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinit
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not exercise real playback";
     }
+}
+
+// AUD-11-016: confirmed real gap and fixed -- Cue::Play() previously `continue`d silently when
+// a wave reference's wave bank couldn't be found (or its SoundEffect failed to load), with zero
+// cue-level diagnostic naming which cue was affected. Verifies the new diagnostic actually names
+// the cue when its sole wave reference points at a wave bank that was never registered with the
+// engine.
+TEST(CueTest, PlayWithUnresolvableWaveBankLogsCueNameAndDoesNotCrash)
+{
+    std::unique_ptr<Cue> cue(SharedUnresolvableWaveBankBank().GetCue("UnresolvableWaveBankCue"));
+    ASSERT_NE(cue, nullptr);
+
+    testing::internal::CaptureStderr();
+    cue->Play();
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    EXPECT_NE(captured.find("UnresolvableWaveBankCue"), std::string::npos) << captured;
+    EXPECT_NE(captured.find(kNeverRegisteredWaveBankName), std::string::npos) << captured;
 }
