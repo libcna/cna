@@ -66,7 +66,9 @@ namespace Microsoft::Xna::Framework::Input::Touch
          *
          * Mirrors FNA's settable `this[int]` indexer; since the collection is never
          * actually read-only in this implementation (unlike FNA's default-constructed,
-         * null-backed struct), assignment always succeeds.
+         * null-backed struct), assignment is never blocked purely because IsReadOnly is
+         * true. Assignment still requires an in-range index — out-of-range access throws
+         * std::out_of_range, matching FNA's indexer throwing for a bad/null-backed index.
          *
          * @param index The zero-based index to retrieve.
          * @return A reference to the touch location.
@@ -96,8 +98,14 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Tries to find a touch by finger id. Returns false if not found.
+         *
+         * @note Matches FNA: `touchLocation` is written unconditionally, on every path — not just
+         *       when a match is found. When no match exists (including when the collection is
+         *       empty), `touchLocation` is set to `TouchLocation(-1, TouchLocationState::Invalid,
+         *       Vector2::Zero)` before returning false.
          * @param id The finger id to search for.
-         * @param touchLocation Output parameter receiving the found location.
+         * @param touchLocation Output parameter receiving the found location, or the Invalid
+         *        sentinel location if no match was found.
          * @return True if found; false otherwise.
          */
         bool FindById(int id, TouchLocation& touchLocation) const;

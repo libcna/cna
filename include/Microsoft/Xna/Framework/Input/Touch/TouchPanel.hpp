@@ -27,13 +27,25 @@ namespace Microsoft::Xna::Framework::Input::Touch
     public:
         using intcs = SharpRuntime::intcs;
 
+        /** @brief TouchPanel is a static class (XNA `public static class TouchPanel`) and cannot be instantiated. */
         TouchPanel() = delete;
 
-        /** @brief Maximum number of simultaneous touches accepted by the XNA touch panel API. */
-        static constexpr intcs MAX_TOUCHES = 8;
+        /**
+         * @brief Maximum number of simultaneous touches accepted by the XNA touch panel API.
+         * @note NOXNA — FNA declares this `internal const int MAX_TOUCHES` (TouchPanel.cs:23), not
+         *       part of the public XNA `TouchPanel` API. Exposed as a public NOXNA constant (mirroring
+         *       `GamePad::LeftDeadZone`/`RightDeadZone`/`TriggerThreshold`) since C++ has no
+         *       assembly-internal visibility and other translation units (`GestureDetector`, tests)
+         *       need it.
+         */
+        NOXNA static constexpr intcs MAX_TOUCHES = 8;
 
-        /** @brief Marker used when no finger is present for a touch slot. */
-        static constexpr intcs NO_FINGER = -1;
+        /**
+         * @brief Marker used when no finger is present for a touch slot.
+         * @note NOXNA — FNA declares this `internal const int NO_FINGER` (TouchPanel.cs:26); see
+         *       MAX_TOUCHES's note for why it is exposed as a public NOXNA constant in CNA.
+         */
+        NOXNA static constexpr intcs NO_FINGER = -1;
 
         /**
          * @brief Gets the display width used for normalized touch coordinates.
@@ -175,6 +187,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Advances touch panel state by one frame.
+         *
+         * Copies the SetFinger()-driven touch array to its previous-frame snapshot, advances the
+         * event-driven InputManager touch map by one frame (see InputManager::AdvanceTouchFrame —
+         * promotes Pressed to Moved, retires Released touches), and updates gesture detection.
+         * Must be called at most once per frame; GetState() itself no longer mutates state.
+         *
          * @note NOXNA — FNA declares `Update` `internal`, not part of the public XNA
          *       `TouchPanel` API. Exposed for `FrameworkDispatcher::Update()`.
          */

@@ -1,14 +1,16 @@
 # Input source → test coverage (INPUT-AUDIT-002)
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 > **Generated** by `tools/input_parity/check_input_test_coverage.py`. Maps each Input
 > type to whether it has a dedicated `TEST(<Type>Test, …)` suite and how many test files
-> reference it. Inspection aid — a value type covered inside a sibling suite is not a real
-> gap (see the `note` column). Do not hand-edit; re-run the script.
 ## Gaps (candidate INPUT-TEST-* tasks)
 
 None — every Input type has a dedicated suite or a documented sibling-suite cover.
 
 
+> reference it. Inspection aid — a value type covered inside a sibling suite is not a real
+> gap (see the `note` column). Do not hand-edit; re-run the script.
 
 ## Public XNA Input types
 
@@ -27,14 +29,16 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `GamePadType` | `include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 6 |  |
 | `GestureSample` | `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp` | yes | 6 |  |
 | `GestureType` | `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp` | yes | 9 |  |
+| `KeyModifiersEXT` | `include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | no | 2 | covered via KeyboardModStateTests.cpp (KeyboardModStateEXTTest) — every flag tested individually + combined |
 | `KeyState` | `include/Microsoft/Xna/Framework/Input/KeyState.hpp` | yes | 4 |  |
-| `Keyboard` | `include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | yes | 7 |  |
+| `Keyboard` | `include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | yes | 11 |  |
 | `KeyboardState` | `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp` | yes | 3 |  |
-| `Keys` | `include/Microsoft/Xna/Framework/Input/Keys.hpp` | no | 8 | covered via KeyboardInputTests.cpp (exhaustive Keys value table, INPUT-KBD-001) |
-| `Mouse` | `include/Microsoft/Xna/Framework/Input/Mouse.hpp` | yes | 7 |  |
-| `MouseCursor` | `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp` | yes | 3 |  |
+| `Keys` | `include/Microsoft/Xna/Framework/Input/Keys.hpp` | no | 12 | covered via KeyboardInputTests.cpp (exhaustive Keys value table, INPUT-KBD-001) |
+| `Mouse` | `include/Microsoft/Xna/Framework/Input/Mouse.hpp` | yes | 9 |  |
+| `MouseCursor` | `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp` | yes | 5 |  |
 | `MouseState` | `include/Microsoft/Xna/Framework/Input/MouseState.hpp` | yes | 6 |  |
-| `TextInputEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | yes | 7 |  |
+| `TextInputEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | yes | 9 |  |
+| `TextInputTypeEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | no | 2 | covered via TextInputEXTTests.cpp (TextInputEXTTest) — all 9 values iterated in StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType and StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType |
 | `TouchCollection` | `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | yes | 7 |  |
 | `TouchLocation` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp` | yes | 5 |  |
 | `TouchLocationState` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp` | yes | 9 |  |
@@ -49,8 +53,15 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `GamePadButton` | `include/CNA/Internal/Input/InputManager.hpp` | yes | 2 |  |
 | `GestureDetector` | `include/CNA/Internal/Input/GestureDetector.hpp` | yes | 4 |  |
 | `ISdlGamepadBackend` | `include/CNA/Internal/Input/SdlGamepadBackend.hpp` | no | 1 | covered via SdlGamepadBackendTests.cpp via the FakeSdlGamepadBackend seam |
-| `InputManager` | `include/CNA/Internal/Input/InputManager.hpp` | no | 16 | covered via InputResetTests / SdlInputBridge* / SdlGamepadBackendTests (no same-named suite by design) |
+| `ISdlHapticBackend` | `include/CNA/Internal/Input/SdlHapticBackend.hpp` | no | 0 | covered via SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam |
+| `ISdlJoystickBackend` | `include/CNA/Internal/Input/SdlJoystickBackend.hpp` | no | 1 | covered via SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam |
+| `ISystemDeviceBackend` | `include/CNA/Internal/Input/SystemDeviceBackend.hpp` | no | 2 | covered via InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend |
+| `ISystemKeyboardBackend` | `include/CNA/Internal/Input/SystemKeyboardBackend.hpp` | no | 1 | covered via KeyboardModStateTests.cpp (KeyboardModStateEXTTest) via a fake system-keyboard-backend seam |
+| `ISystemMouseBackend` | `include/CNA/Internal/Input/SystemMouseBackend.hpp` | no | 1 | covered via MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam |
+| `ISystemPowerBackend` | `include/CNA/Internal/Input/SystemPowerBackend.hpp` | no | 1 | covered via PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam |
+| `ISystemSensorBackend` | `include/CNA/Internal/Input/SystemSensorBackend.hpp` | no | 1 | covered via SensorsTests.cpp (CnaInputSensorsTest) via a fake system-sensor-backend seam |
+| `InputManager` | `include/CNA/Internal/Input/InputManager.hpp` | no | 18 | covered via InputResetTests / SdlInputBridge* / SdlGamepadBackendTests (no same-named suite by design) |
 | `MouseButton` | `include/CNA/Internal/Input/InputManager.hpp` | no | 2 | covered via SdlInputBridgeMouseTests / InputManager (internal enum) |
 | `RawGamePadState` | `include/CNA/Internal/Input/InputManager.hpp` | no | 0 | covered via SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto) |
-| `SdlInputBridge` | `include/CNA/Internal/Input/SdlInputBridge.hpp` | yes | 12 |  |
+| `SdlInputBridge` | `include/CNA/Internal/Input/SdlInputBridge.hpp` | yes | 16 |  |
 

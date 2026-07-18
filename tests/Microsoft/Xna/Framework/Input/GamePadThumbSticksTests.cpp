@@ -83,6 +83,31 @@ TEST(GamePadThumbSticksTest, IndependentAxesModeExcludesPerAxisDeadZoneThenSquar
     ResetGamePadState();
 }
 
+TEST(GamePadThumbSticksTest, IndependentAxesModeExcludesRightStickDeadZoneUsingRightDeadZoneConstant)
+{
+    // The Left-stick test above only exercises GamePad::LeftDeadZone. LeftDeadZone
+    // (7849/32768) and RightDeadZone (8689/32768) are distinct constants per FNA's
+    // GamePad.cs, and GamePadThumbSticks::ApplyDeadZone wires right_.X/right_.Y to
+    // RightDeadZone specifically (not LeftDeadZone) for GamePadDeadZone::IndependentAxes.
+    // This pins that per-stick wiring, not just the shared formula.
+    ResetGamePadState();
+    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickX, 0.5f);
+    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickY, 0.0f);
+
+    const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
+    const Vector2 right = state.getThumbSticksProperty().getRightProperty();
+
+    const float expectedX = GamePad::ExcludeAxisDeadZone(0.5f, GamePad::RightDeadZone);
+    EXPECT_NE(GamePad::LeftDeadZone, GamePad::RightDeadZone);
+    EXPECT_NEAR(right.X, expectedX, 1e-5f);
+    EXPECT_FLOAT_EQ(right.Y, 0.0f);
+
+    ResetGamePadState();
+}
+
 TEST(GamePadThumbSticksTest, IndependentAxesModeZeroesValuesWithinDeadZone)
 {
     ResetGamePadState();
@@ -130,6 +155,30 @@ TEST(GamePadThumbSticksTest, CircularModeRescalesValueOutsideDeadZoneRadius)
     const float expectedLength = (originalLength - GamePad::LeftDeadZone) / (1.0f - GamePad::LeftDeadZone);
     EXPECT_NEAR(left.X, 0.0f, 1e-5f);
     EXPECT_NEAR(left.Y, expectedLength, 1e-5f);
+
+    ResetGamePadState();
+}
+
+TEST(GamePadThumbSticksTest, CircularModeRescalesRightStickUsingRightDeadZoneConstant)
+{
+    // Mirrors CircularModeRescalesValueOutsideDeadZoneRadius but for the Right stick, pinning
+    // that ApplyDeadZone's Circular branch calls ExcludeCircularDeadZone(right_, RightDeadZone)
+    // -- not LeftDeadZone -- for the right stick specifically.
+    ResetGamePadState();
+    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickX, 0.0f);
+    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickY, 0.5f);
+
+    const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular);
+    const Vector2 right = state.getThumbSticksProperty().getRightProperty();
+
+    const float originalLength = 0.5f;
+    const float expectedLength = (originalLength - GamePad::RightDeadZone) / (1.0f - GamePad::RightDeadZone);
+    EXPECT_NE(GamePad::LeftDeadZone, GamePad::RightDeadZone);
+    EXPECT_NEAR(right.X, 0.0f, 1e-5f);
+    EXPECT_NEAR(right.Y, expectedLength, 1e-5f);
 
     ResetGamePadState();
 }

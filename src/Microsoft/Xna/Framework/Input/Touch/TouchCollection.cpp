@@ -58,6 +58,11 @@ namespace Microsoft::Xna::Framework::Input::Touch
                 return true;
             }
         }
+        // Matches FNA exactly (TouchCollection.cs:125-130): the out-param is written on every
+        // path, not just the found path. On the not-found path it becomes an Invalid sentinel
+        // location, mirroring the same "out-param assigned unconditionally" pattern already
+        // fixed for TouchLocation::TryGetPreviousLocation (DEC-12).
+        touchLocation = TouchLocation(-1, TouchLocationState::Invalid, Microsoft::Xna::Framework::Vector2::Zero);
         return false;
     }
 

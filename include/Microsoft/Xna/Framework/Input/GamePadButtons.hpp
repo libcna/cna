@@ -92,6 +92,13 @@ namespace Microsoft::Xna::Framework::Input
         explicit GamePadButtons(Buttons buttons);
 
         /**
+         * @brief Derives a GamePadButtons from a list of Buttons flags values.
+         * @param btns The list of button flags to combine.
+         * @return The resulting GamePadButtons.
+         */
+        NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns);
+
+        /**
          * @brief Compares this instance with another for equality.
          * @param other The other GamePadButtons to compare.
          * @return True if equal; false otherwise.
@@ -120,18 +127,11 @@ namespace Microsoft::Xna::Framework::Input
          */
         friend bool operator!=(const GamePadButtons& left, const GamePadButtons& right);
 
-        /**
-         * @brief Derives a GamePadButtons from a list of Buttons flags values.
-         * @param btns The list of button flags to combine.
-         * @return The resulting GamePadButtons.
-         */
-        NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns);
+    private:
+        [[nodiscard]] ButtonState ButtonStateFromFlag(Buttons flag) const;
 
         /** @brief Packed button flags. For internal library use only. */
         NOXNA Buttons buttons_;
-
-    private:
-        [[nodiscard]] ButtonState ButtonStateFromFlag(Buttons flag) const;
 
         friend struct GamePadState;
     };

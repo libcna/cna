@@ -28,8 +28,9 @@ namespace
             );
         }
 
-        (void)TouchPanel::GetState();
-        (void)TouchPanel::GetState();
+        // GetTouchState() is a pure read; AdvanceTouchFrame() is what actually retires the
+        // Released touches just set above.
+        CNA::Internal::Input::InputManager::AdvanceTouchFrame();
     }
 }
 
@@ -47,6 +48,14 @@ TEST(TouchInputTest, GetStateReflectsCurrentTouchSnapshot)
     EXPECT_EQ(touchLocation.getStateProperty(), TouchLocationState::Pressed);
     EXPECT_FLOAT_EQ(touchLocation.getPositionProperty().X, 100.5f);
     EXPECT_FLOAT_EQ(touchLocation.getPositionProperty().Y, 200.25f);
+
+    // GetState() is a pure read (INP-AUD-001): a repeated call without an intervening frame
+    // advance must return the identical snapshot, not silently promote Pressed -> Moved.
+    const auto stillPressed = TouchPanel::GetState();
+    ASSERT_EQ(stillPressed.getCountProperty(), 1);
+    EXPECT_EQ(stillPressed[0].getStateProperty(), TouchLocationState::Pressed);
+
+    TouchPanel::Update(); // advances exactly one frame: Pressed -> Moved
 
     const auto nextState = TouchPanel::GetState();
     ASSERT_EQ(nextState.getCountProperty(), 1);
@@ -69,6 +78,13 @@ TEST(TouchInputTest, ReleasedTouchIsReturnedOnceAndThenRemoved)
     ASSERT_EQ(releasedState.getCountProperty(), 1);
     EXPECT_EQ(releasedState[0].getIdProperty(), 21);
     EXPECT_EQ(releasedState[0].getStateProperty(), TouchLocationState::Released);
+
+    // A repeated read within the same frame must still report the Released touch (pure read).
+    const auto releasedStateAgain = TouchPanel::GetState();
+    ASSERT_EQ(releasedStateAgain.getCountProperty(), 1);
+    EXPECT_EQ(releasedStateAgain[0].getStateProperty(), TouchLocationState::Released);
+
+    TouchPanel::Update(); // advances one frame: Released touches are retired
 
     const auto afterReleasedState = TouchPanel::GetState();
     EXPECT_EQ(afterReleasedState.getCountProperty(), 0);
@@ -370,6 +386,37 @@ TEST(TouchCollectionTest, FindByIdReturnsMatchAndFalseWhenMissing)
 
     TouchLocation notFound;
     EXPECT_FALSE(collection.FindById(999, notFound));
+}
+
+// FNA writes the out-param unconditionally, even on the not-found path (TouchCollection.cs:112-131):
+// the "not found" case still assigns touchLocation = new TouchLocation(-1, Invalid, Vector2.Zero)
+// before returning false, mirroring the same pattern already fixed for
+// TouchLocation::TryGetPreviousLocation (DEC-12). Verify CNA's FindById does the same rather than
+// leaving the caller-supplied out-param untouched.
+TEST(TouchCollectionTest, FindByIdWritesInvalidSentinelOnOutParamWhenMissing)
+{
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(7, TouchLocationState::Pressed, Vector2(9.0f, 9.0f))
+    });
+
+    TouchLocation notFound(42, TouchLocationState::Moved, Vector2(1.0f, 2.0f));
+    EXPECT_FALSE(collection.FindById(999, notFound));
+    EXPECT_EQ(notFound.getIdProperty(), -1);
+    EXPECT_EQ(notFound.getStateProperty(), TouchLocationState::Invalid);
+    EXPECT_EQ(notFound.getPositionProperty(), Vector2::Zero);
+}
+
+// Same not-found out-param contract when the collection itself is default-constructed/empty
+// (CNA's stand-in for FNA's null-backed default TouchCollection, TouchCollection.cs:114 `touches != null`).
+TEST(TouchCollectionTest, FindByIdWritesInvalidSentinelOnOutParamForEmptyCollection)
+{
+    const TouchCollection empty;
+
+    TouchLocation notFound(3, TouchLocationState::Released, Vector2(5.0f, 6.0f));
+    EXPECT_FALSE(empty.FindById(1, notFound));
+    EXPECT_EQ(notFound.getIdProperty(), -1);
+    EXPECT_EQ(notFound.getStateProperty(), TouchLocationState::Invalid);
+    EXPECT_EQ(notFound.getPositionProperty(), Vector2::Zero);
 }
 
 TEST(TouchCollectionTest, CopyToAppendsAllElementsInOrder)

@@ -4,10 +4,19 @@
 #include "KeyboardState.hpp"
 #include "Keys.hpp"
 #include "CNA/CNAHelper.hpp"
-#include "CNA/Input/KeyModifiers.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 
+#include <cstdint>
 #include <string>
+
+// Forward-declared rather than including CNA/Input/KeyModifiers.hpp: this is a strict-XNA header
+// (P1-027/P1-028) and must not require a consumer to pull in a CNA::Input extension header just to
+// use Keyboard's non-EXT surface. GetModStateEXT() below only needs the type name to declare its
+// return type; Keyboard.cpp includes the real header for the definition.
+namespace CNA::Input
+{
+    enum class KeyModifiersEXT : std::uint32_t;
+}
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -17,6 +26,7 @@ namespace Microsoft::Xna::Framework::Input
     class Keyboard
     {
     public:
+        /** @brief Keyboard is a static class (XNA `public static class Keyboard`) and cannot be instantiated. */
         Keyboard() = delete;
 
         /**

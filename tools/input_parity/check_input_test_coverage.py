@@ -49,6 +49,25 @@ KNOWN_COVERED_ELSEWHERE = {
     # GetRawGamePadState(...) is asserted in SdlGamepadBackendTests.cpp (leftY etc.); the return value is
     # bound with `auto`, so the type name never appears literally, but the struct is exercised.
     "RawGamePadState": "SdlGamepadBackendTests.cpp via InputManager::GetRawGamePadState (bound as auto)",
+    # INP-AUD-audit (2026-07-16): these 7 interfaces are each exercised through a dedicated
+    # fake-backend-driven suite, same as ISdlGamepadBackend above -- but the suite is named after the
+    # concrete Fake*/CnaInput* type, not the "I"-prefixed interface, so suite_re's literal
+    # `<TypeName>\w*Test` prefix match never fires. Confirmed real coverage exists for every one of
+    # these before adding the exemption (not just a name collision at the same file).
+    "ISdlHapticBackend": "SdlHapticBackendTests.cpp (FakeHapticTest) via the FakeSdlHapticBackend seam",
+    "ISdlJoystickBackend": "SdlJoystickBackendTests.cpp (FakeJoystickTest) via the FakeSdlJoystickBackend seam",
+    "ISystemDeviceBackend": "InputDevicesTests.cpp (CnaInputDevicesTest) / TouchEdgeCaseTests.cpp (TouchCapabilitiesEnumerationTest) via FakeSystemDeviceBackend",
+    "ISystemKeyboardBackend": "KeyboardModStateTests.cpp (KeyboardModStateEXTTest) via a fake system-keyboard-backend seam",
+    "ISystemMouseBackend": "MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam",
+    "ISystemPowerBackend": "PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam",
+    "ISystemSensorBackend": "SensorsTests.cpp (CnaInputSensorsTest) via a fake system-sensor-backend seam",
+    # P9-027: both are enums, not classes, so their suite is named after the *class* whose behavior
+    # they parameterize, not the enum itself. Confirmed real, exhaustive coverage exists (all
+    # flags/values iterated) before adding the exemption.
+    "KeyModifiersEXT": "KeyboardModStateTests.cpp (KeyboardModStateEXTTest) — every flag tested individually + combined",
+    "TextInputTypeEXT": "TextInputEXTTests.cpp (TextInputEXTTest) — all 9 values iterated in "
+                         "StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType and "
+                         "StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType",
 }
 
 
@@ -114,6 +133,15 @@ def analyse(types: dict, tests: list):
 def render(rows_public, rows_internal) -> str:
     out = []
     out.append("# Input source → test coverage (INPUT-AUDIT-002)")
+    out.append("")
+    out.append("> **Related input docs (INP-0003):** [plan](../plan_input.md) · "
+               "[backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · "
+               "[member-parity matrix](input-member-parity-matrix.md) · "
+               "[frozen API + tier glossary](input-public-api-frozen.md) · "
+               "[test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · "
+               "[platform notes](platform-input-notes.md) · "
+               "[manual results](input-manual-verification-results.md) · "
+               "[demo checklist](demo-input-checklist.md)")
     out.append("")
     out.append("> **Generated** by `tools/input_parity/check_input_test_coverage.py`. Maps each Input")
     out.append("> type to whether it has a dedicated `TEST(<Type>Test, …)` suite and how many test files")

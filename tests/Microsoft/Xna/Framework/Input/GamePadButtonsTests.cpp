@@ -182,3 +182,14 @@ TEST(GamePadDPadTest, GetHashCodeMatchesFnaBitWeightedFormula)
                           ButtonState::Pressed, ButtonState::Pressed);
     EXPECT_EQ(all.GetHashCode(), 8 + 1 + 2 + 4);
 }
+
+TEST(GamePadDPadTest, GetHashCodeIsConsistentForEqualInstances)
+{
+    const GamePadDPad a(ButtonState::Pressed, ButtonState::Released,
+                        ButtonState::Pressed, ButtonState::Released);
+    const GamePadDPad sameAsA(ButtonState::Pressed, ButtonState::Released,
+                              ButtonState::Pressed, ButtonState::Released);
+
+    EXPECT_TRUE(a == sameAsA);
+    EXPECT_EQ(a.GetHashCode(), sameAsA.GetHashCode());
+}

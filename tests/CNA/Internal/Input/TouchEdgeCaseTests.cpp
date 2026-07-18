@@ -10,15 +10,21 @@
 
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
+#include "CNA/Input/InputDeviceInfo.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SystemDeviceBackend.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
+using CNA::Input::InputDeviceInfoEXT;
 using CNA::Internal::Input::GestureDetector;
 using CNA::Internal::Input::InputManager;
+using CNA::Internal::Input::ISystemDeviceBackend;
+using CNA::Internal::Input::SetSystemDeviceBackendForTests;
 using Microsoft::Xna::Framework::Vector2;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
@@ -154,7 +160,11 @@ TEST_F(TouchEdgeCaseTest, UnknownReleasedFingerHasNoBogusPreviousAndClears)
     EXPECT_EQ(first[0].getPositionProperty(), Vector2(5, 5));
     EXPECT_FALSE(first[0].TryGetPreviousLocation(prev)); // no bogus previous — previous is Invalid
 
-    // Released is flushed after that one snapshot; nothing lingers.
+    // A repeated read within the same frame is unaffected (pure read)...
+    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 1);
+
+    // ...but is flushed once the frame is advanced; nothing lingers.
+    InputManager::AdvanceTouchFrame();
     EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 0);
 }
 
@@ -179,8 +189,8 @@ TEST_F(TouchEdgeCaseTest, FingerIdReusedAfterReleaseStartsFresh)
 {
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(10, 10));
     InputManager::SetTouchState(1, TouchLocationState::Released, Vector2(10, 10));
-    (void)InputManager::GetTouchState(); // first read reports the Released touch...
-    (void)InputManager::GetTouchState(); // ...second read flushes it (RemoveAfterSnapshot)
+    (void)InputManager::GetTouchState(); // reports the Released touch (pure read)
+    InputManager::AdvanceTouchFrame();   // retires it (RemoveAfterSnapshot)
 
     InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(30, 30));
     const TouchCollection state = InputManager::GetTouchState();
@@ -227,8 +237,9 @@ TEST_F(TouchEdgeCaseTest, SetFingerRejectsOutOfRangeSlotIndexWithoutOutOfBoundsW
 
 TEST_F(TouchEdgeCaseTest, EventDrivenPathPreservesPreviousLocation)
 {
-    // Drives the REAL event-driven path (InputManager::SetTouchState + GetTouchState), one event
-    // per snapshot (= one per frame), and checks TryGetPreviousLocation at each transition.
+    // Drives the REAL event-driven path (InputManager::SetTouchState + GetTouchState), reading
+    // (pure) then explicitly advancing (InputManager::AdvanceTouchFrame) one frame at a time, and
+    // checks TryGetPreviousLocation at each transition.
     const Vector2 a(10, 10), b(20, 20), c(30, 30);
     TouchLocation prev;
 
@@ -240,6 +251,7 @@ TEST_F(TouchEdgeCaseTest, EventDrivenPathPreservesPreviousLocation)
         EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Pressed);
         EXPECT_FALSE(s[0].TryGetPreviousLocation(prev));
     }
+    InputManager::AdvanceTouchFrame();
 
     // Pressed -> Moved: previous is the Pressed location.
     InputManager::SetTouchState(1, TouchLocationState::Moved, b);
@@ -252,6 +264,7 @@ TEST_F(TouchEdgeCaseTest, EventDrivenPathPreservesPreviousLocation)
         EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
         EXPECT_EQ(prev.getPositionProperty(), a);
     }
+    InputManager::AdvanceTouchFrame();
 
     // Moved -> Moved: previous is the prior Moved location.
     InputManager::SetTouchState(1, TouchLocationState::Moved, c);
@@ -261,8 +274,9 @@ TEST_F(TouchEdgeCaseTest, EventDrivenPathPreservesPreviousLocation)
         EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Moved);
         EXPECT_EQ(prev.getPositionProperty(), b);
     }
+    InputManager::AdvanceTouchFrame();
 
-    // Moved -> Released: previous is the prior Moved location; then removed after one snapshot.
+    // Moved -> Released: previous is the prior Moved location; then removed after one advance.
     InputManager::SetTouchState(1, TouchLocationState::Released, c);
     {
         const TouchCollection s = InputManager::GetTouchState();
@@ -272,18 +286,24 @@ TEST_F(TouchEdgeCaseTest, EventDrivenPathPreservesPreviousLocation)
         EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Moved);
         EXPECT_EQ(prev.getPositionProperty(), c);
     }
+    InputManager::AdvanceTouchFrame();
     EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 0); // Released removed
 }
 
 TEST_F(TouchEdgeCaseTest, HeldTouchAutoPromotesToMovedWithPressedPrevious)
 {
-    // A Pressed touch held across two snapshots (no new SDL event) auto-promotes to Moved on the
-    // second snapshot, with the previous being the Pressed location the game actually saw.
+    // A Pressed touch held across two frames (no new SDL event) auto-promotes to Moved once the
+    // frame is advanced, with the previous being the Pressed location the game actually saw.
     const Vector2 a(5, 5);
     TouchLocation prev;
 
     InputManager::SetTouchState(1, TouchLocationState::Pressed, a);
-    (void)InputManager::GetTouchState(); // frame 1: Pressed (no previous), promotes to Moved
+    {
+        const TouchCollection frame1 = InputManager::GetTouchState(); // Pressed, no previous
+        ASSERT_EQ(frame1.getCountProperty(), 1);
+        EXPECT_EQ(frame1[0].getStateProperty(), TouchLocationState::Pressed);
+    }
+    InputManager::AdvanceTouchFrame(); // promotes to Moved; previous becomes the Pressed location
 
     const TouchCollection s = InputManager::GetTouchState(); // frame 2: Moved
     ASSERT_EQ(s.getCountProperty(), 1);
@@ -291,6 +311,59 @@ TEST_F(TouchEdgeCaseTest, HeldTouchAutoPromotesToMovedWithPressedPrevious)
     ASSERT_TRUE(s[0].TryGetPreviousLocation(prev));
     EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
     EXPECT_EQ(prev.getPositionProperty(), a);
+}
+
+// INP-AUD-001 regression: GetTouchState() must be a pure read. Two consecutive calls with no
+// intervening AdvanceTouchFrame() must return identical snapshots, regardless of how many times
+// (zero, one, or many) it is called within the frame.
+TEST_F(TouchEdgeCaseTest, GetTouchStateIsPureAndRepeatedReadsWithinAFrameAreIdentical)
+{
+    const Vector2 a(1, 2);
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, a);
+
+    const TouchCollection first = InputManager::GetTouchState();
+    const TouchCollection second = InputManager::GetTouchState();
+    const TouchCollection third = InputManager::GetTouchState();
+
+    ASSERT_EQ(first.getCountProperty(), 1);
+    ASSERT_EQ(second.getCountProperty(), 1);
+    ASSERT_EQ(third.getCountProperty(), 1);
+    EXPECT_EQ(first[0].getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(second[0].getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(third[0].getStateProperty(), TouchLocationState::Pressed);
+    EXPECT_EQ(first[0].getPositionProperty(), a);
+    EXPECT_EQ(second[0].getPositionProperty(), a);
+    EXPECT_EQ(third[0].getPositionProperty(), a);
+}
+
+// INP-AUD-001 regression: a frame with zero GetTouchState() reads still advances correctly once
+// AdvanceTouchFrame() runs — a held Pressed touch is Moved on the very next read even if nothing
+// read it during the frame it was pressed in.
+TEST_F(TouchEdgeCaseTest, AdvanceTouchFrameWorksEvenWithoutAnIntermediateRead)
+{
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(3, 4));
+
+    InputManager::AdvanceTouchFrame(); // no GetTouchState() call happened this frame
+
+    const TouchCollection s = InputManager::GetTouchState();
+    ASSERT_EQ(s.getCountProperty(), 1);
+    EXPECT_EQ(s[0].getStateProperty(), TouchLocationState::Moved);
+}
+
+// INP-AUD-001 regression: a Released touch remains visible for exactly one post-advance read,
+// no matter how many times it was read *before* that advance.
+TEST_F(TouchEdgeCaseTest, ReleasedTouchIsVisibleForExactlyOnePostAdvanceReadRegardlessOfPriorReads)
+{
+    InputManager::SetTouchState(1, TouchLocationState::Released, Vector2(7, 8));
+
+    // Read it many times before advancing — must not consume/flush it early.
+    for (int i = 0; i < 5; ++i)
+    {
+        EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 1);
+    }
+
+    InputManager::AdvanceTouchFrame();
+    EXPECT_EQ(InputManager::GetTouchState().getCountProperty(), 0);
 }
 
 // --- Task 827: GetCapabilities() ---
@@ -353,6 +426,103 @@ TEST_F(TouchEdgeCaseTest, GetCapabilitiesReturnsToDisconnectedAfterReset)
     const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
     EXPECT_FALSE(caps.getIsConnectedProperty());
     EXPECT_EQ(caps.getMaximumTouchCountProperty(), 0);
+}
+
+// --- INP-AUD-003: GetCapabilities() consults SDL touch-device enumeration ---
+
+namespace
+{
+    // A fake device enumeration source (mirrors tests/CNA/Input/InputDevicesTests.cpp), so
+    // GetCapabilities()'s SDL-enumeration path is exercised deterministically instead of depending
+    // on whether the CI machine happens to have a touch device.
+    class FakeTouchDeviceBackend final : public ISystemDeviceBackend
+    {
+    public:
+        std::vector<InputDeviceInfoEXT> touchDevices;
+
+        std::vector<InputDeviceInfoEXT> GetMice() override { return {}; }
+        std::vector<InputDeviceInfoEXT> GetKeyboards() override { return {}; }
+        std::vector<InputDeviceInfoEXT> GetTouchDevices() override { return touchDevices; }
+    };
+
+    class TouchCapabilitiesEnumerationTest : public TouchEdgeCaseTest
+    {
+    protected:
+        FakeTouchDeviceBackend fakeBackend;
+
+        void SetUp() override
+        {
+            TouchEdgeCaseTest::SetUp();
+            SetSystemDeviceBackendForTests(&fakeBackend);
+        }
+
+        void TearDown() override
+        {
+            SetSystemDeviceBackendForTests(nullptr);
+            TouchEdgeCaseTest::TearDown();
+        }
+    };
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, ReportsConnectedFromEnumerationBeforeAnyTouchIsObserved)
+{
+    // A touchscreen SDL already enumerates, but nobody has touched it yet: touchDeviceExists_ is
+    // still false and there is no live touch in InputManager. Before the fix this reported
+    // disconnected; GetCapabilities() must now trust the enumeration.
+    fakeBackend.touchDevices = {{1, "Fake Touchscreen"}};
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, ReportsDisconnectedWhenEnumerationEmptyAndNoTouchObserved)
+{
+    // No enumerable device, no sticky flag, no live touch: genuinely disconnected.
+    fakeBackend.touchDevices.clear();
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_FALSE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 0);
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, FallsBackToStickyFlagWhenEnumerationLagsInteractionWindowsStyle)
+{
+    // FNA notes Windows only enumerates a touch device after it has actually been touched. Model
+    // that here: enumeration stays empty, but touchDeviceExists_ was set by an earlier FINGER_DOWN.
+    fakeBackend.touchDevices.clear();
+    TouchPanel::setTouchDeviceExistsProperty(true);
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4);
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, FallsBackToLiveTouchWhenEnumerationEmptyAndFlagUnset)
+{
+    // Same late-enumeration scenario, but observed only via a live touch in InputManager rather
+    // than the sticky TouchPanel flag (e.g. a test/backend that calls InputManager directly).
+    fakeBackend.touchDevices.clear();
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(5, 5));
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4);
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, EnumerationQueryDoesNotMutateTouchState)
+{
+    // GetCapabilities() must remain non-mutating even with the new enumeration check added.
+    fakeBackend.touchDevices = {{1, "Fake Touchscreen"}};
+    InputManager::SetTouchState(7, TouchLocationState::Pressed, Vector2(5, 5));
+
+    (void) TouchPanel::GetCapabilities();
+    (void) TouchPanel::GetCapabilities();
+
+    const TouchCollection state = TouchPanel::GetState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_EQ(state[0].getStateProperty(), TouchLocationState::Pressed)
+        << "GetCapabilities() must not promote Pressed to Moved";
 }
 
 // --- Task 828: coordinate scaling in INTERNAL_onTouchEvent ---

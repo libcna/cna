@@ -56,6 +56,19 @@ ctest --test-dir build --output-on-failure
 - Core game loop and framework primitives are available (`Game`, `GameTime`, graphics types, input/audio surfaces).
 - Compatibility is partial and evolving; implementation status is tracked progressively in source.
 
+### Input
+
+- `Keyboard`, `Mouse` (incl. `MouseCursor`), `GamePad` (up to 4 players), `TouchPanel`/`TouchCollection`,
+  and the `GestureDetector` gesture recognizer (Tap/DoubleTap/Hold/Drag/Flick/Pinch) — all under
+  `Microsoft::Xna::Framework::Input`, matching FNA/XNA 4.0 behavior member-for-member.
+  See `plan_input.md` for the full FNA-parity audit record.
+- NOXNA extensions beyond stock XNA: `TextInputEXT` (IME composition), rumble/trigger-rumble/light-bar/
+  gyro/accelerometer on `GamePad`, raw `CNA::Input::Joysticks` (distinct from `GamePad`'s mapped view),
+  device-level `CNA::Input::Sensors`/`Power`, and `CNA::Input::Haptics` for standalone haptic devices.
+- Single SDL event funnel (`SdlInputBridge::ProcessEvent`), backend-agnostic — Input behavior is
+  identical across all 4 graphics backends (EasyGL/Vulkan/bgfx/SDL_RENDERER), verified by the
+  `CnaTests` input suite.
+
 ### Rendering
 
 - `GraphicsDevice` abstraction with backend delegation.

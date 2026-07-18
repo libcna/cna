@@ -2,7 +2,6 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
-#include "CNA/Input/TextInputType.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "System/MulticastAction.hpp"
@@ -11,6 +10,15 @@
 #include <functional>
 #include <string>
 #include <vector>
+
+// Forward-declared rather than including CNA/Input/TextInputType.hpp: this is a strict-XNA header
+// (P1-027/P1-028) and must not require a consumer to pull in a CNA::Input extension header just to
+// use TextInputEXT's non-EXT surface. StartTextInputWithTypeEXT() below only needs the type name to
+// declare its parameter type; TextInputEXT.cpp includes the real header for the definition.
+namespace CNA::Input
+{
+    enum class TextInputTypeEXT;
+}
 
 namespace Microsoft::Xna::Framework::Input
 {
@@ -31,6 +39,7 @@ namespace Microsoft::Xna::Framework::Input
     NOXNA class TextInputEXT
     {
     public:
+        /** @brief TextInputEXT is a static class (FNA `public static class TextInputEXT`) and cannot be instantiated. */
         TextInputEXT() = delete;
 
         /**
@@ -83,6 +92,10 @@ namespace Microsoft::Xna::Framework::Input
 
         /**
          * @brief Returns true if text input mode is currently active.
+         *
+         * For the on-screen keyboard, this may remain true on some platforms if an external event
+         * closed the keyboard; in that case, check `IsScreenKeyboardShown` instead.
+         *
          * @return True if text input is active; false otherwise.
          */
         NOXNA static bool IsTextInputActive();

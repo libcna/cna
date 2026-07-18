@@ -2,9 +2,6 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
-#include "CNA/Input/GamePadButtonLabel.hpp"
-#include "CNA/Input/GamePadConnectionState.hpp"
-#include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
@@ -15,6 +12,18 @@
 
 #include <cstdint>
 #include <string>
+
+// Forward-declared rather than including their CNA/Input/*.hpp headers: this is a strict-XNA
+// header (P1-027/P1-028) and must not require a consumer to pull in a CNA::Input extension header
+// just to use GamePad's non-EXT surface. GetPowerInfoEXT/GetButtonLabelEXT/GetConnectionStateEXT
+// below only need the type names to declare their return types; GamePad.cpp already gets the real
+// definitions transitively via CNA/Internal/Input/SdlInputBridge.hpp.
+namespace CNA::Input
+{
+    enum class GamePadButtonLabelEXT;
+    enum class GamePadConnectionStateEXT;
+    enum class PowerStateEXT;
+}
 
 namespace Microsoft::Xna::Framework::Input
 {

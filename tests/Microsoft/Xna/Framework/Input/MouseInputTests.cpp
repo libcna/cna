@@ -68,6 +68,10 @@ TEST(MouseStateTest, DefaultConstructorAllValuesAtRest)
     EXPECT_EQ(state.getMiddleButtonProperty(), ButtonState::Released);
     EXPECT_EQ(state.getXButton1Property(), ButtonState::Released);
     EXPECT_EQ(state.getXButton2Property(), ButtonState::Released);
+
+    // P1-018: the NOXNA/EXT horizontal wheel also defaults to 0 through the true (parameterless)
+    // default constructor, not just through the 8-arg XNA ctor (already covered separately below).
+    EXPECT_EQ(state.getHorizontalScrollWheelValueEXTProperty(), 0);
 }
 
 TEST(MouseStateTest, EightArgConstructorSetsEveryFieldInTheRightSlot)
@@ -428,7 +432,7 @@ TEST(MouseTest, SetPositionIsNoOpWhenRelativeModeEnabled)
     CNA::Internal::Input::InputManager::SetMousePosition(7, 7);
 
     Mouse::setIsRelativeMouseModeEXTProperty(true);
-    Mouse::SetPosition(99, 99); // must be a no-op while relative mode is on (Mouse.cs:99-103)
+    Mouse::SetPosition(99, 99); // must be a no-op while relative mode is on (Mouse.cs:106-110)
     Mouse::setIsRelativeMouseModeEXTProperty(false);
 
     const auto state = Mouse::GetState();
@@ -496,6 +500,39 @@ TEST(MouseTest, SetCursorIsSafeNoOpForDisposedCursor)
     ASSERT_EQ(cursor.GetSDLCursor(), nullptr);
 
     EXPECT_NO_THROW(Mouse::SetCursor(cursor));
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+// P1-016: positive-path counterpart to SetCursorIsSafeNoOpForDisposedCursor above — the disposed
+// case only exercises the early-return guard, never the actual SDL_SetCursor(handle) call
+// (Mouse.cpp). Uses a locally-owned cursor created fresh inside this test (same pattern as the
+// sibling test above), not one of the process-wide stock singletons: the stock singletons are
+// created once on first access and cached for the process lifetime, but their underlying
+// SDL_Cursor* is tied to the SDL video subsystem's lifetime — an earlier test in the (shuffled)
+// run order that calls SDL_QuitSubSystem(SDL_INIT_VIDEO) invalidates that cached handle, which
+// this test's own SDL_InitSubSystem call does not recreate, causing an intermittent, shuffle-order
+// -dependent failure. A cursor created fresh after this test's own SDL_InitSubSystem call cannot
+// be stale from another test's subsystem-quit/reinit cycle.
+TEST(MouseTest, SetCursorAppliesTheGivenCursorToSDL)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR);
+    if (!raw)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
+    }
+
+    MouseCursor cursor(raw, /*owning=*/true);
+    ASSERT_EQ(cursor.GetSDLCursor(), raw);
+
+    Mouse::SetCursor(cursor);
+    EXPECT_EQ(SDL_GetCursor(), raw);
 
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
@@ -780,6 +817,34 @@ TEST(MouseCursorTest, MoveAssignmentDisposesPreviousHandleAndTransfersOwnership)
 
     EXPECT_EQ(a.GetSDLCursor(), rawB);
     EXPECT_EQ(b.GetSDLCursor(), nullptr);
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+TEST(MouseCursorTest, SelfMoveAssignmentLeavesCursorIntact)
+{
+    // Task P1-017: move-assignment guards self-assignment with `if (this != &other)` before
+    // calling Dispose() and reading `other`'s fields. Without that guard, `cursor = std::move(cursor)`
+    // would Dispose() the cursor (freeing/nulling sdlCursor_) and then copy those now-cleared fields
+    // back onto itself, silently destroying the handle. Indirection through a pointer keeps this a
+    // genuine runtime self-move rather than something a compiler could diagnose/elide at compile time.
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Cursor* raw = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+    if (!raw)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateSystemCursor failed: " << SDL_GetError();
+    }
+
+    MouseCursor cursor(raw, /*owning=*/true);
+    MouseCursor* self = &cursor;
+    *self             = std::move(*self);
+
+    EXPECT_EQ(cursor.GetSDLCursor(), raw);
 
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }

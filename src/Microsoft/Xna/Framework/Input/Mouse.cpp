@@ -89,7 +89,7 @@ namespace Microsoft::Xna::Framework::Input
 
     void Mouse::SetPosition(int x, int y)
     {
-        // In relative mode, this function is meaningless (Mouse.cs:99-103).
+        // In relative mode, this function is meaningless (Mouse.cs:106-110).
         if (getIsRelativeMouseModeEXTProperty())
         {
             return;

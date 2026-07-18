@@ -171,6 +171,7 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerEventsExposePreviousLocationThrough
         EXPECT_FALSE(s[0].TryGetPreviousLocation(prev));
         pressedPos = s[0].getPositionProperty();
     }
+    TouchPanel::Update(); // frame boundary (INP-AUD-001): previous becomes the Pressed location
 
     // MOTION -> GetState: Moved, previous is the pressed location.
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_MOTION, 7001, 0.5f, 0.9f, 0.25f, 0.15f));
@@ -183,8 +184,9 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerEventsExposePreviousLocationThrough
         EXPECT_EQ(prev.getStateProperty(), TouchLocationState::Pressed);
         EXPECT_EQ(prev.getPositionProperty(), pressedPos);
     }
+    TouchPanel::Update(); // frame boundary: previous becomes the Moved location
 
-    // UP -> GetState: Released, previous still present; then removed after the snapshot.
+    // UP -> GetState: Released, previous still present; then removed once the frame advances.
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_UP, 7001, 0.5f, 0.9f));
     {
         const TouchCollection s = TouchPanel::GetState();
@@ -209,13 +211,15 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerCanceledReleasesTouchLikeFingerUp)
     // Cancel instead of lifting the finger.
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_CANCELED, 8001, 0.5f, 0.5f));
 
-    // The touch is reported Released exactly once (not stuck Pressed/Moved), then disappears.
+    // The touch is reported Released exactly once (not stuck Pressed/Moved), then disappears once
+    // the frame advances.
     {
         const TouchCollection afterCancel = TouchPanel::GetState();
         ASSERT_EQ(afterCancel.getCountProperty(), 1);
         EXPECT_EQ(afterCancel[0].getStateProperty(), TouchLocationState::Released)
             << "a canceled finger must transition to Released, not stay Pressed/Moved";
     }
+    TouchPanel::Update();
     EXPECT_EQ(TouchPanel::GetState().getCountProperty(), 0)
         << "a canceled finger must not remain tracked forever";
 }
@@ -228,8 +232,8 @@ TEST_F(SdlInputBridgeTouchGestureTest, FingerIdReusableAfterCancel)
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 8100, 0.1f, 0.1f));
     (void)TouchPanel::GetState();
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_CANCELED, 8100, 0.1f, 0.1f));
-    (void)TouchPanel::GetState();
-    (void)TouchPanel::GetState(); // flush the Released removal
+    (void)TouchPanel::GetState(); // reports the Released touch (pure read)
+    TouchPanel::Update();         // retires it (RemoveAfterSnapshot)
 
     // Same SDL finger id pressed again -> a fresh Pressed touch.
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 8100, 0.2f, 0.2f));

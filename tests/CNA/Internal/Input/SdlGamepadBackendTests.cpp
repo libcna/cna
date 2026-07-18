@@ -1038,3 +1038,23 @@ TEST(SdlGamepadSubsystemInit, EnsureIsIdempotentAndInitializesSubsystem)
     SdlInputBridge::EnsureGamepadSubsystemInitialized();
     EXPECT_TRUE((SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD) != 0u);
 }
+
+// P8-002: the shutdown counterpart to EnsureGamepadSubsystemInitialized (Game::Dispose calls this,
+// mirroring FNA's ProgramExit which quits SDL_INIT_VIDEO | SDL_INIT_GAMEPAD together). Must actually
+// quit the subsystem, and must be safe to call when the subsystem was never initialized or has
+// already been shut down (SDL_QuitSubSystem is a documented no-op in both cases).
+TEST(SdlGamepadSubsystemInit, ShutdownQuitsSubsystemAndIsSafeToCallRepeatedly)
+{
+    SdlInputBridge::EnsureGamepadSubsystemInitialized();
+    ASSERT_TRUE((SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD) != 0u);
+
+    SdlInputBridge::ShutdownGamepadSubsystem();
+    EXPECT_FALSE((SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD) != 0u);
+
+    // Safe to call again with the subsystem already shut down.
+    EXPECT_NO_THROW(SdlInputBridge::ShutdownGamepadSubsystem());
+
+    // Re-initialization still works afterward (round-trips cleanly).
+    SdlInputBridge::EnsureGamepadSubsystemInitialized();
+    EXPECT_TRUE((SDL_WasInit(SDL_INIT_GAMEPAD) & SDL_INIT_GAMEPAD) != 0u);
+}

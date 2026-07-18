@@ -115,3 +115,31 @@ TEST(GamePadTriggersTest, NoneDeadZoneModePassesValueThroughClampedOnly)
 
     ResetGamePadState();
 }
+
+TEST(GamePadTriggersTest, NonNoneDeadZoneModeAppliesIndependentlyToBothTriggers)
+{
+    // Guards against a left/right field swap in the internal 3-arg constructor:
+    // Left and Right use distinct raw values here, so a copy/paste mistake that fed
+    // leftTrigger into `right` (or vice versa) would make this test fail.
+    ResetGamePadState();
+    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    const float rawLeft = GamePad::TriggerThreshold + 0.2f;
+    const float rawRight = GamePad::TriggerThreshold + 0.5f;
+    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftTrigger, rawLeft);
+    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightTrigger, rawRight);
+
+    const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
+
+    const float expectedLeft = MathHelper::Clamp(
+        GamePad::ExcludeAxisDeadZone(rawLeft, GamePad::TriggerThreshold), 0.0f, 1.0f);
+    const float expectedRight = MathHelper::Clamp(
+        GamePad::ExcludeAxisDeadZone(rawRight, GamePad::TriggerThreshold), 0.0f, 1.0f);
+    ASSERT_NE(expectedLeft, expectedRight);
+
+    EXPECT_NEAR(state.getTriggersProperty().getLeftProperty(), expectedLeft, 1e-5f);
+    EXPECT_NEAR(state.getTriggersProperty().getRightProperty(), expectedRight, 1e-5f);
+
+    ResetGamePadState();
+}

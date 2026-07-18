@@ -7,6 +7,7 @@
 
 #include "CNA/Internal/Input/InputManager.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
+#include "CNA/Internal/Input/SystemDeviceBackend.hpp"
 #include "System/InvalidOperationException.hpp"
 
 namespace Microsoft::Xna::Framework::Input::Touch
@@ -98,15 +99,16 @@ namespace Microsoft::Xna::Framework::Input::Touch
         // number of tracked touches — that cap is MAX_TOUCHES (= 8, see GetState). Report 4 to match
         // FNA; 0 when no touch device is present.
         constexpr int kXnaReportedMaxTouchCount = 4;
-        if (touchDeviceExists_)
-        {
-            return TouchPanelCapabilities(true, kXnaReportedMaxTouchCount);
-        }
 
-        // Query touch presence WITHOUT mutating state. GetTouchState() advances previous-location
-        // tracking, consumes Released touches, and promotes Pressed->Moved — a capability query
-        // must not consume a frame of input, so use the non-mutating HasAnyTouch() peek instead.
-        const bool isConnected = CNA::Internal::Input::InputManager::HasAnyTouch();
+        // INP-AUD-003: query SDL's live device enumeration on every call, matching FNA's
+        // GetTouchCapabilities() (SDL_GetTouchDevices() every query). Neither this call nor the two
+        // fallbacks below mutate touch state, so a capability query never consumes a frame of input.
+        // The sticky touchDeviceExists_ flag and the live HasAnyTouch() peek remain as fallbacks for
+        // platforms (FNA notes Windows) that only enumerate a touch device after first interaction.
+        const bool isConnected =
+            !CNA::Internal::Input::system_device_backend().GetTouchDevices().empty() ||
+            touchDeviceExists_ ||
+            CNA::Internal::Input::InputManager::HasAnyTouch();
         return TouchPanelCapabilities(isConnected, isConnected ? kXnaReportedMaxTouchCount : 0);
     }
 
@@ -286,6 +288,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
     void TouchPanel::Update()
     {
         previousTouches_ = touches_;
+
+        // Advance the event-driven fallback InputManager::GetTouchState() reads from (see
+        // GetState() above) by exactly one frame: promote Pressed->Moved, retire Released, and
+        // record this frame's locations as "previous" for the next snapshot. Must happen here
+        // (once per frame) rather than inside the getter, so repeated/zero reads in a frame no
+        // longer change what is reported.
+        CNA::Internal::Input::InputManager::AdvanceTouchFrame();
 
         CNA::Internal::Input::GestureDetector::OnUpdate();
     }

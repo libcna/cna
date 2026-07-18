@@ -1,5 +1,7 @@
 # Input member-level parity matrix (INPUT-API-027)
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 > **Generated** by `tools/input_parity/gen_input_parity_matrix.py` from the public
 > `Microsoft::Xna::Framework::Input` (+ `::Touch`) headers and the FNA reference
 > at `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`. Do not hand-edit — re-run the generator. This is a review aid;
@@ -79,6 +81,19 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `NOXNA static bool SetTriggerVibrationEXT(PlayerIndex playerIndex, float leftTrigger, float rightTrigger)` | EXT | yes | matched |
 | `NOXNA static bool GetGyroEXT(PlayerIndex playerIndex, Microsoft::Xna::Framework::Vector3& gyro)` | EXT | yes | matched |
 | `NOXNA static bool GetAccelerometerEXT(PlayerIndex playerIndex, Microsoft::Xna::Framework::Vector3& accel)` | EXT | yes | matched |
+| `NOXNA static int GetPlayerIndexEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static bool SetPlayerIndexEXT(PlayerIndex playerIndex, int index)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static CNA::Input::PowerStateEXT GetPowerInfoEXT(PlayerIndex playerIndex, int& percent)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static CNA::Input::GamePadButtonLabelEXT GetButtonLabelEXT(PlayerIndex playerIndex, Buttons button)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static std::string GetNameEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static std::string GetPathEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static std::string GetSerialEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static std::uint16_t GetFirmwareVersionEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static std::uint64_t GetSteamHandleEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static CNA::Input::GamePadConnectionStateEXT GetConnectionStateEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static int GetTouchpadCountEXT(PlayerIndex playerIndex)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static int GetTouchpadFingerCountEXT(PlayerIndex playerIndex, int touchpad)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static bool GetTouchpadFingerEXT(PlayerIndex playerIndex, int touchpad, int finger, bool& down, float& x, float& y, float& pressure)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 | `NOXNA static constexpr float LeftDeadZone = 7849.0f / 32768.0f` | NOXNA | internal | maps FNA non-public |
 | `NOXNA static constexpr float RightDeadZone = 8689.0f / 32768.0f` | NOXNA | internal | maps FNA non-public |
 | `NOXNA static constexpr float TriggerThreshold = 30.0f / 255.0f` | NOXNA | internal | maps FNA non-public |
@@ -101,11 +116,11 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `ButtonState getBigButtonProperty() const` | STRICT | yes | matched |
 | `NOXNA GamePadButtons()` | NOXNA | yes | maps FNA non-public |
 | `explicit GamePadButtons(Buttons buttons)` | STRICT | yes | matched |
+| `NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns)` | NOXNA | internal | maps FNA non-public |
 | `bool Equals(const GamePadButtons& other) const` | STRICT | yes | matched |
 | `int GetHashCode() const` | STRICT | yes | matched |
 | `friend bool operator==(const GamePadButtons& left, const GamePadButtons& right)` | STRICT | yes | matched |
 | `friend bool operator!=(const GamePadButtons& left, const GamePadButtons& right)` | STRICT | yes | matched |
-| `NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns)` | NOXNA | internal | maps FNA non-public |
 
 ## `GamePadCapabilities` — struct (FNA `GamePadCapabilities.cs`)
 
@@ -319,6 +334,11 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `static KeyboardState GetState()` | STRICT | yes | matched |
 | `static KeyboardState GetState(Microsoft::Xna::Framework::PlayerIndex playerIndex)` | STRICT | yes | matched |
 | `NOXNA static Keys GetKeyFromScancodeEXT(Keys scancode)` | EXT | yes | matched |
+| `NOXNA static CNA::Input::KeyModifiersEXT GetModStateEXT()` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static std::string GetScancodeNameEXT(Keys key)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static Keys GetScancodeFromNameEXT(const std::string& name)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static std::string GetKeyNameEXT(Keys key)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static Keys GetKeyFromNameEXT(const std::string& name)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 
 ## `KeyboardState` — struct (FNA `KeyboardState.cs`)
 
@@ -516,6 +536,9 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `NOXNA static System::MulticastAction<int> ClickedEXT` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 | `NOXNA static bool getIsRelativeMouseModeEXTProperty()` | NOXNA | yes | maps FNA non-public |
 | `NOXNA static void setIsRelativeMouseModeEXTProperty(bool value)` | NOXNA | yes | maps FNA non-public |
+| `NOXNA static bool SetCaptureEXT(bool enabled)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static void GetGlobalPositionEXT(int& x, int& y)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
+| `NOXNA static bool WarpGlobalEXT(int x, int y)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 | `NOXNA static void INTERNAL_onClicked(int button)` | NOXNA | internal | maps FNA non-public |
 | `NOXNA static void ResetForTests()` | NOXNA | no | CNA-only |
 
@@ -531,7 +554,8 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `MouseCursor(MouseCursor&& other) noexcept` | NOXNA | no | CNA-only |
 | `~MouseCursor() override` | NOXNA | no | CNA-only |
 | `NOXNA void Dispose() override` | NOXNA | no | CNA-only |
-| `NOXNA SDL_Cursor* GetSDLCursor() const NOXNA static MouseCursor& getArrowProperty()` | NOXNA | no | CNA-only |
+| `NOXNA SDL_Cursor* GetSDLCursor() const` | NOXNA | no | CNA-only |
+| `NOXNA static MouseCursor& getArrowProperty()` | NOXNA | no | CNA-only |
 | `NOXNA static MouseCursor& getCrosshairProperty()` | NOXNA | no | CNA-only |
 | `NOXNA static MouseCursor& getHandProperty()` | NOXNA | no | CNA-only |
 | `NOXNA static MouseCursor& getIBeamProperty()` | NOXNA | no | CNA-only |
@@ -556,8 +580,10 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `ButtonState getXButton1Property() const` | STRICT | yes | matched |
 | `ButtonState getXButton2Property() const` | STRICT | yes | matched |
 | `int getScrollWheelValueProperty() const` | STRICT | yes | matched |
+| `NOXNA int getHorizontalScrollWheelValueEXTProperty() const` | NOXNA | no | CNA-only |
 | `NOXNA MouseState()` | NOXNA | yes | maps FNA non-public |
 | `MouseState(int x, int y, int scrollWheel, ButtonState leftButton, ButtonState middleButton, ButtonState rightButton, ButtonState xButton1, ButtonState xButton2)` | STRICT | yes | matched |
+| `NOXNA MouseState(int x, int y, int scrollWheel, ButtonState leftButton, ButtonState middleButton, ButtonState rightButton, ButtonState xButton1, ButtonState xButton2, int horizontalScrollWheel)` | NOXNA | yes | maps FNA non-public |
 | `bool Equals(const MouseState& other) const` | STRICT | yes | matched |
 | `int GetHashCode() const` | STRICT | yes | matched |
 | `std::string ToString() const` | STRICT | yes | matched |
@@ -571,6 +597,7 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `TextInputEXT() = delete` | EXT | no | C++ special-member idiom (no XNA counterpart expected) |
 | `NOXNA static System::MulticastAction<charcs> TextInput` | NOXNA | no | CNA-only |
 | `NOXNA static System::MulticastAction<const std::string&, int, int> TextEditing` | NOXNA | no | CNA-only |
+| `NOXNA static System::MulticastAction<const std::vector<std::string>&, int, bool> TextEditingCandidatesEXT` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 | `NOXNA static std::uintptr_t getWindowHandleProperty()` | NOXNA | yes | maps FNA non-public |
 | `NOXNA static void setWindowHandleProperty(std::uintptr_t value)` | NOXNA | yes | maps FNA non-public |
 | `NOXNA static bool IsTextInputActive()` | NOXNA | yes | maps FNA non-public |
@@ -578,9 +605,11 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `NOXNA static bool IsScreenKeyboardShown(std::uintptr_t window)` | NOXNA | yes | maps FNA non-public |
 | `NOXNA static void StartTextInput()` | NOXNA | yes | maps FNA non-public |
 | `NOXNA static void StopTextInput()` | NOXNA | yes | maps FNA non-public |
+| `NOXNA static void StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT type)` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 | `NOXNA static void SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& rectangle)` | NOXNA | yes | maps FNA non-public |
 | `NOXNA static void INTERNAL_OnTextInput(charcs c)` | NOXNA | no | CNA-only |
 | `NOXNA static void INTERNAL_OnTextEditing(const std::string& text, int start, int length)` | NOXNA | no | CNA-only |
+| `NOXNA static void INTERNAL_OnTextEditingCandidates( const std::vector<std::string>& candidates, int selected, bool horizontal)` | NOXNA | no | CNA-only |
 | `NOXNA static void ResetForTests()` | NOXNA | no | CNA-only |
 
 ## `TouchCollection` — struct (FNA `TouchCollection.cs`)
@@ -617,9 +646,12 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `int getIdProperty() const` | STRICT | yes | matched |
 | `TouchLocationState getStateProperty() const` | STRICT | yes | matched |
 | `const Microsoft::Xna::Framework::Vector2& getPositionProperty() const` | STRICT | yes | matched |
+| `NOXNA float getPressureEXT() const` | EXT | no | EXT extension (no stock-XNA counterpart expected) |
 | `NOXNA TouchLocation()` | NOXNA | yes | maps FNA non-public |
 | `TouchLocation(int id, TouchLocationState state, const Microsoft::Xna::Framework::Vector2& position)` | STRICT | yes | matched |
 | `TouchLocation(int id, TouchLocationState state, const Microsoft::Xna::Framework::Vector2& position, TouchLocationState previousState, const Microsoft::Xna::Framework::Vector2& previousPosition)` | STRICT | yes | matched |
+| `NOXNA TouchLocation(int id, TouchLocationState state, const Microsoft::Xna::Framework::Vector2& position, float pressure)` | NOXNA | yes | maps FNA non-public |
+| `NOXNA TouchLocation(int id, TouchLocationState state, const Microsoft::Xna::Framework::Vector2& position, TouchLocationState previousState, const Microsoft::Xna::Framework::Vector2& previousPosition, float pressure)` | NOXNA | yes | maps FNA non-public |
 | `bool TryGetPreviousLocation(TouchLocation& previousLocation) const` | STRICT | yes | matched |
 | `bool Equals(const TouchLocation& other) const` | STRICT | yes | matched |
 | `int GetHashCode() const` | STRICT | yes | matched |
@@ -641,8 +673,8 @@ documented collection-interface deviations below). Full per-type tables follow.
 | Member | Tag | In FNA | Note |
 |--------|-----|--------|------|
 | `TouchPanel() = delete` | STRICT | no | C++ special-member idiom (no XNA counterpart expected) |
-| `static constexpr intcs MAX_TOUCHES = 8` | STRICT | internal | FNA-internal (review tag) |
-| `static constexpr intcs NO_FINGER = -1` | STRICT | internal | FNA-internal (review tag) |
+| `NOXNA static constexpr intcs MAX_TOUCHES = 8` | NOXNA | internal | maps FNA non-public |
+| `NOXNA static constexpr intcs NO_FINGER = -1` | NOXNA | internal | maps FNA non-public |
 | `static intcs getDisplayWidthProperty()` | STRICT | yes | matched |
 | `static void setDisplayWidthProperty(intcs value)` | STRICT | yes | matched |
 | `static intcs getDisplayHeightProperty()` | STRICT | yes | matched |
