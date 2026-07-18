@@ -2038,6 +2038,119 @@ gone undetected — none of them assert the callback actually ran.
 
 ---
 
+## Phase 15 — Post-completion audit remediation, rounds 1-7 (2026-07-18) — SESSION HANDOFF
+
+**Read this first when resuming.** `plan_net.md`'s Phases 0-14 are all `[x]`, but seven
+consecutive independent audits on 2026-07-18 each found real gaps in the *previous round's own*
+"done" claims. Everything below is the state at the end of round 7. Branch `feature/net`,
+HEAD `d82f0b9a`, working tree clean, **17 commits not yet pushed** (push only when asked).
+
+### Where things stand
+
+| Area | Status |
+|---|---|
+| Net — `PendingPreHandshakeSends` queue | ✅ **Accepted by the auditor.** Do not change without a new concrete finding. |
+| Guide — password-masking test | ✅ Done, adversarially verified |
+| EasyGL — `EmissiveColor` shader fidelity | ✅ Fixed + discriminating pixel tests |
+| Docs honesty | ✅ Corrected repeatedly (incl. correcting my own wrong claims) |
+| **Avatar visuals** | ⚠️ **PARTIALLY FIXED — the one open item.** Wave still shows blue/skin fragments. |
+
+### Real bugs found and fixed (all measured, not assumed)
+
+1. **`AvatarRenderer::DrawRealEXT` called `EnableDefaultLighting()` *after* setting custom
+   ambient**, so the custom value was discarded on every draw call (commit `105167e2`).
+2. **EasyGL multiplied `EmissiveColor` by `DiffuseColor` twice** in `EnsureSkinnedProgram`,
+   `EnsureSkinnedVertexLitProgram`, `EnsureEnvMapped3DProgram` — FNA's `Lighting.fxh` adds it
+   *after* the multiply. Since ambient is pre-folded into emissive, ambient landed as
+   `ambient*diffuse²`, crushing dark materials. **This is why three earlier rounds of ambient
+   tuning failed.** Near-black pixels went 4.1-6.0% → **0.0%** (commit `d190e4ff`).
+3. **`fix_automatic_weights`' joint blend selected an infinite slab** — it tested only axial
+   distance along the bone with no perpendicular limit, so a laterally-pointing arm bone's slab
+   swept down through torso/hips/legs. Result: Pants weighted to `Shoulder.L/R` (108/107 verts).
+   Fixed with a perpendicular gate (commit `04de2084`).
+4. **Shoes shell covered only `Foot`**, so its rear cap burrowed into the `LowerLeg` capsule
+   (18.9% of shoe verts inside the body, worst -74mm). Extended to `LowerLeg` (commit `8fba7ea7`).
+5. **Garments were skinned with a different `blend_radius` than the body** (0.08 vs 0.1474) —
+   now derived identically (commit `8fba7ea7`).
+6. **Net queue lifecycle** — `HandleGamerLeaveBroadcast` never purged; drop counter contradicted
+   its own documented contract; no cleanup tests (commit `9ac7c2e4`).
+
+### Tooling added (use it — do not re-derive it)
+
+- `scripts/avatar_visual_regression_check.py` — renders male/female T-pose + male Wave through
+  the **real** pipeline; per-region boxes (groin, `foot_left`, `foot_right`, Wave
+  `torso_shoulder`) and a structural "speckle" metric. `--report` prints without enforcing.
+- `tools/avatar_builder/diagnose_avatar_mesh.py` — `crossings` (signed distance + face-normal
+  sign, attributed to nearest bone), `normals` (CSG singularities), `weights` (spurious bone
+  influences — this is what caught bug #3). Supports **`pose=<Clip>`** to evaluate deformed
+  geometry, which is essential: bind-pose-only measurement is blind to pose-dependent defects.
+
+### The one open defect, and what is now known about it
+
+Wave shows ragged blue (shirt) / skin fragments at shoulder and chest.
+
+**Round 7 reframed it.** With `pose=Wave` measurement, garment-vs-body crossing counts are
+**identical** to Stand0 (Shirt 64/228 both, Pants 21/285, Shoes 51/270) — only the attribution
+shifts onto the raised arm. So garment and body now deform *together* (bug #3's fix worked) and
+this is **not** deformation-induced. It is the same rest-pose interpenetration rotated into
+camera view. **Any fix must reduce the interpenetration itself, not the skinning.**
+
+Where it actually is (measured, `pose=Stand0`): Shirt→Head 19 verts at -0.131m (the `Spine1`
+shell's top cap = the collar), Shirt→LowerArm 24 (the cuffs), Shirt→Hips 7 (the hem),
+Pants→Spine1 13 at -0.135m (the waistband). **The waist pair is mutually hidden** — Pants' `Hips`
+shell (0.186) is wider than Shirt's `Spine` shell (0.176), so each buries in the other. The
+**visible** offenders are therefore only the **collar** and the **cuffs**.
+
+Why the obvious structural fix does not apply: a spherical cap at a joint extends in *every*
+direction, while neighbouring shells cover only *some* of them — so "is this end an interior
+joint?" is the wrong question.
+
+### FOUR approaches already disproven — do not retry
+
+| Approach | Measured outcome |
+|---|---|
+| Narrow `blend_radius` 1.6× → 0.8× avg bone radius | No clear improvement. Reverted. |
+| Trim garment capsule boundary caps by one radius | Pants burial **worse**: 21 → 39 verts inside. Reverted. |
+| Flat-capped `<cylinder>` shells + joint spheres (this plan's own former recommendation) | **Worse on every metric**: Wave speckle 120 → 200, groin 0 → 28, brightness 357 → 326. Joint spheres bulge out of thinner neighbouring shells. Reverted. |
+| Raise tessellation 12 → 32 segments | Genuinely smooths ragged edges, but does **not** remove fragments and costs **4.2× vertex data** (66KB → 277KB body+shirt). Reverted as an owner decision, not a fix. One-line change if wanted. |
+
+Note the flat-cap result means **Task 7.3's "capsules, not cylinder+sphere" conclusion still
+holds for garments on fresh evidence**, even though its original reasoning (pre-CSG
+`bpy.ops.object.join()` not welding) is obsolete.
+
+### Suggested next steps (in priority order)
+
+1. **Target the collar and cuffs specifically** — they are the only *visible* offenders, and the
+   waist/ankle ends must be left alone (round 5 proved trimming them globally makes Pants worse).
+   The shirt's `Spine1` top cap (radius 0.176 from z=1.40, reaching z=1.576) sits inside the Head
+   sphere (radius 0.15 centred z=1.60, bottom at z=1.45) — overlap ≈0.126m, matching the measured
+   -0.131m exactly.
+2. **Or size shells against the maximum body radius they must clear** along their span, rather
+   than against their own bone alone (a thin bone's shell, `Shoulder` 0.106, is narrower than the
+   fat segment it abuts, `Spine1` body 0.14).
+3. **Or accept it as a placeholder-art limitation** and close the audit on that basis — this is a
+   deliberately toy, procedurally-generated placeholder avatar, and shelling a body with convex
+   per-bone primitives has an inherent overlap floor.
+4. **Open owner decision:** tessellation 32 (smoother, 4.2× geometry) — yes or no?
+
+Verify anything attempted with `diagnose_avatar_mesh.py` (`crossings` **with `pose=Wave`**) plus
+`avatar_visual_regression_check.py`, then fresh male/female/Wave screenshots — not by eye alone,
+and not by moving the regression thresholds.
+
+### Standing lessons from these seven rounds
+
+- When repeated tuning of a *parameter* fails to move a defect, suspect the *formula*. Three of
+  the first four rounds attacked darkness at the lighting layer before anyone checked the shader
+  arithmetic against FNA.
+- When a visual defect resists visual debugging, enumerate the underlying data numerically. Bug
+  #3 was invisible to every screenshot-based check and surfaced only from a weights dump.
+- Never write a test for a multiplicative formula using operands of 0 or 1 — `x*x == x` there,
+  which is exactly why the emissive bug survived every pre-existing test.
+- A carefully-hedged "partially fixed, here's what's open" claim still needs re-verification; it
+  is not a substitute for measuring again.
+
+---
+
 ## Implementation quality rules (carried over, still binding)
 
 - Keep changes minimal but complete — no half-finished implementations.
