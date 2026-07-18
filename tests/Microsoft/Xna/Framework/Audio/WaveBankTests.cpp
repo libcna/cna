@@ -753,6 +753,21 @@ TEST(WaveBankTest, StreamingGetSoundEffectRejectsEntryLengthExceedingRealFileSiz
     EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(streamingWb, 0), nullptr);
 }
 
+// AUD-11-004: the non-streaming path's own equivalent bounds check (WaveBank.cpp:
+// `entry.dataOffset + entry.dataLength > fd.size()`, a separate code path from the streaming
+// check exercised just above) had no dedicated regression test. Reuses the exact same corrupt
+// fixture (entry playLength=1,000,000 against a file that's really only ~184 bytes) via the
+// *non-streaming* constructor instead, so the fully-resident `fileData` buffer's own size is
+// what the check runs against rather than a re-opened file's on-disk size.
+TEST(WaveBankTest, NonStreamingGetSoundEffectRejectsEntryLengthExceedingRealFileSize)
+{
+    WaveBank nonStreamingWb(&SharedEngine(), OversizedStreamingXwbFixturePath());
+    ASSERT_TRUE(nonStreamingWb.getIsPreparedProperty());
+    ASSERT_FALSE(WaveBankTestAccess::IsStreaming(nonStreamingWb));
+
+    EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(nonStreamingWb, 0), nullptr);
+}
+
 // ===================== IsDisposed / IsPrepared =====================
 
 // P9-HARDWARE-003: matches FNA exactly (WaveBank.cs, non-streaming ctor) -- a missing

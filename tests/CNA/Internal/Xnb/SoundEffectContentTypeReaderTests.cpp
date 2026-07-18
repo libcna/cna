@@ -373,3 +373,87 @@ TEST_F(SoundEffectContentTypeReaderTest, OversizedDataLengthAgainstTruncatedStre
         reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
         System::IO::EndOfStreamException);
 }
+
+// ---------------------------------------------------------------------------
+// AUD-06-011: formatLength drives two separate `int64_t skip = formatLength - 18[- 34]` /
+// `static_cast<int32_t>(skip)` computations (SoundEffectContentTypeReader.cpp) that must never
+// desynchronize the reader (silently read the wrong number of extension bytes) or read
+// out-of-bounds, however corrupt the declared value is. These tests exercise the boundary and
+// the pathological-large-value case specifically.
+// ---------------------------------------------------------------------------
+
+// formatLength=17 is one byte short of even covering its own cbSize field (16-byte base + 2-byte
+// cbSize = 18 minimum for any formatLength > 16) -- `skip = 17 - 18 = -1` must be caught by the
+// existing negative-count guard, not silently truncated/misread.
+TEST_F(SoundEffectContentTypeReaderTest, FormatLengthOneByteTooSmallForCbSizeThrowsCleanly)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(17);   // formatLength: > 16, but too small to contain even a cbSize field
+    w16(1);    // wFormatTag: PCM
+    w16(1);    // nChannels: mono
+    w32(44100); // nSamplesPerSec
+    w32(88200); // nAvgBytesPerSec
+    w16(2);    // nBlockAlign
+    w16(16);   // wBitsPerSample
+    w16(0);    // cbSize (read since formatLength > 16)
+    // No further bytes -- the reader should throw before ever trying to read a negative-length
+    // extension, so nothing past cbSize needs to exist for this fixture to be a valid test.
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    EXPECT_THROW(
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
+        ContentLoadException);
+}
+
+// A pathologically large formatLength (near uint32_t's own ceiling) must not desync the reader
+// into misreading downstream fields -- `skip` (int64) stays bounded by formatLength's own
+// uint32_t range, so casting to int32_t always either produces the correct positive value or
+// wraps to negative (caught by the existing guard), never a small-but-wrong positive value that
+// would silently consume the wrong number of bytes.
+TEST_F(SoundEffectContentTypeReaderTest, PathologicallyLargeFormatLengthThrowsCleanlyNotDesync)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(0xFFFFFFF0u); // formatLength: near uint32_t's ceiling
+    w16(1);            // wFormatTag: PCM
+    w16(1);            // nChannels: mono
+    w32(44100);        // nSamplesPerSec
+    w32(88200);        // nAvgBytesPerSec
+    w16(2);            // nBlockAlign
+    w16(16);           // wBitsPerSample
+    w16(0);            // cbSize
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    EXPECT_THROW(
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
+        ContentLoadException);
+}
