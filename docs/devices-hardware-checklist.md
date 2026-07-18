@@ -511,6 +511,44 @@ be run in this environment:**
    call successfully re-probes and resumes delivering samples rather than silently reusing
    a now-dead cached `manager_`/`sensor_` forever.
 
+## 6b. `AndroidSensorBridge` bounded event drain and backpressure counter (Task ANDR2-009, 2026-07-17)
+
+**Code under test:** `AndroidSensorBridge::Impl::Run()`'s inner drain loop now caps how
+many events it processes per outer-loop pass (`MaxEventsPerDrainBatch = 64`) before
+yielding back to the outer loop, which re-polls the looper and re-checks
+`rateChangeRequested_` immediately — previously the inner loop could, in principle, drain
+a continuous high-rate event flood indefinitely without ever returning to the outer loop,
+delaying a pending `SetSampleInterval()` request far longer than reasonable.
+`GetDrainBatchLimitHitCountForTesting()` counts how often this cap actually fires.
+
+**Important nuance found while investigating (do not re-litigate without re-checking the
+code):** the required work's "starve Stop" framing is only partially accurate —
+`stopRequested_` was **already** re-checked at the top of every single inner-loop
+iteration (confirmed by reading `Run()` before this task), so `Stop()` itself was never
+literally starved by this loop. What actually was unbounded was `rateChangeRequested_`.
+
+**What is already verified, without hardware:** `GetDrainBatchLimitHitCountForTesting()`
+itself (the getter, and its `0` default on a never-started/non-Android bridge) is
+host-tested — 2 new tests in `AndroidSensorBridgeTests.cpp`. This does **not** exercise
+the actual cap-hitting logic, which only fires from inside `Run()`'s real drain loop
+(Android-only, and only reachable under a genuine high-rate event flood).
+
+**Why this needs real hardware:** confirming the cap actually triggers under sustained
+high-rate delivery, and that a pending rate-change request is applied measurably sooner
+than it would have been without this cap, requires either a real high-rate Android sensor
+or a native fault-injection layer that can simulate one (`TEST2-005`'s own scope) — this
+container has neither. **Status: NOT RUN — hardware/TEST2-005 validation open.**
+
+**Steps:**
+1. On a real Android device, start a high-rate sensor stream (e.g. a game/demo requesting
+   the fastest supported `TimeBetweenUpdates`) and, while it is under sustained load, call
+   `SetSampleInterval()` with a different value — measure the delay before the new rate
+   actually takes effect (observable via a change in delivered sample cadence).
+2. If feasible, temporarily lower `MaxEventsPerDrainBatch` (or add ad hoc logging) to
+   confirm `GetDrainBatchLimitHitCountForTesting()` actually increments under this load,
+   and that the measured rate-change delay from step 1 improves relative to an unbounded
+   drain loop (e.g. by temporarily reverting this fix for an A/B comparison).
+
 ## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
 
 **Code under test:** `Detail::AndroidCompassBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`)

@@ -171,3 +171,22 @@ TEST(AndroidSensorBridgeTests, SetSampleIntervalDoesNotCrashAfterFailedStart)
     EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
     EXPECT_NO_THROW(bridge.SetSampleInterval(TimeSpan::FromMilliseconds(50.0)));
 }
+
+// Task ANDR2-009 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// on this (non-Android) host, GetDrainBatchLimitHitCountForTesting() always
+// returns 0 -- there is no worker thread on this platform to ever hit
+// Run()'s per-batch drain cap. The real Android drain-cap logic itself was
+// verified separately via a cross-compile of AndroidSensorBridge.cpp (not
+// runtime-exercised -- no Android device/emulator in this environment).
+TEST(AndroidSensorBridgeTests, GetDrainBatchLimitHitCountForTestingIsZeroOnNonAndroidPlatform)
+{
+    const AndroidSensorBridge bridge(1);
+    EXPECT_EQ(bridge.GetDrainBatchLimitHitCountForTesting(), 0);
+}
+
+TEST(AndroidSensorBridgeTests, GetDrainBatchLimitHitCountForTestingIsZeroAfterFailedStart)
+{
+    AndroidSensorBridge bridge(1);
+    EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
+    EXPECT_EQ(bridge.GetDrainBatchLimitHitCountForTesting(), 0);
+}

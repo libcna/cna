@@ -346,6 +346,21 @@ namespace Microsoft::Devices::Sensors::Detail
          */
         void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates);
 
+        /**
+         * @brief Test-only hook (Task ANDR2-009): how many times `Run()`'s inner drain loop hit its per-batch event cap.
+         *
+         * Counts real backpressure (more events were available than one
+         * batch drains before yielding back to the outer loop), not dropped
+         * or coalesced samples — every event is still delivered to the
+         * caller's callback exactly once; only how many get processed
+         * before the outer loop re-checks a pending `SetSampleInterval()`
+         * request is bounded. See `Run()`'s own doc comment for the full
+         * rationale. Always `0` on a platform with no native backend.
+         *
+         * @return The number of times the per-batch drain cap was hit.
+         */
+        [[nodiscard]] int GetDrainBatchLimitHitCountForTesting() const;
+
     private:
         struct Impl;
 

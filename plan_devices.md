@@ -7296,7 +7296,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Leak/heap snapshots stabilize over 100k cycles.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### ANDR2-009 — Bound event draining and implement backpressure/coalescing — OPEN
+### ANDR2-009 — Bound event draining and implement backpressure/coalescing — OPEN (drain cap and counter implemented and host-tested; Stop-latency/coalescing acceptance criteria need real hardware)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7309,6 +7309,60 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Stop latency remains below budget under a synthetic never-empty queue.
   - Published cadence and drop policy are deterministic.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - **Corrected the problem statement's own framing** after re-reading `Run()`: `stopRequested_`
+    was **already** re-checked at the top of every single inner-loop iteration before this
+    task (confirmed by reading the existing code, not assumed) — `Stop()` itself was never
+    literally starved by the inner drain loop. What actually was unbounded is
+    `rateChangeRequested_`, only re-checked once per *outer* loop iteration (right after
+    `ALooper_pollOnce()`) — under a continuous high-rate flood that never lets
+    `ASensorEventQueue_getEvents()` return `0`, the inner loop could in principle run
+    indefinitely without returning control to the outer loop, delaying a pending
+    `SetSampleInterval()` request far longer than reasonable. This distinction matters for
+    whoever next reads this task: the fix targets rate-change responsiveness specifically,
+    not a genuine Stop()-starvation bug that didn't exist.
+  - "Limit events or time per iteration": added `constexpr int MaxEventsPerDrainBatch = 64;`
+    — the inner loop now yields back to the outer loop (which immediately re-polls and
+    re-checks `rateChangeRequested_`) after processing this many events in one pass, even
+    if more are immediately available.
+  - "Prioritize stop/rate commands": satisfied for rate commands by the cap above (bounds
+    the worst-case delay to one batch's processing time); stop commands needed no separate
+    fix, per the corrected framing above.
+  - "Track dropped/coalesced counts": added `drainBatchLimitHitCountForTesting_`
+    (`std::atomic<int>`, incremented each time the cap fires) and a new public
+    `AndroidSensorBridge::GetDrainBatchLimitHitCountForTesting()`. Named deliberately, not
+    "dropped" or "coalesced": **no sample is ever dropped or coalesced by this fix** — every
+    event the loop sees is still delivered to the caller's callback exactly once, only how
+    many get processed *before yielding* is bounded. "Optionally coalesce to newest sample"
+    (the required work's own explicitly-optional bullet) was **not** implemented — that
+    would change observable delivery behavior (fewer callback invocations under sustained
+    high load, discarding older-but-still-valid samples), a real design decision judged out
+    of scope for this pass given the bullet's own "optionally" wording.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`,
+  `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
+  `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp`,
+  `docs/devices-hardware-checklist.md`.
+- **Tests:** 2 new tests in `AndroidSensorBridgeTests.cpp` — this file already hosts pure,
+  host-testable pieces of this Android-only class (`ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds()`,
+  etc.), so the new getter's plumbing (and its `0` default on a never-started/non-Android
+  bridge) is directly tested; the actual cap-hitting logic itself only runs inside `Run()`'s
+  real drain loop and cannot be exercised without a genuine high-rate event source. Scoped
+  filtered run (now including `AndroidSensorBridgeTests.*`): 319 tests, 315 passed, 4
+  pre-existing hardware-only skips, 0 failures — 2 new, both passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. `AndroidSensorBridge.cpp`
+  (the actual `Run()` wiring) verified via a successful Android NDK cross-compile of this
+  exact translation unit. Not applicable for TSan on the host — the new counter is a
+  worker-thread-only-written `std::atomic<int>`, no new lock-based concurrency introduced.
+- **Remaining limitations (explicitly OPEN, not fabricated):** confirming the cap actually
+  fires under sustained high-rate delivery, and that a pending rate-change request is
+  applied measurably sooner than an unbounded drain would allow, requires either a real
+  high-rate Android sensor or `TEST2-005`'s future native fault-injection layer — neither
+  exists in this container. Documented as a new hardware validation procedure in
+  `docs/devices-hardware-checklist.md` Section 6b. Left **OPEN** rather than CLOSED,
+  consistent with this pass's established convention: both acceptance criteria ("Stop
+  latency remains below budget under a synthetic never-empty queue", "published cadence
+  and drop policy are deterministic") describe behavior only a real or synthetic
+  high-throughput run can demonstrate.
 
 ### ANDR2-010 — Track requested and effective sample interval — OPEN
 

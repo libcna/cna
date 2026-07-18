@@ -225,6 +225,14 @@ namespace Microsoft::Devices::Sensors::Detail
         std::atomic<bool> rateChangeRequested_{false};
         System::TimeSpan pendingTimeBetweenUpdates_;
 
+        // Task ANDR2-009: written only by Run()'s own worker thread (never
+        // concurrently), read by GetDrainBatchLimitHitCountForTesting() from
+        // any thread -- atomic rather than stateMutex_-guarded purely
+        // because a plain relaxed counter is simpler here and there is no
+        // other field this needs to stay consistent with. See Run()'s own
+        // doc comment for what this counts.
+        std::atomic<int> drainBatchLimitHitCountForTesting_{0};
+
         // Startup handshake (Task: async startup reporting): Run() signals
         // one of these exactly once, early in its own execution, so
         // Start() can block (briefly, bounded) until real success/failure
@@ -482,6 +490,33 @@ namespace Microsoft::Devices::Sensors::Detail
                 }
 
                 ASensorEvent event;
+                // Task ANDR2-009 (2026-07-17, external audit
+                // `audit_devices_2026-07-17.md`): bounds how many events this
+                // inner loop drains before yielding back to the outer loop --
+                // stopRequested_ was already re-checked every inner
+                // iteration (see the comment below, unchanged), so Stop()
+                // itself was never literally starved by this loop; what
+                // *was* unbounded is rateChangeRequested_, only re-checked
+                // once per *outer* iteration (right after ALooper_pollOnce()
+                // above) -- under a continuous high-rate event flood that
+                // never lets eventCount reach 0, the inner loop could run
+                // indefinitely without ever returning control to the outer
+                // loop, delaying a pending SetSampleInterval() request far
+                // longer than its caller would reasonably expect. Capping
+                // this batch and returning to the outer loop -- which
+                // re-polls the looper and re-checks rateChangeRequested_
+                // immediately -- bounds that delay to (at most)
+                // MaxEventsPerDrainBatch events' worth of processing, not an
+                // entire flood. drainBatchLimitHitCountForTesting_ (see its
+                // own doc comment) tracks how often this actually happens,
+                // satisfying this task's "track dropped/coalesced counts"
+                // bullet -- no sample is ever dropped or coalesced by this
+                // fix (every event this loop sees is still delivered to
+                // callback_ exactly once), only its *draining* is bounded,
+                // so the counter's name reflects that.
+                constexpr int MaxEventsPerDrainBatch = 64;
+                int eventsDrainedThisBatch = 0;
+
                 // Re-checks stopRequested_ before every callback invocation,
                 // not just once per outer iteration: a callback can
                 // reentrantly call Stop() (e.g. the owning Compass/Motion
@@ -498,6 +533,12 @@ namespace Microsoft::Devices::Sensors::Detail
                 {
                     if (stopRequested_.load(std::memory_order_acquire))
                     {
+                        break;
+                    }
+
+                    if (eventsDrainedThisBatch >= MaxEventsPerDrainBatch)
+                    {
+                        drainBatchLimitHitCountForTesting_.fetch_add(1, std::memory_order_relaxed);
                         break;
                     }
 
@@ -541,6 +582,8 @@ namespace Microsoft::Devices::Sensors::Detail
                     {
                         break;
                     }
+
+                    ++eventsDrainedThisBatch;
 
                     AndroidSensorSample sample;
                     // Task ANDROID-BRIDGE-001 (2026-07-06): ValueCount now
@@ -1019,6 +1062,15 @@ namespace Microsoft::Devices::Sensors::Detail
         }
 #else
         (void)timeBetweenUpdates;
+#endif
+    }
+
+    int AndroidSensorBridge::GetDrainBatchLimitHitCountForTesting() const
+    {
+#ifdef __ANDROID__
+        return impl_->drainBatchLimitHitCountForTesting_.load(std::memory_order_relaxed);
+#else
+        return 0;
 #endif
     }
 } // namespace Microsoft::Devices::Sensors::Detail
