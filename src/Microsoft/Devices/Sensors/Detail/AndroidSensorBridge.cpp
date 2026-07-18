@@ -5,7 +5,6 @@
 #include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 
 #ifdef __ANDROID__
-#include <android/log.h>
 #include <android/looper.h>
 #include <android/sensor.h>
 
@@ -702,28 +701,42 @@ namespace Microsoft::Devices::Sensors::Detail
             // available (a failed disableSensor()/destroyEventQueue() here
             // means, at worst, the underlying native resource is left in
             // whatever state the platform's own driver decides, which this
-            // bridge cannot query or repair from here). Logged (debug builds
-            // only, __android_log_print rather than SDL_Log -- this file is
-            // deliberately SDL-free) so the failure is at least observable
-            // instead of silently disappearing, per this task's own "report
-            // cleanup failures without throwing from destructors" -- neither
-            // call can throw (they are plain C NDK functions), so there is
-            // no destructor-safety concern here, only a diagnostics one.
-            if (ASensorEventQueue_disableSensor(queue_, sensor_) < 0)
+            // bridge cannot query or repair from here).
+            //
+            // Task DEVPERF-005 (2026-07-18, external audit
+            // `audit_devices_2026-07-17.md`): routed through the shared
+            // Detail::NativeDiagnosticSink (replacing, not supplementing,
+            // the original bare __android_log_print() calls -- no host test
+            // reads this Android-only path's log text, so there is nothing
+            // to preserve alongside), the last of the four diagnostic call
+            // sites this task's own remaining-limitations note named.
+            // Record() is noexcept and does not itself throw, so calling it
+            // from this destructor-adjacent cleanup path introduces no new
+            // destructor-safety concern beyond what the original
+            // __android_log_print() calls already had none of either.
+            const int disableSensorResult = ASensorEventQueue_disableSensor(queue_, sensor_);
+            if (disableSensorResult < 0)
             {
-#ifndef NDEBUG
-                __android_log_print(ANDROID_LOG_WARN, "CNA",
-                    "AndroidSensorBridge: ASensorEventQueue_disableSensor failed for sensor type %d",
-                    sensorType_);
-#endif
+                NativeDiagnosticRecord record;
+                record.Backend = "Android";
+                record.Operation = "ASensorEventQueue_disableSensor";
+                record.NativeCode = disableSensorResult;
+                record.DeviceId = std::to_string(sensorType_);
+                record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+                record.Severity = NativeDiagnosticSeverity::Warning;
+                NativeDiagnosticSink::Record(record);
             }
-            if (ASensorManager_destroyEventQueue(manager_, queue_) < 0)
+            const int destroyEventQueueResult = ASensorManager_destroyEventQueue(manager_, queue_);
+            if (destroyEventQueueResult < 0)
             {
-#ifndef NDEBUG
-                __android_log_print(ANDROID_LOG_WARN, "CNA",
-                    "AndroidSensorBridge: ASensorManager_destroyEventQueue failed for sensor type %d",
-                    sensorType_);
-#endif
+                NativeDiagnosticRecord record;
+                record.Backend = "Android";
+                record.Operation = "ASensorManager_destroyEventQueue";
+                record.NativeCode = destroyEventQueueResult;
+                record.DeviceId = std::to_string(sensorType_);
+                record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+                record.Severity = NativeDiagnosticSeverity::Warning;
+                NativeDiagnosticSink::Record(record);
             }
             queue_ = nullptr;
 

@@ -6243,9 +6243,38 @@ test is not sufficient for an Android coordinate/fusion claim.
     Full precise filter (347 tests) clean under `devices-ubsan` (343 passed,
     4 hardware skips, 0 failures) and `devices-tsan` (3 runs on
     `AccelerometerTests`/`GyroscopeTests`, 0 `WARNING: ThreadSanitizer`).
-    **Remaining migration, still open**: `ANDR2-006` (Android-only, needs an
-    NDK-cross-compile-only verification pass, same as the `AndroidSensorBridge::
-    Run()` callback migration earlier this task).
+  - **2026-07-18, fifth and final named follow-up migration completed**:
+    `ANDR2-006`'s `ASensorEventQueue_disableSensor()`/
+    `ASensorManager_destroyEventQueue()` cleanup-failure diagnostics
+    (`AndroidSensorBridge.cpp`, this destructor-adjacent path's own bare
+    `__android_log_print()` calls) now route through
+    `NativeDiagnosticSink::Record()` (`Backend="Android"`,
+    `Operation="ASensorEventQueue_disableSensor"`/
+    `"ASensorManager_destroyEventQueue"`, `NativeCode` = the actual negative
+    return value — the first of these five migrations able to populate that
+    field with a real native error code rather than leaving it at its
+    default `0`, since both are plain C NDK functions returning `int`).
+    Replaced, not supplemented (no host test reads this Android-only path's
+    log text). `Record()` is `noexcept`, so calling it from this
+    destructor-adjacent cleanup path introduces no new destructor-safety
+    concern the original `__android_log_print()` calls didn't already avoid
+    identically. The now-unused `#include <android/log.h>` was removed (no
+    other `__android_log_print()`/`ANDROID_LOG_*` usage remains anywhere in
+    this file — confirmed by grep). `AndroidSensorBridge.cpp` re-verified via
+    NDK cross-compile (clean) and the host build (also clean — this file
+    compiles on every platform, Android-only code stays inert elsewhere).
+    Full precise filter (347 tests) still clean under `devices-ubsan`.
+  - **All five diagnostic call sites named in this task's own original
+    remaining-limitations note are now migrated.** An independent sweep of
+    the rest of the `Microsoft::Devices` tree (`SDL_OpenSensor`/
+    `SDL_OpenHaptic*`/`SDL_CreateHapticEffect`/`SDL_DestroyHapticEffect`/
+    `SDL_CloseHaptic`/`SDL_CloseSensor`/`SDL_InitSubSystem`/
+    `SDL_AddEventWatch`/`SDL_RemoveEventWatch`/`SDL_GetSensors`/
+    `SDL_GetHaptics`, and `ASensorManager_*`/`ASensorEventQueue_*`/
+    `ALooper_*`) for any further silent-swallow call sites this task's own
+    sweeping acceptance criterion ("**every** ignored native return value")
+    would still require — see this task's own closing note below for the
+    result and final CLOSED/OPEN decision.
 
 ### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)
 
