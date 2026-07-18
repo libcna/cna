@@ -12,12 +12,14 @@ the audit must continue fully autonomously per the original prompt's instruction
 Microsoft.Xna/Devices public API are audited **directly** by the main agent (judgment-heavy, FNA-parity/
 cross-backend work); large mechanical batches (examples, tests, tools) are fanned out via the Workflow tool.
 
-### Direct-audit backend work: 9 of 16 backend shards fully AUDITED
+### Direct-audit backend work: 10 of 16 backend shards fully AUDITED
 
 `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2), `backend-sdlrenderer` (2/2, the
 backend itself, not the example-test shard), `backend-dx3` (2/2, static-only per D-P4), `backend-easygl` (2/2,
 scoped-depth review of the 4733-line file), `backend-webgpu` (2/2, scoped-depth review of the 8805-line file — the
-largest in this audit), `backend-ascii` (6/6), `backend-canvas` (8/8).
+largest in this audit), `backend-ascii` (6/6), `backend-canvas` (8/8), **`backend-d3dcommon` (46/46, shared
+D3D11/D3D12 infrastructure — every one of the 34 `.hlsl` shader files individually read and reported on, plus all
+9 C++ layout/mapping files and the 3 shader-compile-tooling files)**.
 
 **Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
 `EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
@@ -25,20 +27,22 @@ defer registration until construction can no longer fail. `SdlGpu`, however, has
 resource-leak risk in the same area (see Findings below) — flagged in the cross-cutting doc but **not yet written
 up as a formal per-file finding**, since `backend-sdlgpu`'s own 27-file direct audit has not started yet.
 
-### Remaining backend shards — NOT YET STARTED (7 of 16)
+### Remaining backend shards — NOT YET STARTED (6 of 16)
 
-`backend-d3d11` (20 files), `backend-d3d12` (26), `backend-sdlgpu` (27 — priority: formalize the resource-leak
+`backend-d3d11` (20 files — its 20 non-shader files: shaders already fully covered via `backend-d3dcommon`
+above), `backend-d3d12` (26 — same relationship), `backend-sdlgpu` (27 — priority: formalize the resource-leak
 finding already spotted in its constructor), `backend-bgfx` (34), `backend-vulkan` (40), `backend-d3d9` (50, note
 D-5 vendored-shader boundary — the 12 vendored `.fx`/`.fxh` files are EXEMPT, only the C++ consumer code is
-in-scope), `backend-d3dcommon` (46, shared D3D9/D3D11/D3D12 infrastructure).
+in-scope).
 
 **For each of these, specifically check**: (1) does its SkinnedEffect/SkinnedPbrEffect shader share the
-world-space-normal-transform bug (confirmed in EasyGL/WebGPU/Vulkan so far — Vulkan's own backend shard is D3D9/
-D3D11/D3D12/Bgfx/SdlGpu/D3DCommon's sibling and hasn't been directly audited yet either, only its *examples* were,
-via the mechanical batch); (2) does it share the fog-formula bug (confirmed in EasyGL-fixed/Bgfx-broken/
-Vulkan-broken so far, via their example-test batches — Bgfx and Vulkan's own backend *source* hasn't been directly
-read yet, only inferred from test-file audits); (3) if it calls `RegisterForWindow`, does its constructor share
-either the EasyGL dangling-pointer bug or the SdlGpu resource-leak bug.
+world-space-normal-transform bug (now confirmed at the shader-source level in 5 of 14 backends: EasyGL, WebGPU,
+Vulkan, SdlGpu, D3D11+D3D12 — only Bgfx's own shader source remains unconfirmed); (2) does it share the
+fog-formula bug (confirmed in Bgfx/Vulkan/D3D11+D3D12 — D3D11/D3D12 is now the *widest* single instance, ALL 15
+fog-capable D3DCommon shaders affected); (3) if it calls `RegisterForWindow`, does its constructor share either
+the EasyGL dangling-pointer bug or the SdlGpu resource-leak bug. **`backend-d3d11`/`backend-d3d12`'s own
+non-shader files still need this check for (3)** (D3D11 confirmed NOT to call `RegisterForWindow` at all, per
+the constructor spot-check already done; D3D12 not yet checked).
 
 ### Mechanical-batch Workflow status (examples-tests-* shards)
 
@@ -78,15 +82,30 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **563** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
-  backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8,
+- AUDITED so far: **609** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+  backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
   examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70,
   examples-tests-webgpu ×22, examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22, examples-tests-generic ×24)
-- PENDING: **1734**
+- PENDING: **1688**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~24.5% AUDITED so far** (563/2297).
+**~26.5% AUDITED so far** (609/2297).
+
+`backend-d3dcommon` (46 files — shared D3D11/D3D12 shader source + layout/mapping infrastructure) is now fully,
+directly audited: every one of the 34 `.hlsl` files individually read line-by-line (not inferred from test
+behavior), confirming this shard shares 4 cross-cutting defects with maximum severity/breadth: (1) **ALL 15**
+fog-capable vertex shaders share the mirrored Task-1111 formula — the single widest instance of this bug in the
+whole audit; (2) **ALL 5** skinned vertex shaders share the world-space-normal-transform omission (4 complete
+omissions + 1 raw-World-not-inverse-transpose), while the 3 unskinned lit shaders in the same directory get it
+correctly right, proving the bug is a skinning-specific oversight; (3) `env_map3d.frag.hlsl` shares the
+`EnvironmentMapEffect` emissive-remultiply bug (5th confirmed backend-group overall); (4) all 4 `SkinnedEffect`
+fragment shaders lack an `EmissiveColor` cbuffer field entirely (narrower than but related to the already-confirmed
+Vulkan-specific ambient/emissive gap). Also found: 2 stale "NOT YET WIRED" doc comments in
+`D3DConstantBuffers.hpp` contradicted by actual, current backend usage. Positive findings: D3D11/D3D12 correctly
+and deliberately do NOT share Vulkan's `EnvironmentMapEffect` Y-flip bug (a genuine, well-documented backend
+difference, not an oversight); `D3DStateMapping.cpp`'s `TextureFilter` table is the most complete found in this
+audit (no collapsed/simplified compound-filter cases, unlike SdlGpu's disclosed gap in the same area).
 
 `examples-tests-webgpu` (22 files) and `examples-tests-d3d9` (14 files) batches both complete, 0 errors. WebGPU
 batch added a THIRD backend to the EnvironmentMapEffect emissive bug (Bgfx, now WebGPU too) and a new
@@ -165,26 +184,27 @@ audits) to confirm whether they share the same pattern.
 
 ## Last completed file
 
-`src/CNA/Internal/Backends/D3DCommon/shaders/skinned3d.vert.hlsl` and `pbr_skinned3d.vert.hlsl` (direct source
-read, ahead of the `backend-d3d11`/`backend-d3d12`/`backend-d3dcommon` shards' own full audits — findings recorded
-above). `examples-tests-sdlgpu` (22 files) and `examples-tests-generic` (24 files) mechanical batches both landed,
-verified on disk, marked AUDITED, and findings folded into this update.
+`backend-d3dcommon` shard — all 46 files (34 `.hlsl` shaders + 9 C++ layout/mapping files + 3 shader-compile
+tooling files) fully, directly audited and written up as individual `.audit.md` reports, marked AUDITED. This
+closes out the shared D3D11/D3D12 infrastructure entirely; only each backend's own non-shader `.cpp`/`.hpp` files
+remain for `backend-d3d11`/`backend-d3d12`.
 
 ## Next exact action
 
 1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_FINDINGS_INDEX.md`, `AUDIT_PROGRESS.md`, the
-   46 new `.audit.md` reports under `audit/examples/`, and the two updated manifest shard files) as one logical
-   batch, verifying staged paths are `audit/`-only first.
+   46 new `.audit.md` reports under `audit/include/.../D3DCommon/` and `audit/src/.../D3DCommon/`, and the updated
+   `backend-d3dcommon` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
 2. Resume `backend-d3d11`'s full 20-file direct audit (constructor/destructor at lines 87/111+ not yet read in
-   full; `RegisterForWindow` confirmed absent — no window-registry risk for this backend). Read
-   `skinned3d_vertexlit.vert.hlsl` and the two `.frag.hlsl` D3DCommon siblings in full to close out the one
-   remaining open question (whether `skinned3d_vertexlit` shares the bug too) before writing up `backend-d3dcommon`.
-3. Then `backend-d3d12` (26 files — shares the same D3DCommon shaders already found buggy, so those findings
-   transfer directly), `backend-d3dcommon` (46 files, the shared infrastructure itself), `backend-sdlgpu` (27 —
-   formalize the constructor resource-leak finding as a proper per-file report), `backend-bgfx` (34, backend source
-   itself — priority: confirm/refute whether Bgfx's own skinned shader shares the normal-transform bug, the one
-   backend not yet confirmed at the source level), `backend-vulkan` (40), `backend-d3d9` (50, note D-5 vendored
-   shader boundary).
+   full; `RegisterForWindow` confirmed absent — no window-registry risk for this backend). Since `backend-d3dcommon`
+   is now fully covered, this shard's remaining work is exclusively the backend's own `.cpp`/`.hpp` files (device/
+   context setup, buffers, textures, render targets, sprite batch, effect backend, state/input-layout caches,
+   occlusion query, sampler cache) — check each for its own bugs independent of the shared shader findings already
+   recorded.
+3. Then `backend-d3d12` (26 files — same non-shader-file scope, shares every `backend-d3dcommon` finding already
+   recorded), `backend-sdlgpu` (27 — formalize the constructor resource-leak finding as a proper per-file report),
+   `backend-bgfx` (34, backend source itself — priority: confirm/refute whether Bgfx's own skinned shader shares
+   the normal-transform bug, the one backend not yet confirmed at the source level), `backend-vulkan` (40),
+   `backend-d3d9` (50, note D-5 vendored shader boundary).
 4. After all remaining backend shards: Task #3 (CNA core), Task #4 (Microsoft.Xna areas — start with
    `xna-framework-core` 78, then `xna-graphics` 191 the largest, prioritizing `SpriteFont.cpp`/`SpriteBatch.cpp`
    given the UB finding above), Task #5 (Microsoft.Devices), then tests/tools/examples/docs/build (Tasks #6-9),
@@ -197,8 +217,8 @@ verified on disk, marked AUDITED, and findings folded into this update.
 | Ascii | backend-ascii | **AUDITED** |
 | Bgfx | backend-bgfx | PENDING (examples audited; backend source not yet) |
 | Canvas | backend-canvas | **AUDITED** |
-| D3D11 | backend-d3d11 | PENDING (examples audited; constructor spot-checked, no RegisterForWindow; shared D3DCommon skinned shaders confirmed buggy) |
-| D3D12 | backend-d3d12 | PENDING (examples audited; shares D3D11's D3DCommon shader findings) |
+| D3D11 | backend-d3d11 | PENDING (examples audited + shared D3DCommon shaders it compiles all fully audited; own 20 non-shader files not yet; constructor spot-checked, no RegisterForWindow) |
+| D3D12 | backend-d3d12 | PENDING (examples audited + shared D3DCommon shaders it compiles all fully audited; own 26 non-shader files not yet) |
 | D3D9 | backend-d3d9 | PENDING (examples audited; backend source not yet) |
 | Dx3 | backend-dx3 | **AUDITED** (static-only, D-P4) |
 | EasyGL | backend-easygl | **AUDITED** |
@@ -208,7 +228,7 @@ verified on disk, marked AUDITED, and findings folded into this update.
 | Software | backend-software | **AUDITED** |
 | Vulkan | backend-vulkan | PENDING (examples audited; backend source not yet) |
 | WebGPU | backend-webgpu | **AUDITED** |
-| D3DCommon (shared) | backend-d3dcommon | PENDING (2 of ~6 shader files in `shaders/` directly read: `skinned3d.vert.hlsl`, `pbr_skinned3d.vert.hlsl`, both confirmed buggy) |
+| D3DCommon (shared) | backend-d3dcommon | **AUDITED** (46/46: all 34 `.hlsl` shaders + 9 C++ files + 3 tooling files) |
 | Common (shared) | backend-common | **AUDITED** |
 
 `AUDIT_GRAPHICS_BACKEND_MATRIX.md`: still skeleton only — do not populate until all 16 backend shards are
@@ -253,7 +273,8 @@ consolidating what's already known rather than re-deriving it.
 13. `audit: resolve RegisterForWindow cross-cutting check, refresh progress`
 14. `audit: review WebGPU and D3D9 example test shards (36 files, via mechanical batches)`
 15. `audit: review SdlGpu and generic example test shards (46 files) + D3DCommon skinned-shader findings`
-16. *(next commit: continue backend-d3d11/d3d12/d3dcommon direct audit)*
+16. `audit: review D3DCommon backend (46 files, shared D3D11/D3D12 shader + layout infrastructure)`
+17. *(next commit: continue backend-d3d11/d3d12 direct audit — own non-shader files)*
 
 ## Self-check log
 

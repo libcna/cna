@@ -1,0 +1,49 @@
+# Audit: src/CNA/Internal/Backends/D3DCommon/shaders/sprite2d.frag.hlsl
+
+## Metadata
+
+- Source file: `src/CNA/Internal/Backends/D3DCommon/shaders/sprite2d.frag.hlsl`
+- Audit status: AUDITED
+- Subsystem: `backend-d3dcommon` shard (shared D3D11/D3D12 HLSL source)
+- File type: HLSL shader source
+- XNA/FNA relevance: SpriteBatch fragment stage
+- Graphics backend relevance: compiled into both the D3D11 and D3D12 backends via this shared directory
+- FNA reference: SpriteEffect.fx (implicit)
+- Main related tests: covered indirectly by `examples-tests-generic`/backend-specific example shards where a
+  cross-backend test happens to register on D3D11/D3D12; no D3D11/D3D12-specific shader unit test found
+
+## Purpose
+
+Trivial texture-sample-times-vertex-color pass-through.
+
+## Executive Verdict
+
+**Healthy.**
+
+## Checklist Results
+
+### API / XNA parity
+Correct, minimal implementation.
+
+### Logic
+Trivially correct.
+
+## Detailed Findings
+
+None.
+
+## Cross-File Observations
+
+Consistent minimal design with `instanced3d.frag.hlsl`.
+
+## Missing or Weak Tests
+
+No dedicated test found for this specific file (general SpriteBatch rendering is covered extensively elsewhere).
+
+## Positive Findings
+
+Deliberately minimal — nothing to get wrong.
+
+## Final Assessment
+
+No defects found.

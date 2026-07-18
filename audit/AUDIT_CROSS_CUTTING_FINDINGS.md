@@ -92,16 +92,27 @@ _(pending)_
   single defect** (2 backends, 6 shader variants, all traced to the same root formula) — high priority for the
   Pass 3 systematic FNA parity sweep and Pass 4 backend matrix to determine its true full extent (D3D9/D3D11/D3D12/
   SdlGpu/WebGPU/Software/SdlRenderer/Dx3/Canvas/Ascii/Headless not yet checked for the same formula).
-  **UPDATE (direct source read of the shared `D3DCommon` shaders ahead of the `backend-d3d11`/`backend-d3d12`
-  shard audits): `src/CNA/Internal/Backends/D3DCommon/shaders/skinned3d.vert.hlsl` — compiled into BOTH D3D11 and
-  D3D12 — has the identical mirrored formula, `(FogStartEnd.y - input.Position.z) / max(FogStartEnd.y -
-  FogStartEnd.x, 1e-6)` (algebraically `(FogEnd-z)/(FogEnd-FogStart)`).** This file's own header comment claims
-  the formula "matches EasyGL/Bgfx's established SkinnedEffect fog formula exactly" — a **false claim**: EasyGL's
-  real formula is the corrected, post-Task-1111 one; only Bgfx's is the mirrored/wrong one this comment actually
-  matches. This is revealing as a likely propagation mechanism: a later port copied whichever prior instance was
-  most convenient (Bgfx's) while believing, incorrectly, that it agreed with EasyGL's (since-fixed) version,
+  **UPDATE (direct, exhaustive source read of every fog-capable shader in the shared `D3DCommon` directory —
+  compiled into BOTH D3D11 and D3D12 — ahead of the `backend-d3d11`/`backend-d3d12`/`backend-d3dcommon` shard
+  audits): ALL 15 of D3DCommon's 15 fog-capable vertex shaders share the identical mirrored formula**,
+  `(FogEnd - z) / (FogEnd - FogStart)` in one of two equivalent spellings (`(FogStartEnd.y - input.Position.z) /
+  max(FogStartEnd.y - FogStartEnd.x, 1e-6)` or, for the two alpha-test shaders, `(FogEnd - input.Position.z) /
+  max(FogEnd - FogStart, 1e-6)`) — confirmed via `grep` across every `*.vert.hlsl` file in
+  `src/CNA/Internal/Backends/D3DCommon/shaders/`: `colored3d`, `colored_textured3d`, `textured3d`, `dual_texture3d`,
+  `lit_textured3d`, `lit_textured3d_vertexlit`, `env_map3d`, `pbr3d`, `skinned3d`, `skinned3d_vertexlit`,
+  `skinned_colored3d`, `skinned_colored3d_vertexlit`, `pbr_skinned3d`, `alpha_test3d`, `alpha_test_colored3d` (only
+  `sprite2d`/`instanced3d` have no fog term at all — consistent with FNA, which doesn't fog sprites). **This makes
+  D3D11+D3D12 the *most completely affected* backend-group found so far for this bug — not a handful of shaders
+  like Bgfx/Vulkan's partial coverage, but literally every fog-capable shader in the shared source.**
+  `skinned3d.vert.hlsl`'s own header comment claims the formula "matches EasyGL/Bgfx's established SkinnedEffect
+  fog formula exactly" and `alpha_test_colored3d.vert.hlsl`/`env_map3d.vert.hlsl` similarly cite "the established
+  Task 888 formula" — **both claims are false**: EasyGL's real formula is the corrected, post-Task-1111 one; only
+  Bgfx's (and apparently whatever Task 888 originally established) is the mirrored/wrong one these comments
+  actually match. This is revealing as a likely propagation mechanism: a later port copied whichever prior
+  instance was most convenient while believing, incorrectly, that it agreed with EasyGL's (since-fixed) version,
   rather than re-deriving the formula from FNA. **Raises the confirmed count to 3 backend-groups at the
-  shader-source level: Bgfx, Vulkan, and D3D11+D3D12 (shared D3DCommon source).**
+  shader-source level: Bgfx, Vulkan, and D3D11+D3D12 (shared D3DCommon source) — with D3D11+D3D12 now the
+  widest/most complete instance of the three.**
 - **CONFIRMED IN 3 BACKENDS: skinned-effect shaders skip the WorldInverseTranspose normal transform** (EasyGL,
   WebGPU — see below — and now **Vulkan**: `skinned3d.vert.glsl`/`skinned3d_vertexlit.vert.glsl` compute the lit
   normal as `mat3(skinMat)*aNormal` with no World-space composition, per `vulkan_skinnedeffect_preferperpixellighting_test.cpp`'s
@@ -133,13 +144,34 @@ _(pending)_
   `World`, not inverse-transpose" variant (`output.Normal = normalize(mul(mul(input.Normal, skinNormalMat),
   (float3x3)World))`), **self-documented in its own comment**: "plain World (NOT the inverse-transpose
   pbr3d.vert.hlsl's unskinned sibling uses)" — i.e. the author of this shader already knew the correct convention
-  (visible one file away) and used the wrong one anyway for the skinned variant. `skinned3d_vertexlit.vert.hlsl`
-  and both `.frag.hlsl` siblings in the same directory have not yet been fully read to confirm/rule out the same
-  pattern — queued for the `backend-d3dcommon`/`backend-d3d11`/`backend-d3d12` shard audits.
+  (visible one file away) and used the wrong one anyway for the skinned variant.
+  **UPDATE (exhaustive read of every D3DCommon vertex shader that computes a lighting normal): `skinned3d_vertexlit.vert.hlsl`
+  DOES share the identical complete-omission bug** (`float3 N = normalize(mul(input.Normal, (float3x3)skinMat))`,
+  line 75 — plus it independently shares the same mirrored fog formula, see above). Two more sibling skinned
+  shaders confirmed the same way: `skinned_colored3d.vert.hlsl` (`output.Normal = normalize(mul(input.Normal,
+  (float3x3)skinMat))`) and `skinned_colored3d_vertexlit.vert.hlsl` (`float3 N = normalize(mul(input.Normal,
+  (float3x3)skinMat))`) — **so all 4 of D3DCommon's non-PBR skinned vertex shaders share the complete-omission
+  variant, and the 1 PBR-skinned shader shares the raw-World variant: 5 for 5, no exceptions.** Crucially, this
+  same directory contains the control group proving the D3DCommon author knew the correct convention and only got
+  skinning wrong: all 3 **unskinned** lit vertex shaders — `lit_textured3d.vert.hlsl`, `pbr3d.vert.hlsl`,
+  `lit_textured3d_vertexlit.vert.hlsl` — correctly compute `float3x3 normalMatrix =
+  InverseTranspose3x3((float3x3)World)` and use it. This is the cleanest evidence yet in this audit that the bug
+  is specifically "skinning code forgets to compose the outer world-space normal matrix," not a general
+  unfamiliarity with the inverse-transpose convention.
   **This raises the confirmed-at-shader-source-level count to 5 of 14 backends: EasyGL, WebGPU, Vulkan, SdlGpu,
   D3D11+D3D12 (shared D3DCommon)** — only Bgfx's *own* skinned shader source (as opposed to its already-audited
   *test* files, which only infer the bug from masked test behavior) remains unconfirmed at the direct-source-read
   level among backends with a SkinnedEffect implementation.
+  **Also confirmed while reading these files: D3D's own `env_map3d.vert.hlsl` — also "ported line-by-line from
+  Vulkan" per its header comment — correctly and deliberately omits Vulkan's Y-flip**, a genuine, positive,
+  non-bug backend difference: a family-wide, well-documented convention across every D3DCommon 3D vertex shader
+  (`colored3d.vert.hlsl`'s comment explains it most fully) states D3D's clip space already matches XNA's own
+  convention, unlike Vulkan's inverted-Y NDC, so the Vulkan-specific Y-flip fix must NOT be carried over. Verified
+  this holds for `env_map3d` specifically too (`textured3d`/`sprite2d`/`colored3d` were the ones whose comments
+  discuss it, not actual flip code — double-checked to avoid a false read). **D3D11/D3D12 do NOT share Vulkan's
+  `EnvironmentMapEffect` Y-flip bug** — worth recording precisely because it shows the porting process *can*
+  correctly localize a backend-specific fix when done right, making the skinned-normal/fog-formula omissions look
+  more like genuine oversights than an inability to handle backend nuance in general.
 - **NEW: a *second*, distinct fog defect — "object-space-only fog" (ignores World/View for the Z used in the fog
   calculation), separate from the Task-1111 mirrored-formula bug above.** Confirmed in D3D9's own custom shaders:
   `SkinnedVertexColor3D.hlsl` (via `d3d9_skinnedvertexcolor_test.cpp`'s audit) and, per that same report, also
@@ -155,6 +187,20 @@ _(pending)_
   (`vulkan_skinnedeffect_combined_test.cpp`, `_preferperpixellighting_test.cpp`, `_specular_test.cpp`,
   `_vertexcolor_test.cpp` — the last of which explicitly identifies the defect in its own header comment and
   deliberately routes around it by setting `AmbientLightColor=0`, per that file's audit).
+  **UPDATE, D3D11+D3D12-specific (narrower variant, found via direct source reading): the shared `D3DCommon`
+  `SkinnedEffect` fragment shaders (`skinned3d.frag.hlsl`, `skinned3d_vertexlit.frag.hlsl`,
+  `skinned_colored3d.frag.hlsl`, `skinned_colored3d_vertexlit.frag.hlsl`) have no `EmissiveColor` cbuffer field at
+  all** — compare their `PerDraw`/`FogParams` cbuffer layouts (no `Emissive*` member anywhere) against their
+  *unskinned* siblings `lit_textured3d.frag.hlsl`/`lit_textured3d_vertexlit.frag.hlsl`, which both carry an
+  explicit `EmissiveColorPad` field consumed in the lit formula (`lit = lightSum * Tint.rgb +
+  EmissiveColorPad.xyz`). Unlike the Vulkan case, `AmbientColor` **is** present and consumed correctly in all 4
+  D3DCommon skinned shaders (`litRGB = (AmbientColor + lightSum) * DiffuseColor.rgb`) — so only the
+  `EmissiveColor` half of this defect transfers to D3D11/D3D12, not the `AmbientColor` half. This is a 2nd,
+  independent backend-group confirmation that `SkinnedEffect`'s `EmissiveColor` support tends to get dropped
+  during porting — worth checking the C++ side (`SkinnedEffect::FillGpuDrawParams` and each backend's
+  draw-param-fill code) to see whether the value is computed and discarded, or never plumbed through at all. Not
+  shared by `SkinnedPbrEffect`'s `pbr_skinned3d.frag.hlsl`, whose cbuffer layout is copied wholesale from the
+  already-correct unskinned `pbr3d.frag.hlsl` and does carry `EmissiveRoughness.xyz`.
 - **NEW, Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip present in every other core Vulkan 3D vertex
   shader**, causing `EnvironmentMapEffect` scenes to render vertically mirrored on Vulkan. Confirmed across 4 test
   files (`vulkan_env_map_test.cpp`, `_amount_one_test.cpp`, `_amount_zero_test.cpp`, `_combined_test.cpp`,
@@ -164,7 +210,7 @@ _(pending)_
   `environmentmapeffect_alphascaledlerp_test.cpp` (a shared cross-backend test file, registered on Vulkan among
   others) exercises this exact shader and is masked for the identical reason (identity View, center-pixel-only
   sampling).
-- **CONFIRMED IN 4 BACKENDS (Bgfx, WebGPU, Vulkan, SdlGpu): `EnvironmentMapEffect`'s fragment shader
+- **CONFIRMED IN 5 BACKENDS (Bgfx, WebGPU, Vulkan, SdlGpu, D3D11+D3D12): `EnvironmentMapEffect`'s fragment shader
   re-multiplies `EmissiveColor` by `DiffuseColor`** instead of adding it unscaled (FNA's `Lighting.fxh` convention,
   explicitly confirmed by this project's own `EnvironmentMapEffect.cpp` comment stating the unscaled-add is
   required to "match FNA"). Confirmed across 5 Bgfx test files (`bgfx_environmentmapeffect_eyeposition_test.cpp`,
@@ -173,13 +219,17 @@ _(pending)_
   fragment shader: `litRGB=(emissiveAmount+lightSum)*diffuseColor`), **Vulkan** (previously only suspected from
   test-file phrasing; now independently confirmed via the `examples-tests-generic` batch's direct read of Vulkan's
   own `env_map3d.frag.glsl` while auditing `environmentmapeffect_alphascaledlerp_test.cpp` — resolving the prior
-  "unconfirmed" note), and now **SdlGpu** (`src/CNA/Internal/Backends/SdlGpu/shaders/env_map3d.frag.glsl`, found
-  via `sdlgpu_envmap_test.cpp`'s and `sdlgpu_smoke_test.cpp`'s audits: `litRGB = (emissiveAmount + lightSum) *
-  DiffuseColor`, byte-for-byte the same formula shape) — all masked because no test in any family varies
-  `DiffuseColor` away from its default white or `EmissiveColor`/`AmbientLightColor` away from black. **A third
-  systemic, multi-backend defect for this audit, alongside the fog-formula and skinned-normal-transform bugs, now
-  the 4-backend-widest of the three** — remaining unchecked: D3D9/D3D11/D3D12/Software/SdlRenderer/Dx3/Canvas/
-  Ascii/Headless's own `EnvironmentMapEffect` shaders.
+  "unconfirmed" note), **SdlGpu** (`src/CNA/Internal/Backends/SdlGpu/shaders/env_map3d.frag.glsl`, found via
+  `sdlgpu_envmap_test.cpp`'s and `sdlgpu_smoke_test.cpp`'s audits: `litRGB = (emissiveAmount + lightSum) *
+  DiffuseColor`, byte-for-byte the same formula shape), and now **D3D11+D3D12** (direct read of the shared
+  `src/CNA/Internal/Backends/D3DCommon/shaders/env_map3d.frag.hlsl`, also explicitly "ported line-by-line from
+  Vulkan" per its own header comment: `float3 litRGB = (EmissiveEm.xyz + lightSum) * DiffuseColor.rgb;`) — all
+  masked because no test in any family varies `DiffuseColor` away from its default white or
+  `EmissiveColor`/`AmbientLightColor` away from black. **A third systemic, multi-backend defect for this audit,
+  alongside the fog-formula and skinned-normal-transform bugs, now the widest of the three at 5 backend-groups**
+  — remaining unchecked: D3D9/Software/SdlRenderer/Dx3/Canvas/Ascii/Headless's own `EnvironmentMapEffect` shaders
+  (Headless/Ascii/Software/Canvas/Dx3/SdlRenderer likely don't implement `EnvironmentMapEffect`'s reflection math
+  at all given their simpler rendering models — worth a quick capability check rather than assuming parity).
 - **NEW, WebGPU-specific: `SpriteBatch`'s clip-space mapping is always backbuffer-relative, never
   render-target-relative.** `WebGPUGraphicsBackend::QueueSprite()` derives its clip-space viewport exclusively
   from the backbuffer's physical/virtual size via `ComputeLogicalViewport()`, never from the currently-bound
@@ -283,6 +333,11 @@ _(pending)_
   passes) into believing a fixed issue is still open. Recommend (not implemented by this audit) a periodic sweep
   specifically for "Task NNN"/"known bug"/"currently broken"-style comments cross-checked against `git log`/
   current source, independent of any one file's own audit.
+- **`D3DConstantBuffers.hpp`'s `D3DLightingConstants`/`D3DBoneConstants` doc comments claim "NOT YET WIRED into
+  any draw call"** (referencing DX-60/DX-60a, ahead of DX-63/DX-67 landing), **but both are directly confirmed
+  actively used today** in both `D3D11GraphicsBackend.cpp` (lines 1655, 1531/1577) and
+  `D3D12GraphicsBackend.cpp` (lines 2001, 1865/1926) — found while auditing the `backend-d3dcommon` shard. A
+  5th-6th instance of this audit's recurring documentation-rot pattern.
 - **Tests asserting metadata/capacity instead of actual data content or actual code-path execution**: a recurring
   shape across the EasyGL example-test shard — `easygl_vertexbuffer_setdata_test.cpp` (capacity getters only, never
   checks uploaded bytes), `easygl_dynamic_buffer_stress_test.cpp` (index-buffer half never actually draws

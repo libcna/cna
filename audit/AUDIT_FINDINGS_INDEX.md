@@ -28,13 +28,16 @@ _(none recorded yet)_
   behavior in `SpriteFont.cpp:101-111`/`SpriteBatch.cpp:457-465`. FNA throws `KeyNotFoundException` in the
   equivalent case. See [audit report](examples/sprite_font_test.cpp.audit.md) and
   `AUDIT_CROSS_CUTTING_FINDINGS.md` (Production correctness bugs outside the graphics-backend layer).
-- **`env_map3d.frag.glsl`'s `EmissiveColor`-re-multiply bug now confirmed in a 4th backend, SdlGpu** (after
-  Bgfx/WebGPU/Vulkan) — same `(emissiveAmount+lightSum)*DiffuseColor` shape. See
-  [audit report](examples/sdlgpu_envmap_test.cpp.audit.md),
-  [audit report](examples/sdlgpu_smoke_test.cpp.audit.md), and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`env_map3d.frag`'s `EmissiveColor`-re-multiply bug now confirmed in 5 backends: Bgfx, WebGPU, Vulkan, SdlGpu,
+  and D3D11+D3D12** (shared `D3DCommon/shaders/env_map3d.frag.hlsl`, also explicitly "ported line-by-line from
+  Vulkan") — same `(emissiveAmount+lightSum)*DiffuseColor` shape everywhere. See
+  [audit report](examples/sdlgpu_envmap_test.cpp.audit.md), [audit report](examples/sdlgpu_smoke_test.cpp.audit.md),
+  and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **The skinned-normal-transform bug (missing world-space normal-matrix contribution) is now confirmed at the
   shader-source level in 5 of 14 backends: EasyGL, WebGPU, Vulkan, SdlGpu, and D3D11+D3D12 (shared `D3DCommon`
-  source).** The shared `D3DCommon/shaders/skinned3d.vert.hlsl` (compiled into both D3D11 and D3D12) carries an
+  source) — and within D3DCommon specifically, confirmed in ALL 5 of its skinned vertex shaders (`skinned3d`,
+  `skinned3d_vertexlit`, `skinned_colored3d`, `skinned_colored3d_vertexlit`, `pbr_skinned3d`), with zero
+  exceptions.** The shared `D3DCommon/shaders/skinned3d.vert.hlsl` (compiled into both D3D11 and D3D12) carries an
   explicit header comment stating it was **"Ported line-by-line from
   `src/CNA/Internal/Backends/Vulkan/shaders/skinned3d.vert.glsl,"`** the clearest direct evidence yet of the
   cross-backend porting chain that propagated this bug (alongside the already-confirmed EasyGL→WebGPU chain).
@@ -42,7 +45,12 @@ _(none recorded yet)_
   `sdlgpu_smoke_test.cpp`'s audit). The related but distinct "raw World instead of inverse-transpose" variant
   (rather than a complete omission) is separately confirmed in `pbr_skinned3d.vert.hlsl` (D3DCommon, shared
   D3D11/D3D12), `pbr_skinned3d.vert.glsl` (SdlGpu), `EnsurePbrSkinnedProgram` (EasyGL), and D3D9's own
-  `PbrSkinned3D.hlsl`. Only Bgfx's *own* skinned shader source remains unconfirmed at the direct-source-read level
+  `PbrSkinned3D.hlsl`. **D3DCommon's own 3 unskinned lit vertex shaders (`lit_textured3d`, `pbr3d`,
+  `lit_textured3d_vertexlit`) correctly use the inverse-transpose convention** — clean proof this is a
+  skinning-specific oversight, not general unfamiliarity with the correct math. Also confirmed while reading this
+  directory: **D3D11/D3D12 do NOT share Vulkan's `EnvironmentMapEffect` Y-flip bug** — a genuine, deliberate,
+  well-documented backend difference (D3D's clip-space convention already matches XNA's, unlike Vulkan's), not an
+  oversight. Only Bgfx's *own* skinned shader source remains unconfirmed at the direct-source-read level
   (only inferred so far from masked test behavior). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity
   gaps) for full detail and every originating test/source reference.
 - **EasyGL backend: a constructor failure after `RegisterForWindow()` but before construction completes leaves a
@@ -54,12 +62,15 @@ _(none recorded yet)_
   `GetForWindow()`'s result unconditionally — a subsequent mouse/input event on that window would be a
   use-after-free. **The most severe confirmed finding in this audit so far.** See
   [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F1.
-- **CONFIRMED IN 2 BACKENDS, 6 SHADER VARIANTS — the pre-Task-1111 fog formula (already proven wrong by this
-  project's own XNA-oracle diff and fixed in EasyGL) was never ported to Bgfx or Vulkan.** Bgfx's
-  `vs_alpha_test3d.sc`/`vs_colored3d.sc`/`vs_lit_textured3d.sc` and Vulkan's `textured3d.vert.glsl`/
-  `env_map3d.vert.glsl` (and by extension likely every other Vulkan 3D fog shader) all use the mirror-image
-  `(FogEnd-z)/(FogEnd-FogStart)` formula instead of the FNA-correct `(z+FogEnd)/(FogEnd-FogStart)`. **This is this
-  audit's single most widely-confirmed defect.** Full detail and all 6 originating test-file reports in
+- **CONFIRMED IN 3 BACKEND-GROUPS — the pre-Task-1111 fog formula (already proven wrong by this project's own
+  XNA-oracle diff and fixed in EasyGL) was never ported to Bgfx, Vulkan, or D3D11/D3D12.** Bgfx's
+  `vs_alpha_test3d.sc`/`vs_colored3d.sc`/`vs_lit_textured3d.sc`, Vulkan's `textured3d.vert.glsl`/
+  `env_map3d.vert.glsl`, and — confirmed by an exhaustive direct read of every fog-capable shader in the shared
+  `D3DCommon` directory — **all 15 of D3DCommon's 15 fog-capable vertex shaders** (compiled into both D3D11 and
+  D3D12) all use the mirror-image `(FogEnd-z)/(FogEnd-FogStart)` formula instead of the FNA-correct
+  `(z+FogEnd)/(FogEnd-FogStart)`. **D3D11/D3D12 is the widest single instance of this bug found in the audit so
+  far — not a handful of shaders, but literally every fog-capable shader in the shared source.** This is this
+  audit's single most widely-confirmed defect. Full detail and all originating reports in
   `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity gaps).
 - *(superseded by the 5-backend skinned-normal-transform entry above)* Vulkan's `skinned3d.vert.glsl`/
   `skinned3d_vertexlit.vert.glsl` share the same missing-world-space-normal-transform defect already confirmed in
@@ -67,8 +78,11 @@ _(none recorded yet)_
 - **Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned shaders
   never consume `emissiveColor`** — silently drops `AmbientLightColor`/`EmissiveColor` for skinned models on
   Vulkan only. Confirmed across 4 test files; this is also the reason `Vulkan_AvatarRenderer_TintRouting`
-  coincidentally passes despite the EasyGL sibling failing (see the currently-failing-CTest entry above). See
-  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+  coincidentally passes despite the EasyGL sibling failing (see the currently-failing-CTest entry above).
+  **A narrower variant now confirmed in D3D11+D3D12 too**: the shared `D3DCommon` `SkinnedEffect` fragment
+  shaders (`skinned3d.frag.hlsl` and its 3 siblings) have no `EmissiveColor` cbuffer field at all, unlike their
+  unskinned siblings which do — `AmbientColor` IS correctly present/consumed here, unlike Vulkan, so only the
+  `EmissiveColor` half of the defect transfers. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip every other core Vulkan 3D vertex shader has**,
   rendering `EnvironmentMapEffect` scenes vertically mirrored. Confirmed across 5 test files (a 5th masked instance
   since found via `environmentmapeffect_alphascaledlerp_test.cpp`); see `AUDIT_CROSS_CUTTING_FINDINGS.md`.
