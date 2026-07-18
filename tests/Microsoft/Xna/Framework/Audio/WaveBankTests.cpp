@@ -1066,6 +1066,40 @@ TEST(WaveBankTest, GetSoundEffectForAdpcmEntrySucceeds)
     }
 }
 
+// AUD-11-013: the loose non-zero duration check above doesn't confirm the samplesPerBlock formula
+// ((wBlockAlign_raw + 16) * 2, AUD-11-012) actually matches how many PCM frames SDL3's own
+// MS-ADPCM decoder produces per block -- this asserts the exact expected duration.
+// BuildAdpcmXwbFixtureBytes uses blockAlign=30, blockCount=4, wBlockAlign_raw=8, sampleRate=22050
+// mono, so samplesPerBlock = (8+16)*2 = 48, giving exactly 4*48 = 192 decoded frames total (no
+// partial trailing block, every block in the fixture is a complete, fully-aligned one).
+TEST(WaveBankTest, GetSoundEffectForAdpcmEntryDecodesExactFrameCountFromSamplesPerBlockFormula)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, XwbAdpcmFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+
+        const SoundEffect* effect = WaveBankTestAccess::GetSoundEffect(wb, 0);
+        ASSERT_NE(effect, nullptr)
+            << "MS-ADPCM entry failed to decode -- see AUDIO-ADPCM-001";
+
+        constexpr int samplesPerBlock = (8 + 16) * 2; // wBlockAlign_raw=8, AUD-11-012's formula
+        constexpr int blockCount = 4;
+        constexpr int expectedFrames = samplesPerBlock * blockCount;
+        constexpr double expectedSeconds = static_cast<double>(expectedFrames) / 22050.0;
+
+        EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), expectedSeconds, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not construct WaveBank/AudioEngine";
+    }
+}
+
 // AUD-11-010/011 (2026-07-17 deep audit): CNA has no XMA/WMA decode path anywhere in this stack
 // (SDL3 doesn't decode either) -- GetSoundEffect() must return nullptr cleanly for an XMA-tagged
 // entry, not crash or silently construct a garbage SoundEffect from the raw compressed bytes. This
