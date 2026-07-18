@@ -376,6 +376,45 @@ TEST(MotionTests, CalibrateFiresFromBackendCalibrationCallback)
     EXPECT_TRUE(invoked);
 }
 
+// Task DEVPERF-004 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// mirrors CompassTests.RemovingAnotherNotYetInvokedCalibrateHandlerDuringDispatchStillInvokesIt
+// -- Motion's Calibrate.Raise() goes through the same System::EventHandler<T>::Raise()
+// snapshot mechanism and needed its own direct proof, not just analogy to Compass.
+TEST(MotionTests, RemovingAnotherNotYetInvokedCalibrateHandlerDuringDispatchStillInvokesIt)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    using Token = System::EventHandler<CalibrationEventArgs>::Token;
+
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    m.Calibrate.Add(
+        [&m, &secondToken](System::Object*, const CalibrationEventArgs&)
+        {
+            m.Calibrate.Remove(secondToken);
+        });
+
+    secondToken = m.Calibrate.Add(
+        [&secondHandlerInvoked](System::Object*, const CalibrationEventArgs&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnCalibrationNeeded));
+    fake->CapturedOnCalibrationNeeded();
+
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    secondHandlerInvoked = false;
+    fake->CapturedOnCalibrationNeeded();
+    EXPECT_FALSE(secondHandlerInvoked);
+}
+
 // Task DEVICES-0113: with a supported fake backend injected, Start() must
 // actually succeed (not throw) and transition to Ready.
 TEST(MotionTests, WithInjectedSupportedBackendStartSucceeds)
@@ -429,6 +468,101 @@ TEST(MotionTests, CurrentValueChangedFiresFromBackendReading)
     ASSERT_TRUE(invoked);
     EXPECT_EQ(received.getDeviceRotationRateProperty(), Vector3(0.01f, 0.02f, 0.03f));
     EXPECT_TRUE(m.getIsDataValidProperty());
+}
+
+// Task DEVPERF-004 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// mirrors AccelerometerTests/GyroscopeTests/CompassTests.
+// RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt -- Motion dispatches
+// CurrentValueChanged through the same SensorBase<T>::SetCurrentValueAndMarkDataValid()/
+// System::EventHandler<T>::Raise() path as the other three sensor classes, so it must
+// honor the same snapshot-based handler-list mutation guarantee.
+TEST(MotionTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    using Args = SensorReadingEventArgs<MotionReading>;
+    using Token = System::EventHandler<Args>::Token;
+
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    m.CurrentValueChanged.Add(
+        [&m, &secondToken](System::Object*, const Args&)
+        {
+            m.CurrentValueChanged.Remove(secondToken);
+        });
+
+    secondToken = m.CurrentValueChanged.Add(
+        [&secondHandlerInvoked](System::Object*, const Args&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading firstReading(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    fake->CapturedOnReading(firstReading);
+
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    secondHandlerInvoked = false;
+    const MotionReading secondReading(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.04f, 0.05f, 0.06f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    fake->CapturedOnReading(secondReading);
+    EXPECT_FALSE(secondHandlerInvoked);
+}
+
+// Task DEVPERF-004: mirrors AccelerometerTests/GyroscopeTests/CompassTests.
+// HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState -- proves the same
+// reentrancy guarantee holds for Motion's CurrentValueChanged dispatch when driven by
+// a backend callback rather than a synthetic-injection test hook.
+TEST(MotionTests, HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    bool reentered = false;
+    std::vector<float> observedRotationRateX;
+
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+
+    m.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<MotionReading>& args)
+    {
+        observedRotationRateX.push_back(args.getSensorReadingProperty().getDeviceRotationRateProperty().X);
+        if (!reentered)
+        {
+            reentered = true;
+            const MotionReading innerReading(
+                attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.99f, 0.05f, 0.06f), Vector3(0.0f, -1.0f, 0.0f),
+                System::DateTimeOffset::getUtcNowProperty());
+            fake->CapturedOnReading(innerReading);
+        }
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const MotionReading outerReading(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    fake->CapturedOnReading(outerReading);
+
+    ASSERT_EQ(observedRotationRateX.size(), 2u);
+    EXPECT_FLOAT_EQ(observedRotationRateX[0], 0.01f);
+    EXPECT_FLOAT_EQ(observedRotationRateX[1], 0.99f);
+    EXPECT_FLOAT_EQ(m.getCurrentValueProperty().getDeviceRotationRateProperty().X, 0.99f);
 }
 
 // Task MOT2-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):

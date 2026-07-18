@@ -412,6 +412,91 @@ TEST(CompassTests, CurrentValueChangedFiresFromBackendReading)
     EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 42.0);
 }
 
+// Task DEVPERF-004 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// mirrors AccelerometerTests/GyroscopeTests.RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt
+// -- Compass dispatches CurrentValueChanged through the same
+// SensorBase<T>::SetCurrentValueAndMarkDataValid()/System::EventHandler<T>::Raise()
+// path as Accelerometer/Gyroscope, so it must honor the same snapshot-based
+// handler-list mutation guarantee, proven here via the fake backend's
+// synchronous CapturedOnReading() callback rather than InjectSyntheticSensorUpdate().
+TEST(CompassTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    using Args = SensorReadingEventArgs<CompassReading>;
+    using Token = System::EventHandler<Args>::Token;
+
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    c.CurrentValueChanged.Add(
+        [&c, &secondToken](System::Object*, const Args&)
+        {
+            c.CurrentValueChanged.Remove(secondToken);
+        });
+
+    secondToken = c.CurrentValueChanged.Add(
+        [&secondHandlerInvoked](System::Object*, const Args&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading firstReading(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    fake->CapturedOnReading(firstReading);
+
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    secondHandlerInvoked = false;
+    const CompassReading secondReading(
+        6.0, 43.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 43.0);
+    fake->CapturedOnReading(secondReading);
+    EXPECT_FALSE(secondHandlerInvoked);
+}
+
+// Task DEVPERF-004: mirrors AccelerometerTests/GyroscopeTests.
+// HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState -- proves the same
+// reentrancy guarantee holds for Compass's CurrentValueChanged dispatch when driven
+// by a backend callback rather than a synthetic-injection test hook.
+TEST(CompassTests, HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    bool reentered = false;
+    std::vector<double> observedHeadings;
+
+    c.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<CompassReading>& args)
+    {
+        observedHeadings.push_back(args.getSensorReadingProperty().getMagneticHeadingProperty());
+        if (!reentered)
+        {
+            reentered = true;
+            const CompassReading innerReading(
+                6.0, 99.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 99.0);
+            fake->CapturedOnReading(innerReading);
+        }
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    const CompassReading outerReading(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    fake->CapturedOnReading(outerReading);
+
+    ASSERT_EQ(observedHeadings.size(), 2u);
+    EXPECT_EQ(observedHeadings[0], 42.0);
+    EXPECT_EQ(observedHeadings[1], 99.0);
+    EXPECT_EQ(c.getCurrentValueProperty().getMagneticHeadingProperty(), 99.0);
+}
+
 // Task READINGS-003 (2026-07-06): the real timestamp-setting logic for
 // Compass lives entirely in Detail::AndroidCompassBackend::PublishReading()
 // (Android-only, #ifdef __ANDROID__, not reachable on this host), which
@@ -492,6 +577,47 @@ TEST(CompassTests, CalibrateFiresFromBackendCalibrationCallback)
     fake->CapturedOnCalibrationNeeded();
 
     EXPECT_TRUE(invoked);
+}
+
+// Task DEVPERF-004 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// Calibrate.Raise() (Compass.cpp's calibration-needed lambda) goes through the same
+// System::EventHandler<T>::Raise() snapshot mechanism as CurrentValueChanged, but was
+// never itself proven -- only CurrentValueChanged had a "handler removes another
+// handler during dispatch" test before this task. Closes that gap for Calibrate
+// specifically, not just by analogy to CurrentValueChanged's own coverage.
+TEST(CompassTests, RemovingAnotherNotYetInvokedCalibrateHandlerDuringDispatchStillInvokesIt)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+    c.Start();
+
+    using Token = System::EventHandler<CalibrationEventArgs>::Token;
+
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    c.Calibrate.Add(
+        [&c, &secondToken](System::Object*, const CalibrationEventArgs&)
+        {
+            c.Calibrate.Remove(secondToken);
+        });
+
+    secondToken = c.Calibrate.Add(
+        [&secondHandlerInvoked](System::Object*, const CalibrationEventArgs&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnCalibrationNeeded));
+    fake->CapturedOnCalibrationNeeded();
+
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    secondHandlerInvoked = false;
+    fake->CapturedOnCalibrationNeeded();
+    EXPECT_FALSE(secondHandlerInvoked);
 }
 
 // Task SENSORBASE-003: unlike Accelerometer/Gyroscope, this exact reentrancy

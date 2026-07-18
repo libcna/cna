@@ -511,6 +511,78 @@ TEST(GyroscopeTests, CurrentValueChangedReceivesExpectedReading)
     EXPECT_EQ(receivedReading.getRotationRateProperty(), expectedRotationRate);
 }
 
+// Task DEVPERF-004 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// mirrors AccelerometerTests.RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt
+// -- Gyroscope dispatches CurrentValueChanged through the same
+// SensorBase<T>::SetCurrentValueAndMarkDataValid()/System::EventHandler<T>::Raise()
+// path as Accelerometer, so it must honor the same snapshot-based handler-list
+// mutation guarantee: a handler mid-dispatch removing a different, not-yet-invoked
+// handler in the same batch does not stop that handler from running in *this*
+// dispatch (its removal only takes effect for the next one).
+TEST(GyroscopeTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt)
+{
+    Gyroscope g;
+    g.SetStartedForTesting(true);
+
+    using Args = SensorReadingEventArgs<GyroscopeReading>;
+    using Token = System::EventHandler<Args>::Token;
+
+    Token secondToken{};
+    bool secondHandlerInvoked = false;
+
+    g.CurrentValueChanged.Add(
+        [&g, &secondToken](System::Object*, const Args&)
+        {
+            g.CurrentValueChanged.Remove(secondToken);
+        });
+
+    secondToken = g.CurrentValueChanged.Add(
+        [&secondHandlerInvoked](System::Object*, const Args&)
+        {
+            secondHandlerInvoked = true;
+        });
+
+    EXPECT_NO_THROW(g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    secondHandlerInvoked = false;
+    EXPECT_NO_THROW(g.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f));
+    EXPECT_FALSE(secondHandlerInvoked);
+}
+
+// Task DEVPERF-004: mirrors AccelerometerTests.HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState
+// -- proves the same reentrancy guarantee holds for Gyroscope's CurrentValueChanged
+// dispatch: a handler that triggers a brand-new dispatch from within itself does not
+// deadlock or corrupt state, and the inner (reentrant) dispatch completes fully
+// before the outer handler returns.
+TEST(GyroscopeTests, HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState)
+{
+    Gyroscope g;
+    g.SetSupportedForTesting(true);
+    g.SetStartedForTesting(true);
+
+    bool reentered = false;
+    std::vector<float> observedXValues;
+
+    g.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<GyroscopeReading>& args)
+    {
+        observedXValues.push_back(args.getSensorReadingProperty().getRotationRateProperty().X);
+        if (!reentered)
+        {
+            reentered = true;
+            g.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f);
+        }
+    };
+
+    EXPECT_NO_THROW(g.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    ASSERT_EQ(observedXValues.size(), 2u);
+    EXPECT_FLOAT_EQ(observedXValues[0], 1.0f);
+    EXPECT_FLOAT_EQ(observedXValues[1], 2.0f);
+    EXPECT_FLOAT_EQ(g.getCurrentValueProperty().getRotationRateProperty().X, 2.0f);
+}
+
 // Task P5-6: mirrors AccelerometerTests.InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported
 // — see that test for the full rationale.
 TEST(GyroscopeTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarkedSupported)

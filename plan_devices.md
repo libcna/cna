@@ -5983,7 +5983,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No behavior is called exact merely because MonoGame or CNA's own tests agree with CNA.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### DEVPERF-004 — Define one normative callback/threading contract — OPEN
+### DEVPERF-004 — Define one normative callback/threading contract — OPEN (implementation/documentation/tests done; one real cross-backend policy gap named for DEVPERF-005 to close)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -5996,6 +5996,78 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No public callback behavior is left as an implicit implementation accident.
   - Real and synthetic paths follow the same documented exception/order policy.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):** new
+  `docs/devices-event-contract.md` is the single normative document this task
+  asks for, covering thread identity, ordering, handler-list mutation,
+  reentrancy, destruction-during-dispatch and exception semantics for all
+  five events (`CurrentValueChanged`, `TimeBetweenUpdatesChanged`,
+  `ReadingChanged`, `Compass::Calibrate`, `Motion::Calibrate`) across all four
+  sensor classes, explicitly separating "WP7 baseline (inherited .NET
+  multicast-delegate semantics)" from "CNA-only policy decision (no WP7
+  equivalent)" per bullet, per the required work's own second line.
+  `docs/devices-thread-safety.md` updated to cross-reference it instead of
+  repeating a now-superseded "not specifically guaranteed beyond does not
+  crash" claim.
+  - **Turned every guarantee into an executable test, closing several real,
+    previously-undetected coverage gaps** (not just re-documenting existing
+    tests): `RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt`
+    and `HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState` were
+    added to `GyroscopeTests`/`CompassTests`/`MotionTests` (previously only
+    `AccelerometerTests` had them, from `BASE2-005`); the underlying
+    `EventHandler<T>::Raise()` snapshot mechanism is generic, but each raise
+    call site is now proven independently rather than assumed correct by
+    analogy. `RemovingAnotherNotYetInvokedCalibrateHandlerDuringDispatchStillInvokesIt`
+    added to `CompassTests`/`MotionTests` — the `Calibrate` event itself had
+    **zero** handler-list-mutation-during-dispatch coverage before this task,
+    only `CurrentValueChanged` did.
+  - **Found a real, concrete policy gap while writing the document, not
+    assumed:** traced the exact call chain for `Compass`/`Motion`'s
+    `CurrentValueChanged`/`Calibrate` handlers and confirmed a throwing
+    handler's exception is caught at `Detail::AndroidSensorBridge::Run()`'s
+    `callback_(sample)` call site (`AndroidSensorBridge.cpp`) via a bare
+    `catch (...) { }` — no crash (the `std::terminate()` hazard this policy
+    exists to prevent is already avoided), but **completely silent**: no
+    logging, no test-visible counter, unlike `Accelerometer`/`Gyroscope`'s
+    `SDLCORE-009`-hardened path (`SDL_Log()` + `dispatchExceptionCountForTesting_`/
+    `lastDispatchExceptionMessageForTesting_`). The existing source comment at
+    that call site ("mirrors `DispatchToInstances()`'s identical policy") was
+    accurate when originally written but is now **stale** — `SDLCORE-009`
+    upgraded the SDL side afterward, without this comment being revisited.
+    **Deliberately not fixed here**: building the matching
+    `__android_log_print()`-based logging plus counter for
+    `AndroidSensorBridge.cpp` is squarely `DEVPERF-005`'s scope ("structured
+    native error/diagnostic channel... cover SDL and Android failure paths"),
+    not a documentation task — recorded as a named, concrete, verified gap
+    for that task, not left as a silently-stale comment. This is exactly why
+    this task's second acceptance criterion ("real and synthetic paths follow
+    the same documented **exception**... policy") is not yet fully met: the
+    policy is now decided and documented identically for both backends, but
+    not yet *implemented* identically.
+  - **Files changed:** new `docs/devices-event-contract.md`;
+    `docs/devices-thread-safety.md` (cross-reference update, no content
+    contradiction — its own "does not crash" framing was accurate as far as
+    it went, just superseded by a stronger, now-formalized contract);
+    `tests/Microsoft/Devices/Sensors/{Gyroscope,Compass,Motion}Tests.cpp` (6
+    new tests total, no production source changes — every guarantee
+    documented was already correctly implemented, this task's gap was
+    entirely in documentation and test coverage, matching `BASE2-005`'s
+    pattern one level up).
+  - **Tests:** full `*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*SensorBase*`-class
+    precise filter (337 tests) passes clean under `devices-ubsan` — 333
+    passed, 4 pre-existing hardware-only skips, 0 failures. Re-verified clean
+    under `devices-tsan` (4 consecutive runs, 0 `WARNING: ThreadSanitizer`
+    occurrences) — every new test exercises a real event-dispatch/reentrancy
+    path.
+  - **Remaining limitations (why this stays OPEN):** (1) the Android
+    exception-diagnostics gap named above is real and unresolved — closing it
+    is `DEVPERF-005`'s job, not this task's; (2) `Compass`/`Motion`'s
+    destruction-during-dispatch guarantee is proven only through the
+    fake-backend seam, same unresolved Android-hardware-only limitation
+    `SENSORBASE-003` already flagged, not newly discovered or newly resolved
+    by this task; (3) `TimeBetweenUpdatesChanged`/`ReadingChanged` dispatch
+    got documentation coverage but deliberately no new near-duplicate tests
+    of their own, since they share `CurrentValueChanged`'s already-proven
+    `Raise()` mechanism with no event-specific dispatch logic.
 
 ### DEVPERF-005 — Create a structured native error/diagnostic channel — OPEN
 
