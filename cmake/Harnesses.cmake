@@ -102,6 +102,22 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
+# --- plan_audio.md AUD-11-028: standalone XWB wave-bank inspection/extraction tool ---
+# A small standalone (non-GTest) executable that parses a .xwb wave bank via the real
+# CNA::Internal::Audio::ParseXwb() and emits every entry's metadata as stable JSON, optionally
+# also exporting each entry's real audio payload as a playable .wav file (via the same shared
+# WavWrapper technique WaveBank.cpp itself uses) for offline diagnosis. Never plays anything.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_xwb_inspect
+        tools/audio/xwb_inspect.cpp
+    )
+    target_link_libraries(cna_xwb_inspect
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
 # --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
 # Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see
