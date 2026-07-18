@@ -4819,6 +4819,23 @@ the still-outstanding original task.
     `Impl` (an empty struct with no fields at all) cannot exercise no matter what seam is
     exposed — the same standing limitation `ANDROID-BRIDGE-003`/`ANDROID-BRIDGE-004`
     already accepted for this exact class.
+    - **Amendment (2026-07-18, independent re-verification of `audit_devices.md`
+      finding `DEV-AUD-001`):** this "not possible" conclusion has since been
+      partially superseded, not by this task but by a **later, independent** audit
+      finding — `plan_devices.md` Section 16's `ANDR2-014` ("Add model-based
+      concurrent lifecycle fuzzing") explicitly asks for "a platform-independent fake
+      NDK adapter and random state-machine test for Start/Stop/SetInterval/
+      IsAvailable/destruction/callback reentry" — i.e. a *fake* NDK adapter can
+      exercise these transitions without a genuinely-running Android worker thread,
+      an approach this task's own reasoning above did not consider. `ANDR2-014`
+      (and `ANDR2-015`, real Android-native sanitizer/instrumented runs) remain
+      **OPEN** in Section 16 and are the correct place to track this remaining gap —
+      this task's own `CLOSED` status reflects that its *specific* correctness fix
+      (the `RunState`/single-claimant protocol) is sound and reasoned-through, not
+      that platform-independent test coverage for this whole area is unattainable or
+      that hardware/instrumented validation has actually happened. Re-examine
+      `ANDR2-014`/`015` before assuming this area has no remaining test-coverage
+      gap.
 - **Acceptance criteria:**
   - A reentrant self-stop racing a concurrent external `Stop()` call never throws, never
     double-touches the same `std::thread` object. Done, by construction (single-claimant
@@ -5594,8 +5611,27 @@ the still-outstanding original task.
     been reflected in this count before. **This number will go stale again the next
     time a task adds a test without updating this line** — re-run the exact command
     above rather than trusting this line at face value in a future session.
-
-### VERIFY-002 — Run sanitizer verification — CLOSED (2026-07-06; re-run 2026-07-16)
+  - **Re-run (2026-07-18, independent re-verification of `audit_devices.md` finding
+    `DEV-AUD-005`):** exactly as the prior entry's own warning predicted, the `358`
+    count above had already gone stale — Section 16's own P0/P1 backlog work (this same
+    branch, `feature/devices`) added many more tests since 2026-07-16 without this line
+    being updated. An independent reviewer flagged the mismatch; re-ran the exact same
+    21-suite filter command above (confirmed the filter itself is still accurate — `find
+    tests/Microsoft/Devices -name '*.cpp'` still returns exactly the same 21 files).
+    **Result: `420 tests from 21 test suites ran. [PASSED] 416 tests. [SKIPPED] 4
+    tests`** (`AccelerometerTests`/`GyroscopeTests`
+    `.FailedEventWatchRegistrationRollsBackAndReportsFailure` and
+    `.GetCurrentValuePropertyDoesNotThrowWhenSupported` — 4 hardware-gated skips, up
+    from the 2 recorded in 2026-07-16's entry because `SDLCORE-003`'s own
+    `RegisterEventWatchIfNeededLocked()` failure-injection test hook, added since, is
+    itself hardware-conditional). **Zero failures**, confirmed via `grep -c '\[  FAILED
+    \]'` on the full log (zero matches). Exactly 3 UBSan reports, same pre-existing
+    `Vector3.cpp:117`(×2)/`Matrix.cpp:249` location this plan has tracked at least ten
+    times before — re-verified unchanged, still outside `Microsoft::Devices`. This
+    entry exists specifically so this line does not silently go stale a second time
+    without at least one dated correction on record — see `NEXTdevices.md`'s own
+    running per-task test-count notes for a more current, but still not
+    permanently-authoritative, source between full re-runs.
 
 - **Priority:** High
 - **Area:** Verification

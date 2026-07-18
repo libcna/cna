@@ -207,7 +207,7 @@ namespace Microsoft::Devices::Sensors
         GetTypeNameHPP()
 
         /**
-         * @brief Event raised when the compass component detects that it requires calibration.
+         * @brief Event raised when the motion sensor's underlying magnetometer detects that it requires calibration.
          */
         System::EventHandler<CalibrationEventArgs> Calibrate;
 
