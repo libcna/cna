@@ -56,32 +56,30 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture3D& Texture3D::operator=(Texture3D&&) noexcept = default;
 
     Texture3D::Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format)
-        : GraphicsResource(&device)
+        : Texture(&device)
         , width_(width)
         , height_(height)
         , depth_(depth)
-        , format_(format)
-        , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
         , backend_(nullptr)
     {
 #ifdef CNA_BACKEND_D3D9
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
 #endif
         Texture::ValidateFormat(format);
+        format_     = format;
+        levelCount_ = mipMap ? CalculateMipLevels(width, height) : 1;
         backend_ = device.GetBackend().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
     }
 
     void Texture3D::Dispose(bool disposing)
     {
         backend_.reset();
-        GraphicsResource::Dispose(disposing);
+        Texture::Dispose(disposing);
     }
 
     int Texture3D::getWidthProperty() const { return width_; }
     int Texture3D::getHeightProperty() const { return height_; }
     int Texture3D::getDepthProperty() const { return depth_; }
-    SurfaceFormat Texture3D::getFormatProperty() const { return format_; }
-    int Texture3D::getLevelCountProperty() const { return levelCount_; }
 
     const std::string& Texture3D::GetTypeName() const
     {

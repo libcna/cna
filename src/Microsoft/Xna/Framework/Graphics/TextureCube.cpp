@@ -56,26 +56,24 @@ namespace Microsoft::Xna::Framework::Graphics
     TextureCube::~TextureCube() = default;
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
-        : GraphicsResource(&device)
+        : Texture(&device)
         , size_(size)
-        , format_(format)
-        , levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
         , backend_(nullptr)
     {
 #ifdef CNA_BACKEND_D3D9
         ValidateCubeSizeForProfileEXT(device, size);
 #endif
         Texture::ValidateFormat(format);
+        format_     = format;
+        levelCount_ = mipMap ? CalculateMipLevels(size, size) : 1;
         backend_ = device.GetBackend().CreateTextureCube(size, mipMap, static_cast<int>(format));
     }
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, SurfaceFormat format,
                              std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend,
                              int levelCount)
-        : GraphicsResource(&device)
+        : Texture(&device)
         , size_(size)
-        , format_(format)
-        , levelCount_(levelCount)
         , backend_(std::move(backend))
     {
         // Task 774 finding: this constructor (used exclusively by RenderTargetCube) previously
@@ -83,17 +81,17 @@ namespace Microsoft::Xna::Framework::Graphics
         // CreateTextureCube's own backend call never actually forwards it -- a RenderTargetCube
         // could report a non-Color Format() while its real GPU resource was always Color.
         Texture::ValidateFormat(format);
+        format_     = format;
+        levelCount_ = levelCount;
     }
 
     void TextureCube::Dispose(bool disposing)
     {
         backend_.reset();
-        GraphicsResource::Dispose(disposing);
+        Texture::Dispose(disposing);
     }
 
     int TextureCube::getSizeProperty() const { return size_; }
-    SurfaceFormat TextureCube::getFormatProperty() const { return format_; }
-    int TextureCube::getLevelCountProperty() const { return levelCount_; }
 
     const std::string& TextureCube::GetTypeName() const
     {

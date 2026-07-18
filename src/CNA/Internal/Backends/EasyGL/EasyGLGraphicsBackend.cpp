@@ -119,6 +119,11 @@ namespace CNA::Internal::Backends::EasyGL
                               data);
     }
 
+    void EasyGLTexture3DBackend::BindGL() const
+    {
+        tex_.bind(::easygl::TextureTarget::Texture3D);
+    }
+
     // --- EasyGLTextureCubeBackend ---
 
     static const ::easygl::TextureTarget kCubeFaceTargets[6] = {
@@ -351,6 +356,19 @@ namespace CNA::Internal::Backends::EasyGL
     // its own interface (not a subtype of ITextureBackend), so this can't just overload/reuse
     // BindTexture() at the call site.
     void EasyGLEffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
+    {
+        if (!texture) return;
+        const auto textureUnit = static_cast<::metagl::TextureUnit>(
+            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
+        ::metagl::glActiveTexture(textureUnit);
+        texture->BindGL();
+        ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+    }
+
+    // plan_graphics.md Task 863: same shape as BindTextureCube(), but for a sampler3D --
+    // ITexture3DBackend is its own interface (not a subtype of ITextureBackend), so this can't
+    // just overload/reuse BindTexture() at the call site.
+    void EasyGLEffectBackend::BindTexture3D(int unit, ITexture3DBackend* texture)
     {
         if (!texture) return;
         const auto textureUnit = static_cast<::metagl::TextureUnit>(

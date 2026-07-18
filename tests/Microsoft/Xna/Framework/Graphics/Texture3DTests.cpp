@@ -14,20 +14,30 @@
 //
 // Happy-path SetData/GetData round-trip coverage (per-slice colour verification) lives in
 // the EasyGL pixel-readback integration test: examples/easygl_texture3d_slices_test.cpp.
+//
+// plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), instead of
+// GraphicsResource directly, so it can be assigned into GraphicsDevice.Textures/VertexTextures
+// (a TextureCollection, which stores Texture* slots) -- previously a compile-time impossibility.
+// See the "TextureCollection assignment / Texture base class (Task 863)" section below.
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
+using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 // -----------------------------------------------------------------------
 // Constructor / properties
@@ -294,4 +304,59 @@ TEST_F(Texture3DTest, DoubleDisposeDoesNotThrow)
     Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
     tex.Dispose();
     EXPECT_NO_THROW(tex.Dispose());
+}
+
+// -----------------------------------------------------------------------
+// TextureCollection assignment / Texture base class (plan_graphics.md Task 863)
+//
+// Before Task 863, Texture3D inherited GraphicsResource directly (not Texture), so it could
+// never be stored in a TextureCollection (std::vector<Texture*>) at all -- a Texture3D* could
+// not be assigned into GraphicsDevice.Textures[slot], a real, previously-impossible operation
+// that is the clearest possible proof this fix succeeded. Now Texture3D : Texture, matching FNA.
+// -----------------------------------------------------------------------
+
+TEST_F(Texture3DTest, CanBeAssignedIntoTextureCollection)
+{
+    Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    TextureCollection col;
+    // Previously a compile error: Texture3D was not convertible to Texture*.
+    EXPECT_NO_THROW(col(0, &tex));
+    EXPECT_EQ(col[0], static_cast<Texture*>(&tex));
+}
+
+TEST_F(Texture3DTest, CanBeAssignedIntoRealGraphicsDeviceTexturesSlot)
+{
+    Texture3D tex(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    // Real GraphicsDevice.Textures[slot] = texture3D, matching FNA's own Texture3D : Texture
+    // capability -- structurally impossible before Task 863.
+    EXPECT_NO_THROW(gd.getTexturesProperty()(0, &tex));
+    EXPECT_EQ(gd.getTexturesProperty()[0], static_cast<Texture*>(&tex));
+}
+
+// Texture::Dispose(bool) removes the texture from GraphicsDevice.Textures/VertexTextures on
+// disposal (matches FNA's Texture.Dispose unbind behaviour). Texture3D::Dispose(bool) previously
+// only released its own backend handle without ever calling into Texture::Dispose(bool), so this
+// unbind never applied to Texture3D. Now it does, since Texture3D::Dispose(bool) calls
+// Texture::Dispose(disposing) after releasing its own backend handle (same order as
+// Texture2D::Dispose(bool)).
+TEST_F(Texture3DTest, DisposeUnbindsFromGraphicsDeviceTextures)
+{
+    auto tex = std::make_unique<Texture3D>(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    gd.getTexturesProperty()(0, tex.get());
+    ASSERT_EQ(gd.getTexturesProperty()[0], static_cast<Texture*>(tex.get()));
+
+    tex->Dispose();
+
+    EXPECT_EQ(gd.getTexturesProperty()[0], nullptr);
+}
+
+TEST_F(Texture3DTest, DisposeUnbindsFromGraphicsDeviceVertexTextures)
+{
+    auto tex = std::make_unique<Texture3D>(gd, 2, 2, 2, false, SurfaceFormat::Color);
+    gd.getVertexTexturesProperty()(0, tex.get());
+    ASSERT_EQ(gd.getVertexTexturesProperty()[0], static_cast<Texture*>(tex.get()));
+
+    tex->Dispose();
+
+    EXPECT_EQ(gd.getVertexTexturesProperty()[0], nullptr);
 }

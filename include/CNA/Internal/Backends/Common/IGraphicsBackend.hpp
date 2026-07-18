@@ -179,6 +179,8 @@ namespace CNA::Internal::Backends
         virtual void GetData(int level, int x, int y, int z,
                              int w, int h, int depth,
                              void* data, int dataLength) const {}
+        /// Binds this volume texture to the currently active GL texture unit. No-op on non-GL backends.
+        virtual void BindGL() const {}
     };
 
     class ITextureBackend
@@ -302,6 +304,13 @@ namespace CNA::Internal::Backends
         /// simultaneously, since they occupy distinct binding targets; the shader's own sampler
         /// type (`sampler2D` vs `samplerCube`) determines which one is actually sampled.
         virtual void BindTextureCube(int unit, ITextureCubeBackend* texture) {}
+        /// plan_graphics.md Task 863: binds a volume texture to the given sampler unit (0-based),
+        /// for a custom shader that declares a `sampler3D` uniform. Same reasoning as
+        /// `BindTextureCube()` above -- `ITexture3DBackend` is its own interface, not a subtype of
+        /// `ITextureBackend`, and GL allows a 2D/cube/3D texture bound to the same unit
+        /// simultaneously since each occupies a distinct binding target; the shader's own sampler
+        /// type (`sampler2D`/`samplerCube`/`sampler3D`) determines which one is actually sampled.
+        virtual void BindTexture3D(int unit, ITexture3DBackend* texture) {}
     };
 
     class ISpriteBatchBackend
