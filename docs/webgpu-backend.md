@@ -295,6 +295,48 @@ back through `SpriteBatch`, and — the architecture's critical proof — that a
 `Clear()` sandwiched between two backbuffer `Clear()`/readback calls does not leak into the
 backbuffer's own render pass.
 
+## EnvironmentMapEffect and real instancing (2026-07-18)
+
+`env_map3d.wgsl` / `GetOrCreatePipelineEnvMap3D()` (`WEBGPU-25`/`36`/`74`) close this backend's
+former "no cube-map shader at all" gap, ported from `VulkanGraphicsBackend`'s
+`env_map3d.{vert,frag}.glsl` (cross-checked against `EasyGLGraphicsBackend::
+EnsureEnvMapped3DProgram()`'s identical GLSL formula before porting). Stride 32
+(`VertexPositionNormalTexture`, the same layout as `lit_textured3d.wgsl`). Group 0 binding 0 is a
+new `Transform` UBO (mvp+world — WebGPU has no push constants); binding 1 is `EnvMapParams` (eye
+position, diffuse, emissive+amount, all 3 directional lights, envMapSpecular+Fresnel, fog, and a
+CPU-precomputed 3×3 normal matrix, since WGSL has no `inverse()`). Group 1 is a new 3-binding shape
+(sampler + `texture_2d` + `texture_cube`), mirroring `dualTextureBindGroupLayout_`'s own 3-binding
+shape with the second `texture_2d` swapped for a `texture_cube`. Getting a cube map to sample at all
+required a new, minimal `WebGPUTextureCubeBackend` (`WEBGPU-56`/`113`) — this backend previously had
+no `TextureCube` support whatsoever; it is deliberately NOT full parity (no `GetData()`, no
+`RenderTargetCube`, mip regeneration untested beyond pre-allocating empty levels). `WebGPU_EnvMap3D`
+(4/4): hand-derived geometry (`View`=`World`=Identity, quad at z=0.5, `Normal`=(0,0,-1)) makes the
+reflection vector land exactly on `CubeMapFace::NegativeZ` — proven by painting each of the 6 faces
+a distinct solid colour and asserting the correct one appears (not just "some colour"); a
+differential Fresnel check (identical scene, only `FresnelFactor` differs) proves the Fresnel term
+genuinely gates the blend rather than being present-but-inert; `EnvironmentMapAmount=0`
+independently proves the amount also gates it; the indexed-draw dispatch path is exercised too.
+
+`instanced3d.wgsl` / `GetOrCreatePipelineInstanced3D()` / `DrawInstancedPrimitivesEx()`
+(`WEBGPU-27`/`38`/`68`) is the other half: a genuine second `WGPUVertexStepMode_Instance` vertex
+buffer binding carrying a per-instance mat4 world transform, ported from `VulkanGraphicsBackend`'s
+`instanced3d.{vert,frag}.glsl`. Unlike the bind-group-shaped families above, a second vertex stream
+needs **no new bind group layout at all** in WebGPU (vertex buffers are set via
+`wgpuRenderPassEncoderSetVertexBuffer()`, entirely separate from bind groups), so this reuses
+`coloredBindGroupLayout_`/`coloredPipelineLayout_` unchanged; `[0..15]` of that UBO is
+View×Projection rather than a full MVP, since world comes from the per-instance stream (matching
+`FillInstancedPushConst()`'s own deliberate choice to ignore the caller's own `World` matrix
+entirely). Unlike Vulkan's own hardcoded 64-byte instance-binding stride, this backend's pipeline
+cache key genuinely includes both the per-vertex and per-instance buffer strides, so the GPU-side
+binding always matches whatever the caller's buffers actually declare. `params.instanceVb ==
+nullptr` falls back to a real `DrawIndexedPrimitivesEx()` draw rather than throwing, matching
+`VulkanGraphicsBackend`'s identical fallback. `WebGPU_Instanced3D` (5/5, tested directly at the
+`IGraphicsBackend` level, matching `examples/d3d9_instanced_test.cpp`'s own established
+test-authoring convention for this API): 3 instances in ONE draw call each paint their own small
+quad at their own independently-predicted screen location with the shared `DiffuseColor` — proving
+the per-instance buffer is genuinely read per-instance, not e.g. always instance 0 or a hardcoded
+2-instance special case — plus an untouched-background check and the null-`instanceVb` fallback.
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:
@@ -319,9 +361,10 @@ The initial backend is deliberately useful rather than an empty scaffold. It cur
 This is **not yet equivalent to CNA's Vulkan, EasyGL or Bgfx 3D backends**. The following remain
 open in `plan_webgpu.md`:
 
-- `EnvironmentMapEffect` (`env_map3d.wgsl`, cube-map sampling) and instancing (`BasicEffect`,
-  `AlphaTestEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedEffect` and `SkinnedPbrEffect` real
-  dispatch are all now implemented, see above);
+- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedEffect`,
+  `SkinnedPbrEffect`, `EnvironmentMapEffect` real dispatch and real instancing
+  (`DrawInstancedPrimitivesEx()`) are all now implemented, see above. Full `TextureCube`/
+  `RenderTargetCube` parity (mip regeneration, `GetData()`, cube render targets) remains open;
 - single-target `RenderTarget2D` (colour + depth/stencil round trip, real 3D-draw dispatch,
   sampling back through `SpriteBatch`) is now implemented, see below; `RenderTargetCube`, 3D
   textures, compressed formats and multiple simultaneous render targets (MRT) remain open. MSAA
