@@ -361,6 +361,35 @@ namespace Microsoft::Devices::Sensors::Detail
          */
         [[nodiscard]] int GetDrainBatchLimitHitCountForTesting() const;
 
+        /**
+         * @brief Test-only hook (Task ANDR2-010): whether the most recent `ASensorEventQueue_setEventRate()` call succeeded.
+         *
+         * Covers both the initial rate set at `Start()` time and every
+         * subsequent live `SetSampleInterval()`-triggered call — "Rate-change
+         * rejection is ignored" (this task's own problem statement) is what
+         * this closes: a caller now has a way to discover a rejection that
+         * was previously silently absorbed. `true` before any `Start()` call
+         * has ever run (nothing has failed yet). Reset to `true` by every
+         * `Start()` call, so a stale result from a previous run/session
+         * cannot be misread as describing the current one.
+         *
+         * @return true if the most recent rate-set attempt succeeded (or none has been attempted yet); false if the platform rejected it.
+         */
+        [[nodiscard]] bool GetLastSetEventRateSucceededForTesting() const;
+
+        /**
+         * @brief Test-only hook (Task ANDR2-010): this sensor's own `ASensor_getMinDelay()`, in microseconds.
+         *
+         * Exposes "effective/min-delay information where available"
+         * (required work) — the hardware/driver's own documented minimum
+         * delay between events, independent of whatever rate was actually
+         * requested. `0` (per the NDK's own documented meaning: "doesn't
+         * report events at a constant rate") if no sensor is currently open.
+         *
+         * @return The sensor's minimum delay between events, in microseconds; `0` if unknown/not currently open.
+         */
+        [[nodiscard]] int32_t GetMinDelayMicrosecondsForTesting() const;
+
     private:
         struct Impl;
 

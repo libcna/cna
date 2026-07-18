@@ -190,3 +190,38 @@ TEST(AndroidSensorBridgeTests, GetDrainBatchLimitHitCountForTestingIsZeroAfterFa
     EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
     EXPECT_EQ(bridge.GetDrainBatchLimitHitCountForTesting(), 0);
 }
+
+// Task ANDR2-010 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// on this (non-Android) host, GetLastSetEventRateSucceededForTesting()
+// defaults to true (nothing has failed yet -- no ASensorEventQueue_setEventRate()
+// call is ever reachable without a real Android worker thread) and
+// GetMinDelayMicrosecondsForTesting() defaults to 0 (no sensor is ever open
+// to query ASensor_getMinDelay() against). The real recording/reset logic
+// itself was verified separately via a cross-compile of
+// AndroidSensorBridge.cpp (not runtime-exercised -- no Android device in
+// this environment).
+TEST(AndroidSensorBridgeTests, GetLastSetEventRateSucceededForTestingIsTrueOnNonAndroidPlatform)
+{
+    const AndroidSensorBridge bridge(1);
+    EXPECT_TRUE(bridge.GetLastSetEventRateSucceededForTesting());
+}
+
+TEST(AndroidSensorBridgeTests, GetLastSetEventRateSucceededForTestingIsTrueAfterFailedStart)
+{
+    AndroidSensorBridge bridge(1);
+    EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
+    EXPECT_TRUE(bridge.GetLastSetEventRateSucceededForTesting());
+}
+
+TEST(AndroidSensorBridgeTests, GetMinDelayMicrosecondsForTestingIsZeroOnNonAndroidPlatform)
+{
+    const AndroidSensorBridge bridge(1);
+    EXPECT_EQ(bridge.GetMinDelayMicrosecondsForTesting(), 0);
+}
+
+TEST(AndroidSensorBridgeTests, GetMinDelayMicrosecondsForTestingIsZeroAfterFailedStart)
+{
+    AndroidSensorBridge bridge(1);
+    EXPECT_FALSE(bridge.Start(TimeSpan::FromMilliseconds(2.0), [](const auto&) {}));
+    EXPECT_EQ(bridge.GetMinDelayMicrosecondsForTesting(), 0);
+}

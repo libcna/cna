@@ -7364,7 +7364,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   and drop policy are deterministic") describe behavior only a real or synthetic
   high-throughput run can demonstrate.
 
-### ANDR2-010 — Track requested and effective sample interval — OPEN
+### ANDR2-010 — Track requested and effective sample interval — OPEN (result recording and min-delay diagnostic implemented and host-tested; hardware measurement remains)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7377,6 +7377,57 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Tests prove a rejected live change cannot silently claim success internally.
   - Effective cadence is measured on hardware.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - "Record setEventRate success/failure": both `ASensorEventQueue_setEventRate()` call
+    sites in `Run()` (the `Start()`-time initial rate and the live
+    `rateChangeRequested_`-triggered update) previously discarded the return value
+    entirely (the startup call had a comment noting the rejection was intentionally
+    non-fatal but never recorded it anywhere; the live-update call did not even check it).
+    Both now record the result into `lastSetEventRateSucceededForTesting_`, exposed via
+    new `AndroidSensorBridge::GetLastSetEventRateSucceededForTesting()`.
+  - "effective/min-delay information where available": added
+    `GetMinDelayMicrosecondsForTesting()`, exposing `ASensor_getMinDelay(sensor_)` — the
+    NDK's own documented hardware/driver minimum delay between events (confirmed by
+    reading the actual NDK header, `android/sensor.h`: available since the earliest
+    sensor API, no `__INTRODUCED_IN` guard, well within this project's API 24+ minimum).
+  - "Continue delivery on nonfatal rejection": already correct before this task —
+    confirmed by re-reading `Run()`'s existing logic/comments, not assumed; no code
+    change needed for this specific bullet.
+  - "Version responses by run generation": rather than introducing an actual generation
+    counter, `lastSetEventRateSucceededForTesting_` is reset to `true` by every `Start()`
+    call, in the same locked section and matching the identical discipline
+    `rateChangeRequested_`/`pendingTimeBetweenUpdates_` already use (`ANDR2-001`) — a
+    stale result from a previous run can never leak into a new one, the same guarantee a
+    generation counter would provide, without a separate versioning scheme.
+  - "expose diagnostics": both new getters together satisfy this.
+  - "keep software throttling if required": **not attempted** — whether native
+    rate-limiting is unreliable enough in practice to need a software backstop is a
+    question this container cannot answer without real hardware measurements; guessing
+    an answer either way was judged worse than leaving it explicitly open.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp`,
+  `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
+  `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp`,
+  `docs/devices-hardware-checklist.md`.
+- **Tests:** 4 new tests in `AndroidSensorBridgeTests.cpp`, covering both new getters'
+  plumbing and their sensible defaults (`true`/`0`) with no Android worker ever having
+  run — the actual recording/reset logic only executes inside `Run()`'s real worker
+  thread and cannot be exercised without one. Scoped filtered run: 323 tests, 319 passed,
+  4 pre-existing hardware-only skips, 0 failures — 4 new, all passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`.
+  `AndroidSensorBridge.cpp` verified via a successful Android NDK cross-compile of this
+  exact translation unit. Not applicable for TSan on the host — both new fields are
+  worker-thread-only-written (or `Start()`-reset under the pre-existing `stateMutex_`),
+  no new lock-based concurrency pattern introduced.
+- **Remaining limitations (explicitly OPEN, not fabricated):** the acceptance criterion
+  "effective cadence is measured on hardware" is, by its own wording, a hardware
+  requirement this session cannot satisfy — no real Android sensor exists here to reject
+  a rate or report a meaningful min-delay value against. "Tests prove a rejected live
+  change cannot silently claim success internally" is satisfied for the plumbing (the
+  getter correctly reflects whatever `Run()` last recorded) but not for an actual
+  real-device rejection, since none has ever been observed. "Software throttling"
+  remains an open question pending real measurements. Documented as a new hardware
+  validation procedure in `docs/devices-hardware-checklist.md` Section 6c. Left **OPEN**
+  rather than CLOSED, consistent with this pass's established convention.
 
 ### ANDR2-011 — Consolidate Android sensor bridges onto a shared looper service — OPEN
 

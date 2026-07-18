@@ -549,6 +549,50 @@ container has neither. **Status: NOT RUN — hardware/TEST2-005 validation open.
    and that the measured rate-change delay from step 1 improves relative to an unbounded
    drain loop (e.g. by temporarily reverting this fix for an A/B comparison).
 
+## 6c. `AndroidSensorBridge` rate-set result and min-delay diagnostics (Task ANDR2-010, 2026-07-17)
+
+**Code under test:** `Run()`'s two `ASensorEventQueue_setEventRate()` call sites (the
+initial `Start()`-time rate and every subsequent live `SetSampleInterval()` update) now
+record whether the platform accepted or rejected the requested rate
+(`lastSetEventRateSucceededForTesting_`, reset to `true` by every `Start()` call so a
+stale result never leaks across runs), exposed via
+`AndroidSensorBridge::GetLastSetEventRateSucceededForTesting()`. Separately,
+`GetMinDelayMicrosecondsForTesting()` exposes `ASensor_getMinDelay()` — the sensor's own
+hardware/driver-documented minimum delay between events, independent of what was actually
+requested.
+
+**What is already verified, without hardware:** both getters' plumbing and their
+sensible defaults (`true`/`0`) when no Android worker has ever run are host-tested (4 new
+tests, `AndroidSensorBridgeTests.cpp`).
+
+**Why this needs real hardware:** confirming a real device's sensor driver actually
+*rejects* a requested rate under some realistic condition (so
+`GetLastSetEventRateSucceededForTesting()` can be observed returning `false`, not just its
+default `true`), and confirming `GetMinDelayMicrosecondsForTesting()` reports a sane,
+sensor-type-appropriate value (e.g. matching a known device's published sensor
+specifications) both require a real Android device — this container has neither a real
+sensor driver to reject a rate nor real hardware specs to cross-check a min-delay value
+against. "Continue delivery on nonfatal rejection" (required work) needed no code change
+— confirmed already correct by reading `Run()`'s existing comments/logic, not assumed.
+"Keep software throttling if required" (required work) was **not** attempted — whether
+native rate-limiting is unreliable enough in practice to need a software backstop is a
+question only answerable with real hardware measurements, not guessed at. **Status: NOT
+RUN — hardware validation open.**
+
+**Steps:**
+1. On a real Android device, request a rate faster than a given sensor's own documented
+   minimum (e.g. via a very small `TimeBetweenUpdates`) and confirm
+   `GetLastSetEventRateSucceededForTesting()` correctly reports `false` if/when the
+   platform rejects it, while delivery still continues at whatever rate was already in
+   effect (not stopped).
+2. Confirm `GetMinDelayMicrosecondsForTesting()`'s reported value for a known sensor type
+   on a known device roughly matches that device's published sensor specifications (or,
+   at minimum, is a plausible microsecond value, not obviously wrong).
+3. If step 1 reveals the platform rejects requested rates often enough in practice to be
+   a real concern (not just a theoretical possibility), that is the evidence needed to
+   decide whether "keep software throttling if required" should actually be implemented —
+   record the finding either way.
+
 ## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
 
 **Code under test:** `Detail::AndroidCompassBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`)

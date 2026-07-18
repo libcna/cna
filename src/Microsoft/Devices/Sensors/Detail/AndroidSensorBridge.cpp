@@ -233,6 +233,24 @@ namespace Microsoft::Devices::Sensors::Detail
         // doc comment for what this counts.
         std::atomic<int> drainBatchLimitHitCountForTesting_{0};
 
+        // Task ANDR2-010 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): result of the most recent
+        // ASensorEventQueue_setEventRate() call -- both the startup call in
+        // Run() and the rateChangeRequested_-triggered live-update call
+        // previously discarded this entirely ("Rate-change rejection is
+        // ignored" -- this task's own problem statement). Written only by
+        // Run()'s own worker thread; read by
+        // GetLastSetEventRateSucceededForTesting() from any thread.
+        // "Version responses by run generation" (required work): rather
+        // than an actual generation counter, this is reset to `true` by
+        // Start() itself (same locked section, same reset discipline
+        // rateChangeRequested_/pendingTimeBetweenUpdates_ already use per
+        // ANDR2-001) -- a stale result from a previous run can therefore
+        // never leak into a new one, the same guarantee a generation
+        // counter would provide, without introducing a separate versioning
+        // scheme.
+        std::atomic<bool> lastSetEventRateSucceededForTesting_{true};
+
         // Startup handshake (Task: async startup reporting): Run() signals
         // one of these exactly once, early in its own execution, so
         // Start() can block (briefly, bounded) until real success/failure
@@ -436,12 +454,13 @@ namespace Microsoft::Devices::Sensors::Detail
             // startup failure would abort otherwise-working sensor
             // delivery over a rate mismatch alone, which is worse than
             // accepting the degraded rate.
-            if (ASensorEventQueue_setEventRate(
+            const bool startupSetEventRateSucceeded = ASensorEventQueue_setEventRate(
                     queue_, sensor_, ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(timeBetweenUpdates_))
-                < 0)
-            {
-                // Intentionally not signaling Failure here -- see comment above.
-            }
+                >= 0;
+            // Task ANDR2-010: recorded, not just observed locally -- see
+            // this field's own doc comment. Still intentionally not
+            // signaling Failure here on rejection -- see comment above.
+            lastSetEventRateSucceededForTesting_.store(startupSetEventRateSucceeded, std::memory_order_relaxed);
 
             SignalStartOutcome(StartOutcome::Success);
 
@@ -485,8 +504,12 @@ namespace Microsoft::Devices::Sensors::Detail
                     // platform rejected the new rate, not that delivery
                     // failed -- the sensor keeps delivering at whatever rate
                     // was already in effect.
-                    ASensorEventQueue_setEventRate(
-                        queue_, sensor_, ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(newInterval));
+                    //
+                    // Task ANDR2-010: recorded, not just discarded -- see
+                    // lastSetEventRateSucceededForTesting_'s own doc comment.
+                    const bool liveSetEventRateSucceeded = ASensorEventQueue_setEventRate(
+                        queue_, sensor_, ConvertTimeBetweenUpdatesToSensorEventRateMicroseconds(newInterval)) >= 0;
+                    lastSetEventRateSucceededForTesting_.store(liveSetEventRateSucceeded, std::memory_order_relaxed);
                 }
 
                 ASensorEvent event;
@@ -799,6 +822,15 @@ namespace Microsoft::Devices::Sensors::Detail
             impl_->rateChangeRequested_.store(false, std::memory_order_release);
             impl_->pendingTimeBetweenUpdates_ = timeBetweenUpdates;
 
+            // Task ANDR2-010: same reset discipline as rateChangeRequested_
+            // immediately above, and for the identical reason -- a stale
+            // success/failure result from a previous run must never be
+            // mistaken for this new run's own first setEventRate outcome.
+            // This is what "version by run generation" (required work)
+            // amounts to for this field, without a separate generation
+            // counter.
+            impl_->lastSetEventRateSucceededForTesting_.store(true, std::memory_order_relaxed);
+
             // Captures impl_ (a shared_ptr copy), not this -- see
             // Impl::Run()'s own doc comment and the shared_ptr<Impl>
             // member's doc comment for the full use-after-free rationale
@@ -1069,6 +1101,29 @@ namespace Microsoft::Devices::Sensors::Detail
     {
 #ifdef __ANDROID__
         return impl_->drainBatchLimitHitCountForTesting_.load(std::memory_order_relaxed);
+#else
+        return 0;
+#endif
+    }
+
+    bool AndroidSensorBridge::GetLastSetEventRateSucceededForTesting() const
+    {
+#ifdef __ANDROID__
+        return impl_->lastSetEventRateSucceededForTesting_.load(std::memory_order_relaxed);
+#else
+        return true;
+#endif
+    }
+
+    int32_t AndroidSensorBridge::GetMinDelayMicrosecondsForTesting() const
+    {
+#ifdef __ANDROID__
+        std::lock_guard<std::mutex> lock(impl_->stateMutex_);
+        if (impl_->sensor_ == nullptr)
+        {
+            return 0;
+        }
+        return ASensor_getMinDelay(impl_->sensor_);
 #else
         return 0;
 #endif
