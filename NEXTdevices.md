@@ -59,9 +59,47 @@ resolution notes as the template.
 
 ---
 
-## 2. Current status (2026-07-17, mid-P1)
+## 2. Current status (2026-07-18, P1 tractable backlog exhausted, moving into P2)
 
 **All P0 tasks closed** (see prior checkpoints / `plan_devices.md` for full detail).
+
+**Precise Section 16 task count (2026-07-18, counted directly from `plan_devices.md`,
+not from memory — re-count with the script below before trusting this if picking up
+much later, since it will go stale):**
+- **92 real tasks total** in Section 16 (`### TASK-ID — ... — CLOSED/OPEN` headers;
+  excludes the trailing "Perfection re-audit definition of done" non-task header).
+- **27 CLOSED** — fully done.
+- **24 OPEN but substantively investigated/progressed** (has its own "Progress so
+  far" note — real implementation/tests/documentation done, left OPEN only because
+  its acceptance criteria name a hardware/oracle/other-blocked-work result this
+  container genuinely cannot produce).
+- **41 OPEN, genuinely untouched** (21 at P1, 20 at P2) — no work done on these at
+  all. Most are either hardware-gated (`COMP2-004/005`, `MOT2-009/010`, `VIB2-005`,
+  `ANDR2-012/015`, `TEST2-006`) or large architecture tasks deliberately set aside,
+  not quick continuations (`LIFE-007/010/011`, `ANDR2-011/014`, `MOT2-006`,
+  `TEST2-004/005` — see Section 9's "Do not do yet" for why each was set aside) or
+  blocked on other not-yet-done work (`DEVPERF-002/003` need a real WP7 reference
+  manifest/harness this environment cannot produce). The P2 items among the 41 are
+  the least-triaged group — worth a fresh look before assuming they're all
+  hardware/architecture-blocked too, since only `VIB2-006`/`VIB2-007` have been
+  looked at closely so far.
+
+Re-count anytime with:
+```bash
+python3 - <<'PYEOF'
+import re
+with open('plan_devices.md') as f:
+    content = f.read()
+idx = content.find('## 16. Independent perfection re-audit backlog')
+blocks = re.split(r'\n(?=### )', content[idx:])
+tasks = [b for b in blocks if b.startswith('### ') and 'definition of done' not in b]
+closed = [t for t in tasks if re.search(r'^### .*— CLOSED', t.split('\n')[0])]
+open_tasks = [t for t in tasks if re.search(r'^### .*— OPEN', t.split('\n')[0])]
+touched = [t for t in open_tasks if 'Progress so far' in t]
+untouched = [t for t in open_tasks if 'Progress so far' not in t]
+print(f"Total: {len(tasks)}  CLOSED: {len(closed)}  OPEN-progressed: {len(touched)}  OPEN-untouched: {len(untouched)}")
+PYEOF
+```
 
 **P1 tasks closed so far, in the order worked (all committed):**
 1. `BASE2-007` (`aaf3dae8`) — counter-underflow clamping → loud `assert()`.
@@ -937,7 +975,11 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 37 P1
+file (NEXTdevices.md)'s own Section 2 top for the precise, directly-counted
+task breakdown (92 total / 27 CLOSED / 24 OPEN-but-progressed / 41
+OPEN-untouched, with a re-count script) before assuming anything about scope
+remaining -- re-run that script if this checkpoint is more than a session or
+two old, since it will go stale. For what's been done: all P0 tasks are closed, and 37 P1
 tasks plus 1 P2 task are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
