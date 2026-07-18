@@ -384,6 +384,50 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     injection for the haptic/Android-only sites remains `VIB2-003`/`004`/`SDLCORE-005`/
     `ANDR2-006`'s **own** separately-tracked "needs real hardware" limitation, not
     reopened or claimed resolved by closing `DEVPERF-005` itself.
+30. `SDLCORE-007` (`e1c9c7d2`, docs-only) — verified against the pinned SDL source:
+    `SDL_SensorEvent::timestamp` is nanoseconds since SDL library init
+    (`SDL_GetTicksNS()`), a genuine monotonic acquisition-time value, distinct from
+    Android's boot-time `ASensorEvent::timestamp`. **Found a real, direct conflict**
+    with `READINGS-003` (`docs/devices-api-coverage.md`, 2026-07-06's already-settled,
+    cross-sensor-class-consistent "always wall-clock-at-dispatch, never raw
+    monotonic" policy) — this task's required work asks for exactly the "unreliable,
+    platform-specific... offset calculation" `READINGS-003` explicitly rejected,
+    just calibrated rather than raw. **Deliberately not implemented**: doing it only
+    for `Accelerometer`/`Gyroscope` (SDL-backed; `Compass`/`Motion` are Android-NDK,
+    a different clock domain this task's SDL-specific wording never addresses) would
+    silently break `READINGS-003`'s "applied identically everywhere" guarantee
+    several existing `Compass`/`Motion` tests rely on; the accuracy gain over
+    dispatch-time is likely small per `READINGS-003`'s own "dispatch happens
+    promptly" reasoning; and the full clock-step-safe bridge this task's acceptance
+    criteria demand is comparable in scope/risk to `LIFE-007`/`010`/`011`/`ANDR2-011`.
+    **Left as a genuine product/architecture decision for explicit human input**
+    (accept the cross-class inconsistency and build it SDL-only, build an equivalent
+    Android-side bridge too, or treat `READINGS-003` as superseding this task) —
+    not picked unilaterally. Added to Section 9's "Do not do yet" below.
+31. `SDLCORE-011` (`3e93860a`) — confirmed the problem statement directly:
+    `VibrateController::getDefaultProperty()`'s function-local static singleton's
+    destructor (via `SdlHapticVibrateBackend`) makes real `SDL_CloseHaptic()`/
+    `SDL_QuitSubSystem()` calls with no guard against running after the
+    application's own `SDL_Quit()`. New `Detail::DevicesShutdownCoordinator`
+    (header-only atomic flag) — call `Shutdown()` before `SDL_Quit()` — wired into
+    that destructor. **Read SDL's own source rather than assuming a uniform risk**:
+    `SDL_CloseHaptic()` on a device `SDL_Quit()` already freed internally is a real
+    heap-use-after-free (`CHECK_HAPTIC_MAGIC()` dereferences freed memory) —
+    reasoned from source, not empirically reproduced (needs a real opened haptic
+    device, unavailable here, same limitation `VIB2-003`/`004` carry).
+    `SDL_QuitSubSystem()` after `SDL_Quit()`, by contrast, was checked and found
+    **already safe** (refcount-gated no-op) — verified empirically via new
+    `tools/devices/shutdown_ordering_harness.cpp` run under `cmake-build-devices-asan`
+    both with and without the guard (`--skip-shutdown-call`), 0 ASan reports either
+    way; an earlier draft of this note had prematurely claimed "confirmed
+    reproducible" before actually running the harness both ways — caught and
+    corrected before committing. New `DevicesShutdownCoordinatorTests.cpp` (4 tests)
+    plus `DevicesShutdownOrderingTests.cpp` (spawns the harness via `posix_spawn`,
+    mirroring `AudioMixerTests.cpp`'s "needs a fresh process" precedent).
+    `SdlSensorSubsystem<TSensor>` checked and confirmed to have **no** destructor
+    logic touching SDL at all — already safe by construction. **Left OPEN**: the one
+    genuinely dangerous call site (`SDL_CloseHaptic` UAF) remains hardware-unverified;
+    "stress exception exit and plugin/library unload" not attempted.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -610,7 +654,11 @@ tractability):
   but this task wants a machine-readable manifest/full behavioral harness, a much
   bigger ask — scope this carefully before starting, it may turn out to be
   irreducibly hardware/SDK-blocked rather than just effort-blocked).
-  `SDLCORE-007`/`011` — investigated briefly last pass, still open, see prior notes.
+  `SDLCORE-007` and `SDLCORE-011` are both now investigated (see Section 2's entries
+  30/31): `007` is deliberately left for explicit human input (see Section 9's "Do
+  not do yet" below, do not pick a side unilaterally); `011` has its core
+  implementation done and stays OPEN only because the one genuinely dangerous call
+  site (`SDL_CloseHaptic` UAF) needs real hardware to verify under ASan.
 - `ANDR2-007`/`012`/`014`/`015` — remaining Android-only items (`ANDR2-009`/`010` done
   this pass, `011` deliberately deferred per above; `007` is the same design-heavy
   "calibrated boot/monotonic-to-UTC offset" concern as `SDLCORE-007` below, for the
@@ -667,8 +715,21 @@ whether a finished implementation should be marked CLOSED or left OPEN.
   hardware evidence, no push without asking).
 - Do not re-litigate `BASE2-007`/`LIFE-008`'s "no RAII quota token" decision without a
   concrete new reason.
-- Do not add `SDL_Log()` (or any SDL call) to `AndroidSensorBridge.cpp` — deliberately
-  SDL-free; use `__android_log_print()` there instead.
+- Do not add a *direct* `SDL_Log()` (or any raw SDL call) to `AndroidSensorBridge.cpp`
+  — still deliberately SDL-free at the translation-unit level. `DEVPERF-005`'s
+  `ANDR2-006` migration routes this file's diagnostics through
+  `NativeDiagnosticSink::Record()` instead (a *separate* translation unit,
+  `NativeDiagnostic.cpp`, that happens to use `SDL_Log()` internally) — this is
+  compliant with the letter of this rule (verified building clean on Android both
+  before and after), not an exception to it; don't add a *new*, second raw SDL call
+  to this file on the theory that one already snuck in.
+- `SDLCORE-007` ("use acquisition timestamps from SDL sensor events"): do not
+  implement the calibrated monotonic-to-wall-clock bridge this task's required work
+  asks for without explicit human input first — it's in direct, confirmed conflict
+  with `READINGS-003`'s already-settled, cross-sensor-class-consistent "always
+  wall-clock-at-dispatch" policy (see Section 2's own dated entry for the full
+  investigation). Implementing it only for `Accelerometer`/`Gyroscope` would silently
+  break that consistency guarantee several existing `Compass`/`Motion` tests rely on.
 - Do not mark a task fully `CLOSED` just because `ANDR2-004`/`005`/`006` were, if its
   own acceptance criteria name an empirical/dynamic result those three didn't — see
   Section 1's labeling convention. Check the literal wording every time.
@@ -683,24 +744,33 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 29 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 31 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
-BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005 -- see Section 2 for commit
-hashes and a one-line summary of each), plus a separate, unrelated
-re-verification round of the *older* `audit_devices.md` (6 `DEV-AUD-*`
-findings, commit `422ed4c4` -- see Section 2's own dated entry). All five
-`BASE2-*` P1 tasks are now done. `DEVPERF-004` found a real, concrete,
-previously-undetected gap (AndroidSensorBridge::Run()'s silent
+BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011 --
+see Section 2 for commit hashes and a one-line summary of each), plus a
+separate, unrelated re-verification round of the *older* `audit_devices.md`
+(6 `DEV-AUD-*` findings, commit `422ed4c4` -- see Section 2's own dated
+entry). All five `BASE2-*` P1 tasks are now done. `DEVPERF-004` found a real,
+concrete, previously-undetected gap (AndroidSensorBridge::Run()'s silent
 exception-swallow, no logging/counter, unlike SDLCORE-009's SDL-side fix);
 `DEVPERF-005` built the shared Detail::NativeDiagnosticSink, closed that gap,
 then migrated all five named follow-up call sites (SDLCORE-009, VIB2-003,
 VIB2-004, SDLCORE-005, ANDR2-006) plus 2 more a dedicated sweep found, and is
 now **CLOSED** -- do not reopen it without a new, concrete reason (real-hardware
 fault injection for the haptic/Android-only sites is VIB2-003/004/SDLCORE-005/
-ANDR2-006's own separately-tracked limitation, not DEVPERF-005's). Read Section
+ANDR2-006's own separately-tracked limitation, not DEVPERF-005's).
+`SDLCORE-011` (VibrateController's static-destruction-order hazard against
+SDL_Quit()) has its core fix done and verified, both by reasoning from SDL's
+own source and by a real standalone ASan harness -- stays OPEN only because the
+one genuinely dangerous call site (SDL_CloseHaptic use-after-free) needs real
+hardware to verify, not because the fix itself is incomplete. `SDLCORE-007`
+was investigated and found in direct conflict with the already-settled
+READINGS-003 policy -- deliberately NOT implemented, left for explicit human
+input (see Section 9's "Do not do yet"), not a task to pick up autonomously.
+Read Section
 1's "labeling convention" note carefully before closing anything -- it
 distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009,
 BASE2-005) from tasks whose acceptance criteria name an empirical/hardware
