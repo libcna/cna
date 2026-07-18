@@ -1753,6 +1753,90 @@ TEST(XactParserTest, NonCompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
     EXPECT_EQ(wb.entries[0].channels, 2);
 }
 
+namespace
+{
+    // AUD-11-012: distinctive, mutually-non-collidable values for every FACTWaveBankMiniWaveFormat
+    // bitfield (real layout confirmed against FAudio's own FACT.h: wFormatTag:2, nChannels:3,
+    // nSamplesPerSec:18, wBlockAlign:8, wBitsPerSample:1, packed LSB-first) -- unlike the
+    // channels-only fixture above, a bit-shift/mask bug that swapped two fields or was off by one
+    // bit would still be caught here, since no two chosen values could plausibly be confused for
+    // each other. Uses ADPCM (fmtTag=2) specifically so the raw wBlockAlign field's own extraction
+    // is verifiable through the derived blockAlign/samplesPerBlock formulas (for PCM, wBlockAlign
+    // is read but overridden by a channels-only formula, so it wouldn't exercise this field at all).
+    std::vector<uint8_t> BuildNonCompactXwbFixtureDistinctiveAdpcmFields()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 16;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0u);
+        AppendU32(data, entryCount);
+        AppendPadded(data, "AUD-11-012-nc-distinctive", 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, 4);
+        AppendU32(data, 0);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        const uint32_t fmt =
+              (2u)              // fmtTag: ADPCM
+            | (5u << 2)         // channels: 5 (distinctive, not a real speaker layout)
+            | (12345u << 5)     // sample rate: distinctive, well within the 18-bit range
+            | (77u << 23)       // wBlockAlign raw field: distinctive
+            | (1u << 31);       // 16-bit
+        AppendU32(data, 0u);
+        AppendU32(data, fmt);
+        AppendU32(data, 0u);
+        AppendU32(data, waveDataLength);
+        AppendU32(data, 0u);
+        AppendU32(data, 0u);
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+}
+
+TEST(XactParserTest, NonCompactWaveBankMiniWaveFormatBitExtractionMatchesEveryFieldExactly)
+{
+    const XwbData wb = ParseXwb(BuildNonCompactXwbFixtureDistinctiveAdpcmFields());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    const auto& e = wb.entries[0];
+
+    EXPECT_EQ(e.channels, 5);
+    EXPECT_EQ(e.sampleRate, 12345u);
+    EXPECT_EQ(e.bitsPerSample, 16);
+    // ADPCM-derived formulas (FAudio's own): wSamplesPerBlock = (wBlockAlign_raw + 16) * 2,
+    // nBlockAlign = (wBlockAlign_raw + 22) * channels -- with wBlockAlign_raw=77, channels=5:
+    EXPECT_EQ(e.samplesPerBlock, (77 + 16) * 2);
+    EXPECT_EQ(e.blockAlign, (77 + 22) * 5);
+}
+
 // ===================== Truncated files / bad magic (IN-6) =====================
 
 TEST(XactParserTest, ParseXgsTruncatedFileThrows)
