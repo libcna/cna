@@ -133,6 +133,39 @@ namespace CNA::Internal::Xnb
             }
         }
 
+        // AUD-06-023 (fuzzing prep): found via property-based testing that the 16-bit PCM direct
+        // fast path had never received the same treatment AUD-06-024 gave BuildViaWavWrapper --
+        // an invalid sample rate (e.g. 0) makes SoundEffect's raw-buffer constructor throw a raw
+        // System::NotSupportedException with no asset context at all, unlike every other failure
+        // path in this reader. Isolating the construction call in its own helper keeps that fix
+        // symmetric with BuildViaWavWrapper's, and keeps ValidateDecodedDurationAgainstStoredOracle
+        // (called separately, after this returns) from being caught and needlessly re-wrapped.
+        SoundEffect BuildDirectPcm16(
+            const std::string& assetName,
+            const std::vector<uint8_t>& data,
+            uint32_t nSamplesPerSec, uint16_t nChannels,
+            int32_t loopStart, int32_t loopLength)
+        {
+            try
+            {
+                SoundEffect effect(
+                    data, 0, static_cast<int32_t>(data.size()),
+                    static_cast<int32_t>(nSamplesPerSec),
+                    static_cast<AudioChannels>(nChannels),
+                    loopStart, loopLength);
+                effect.setNameProperty(assetName);
+                return effect;
+            }
+            catch (const std::exception& inner)
+            {
+                throw ContentLoadException(
+                    "'" + assetName + "': SoundEffectReader failed to construct 16-bit PCM audio "
+                    "(channels=" + std::to_string(nChannels) +
+                    ", sampleRate=" + std::to_string(nSamplesPerSec) + ").",
+                    inner);
+            }
+        }
+
         // Builds a SoundEffect for any format SDL3's own WAV decoder understands natively (PCM
         // 8/16-bit, IEEE float, MS/IMA ADPCM) by wrapping the raw bytes in a minimal in-memory WAV
         // file and going through SoundEffect::FromStream -- the same technique WaveBank.cpp uses
@@ -278,12 +311,8 @@ namespace CNA::Internal::Xnb
         if (wFormatTag == kWaveFormatPcm && wBitsPerSample == 16)
         {
             // Unchanged fast path: direct construction, no WAV-wrapping overhead.
-            SoundEffect effect(
-                data, 0, static_cast<int32_t>(data.size()),
-                static_cast<int32_t>(nSamplesPerSec),
-                static_cast<AudioChannels>(nChannels),
-                loopStart, loopLength);
-            effect.setNameProperty(input.getAssetNameProperty());
+            SoundEffect effect = BuildDirectPcm16(
+                input.getAssetNameProperty(), data, nSamplesPerSec, nChannels, loopStart, loopLength);
             ValidateDecodedDurationAgainstStoredOracle(
                 input.getAssetNameProperty(), storedDurationMs, effect);
             return effect;

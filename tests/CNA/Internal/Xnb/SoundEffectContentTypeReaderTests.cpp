@@ -1051,3 +1051,55 @@ TEST_F(SoundEffectContentTypeReaderTest, LooplessXnbEffectHasNoLoopRegionOnInsta
     EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopStart(instance), 0u);
     EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopLength(instance), 0u);
 }
+
+// ---------------------------------------------------------------------------
+// AUD-06-023 (found via fuzzing/property-based-testing prep): the 16-bit PCM direct fast path had
+// never received AUD-06-024's treatment (that fix only wrapped BuildViaWavWrapper) -- an invalid
+// sample rate let a raw System::NotSupportedException escape with no asset context, unlike every
+// other failure path in this reader. Fixed via BuildDirectPcm16, mirroring BuildViaWavWrapper's
+// existing try/catch pattern exactly.
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectContentTypeReaderTest, Pcm16WithZeroSampleRateFailsWithAssetContextNotRawException)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);
+    w16(1);   // wFormatTag: PCM
+    w16(1);   // nChannels: mono
+    w32(0);   // nSamplesPerSec: 0 -- invalid, makes MIX_LoadRawAudio fail
+    w32(0);
+    w16(2);
+    w16(16);  // wBitsPerSample: 16 -- direct fast path
+    w32(200);
+    for (int i = 0; i < 200; ++i) bytes.push_back(static_cast<uint8_t>(i));
+    w32(0); w32(0); w32(0);
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+
+    try
+    {
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("'test'"), std::string::npos) << what;
+        EXPECT_NE(what.find("--->"), std::string::npos) << what; // inner-exception marker
+    }
+}
