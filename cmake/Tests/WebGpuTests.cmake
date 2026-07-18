@@ -166,4 +166,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_texture3d examples/webgpu_texture3d_test.cpp)
     cna_register_backend_test(NAME WebGPU_Texture3D COMMAND cna_test_webgpu_texture3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-114: WebGPURenderTargetCubeBackend / CreateRenderTargetCube() -- this backend's first
+    # real render-into-a-cube-face support (previously IGraphicsBackend's own nullptr-returning
+    # default). Direct face-to-face switching (no intervening backbuffer bind), a real BasicEffect
+    # 3D draw into a face, an EnvironmentMapEffect sampling round trip proving IWebGPUCubeSamplable
+    # resolves a RenderTargetCube (not just a plain TextureCube), and the "an intervening cube-
+    # face-targeted Clear() must not leak into the backbuffer's own render pass" architecture check.
+    cna_webgpu_test(cna_test_webgpu_rendertargetcube examples/webgpu_rendertargetcube_test.cpp)
+    cna_register_backend_test(NAME WebGPU_RenderTargetCube COMMAND cna_test_webgpu_rendertargetcube
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

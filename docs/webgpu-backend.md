@@ -337,6 +337,61 @@ quad at their own independently-predicted screen location with the shared `Diffu
 the per-instance buffer is genuinely read per-instance, not e.g. always instance 0 or a hardcoded
 2-instance special case — plus an untouched-background check and the null-`instanceVb` fallback.
 
+## RenderTargetCube (2026-07-18)
+
+`WebGPURenderTargetCubeBackend` (`WEBGPU-114`) is this backend's first real render-into-a-cube-face
+support — before this, `CreateRenderTargetCube()` was `IGraphicsBackend`'s own nullptr-returning
+default. It owns ONE shared 6-array-layer colour `WGPUTexture` (the same layout
+`WebGPUTextureCubeBackend`, WEBGPU-56/113, already established for a plain `TextureCube`) plus ONE
+shared `size`×`size` `Depth24PlusStencil8` depth+stencil texture reused across all 6 faces — safe
+because only ONE face is ever bound/rendered-into at a time, mirroring
+`VulkanRenderTargetCubeBackend`'s identical shared-depth-image choice. Each face gets its own
+`WGPUTextureViewDimension_2D` view (the render-pass colour attachment); one further
+`WGPUTextureViewDimension_Cube` view spans all 6 layers for sampling back.
+
+Making a cube face act as its own distinct "target identity" for this backend's pre-existing
+eager-flush-on-target-switch design (see the `RenderTarget2D` section above) needed generalising
+that design's previously `RenderTarget2D`-only switch logic: `WebGPUGraphicsBackend::
+FlushCurrentRenderTarget()` is a new shared entry point (factored out of the old inline
+`SetRenderTarget2D`-only if/else) that flushes whichever of {backbuffer, a bound `RenderTarget2D`,
+a bound `RenderTargetCube` face} is currently active, via a new `currentRenderTargetCubeFace_`/
+`currentRenderTargetCubeFaceIndex_` pair mirroring the pre-existing `currentRenderTarget_` field.
+This means switching directly between two DIFFERENT faces of the SAME (or a different)
+`RenderTargetCube` — not just face↔backbuffer — still correctly flushes the outgoing face's own
+render pass first, verified directly (`WebGPU_RenderTargetCube` Check A: all 6 faces bound
+face-to-face with no intervening backbuffer switch, each reading back its own distinct `Clear()`
+colour).
+
+Sampling a `RenderTargetCube` back as `EnvironmentMapEffect.EnvironmentMap` needed one more small
+piece: a new `IWebGPUCubeSamplable` interface (the cube-map sibling of the pre-existing
+`IWebGPUSamplable`), implemented by BOTH `WebGPUTextureCubeBackend` and
+`WebGPURenderTargetCubeBackend`, resolved via a safe `dynamic_cast` (`ResolveCubeSamplable()`).
+Before this, `GpuDrawParams::envMap` was resolved via a `dynamic_cast` to the concrete
+`WebGPUTextureCubeBackend` type ONLY, so a `RenderTargetCube` (a different concrete class) bound as
+an env map would have silently failed that cast and rendered the 1x1 white-cube fallback instead of
+its own real content — this is CNA's primary real-world `RenderTargetCube` use case (dynamic
+reflection/environment maps), so this wiring matters as much as the render-into support itself.
+
+Deliberately, honestly NOT implemented (documented scope cuts, not silently under-delivered): mip
+regeneration (`mipMap=true` throws, matching `CreateRenderTarget2D`'s own precedent) and MSAA
+(`multiSampleCount` is ignored; `GetMultiSampleCount()` always reports 0). `WebGPU_RenderTargetCube`
+(12/12) verifies: 6-face direct face-to-face switching, a real `BasicEffect` 3D draw into a face,
+the `EnvironmentMapEffect` sampling round trip above, the critical "an intervening cube-face-
+targeted `Clear()` must not leak into the backbuffer's own render pass" architecture check (mirrors
+the `RenderTarget2D` section's own Check E), `mipMap=true` throwing, and `MultiSampleCount`
+honesty.
+
+A genuinely new, previously-untested finding surfaced while writing this test (documented, not
+fixed — pre-existing and backend-wide, not specific to `RenderTargetCube`): `QueueSprite()` computes
+every sprite's clip-space geometry from the BACKBUFFER's own logical dimensions unconditionally,
+never from whatever render target is currently bound. A `SpriteBatch.Draw()` issued while a
+smaller/different-sized off-screen target is bound therefore does not necessarily cover the whole
+bound target the way a caller would expect — confirmed empirically (a 32×32 cube face bound under a
+64×64 backbuffer only had one quadrant painted by a destination-rect-(0,0,32,32) `SpriteBatch.Draw`
+call). `webgpu_rendertargetcube_test.cpp`'s own Check C works around this by painting each face with
+a real 3D (`BasicEffect`) draw instead of `SpriteBatch`, which is not subject to this backbuffer-
+relative ortho mapping.
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:
@@ -363,11 +418,12 @@ open in `plan_webgpu.md`:
 
 - `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedEffect`,
   `SkinnedPbrEffect`, `EnvironmentMapEffect` real dispatch and real instancing
-  (`DrawInstancedPrimitivesEx()`) are all now implemented, see above. Full `TextureCube`/
-  `RenderTargetCube` parity (mip regeneration, `GetData()`, cube render targets) remains open;
-- single-target `RenderTarget2D` (colour + depth/stencil round trip, real 3D-draw dispatch,
-  sampling back through `SpriteBatch`) is now implemented, see below; `RenderTargetCube`, 3D
-  textures, compressed formats and multiple simultaneous render targets (MRT) remain open. MSAA
+  (`DrawInstancedPrimitivesEx()`) are all now implemented, see above. `RenderTargetCube` (cube
+  render targets) is now implemented too, see below; `TextureCube`/`RenderTargetCube` mip
+  regeneration remains open;
+- single-target `RenderTarget2D` AND `RenderTargetCube` (colour + depth/stencil round trip, real
+  3D-draw dispatch, sampling back through `EnvironmentMapEffect`) are now implemented, see below;
+  compressed formats and multiple simultaneous render targets (MRT) remain open. MSAA
   (backbuffer and render target) is now implemented and verified end-to-end — global sample count,
   clamped `ApplyMultiSampleCount()`, RT mirroring, and genuine multisample-resolved rendering all
   work (`WebGPU_Msaa`, 6/6) — see `WEBGPU-58`. A `RenderTarget2D`'s own per-instance
