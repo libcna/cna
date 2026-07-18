@@ -6228,8 +6228,24 @@ test is not sufficient for an Android coordinate/fusion claim.
     precise filter (347 tests) clean under `devices-ubsan` (343 passed, 4
     hardware skips, 0 failures) and `devices-tsan` (3 runs, 0 `WARNING:
     ThreadSanitizer`).
-    **Remaining migrations, still open**: `SDLCORE-005`, `ANDR2-006` — same
-    one-call-site-at-a-time approach.
+  - **2026-07-18, fourth follow-up migration completed**: `SDLCORE-005`'s own
+    original entry had the same gap `VIB2-004` had for the haptic path — no
+    diagnostic at all for `OpenDefaultSensorLocked()`'s stale-sensor-release
+    branch. Added one `NativeDiagnosticSink::Record()` call there,
+    `Severity=Info`, `Operation="SdlSensorSubsystem sensor released
+    (disconnected)"`, `DeviceId` = the about-to-be-closed `sensorId_` (read
+    before the handle is closed and the field reset to `0`). Shared by both
+    `Accelerometer`/`Gyroscope` (same template). No new tests: like the
+    haptic case, this path only runs when `sensor_` is a real, previously-opened
+    SDL sensor handle — no fake/mock seam exists for it, same "needs real
+    hardware" limitation `SDLCORE-005`'s own original entry already carries.
+    `Accelerometer.cpp`/`Gyroscope.cpp` re-verified via NDK cross-compile.
+    Full precise filter (347 tests) clean under `devices-ubsan` (343 passed,
+    4 hardware skips, 0 failures) and `devices-tsan` (3 runs on
+    `AccelerometerTests`/`GyroscopeTests`, 0 `WARNING: ThreadSanitizer`).
+    **Remaining migration, still open**: `ANDR2-006` (Android-only, needs an
+    NDK-cross-compile-only verification pass, same as the `AndroidSensorBridge::
+    Run()` callback migration earlier this task).
 
 ### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)
 

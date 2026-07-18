@@ -356,6 +356,22 @@ namespace Microsoft::Devices::Sensors::Detail
         {
             if (sensor_ != nullptr && !IsSensorConnected(sensorId_, globalSdlSensorMutexHeld))
             {
+                // Task DEVPERF-005 (2026-07-18, external audit
+                // `audit_devices_2026-07-17.md`): SDLCORE-005's own original
+                // entry had no diagnostic at all for this path, the SDL
+                // sensor analogue of VIB2-004's own identical gap (closed
+                // for the haptic path earlier this pass). Info severity, not
+                // Warning/Error -- this is expected, correctly-handled
+                // behavior (the whole reason IsSensorConnected() is checked
+                // here), not an ignored failure.
+                NativeDiagnosticRecord record;
+                record.Backend = "SDL";
+                record.Operation = "SdlSensorSubsystem sensor released (disconnected)";
+                record.DeviceId = std::to_string(sensorId_);
+                record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+                record.Severity = NativeDiagnosticSeverity::Info;
+                NativeDiagnosticSink::Record(record);
+
                 SDL_CloseSensor(sensor_);
                 sensor_ = nullptr;
                 sensorId_ = 0;
