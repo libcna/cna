@@ -102,6 +102,14 @@ namespace
             setIsDataValidProperty(value);
         }
 
+        // Task BASE2-002 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): exercises the new combined setter
+        // directly.
+        void SetCurrentValueAndMarkDataValidForTesting(const TestSensorReading& value)
+        {
+            SetCurrentValueAndMarkDataValid(value);
+        }
+
         void SetTimeBetweenUpdatesForTesting(const TimeSpan& value)
         {
             setTimeBetweenUpdatesProperty(value);
@@ -337,6 +345,86 @@ TEST(SensorBaseTests, CurrentValueChangedEventArgsCarryTheNewValue)
 
     ASSERT_TRUE(invoked);
     EXPECT_EQ(receivedValue, 7);
+}
+
+// Task BASE2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// SetCurrentValueAndMarkDataValid() must publish both IsDataValid and
+// CurrentValue together -- confirms both land correctly in the simple,
+// single-threaded case (the concurrency proof is the stress test below).
+TEST(SensorBaseTests, SetCurrentValueAndMarkDataValidSetsBothFields)
+{
+    TestSensorBase sensor;
+    sensor.SetSupportedForTesting(true);
+
+    ASSERT_FALSE(sensor.getIsDataValidProperty());
+
+    sensor.SetCurrentValueAndMarkDataValidForTesting(TestSensorReading(99));
+
+    EXPECT_TRUE(sensor.getIsDataValidProperty());
+    EXPECT_EQ(sensor.getCurrentValueProperty().getValue(), 99);
+}
+
+TEST(SensorBaseTests, SetCurrentValueAndMarkDataValidRaisesCurrentValueChangedWithTheNewValue)
+{
+    TestSensorBase sensor;
+    sensor.SetSupportedForTesting(true);
+
+    bool invoked = false;
+    int receivedValue = -1;
+    sensor.CurrentValueChanged += [&invoked, &receivedValue](
+        System::Object*, const SensorReadingEventArgs<TestSensorReading>& args)
+    {
+        invoked = true;
+        receivedValue = args.getSensorReadingProperty().getValue();
+    };
+
+    sensor.SetCurrentValueAndMarkDataValidForTesting(TestSensorReading(13));
+
+    ASSERT_TRUE(invoked);
+    EXPECT_EQ(receivedValue, 13);
+}
+
+// The actual regression proof: before Task BASE2-002, a dispatch path called
+// setIsDataValidProperty(true) and setCurrentValueProperty(value) as two
+// independently-locked calls -- a concurrent reader could observe
+// IsDataValid already true while CurrentValue still held the previous (here,
+// default-constructed, value 0) reading. A writer thread repeatedly calls
+// SetCurrentValueAndMarkDataValidForTesting() with a fixed, distinguishable
+// value (never 0) while a reader thread repeatedly checks the invariant "if
+// IsDataValid is true, CurrentValue must not be the default-constructed
+// value" -- any observed violation fails the test immediately. Run under
+// devices-tsan specifically: a genuine race here is exactly what TSan is
+// built to catch, not something an assertion alone can reliably reproduce.
+TEST(SensorBaseTests, SetCurrentValueAndMarkDataValidNeverExposesAnInconsistentSnapshot)
+{
+    TestSensorBase sensor;
+    sensor.SetSupportedForTesting(true);
+
+    std::atomic<bool> stop{false};
+    std::atomic<bool> violationFound{false};
+    constexpr int WriterIterations = 2000;
+
+    std::thread reader([&sensor, &stop, &violationFound]()
+    {
+        while (!stop.load(std::memory_order_acquire))
+        {
+            if (sensor.getIsDataValidProperty() && sensor.getCurrentValueProperty().getValue() == 0)
+            {
+                violationFound.store(true, std::memory_order_release);
+                return;
+            }
+        }
+    });
+
+    for (int i = 0; i < WriterIterations; ++i)
+    {
+        sensor.SetCurrentValueAndMarkDataValidForTesting(TestSensorReading(42));
+    }
+
+    stop.store(true, std::memory_order_release);
+    reader.join();
+
+    EXPECT_FALSE(violationFound.load(std::memory_order_acquire));
 }
 
 // Task P8-2: timeBetweenUpdates_ was the one remaining field on this class read

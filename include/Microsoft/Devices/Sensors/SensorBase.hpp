@@ -370,6 +370,52 @@ namespace Microsoft::Devices::Sensors
         }
 
         /**
+         * @brief Atomically stores a new reading and marks data valid, then raises CurrentValueChanged (Task BASE2-002).
+         *
+         * Every derived sensor class's own dispatch path previously called
+         * `setIsDataValidProperty(true)` and `setCurrentValueProperty(value)`
+         * as two independently-locked calls (`Accelerometer`/`Gyroscope`/
+         * `Compass`/`Motion` all did this identically) — each call is itself
+         * race-free (`docs/devices-thread-safety.md`'s existing guarantee),
+         * but nothing prevented a concurrent reader on another thread from
+         * observing the window *between* the two calls, where
+         * `getIsDataValidProperty()` had already flipped to `true` while
+         * `getCurrentValueProperty()` still returned the previous (or, for a
+         * sensor's very first ever reading, still default-constructed)
+         * value — an inconsistent, misleading snapshot a caller checking
+         * "if valid, use CurrentValue" could genuinely observe. Combining
+         * both assignments into one lock scope closes that window entirely:
+         * a concurrent reader now always sees either the state from before
+         * this call or the fully-updated state after it, never a mix of the
+         * two. Derived classes should prefer this over the two separate
+         * calls whenever a new reading is what makes data valid (the
+         * overwhelmingly common case) — the separate `setIsDataValidProperty()`/
+         * `setCurrentValueProperty()` setters remain available for the rarer
+         * case of changing one without the other (e.g. explicitly
+         * invalidating data with no new reading to publish).
+         *
+         * @param value New sensor reading; also becomes the new CurrentValue.
+         */
+        void SetCurrentValueAndMarkDataValid(const TSensorReading& value)
+        {
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                currentValue_ = value;
+                isDataValid_ = true;
+            }
+
+            if (!CurrentValueChanged.Empty())
+            {
+                // Same discipline as setCurrentValueProperty() above: a
+                // local, per-dispatch event-args instance, never held under
+                // mutex_ while raising (a subscriber's handler may
+                // legitimately call back into this sensor).
+                SensorReadingEventArgs<TSensorReading> args(value);
+                CurrentValueChanged.Raise(static_cast<System::Object*>(this), args);
+            }
+        }
+
+        /**
          * @brief Sets whether the current sensor data is valid.
          *
          * @param value New validity flag.

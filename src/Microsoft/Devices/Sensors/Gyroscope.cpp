@@ -437,10 +437,14 @@ namespace Microsoft::Devices::Sensors
         // values to values[0]/[1]/[2] in the same X/Y/Z order, only scaling
         // degrees-per-second to radians-per-second -- neither backend
         // reorders or negates axes.
+        // Task BASE2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // see Accelerometer::DispatchSensorReading()'s identical fix for the
+        // full rationale -- checked directly as the local `valid` from here
+        // on, instead of an early setIsDataValidProperty(valid) call
+        // immediately re-read back via getIsDataValidProperty().
         const bool valid = true;
-        setIsDataValidProperty(valid);
 
-        if (getIsDataValidProperty())
+        if (valid)
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
@@ -468,7 +472,10 @@ namespace Microsoft::Devices::Sensors
             gyroscopeReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 
-        setCurrentValueProperty(gyroscopeReading);
+        // Task BASE2-002: atomically publishes the new reading and marks
+        // IsDataValid true together -- see
+        // SetCurrentValueAndMarkDataValid()'s own doc comment.
+        SetCurrentValueAndMarkDataValid(gyroscopeReading);
     }
 
     void Gyroscope::InjectSyntheticSensorUpdate(float x, float y, float z)

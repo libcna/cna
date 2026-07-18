@@ -170,8 +170,15 @@ namespace Microsoft::Devices::Sensors
                         }
                         owner = control->owner;
                     }
-                    owner->setIsDataValidProperty(true);
-                    owner->setCurrentValueProperty(reading);
+                    // Task BASE2-002 (2026-07-17, external audit
+                    // `audit_devices_2026-07-17.md`): previously two separate
+                    // calls (setIsDataValidProperty(true) then
+                    // setCurrentValueProperty(reading)) -- a concurrent
+                    // reader could observe IsDataValid already true while
+                    // CurrentValue still held the previous (or, for the very
+                    // first reading, still default-constructed) value. See
+                    // SetCurrentValueAndMarkDataValid()'s own doc comment.
+                    owner->SetCurrentValueAndMarkDataValid(reading);
                 },
                 [control = control_, myGeneration]()
                 {

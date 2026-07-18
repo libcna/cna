@@ -616,10 +616,17 @@ namespace Microsoft::Devices::Sensors
         // SDL_STANDARD_GRAVITY -- neither backend reorders or negates axes,
         // so this method's x/y/z parameters are exactly SDL's documented
         // natural-orientation axes on every platform this project builds for.
+        // Task BASE2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // previously set via an early setIsDataValidProperty(valid) call,
+        // then immediately re-read back via getIsDataValidProperty() below --
+        // a redundant round-trip through mutex_-guarded shared state for a
+        // value already known locally, and one that let IsDataValid become
+        // observably true well before CurrentValue actually held this new
+        // reading (SetCurrentValueAndMarkDataValid() below closes that
+        // window). Checked directly as the local `valid` from here on.
         const bool valid = true;
-        setIsDataValidProperty(valid);
 
-        if (getIsDataValidProperty())
+        if (valid)
         {
 #ifdef __ANDROID__
             // On Android, remap raw SDL portrait-frame axes to the XNA landscape
@@ -686,7 +693,11 @@ namespace Microsoft::Devices::Sensors
             shouldRaiseReadingChanged = true;
         }
 
-        setCurrentValueProperty(accelerometerReading);
+        // Task BASE2-002: atomically publishes the new reading and marks
+        // IsDataValid true together -- see SetCurrentValueAndMarkDataValid()'s
+        // own doc comment for the race this closes (previously two separate
+        // calls, one at the very top of this method).
+        SetCurrentValueAndMarkDataValid(accelerometerReading);
 
         if (shouldRaiseReadingChanged)
         {

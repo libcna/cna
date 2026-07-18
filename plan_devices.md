@@ -8274,7 +8274,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   other `OPEN (implementation done)` entries this pass, worth distinguishing from
   "needs hardware" (this needs an oracle/design decision, not a device).
 
-### BASE2-002 — Verify CurrentValue/IsDataValid lifecycle semantics — OPEN
+### BASE2-002 — Verify CurrentValue/IsDataValid lifecycle semantics — OPEN (found and fixed a real atomicity bug across all four sensor classes; lifecycle-transition verification against an oracle remains blocked)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -8286,6 +8286,68 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No stale value is presented as valid after a failed/new generation unless the oracle requires it.
   - Every transition has tests.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - **Found and fixed a real, universal atomicity bug** while investigating "Update
+    atomically with generation/state" — every one of the four sensor classes
+    (`Accelerometer`, `Gyroscope`, `Compass`, `Motion`) dispatched a new reading by
+    calling `setIsDataValidProperty(true)` and `setCurrentValueProperty(reading)` as two
+    *independently*-locked calls (each individually race-free per
+    `docs/devices-thread-safety.md`'s existing guarantee, but not atomic *together*). A
+    concurrent reader on another thread could observe the window between the two calls —
+    `getIsDataValidProperty()` already `true` while `getCurrentValueProperty()` still
+    returned the previous value, or, for a sensor's very first reading ever, the
+    still-default-constructed one. `Accelerometer`'s own dispatch made this window
+    especially wide: `setIsDataValidProperty(true)` ran at the very top of
+    `DispatchSensorReading()`, with axis conversion, timestamp construction, and
+    `ReadingChanged` preparation all happening *before* `setCurrentValueProperty()` ran
+    near the bottom (69 lines of intervening code).
+  - Fixed by adding `SensorBase<T>::SetCurrentValueAndMarkDataValid(value)` — a new
+    `protected` method that sets `currentValue_`/`isDataValid_` together under one
+    `mutex_` lock scope, then raises `CurrentValueChanged` outside the lock (same
+    discipline the existing setters already use). All four classes' dispatch paths now
+    call this single method instead of the two separate setters.
+    `Accelerometer`/`Gyroscope` additionally had a redundant `getIsDataValidProperty()`
+    round-trip immediately after the early `setIsDataValidProperty(valid)` call — since
+    `valid` is a local constant known at the call site, the internal
+    `if (getIsDataValidProperty())` gate was checking mutex_-guarded shared state for a
+    value already known locally; replaced with `if (valid)` directly, which is what let
+    the early separate `setIsDataValidProperty()` call be removed entirely (the combined
+    call now happens once, at the point the reading is actually complete).
+  - This closes the "stale value... unless the oracle requires it" acceptance criterion
+    for the *intra-dispatch* race specifically — a case no oracle comparison could ever
+    excuse, since it is about this codebase's own internal consistency guarantee, not
+    about matching a specific WP7 behavior.
+- **Files changed:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`,
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+  `src/Microsoft/Devices/Sensors/Gyroscope.cpp`, `src/Microsoft/Devices/Sensors/Compass.cpp`,
+  `src/Microsoft/Devices/Sensors/Motion.cpp`,
+  `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`.
+- **Tests:** 3 new tests in `SensorBaseTests.cpp` — two direct correctness checks
+  (`SetCurrentValueAndMarkDataValidSetsBothFields`,
+  `...RaisesCurrentValueChangedWithTheNewValue`) plus the actual regression proof,
+  `SetCurrentValueAndMarkDataValidNeverExposesAnInconsistentSnapshot`: a writer thread
+  repeatedly calls the new combined setter with a fixed, distinguishable non-zero value
+  while a reader thread continuously checks the invariant "if `IsDataValid`, then
+  `CurrentValue` is not the default-constructed value" — any violation fails the test
+  immediately. Scoped filtered run: 328 tests, 324 passed, 4 pre-existing hardware-only
+  skips, 0 failures — 3 new, all passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. Re-verified under
+  `devices-tsan` specifically — a genuine data race is exactly what TSan is built to
+  catch, more reliably than a timing-dependent assertion alone: 3 consecutive clean
+  runs, 0 `WARNING: ThreadSanitizer` occurrences, 184/184 tests passing each run
+  (`AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorBaseTests.*`).
+- **Remaining limitations (explicitly OPEN, not fabricated):** the required work's other
+  bullet — "test before first sample, after Stop, failed Start, restart, source loss,
+  permission loss and disposal against reference behavior" — was not attempted. Like
+  `BASE2-001`, this genuinely depends on the not-yet-built behavioral oracle
+  (`DEVPERF-002`/`003`) to know what real WP7 does at each of these transitions (e.g.
+  whether `IsDataValid` should reset to `false` on `Stop()`, which this codebase
+  currently does *not* do — `CurrentValue`/`IsDataValid` persist their last value after
+  `Stop()`, matching this task's own "Problem" framing, but whether that is correct WP7
+  behavior or a bug is exactly what the oracle would answer and this session cannot).
+  Left **OPEN**, for the same reason as `BASE2-001`: the atomicity fix is real,
+  verified, and complete, but the task's core lifecycle-verification ask remains
+  blocked on other unstarted work, not on hardware.
 
 ### BASE2-003 — Verify public SensorState transitions and timing — OPEN
 
