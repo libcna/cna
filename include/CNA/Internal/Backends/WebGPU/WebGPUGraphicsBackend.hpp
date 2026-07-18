@@ -623,6 +623,8 @@ namespace CNA::Internal::Backends::WebGPU
     private:
         friend class WebGPURenderTargetBackend;
         friend class WebGPURenderTargetCubeBackend;
+        friend class WebGPUTextureBackend;
+        friend class WebGPUTextureCubeBackend;
         struct LogicalViewport
         {
             float x = 0.0f;
@@ -726,6 +728,38 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
         [[noreturn]] static void ThrowUnsupported3DDraw(const char* method);
 
+        // WEBGPU-52: real, genuinely-linear-filtered mip generation for a plain Texture2D/
+        // TextureCube, via a render pass per mip level that draws a full-screen triangle sampling
+        // the PREVIOUS level through a real linear WGPUSampler into the NEXT level's own
+        // render-attachment view -- wgpu-native has no vkCmdBlitImage-equivalent filtered-
+        // downsample primitive (verified against this project's pinned wgpu-native v29.0.1.1
+        // webgpu.h: wgpuCommandEncoderCopyTextureToTexture is a raw same-size copy, nothing else
+        // resembling a blit exists), so this is the same technique other WebGPU-based engines use.
+        // IMPORTANT, DELIBERATE DIVERGENCE (documented, not silently introduced): unlike every
+        // other CNA graphics backend (VulkanGraphicsBackend/EasyGLGraphicsBackend), which only
+        // regenerate mip content for a RENDER TARGET being unbound (matching real FNA3D's
+        // OPENGL_ResolveTarget/vkCmdBlitImage-on-unbind semantics -- a PLAIN Texture2D/TextureCube
+        // never auto-generates mip content from level 0 in FNA/XNA itself, matching every other
+        // CNA backend's own plain-texture behaviour too), this WebGPU-only helper DOES generate
+        // real mip content for a plain Texture2D/TextureCube automatically whenever mipMap=true
+        // AND non-empty initial pixel data is supplied at construction time. This makes WebGPU's
+        // plain-texture mip behaviour genuinely BETTER (never garbage/undefined content at
+        // level>0) but ALSO genuinely DIFFERENT from FNA and every sibling CNA backend for the
+        // identical public Texture2D/TextureCube(mipMap=true) constructor call -- see
+        // plan_webgpu.md's WEBGPU-52 row and docs/webgpu-backend.md for the full investigation
+        // this finding is based on. Explicit per-level SetData(level>0, ...) calls made AFTER
+        // construction are, as before, never auto-regenerated (matches every other backend).
+        void EnsureMipBlitPipeline();
+        // Shared implementation: generates levels 1..mipLevels-1 of ONE array layer of `texture`
+        // from that layer's own level 0. GenerateMips2D()/GenerateMipsCubeFace() are thin
+        // wrappers (layer=0 for a plain 2D texture, layer=face for one cube face).
+        void GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height, int mipLevels);
+        // Generates levels 1..mipLevels-1 of a plain (non-array) 2D texture from level 0.
+        void GenerateMips2D(WGPUTexture texture, int width, int height, int mipLevels);
+        // Generates levels 1..mipLevels-1 of ONE array layer (cube face) of a 6-layer texture,
+        // leaving the other 5 faces' mip chains untouched -- called once per face.
+        void GenerateMipsCubeFace(WGPUTexture texture, int face, int size, int mipLevels);
+
         SDL_Window* window_ = nullptr;
         void* metalView_ = nullptr;
         WGPUInstance instance_ = nullptr;
@@ -765,6 +799,17 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUBuffer spriteVertexBuffer_ = nullptr;
         std::uint64_t spriteVertexCapacityBytes_ = 0;
         std::array<WGPUSampler, 18> samplerCache_{};
+
+        // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment. Created
+        // lazily on first use (a game that never requests mipMap=true with initial pixel data
+        // never pays for these). Always targets WGPUTextureFormat_RGBA8Unorm, matching
+        // WebGPUTextureBackend/WebGPUTextureCubeBackend's own fixed format -- no per-format cache
+        // needed, unlike the ~10 GetOrCreatePipeline*3D() families.
+        WGPUShaderModule mipBlitShader_ = nullptr;
+        WGPUBindGroupLayout mipBlitBindGroupLayout_ = nullptr;
+        WGPUPipelineLayout mipBlitPipelineLayout_ = nullptr;
+        WGPURenderPipeline mipBlitPipeline_ = nullptr;
+        WGPUSampler mipBlitSampler_ = nullptr;
 
         std::vector<SpriteCommand> spriteCommands_;
         int physicalWidth_ = 0;

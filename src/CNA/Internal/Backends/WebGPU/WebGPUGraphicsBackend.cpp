@@ -591,8 +591,12 @@ namespace CNA::Internal::Backends::WebGPU
         descriptor.label = StringView("CNA WebGPU Texture2D");
         // WEBGPU-51: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
         // readback (added alongside that method -- every texture created before GetData() existed
-        // never needed it).
-        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
+        // never needed it). WEBGPU-52: RenderAttachment is required by GenerateMips2D()'s
+        // render-pass-based mip blit (see that method's own doc comment) -- only actually used
+        // when mipLevels_ > 1 and initial pixel data is supplied below, but declared
+        // unconditionally since usage flags are fixed at texture-creation time.
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
+                           WGPUTextureUsage_CopySrc | WGPUTextureUsage_RenderAttachment;
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
         descriptor.format = WGPUTextureFormat_RGBA8Unorm;
@@ -643,6 +647,19 @@ namespace CNA::Internal::Backends::WebGPU
             upload = tightlyPacked.data();
         }
         UpdatePixelsLevel(0, upload, width_, height_);
+
+        // WEBGPU-52: real, genuinely-linear-filtered mip generation from level 0 -- see
+        // WebGPUGraphicsBackend::EnsureMipBlitPipeline()'s own doc comment for the full rationale
+        // and the deliberate divergence this introduces from FNA and every sibling CNA backend
+        // (which only auto-regenerate mips for a RENDER TARGET being unbound, not a plain
+        // Texture2D). Placed here (not just in the constructor) so a LATER Texture2D::SetData()
+        // call that replaces level 0 (the only backend entry point XNA-layer SetData(level=0,...)
+        // ever calls, even for a partial sub-rectangle -- see Texture2D.cpp's own
+        // getMipBuffer()-backed whole-level re-upload) regenerates the mip chain again too,
+        // consistent with WebGPUTextureCubeBackend::SetData()'s identical per-level-0-write
+        // trigger. A no-op when mipLevels_ == 1.
+        if (mipLevels_ > 1)
+            owner_->GenerateMips2D(texture_, width_, height_, mipLevels_);
     }
 
     void WebGPUTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
@@ -783,8 +800,12 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU TextureCube");
         // WEBGPU-113: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
-        // readback (added alongside that method).
-        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
+        // readback (added alongside that method). WEBGPU-52: RenderAttachment is required by
+        // GenerateMipsCubeFace()'s render-pass-based mip blit -- see that method's own doc
+        // comment; only actually used when mipLevels_ > 1, declared unconditionally since usage
+        // flags are fixed at texture-creation time.
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
+                           WGPUTextureUsage_CopySrc | WGPUTextureUsage_RenderAttachment;
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 6};
         descriptor.format = WGPUTextureFormat_RGBA8Unorm;
@@ -847,6 +868,18 @@ namespace CNA::Internal::Backends::WebGPU
         layout.rowsPerImage = static_cast<std::uint32_t>(h);
         const WGPUExtent3D extent{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
         wgpuQueueWriteTexture(owner_->Queue(), &destination, data, required, &layout, &extent);
+
+        // WEBGPU-52: real, genuinely-linear-filtered mip generation for THIS face, from its own
+        // level 0 -- see WebGPUGraphicsBackend::EnsureMipBlitPipeline()'s own doc comment for the
+        // full rationale and the deliberate divergence this introduces from FNA and every sibling
+        // CNA backend. Triggers on every level-0 write (even a partial sub-rectangle, matching
+        // this method's own existing per-call granularity) rather than only once at "the first
+        // full-face upload", since TextureCube -- unlike Texture2D -- has no single constructor-
+        // time initial-pixel-data moment to hook; a game that calls SetData(face, level=0, ...)
+        // more than once simply regenerates that face's mips again each time, which is correct
+        // (if not maximally efficient). A no-op when mipLevels_ == 1.
+        if (level == 0 && mipLevels_ > 1)
+            owner_->GenerateMipsCubeFace(texture_, face, size_, mipLevels_);
     }
 
     // WEBGPU-113: real per-face CPU readback, same staged-copy/row-alignment/async-map technique
@@ -1886,6 +1919,12 @@ namespace CNA::Internal::Backends::WebGPU
                 wgpuSamplerRelease(sampler);
             sampler = nullptr;
         }
+        // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment.
+        if (mipBlitPipeline_ != nullptr) wgpuRenderPipelineRelease(mipBlitPipeline_);
+        if (mipBlitPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(mipBlitPipelineLayout_);
+        if (mipBlitBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(mipBlitBindGroupLayout_);
+        if (mipBlitShader_ != nullptr) wgpuShaderModuleRelease(mipBlitShader_);
+        if (mipBlitSampler_ != nullptr) wgpuSamplerRelease(mipBlitSampler_);
         if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
         if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
@@ -4466,6 +4505,230 @@ struct VertexOutput {
         if (samplerCache_[index] == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create sampler");
         return samplerCache_[index];
+    }
+
+    // WEBGPU-52: lazily creates the shader/bind-group-layout/pipeline-layout/pipeline/sampler
+    // used by GenerateMipsForLayer() -- see this method's own header doc comment for the full
+    // rationale and the deliberate FNA/cross-backend divergence this introduces. A minimal
+    // full-screen-triangle vertex shader (the standard 3-vertex, no-vertex-buffer trick: each
+    // vertex's clip position/UV is derived purely from @builtin(vertex_index)) plus a fragment
+    // shader that samples the previous mip level through a real linear sampler -- this is what
+    // makes the result a genuine filtered downsample, not a nearest-neighbor copy.
+    void WebGPUGraphicsBackend::EnsureMipBlitPipeline()
+    {
+        if (mipBlitPipeline_ != nullptr)
+            return;
+
+        static constexpr char shaderSource[] = R"WGSL(
+struct VSOut {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+@vertex fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VSOut {
+    var output: VSOut;
+    let x = f32((vertexIndex << 1u) & 2u);
+    let y = f32(vertexIndex & 2u);
+    output.position = vec4f(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+    output.uv = vec2f(x, y);
+    return output;
+}
+@group(0) @binding(0) var mipSampler: sampler;
+@group(0) @binding(1) var mipSource: texture_2d<f32>;
+@fragment fn fs_main(input: VSOut) -> @location(0) vec4f {
+    return textureSample(mipSource, mipSampler, input.uv);
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU MipBlit WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        mipBlitShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        if (mipBlitShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create MipBlit shader");
+
+        std::array<WGPUBindGroupLayoutEntry, 2> layoutEntries{};
+        layoutEntries[0].binding = 0;
+        layoutEntries[0].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
+        layoutEntries[1].binding = 1;
+        layoutEntries[1].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[1].texture.sampleType = WGPUTextureSampleType_Float;
+        layoutEntries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+        layoutEntries[1].texture.multisampled = false;
+        WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
+        bindLayoutDescriptor.label = StringView("CNA WebGPU MipBlit BindGroupLayout");
+        bindLayoutDescriptor.entryCount = layoutEntries.size();
+        bindLayoutDescriptor.entries = layoutEntries.data();
+        mipBlitBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
+
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU MipBlit PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = 1;
+        pipelineLayoutDescriptor.bindGroupLayouts = &mipBlitBindGroupLayout_;
+        mipBlitPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        WGPUColorTargetState target{};
+        target.format = WGPUTextureFormat_RGBA8Unorm;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = mipBlitShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU MipBlit Pipeline");
+        pipeline.layout = mipBlitPipelineLayout_;
+        pipeline.vertex.module = mipBlitShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 0;
+        pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        // Always single-sample -- a plain Texture2D/TextureCube is never multisampled, regardless
+        // of this backend's own global sampleCount_ (unlike the swapchain/RenderTarget2D
+        // pipelines, which must match sampleCount_ to stay render-pass compatible).
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+        // No depthStencil: this is its own dedicated colour-only render pass, not sharing the
+        // swapchain/RenderTarget2D's depth attachment the way SpriteBatch's pipeline must.
+        mipBlitPipeline_ = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (mipBlitPipeline_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create MipBlit pipeline");
+
+        WGPUSamplerDescriptor samplerDescriptor{};
+        samplerDescriptor.label = StringView("CNA WebGPU MipBlit Sampler");
+        samplerDescriptor.addressModeU = WGPUAddressMode_ClampToEdge;
+        samplerDescriptor.addressModeV = WGPUAddressMode_ClampToEdge;
+        samplerDescriptor.addressModeW = WGPUAddressMode_ClampToEdge;
+        samplerDescriptor.magFilter = WGPUFilterMode_Linear;
+        samplerDescriptor.minFilter = WGPUFilterMode_Linear;
+        samplerDescriptor.mipmapFilter = WGPUMipmapFilterMode_Linear;
+        samplerDescriptor.lodMaxClamp = 32.0f;
+        samplerDescriptor.maxAnisotropy = 1;
+        mipBlitSampler_ = wgpuDeviceCreateSampler(device_, &samplerDescriptor);
+        if (mipBlitSampler_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create MipBlit sampler");
+    }
+
+    // WEBGPU-52: one render pass per mip level, each sampling the previous level (via the real
+    // linear mipBlitSampler_) into the next level's own single-mip render-attachment view -- see
+    // EnsureMipBlitPipeline()'s own doc comment for why this, not a hypothetical filtered "blit"
+    // call (wgpu-native has none). All levels for this ONE layer are recorded into a single
+    // command encoder and submitted together; per-level transient views/bind-groups are released
+    // only AFTER submission (matching EnsureFrameRendered()'s own pendingBindGroupReleases_/
+    // pendingBufferReleases_ precedent for resources a not-yet-submitted encoder still
+    // references), not eagerly like RenderSprites()'s per-draw bind groups (whose referenced
+    // views are long-lived texture members, unlike these transient single-mip-level views).
+    void WebGPUGraphicsBackend::GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height, int mipLevels)
+    {
+        if (texture == nullptr || mipLevels <= 1 || width <= 0 || height <= 0)
+            return;
+        EnsureMipBlitPipeline();
+
+        WGPUCommandEncoderDescriptor encoderDescriptor{};
+        encoderDescriptor.label = StringView("CNA WebGPU MipBlit Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
+
+        std::vector<WGPUTextureView> pendingViews;
+        std::vector<WGPUBindGroup> pendingGroups;
+        pendingViews.reserve(static_cast<std::size_t>(mipLevels - 1) * 2u);
+        pendingGroups.reserve(static_cast<std::size_t>(mipLevels - 1));
+
+        int srcW = width;
+        int srcH = height;
+        for (int level = 1; level < mipLevels; ++level)
+        {
+            const int dstW = std::max(1, srcW / 2);
+            const int dstH = std::max(1, srcH / 2);
+
+            WGPUTextureViewDescriptor srcViewDescriptor{};
+            srcViewDescriptor.label = StringView("CNA WebGPU MipBlit Source View");
+            srcViewDescriptor.format = WGPUTextureFormat_RGBA8Unorm;
+            srcViewDescriptor.dimension = WGPUTextureViewDimension_2D;
+            srcViewDescriptor.baseMipLevel = static_cast<std::uint32_t>(level - 1);
+            srcViewDescriptor.mipLevelCount = 1;
+            srcViewDescriptor.baseArrayLayer = static_cast<std::uint32_t>(layer);
+            srcViewDescriptor.arrayLayerCount = 1;
+            srcViewDescriptor.aspect = WGPUTextureAspect_All;
+            WGPUTextureView srcView = wgpuTextureCreateView(texture, &srcViewDescriptor);
+            if (srcView == nullptr)
+                throw std::runtime_error("CNA WebGPU: MipBlit: failed to create source view");
+
+            WGPUTextureViewDescriptor dstViewDescriptor = srcViewDescriptor;
+            dstViewDescriptor.label = StringView("CNA WebGPU MipBlit Destination View");
+            dstViewDescriptor.baseMipLevel = static_cast<std::uint32_t>(level);
+            WGPUTextureView dstView = wgpuTextureCreateView(texture, &dstViewDescriptor);
+            if (dstView == nullptr)
+            {
+                wgpuTextureViewRelease(srcView);
+                throw std::runtime_error("CNA WebGPU: MipBlit: failed to create destination view");
+            }
+            pendingViews.push_back(srcView);
+            pendingViews.push_back(dstView);
+
+            std::array<WGPUBindGroupEntry, 2> entries{};
+            entries[0].binding = 0;
+            entries[0].sampler = mipBlitSampler_;
+            entries[1].binding = 1;
+            entries[1].textureView = srcView;
+            WGPUBindGroupDescriptor bindGroupDescriptor{};
+            bindGroupDescriptor.label = StringView("CNA WebGPU MipBlit BindGroup");
+            bindGroupDescriptor.layout = mipBlitBindGroupLayout_;
+            bindGroupDescriptor.entryCount = entries.size();
+            bindGroupDescriptor.entries = entries.data();
+            WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindGroupDescriptor);
+            if (bindGroup == nullptr)
+                throw std::runtime_error("CNA WebGPU: MipBlit: failed to create bind group");
+            pendingGroups.push_back(bindGroup);
+
+            WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+            colorAttachment.view = dstView;
+            colorAttachment.loadOp = WGPULoadOp_Clear;
+            colorAttachment.storeOp = WGPUStoreOp_Store;
+            colorAttachment.clearValue = WGPUColor{0.0, 0.0, 0.0, 0.0};
+
+            WGPURenderPassDescriptor passDescriptor{};
+            passDescriptor.label = StringView("CNA WebGPU MipBlit RenderPass");
+            passDescriptor.colorAttachmentCount = 1;
+            passDescriptor.colorAttachments = &colorAttachment;
+            WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+            wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(dstW), static_cast<float>(dstH), 0.0f, 1.0f);
+            wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, static_cast<std::uint32_t>(dstW), static_cast<std::uint32_t>(dstH));
+            wgpuRenderPassEncoderSetPipeline(pass, mipBlitPipeline_);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+            wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+            wgpuRenderPassEncoderEnd(pass);
+            wgpuRenderPassEncoderRelease(pass);
+
+            srcW = dstW;
+            srcH = dstH;
+        }
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU MipBlit Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        wgpuCommandBufferRelease(commandBuffer);
+
+        for (WGPUBindGroup bg : pendingGroups) wgpuBindGroupRelease(bg);
+        for (WGPUTextureView view : pendingViews) wgpuTextureViewRelease(view);
+    }
+
+    void WebGPUGraphicsBackend::GenerateMips2D(WGPUTexture texture, int width, int height, int mipLevels)
+    {
+        GenerateMipsForLayer(texture, 0, width, height, mipLevels);
+    }
+
+    void WebGPUGraphicsBackend::GenerateMipsCubeFace(WGPUTexture texture, int face, int size, int mipLevels)
+    {
+        GenerateMipsForLayer(texture, face, size, size, mipLevels);
     }
 
     WebGPUGraphicsBackend::LogicalViewport WebGPUGraphicsBackend::ComputeLogicalViewport() const

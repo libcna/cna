@@ -392,6 +392,54 @@ call). `webgpu_rendertargetcube_test.cpp`'s own Check C works around this by pai
 a real 3D (`BasicEffect`) draw instead of `SpriteBatch`, which is not subject to this backbuffer-
 relative ortho mapping.
 
+## Real mip generation for Texture2D/TextureCube (2026-07-18)
+
+`WEBGPU-52`: previously, `mipMap=true` on a plain `Texture2D`/`TextureCube` only pre-allocated
+empty GPU storage for levels 1+ — no content was ever generated from level 0. Investigating the
+row's own originally-suggested technique (`wgpuCommandEncoderCopyTextureToTexture`) confirmed it is
+a raw same-size copy in this project's pinned wgpu-native v29.0.1.1 — there is no
+`vkCmdBlitImage`-equivalent filtered-downsample primitive in wgpu-native at all. The real technique
+other WebGPU-based engines use, and the one implemented here
+(`WebGPUGraphicsBackend::GenerateMipsForLayer()`, wrapped by `GenerateMips2D()`/
+`GenerateMipsCubeFace()`): one render pass per mip level, each drawing a full-screen triangle (the
+standard 3-vertex, no-vertex-buffer `@builtin(vertex_index)` trick — no `SpriteVertex`-style vertex
+buffer needed) that samples the PREVIOUS level through a real `WGPUFilterMode_Linear` `WGPUSampler`
+into the NEXT level's own single-mip-level render-attachment view. This is a genuine filtered
+downsample, not a nearest-neighbor copy — proven directly by `webgpu_mipgen_test.cpp`'s hard-edged
+red/blue stripe check, whose boundary destination pixel reads back an exact `(128,0,128)` 50/50
+blend, not a hard unblended edge.
+
+**Important, deliberate, honestly-documented divergence from FNA and every sibling CNA backend.**
+`VulkanGraphicsBackend`/`EasyGLGraphicsBackend` only ever regenerate mip content for a RENDER
+TARGET being unbound (`vkCmdBlitImage`/`glGenerateMipmap`-on-unbind, matching real FNA3D
+`OPENGL_ResolveTarget` semantics) — neither backend, nor real FNA/XNA itself, auto-generates mip
+content for a PLAIN `Texture2D`/`TextureCube` at all (mip levels beyond 0 are always
+user/content-pipeline-supplied via explicit per-level `SetData()`, matching how a real XNA
+content-pipeline-processed `.xnb` already carries every level pre-baked at content-build time —
+there is no runtime "generate the rest from level 0" API anywhere in real XNA/FNA for a plain
+texture). This WebGPU backend's mip generation DOES generate real content automatically instead,
+triggered whenever content is written to level 0: `WebGPUTextureBackend::UpdatePixels()` (covers
+both the constructor's initial pixel upload AND any later `Texture2D::SetData(level=0,...)` call,
+since that XNA-layer method always re-uploads the whole level 0 via a CPU-side shadow buffer, even
+for a partial-rectangle update) and `WebGPUTextureCubeBackend::SetData(face, level=0, ...)`
+(per-face, on every call). This makes WebGPU's plain-texture mip behaviour strictly BETTER (never
+garbage/undefined content at level>0) but genuinely DIFFERENT from FNA and every other CNA backend
+for the identical public `Texture2D`/`TextureCube(mipMap=true)` constructor call. A later explicit
+`SetData(level>0,...)` call is not retroactively protected — a subsequent level-0 write will
+regenerate over it, exactly the same interaction a real mip chain has with itself.
+
+`RenderTarget2D`/`RenderTargetCube` mip regeneration (the actual FNA-equivalent feature, matching
+Vulkan/EasyGL's own render-target-only precedent) remains a separate, already-tracked, still-open
+scope cut (see the `RenderTarget2D`/`RenderTargetCube` sections above) — this section's own work
+does not touch either render-target class.
+
+`webgpu_mipgen_test.cpp` (`WebGPU_MipGen` CTest, 9/9): a hard-edged red/blue vertical stripe
+(deliberately NOT power-of-2-aligned with the 2:1 downsample's texel pairing, so a straddling
+destination pixel actually exists) proves the genuine linear blend above for both `Texture2D` level
+1 and one `TextureCube` face's level 1; a chain-downsampled level 2 (sourced from level 1, not
+level 0, proving the per-level loop chains correctly) has real, plausible, non-garbage content; and
+`mipMap=false` construction with non-empty pixel data does not crash.
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:
