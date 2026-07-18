@@ -1464,6 +1464,66 @@ TEST(XactParserTest, CompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
     EXPECT_EQ(wb.entries[0].channels, 2);
 }
 
+// AUD-11-021: every other fixture in this file uses version=1 (<=43, no headerVersion field) --
+// the newer header format (version>43, WITH an extra 4-byte headerVersion field between version
+// and the segment table) had zero test coverage anywhere despite ReadXwbSegmentTable explicitly
+// branching on it. Confirms the segment table (and everything after it) is still read from the
+// correct offset when that extra field is present -- a real desync risk if the branch were ever
+// wrong, since every segOffset in the file is authored relative to this header's own true size.
+std::vector<uint8_t> BuildCompactXwbFixtureWithNewerHeaderVersion()
+{
+    constexpr uint32_t headerSize        = 52; // magic+version+headerVersion+5*{offset,length}
+    constexpr uint32_t bankDataSize      = 96;
+    constexpr uint32_t entryCount        = 1;
+    constexpr uint32_t entryMetaDataSize = 4;
+    constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+    constexpr uint32_t waveDataLength    = 20;
+
+    const uint32_t segOffset[5] = {
+        headerSize,
+        headerSize + bankDataSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+        headerSize + bankDataSize + entryMetaSegSize,
+    };
+    const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'W', 'B', 'N', 'D' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU32(data, 44); // version: >43, exercises the headerVersion branch (still <=46, no
+                          // "may not be fully supported" warning)
+    AppendU32(data, 1);  // headerVersion -- only present because version>43
+    for (int i = 0; i < 5; ++i) { AppendU32(data, segOffset[i]); AppendU32(data, segLength[i]); }
+
+    AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+    AppendU32(data, entryCount);
+    AppendPadded(data, "AUD-11-021", 64);
+    AppendU32(data, entryMetaDataSize);
+    AppendU32(data, 0);
+    AppendU32(data, 4);
+    const uint32_t compactFormat = (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+    AppendU32(data, compactFormat);
+    for (int i = 0; i < 8; ++i) data.push_back(0);
+
+    AppendU32(data, 0u); // entry 0: offset=0, deviation=0
+
+    for (uint32_t i = 0; i < waveDataLength; ++i)
+        data.push_back(static_cast<uint8_t>(i));
+
+    return data;
+}
+
+TEST(XactParserTest, NewerHeaderVersionWithExtraFieldParsesSegmentsAtCorrectOffset)
+{
+    const XwbData wb = ParseXwb(BuildCompactXwbFixtureWithNewerHeaderVersion());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    EXPECT_EQ(wb.bankName, "AUD-11-021");
+    EXPECT_EQ(wb.entries[0].channels, 1);
+    EXPECT_EQ(wb.entries[0].sampleRate, 44100u);
+    EXPECT_EQ(wb.entries[0].dataLength, 20u);
+}
+
 TEST(XactParserTest, CompactAdpcmEntryComputesBlockAlignAndSamplesPerBlock)
 {
     const XwbData wb = ParseXwb(BuildCompactXwbFixtureAdpcm());
