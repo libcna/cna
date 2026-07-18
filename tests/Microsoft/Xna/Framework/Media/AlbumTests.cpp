@@ -85,9 +85,9 @@ TEST_F(AlbumNameCollisionTest, SameNameDifferentArtistAlbumsCompareUnequal)
 }
 
 // plan_media.md MEDIA-65: real implementation, incl. HasArt reflecting the real cover.jpg fixture.
-TEST_F(MediaLibraryTestFixture, AlbumsContainsAllFourAlbums)
+TEST_F(MediaLibraryTestFixture, AlbumsContainsEveryFixtureAlbum)
 {
-    EXPECT_EQ(library->getAlbumsProperty()->getCountProperty(), 4); // Alpha, Beta, Gamma, Delta
+    EXPECT_EQ(library->getAlbumsProperty()->getCountProperty(), 6); // Alpha, Beta, Gamma, Delta, Flac, Opus
 }
 
 TEST_F(MediaLibraryTestFixture, AlbumAlphaHasArtViaRealCoverFile)
@@ -207,7 +207,7 @@ TEST_F(MediaLibraryTestFixture, AlbumDisposeFlipsIsDisposed)
 TEST_F(MediaLibraryTestFixture, AlbumCollectionIndexerReturnsAlbumsInBounds)
 {
     auto* albums = library->getAlbumsProperty();
-    ASSERT_EQ(albums->getCountProperty(), 4);
+    ASSERT_EQ(albums->getCountProperty(), 6); // +2 from the FLAC/Opus fixtures added by plan_media.md MEDIA-199/203
     for (SharpRuntime::intcs i = 0; i < albums->getCountProperty(); ++i)
     {
         EXPECT_NE((*albums)[i], nullptr);

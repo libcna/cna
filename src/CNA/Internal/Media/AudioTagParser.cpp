@@ -271,15 +271,28 @@ namespace CNA::Internal::Media
         uint32_t commentCount = ReadU32LE(&concatenated[pos]);
         pos += 4;
 
+        return ParseVorbisCommentList(concatenated, pos, commentCount, out);
+    }
+
+    // Walks a Vorbis-comment list (count already read) of `commentCount` length-prefixed
+    // "KEY=value" entries starting at `pos`. Shared by the Ogg-Vorbis, Ogg-Opus and FLAC readers:
+    // all three embed the identical comment-list layout, differing only in how it is located
+    // (plan_media.md MEDIA-200/202). Every length is bounds-checked against `data` so a truncated
+    // or hostile file cannot read past the buffer.
+    bool AudioTagParser::ParseVorbisCommentList(const std::vector<uint8_t>& data,
+                                                 std::size_t pos,
+                                                 uint32_t commentCount,
+                                                 AudioTags& out)
+    {
         bool any = false;
         for (uint32_t i = 0; i < commentCount; ++i)
         {
-            if (pos + 4 > concatenated.size()) break;
-            uint32_t len = ReadU32LE(&concatenated[pos]);
+            if (pos + 4 > data.size()) break;
+            uint32_t len = ReadU32LE(&data[pos]);
             pos += 4;
-            if (pos + len > concatenated.size()) break;
+            if (pos + len > data.size()) break;
 
-            std::string comment(reinterpret_cast<const char*>(&concatenated[pos]), len);
+            std::string comment(reinterpret_cast<const char*>(&data[pos]), len);
             pos += len;
 
             auto eq = comment.find('=');
@@ -295,6 +308,91 @@ namespace CNA::Internal::Media
             out.fromRealTags = true;
         }
         return any;
+    }
+
+    bool AudioTagParser::TryReadOpusTags(const std::vector<uint8_t>& fileBytes, AudioTags& out)
+    {
+        // Ogg-Opus stores the same Vorbis-comment list as Ogg-Vorbis, but behind an "OpusTags"
+        // magic instead of "\x03vorbis", and with no trailing framing bit. The existing Vorbis
+        // reader searches specifically for the \x03vorbis magic, so it finds nothing in an Opus
+        // file -- verified empirically before writing this, not assumed (plan_media.md MEDIA-202).
+        std::vector<OggPage> pages = ReadOggPages(fileBytes, 8);
+        if (pages.empty())
+        {
+            return false;
+        }
+
+        std::vector<uint8_t> concatenated;
+        for (const auto& page : pages)
+        {
+            concatenated.insert(concatenated.end(), page.payload.begin(), page.payload.end());
+        }
+
+        static const uint8_t kOpusTagsMagic[8] = {'O', 'p', 'u', 's', 'T', 'a', 'g', 's'};
+        auto it = std::search(concatenated.begin(), concatenated.end(),
+                               std::begin(kOpusTagsMagic), std::end(kOpusTagsMagic));
+        if (it == concatenated.end())
+        {
+            return false;
+        }
+
+        std::size_t pos = static_cast<std::size_t>(it - concatenated.begin()) + 8;
+        if (pos + 4 > concatenated.size()) return false;
+        uint32_t vendorLen = ReadU32LE(&concatenated[pos]);
+        pos += 4;
+        if (pos + vendorLen > concatenated.size()) return false;
+        pos += vendorLen;
+
+        if (pos + 4 > concatenated.size()) return false;
+        uint32_t commentCount = ReadU32LE(&concatenated[pos]);
+        pos += 4;
+
+        return ParseVorbisCommentList(concatenated, pos, commentCount, out);
+    }
+
+    bool AudioTagParser::TryReadFlacComments(const std::vector<uint8_t>& fileBytes, AudioTags& out)
+    {
+        // Native FLAC is NOT an Ogg container: after the "fLaC" marker comes a chain of metadata
+        // blocks, each with a 4-byte header (1 bit last-block flag, 7 bits type, 24-bit big-endian
+        // length). Block type 4 is VORBIS_COMMENT and holds the same comment list as Ogg
+        // (plan_media.md MEDIA-200).
+        if (fileBytes.size() < 8 || std::memcmp(fileBytes.data(), "fLaC", 4) != 0)
+        {
+            return false;
+        }
+
+        std::size_t pos = 4;
+        while (pos + 4 <= fileBytes.size())
+        {
+            const uint8_t header = fileBytes[pos];
+            const bool isLast = (header & 0x80) != 0;
+            const uint8_t blockType = header & 0x7F;
+            const uint32_t blockLen = (static_cast<uint32_t>(fileBytes[pos + 1]) << 16) |
+                                       (static_cast<uint32_t>(fileBytes[pos + 2]) << 8) |
+                                        static_cast<uint32_t>(fileBytes[pos + 3]);
+            pos += 4;
+            if (pos + blockLen > fileBytes.size()) return false; // truncated/hostile file
+
+            if (blockType == 4) // VORBIS_COMMENT
+            {
+                std::size_t p = pos;
+                if (p + 4 > fileBytes.size()) return false;
+                uint32_t vendorLen = ReadU32LE(&fileBytes[p]);
+                p += 4;
+                if (p + vendorLen > fileBytes.size()) return false;
+                p += vendorLen;
+
+                if (p + 4 > fileBytes.size()) return false;
+                uint32_t commentCount = ReadU32LE(&fileBytes[p]);
+                p += 4;
+
+                return ParseVorbisCommentList(fileBytes, p, commentCount, out);
+            }
+
+            pos += blockLen;
+            if (isLast) break;
+        }
+        return false;
     }
 
     bool AudioTagParser::TryReadId3v2(const std::vector<uint8_t>& fileBytes, AudioTags& out)
@@ -400,6 +498,14 @@ namespace CNA::Internal::Media
             if (ext == ".ogg" || ext == ".oga")
             {
                 TryReadVorbisComments(bytes, out);
+            }
+            else if (ext == ".opus")
+            {
+                TryReadOpusTags(bytes, out);
+            }
+            else if (ext == ".flac")
+            {
+                TryReadFlacComments(bytes, out);
             }
             else if (ext == ".mp3")
             {

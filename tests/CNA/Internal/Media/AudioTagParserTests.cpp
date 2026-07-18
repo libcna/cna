@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <fstream>
 #include <gtest/gtest.h>
 #include "CNA/Internal/Media/AudioTagParser.hpp"
 
@@ -184,4 +185,52 @@ TEST(AudioTagParserTest, Id3v2TextFrameDecodesUtf8Encoding)
     auto tag = BuildId3v24WithTitleFrame(0x03, {'A', 0xC3, 0xA9, 0x00});
     ASSERT_TRUE(AudioTagParser::TryReadId3v2(tag, tags));
     EXPECT_EQ(tags.title, "A\xC3\xA9");
+}
+
+// plan_media.md MEDIA-200/202: FLAC and Opus store the SAME Vorbis-comment list as Ogg Vorbis but
+// locate it completely differently -- FLAC in a native METADATA_BLOCK (type 4) after the "fLaC"
+// marker, Opus behind an "OpusTags" magic instead of "\x03vorbis". The pre-existing Vorbis reader
+// searches specifically for \x03vorbis, so it finds nothing in either; verified empirically before
+// implementing, not assumed. Ground truth was set with ffmpeg and cross-checked via ffprobe.
+TEST(AudioTagParserTest, ReadsRealFlacVorbisCommentBlock)
+{
+    auto tags = CNA::Internal::Media::AudioTagParser::ReadTags(
+        "tests/assets/media/music/Artist Three/Album Flac/01 - Flac Song.flac");
+    EXPECT_TRUE(tags.fromRealTags) << "FLAC tags must come from the real metadata block, not the filename fallback";
+    EXPECT_EQ(tags.title, "Flac Song");
+    EXPECT_EQ(tags.artist, "Artist Three");
+    EXPECT_EQ(tags.album, "Album Flac");
+    EXPECT_EQ(tags.genre, "Jazz");
+    EXPECT_EQ(tags.trackNumber, 7);
+}
+
+TEST(AudioTagParserTest, ReadsRealOpusTagsHeader)
+{
+    auto tags = CNA::Internal::Media::AudioTagParser::ReadTags(
+        "tests/assets/media/music/Artist Four/Album Opus/01 - Opus Song.opus");
+    EXPECT_TRUE(tags.fromRealTags) << "Opus tags must come from the real OpusTags header";
+    EXPECT_EQ(tags.title, "Opus Song");
+    EXPECT_EQ(tags.artist, "Artist Four");
+    EXPECT_EQ(tags.album, "Album Opus");
+    EXPECT_EQ(tags.genre, "Ambient");
+    EXPECT_EQ(tags.trackNumber, 9);
+}
+
+// Hostile-input hardening, matching the standard MEDIA-39/40 set for the video decoder: a
+// truncated FLAC metadata block must be rejected, never read past the buffer.
+TEST(AudioTagParserTest, TruncatedFlacIsRejectedWithoutReadingPastTheBuffer)
+{
+    std::ifstream src("tests/assets/media/music/Artist Three/Album Flac/01 - Flac Song.flac",
+                       std::ios::binary);
+    ASSERT_TRUE(src.is_open());
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(src)),
+                                std::istreambuf_iterator<char>());
+    ASSERT_GT(bytes.size(), 32u);
+
+    bytes.resize(20); // keep "fLaC" + a block header claiming far more data than remains
+    CNA::Internal::Media::AudioTags out;
+    EXPECT_NO_THROW({
+        bool ok = CNA::Internal::Media::AudioTagParser::TryReadFlacComments(bytes, out);
+        EXPECT_FALSE(ok);
+    });
 }

@@ -488,3 +488,34 @@ TEST_F(MediaLibraryTestFixture, LibrarySongsCarryTheirRealTrackNumberFromTags)
     EXPECT_EQ(checked, static_cast<int>(expected.size()))
         << "did not find every expected fixture song in the library";
 }
+
+// plan_media.md MEDIA-199/204: the scan used to accept only .ogg/.oga/.mp3/.wav. FLAC and Opus are
+// now indexed too -- and only formats this project's SDL3_mixer build can actually PLAY were
+// added. (.m4a/.aac are deliberately still excluded: SDL3_mixer ships no AAC decoder at all, so
+// indexing them would advertise songs MediaPlayer::Play() could never play.)
+TEST_F(MediaLibraryTestFixture, LibraryIndexesFlacAndOpusFilesWithTheirRealTags)
+{
+    Song* flac = nullptr;
+    Song* opus = nullptr;
+    for (Song* s : *library->getSongsProperty())
+    {
+        if (s->getNameProperty() == "Flac Song") flac = s;
+        if (s->getNameProperty() == "Opus Song") opus = s;
+    }
+
+    ASSERT_NE(flac, nullptr) << ".flac file was not indexed by the library scan";
+    ASSERT_NE(opus, nullptr) << ".opus file was not indexed by the library scan";
+
+    // Real tags, not filename fallbacks -- and routed into the full object graph.
+    ASSERT_NE(flac->getArtistProperty(), nullptr);
+    EXPECT_EQ(flac->getArtistProperty()->getNameProperty(), "Artist Three");
+    ASSERT_NE(flac->getAlbumProperty(), nullptr);
+    EXPECT_EQ(flac->getAlbumProperty()->getNameProperty(), "Album Flac");
+    EXPECT_EQ(flac->getTrackNumberProperty(), 7);
+
+    ASSERT_NE(opus->getArtistProperty(), nullptr);
+    EXPECT_EQ(opus->getArtistProperty()->getNameProperty(), "Artist Four");
+    ASSERT_NE(opus->getGenreProperty(), nullptr);
+    EXPECT_EQ(opus->getGenreProperty()->getNameProperty(), "Ambient");
+    EXPECT_EQ(opus->getTrackNumberProperty(), 9);
+}

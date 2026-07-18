@@ -23,9 +23,9 @@ namespace
 }
 
 // plan_media.md MEDIA-64: real implementation backed by MediaLibraryIndex artist grouping.
-TEST_F(MediaLibraryTestFixture, ArtistsContainsBothArtists)
+TEST_F(MediaLibraryTestFixture, ArtistsContainsEveryFixtureArtist)
 {
-    EXPECT_EQ(library->getArtistsProperty()->getCountProperty(), 2);
+    EXPECT_EQ(library->getArtistsProperty()->getCountProperty(), 4); // +2 from the FLAC/Opus fixtures added by plan_media.md MEDIA-199/203
     EXPECT_NE(FindArtist(library->getArtistsProperty(), "Artist One"), nullptr);
     EXPECT_NE(FindArtist(library->getArtistsProperty(), "Artist Two"), nullptr);
 }
@@ -80,7 +80,7 @@ TEST_F(MediaLibraryTestFixture, ArtistCollectionIndexerThrowsOutOfRange)
 TEST_F(MediaLibraryTestFixture, ArtistCollectionIndexerReturnsArtistsInBounds)
 {
     auto* artists = library->getArtistsProperty();
-    ASSERT_EQ(artists->getCountProperty(), 2);
+    ASSERT_EQ(artists->getCountProperty(), 4); // +2 from the FLAC/Opus fixtures added by plan_media.md MEDIA-199/203
     EXPECT_NE((*artists)[0], nullptr);
     EXPECT_NE((*artists)[1], nullptr);
 }

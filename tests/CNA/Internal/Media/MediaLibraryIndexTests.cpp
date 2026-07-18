@@ -21,10 +21,12 @@ namespace
     }
 }
 
-TEST(MediaLibraryIndexTest, ScansAllFiveFixtureSongs)
+TEST(MediaLibraryIndexTest, ScansEveryFixtureSong)
 {
     MediaLibraryIndex index(kMusicRoot);
-    EXPECT_EQ(index.GetSongs().size(), 5u);
+    // 5 original (.ogg/.mp3/.wav) + the .flac and .opus fixtures added when the scan was extended
+    // to those formats (plan_media.md MEDIA-199/203).
+    EXPECT_EQ(index.GetSongs().size(), 7u);
 }
 
 TEST(MediaLibraryIndexTest, EachSongHasCorrectTagsFromItsSource)

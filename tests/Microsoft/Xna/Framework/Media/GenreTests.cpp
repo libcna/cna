@@ -22,9 +22,9 @@ namespace
 }
 
 // plan_media.md MEDIA-63: real implementation backed by MediaLibraryIndex genre grouping.
-TEST_F(MediaLibraryTestFixture, GenresContainsRockAndElectronic)
+TEST_F(MediaLibraryTestFixture, GenresContainsEveryFixtureGenre)
 {
-    EXPECT_EQ(library->getGenresProperty()->getCountProperty(), 2);
+    EXPECT_EQ(library->getGenresProperty()->getCountProperty(), 4); // Rock, Electronic, Jazz, Ambient
     EXPECT_NE(FindGenre(library->getGenresProperty(), "Rock"), nullptr);
     EXPECT_NE(FindGenre(library->getGenresProperty(), "Electronic"), nullptr);
 }
@@ -76,14 +76,21 @@ TEST_F(MediaLibraryTestFixture, GenreGetTypeNameIsFullyQualified)
 TEST_F(MediaLibraryTestFixture, GenreCollectionIndexerAndIterationWork)
 {
     auto* genres = library->getGenresProperty();
-    ASSERT_EQ(genres->getCountProperty(), 2);
-    EXPECT_NE((*genres)[0], nullptr);
-    EXPECT_NE((*genres)[1], nullptr);
-    EXPECT_THROW((void)(*genres)[2], System::ArgumentOutOfRangeException);
+    const auto genreCount = genres->getCountProperty();
+    ASSERT_GT(genreCount, 0);
 
-    int count = 0;
+    // Derived from the live count rather than hardcoded, so growing the fixture corpus (e.g. the
+    // FLAC/Opus files added for plan_media.md MEDIA-199) exercises the same contract instead of
+    // breaking an unrelated indexer test.
+    for (SharpRuntime::intcs i = 0; i < genreCount; ++i)
+    {
+        EXPECT_NE((*genres)[i], nullptr) << "index " << i;
+    }
+    EXPECT_THROW((void)(*genres)[genreCount], System::ArgumentOutOfRangeException);
+
+    SharpRuntime::intcs count = 0;
     for (Genre* g : *genres) { EXPECT_NE(g, nullptr); ++count; }
-    EXPECT_EQ(count, 2);
+    EXPECT_EQ(count, genreCount) << "iteration must visit exactly Count items";
 }
 
 // plan_media.md MEDIA-121 (found by external code review): GenreCollection's own GetTypeName(),

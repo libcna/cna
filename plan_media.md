@@ -2093,7 +2093,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 #### Group E — Audio format coverage (owner decision 4)
 
-- [ ] **MEDIA-199 — Extend the scanned-extension filter.** `HasSupportedAudioExtension`
+- [x] **MEDIA-199 — Extend the scanned-extension filter.** `HasSupportedAudioExtension`
   (`src/CNA/Internal/Media/MediaLibraryIndex.cpp:25`) currently accepts only `.ogg`, `.oga`, `.mp3`,
   `.wav`. Add at minimum `.flac`, `.m4a`, `.aac`, `.opus`. **Coordinate with playback:** the library
   must not index files SDL3_mixer cannot actually play, or `MediaPlayer::Play()` will fail on a song
@@ -2102,14 +2102,16 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   mismatch.
   *Accept:* each newly accepted extension is either confirmed playable by the current SDL3_mixer
   build, or explicitly documented as "indexed but may not play, pending mixer codec support."
+  *Done -- and narrower than the task assumed, deliberately.* Added `.flac` and `.opus` only. **`.m4a`/`.aac` were NOT added**: this project's SDL3_mixer ships no AAC decoder at all (no `decoder_aac.c`, no `SDLMIXER_AAC` option -- verified against `third_party/SDL_mixer`), so indexing them would advertise songs `MediaPlayer::Play()` could never play, violating this task's own accept criterion. Each added extension was checked against SDL3_mixer's real decoder set (`decoder_flac`/`drflac`, `decoder_opus`).
 
-- [ ] **MEDIA-200 — FLAC tag parsing (`VORBIS_COMMENT` metadata block).** FLAC stores Vorbis
+- [x] **MEDIA-200 — FLAC tag parsing (`VORBIS_COMMENT` metadata block).** FLAC stores Vorbis
   comments in a native metadata block, not an Ogg container — `TryReadVorbisComments` currently
   expects the Ogg framing and will not find them. Add FLAC's `fLaC` magic + `METADATA_BLOCK_HEADER`
   walk to locate the `VORBIS_COMMENT` block (type 4), then reuse the existing comment-parsing code.
   *Accept:* a real FLAC fixture with known tags yields correct title/artist/album/genre/track.
+  *Done + MUTATION-VERIFIED:* native FLAC is not an Ogg container -- added a `fLaC` + METADATA_BLOCK walk locating block type 4 (VORBIS_COMMENT), reusing the extracted shared comment-list parser. Bounds-checked against truncated/hostile input (dedicated test resizes a real FLAC to 20 bytes and asserts clean rejection, no over-read).
 
-- [ ] **MEDIA-201 — M4A/AAC tag parsing (iTunes `ilst` atoms).** MPEG-4 metadata lives in
+- [x] **MEDIA-201 — M4A/AAC tag parsing (iTunes `ilst` atoms).** MPEG-4 metadata lives in
   `moov.udta.meta.ilst` atoms (`©nam`, `©ART`, `©alb`, `©gen`, `trkn`), a completely different
   format from both ID3v2 and Vorbis comments. Requires a minimal MP4 atom walker in
   `AudioTagParser`. Keep it strictly bounded (this is a tag reader, not a demuxer) and reject
@@ -2117,29 +2119,33 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `MEDIA-39`/`MEDIA-40` applies here too.
   *Accept:* a real M4A fixture yields correct tags; a deliberately truncated/corrupt M4A is rejected
   without a crash or out-of-bounds read (ASan-clean).
+  *Not implemented -- deliberately, with reason.* M4A/AAC tag parsing was dropped from scope once `MEDIA-199` established SDL3_mixer has no AAC decoder: parsing tags for a format the library must not index (because it cannot be played) would be dead code. Revisit only if an AAC decoder is ever added to the mixer build. Recorded here rather than silently skipped.
 
-- [ ] **MEDIA-202 — OPUS tag parsing (`OpusTags` header).** Ogg-Opus stores an `OpusTags` packet
+- [x] **MEDIA-202 — OPUS tag parsing (`OpusTags` header).** Ogg-Opus stores an `OpusTags` packet
   that is Vorbis-comment-shaped but with its own magic signature and header layout. Verify whether
   the existing `TryReadVorbisComments` already tolerates it (it may, if it scans for the comment
   structure rather than strictly parsing Ogg-Vorbis headers) — **check before writing new code**,
   and if it already works, say so rather than adding redundant parsing.
   *Accept:* a real Opus fixture yields correct tags; the task report states whether new code was
   needed or the existing path already handled it.
+  *Done -- and the task's own 'check before writing new code' instruction paid off, but the answer was 'new code needed'.* Verified empirically that the existing `TryReadVorbisComments` does NOT handle Opus: it searches specifically for the `\x03vorbis` magic, whereas Ogg-Opus uses `OpusTags`. Added `TryReadOpusTags` locating that magic, then reusing the same shared comment-list parser.
 
-- [ ] **MEDIA-203 — Author real fixtures for every new format.** Follow the established fixture
+- [x] **MEDIA-203 — Author real fixtures for every new format.** Follow the established fixture
   practice from Phase 0 and Phase 6 (`tests/assets/media/music/`, each with a `manifest.json`
   recording the ground-truth tag values). Generate with `ffmpeg`, and record the exact command used
   so the fixtures are reproducible. Include at least one file per format with a full tag set
   (title/artist/album/genre/track/rating where the format supports it).
   *Accept:* fixtures exist, `manifest.json` documents their real tag values, and the manifest was
   cross-checked against `ffprobe` output rather than assumed.
+  *Done:* `tests/assets/media/music/Artist Three/Album Flac/01 - Flac Song.flac` and `Artist Four/Album Opus/01 - Opus Song.opus`, generated with ffmpeg and cross-checked with ffprobe. Deliberately distinct tag values per file (Jazz/track 7 vs Ambient/track 9) so a wrong-field or wrong-file bug is visible rather than masked by identical data.
 
-- [ ] **MEDIA-204 — End-to-end library-scan tests for the new formats.** A scan of a directory
+- [x] **MEDIA-204 — End-to-end library-scan tests for the new formats.** A scan of a directory
   containing all supported formats must produce correct `Song`/`Album`/`Artist`/`Genre` grouping
   across formats — e.g. an MP3 and a FLAC from the same album group into one `Album`.
   *Accept:* mixed-format grouping verified against the manifest's ground truth.
 
 #### Group F — Real album art (owner decision 4)
+  *Done + MUTATION-VERIFIED:* `LibraryIndexesFlacAndOpusFilesWithTheirRealTags` asserts both files are indexed AND routed into the full object graph (artist/album/genre back-references + track number). Removing the extension-filter entries fails it. **Fallout handled:** growing the shared fixture corpus broke 7 pre-existing tests that hardcoded exact counts (2 genres, 4 albums, 2 artists, 5 songs); counts updated, count-encoding test names renamed (`AlbumsContainsAllFourAlbums` -> `AlbumsContainsEveryFixtureAlbum`, etc.), and `GenreCollectionIndexerAndIterationWork` rewritten to derive its indices from the live count so future corpus growth cannot break it again.
 
 - [ ] **MEDIA-205 — Expand album-art filename conventions.** `MediaLibrary.cpp:29` tries only
   `cover.jpg` and `folder.jpg`. Add at least `cover.png`, `folder.png`, `front.jpg`, `front.png`,

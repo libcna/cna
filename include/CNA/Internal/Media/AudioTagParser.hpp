@@ -41,6 +41,16 @@ namespace CNA::Internal::Media
         /// untouched) if no ID3v2 header is found or the data is malformed.
         static bool TryReadId3v2(const std::vector<uint8_t>& fileBytes, AudioTags& out);
 
+        /// Reads an Ogg-Opus "OpusTags" comment header (plan_media.md MEDIA-202).
+        static bool TryReadOpusTags(const std::vector<uint8_t>& fileBytes, AudioTags& out);
+
+        /// Reads a native-FLAC VORBIS_COMMENT metadata block (plan_media.md MEDIA-200).
+        static bool TryReadFlacComments(const std::vector<uint8_t>& fileBytes, AudioTags& out);
+
+        /// Walks a length-prefixed "KEY=value" Vorbis-comment list; shared by all three readers.
+        static bool ParseVorbisCommentList(const std::vector<uint8_t>& data, std::size_t pos,
+                                            uint32_t commentCount, AudioTags& out);
+
         /// Derives Title/Album/Artist from the file's own path (filename, parent dir, grandparent
         /// dir respectively) when no real tags are available.
         static void ApplyFilenameFallback(const std::string& path, AudioTags& out);
