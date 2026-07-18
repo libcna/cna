@@ -440,3 +440,72 @@ TEST(OfflineAudioRendererTest, MixerGainChangeMidPlaybackAffectsActiveVoiceOnNex
     EXPECT_NEAR(rms2 / rms1, 0.25, 0.02)
         << "gain change mid-playback did not take effect on the already-active voice's next chunk";
 }
+
+// ---------------------------------------------------------------------------
+// AUD-05-004: matches FNA's own SoundEffect internal ctor (SoundEffect.cs: `this.loopStart =
+// (uint) loopStart;`), which does zero C#-level validation of loopStart/loopLength against the
+// real decoded frame count (P9-VALIDATION-002, SoundEffect.cpp) -- relying entirely on the native
+// backend to behave safely for an out-of-range loop region. This test empirically confirms
+// SDL3_mixer (CNA's chosen backend) does exactly that: MIX_PlayTrack's own loop_start clamp
+// (>= 0 only, no upper-bound check at play() time -- read directly from
+// third_party/SDL_mixer/src/SDL_mixer.c) and the mixing loop's natural EOF/seek-failure handling
+// (a loop-start beyond the real audio's length hits the decoder's own seek() call, which either
+// clamps or fails cleanly, never a crash or garbage read) together mean a loop region far beyond
+// the real decoded length degrades gracefully -- never reaches the backend "unchecked" in the
+// sense of causing memory-unsafe behavior, even though CNA itself performs no explicit bounds
+// check (matching FNA's own documented lack of one).
+// ---------------------------------------------------------------------------
+TEST(OfflineAudioRendererTest, LoopRegionFarBeyondDecodedLengthDegradesGracefullyNoCrashNoNaN)
+{
+    // Only 0.05s (2205 frames) of real audio -- loopStart/maxFrame below are set to values far
+    // beyond that, deliberately nonsensical relative to the real content.
+    auto pcm = GenerateSineWaveS16(440.0, 44100, 1, 0.05);
+
+    ASSERT_TRUE(MIX_Init());
+    SDL_AudioSpec renderSpec{};
+    renderSpec.format = SDL_AUDIO_F32;
+    renderSpec.channels = 1;
+    renderSpec.freq = 44100;
+    MIX_Mixer* mixer = MIX_CreateMixer(&renderSpec);
+    ASSERT_NE(mixer, nullptr);
+
+    SDL_AudioSpec sourceSpec{};
+    sourceSpec.format = SDL_AUDIO_S16LE;
+    sourceSpec.channels = 1;
+    sourceSpec.freq = 44100;
+    SDL_IOStream* io = SDL_IOFromConstMem(pcm.data(), pcm.size());
+    ASSERT_NE(io, nullptr);
+    MIX_Audio* audio = MIX_LoadRawAudio_IO(mixer, io, &sourceSpec, true);
+    ASSERT_NE(audio, nullptr);
+
+    MIX_Track* track = MIX_CreateTrack(mixer);
+    ASSERT_NE(track, nullptr);
+    ASSERT_TRUE(MIX_SetTrackAudio(track, audio));
+
+    SDL_PropertiesID props = SDL_CreateProperties();
+    ASSERT_NE(props, 0u);
+    SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOPS_NUMBER, -1); // loop forever
+    // Loop start ~10x past the real 2205-frame source, and a max-frame ~100x past it -- neither
+    // corresponds to anything in the real decoded content.
+    SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOP_START_FRAME_NUMBER, 22050);
+    SDL_SetNumberProperty(props, MIX_PROP_PLAY_MAX_FRAME_NUMBER, 220500);
+    ASSERT_TRUE(MIX_PlayTrack(track, props));
+    SDL_DestroyProperties(props);
+
+    // Render well past the real source's natural length (2205 frames) so this must have hit the
+    // nonsensical loop points (or the decoder's own EOF handling) at least once.
+    const int framesToRender = 8820; // 0.2s, 4x the real source length
+    const std::size_t totalBytes = static_cast<std::size_t>(framesToRender) * sizeof(float);
+    std::vector<uint8_t> raw(totalBytes);
+    int generated = MIX_Generate(mixer, raw.data(), static_cast<int>(totalBytes));
+
+    MIX_DestroyTrack(track);
+    MIX_DestroyAudio(audio);
+    MIX_DestroyMixer(mixer);
+    MIX_Quit();
+
+    ASSERT_GE(generated, 0) << "MIX_Generate must not fail even with a nonsensical loop region";
+    std::vector<float> samples(framesToRender);
+    std::memcpy(samples.data(), raw.data(), totalBytes);
+    EXPECT_FALSE(ContainsNaNOrInf(samples));
+}
