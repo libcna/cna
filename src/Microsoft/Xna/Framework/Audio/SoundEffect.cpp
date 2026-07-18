@@ -4,11 +4,11 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <istream>
-#include <mutex>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
@@ -85,6 +85,11 @@ namespace Microsoft::Xna::Framework::Audio
         {
             bool  active = false; // false: pan == 0 at Play() time, matrix is the identity
             float ll = 1.0f, rl = 0.0f, lr = 0.0f, rr = 1.0f;
+
+            // AUD-15-008: intrusive link for PendingPanStateCleanup's lock-free queue below --
+            // reuses this already-heap-allocated object as its own queue node instead of a
+            // separate std::vector entry, so queuing one for cleanup never allocates.
+            FireAndForgetPanState* next = nullptr;
         };
 
         // AUD-05-006: best-effort detection that the caller passed whole-file container bytes
@@ -169,16 +174,29 @@ namespace Microsoft::Xna::Framework::Audio
         // otherwise the last fire-and-forget sound(s) played before exit, with no later Play()
         // call to opportunistically drain them, would show up as a real (if tiny and harmless)
         // ASan leak report, which this project's testing culture treats as a bar worth clearing.
+        //
+        // AUD-15-008: Queue() runs from OnFireAndForgetStopped, a real SDL3_mixer track-stopped
+        // callback that fires on the mixer thread (see that function's own comment) -- real-time
+        // audio code must not block on a mutex or allocate. The original implementation did both
+        // (std::mutex + std::vector::push_back, which can reallocate). Rewritten as a classic
+        // lock-free Treiber-stack push: FireAndForgetPanState now carries its own intrusive
+        // `next` link (already heap-allocated at Play() time, so pushing it costs nothing but an
+        // atomic CAS), and Drain() atomically claims the whole chain in one exchange.
         struct PendingPanStateCleanup
         {
-            std::mutex mutex;
-            std::vector<FireAndForgetPanState*> pending;
+            std::atomic<FireAndForgetPanState*> head{nullptr};
 
             void Queue(FireAndForgetPanState* state)
             {
                 if (!state) return;
-                std::lock_guard<std::mutex> lock(mutex);
-                pending.push_back(state);
+                state->next = head.load(std::memory_order_relaxed);
+                while (!head.compare_exchange_weak(
+                    state->next, state,
+                    std::memory_order_release, std::memory_order_relaxed))
+                {
+                    // state->next is updated to the current head by compare_exchange_weak on
+                    // failure, so the retry always links onto the latest head.
+                }
             }
 
             // Called from Play() (main/calling thread) before creating a new fire-and-forget
@@ -187,13 +205,13 @@ namespace Microsoft::Xna::Framework::Audio
             // here is safe.
             void Drain()
             {
-                std::vector<FireAndForgetPanState*> toDelete;
+                FireAndForgetPanState* node = head.exchange(nullptr, std::memory_order_acquire);
+                while (node)
                 {
-                    std::lock_guard<std::mutex> lock(mutex);
-                    toDelete.swap(pending);
+                    FireAndForgetPanState* next = node->next;
+                    delete node;
+                    node = next;
                 }
-                for (auto* state : toDelete)
-                    delete state;
             }
 
             ~PendingPanStateCleanup()
