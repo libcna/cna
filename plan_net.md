@@ -1072,6 +1072,22 @@ regression check (`scripts/avatar_visual_regression_check.py`) was added per thi
 explicit request. See `NEXTnet.md` section 3's own "Update (third remediation pass)" paragraph
 for full detail - not repeated here to avoid this note drifting out of sync with that one.
 
+**Update (2026-07-18, fourth independent audit, same day):** the third round's ambient increase
+turned out to be treating a symptom. The dominant root cause was a **shader-fidelity bug**, found
+by comparing EasyGL's shaders against FNA's `Lighting.fxh` directly: `EnsureSkinnedProgram`,
+`EnsureSkinnedVertexLitProgram` and `EnsureEnvMapped3DProgram` computed
+`(EmissiveColor + lightSum) * DiffuseColor`, multiplying `EmissiveColor` by `DiffuseColor` twice,
+where FNA adds it after the multiply. Since ambient is pre-folded into emissive, ambient landed as
+`ambient * diffuse²` - so dark materials were crushed and every prior ambient increase gave
+diminishing returns. Fixed; near-black pixels went to 0.0% everywhere and the third round's
+`0.35`→`0.5` ambient bump was reverted as the compensation hack it was. Two further real content
+defects were found by mesh-level measurement and fixed: the Shoes shell crossed the body (18.9% of
+its vertices strictly inside, worst -74mm) because it covered only `Foot`, and garments were
+skinned with a different `blend_radius` (0.08) than the body (0.1474). Feet speckle -60%, Wave
+torso -22%, groin resolved. **Still PARTIALLY FIXED** - garment capsule end caps still burrow into
+adjacent uncovered body segments. Full detail, measurements and the proposed next fix are in
+`NEXTnet.md` section 3's own "Update (fourth remediation pass)" paragraph and section 6 item 16.
+
 Goal (per decisions 4/4a/4b/4c): toy-like Xbox-Avatar-inspired look, fully original CNA assets,
 generated via `../mesh-craft` for body/head (and other feasible) geometry, feeding into the
 existing `tools/avatar_builder/` Blender pipeline for skeleton/skinning/animation (mesh-craft has

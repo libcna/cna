@@ -27,10 +27,22 @@ the second round never claimed otherwise), plus a real, still-incomplete lifecyc
 second round's own new `SendAppData` pre-handshake queue (`HandleGamerLeaveBroadcast` never purged
 it, the drop counter's own documented contract didn't match its actual behavior, and no tests
 proved cleanup on leave/disconnect/migration/Dispose) — see section 3/6 for the third round's own
-fixes, sharper avatar diagnosis, and the new reproducible visual regression script. **Do not
-assume a fourth pass wouldn't find more** — three consecutive independent audits each catching
-real gaps in the prior "done" claims is itself the strongest signal in this file: verify with
-fresh evidence, every time, regardless of how many prior passes already happened. Treat
+fixes, sharper avatar diagnosis, and the new reproducible visual regression script. A **fourth**
+audit then confirmed the network side as genuinely fixed, but again found the avatar visibly
+wrong *and* correctly identified that the third round's regression script only measured global
+brightness, so it could pass with local deformations intact — both accurate. That fourth pass
+finally located the dominant root cause: an EasyGL shader-fidelity bug (EmissiveColor multiplied
+by DiffuseColor twice) that made ambient light land as `ambient*diffuse²`, crushing dark
+materials — which is precisely why three earlier rounds of ambient-light increases had failed to
+fix the darkness. Near-black pixels are now 0.0% everywhere and two of the three named defects are
+largely resolved, but garment/body interpenetration remains, so **the avatar and this audit stay
+PARTIALLY FIXED** (section 3/6). **Do not assume a fifth pass wouldn't find more** — four
+consecutive independent audits each catching real gaps in the prior "done" claims is itself the
+strongest signal in this file: verify with fresh evidence, every time, regardless of how many
+prior passes already happened. Note also that three of those four rounds attacked the avatar's
+darkness at the *lighting* layer before anyone checked the *shader arithmetic* against FNA —
+when repeated tuning of a parameter fails to move a defect, suspect the formula, not the value.
+Treat
 `plan_net.md`'s checkmarks as "this task's described work was completed at the time," not as "the
 underlying feature was fully correct" on first landing. The prior first-implementation pass
 (132/132 tasks) is complete; its own archive file (`plan_net_20260707.md`) no longer exists in the
@@ -234,6 +246,68 @@ still fully recoverable via git history, see Task 11.3's write-up in `plan_net.m
     fix, confirmed a clean pass again. This catches a *regression* below the current, still
     imperfect state — it cannot and does not claim the avatar looks fully correct, which remains
     for a human (or a much more sophisticated check) to judge.
+
+  **Update (2026-07-18, fourth remediation pass) — still ⚠️ PARTIALLY FIXED, but the three named
+  defects now have identified root causes and two are largely resolved.** A fourth independent
+  audit repeated the (correct) finding that the avatar still looked wrong, and additionally
+  pointed out that the third round's regression script only measured *global* brightness, so it
+  could pass while local deformations remained. Both criticisms were accurate. What this pass
+  found and fixed:
+  - **The dominant root cause was a real shader-fidelity bug, not a lighting-setup problem.**
+    EasyGL's `EnsureSkinnedProgram`, `EnsureSkinnedVertexLitProgram` and
+    `EnsureEnvMapped3DProgram` composed lit colour as `(EmissiveColor + lightSum) * DiffuseColor`,
+    multiplying `EmissiveColor` by `DiffuseColor` a second time. FNA's own `Lighting.fxh`
+    `ComputeLights()` adds it *after* the diffuse multiply
+    (`mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor`), and this same file's
+    `EnsureLit3DProgram` (plus the WebGPU backend) already did it correctly — these three had
+    drifted. Because `SkinnedEffect::FillGpuDrawParams` pre-folds ambient into emissive
+    (correctly, matching FNA's `EffectHelpers`), the bug made ambient land as
+    `ambient * diffuse²` — a quadratic suppression that crushed *dark* materials specifically.
+    Predicted the shoes' ambient floor at `0.5*0.14*0.14 = 0.0098 → 2.5/255`, then sampled the
+    rendered feet and found the darkest pixels at exactly `(3,3,3)`. After the fix the darkest
+    foot pixel measures R+G+B=54 (~18/channel), as predicted. **This is why three prior rounds of
+    ambient-light increases kept failing to fix the darkness** — a brighter ambient barely helps
+    when it is being squared against a dark albedo. Near-black pixels are now **0.0%** in every
+    tracked region, both genders, T-pose and `Wave`.
+  - **Groin — resolved.** With the shader fix the black wedge is gone; the region now measures
+    5-25 speckle out of 2400 px and reads as ordinary soft shading. The underlying CSG normal
+    singularity still exists geometrically, but it no longer renders as a black hole.
+  - **Shoes/Foot boundary — largely resolved, root cause confirmed by measurement.** A new
+    mesh-level diagnostic (signed distance from each vertex of one mesh to the nearest surface of
+    another, signed by the target's face normal) proved the Shoes shell genuinely CROSSED the
+    body: 18.9% of shoe vertices strictly inside it, worst -74mm. Cause: the shell covered only
+    `Foot.L/R`, so its rear hemispherical cap burrowed into the body's vertical `LowerLeg`
+    capsule. Extending the shell to `LowerLeg.L/R` makes it *enclose* the leg (0.107 vs the leg's
+    0.080) while staying inside the Pants shell (0.116) so it does not read as knee-high boots.
+    Re-measured: the entire foot/ankle span is now clean; the only remaining crossing is at the
+    knee, hidden inside the pants. Feet speckle **295 → 119 (-60%)** on both genders.
+  - **Wave torso/shoulder — improved, not eliminated.** Found a second real defect: garments were
+    skinned with `fix_automatic_weights`' 0.08 default `blend_radius` while the body used
+    `avg_radius*1.6 = 0.1474`, an ~84% mismatch, so garment and body deformed differently at every
+    animated joint and crossed under pose. `build_clothes` now derives the identical value.
+    Combined with the shader fix, Wave torso speckle **161 → 125** and the large black blotches
+    are gone — but jagged *blue* (shirt) fragments remain, see "still open" below.
+  - The third round's ambient `0.35 → 0.5` bump was **reverted across all 7 demos**: it was
+    compensating for the shader bug, and with the real bug fixed 0.35 measures strictly better
+    than 0.5 on every tracked region.
+  - `scripts/avatar_visual_regression_check.py` rewritten with per-region boxes and a
+    **structural** "speckle" metric (dark pixels adjacent to bright ones — the intersection-seam
+    signature, which average brightness cannot detect). Adversarially verified: restoring the old
+    Foot-only shoes content makes it fail (`feet speckle 265 > 160`, exit 1) while that content's
+    *global* metrics still pass — demonstrating exactly the blind spot the audit identified.
+
+  **Honestly still open (why this stays PARTIALLY FIXED):** the garment shells and the body still
+  interpenetrate broadly — the measured pair-wise audit shows Shirt-vs-Body crossing at 28%, and
+  Shirt/Pants/Shoes crossing each other. The general pattern is now precisely understood: *every
+  garment capsule's hemispherical end cap burrows into whichever adjacent body segment the
+  garment does not itself cover* (the shirt's lower cap into the Hips, and so on). That is why the
+  torso still shows irregular blue shirt fragments. Fixing it properly means changing how garment
+  shells are authored — most likely flat-capped `cylinder` primitives (mesh-craft supports them)
+  instead of `capsule`, so a garment ends in a clean hem ring rather than a bulging sphere, with
+  care taken that terminal extremities (toe, hand) stay covered. That is a deliberate redesign of
+  `_garment_to_mc3_xml`, with a full re-verification pass across both genders and all 8 demos, and
+  it was not attempted here rather than risk it half-done. **The avatar and this audit therefore
+  remain PARTIALLY FIXED.**
 - **`NEXTnet.md`'s own example command was broken** when followed from the repo root (see the
   working-directory note in section 5) — fixed in this same pass that added this subsection.
 
@@ -403,6 +477,21 @@ honestly open:**
     setup call) — see `src/CNA/Internal/Net/ENetBackend.cpp`/`ENetBackendTests.cpp`'s own commit
     for the full writeup.
 
+**Fourth-round remediation (independent audit, 2026-07-18) — avatar still ⚠️ PARTIALLY FIXED:**
+
+3d. **Avatar — two of the three named defects largely resolved, one improved, all root-caused.**
+    Dominant cause turned out to be an EasyGL shader-fidelity bug (EmissiveColor multiplied by
+    DiffuseColor twice in 3 shaders), which explains why three earlier rounds of ambient-light
+    increases failed. Near-black pixels now 0.0% everywhere; groin resolved; feet speckle -60%
+    via a measured Shoes-shell enclosure fix; Wave torso improved via a garment/body skinning
+    blend-radius match. Still open: broad garment-vs-body capsule end-cap interpenetration -
+    see section 3's own fourth-round paragraph for the full measurements and the concrete
+    proposed fix (flat-capped `cylinder` garment shells).
+17. ~~**Regression check measured only global brightness**~~ — ✅ **DONE.**
+    `scripts/avatar_visual_regression_check.py` now has per-region boxes plus a structural
+    "speckle" metric, adversarially verified to catch a real local regression that the global
+    metrics pass.
+
 **Not yet started, not this session's active scope:**
 
 13. **Optional follow-up:** fix the same `MakeSimpleFont` glyph-bounds bug (section 3) in the 10
@@ -412,20 +501,24 @@ honestly open:**
     3) — needs its own design decision, not just a mechanical fix.
 15. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
     7.8/7.10).
-16. **Next logical steps for item 3b/3c above**, in rough priority order:
-    - The groin normal singularity: try either a capsule-geometry/padding change at the
-      Hips/UpperLeg CSG union to avoid the exact symmetric meeting point, or an explicit
-      normal-averaging pass targeted at that specific vertex position.
-    - The Shoes/Foot boundary jaggedness: check whether the Shoes garment capsule's radius/padding
-      genuinely encloses the body's own foot mesh silhouette at every point along their shared
-      boundary, across the actual bind pose (not just nominal bone radii).
-    - The `Wave`-pose torso darkness: confirmed not caused by degenerate-normal NaN propagation
-      (defensive guard added, zero measured effect) or purely by `blend_radius` width (narrowing
-      tested and reverted, no clear improvement) - most likely needs targeted weight-painting
-      changes specifically at the `Shoulder`/`UpperArm` blend region.
-    - Verify every one of the above the same way this session verified everything else (fresh
-      runtime screenshots at the exact repro commands, cross-checked with
-      `scripts/avatar_visual_regression_check.py`, not tests or non-manifold analysis alone).
+16. **Next logical step for item 3d above — the one remaining avatar defect class.** Garment
+    shells still interpenetrate the body because each garment capsule's *hemispherical end cap*
+    burrows into whichever adjacent body segment that garment does not itself cover (measured:
+    Shirt-vs-Body 28% of shirt vertices inside the body; Shirt/Pants/Shoes also cross each
+    other). The concrete proposed fix, in priority order:
+    - Change `generate_clothes_meshcraft._garment_to_mc3_xml` to author garment shells as
+      flat-capped `<cylinder>` primitives instead of `<capsule>` (mesh-craft supports cylinder -
+      confirmed in `mc3/src/Mc3XmlParser.cpp`; it takes the same radius/height/segments shape, so
+      it is close to a drop-in). A flat cap ends the garment in a clean hem ring instead of a
+      sphere that bulges into the neighbouring limb.
+    - Watch out for the converse failure this introduces: at *terminal* extremities (toe, hand,
+      head) the body's own capsule cap extends past the bone tail, so a flat-capped garment there
+      would let the body poke out. Those ends need the cylinder lengthened by roughly the body
+      radius, or to keep a capsule cap.
+    - Re-verify with the tooling this round added, not by eye: the pair-wise crossing diagnostic
+      (signed distance + face-normal sign) to prove enclosure, then
+      `scripts/avatar_visual_regression_check.py` for the per-region speckle metric, then fresh
+      male/female/`Wave` screenshots at the exact repro commands.
 
 ## 7. Do not do yet
 
