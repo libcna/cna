@@ -4,17 +4,17 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-161`, Phases 0-12); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-166`, Phases 0-13); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 161/161 tasks checked off across 12 phases
+## 1. Status (2026-07-18) — 166/166 tasks checked off across 13 phases
 
-**Deliberately not calling this "complete."** Five separate external adversarial reviews landed on
-this plan the same day (Phase 8, 9, 10, 11, and 12 below), and every single one found real, specific,
-file-and-line-cited defects that a clean build and passing targeted tests did not surface —
-including in the fix commits written *in response to* the previous review. Read this status as "all
-currently-known findings are fixed, full regression is green" rather than "nothing is left to find."
-Any future review of this code should get the same independent, skeptical treatment the last five
-did — see §1e's closing lesson.
+**Deliberately not calling this "complete."** Six separate external adversarial reviews landed on
+this plan the same day (Phase 8, 9, 10, 11, 12, and 13 below), and every single one found real,
+specific, file-and-line-cited defects that a clean build and passing targeted tests did not surface
+— including in the fix commits written *in response to* the previous review. Read this status as
+"all currently-known findings are fixed, full regression is green" rather than "nothing is left to
+find." Any future review of this code should get the same independent, skeptical treatment the last
+six did — see §1f's closing lesson.
 
 **Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
 this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
@@ -568,6 +568,56 @@ code, only assumed satisfied because the surrounding hardening work *felt* thoro
 both lessons hold simultaneously: verify every fix commit as skeptically as the code it responded to,
 *and* periodically re-read old `[x]` tasks' own Accept criteria against current code rather than
 trusting a checkbox that was never independently re-verified.
+
+## 1f. Phase 13 — sixth external review pass (2026-07-18, same day as Phase 8/9/10/11/12)
+
+A *sixth* external review, this time of the Phase 12 fix commit (`0df369bc`), confirmed everything
+that phase actually landed, then found four more real defects — three of them gaps *within* Phase
+12's own fixes, one an older asymmetry surfaced by looking at the audio path's EAGAIN handling for
+the first time (the video side got this fix back in `MEDIA-146`; audio never did):
+
+1. **`MEDIA-158`'s bool-contract fix was itself incomplete for the resampler-failure case**
+   (`MEDIA-162`, most severe finding this round) — `OpenAudioStreamByIndex()` committed the new
+   codec context and destroyed the OLD one *before* calling the resampler setup, then returned
+   `true` unconditionally regardless of whether the resampler actually succeeded. A resampler
+   failure at that point meant: the old, working audio track is gone, the new one can never produce
+   audio, and the caller is told the switch succeeded anyway. Fixed by making the whole operation
+   transactional: `SetupResampler()` (renamed `CreateResampler()`) now returns the new `SwrContext*`
+   instead of assigning it directly, so both the codec AND the resampler are built and verified
+   *before* anything old is touched. `Open()`'s own initial audio setup got the same treatment for
+   consistency.
+2. **`SeekToStart()`'s resampler-delay discard wasn't robust** (`MEDIA-163`) — a single
+   `swr_convert()` call, return value unchecked, no confirmation the delay actually reached zero.
+   Fixed: now a bounded loop (max 8 iterations) that checks the return each pass and stops on either
+   a fully-drained delay or a non-positive result.
+3. **`MEDIA-38`'s own original task text was never actually edited** (`MEDIA-165`) — Phase 12's
+   commit message claimed the text was corrected, but the diff only appended a new note in the Phase
+   12 section; `MEDIA-38`'s own bullet, in its own original location, still literally demanded a
+   thrown exception and a fault-injection/ASan test, directly contradicting the new note next to it.
+   Fixed: `MEDIA-38`'s own bullet now carries the correction in place (original text preserved and
+   labeled as superseded, followed by the actual decision and why), matching this plan's own
+   established precedent for in-place task-note correction.
+4. **The audio side never got the EAGAIN-retry fix the video side got in `MEDIA-146`**
+   (`MEDIA-164`) — `ProcessAudioPacket()` tolerated `AVERROR(EAGAIN)` from `avcodec_send_packet`
+   without throwing, but never resent the packet; the caller unconditionally unrefs it regardless,
+   silently discarding real audio data on the rare occasions this triggers. Fixed with a retry loop
+   mirroring the video-side pattern, contained within the one function's own call (unlike the video
+   side, an audio packet doesn't need to survive across separate `NextFrame()` calls).
+
+Full-suite regression after Phase 13: **4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail. No new tests added this
+phase; all four fixes verified by direct code review plus the unchanged full-suite pass (each
+involves an FFmpeg failure mode this plan has repeatedly documented as impractical to fault-inject
+with real fixtures — see `MEDIA-94`/`MEDIA-147`/`MEDIA-152`/`MEDIA-155` for the established
+precedent this follows).
+
+**Lesson reinforced a sixth time, with a new wrinkle:** three of four findings were gaps *inside*
+fixes from the immediately preceding round — reinforcing the now-familiar pattern that a fix commit
+needs its own skeptical read, not just "did the specific line I changed do what I meant." The new
+wrinkle is finding #3: a commit message asserted a documentation correction that the actual diff
+never made. **A commit message's own claims about what changed are not proof — verify the diff
+itself, especially for claims like "corrected the text" or "fixed the docs," which are easy to
+believe without opening the file.**
 
 ## 2. Correction to Phase 0's own build-verification record
 

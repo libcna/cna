@@ -96,6 +96,20 @@ namespace CNA::Internal::Media
                     avcodec_free_context(&audioCtx_);
                     audioCtx_ = nullptr;
                 }
+                if (audioCtx_)
+                {
+                    // A resampler failure here is treated exactly like the avcodec_open2() failure
+                    // just above -- audio simply isn't available for this track, rather than
+                    // leaving audioCtx_ allocated with HasAudio() correctly reporting false (via
+                    // MEDIA-160) but the codec still decoding audio into a black hole every frame
+                    // (found by external code review, plan_media.md MEDIA-162).
+                    swrCtx_ = CreateResampler(audioCtx_);
+                    if (!swrCtx_)
+                    {
+                        avcodec_free_context(&audioCtx_);
+                        audioCtx_ = nullptr;
+                    }
+                }
                 if (!audioCtx_)
                 {
                     audioStream_ = -1;
@@ -105,7 +119,6 @@ namespace CNA::Internal::Media
                     sampleRate_ = audioCtx_->sample_rate;
                     channels_   = audioCtx_->ch_layout.nb_channels;
                     audioTimeBase_ = av_q2d(as->time_base);
-                    SetupResampler(audioCtx_);
                 }
             }
         }
@@ -177,16 +190,21 @@ namespace CNA::Internal::Media
             // with the first freshly-decoded post-seek audio, an audible discontinuity artifact.
             // Discarded (not kept, unlike MEDIA-147's EOF flush) because a seek is a genuine
             // timeline discontinuity -- there is no "before" audio worth preserving across it.
-            // swr_convert()'s return isn't checked here the way other call sites in this file are:
-            // this is a best-effort discard of data that's being thrown away either way, not real
-            // audio the caller would otherwise receive, so a failure here has no data-loss
-            // consequence to surface.
-            int delaySamples = static_cast<int>(swr_get_delay(swrCtx_, audioCtx_->sample_rate));
-            if (delaySamples > 0)
+            // Loops until swr_get_delay() reports nothing left (rather than trusting a single
+            // fixed-size call to fully empty it in one shot) and checks swr_convert()'s own return
+            // each iteration, stopping on either a genuine error or "nothing more was produced" --
+            // matching this file's own MEDIA-39 standard of checking every swr_convert() call
+            // rather than assuming a best-effort discard can't also be a symptom of a real problem
+            // (found by external code review, plan_media.md MEDIA-163). Bounded to guard against a
+            // pathological non-terminating drain rather than looping forever.
+            for (int guard = 0; guard < 8; ++guard)
             {
+                int delaySamples = static_cast<int>(swr_get_delay(swrCtx_, audioCtx_->sample_rate));
+                if (delaySamples <= 0) break;
                 std::vector<float> discard(static_cast<std::size_t>(delaySamples) * channels_);
                 uint8_t* outPtr = reinterpret_cast<uint8_t*>(discard.data());
-                swr_convert(swrCtx_, &outPtr, delaySamples, nullptr, 0);
+                int converted = swr_convert(swrCtx_, &outPtr, delaySamples, nullptr, 0);
+                if (converted <= 0) break;
             }
         }
 
@@ -229,7 +247,7 @@ namespace CNA::Internal::Media
         return ctx;
     }
 
-    void VideoDecoder::SetupResampler(AVCodecContext* ctx)
+    SwrContext* VideoDecoder::CreateResampler(AVCodecContext* ctx)
     {
         SwrContext* newSwr = nullptr;
         int ret = swr_alloc_set_opts2(
@@ -240,10 +258,9 @@ namespace CNA::Internal::Media
         if (ret < 0 || !newSwr || swr_init(newSwr) < 0)
         {
             if (newSwr) swr_free(&newSwr);
-            swrCtx_ = nullptr;
-            return;
+            return nullptr;
         }
-        swrCtx_ = newSwr;
+        return newSwr;
     }
 
     bool VideoDecoder::OpenAudioStreamByIndex(int streamIdx)
@@ -263,17 +280,33 @@ namespace CNA::Internal::Media
             return false;
         }
 
+        // Build the new resampler and confirm it works BEFORE touching any existing state -- the
+        // previous version committed the new codec context and destroyed the old one first, then
+        // called SetupResampler() and returned true unconditionally regardless of its result. A
+        // resampler-setup failure at that point still reported success while the old, fully
+        // working track was already irrecoverably gone and the new one could never actually
+        // produce audio. A track switch is now genuinely transactional: both the codec AND its
+        // resampler must succeed before anything old is destroyed, matching this function's own
+        // return-value contract ("true only if a different stream is now genuinely active") for
+        // every failure mode, not just avcodec_open2()'s (found by external code review,
+        // plan_media.md MEDIA-162).
+        SwrContext* newSwr = CreateResampler(newCtx);
+        if (!newSwr)
+        {
+            avcodec_free_context(&newCtx);
+            return false;
+        }
+
         if (swrCtx_)   { swr_free(&swrCtx_);              swrCtx_   = nullptr; }
         if (audioCtx_) { avcodec_free_context(&audioCtx_); }
 
         audioCtx_      = newCtx;
+        swrCtx_        = newSwr;
         audioStream_   = streamIdx;
         sampleRate_    = audioCtx_->sample_rate;
         channels_      = audioCtx_->ch_layout.nb_channels;
         audioTimeBase_ = av_q2d(as->time_base);
         pendingAudio_.clear();
-
-        SetupResampler(audioCtx_);
 
         return true;
     }
@@ -708,65 +741,80 @@ namespace CNA::Internal::Media
     {
         if (!audioCtx_ || !swrCtx_) return;
 
-        // plan_media.md MEDIA-39/128 (found incomplete by external code review): every FFmpeg
-        // call in this function is now checked and a genuine error propagated as a thrown
-        // exception, matching the same "surface it, don't silently produce garbage/skip" standard
-        // NextFrame()'s own video-decode path already applies -- a corrupted *audio* packet is no
-        // less a real decode failure than a corrupted video one, and MEDIA-39's own task text
-        // explicitly calls out this function's swr_convert/avcodec_send_packet sites by name.
-        int sendRet = avcodec_send_packet(audioCtx_, pkt);
-        if (sendRet < 0 && sendRet != AVERROR(EAGAIN))
-        {
-            char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
-            av_strerror(sendRet, errBuf, sizeof(errBuf));
-            throw std::runtime_error(
-                std::string("VideoDecoder: failed to send audio packet to decoder: ") + errBuf);
-        }
-
         AVFrame* aFrame = av_frame_alloc();
         if (!aFrame)
         {
             throw std::runtime_error("VideoDecoder: av_frame_alloc() failed for audio frame.");
         }
 
-        while (true)
+        // plan_media.md MEDIA-39/128 (found incomplete by external code review): every FFmpeg
+        // call in this function is now checked and a genuine error propagated as a thrown
+        // exception, matching the same "surface it, don't silently produce garbage/skip" standard
+        // NextFrame()'s own video-decode path already applies -- a corrupted *audio* packet is no
+        // less a real decode failure than a corrupted video one, and MEDIA-39's own task text
+        // explicitly calls out this function's swr_convert/avcodec_send_packet sites by name.
+        //
+        // avcodec_send_packet() returning EAGAIN means "the codec's internal output queue is full
+        // -- drain via receive_frame, then resend this exact packet" (FFmpeg's documented
+        // contract). This used to be tolerated without throwing but never actually retried -- the
+        // caller (NextFrame()'s packet-reading loop) unconditionally av_packet_unref()s pkt_
+        // regardless of whether it was ever accepted, silently discarding real audio data on the
+        // rare occasions this path is taken. Retried here, mirroring the same fix NextFrame()
+        // already applies on the video side via havePendingVideoPacket_ (MEDIA-146) -- found by
+        // external code review, plan_media.md MEDIA-164.
+        bool needsResend = true;
+        while (needsResend)
         {
-            int recvRet = avcodec_receive_frame(audioCtx_, aFrame);
-            if (recvRet != 0)
-            {
-                if (recvRet != AVERROR(EAGAIN) && recvRet != AVERROR_EOF)
-                {
-                    char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
-                    av_strerror(recvRet, errBuf, sizeof(errBuf));
-                    av_frame_free(&aFrame);
-                    throw std::runtime_error(
-                        std::string("VideoDecoder: audio decode error: ") + errBuf);
-                }
-                break; // EAGAIN (no more frames from this packet yet) or EOF -- both expected, not errors
-            }
-
-            int numSamples = aFrame->nb_samples;
-            // Convert to float
-            std::vector<float> buf(static_cast<std::size_t>(numSamples) * channels_);
-            uint8_t* outPtr = reinterpret_cast<uint8_t*>(buf.data());
-            int converted = swr_convert(swrCtx_, &outPtr, numSamples,
-                        const_cast<const uint8_t**>(aFrame->data), numSamples);
-            // plan_media.md MEDIA-39: swr_convert's return is the ACTUAL number of samples
-            // produced, which can be less than numSamples (trim to what was actually produced) or
-            // negative on a genuine resample error, which -- like every other site in this
-            // function -- is now surfaced rather than silently swallowed.
-            if (converted < 0)
+            int sendRet = avcodec_send_packet(audioCtx_, pkt);
+            needsResend = (sendRet == AVERROR(EAGAIN));
+            if (sendRet < 0 && !needsResend)
             {
                 char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
-                av_strerror(converted, errBuf, sizeof(errBuf));
+                av_strerror(sendRet, errBuf, sizeof(errBuf));
                 av_frame_free(&aFrame);
                 throw std::runtime_error(
-                    std::string("VideoDecoder: audio resample error: ") + errBuf);
+                    std::string("VideoDecoder: failed to send audio packet to decoder: ") + errBuf);
             }
-            if (converted > 0)
+
+            while (true)
             {
-                buf.resize(static_cast<std::size_t>(converted) * channels_);
-                pendingAudio_.insert(pendingAudio_.end(), buf.begin(), buf.end());
+                int recvRet = avcodec_receive_frame(audioCtx_, aFrame);
+                if (recvRet != 0)
+                {
+                    if (recvRet != AVERROR(EAGAIN) && recvRet != AVERROR_EOF)
+                    {
+                        char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                        av_strerror(recvRet, errBuf, sizeof(errBuf));
+                        av_frame_free(&aFrame);
+                        throw std::runtime_error(
+                            std::string("VideoDecoder: audio decode error: ") + errBuf);
+                    }
+                    break; // EAGAIN (no more frames from this packet yet) or EOF -- both expected, not errors
+                }
+
+                int numSamples = aFrame->nb_samples;
+                // Convert to float
+                std::vector<float> buf(static_cast<std::size_t>(numSamples) * channels_);
+                uint8_t* outPtr = reinterpret_cast<uint8_t*>(buf.data());
+                int converted = swr_convert(swrCtx_, &outPtr, numSamples,
+                            const_cast<const uint8_t**>(aFrame->data), numSamples);
+                // plan_media.md MEDIA-39: swr_convert's return is the ACTUAL number of samples
+                // produced, which can be less than numSamples (trim to what was actually produced) or
+                // negative on a genuine resample error, which -- like every other site in this
+                // function -- is now surfaced rather than silently swallowed.
+                if (converted < 0)
+                {
+                    char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                    av_strerror(converted, errBuf, sizeof(errBuf));
+                    av_frame_free(&aFrame);
+                    throw std::runtime_error(
+                        std::string("VideoDecoder: audio resample error: ") + errBuf);
+                }
+                if (converted > 0)
+                {
+                    buf.resize(static_cast<std::size_t>(converted) * channels_);
+                    pendingAudio_.insert(pendingAudio_.end(), buf.begin(), buf.end());
+                }
             }
         }
 

@@ -412,9 +412,30 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 - [x] **MEDIA-38 — Harden `VideoDecoder::Open`/`OpenAudioStreamByIndex` against allocation failures.**
   `avcodec_alloc_context3()`'s return isn't null-checked before use (`VideoDecoder.cpp:58-60,87-89`);
   `swr_alloc_set_opts2()`'s return value is discarded (`102-106`,`173-177`) before the
-  immediately-following `swr_init()` call. Add explicit null/error checks that throw a clear, documented
-  C++ exception instead of risking a null dereference.
-  *Accept:* a fault-injection test throws cleanly instead of crashing; ASan-clean.
+  immediately-following `swr_init()` call.
+  *Original text (superseded below, kept for history):* "Add explicit null/error checks that throw a
+  clear, documented C++ exception instead of risking a null dereference." *Accept (original):* "a
+  fault-injection test throws cleanly instead of crashing; ASan-clean."
+  **Correction (Phase 12, `MEDIA-160`/`MEDIA-162`, found by external code review, `plan_media.md`
+  `MEDIA-165`): the "throw" wording above was never actually implemented, and this checkbox should
+  not have been left claiming it was.** `avcodec_alloc_context3()`/`AllocAndConfigureCodecContext()`
+  null-checks ARE real and do throw where a null dereference was otherwise possible (`Open()`'s
+  `frame_`/`pkt_` allocation check, `NextFrame()`'s decode-error throws). But
+  `swr_alloc_set_opts2()`/`swr_init()` failure specifically was deliberately changed to graceful
+  degradation instead of a throw (see `MEDIA-160`'s own reasoning: `Open()`'s established
+  non-throwing `bool` contract, relied on unwrapped by dozens of call sites, shouldn't be broken for
+  one failure mode; a throw immediately caught back into the same degrade-to-"no audio" behavior
+  would be a no-op complication). This is the actual, correct fix for this specific failure mode —
+  the *original* Accept criterion's "throw a clear exception" wording was simply wrong for this case
+  and is retracted here, not merely left unmet.
+  *Accept (actual, current):* `HasAudio()` requires both `audioCtx_` and `swrCtx_` (`MEDIA-160`);
+  `OpenAudioStreamByIndex()`/`Open()`'s audio setup both build+verify the resampler before
+  committing to using that audio track at all, so a resampler failure never leaves a half-broken
+  "audio available but silent" track (`MEDIA-162`). No fault-injection test or ASan run was added --
+  `swr_alloc_set_opts2()` failing for a channel layout/sample format `avcodec_open2()` already
+  accepted is not practically reproducible with this repo's real fixtures, matching this plan's own
+  established precedent (`MEDIA-94`) for not building disproportionate fault-injection
+  infrastructure for a near-unreachable failure mode.
 
 - [x] **MEDIA-39 — Harden the broader unchecked FFmpeg decode return codes.** Beyond MEDIA-38's
   allocation sites, `avcodec_send_packet`/`swr_convert`'s return values are unchecked in several other
@@ -1508,6 +1529,107 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Verified:* 4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
   Gyroscope) -- 1 new test added by this phase, zero pre-existing tests broken. Grepped in full
   (`grep -c FAILED` on the complete log, not a truncated tail), confirmed on two independent full runs.
+
+### Phase 13 — Sixth external review pass (2026-07-18, same day as Phase 8/9/10/11/12)
+
+> Applying MEDIA-126's own convention a sixth time. A sixth external adversarial review of commit
+> `0df369bc` (Phase 12's own fix commit) confirmed the fixes that WERE landed real, then found the
+> `MEDIA-158` bool-contract fix was itself still incomplete for one specific failure mode inside the
+> function it fixed, `SeekToStart()`'s resampler discard had a robustness gap, `MEDIA-38`'s own
+> original task text was never actually edited despite the commit message claiming it was, and a
+> long-standing asymmetry between the video- and audio-side EAGAIN handling had never been closed.
+> Every claim independently re-derived from the actual code before any fix was written.
+
+- [x] **MEDIA-162 — Make audio track switching genuinely transactional: build+verify the new
+  resampler BEFORE destroying the old track's state.** `MEDIA-158`'s fix made
+  `OpenAudioStreamByIndex()` propagate its own success/failure correctly for an `avcodec_open2()`
+  failure -- but the function's own internal ordering still committed the new codec context and
+  destroyed the OLD `audioCtx_`/`swrCtx_` *before* calling `SetupResampler()`, then unconditionally
+  returned `true` regardless of the resampler's own result. A resampler-setup failure at that point
+  left the old, fully-working track irrecoverably destroyed, the new track silently unable to
+  produce any audio, and the function still reporting success -- violating this class's own
+  documented `bool` contract ("true only if a different stream is genuinely active") for this one
+  failure mode. Same gap existed in `Open()`'s own initial audio-codec setup, just with no "old
+  track" to preserve (the practical effect there was a wastefully-allocated `audioCtx_` that could
+  never produce audio, correctly hidden from `HasAudio()` by `MEDIA-160` but never freed).
+  *Fix:* `SetupResampler()` renamed to `CreateResampler()` and changed to return the new
+  `SwrContext*` directly instead of assigning `swrCtx_` itself, so callers can test success before
+  committing anything. `OpenAudioStreamByIndex()` now builds and verifies the new resampler BEFORE
+  touching any existing `audioCtx_`/`swrCtx_` state -- a track switch is only committed once BOTH
+  the codec AND its resampler are confirmed working. `Open()`'s own audio setup applies the same
+  pattern, freeing `audioCtx_` and falling back to `audioStream_ = -1` (exactly like an
+  `avcodec_open2()` failure) if the resampler fails, instead of leaving a half-alive audio context.
+  *Accept:* the full existing test suite (including every `SetAudioTrackEXT`/multi-track test) passes
+  unchanged, confirming the reordering doesn't alter the success path. No dedicated test forces a
+  genuine mid-switch resampler failure -- `swr_alloc_set_opts2()` failing for a channel
+  layout/sample format `avcodec_open2()` already accepted is not practically reproducible with this
+  repo's real fixtures, matching this plan's own established precedent (`MEDIA-94`/`MEDIA-152`) for
+  not building disproportionate fault-injection infrastructure for a near-unreachable failure mode
+  -- verified correct by direct code review instead.
+
+- [x] **MEDIA-163 — Harden `SeekToStart()`'s resampler-delay discard: check `swr_convert()`'s
+  return and loop until the delay is actually drained.** The `MEDIA-159` fix called `swr_convert()`
+  exactly once, sized to a single `swr_get_delay()` reading, without checking its return or
+  confirming the delay actually reached zero afterward -- inconsistent with this file's own
+  `MEDIA-39` standard of checking every `swr_convert()` call, and a real (if currently low-impact)
+  robustness gap: a partial drain or a genuine `swr_convert()` error would silently leave stale
+  pre-seek resampler state behind.
+  *Fix:* the discard is now a bounded loop (max 8 iterations, matching this file's existing
+  bounded-retry style) that re-reads `swr_get_delay()` each pass and stops when it reports nothing
+  left, checking `swr_convert()`'s own return each iteration and stopping on a non-positive result
+  (error or "nothing more produced") rather than assuming a single call always fully empties the
+  buffer.
+  *Accept:* verified by code review and the full-suite regression run (`MEDIA-166`) showing no
+  behavior change for the (currently delay-free, format-conversion-only) real fixtures. No dedicated
+  test forces non-trivial resampler delay or a genuine `swr_convert()` failure here, for the same
+  reason `MEDIA-147`/`MEDIA-159` already documented.
+
+- [x] **MEDIA-165 — Actually edit `MEDIA-38`'s own original task text, not just add a note
+  elsewhere.** The Phase 12 commit message claimed "`MEDIA-38`'s task text corrected in
+  `plan_media.md`," but the diff only *appended* `MEDIA-160`'s new note in the Phase 12 section --
+  `MEDIA-38`'s own original bullet (§5 Phase 1) was untouched and still literally said "throw a
+  clear, documented C++ exception" with an Accept criterion of "a fault-injection test throws
+  cleanly instead of crashing; ASan-clean," directly contradicting `MEDIA-160`'s own explicit
+  statement that neither was implemented. A reader who only read `MEDIA-38` in isolation (its own
+  original location in the document) would see no indication anything about it was revisited.
+  *Fix:* `MEDIA-38`'s own bullet is now edited in place -- the original wording is preserved
+  (labeled "original text, superseded below, kept for history") immediately followed by a
+  "Correction (Phase 12...)" section explaining what was actually decided and why, cross-referencing
+  `MEDIA-160`/`MEDIA-162`. Matches this plan's own established precedent for in-place task-note
+  correction (`MEDIA-73`/`MEDIA-32`/`MEDIA-94`/`MEDIA-121`, per `NEXTmedia.md`'s own Phase 0
+  provenance note) -- individual task notes may be corrected in place; only whole-phase history is
+  append-only.
+
+- [x] **MEDIA-164 — Fix the audio-side EAGAIN asymmetry: `ProcessAudioPacket()` never retried a
+  packet `avcodec_send_packet` rejected with EAGAIN.** The video side has retried an EAGAIN'd packet
+  since `MEDIA-146`, but the audio side's `ProcessAudioPacket()` tolerated `AVERROR(EAGAIN)` from
+  `avcodec_send_packet` without throwing, then simply drained whatever frames were currently
+  available and returned -- the original packet was never resent. Its caller
+  (`NextFrame()`'s packet-reading loop) unconditionally `av_packet_unref()`s the packet regardless
+  of whether it was ever actually accepted by the codec, silently discarding real audio data on the
+  rare occasions an audio codec's internal queue fills up. Low real-world likelihood (audio codecs
+  buffer far less aggressively than video codecs), but the implemented error path was not correct.
+  *Fix:* `ProcessAudioPacket()` now wraps the send+drain sequence in a retry loop: if
+  `avcodec_send_packet` returns EAGAIN, the receive loop still drains whatever's currently available
+  (relieving the backpressure), then the SAME packet is resent -- mirroring
+  `havePendingVideoPacket_`'s pattern on the video side, just contained entirely within this one
+  function's own call (audio packets aren't retained across `NextFrame()` calls the way video
+  packets are, since `ProcessAudioPacket()` doesn't return until the packet is fully consumed one
+  way or another).
+  *Accept:* the full existing audio-decode test suite (`DrainAudioProducesRealSamplesAfterDecodingFrames`,
+  `Av1ContentDecodesVideoAndKeepsItsAudioTrack`, the `audio_tail.mkv`/multi-track tests) continues to
+  pass unchanged, confirming the retry loop doesn't alter behavior for the non-EAGAIN case (the only
+  case these fixtures currently exercise). No dedicated test forces a genuine audio-side EAGAIN --
+  reliably triggering it requires a codec/fixture combination whose internal buffering behavior
+  isn't practically controllable from a test, matching this plan's established precedent for
+  near-unreachable FFmpeg failure modes.
+
+- [x] **MEDIA-166 — Full-suite regression run.** Confirm zero regressions from this sixth
+  remediation pass, grepped in full (not a truncated tail).
+  *Verified:* 4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope) -- 0 new tests added this phase (all four fixes verified by code review + full-suite
+  non-regression, per each task's own Accept note above), zero pre-existing tests broken. Grepped in
+  full (`grep -c FAILED` on the complete log, not a truncated tail).
 
 ---
 

@@ -92,11 +92,15 @@ namespace CNA::Internal::Media
         static AVCodecContext* AllocAndConfigureCodecContext(
             const AVCodec* codec, const AVCodecParameters* params);
 
-        // (Re)creates swrCtx_ for the given codec context, resampling to packed float32. Leaves
-        // swrCtx_ null (freeing any partial allocation) if either allocation or swr_init fails,
+        // Builds a new resampler for the given codec context, resampling to packed float32.
+        // Returns nullptr (freeing any partial allocation) if either allocation or swr_init fails,
         // instead of leaving a half-configured context a later swr_convert call would crash on
-        // (plan_media.md MEDIA-38).
-        void SetupResampler(AVCodecContext* ctx);
+        // (plan_media.md MEDIA-38). Deliberately does NOT assign to swrCtx_ itself -- callers
+        // build the new resampler and confirm it works BEFORE committing it (and destroying
+        // whatever it replaces), so a resampler-setup failure can be reported as a genuine open
+        // failure rather than silently leaving audio half-broken after the old, working state has
+        // already been discarded (plan_media.md MEDIA-162, found by external code review).
+        static SwrContext* CreateResampler(AVCodecContext* ctx);
 
         // BT.601 8-bit planar YUV -> RGBA (no libswscale needed). hChromaShift/vChromaShift
         // encode the chroma subsampling: 0 = full resolution on that axis, 1 = halved (4:2:0 is
