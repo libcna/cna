@@ -217,6 +217,28 @@ resolution notes as the template.
     genuinely needs real hardware measurement to know if it's even necessary. **Left
     OPEN** (implementation done) — "effective cadence is measured on hardware" is, by
     its own wording, unsatisfiable without real hardware.
+22. `BASE2-001` (`92a0b6b8`) — **found and fixed a real, previously undetected
+    signed-integer-overflow bug**, not just a diagnostic addition: adding the overflow
+    test coverage this task's own required work asks for immediately triggered UBSan in
+    `SensorBase<T>::ShouldAcceptUpdateAt()` — comparing `(now - lastAcceptedUpdateTime_)
+    >= interval` directly implicitly promotes both `std::chrono::duration`s to their
+    finer common period, multiplying `interval`'s 100ns-tick count by 100; for
+    `TimeSpan::MaxValue` (tick count near `INT64_MAX`) that overflows signed 64-bit
+    arithmetic (`9223372036854775807 * 100...`). Fixed by explicitly `duration_cast`-ing
+    the *elapsed* duration down to `interval`'s own coarser period first (always safe —
+    an int64 100ns-tick count spans ~29,000 years). Added regression tests at both
+    `MaxValue`/`MinValue` through the real comparison (previously only the plain setter
+    was tested at these extremes). **Confirmed** the Problem statement's own claim
+    ("Android silently clamps while SDL throttle treats negative as always-ready") is
+    real — only `Accelerometer`/`Gyroscope` call `ShouldAcceptUpdateAt()` at all.
+    **Deliberately did not** attempt unifying the two mechanisms (adding software
+    throttling to `Compass`/`Motion`) — genuinely blocked on the not-yet-built behavioral
+    oracle (`DEVPERF-002`/`003`; real WP7 throttle-equivalent behavior is unknown without
+    it) and would likely break existing fake-backend tests that fire readings in
+    immediate succession. **Left OPEN** — but for a *different* reason than most other
+    entries this pass: blocked on other unstarted work (an oracle), not on hardware.
+    Re-verified clean under `devices-tsan` (shared, concurrency-relevant method on the
+    real `Accelerometer`/`Gyroscope` dispatch path).
 
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
@@ -237,15 +259,15 @@ resolve at link time.
 `cmake-build-android` all still build clean (the last for individual translation units
 only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **323 tests** (precise filter, used from
+**Tests:** Devices/Sensors filtered suite — **325 tests** (precise filter, used from
 `VIB2-003` onward, now including `AndroidSensorBridgeTests.*` since `ANDR2-009`:
 `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorBaseTests.*:
 SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:AndroidMotionMathTests.*:
-AndroidCompassMathTests.*:AndroidSensorBridgeTests.*`) — **319 passed, 4 skipped**
+AndroidCompassMathTests.*:AndroidSensorBridgeTests.*`) — **321 passed, 4 skipped**
 (hardware-only, unchanged), 0 failures across every task above. `MOT2-003` added no
 tests (Android-only, no pure-logic component to test the way `COMP2-001`/`MOT2-005`/
-`ANDR2-009`/`ANDR2-010`'s getter plumbing had). Note: a broader, unscoped
-`*Devices*:*Sensor*:...` filter also incidentally matches
+`ANDR2-009`/`ANDR2-010`/`BASE2-001`'s host-testable pieces had). Note: a broader,
+unscoped `*Devices*:*Sensor*:...` filter also incidentally matches
 `AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of which
 (`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
 `Vector3::GetHashCode()` (signed-int overflow in hash-combining) — not touched by any
@@ -253,14 +275,17 @@ task this pass, out of scope for Devices work, not silenced, just avoid the broa
 filter and use the precise one above (or expect and ignore that one specific failure
 if using a broader filter for some other reason).
 
-**Sanitizers:** `devices-ubsan` clean on every P1 change this pass. `devices-tsan` was
-NOT re-run for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003`/`ANDR2-009`/`010`
-(none add new locking/concurrency structure beyond what already existed, or the new
-state is a worker-thread-only-written atomic with no new lock) but WAS re-run for
-`SDLCORE-009`, `SDLCORE-005`, and `MOT2-005` (each adds a new, host-buildable
-lock-acquisition site) — 3 consecutive clean runs each, 0 `WARNING: ThreadSanitizer`
-occurrences. Re-run TSan if a future P1 task touches concurrent *host-buildable*
-lock-based logic.
+**Sanitizers:** `devices-ubsan` clean on every P1 change this pass — **and directly
+caught a real bug this pass** (`BASE2-001`'s `ShouldAcceptUpdateAt()` overflow, see
+Section 2's own entry — this is exactly the kind of finding the mandatory "verify via
+sanitizer, don't just reason about it" rule exists for). `devices-tsan` was NOT re-run
+for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003`/`ANDR2-009`/`010` (none add new
+locking/concurrency structure beyond what already existed, or the new state is a
+worker-thread-only-written atomic with no new lock) but WAS re-run for `SDLCORE-009`,
+`SDLCORE-005`, `MOT2-005`, and `BASE2-001` (a new lock-acquisition site, or a
+meaningfully-changed comparison inside an existing one, on a real dispatch path) — 3
+consecutive clean runs each, 0 `WARNING: ThreadSanitizer` occurrences. Re-run TSan if a
+future P1 task touches concurrent *host-buildable* lock-based logic.
 
 ---
 
@@ -310,7 +335,15 @@ checkpoints (unchanged):
   partially accurate — `stopRequested_` was already checked every inner-loop iteration;
   only rate-change responsiveness was actually unbounded. Worth re-checking the code
   directly (not just this note) before assuming either framing without verification.
-- 29+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
+- `BASE2-001` is left OPEN for a genuinely different reason than the others: its
+  overflow-bug fix is real and complete, but its core "unify TimeBetweenUpdates
+  semantics across all four sensor backends" ask is blocked on `DEVPERF-002`/`003` (the
+  not-yet-built behavioral oracle), not on hardware — don't conflate this with the
+  hardware-validation reason most other `OPEN` entries this pass carry.
+- `ANDR2-011` ("consolidate Android sensor bridges onto a shared looper") was scanned
+  and judged a major architecture redesign (up to 6 worker threads per `Motion`
+  instance → one shared looper) — comparable to `LIFE-007`/`010`/`011`, not attempted.
+- 28+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
   actual source of truth — this file only tracks what's been *closed or progressed*).
 
 ---
@@ -349,6 +382,11 @@ changes only:
   (also implemented by `AndroidMotionBackend`) plus `Motion::getIsAttitudeNorthReferencedProperty()`
   (`NOXNA`); `usingGameRotationVector_` moved under `stateMutex_` (was an unguarded
   write, harmless until this task added a reader).
+- `SensorBase.hpp`: `ShouldAcceptUpdateAt()`'s duration comparison rewritten to
+  `duration_cast` the elapsed time down to `interval`'s own period before comparing,
+  fixing a real signed-integer-overflow at `TimeSpan::MaxValue` (found by UBSan, see
+  `BASE2-001`'s own entry above) — affects the real `Accelerometer`/`Gyroscope` dispatch
+  path, not just a test-only surface.
 
 ---
 
@@ -385,22 +423,28 @@ Continue the P1 backlog. Not yet triaged/started, roughly in the order encounter
 scanning `plan_devices.md` Section 16 (no mandated order within P1 — pick by
 tractability):
 
-- **`LIFE-007`/`010`/`011` — deliberately set aside, not merely unstarted.** Large
-  architecture tasks; `LIFE-011` specifically has a **real design tension** already
-  found (see prior checkpoint / its own `plan_devices.md` notes) — do not attempt a
-  naive symmetric `Stop()` wait, it reintroduces `TEST2-001`'s fixed deadlock.
+- **`LIFE-007`/`010`/`011`, `ANDR2-011` — deliberately set aside, not merely
+  unstarted.** Large architecture tasks; `LIFE-011` specifically has a **real design
+  tension** already found (see prior checkpoint / its own `plan_devices.md` notes) — do
+  not attempt a naive symmetric `Stop()` wait, it reintroduces `TEST2-001`'s fixed
+  deadlock. `ANDR2-011` ("consolidate Android sensor bridges onto a shared looper") was
+  scanned and judged comparably large (up to 6 worker threads per `Motion` instance →
+  one shared looper/thread — a genuine architecture redesign, not a quick fix).
 - `DEVPERF-002`–`005` — API/behavioral oracle generation, callback/threading contract
   documentation, structured diagnostic channel. `DEVPERF-005` (diagnostic channel) is
   referenced as "future scope" by several already-closed tasks (including this pass's
   `SDLCORE-009`) — worth considering next since multiple other tasks implicitly wait on
-  it.
+  it. `DEVPERF-002`/`003` (the behavioral oracle) are now **also** a confirmed blocker
+  for `BASE2-001`'s remaining scope (see Section 5) — picking these up unblocks more
+  than just their own tasks.
   `SDLCORE-007`/`011` — investigated briefly last pass, still open, see prior notes.
-- `ANDR2-007`/`011`/`012`/`014`/`015` — remaining Android-only items (`ANDR2-009`/`010`
-  done this pass; `007` is the same design-heavy "calibrated boot/monotonic-to-UTC
-  offset" concern as `SDLCORE-007` below, for the Android-native path specifically;
-  `014`/`015` explicitly want fuzzing/instrumented hardware runs; `ANDR2-012` is the
-  right home for the "app lifecycle changes"/mid-session-recovery scope both `ANDR2-002`
-  and `SDLCORE-005` deliberately deferred this pass).
+- `ANDR2-007`/`012`/`014`/`015` — remaining Android-only items (`ANDR2-009`/`010` done
+  this pass, `011` deliberately deferred per above; `007` is the same design-heavy
+  "calibrated boot/monotonic-to-UTC offset" concern as `SDLCORE-007` below, for the
+  Android-native path specifically; `014`/`015` explicitly want fuzzing/instrumented
+  hardware runs; `ANDR2-012` is the right home for the "app lifecycle
+  changes"/mid-session-recovery scope both `ANDR2-002` and `SDLCORE-005` deliberately
+  deferred this pass).
 - `COMP2-003`/`004`/`005`/`008` — remaining Compass items (`COMP2-001` done this pass;
   `004`/`005` need physical devices).
 - `MOT2-001`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-003`/`005` done
@@ -412,9 +456,13 @@ tractability):
   mid-session backend degradation, confirmed by reading `Motion.cpp` — comparable in
   scope to `LIFE-007`/`010`, not attempted this pass. `MOT2-010` needs physical
   hardware.).
-- `BASE2-001`–`005` — mostly "verify against a behavioral oracle" tasks; this
-  environment has no WP7 SDK/MonoGame reference — may need scoping down to "verify
-  internal consistency", a decision worth making explicit if picked up.
+- `BASE2-002`–`005` — like `BASE2-001` (done this pass, see Section 2), all rely on "the
+  behavioral oracle"/"reference behavior"; this environment has no WP7 SDK/MonoGame
+  reference and `DEVPERF-002`/`003` (the oracle-generation tasks) are themselves not yet
+  done — genuinely blocked, not just under-scoped. `BASE2-001`'s own precedent: **do**
+  look for a concrete, oracle-independent bug/gap named in the problem statement first
+  (it found and fixed a real overflow this way) before concluding a task is entirely
+  blocked — investigate before deferring wholesale.
 - `VIB2-005`–`007` — remaining Vibrate items (`005` needs a direct-backend Android
   validation; `006`/`007` are host-testable design/behavior questions).
 - `PERF2-001`–`003`, `TEST2-002`/`004`–`006`/`010` — remaining P1 perf/test-infra items.
@@ -463,19 +511,28 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 21 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 22 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
-MOT2-005, ANDR2-009, ANDR2-010 -- see Section 2 for commit hashes and a
-one-line summary of each). Read Section 1's "labeling convention" note
+MOT2-005, ANDR2-009, ANDR2-010, BASE2-001 -- see Section 2 for commit hashes
+and a one-line summary of each). Read Section 1's "labeling convention" note
 carefully before closing anything -- it distinguishes tasks provable by code
 inspection (CLOSED, e.g. SDLCORE-009) from tasks whose acceptance criteria
 name an empirical/hardware result (stays OPEN even once implemented, e.g.
 VIB2-003/004, ANDR2-002, SDLCORE-005, COMP2-001, MOT2-005, ANDR2-009/010).
 MOT2-003 is a special case: only its narrowest sub-bullet was implemented,
 its acceptance criteria remain genuinely unmet (not just hardware-unverified)
--- don't mistake it for a near-complete fix.
+-- don't mistake it for a near-complete fix. BASE2-001 is a different special
+case: it found and fixed a real signed-integer-overflow bug (verified by
+UBSan) while investigating, but stays OPEN because its core cross-backend
+unification ask is blocked on the not-yet-built behavioral oracle
+(DEVPERF-002/003), not on hardware -- a third distinct "why OPEN" reason
+alongside "needs hardware" and "genuinely unimplemented, comparable to
+LIFE-007/010/011". Worth remembering: investigate each task for a concrete,
+oracle-independent bug named in its own problem statement before assuming
+it's entirely blocked -- BASE2-001's overflow fix came from doing exactly
+that.
 
 Continue the P1 backlog (Section 8 lists untriaged candidates with rough
 tractability notes). Read each task's full plan_devices.md entry before
