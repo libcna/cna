@@ -31,6 +31,27 @@ Organize by category as entries accumulate.
   `ConfigureSurface`) in a `try` block with `RegisterForWindow` called last, and a full `catch (...)` that releases
   every resource before rethrowing — a model example of the correct pattern. **Still need to check `Canvas`/
   `SdlGpu`** (the other two `RegisterForWindow` callers) for the same ordering risk when their shards are audited.
+  **Update: all four callers now checked.** `Canvas` (confirmed safe — the only fallible step is a null-check that
+  precedes registration, nothing to leak). `SdlGpu` (checked: registration also happens *last*, after 10
+  sequential `Create*Resources()` shader/pipeline-creation calls, so it does **not** share EasyGL's
+  dangling-registry-entry risk — but see the new, distinct finding immediately below that this same ordering
+  creates for `SdlGpu` specifically). **Only `EasyGL` has the dangling-registry-entry bug** — the other three all
+  correctly defer registration until construction can no longer fail.
+- **NEW, SdlGpu-specific: constructor resource leak on any of 10 sequential fallible resource-creation calls.**
+  `SdlGpuGraphicsBackend`'s constructor (`SdlGpuGraphicsBackend.cpp` ~line 487-543) creates the SDL GPU device and
+  claims the window (with correct, explicit cleanup on `SDL_ClaimWindowForGPUDevice` failure specifically), then
+  calls `SetSwapInterval`/`QueryDepthStencilFormat`/`CreateSpriteResources`/`CreateColoredResources`/
+  `CreateTexturedResources`/`CreateLitTexturedResources`/`CreateAlphaTestResources`/`CreateDualTextureResources`/
+  `CreateEnvMapResources`/`CreateSkinnedResources`/`CreatePbrResources` in sequence, entirely unwrapped by any
+  try/catch. If ANY of these ten calls throws (plausible — they compile SPIR-V shaders and create GPU pipeline
+  objects, and the constructor's own comment notes non-Linux platforms' shader-format support is still
+  incomplete/deferred, a real reachable failure mode there), the destructor (which does a complete, correct
+  teardown of exactly these resources, verified by direct comparison) never runs, since a constructor that throws
+  leaves the object never-fully-constructed. Result: the SDL GPU device, the claimed window, and any GPU
+  pipelines/shaders successfully created by earlier calls in the sequence all leak. **Contrast with WebGPU's
+  constructor (this audit's model example of correct exception safety) which wraps the equivalent sequence in
+  exactly the try/catch+cleanup-then-rethrow pattern this file is missing.** Not yet written up as a full per-file
+  finding — `backend-sdlgpu`'s own direct audit (queued, 27 files, not yet started) should record this formally.
 - **Recurring shape: device/object state is mutated to reflect a requested change *before* the call that can
   reject/throw for that change, leaving stale/inconsistent tracked state on failure.** Three confirmed instances
   now, in unrelated subsystems: (1) `IGraphicsBackend`'s window registry (EasyGL F1, above); (2)

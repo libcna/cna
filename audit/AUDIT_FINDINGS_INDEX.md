@@ -95,6 +95,14 @@ _(none recorded yet)_
   streaming — reduces to a static capacity assertion that would pass even if `SetData` were a no-op. See
   [easygl_dynamic_buffer_stress_test.cpp](examples/easygl_dynamic_buffer_stress_test.cpp.audit.md).
 
+### MEDIUM (SdlGpu, preliminary — full per-file audit not yet done)
+
+- **SdlGpu backend: constructor resource leak if any of 10 sequential shader/pipeline-creation calls throws.**
+  Unlike WebGPU's model-example try/catch+cleanup, `SdlGpuGraphicsBackend`'s constructor has no exception-safety
+  wrapper around `CreateSpriteResources` through `CreatePbrResources` — a failure leaks the SDL GPU device, claimed
+  window, and any already-created pipelines, since the destructor (which correctly tears all of this down) never
+  runs on a failed construction. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+
 ### MEDIUM (continued, Bgfx/Vulkan batch)
 
 - **Two known-failing CTest targets registered with no `WILL_FAIL`/skip annotation**: `Bgfx_RenderTargetCube_DepthFormat`

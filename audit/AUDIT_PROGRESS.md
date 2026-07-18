@@ -1,158 +1,213 @@
 # AUDIT_PROGRESS.md — Live Rollup and Resume Point
 
-**If context is lost, resume from here.** Read this file, `AUDIT_MANIFEST.md`, and `AUDIT_DECISIONS.md`, then
-continue the work queue — no need to re-derive scope or re-ask the user anything (see `AUDIT_DECISIONS.md` D-P1
-through D-P4 for the standing preflight decisions).
+**If context is lost, resume from here.** Read this file, `AUDIT_MANIFEST.md`, `AUDIT_DECISIONS.md`, and
+`AUDIT_CROSS_CUTTING_FINDINGS.md`, then continue the work queue — no need to re-derive scope or re-ask the user
+anything (see `AUDIT_DECISIONS.md` D-P1 through D-P4 for the standing preflight decisions the user already gave;
+the audit must continue fully autonomously per the original prompt's instructions, no further questions).
 
 ## Current phase
 
 **Pass 1 (Inventory and structural reconnaissance) — COMPLETE.**
-**Pass 2 (Deep per-file audit) — IN PROGRESS.** Executing as a hybrid: judgment-heavy areas (graphics backends,
-core CNA internals, Microsoft.Xna/Devices public API) audited directly by the main agent; large mechanical
-batches (examples, tests, tools) fanned out via the Workflow tool per decision D-P1.
+**Pass 2 (Deep per-file audit) — IN PROGRESS.** Hybrid execution per D-P1: graphics backends, CNA core, and
+Microsoft.Xna/Devices public API are audited **directly** by the main agent (judgment-heavy, FNA-parity/
+cross-backend work); large mechanical batches (examples, tests, tools) are fanned out via the Workflow tool.
 
-Direct-audit work so far: `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2),
-`backend-sdlrenderer` (2/2), `backend-dx3` (2/2, static-only per D-P4), `backend-easygl` (2/2, scoped-depth review
-of the 4733-line file), `backend-webgpu` (2/2, scoped-depth review of the 8805-line file — the largest in this
-audit) — **all 6 single-file backend adapters now fully AUDITED.** EasyGL's audit produced this pass's most severe
-finding (F1: dangling window-registry entry on constructor failure) and independently confirmed the
-skinned-normal-transform bug the mechanical batch had already surfaced from the test side (F2/F3); WebGPU's audit
-then confirmed the SAME skinned-normal-transform bug is present there too (its own comments admit a deliberate
-line-for-line port from EasyGL), making this now a suspected-systemic, priority cross-backend check — and
-separately confirmed WebGPU's own constructor does NOT share EasyGL's window-registration ordering bug (a model
-example of correct exception safety).
+### Direct-audit backend work: 9 of 16 backend shards fully AUDITED
 
-Next: the larger multi-file backends (`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`,
-`backend-bgfx`, `backend-vulkan`, `backend-d3dcommon`) — each should specifically check (1) whether its own
-SkinnedEffect shader has the same missing/wrong normal-matrix transform, and (2) whether its own `RegisterForWindow`
-call site (if any) shares EasyGL's constructor-ordering risk — then CNA core / Microsoft.Xna / Microsoft.Devices
-shards.
+`backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2), `backend-sdlrenderer` (2/2, the
+backend itself, not the example-test shard), `backend-dx3` (2/2, static-only per D-P4), `backend-easygl` (2/2,
+scoped-depth review of the 4733-line file), `backend-webgpu` (2/2, scoped-depth review of the 8805-line file — the
+largest in this audit), `backend-ascii` (6/6), `backend-canvas` (8/8).
 
-Three more mechanical-batch Workflows launched in parallel (same proven pattern as easygl): `examples-tests-bgfx`
-(98 files, run `wf_bcaa2d48-c2c`), `examples-tests-vulkan` (70 files, run `wf_97caa64c-71d`, after one transient
-"model temporarily unavailable" retry), `examples-tests-sdlrenderer` (67 files, run `wf_afb2b5fa-e2b`) — all
-in flight as of this update.
+**Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
+`EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
+defer registration until construction can no longer fail. `SdlGpu`, however, has a *different*, newly-found
+resource-leak risk in the same area (see Findings below) — flagged in the cross-cutting doc but **not yet written
+up as a formal per-file finding**, since `backend-sdlgpu`'s own 27-file direct audit has not started yet.
 
-Background Workflow COMPLETE: `examples-tests-easygl` (218 files, run ID `wf_0b3830f6-648`, 28 agents, 0 errors,
-~1.8M subagent tokens, ~30 min wall-clock) — the first mechanical-batch trial, and it worked very well: all 218
-reports genuinely evidence-based (spot-checked 3, all did real formula re-derivation, git-log cross-referencing,
-and production-code reading, not boilerplate). Found 4 HIGH-severity issues worth flagging prominently (see
-`AUDIT_FINDINGS_INDEX.md`), the most significant being a **production** EasyGL bug (skinned-effect shaders skip
-the WorldInverseTranspose normal transform) that no existing test can detect because they all use World=Identity —
-queued as a priority verification item for the `backend-easygl` direct audit. A first attempt at this workflow
-(run ID `wf_8c4ac6b8-702`, using an `args`-based file list) failed instantly with `args.files` undefined — worked
-around by inlining the file list as a literal JS array in the script body instead of passing it via the `args`
-parameter; **use this workaround for every future mechanical-batch workflow in this audit** (don't retry passing
-file lists via `args`).
+### Remaining backend shards — NOT YET STARTED (7 of 16)
 
-Next mechanical-batch candidates (same pattern, same prompt template): `examples-tests-bgfx` (98),
-`examples-tests-vulkan` (70), `examples-tests-sdlrenderer` (67), remaining `examples-tests-*` shards, then
-`tests-*` shards, then `tools-*` shards.
+`backend-d3d11` (20 files), `backend-d3d12` (26), `backend-sdlgpu` (27 — priority: formalize the resource-leak
+finding already spotted in its constructor), `backend-bgfx` (34), `backend-vulkan` (40), `backend-d3d9` (50, note
+D-5 vendored-shader boundary — the 12 vendored `.fx`/`.fxh` files are EXEMPT, only the C++ consumer code is
+in-scope), `backend-d3dcommon` (46, shared D3D9/D3D11/D3D12 infrastructure).
 
-## Counts (as of this update, 2026-07-18)
+**For each of these, specifically check**: (1) does its SkinnedEffect/SkinnedPbrEffect shader share the
+world-space-normal-transform bug (confirmed in EasyGL/WebGPU/Vulkan so far — Vulkan's own backend shard is D3D9/
+D3D11/D3D12/Bgfx/SdlGpu/D3DCommon's sibling and hasn't been directly audited yet either, only its *examples* were,
+via the mechanical batch); (2) does it share the fog-formula bug (confirmed in EasyGL-fixed/Bgfx-broken/
+Vulkan-broken so far, via their example-test batches — Bgfx and Vulkan's own backend *source* hasn't been directly
+read yet, only inferred from test-file audits); (3) if it calls `RegisterForWindow`, does its constructor share
+either the EasyGL dangling-pointer bug or the SdlGpu resource-leak bug.
+
+### Mechanical-batch Workflow status (examples-tests-* shards)
+
+**COMPLETE**: `examples-tests-easygl` (218, run `wf_0b3830f6-648`), `examples-tests-sdlrenderer` (67, run
+`wf_afb2b5fa-e2b`), `examples-tests-bgfx` (98, run `wf_bcaa2d48-c2c`), `examples-tests-vulkan` (70, run
+`wf_97caa64c-71d`) — all committed.
+
+**IN FLIGHT as of this update** (launched, not yet returned): `examples-tests-sdlgpu` (22, run `wf_bce2a701-d32`),
+`examples-tests-webgpu` (22, run `wf_3e108598-937`), `examples-tests-generic` (24, run `wf_b52cd363-065`),
+`examples-tests-d3d9` (14, run `wf_95244dcf-c63`). **When these complete: verify every file exists on disk
+(`find audit/examples -name '*.audit.md' | wc -l` and check no `MISSING` from a Python existence-check loop, same
+pattern as every prior batch), mark AUDITED via `mark_audited.py`, extract HIGH+ findings into
+`AUDIT_FINDINGS_INDEX.md`/`AUDIT_CROSS_CUTTING_FINDINGS.md`, update counts below, commit each shard separately.**
+
+**NOT YET LAUNCHED**: remaining `examples-tests-*` shards (`ascii` 6, `canvas` 2, `d3d11` 3, `d3d12` 2, `dx3` 9,
+`headless` 7, `software` 6 — these 7 small shards could be combined into one or two Workflow calls rather than 7
+separate ones, given how small they are), and every `examples-demo_*` shard (~30 shards, ~227 files total — demo
+applications, not backend integration tests; likely need a different prompt template since they're full sample
+games, not single-feature pixel tests). Also **all `tests-*` shards** (~350 files: `tests-xna-*` × 8,
+`tests-cna-*` × 4, `tests-microsoft-devices`, `tests-misc`) and **all `tools-*` shards** (~124 files, 10 shards)
+have not been touched at all yet — same mechanical-batch pattern applies.
+
+### Reusable Workflow script pattern (for every future mechanical batch)
+
+Copy the structure used in every batch above: `meta` block, `FILES` as an inlined literal JS array (**never pass
+file lists via the `args` parameter — this failed instantly with `args.files` undefined on the very first
+attempt, run `wf_8c4ac6b8-702`**), a `RESULT_SCHEMA` requiring `{path, report_written, verdict,
+high_or_above_findings[]}` per file, a `buildPrompt(batch)` function instructing agents to read
+`AUDIT_CHECKLIST.md`/`AUDIT_SCOPE.md`/`AUDIT_DECISIONS.md`/`AUDIT_CROSS_CUTTING_FINDINGS.md` first (the last one
+is important — it tells agents what cross-backend bugs to specifically check for) plus one strong example report
+as a template, the anti-boilerplate rule, and explicit backend/production-source paths to cross-check against;
+`pipeline()` over batches of 5-8 files each; `phase('Audit')`. After completion: read the full `journal.jsonl` (not
+just the truncated notification text) via a Python script to get every file's complete result, verify every
+report file exists on disk before trusting the count, mark manifest rows AUDITED via
+`/tmp/.../scratchpad/mark_audited.py <paths...>` (this script and the shard-key→path mapping in
+`shards.json`/`classified.json` live in the scratchpad directory from Pass 1 — if that scratchpad is gone,
+regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per shard already).
+
+## Counts (as of this update, 2026-07-18, mid-session)
 
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **473** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
-  backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, examples-tests-easygl ×218,
-  examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70)
-- PENDING: **1824**
+- AUDITED so far: **481** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+  backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8,
+  examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70)
+- PENDING: **1816** (+ 82 in flight via 4 parallel background workflows: sdlgpu 22, webgpu 22, generic 24, d3d9 14)
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**bgfx (98 files) and vulkan (70 files) batches both complete** (13+9 agents, 0 errors). Together with the earlier
-EasyGL batch, these produced this audit's most significant discovery: **the pre-Task-1111 fog formula fix
-(EasyGL-only) was never ported to Bgfx or Vulkan — confirmed in 6 shader variants across both backends**, this
-audit's single most widely-confirmed defect. Also confirmed: the skinned-normal-transform bug (EasyGL/WebGPU) now
-present in Vulkan too (3 backends); new Vulkan-specific bugs (ambient/emissive dropped for skinned models,
-missing Y-flip in EnvironmentMapEffect, scissor ignored on render-target passes); new Bgfx-specific bugs (Clear()
-ignores ClearOptions and always wipes color+depth+stencil, a vertex-format test whose entire subject is dead
-code); two known-failing CTest targets with no `WILL_FAIL` annotation; `BasicEffect::VertexColorEnabled`'s bare
-public field (no property wrapper) confirmed via two independent backend batches. Full detail in
-`AUDIT_CROSS_CUTTING_FINDINGS.md` and `AUDIT_FINDINGS_INDEX.md`.
+**~21% AUDITED so far** (481/2297), climbing to ~25% once the 4 in-flight batches land.
 
-`examples-tests-sdlrenderer` batch complete (67 files, 9 agents, 0 errors). Notable findings: `SpriteBatch::Begin()`
-exception-safety bug (general, not backend-specific — permanently wedges the object if a backend call throws
-mid-Begin); `GraphicsDevice::SetRenderTargets` mutates tracked state before the backend call that can reject MRT;
-two tests with stale expected-throw assertions superseded by FNA-parity fix commit `90f5db2c`; SpriteFont flip
-lookup tables sized 3 not 4 (potential OOB read). See `AUDIT_CROSS_CUTTING_FINDINGS.md` for the now-3-instance
-"mutate state before the fallible call" pattern this reinforces.
+## Major discoveries so far (see AUDIT_FINDINGS_INDEX.md and AUDIT_CROSS_CUTTING_FINDINGS.md for full detail)
 
-## Findings recorded so far (see AUDIT_FINDINGS_INDEX.md for full detail)
-
-- MEDIUM: Headless `HeadlessStatistics::primitiveCount` undercounts instanced draws by `instanceCount`×.
-- MEDIUM: Software backend `DepthBufferWriteEnable`/`SetDepthWriteEnabled` have no effect (depth always written).
-- MEDIUM: Software backend `DepthStencilState.DepthBufferFunction` ignored (hardcoded LessEqual-equivalent test).
-- LOW/INFO: several consistency/dead-code/documentation notes in `IGraphicsBackend.hpp`, Headless, and Software
-  reports (missing `final`, one dead constructor overload, missing `default:` in a primitive-count switch, etc.)
+1. **Fog formula bug — this audit's single most widely-confirmed defect.** The pre-Task-1111 fog formula (proven
+   wrong by this project's own XNA-oracle diff, commit `74ad3bae`) was fixed in EasyGL but never ported to Bgfx or
+   Vulkan. Confirmed in 6 shader variants across 2 backends. Priority: check every remaining backend
+   (D3D9/D3D11/D3D12/SdlGpu/D3DCommon/Software/SdlRenderer/Dx3/Canvas/Ascii/Headless) for the same formula.
+2. **Skinned-effect world-space-normal-transform bug — confirmed in 3 backends** (EasyGL, WebGPU, Vulkan). WebGPU's
+   own comments admit a deliberate line-for-line port from EasyGL, including the bug. Priority: check every
+   remaining backend with a SkinnedEffect implementation (Bgfx, D3D9, D3D11, D3D12, SdlGpu).
+3. **EasyGL F1 (HIGH): dangling window-registry pointer on constructor failure** — the single most severe finding
+   of the audit so far (a real use-after-free path via `SdlInputBridge`/`Mouse`). Confirmed NOT present in
+   WebGPU/Canvas/SdlGpu (all three defer registration correctly).
+4. **SdlGpu: constructor resource leak** (new, distinct from #3) if any of 10 sequential shader/pipeline-creation
+   calls throws — no try/catch, unlike WebGPU's model-example pattern. Needs formal write-up when `backend-sdlgpu`
+   is directly audited.
+5. Several Vulkan-specific bugs (ambient/emissive dropped for skinned models, missing Y-flip in
+   EnvironmentMapEffect causing vertical mirroring, scissor ignored on render-target passes) and Bgfx-specific bugs
+   (`Clear()` ignores `ClearOptions` and always wipes color+depth+stencil; a vertex-format test whose entire
+   subject function is dead code in production).
+6. Two known-failing CTest targets registered with no `WILL_FAIL` annotation (Bgfx).
+7. `BasicEffect::VertexColorEnabled` is a bare public field with no property wrapper, violating the project's own
+   C# property convention — confirmed via both Bgfx and Vulkan test batches independently.
+8. `SpriteBatch::Begin()` and `GraphicsDevice::SetRenderTargets` both mutate tracked state before a backend call
+   that can throw/reject — a recurring "mutate before the fallible call" shape, 3 confirmed instances now.
+9. **Recurring documentation rot**: header comments describing "known bugs"/stale expected-throw behavior,
+   confirmed across 4 independent mechanical batches (EasyGL, SdlRenderer, Bgfx, Vulkan) — not incidental to one
+   subsystem.
+10. Backend-specific, lower-severity findings: Headless statistics undercount instanced draws; Software backend
+    ignores `DepthBufferWriteEnable`/`DepthBufferFunction`; Dx3 resize failure leaves the backend unusable; Ascii's
+    forced blend state isn't restored after `Present()`.
 
 ## Last completed file
 
-`include/CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp` (backend-sdlrenderer shard, direct audit).
+`include/CNA/Internal/Backends/Canvas/CanvasRenderTargetBackend.hpp` (backend-canvas shard, direct audit) — plus
+the SdlGpu constructor spot-check (not a full file audit, just the `RegisterForWindow` cross-cutting check,
+recorded in `AUDIT_CROSS_CUTTING_FINDINGS.md`).
 
-## Next exact files/subsystem
+## Next exact action
 
-Start with the graphics backend shards (Task #2) since they're the audit's most emphasized area (prompt §12-14)
-and establish the FNA/CNA/backend three-way comparison pattern other shards will reuse. Suggested order (smallest
-single-file adapters first, to calibrate report depth/format before tackling the large multi-file backends):
-
-1. `backend-headless`, `backend-software`, `backend-sdlrenderer`, `backend-dx3`, `backend-easygl`, `backend-webgpu`
-   (2 files each — single massive adapter + header; note D-6 external-dependency boundary for EasyGL/Dx3)
-2. `backend-ascii` (6), `backend-canvas` (8), `backend-common` (2)
-3. `backend-d3d11` (20), `backend-d3d12` (26), `backend-sdlgpu` (27)
-4. `backend-bgfx` (34), `backend-vulkan` (40), `backend-d3d9` (50, note D-5 vendored-shader boundary),
-   `backend-d3dcommon` (46)
-
-Then proceed to Task #3 (CNA core), Task #4 (Microsoft.Xna areas — start with `xna-framework-core` since
-Vector/Matrix/Color/BoundingBox etc. are foundational to everything else), Task #5 (Microsoft.Devices), then tests/
-tools/examples/docs/build (Tasks #6-9), matching each production-code audit with its paired test shard where
-possible (e.g. audit `xna-graphics` and `tests-xna-graphics` close together so FNA-parity findings and test-gap
-findings reinforce each other).
+1. Nothing to do until the 4 in-flight workflow notifications arrive — when they do, process each per the
+   "Mechanical-batch Workflow status" instructions above.
+2. In parallel (direct work), start `backend-sdlgpu`'s full 27-file audit (formalize the resource-leak finding as
+   a proper per-file report, then continue through the rest of the backend) — OR start `backend-d3d11`/
+   `backend-d3d12` (smaller, 20/26 files) first if resuming from a fresh context makes SdlGpu's partial context
+   (constructor already read) less valuable to preserve.
+3. After all 7 remaining backend shards: Task #3 (CNA core: `cna-internal-core` 113, `cna-devices` 39, `cna-input`
+   31, `cna-graphics` 7, `cna-root-utilities` 15), Task #4 (Microsoft.Xna areas — start with `xna-framework-core`
+   78 since Vector/Matrix/Color/BoundingBox are foundational to everything else, then `xna-graphics` 191 the
+   largest), Task #5 (Microsoft.Devices, `microsoft-devices` 54), then tests/tools/examples/docs/build (Tasks
+   #6-9), matching each production-code shard with its paired test shard where possible (e.g. `xna-graphics` +
+   `tests-xna-graphics`) so findings reinforce each other.
 
 ## Graphics backend progress
 
 | Backend | Shard(s) | Status |
 |---|---|---|
-| Ascii | backend-ascii | PENDING |
-| Bgfx | backend-bgfx | PENDING |
-| Canvas | backend-canvas | PENDING |
+| Ascii | backend-ascii | **AUDITED** |
+| Bgfx | backend-bgfx | PENDING (examples audited; backend source not yet) |
+| Canvas | backend-canvas | **AUDITED** |
 | D3D11 | backend-d3d11 | PENDING |
 | D3D12 | backend-d3d12 | PENDING |
-| D3D9 | backend-d3d9 | PENDING |
-| Dx3 | backend-dx3 | PENDING |
-| EasyGL | backend-easygl | PENDING |
-| Headless | backend-headless | PENDING |
-| SdlGpu | backend-sdlgpu | PENDING |
-| SdlRenderer | backend-sdlrenderer | PENDING |
-| Software | backend-software | PENDING |
-| Vulkan | backend-vulkan | PENDING |
-| WebGPU | backend-webgpu | PENDING |
+| D3D9 | backend-d3d9 | PENDING (examples in flight; backend source not yet) |
+| Dx3 | backend-dx3 | **AUDITED** (static-only, D-P4) |
+| EasyGL | backend-easygl | **AUDITED** |
+| Headless | backend-headless | **AUDITED** |
+| SdlGpu | backend-sdlgpu | PENDING (constructor spot-checked only — see Findings #4) |
+| SdlRenderer | backend-sdlrenderer | **AUDITED** |
+| Software | backend-software | **AUDITED** |
+| Vulkan | backend-vulkan | PENDING (examples audited; backend source not yet) |
+| WebGPU | backend-webgpu | **AUDITED** |
 | D3DCommon (shared) | backend-d3dcommon | PENDING |
-| Common (shared) | backend-common | PENDING |
+| Common (shared) | backend-common | **AUDITED** |
 
-`AUDIT_GRAPHICS_BACKEND_MATRIX.md`: skeleton only, not yet populated (needs Pass 2 backend evidence first).
+`AUDIT_GRAPHICS_BACKEND_MATRIX.md`: still skeleton only — do not populate until all 16 backend shards are
+directly audited (Pass 4 depends on this).
 
 ## FNA parity progress
 
-Not started (Pass 3, Task #10). Will proceed area-by-area alongside Pass 2's Microsoft.Xna shards rather than
-purely as a separate pass, then get a final systematic sweep in Pass 3 to catch anything missed incidentally.
+Not started as a dedicated pass yet (Pass 3, Task #10), but two major systemic FNA-parity gaps (fog formula,
+skinned-normal-transform) have already been found incidentally via backend audits + mechanical test batches. This
+is ahead of where a dedicated Pass 3 would have started from scratch — when Pass 3 formally begins, start by
+consolidating what's already known rather than re-deriving it.
 
 ## Cross-cutting investigations open
 
 - `known_bugs.md`'s SpriteBatch Begin/End defect — needs corroboration once `xna-graphics`/`tests-xna-graphics`
-  are audited (see `AUDIT_CROSS_CUTTING_FINDINGS.md`).
-- EasyGL (4733-line single file) and Dx3/Headless/SdlRenderer/Software/WebGPU (single-file adapters) — maintainability
-  question of whether single-file-backend size is a real concern, to be judged once actually read, not assumed.
-- External sibling-repo boundary (`easy-gl`, `free-direct`, D-6) — track which findings bottom out at "this lives in
-  a different repository" so the final report can state that boundary explicitly rather than silently.
+  are audited. **Possibly already partially corroborated**: the SdlRenderer batch found a *different* SpriteBatch
+  exception-safety bug (`Begin()` wedging on a throwing backend call) — confirm whether these are the same issue
+  or two distinct ones when `SpriteBatch.cpp` itself is audited.
+- External sibling-repo boundary (`easy-gl`, `free-direct`, D-6) — track which findings bottom out at "this lives
+  in a different repository" for the final report.
+- Full CTest-registration sweep (Pass 6) to find every currently-failing/expected-to-fail test, given 2 were
+  found by accident in the Bgfx batch with no `WILL_FAIL` annotation — there may be more.
+- `BasicEffect::VertexColorEnabled`'s bare-public-field issue — check whether it's the only such lapse when
+  `xna-graphics`/`BasicEffect.hpp` is directly audited.
 
-## Commit batches so far
+## Commit batches so far (chronological)
 
-1. `audit: add initial repository inventory, scope, and manifest` (Pass 1 infrastructure) — about to be committed.
+1. `audit: add initial repository inventory, scope, and manifest` — Pass 1 infrastructure.
+2. `audit: review Common backend contract, Headless and Software backends`
+3. `audit: review EasyGL example test shard (218 files, via mechanical batch)`
+4. `audit: review SdlRenderer backend`
+5. `audit: review Dx3 (DirectDraw) backend`
+6. `audit: review EasyGL backend (largest single file, 4733 lines)`
+7. `audit: review SdlRenderer example test shard (67 files, via mechanical batch)`
+8. `audit: review WebGPU backend (largest file in the audit, 8805 lines)`
+9. `audit: review Ascii backend (6 files)`
+10. `audit: review Bgfx example test shard (98 files, via mechanical batch)`
+11. `audit: review Vulkan example test shard (70 files, via mechanical batch)`
+12. `audit: review Canvas backend (8 files)`
+13. *(next commit: process the sdlgpu/webgpu/generic/d3d9 example batches as they land)*
 
 ## Self-check log
 
-- 2026-07-18: `2297 + 337 == 2634` verified via script (see `AUDIT_SCOPE.md`). Zero `NEEDS_REVIEW` after two
-  classifier-fix rounds (D-1, D-2). Zero leftover/uncategorized shards after sharding script run (`gen_master.py`
-  printed `leftover shards: []`).
+- 2026-07-18 (session start): `2297 + 337 == 2634` verified via script (see `AUDIT_SCOPE.md`). Zero
+  `NEEDS_REVIEW` after two classifier-fix rounds (D-1, D-2). Zero leftover/uncategorized shards after sharding
+  script run (`gen_master.py` printed `leftover shards: []`).
+- 2026-07-18 (mid-session): every mechanical-batch result verified against disk (no trusting the notification
+  summary alone — each batch's file list was checked with a Python existence loop before marking AUDITED) for all
+  4 completed batches (easygl, sdlrenderer, bgfx, vulkan). Zero missing files in any batch.
