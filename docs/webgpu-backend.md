@@ -471,7 +471,13 @@ open in `plan_webgpu.md`:
   regeneration remains open;
 - single-target `RenderTarget2D` AND `RenderTargetCube` (colour + depth/stencil round trip, real
   3D-draw dispatch, sampling back through `EnvironmentMapEffect`) are now implemented, see below;
-  compressed formats and multiple simultaneous render targets (MRT) remain open. MSAA
+  real GPU-native compressed texture formats (`WEBGPU-111`) and multiple simultaneous render
+  targets (MRT) remain open. Compressed formats are a cross-backend/XNA-layer gap, not a
+  WebGPU-specific one -- no CNA backend does real block-compressed GPU upload today (`Texture2D`
+  always CPU-decompresses DXT source content to RGBA8 first, and the common `ImageData` struct has
+  no field for a compressed format at all); the real adapter on the development machine used to
+  investigate this DOES support `WGPUFeatureName_TextureCompressionBC`, so this is a genuine future
+  design task, not a hardware dead end. MSAA
   (backbuffer and render target) is now implemented and verified end-to-end — global sample count,
   clamped `ApplyMultiSampleCount()`, RT mirroring, and genuine multisample-resolved rendering all
   work (`WebGPU_Msaa`, 6/6) — see `WEBGPU-58`. A `RenderTarget2D`'s own per-instance
