@@ -88,7 +88,7 @@ namespace Microsoft::Xna::Framework::Audio
     SoundState DynamicSoundEffectInstance::getStateProperty() const
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrackD(track_);
+        MIX_Track* track = AsTrackD(GetLiveTrackHandle());
         if (!track) return SoundState::Stopped;
         if (MIX_TrackPaused(track)) return SoundState::Paused;
         if (MIX_TrackPlaying(track)) return SoundState::Playing;
@@ -134,7 +134,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (current == SoundState::Paused)
         {
 #ifdef SOUND_ENABLED
-            MIX_Track* track = AsTrackD(track_);
+            MIX_Track* track = AsTrackD(GetLiveTrackHandle());
             if (track)
             {
                 MIX_ResumeTrack(track);
@@ -171,7 +171,7 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_Mixer* mixer = GetMixerOrThrowXna();
 
         // Destroy previous track if any.
-        MIX_Track* track = AsTrackD(track_);
+        MIX_Track* track = AsTrackD(GetLiveTrackHandle());
         if (!track)
         {
             track = MIX_CreateTrack(mixer);
@@ -182,6 +182,10 @@ namespace Microsoft::Xna::Framework::Audio
                 return;
             }
             track_ = track;
+            // AUD-04-008/009: see SoundEffectInstance::Play()'s identical capture -- lets
+            // GetLiveTrackHandle() detect an AudioMixer::DestroyMixer() call that frees this
+            // track out from under this instance.
+            trackMixerGeneration_ = CNA::Internal::Audio::GetMixerGeneration();
         }
 
         if (!MIX_SetTrackAudioStream(track, AsStream(audioStream_)))
@@ -247,7 +251,7 @@ namespace Microsoft::Xna::Framework::Audio
         // before any Play()) -- only once playback has actually started does a non-immediate
         // Stop become a meaningful (and, for dynamic instances, invalid) request.
 #ifdef SOUND_ENABLED
-        if (!AsTrackD(track_))
+        if (!AsTrackD(GetLiveTrackHandle()))
         {
             return;
         }
@@ -275,13 +279,18 @@ namespace Microsoft::Xna::Framework::Audio
     void DynamicSoundEffectInstance::StopInternal()
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrackD(track_);
+        // AUD-04-008/009: GetLiveTrackHandle() returns nullptr (and already clears track_) if
+        // the mixer that owned this track was destroyed since it was created -- MIX_StopTrack/
+        // MIX_DestroyTrack must never run against that freed pointer. track_ is explicitly
+        // cleared again below regardless, matching this function's pre-existing "always end up
+        // with no track" contract for both the live and already-stale cases.
+        MIX_Track* track = AsTrackD(GetLiveTrackHandle());
         if (track)
         {
             MIX_StopTrack(track, 0);
             MIX_DestroyTrack(track);
-            track_ = nullptr;
         }
+        track_ = nullptr;
 #endif
         State_   = SoundState::Stopped;
         playing_ = false;

@@ -2,6 +2,7 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #ifdef SOUND_ENABLED
+#include <atomic>
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
@@ -27,6 +28,25 @@ namespace CNA::Internal::Audio
         // mutex as g_mixer since it is read/written from the same lazy-init sequence.
         bool g_hasSpecOverride = false;
         SDL_AudioSpec g_specOverride{};
+
+        // AUD-04-008/009: bumped by DestroyMixer() below, read (lock-free) by
+        // SoundEffectInstance::GetLiveTrackHandle() from any thread that touches a track --
+        // an atomic, not the mutex above, so instance code never needs to take g_mixerMutex
+        // just to check whether its own track is still valid.
+        std::atomic<std::uint64_t> g_mixerGeneration{0};
+
+        // AUD-04-008/009: an extra, permanently-held SDL_INIT_AUDIO reference, acquired once
+        // (guarded by g_mixerMutex, same as g_mixer) and never released. Without this,
+        // MIX_DestroyMixer() below can bring the *global* SDL audio subsystem's own refcount to
+        // zero via its own internal SDL_QuitSubSystem(SDL_INIT_AUDIO) call -- confirmed via a
+        // real crash (SDL_WasInit(SDL_INIT_AUDIO) observed 0 at the crash site; ASan-symbolized
+        // SEGV inside SDL_UnbindAudioStream_REAL) when DynamicSoundEffectInstance::DestroyStream()
+        // later called SDL_DestroyAudioStream() on its own independently-owned, subsystem-level
+        // (not mixer/track-owned) audio stream. DestroyMixer() has no registry of every
+        // SDL_AudioStream CNA might still hold elsewhere (dynamic instances, Microphone capture
+        // streams, ...), so destroying its own mixer must never be what fully deinitializes the
+        // subsystem those depend on.
+        bool g_audioSubsystemPinned = false;
     }
 
     void SetMixerSpecOverrideForTests(const SDL_AudioSpec& spec)
@@ -45,6 +65,16 @@ namespace CNA::Internal::Audio
     MIX_Mixer* GetMixer()
     {
         std::lock_guard<std::mutex> lock(g_mixerMutex);
+
+        // AUD-04-008/009: acquire the permanent subsystem pin (see g_audioSubsystemPinned's own
+        // comment) before anything else touches the audio subsystem below -- retried on every
+        // call until it succeeds (e.g. a prior attempt with no audio hardware), same "retry from
+        // scratch" philosophy as g_mixer's own lazy init.
+        if (!g_audioSubsystemPinned)
+        {
+            g_audioSubsystemPinned = SDL_InitSubSystem(SDL_INIT_AUDIO);
+        }
+
         if (!g_mixer)
         {
             if (!MIX_Init())
@@ -106,7 +136,16 @@ namespace CNA::Internal::Audio
             MIX_DestroyMixer(g_mixer);
             g_mixer = nullptr;
             MIX_Quit();
+            // AUD-04-008/009: every track this mixer owned was just freed by MIX_DestroyMixer
+            // above -- bump the generation so any instance still holding one of those tracks
+            // detects the invalidation on its next access instead of dereferencing freed memory.
+            g_mixerGeneration.fetch_add(1, std::memory_order_release);
         }
+    }
+
+    std::uint64_t GetMixerGeneration()
+    {
+        return g_mixerGeneration.load(std::memory_order_acquire);
     }
 }
 #endif

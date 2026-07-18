@@ -51,6 +51,41 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task AUD-04-008: standalone mixer-destroy-with-active-voice harness ---
+# A tiny standalone (non-GTest) executable that plays a SoundEffectInstance, then calls
+# CNA::Internal::Audio::DestroyMixer() directly while it's still alive, then exercises every
+# operation still reachable on the now-orphaned instance. Needs its own process so a genuine
+# use-after-free crash (if AudioMixer.hpp's documented "no way to know about a live instance's
+# lifetime" gap is real) is isolated from the shared CnaTests binary -- see the harness file's own
+# top-of-file comment / tools/audio/audio_no_hardware_harness.cpp for the same "needs its own
+# process" precedent.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_audio_mixer_destroy_active_static_voice_harness
+        tools/audio/mixer_destroy_active_static_voice_harness.cpp
+    )
+    target_link_libraries(cna_audio_mixer_destroy_active_static_voice_harness
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
+# --- Task AUD-04-009: standalone mixer-destroy-with-active-dynamic-voice harness ---
+# The DynamicSoundEffectInstance counterpart to cna_audio_mixer_destroy_active_static_voice_harness
+# just above -- same hazard/fix, but exercised through DynamicSoundEffectInstance's own independent
+# track_ access sites. See the harness file's own top-of-file comment for why this needs a separate
+# harness from the static-voice one, not just a shared one.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_audio_mixer_destroy_active_dynamic_voice_harness
+        tools/audio/mixer_destroy_active_dynamic_voice_harness.cpp
+    )
+    target_link_libraries(cna_audio_mixer_destroy_active_dynamic_voice_harness
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
+
 # --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
 # Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see

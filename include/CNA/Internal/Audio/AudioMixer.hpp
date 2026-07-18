@@ -5,6 +5,8 @@
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 
+#include <cstdint>
+
 namespace CNA::Internal::Audio
 {
     /// Returns the shared SDL3_mixer device, creating it on first call.
@@ -50,6 +52,30 @@ namespace CNA::Internal::Audio
     /// know about (or wait on) those higher-level objects' own lifetimes. A GetMixer() call after
     /// this one simply recreates the mixer from scratch, the same as the very first call ever
     /// made.
+    ///
+    /// AUD-04-008/009: every MIX_Track/MIX_Audio the destroyed mixer owned is freed as part of
+    /// this call (confirmed against real SDL3_mixer source, MIX_DestroyMixer -> MIX_DestroyTrack),
+    /// so any SoundEffectInstance/DynamicSoundEffectInstance that still holds one becomes a
+    /// dangling pointer. This function bumps the counter GetMixerGeneration() returns so those
+    /// instances can detect the invalidation instead of dereferencing freed memory -- see
+    /// SoundEffectInstance::GetLiveTrackHandle().
+    ///
+    /// AUD-04-008/009: does NOT deinitialize the global SDL audio subsystem, even though the real
+    /// MIX_DestroyMixer() call underneath this does call SDL_QuitSubSystem(SDL_INIT_AUDIO)
+    /// internally -- GetMixer() pins an extra, permanently-held subsystem reference on first use
+    /// specifically so that internal call can never bring the subsystem's own refcount to zero.
+    /// Confirmed necessary via a real crash: without the pin, any independently-owned
+    /// SDL_AudioStream CNA still holds (e.g. DynamicSoundEffectInstance's own audio stream, not
+    /// owned by any MIX_Track) becomes unsafe to destroy the moment this function runs, since
+    /// SDL_DestroyAudioStream's internal unbind logic depends on subsystem-global state.
     void DestroyMixer();
+
+    /// AUD-04-008/009: monotonically increases by exactly one every time DestroyMixer() actually
+    /// destroys a mixer (never on a call where no mixer existed, since nothing was invalidated).
+    /// SoundEffectInstance captures this value when it creates a MIX_Track (Play()) and compares
+    /// it before every later use, so a track orphaned by a DestroyMixer() call is detected instead
+    /// of dereferenced. Not tied to GetMixer()'s creation -- only destruction invalidates
+    /// previously-issued tracks.
+    std::uint64_t GetMixerGeneration();
 }
 #endif

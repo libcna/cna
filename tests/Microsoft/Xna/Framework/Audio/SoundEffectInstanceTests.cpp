@@ -1051,6 +1051,42 @@ TEST_F(SoundEffectInstanceTest, PlayAfterDisposeThrows)
     EXPECT_THROW(inst.Play(), System::ObjectDisposedException);
 }
 
+// AUD-04-008: DestroyMixer() frees every MIX_Track the mixer owned (confirmed against real
+// SDL3_mixer source, MIX_DestroyMixer -> MIX_DestroyTrack -> SDL_aligned_free) -- a live
+// SoundEffectInstance's track_ becomes a dangling pointer the instant that runs. This test proves
+// SoundEffectInstance::GetLiveTrackHandle()'s generation check (AUD-04-008/009) actually detects
+// that and clears track_ BEFORE any accessor can dereference it -- directly, deterministically,
+// and in-process (no subprocess/crash-detection needed, unlike
+// tools/audio/mixer_destroy_active_static_voice_harness.cpp's end-to-end safety net): GetTrack()
+// reads track_ raw (bypassing the check) to prove the pointer is still the same dangling value
+// immediately after DestroyMixer(), then the first real accessor call is shown to null it out as
+// a side effect, which is direct evidence the check ran rather than merely "nothing crashed."
+TEST_F(SoundEffectInstanceTest, MixerDestructionOrphansTrackWithoutUseAfterFree)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    ASSERT_EQ(inst.getStateProperty(), SoundState::Playing);
+    ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
+
+    CNA::Internal::Audio::DestroyMixer();
+
+    // Still the same (now-dangling) raw pointer value -- DestroyMixer() itself has no way to
+    // reach into this instance, so nothing has cleared it yet.
+    EXPECT_NE(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
+
+    // getStateProperty() is the first real accessor call after DestroyMixer() -- it must detect
+    // the stale generation and report Stopped without ever touching the freed MIX_Track*.
+    EXPECT_EQ(inst.getStateProperty(), SoundState::Stopped);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr);
+
+    // Every other operation a real caller could still reach must also be safe now that track_ is
+    // null.
+    EXPECT_NO_THROW(inst.Pause());
+    EXPECT_NO_THROW(inst.Stop());
+    EXPECT_NO_THROW(inst.Dispose());
+}
+
 TEST_F(SoundEffectInstanceTest, GetTypeName)
 {
     REQUIRE_DEVICE();

@@ -21,6 +21,7 @@
 #include "System/TimeSpan.hpp"
 #include "System/Environment.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
 
@@ -906,4 +907,40 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededSubscriberCanRemoveItselfDuring
     EXPECT_EQ(firedOnce, 1);
     EXPECT_GT(firedOther, 0);
     EXPECT_EQ(d.BufferNeeded.Size(), 1u); // only the still-subscribed "other" handler remains
+}
+
+// AUD-04-009: the DynamicSoundEffectInstance counterpart to SoundEffectInstanceTests.cpp's
+// MixerDestructionOrphansTrackWithoutUseAfterFree (AUD-04-008) -- same generation-check
+// mechanism (shared via the inherited track_/trackMixerGeneration_), but exercised through
+// DynamicSoundEffectInstance's own independent getStateProperty()/track_ access path, which does
+// not share code with the base class's. Deterministic and in-process (no subprocess needed): as
+// with the static-instance test, GetTrack() reads track_ raw (bypassing the check) to prove the
+// dangling pointer is untouched immediately after DestroyMixer(), then the first real accessor
+// call is shown to null it out as direct evidence the check ran.
+TEST(DynamicSoundEffectInstanceTest, MixerDestructionOrphansTrackWithoutUseAfterFree)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    ASSERT_EQ(d.getStateProperty(), SoundState::Playing);
+    ASSERT_NE(SoundEffectInstanceTestAccess::GetTrack(d), nullptr);
+
+    CNA::Internal::Audio::DestroyMixer();
+
+    // Still the same (now-dangling) raw pointer value -- DestroyMixer() itself has no way to
+    // reach into this instance, so nothing has cleared it yet.
+    EXPECT_NE(SoundEffectInstanceTestAccess::GetTrack(d), nullptr);
+
+    // getStateProperty() is the first real accessor call after DestroyMixer() -- it must detect
+    // the stale generation and report Stopped without ever touching the freed MIX_Track*.
+    EXPECT_EQ(d.getStateProperty(), SoundState::Stopped);
+    EXPECT_EQ(SoundEffectInstanceTestAccess::GetTrack(d), nullptr);
+
+    // Every other operation a real caller could still reach must also be safe now that track_ is
+    // null.
+    EXPECT_NO_THROW(d.Pause());
+    EXPECT_NO_THROW(d.Stop());
+    EXPECT_NO_THROW(d.Dispose());
 }

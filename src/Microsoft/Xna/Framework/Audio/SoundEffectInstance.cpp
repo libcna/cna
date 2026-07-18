@@ -166,15 +166,22 @@ namespace Microsoft::Xna::Framework::Audio
             return std::clamp(dopplerFactor, 0.5f, 4.0f);
         }
 
-        void DestroyTrackSafe(void*& trackPtr)
+        // AUD-04-008/009: trackGeneration is the CNA::Internal::Audio::GetMixerGeneration() value
+        // captured when trackPtr was created (SoundEffectInstance::trackMixerGeneration_) -- if it
+        // no longer matches the current generation, AudioMixer::DestroyMixer() has already freed
+        // this exact MIX_Track (and every other track its mixer owned), so touching it here via
+        // MIX_StopTrack/MIX_DestroyTrack would itself be a use-after-free/double-free. trackPtr is
+        // always cleared regardless: whether this call genuinely destroyed it or it was already
+        // gone, the caller has no live track either way.
+        void DestroyTrackSafe(void*& trackPtr, std::uint64_t trackGeneration)
         {
             MIX_Track* track = AsTrack(trackPtr);
-            if (track)
+            if (track && trackGeneration == CNA::Internal::Audio::GetMixerGeneration())
             {
                 MIX_StopTrack(track, 0);
                 MIX_DestroyTrack(track);
-                trackPtr = nullptr;
             }
+            trackPtr = nullptr;
         }
 
         // P14-ORDER-002: CNA::Internal::Audio::GetMixer() throws a raw std::runtime_error on its
@@ -354,6 +361,7 @@ namespace Microsoft::Xna::Framework::Audio
         , loopStart_(other.loopStart_)
         , loopLength_(other.loopLength_)
         , track_(other.track_)
+        , trackMixerGeneration_(other.trackMixerGeneration_)
         , playing_(other.playing_)
         , hasStarted_(other.hasStarted_)
         , State_(other.State_)
@@ -395,7 +403,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (this != &other)
         {
 #ifdef SOUND_ENABLED
-            DestroyTrackSafe(track_);
+            DestroyTrackSafe(track_, trackMixerGeneration_);
 #endif
             // Unregister *this* from whatever SoundEffect it was previously tracked by --
             // once soundEffectKeepAlive_ is overwritten below, *this* address represents a
@@ -408,6 +416,7 @@ namespace Microsoft::Xna::Framework::Audio
             loopStart_   = other.loopStart_;
             loopLength_  = other.loopLength_;
             track_       = other.track_;
+            trackMixerGeneration_ = other.trackMixerGeneration_;
             playing_     = other.playing_;
             hasStarted_  = other.hasStarted_;
             State_       = other.State_;
@@ -443,12 +452,34 @@ namespace Microsoft::Xna::Framework::Audio
         return *this;
     }
 
+#ifdef SOUND_ENABLED
+    void* SoundEffectInstance::GetLiveTrackHandle() const
+    {
+        if (!track_)
+        {
+            return nullptr;
+        }
+        if (trackMixerGeneration_ != CNA::Internal::Audio::GetMixerGeneration())
+        {
+            // AUD-04-008/009: the mixer that owned this track was destroyed (AudioMixer::
+            // DestroyMixer(), which frees every MIX_Track it owns) since this track was
+            // created -- track_ is a dangling pointer. Clear it (mutating via const_cast, same
+            // pattern getStateProperty() already uses to lazily sync cached state from a const
+            // getter) so every other accessor sees the same "no track" state from here on,
+            // instead of dereferencing freed memory.
+            const_cast<SoundEffectInstance*>(this)->track_ = nullptr;
+            return nullptr;
+        }
+        return track_;
+    }
+#endif
+
     void SoundEffectInstance::Dispose()
     {
         if (!isDisposed_)
         {
 #ifdef SOUND_ENABLED
-            DestroyTrackSafe(track_);
+            DestroyTrackSafe(track_, trackMixerGeneration_);
 #endif
             if (soundEffectKeepAlive_)
             {
@@ -482,7 +513,7 @@ namespace Microsoft::Xna::Framework::Audio
         // If paused, resume instead of restarting.
         if (State_ == SoundState::Paused)
         {
-            MIX_Track* track = AsTrack(track_);
+            MIX_Track* track = AsTrack(GetLiveTrackHandle());
             if (track)
             {
                 MIX_ResumeTrack(track);
@@ -502,7 +533,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
 
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (!track)
         {
             track = MIX_CreateTrack(mixer);
@@ -513,6 +544,10 @@ namespace Microsoft::Xna::Framework::Audio
                 return;
             }
             track_ = track;
+            // AUD-04-008/009: captured at the exact moment this track is created, so
+            // GetLiveTrackHandle() can detect a later AudioMixer::DestroyMixer() call that
+            // frees it out from under this instance.
+            trackMixerGeneration_ = CNA::Internal::Audio::GetMixerGeneration();
         }
 
         if (!MIX_SetTrackAudio(track, audio))
@@ -588,7 +623,7 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Stop(bool immediate)
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (track)
         {
             if (immediate)
@@ -612,7 +647,7 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Pause()
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (track && getStateProperty() == SoundState::Playing)
         {
             MIX_PauseTrack(track);
@@ -625,7 +660,7 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Resume()
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (!track)
         {
             // P9-VALIDATION-010: matches FNA (SoundEffectInstance.cs Resume(): "XNA4 just plays
@@ -678,7 +713,7 @@ namespace Microsoft::Xna::Framework::Audio
         // Only registers the real callback once there's a track to attach it to (matches
         // MIX_SetTrackCookedCallback's own "may be called... at any time" contract) -- otherwise
         // this is deferred to EnsureTrackDspState(), called from Play() once a track is created.
-        if (track_) MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        if (MIX_Track* liveTrack = AsTrack(GetLiveTrackHandle())) MIX_SetTrackCookedCallback(liveTrack, FilterMixCallback, filterState_.get());
 #else
         (void)cutoff; (void)oneOverQ;
 #endif
@@ -701,7 +736,7 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        if (track_) MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        if (MIX_Track* liveTrack = AsTrack(GetLiveTrackHandle())) MIX_SetTrackCookedCallback(liveTrack, FilterMixCallback, filterState_.get());
 #else
         (void)cutoff; (void)oneOverQ;
 #endif
@@ -724,7 +759,7 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        if (track_) MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        if (MIX_Track* liveTrack = AsTrack(GetLiveTrackHandle())) MIX_SetTrackCookedCallback(liveTrack, FilterMixCallback, filterState_.get());
 #else
         (void)center; (void)oneOverQ;
 #endif
@@ -899,16 +934,17 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::EnsureTrackDspState()
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
+        if (!track) return;
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        MIX_SetTrackCookedCallback(track, FilterMixCallback, filterState_.get());
 #endif
     }
 
     void SoundEffectInstance::INTERNAL_applyComposedTrackProperties()
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (!track) return;
 
         EnsureTrackDspState(); // must exist before ApplyTrackProperties writes pan
@@ -1171,7 +1207,7 @@ namespace Microsoft::Xna::Framework::Audio
     SoundState SoundEffectInstance::getStateProperty() const
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
+        MIX_Track* track = AsTrack(GetLiveTrackHandle());
         if (!track)
         {
             return SoundState::Stopped;

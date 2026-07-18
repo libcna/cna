@@ -45,6 +45,26 @@ namespace Microsoft::Xna::Framework::Audio
         bool  hasStarted_   = false; // true once Play() has been called; never reset (gates IsLooped)
         SoundState State_   = SoundState::Stopped;
 
+        // AUD-04-008/009: the CNA::Internal::Audio::GetMixerGeneration() value captured at the
+        // moment track_ was created (Play()). Compared against the current generation by
+        // GetLiveTrackHandle() below, so a track_ orphaned by AudioMixer::DestroyMixer() (which
+        // frees every MIX_Track the destroyed mixer owned) is detected instead of dereferenced.
+        // 0 is a safe "never captured" sentinel: it only matters once track_ is non-null, and
+        // track_ is only ever set alongside this field.
+        std::uint64_t trackMixerGeneration_ = 0;
+
+        // AUD-04-008/009: returns track_ as a live MIX_Track* (type-erased to void*, same as
+        // track_ itself), or nullptr -- clearing track_ as a side effect -- if the mixer that
+        // owned it has been destroyed since this track was created. Every accessor that needs a
+        // live track handle (in this class and DynamicSoundEffectInstance, which shares track_)
+        // must go through this instead of reading track_ directly, since AudioMixer::
+        // DestroyMixer() frees every MIX_Track the mixer owned with no way to notify a live
+        // SoundEffectInstance directly. const so getStateProperty() (a const query) can call it;
+        // mutates via const_cast, matching this class's existing convention for lazily
+        // synchronizing cached state from a const getter (see getStateProperty()'s own
+        // const_cast on playing_/State_).
+        [[nodiscard]] void* GetLiveTrackHandle() const;
+
         // P13-DYNAMIC-001: recomposes and writes this instance's full set of live track properties
         // (gain, pan, frequency ratio) from Volume_/Pan_/Pitch_ together with the persisted
         // spatial state (attenuation_/dopplerFactor_/spatialPan_, private below) -- the single call

@@ -41,7 +41,10 @@ namespace {
         int readFd{-1};
     };
 
-    SpawnedProcess SpawnHarness() {
+    // AUD-04-008/009: generalized to take an explicit path so the same spawn/watchdog/drain
+    // plumbing serves the no-hardware harness plus the two mixer-destroy-with-active-voice
+    // harnesses below, instead of duplicating it per harness.
+    SpawnedProcess SpawnHarness(const char* path) {
         int pipeFds[2];
         if (pipe(pipeFds) != 0) {
             ADD_FAILURE() << "pipe() failed: " << strerror(errno);
@@ -53,15 +56,15 @@ namespace {
         posix_spawn_file_actions_adddup2(&actions, pipeFds[1], STDERR_FILENO);
         posix_spawn_file_actions_addclose(&actions, pipeFds[0]);
 
-        char* argv[] = {const_cast<char*>(CNA_AUDIO_NO_HARDWARE_HARNESS_PATH), nullptr};
+        char* argv[] = {const_cast<char*>(path), nullptr};
 
         pid_t pid = -1;
-        int rc = posix_spawn(&pid, CNA_AUDIO_NO_HARDWARE_HARNESS_PATH, &actions, nullptr, argv, environ);
+        int rc = posix_spawn(&pid, path, &actions, nullptr, argv, environ);
         posix_spawn_file_actions_destroy(&actions);
         close(pipeFds[1]); // the child has its own dup'd copy; the parent only needs the read end
 
         if (rc != 0) {
-            ADD_FAILURE() << "posix_spawn(" << CNA_AUDIO_NO_HARDWARE_HARNESS_PATH << ") failed: " << strerror(rc);
+            ADD_FAILURE() << "posix_spawn(" << path << ") failed: " << strerror(rc);
             close(pipeFds[0]);
             return {};
         }
@@ -271,7 +274,7 @@ TEST(AudioMixerTest, RepeatedDeviceOpenFailuresLeaveBalancedLifecycleAndSubseque
 TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsInvalid) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
 
-    SpawnedProcess proc = SpawnHarness();
+    SpawnedProcess proc = SpawnHarness(CNA_AUDIO_NO_HARDWARE_HARNESS_PATH);
     ASSERT_NE(proc.pid, -1);
 
     int exitCode = -1;
@@ -285,4 +288,57 @@ TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsI
     EXPECT_EQ(exitCode, 0)
         << "expected the harness to exit 0 (NoAudioHardwareException thrown); got " << exitCode
         << "; output: " << output;
+}
+
+// AUD-04-008: DestroyMixer() frees every MIX_Track the mixer owned (confirmed against real
+// SDL3_mixer source, MIX_DestroyMixer -> MIX_DestroyTrack -> SDL_aligned_free) -- a still-alive
+// SoundEffectInstance holding one of those tracks must detect the invalidation
+// (SoundEffectInstance::GetLiveTrackHandle()'s generation check) rather than dereference freed
+// memory on its next Pause()/Stop()/Dispose()/state-query/destructor call. Spawned as its own
+// process (see tools/audio/mixer_destroy_active_static_voice_harness.cpp's top-of-file comment)
+// so a crash here is caught by the watchdog/exit-status check below instead of taking down every
+// other test in this shared binary. Exit 0 = safe AND the state genuinely reflected the
+// generation check (not merely "didn't crash"); exit 2 = no crash but the check itself regressed.
+TEST(AudioMixerTest, MixerDestructionWithActiveStaticVoiceDoesNotCrashOrUseAfterFree) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+
+    SpawnedProcess proc = SpawnHarness(CNA_AUDIO_MIXER_DESTROY_ACTIVE_STATIC_VOICE_HARNESS_PATH);
+    ASSERT_NE(proc.pid, -1);
+
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(proc.pid, deadline, &exitCode);
+
+    std::string output;
+    DrainRemaining(proc.readFd, &output);
+    close(proc.readFd);
+
+    ASSERT_TRUE(finished) << "harness process did not exit before the watchdog deadline (hang?) and was killed; output: " << output;
+    EXPECT_EQ(exitCode, 0)
+        << "expected the harness to exit 0 (no crash, generation check correctly detected the "
+        << "orphaned track); got " << exitCode << " (-1 means the process crashed/was signaled, "
+        << "e.g. a real use-after-free -- see AudioMixerTests.cpp's AUD-04-008 note); output: " << output;
+}
+
+// AUD-04-009: the DynamicSoundEffectInstance counterpart to the AUD-04-008 test just above -- see
+// tools/audio/mixer_destroy_active_dynamic_voice_harness.cpp's top-of-file comment for why this
+// needs a separate harness (DynamicSoundEffectInstance has its own independent track_ access
+// sites, none of which share code with the base class's).
+TEST(AudioMixerTest, MixerDestructionWithActiveDynamicVoiceDoesNotCrashOrUseAfterFree) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
+
+    SpawnedProcess proc = SpawnHarness(CNA_AUDIO_MIXER_DESTROY_ACTIVE_DYNAMIC_VOICE_HARNESS_PATH);
+    ASSERT_NE(proc.pid, -1);
+
+    int exitCode = -1;
+    bool finished = WaitWithWatchdog(proc.pid, deadline, &exitCode);
+
+    std::string output;
+    DrainRemaining(proc.readFd, &output);
+    close(proc.readFd);
+
+    ASSERT_TRUE(finished) << "harness process did not exit before the watchdog deadline (hang?) and was killed; output: " << output;
+    EXPECT_EQ(exitCode, 0)
+        << "expected the harness to exit 0 (no crash, generation check correctly detected the "
+        << "orphaned track); got " << exitCode << " (-1 means the process crashed/was signaled, "
+        << "e.g. a real use-after-free -- see AudioMixerTests.cpp's AUD-04-009 note); output: " << output;
 }

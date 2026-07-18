@@ -202,6 +202,35 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
 
 ### Phase 15 (current, 2026-07-17-, `AUD-XX-NNN` IDs)
 
+- **`AUD-04-008/009`** — **two confirmed real memory-safety defects found and fixed**, discovered
+  by testing "what happens if `AudioMixer::DestroyMixer()` runs while a `SoundEffectInstance`/
+  `DynamicSoundEffectInstance` is still playing" (never exercised before -- `DestroyMixer()` has
+  zero production callers today, but the plan explicitly required proving this safe).
+  1. **UAF on `track_`**: `MIX_DestroyMixer()` frees every `MIX_Track` it owns
+     (`MIX_DestroyTrack` → `SDL_aligned_free`, confirmed against real SDL3_mixer source), but
+     `SoundEffectInstance`'s ~13 `AsTrack(track_)` call sites only null-checked, never validated
+     liveness. **Fix**: `AudioMixer::GetMixerGeneration()`, a counter bumped by `DestroyMixer()`;
+     `SoundEffectInstance::trackMixerGeneration_` (captured at track creation) + a new
+     `GetLiveTrackHandle()` accessor every call site now goes through, returning `nullptr` (and
+     clearing `track_`) once stale. `DynamicSoundEffectInstance`'s own independent call sites
+     (`getStateProperty`, `Play`, `Stop(bool)`, `StopInternal`) got the same treatment.
+  2. **A second, more severe defect found en route**: `MIX_DestroyMixer()` also calls
+     `SDL_QuitSubSystem(SDL_INIT_AUDIO)` internally, which can fully deinitialize SDL's *global*
+     audio subsystem if the refcount hits zero -- silently breaking any OTHER independently-owned
+     `SDL_AudioStream` (confirmed via an ASan-symbolized crash: `SDL_WasInit(SDL_INIT_AUDIO)==0`
+     at the crash site, `SEGV` inside `SDL_UnbindAudioStream_REAL` when
+     `DynamicSoundEffectInstance::DestroyStream()` later destroyed its own stream). **Fix**:
+     `GetMixer()` now pins one extra, permanently-held `SDL_InitSubSystem(SDL_INIT_AUDIO)`
+     reference on first use, so `DestroyMixer()` can never bring the subsystem below refcount 1.
+  Both fixes proven via the git-stash pattern: new deterministic (non-subprocess) tests
+  `SoundEffectInstanceTest.MixerDestructionOrphansTrackWithoutUseAfterFree` /
+  `DynamicSoundEffectInstanceTest.MixerDestructionOrphansTrackWithoutUseAfterFree` fail against
+  pre-fix code (the dynamic instance case even shows `getStateProperty()` returning the *wrong*
+  live value, `Playing` not `Stopped`, reading freed memory -- concrete proof the old behavior was
+  genuinely undefined). New isolated-subprocess harnesses
+  (`tools/audio/mixer_destroy_active_{static,dynamic}_voice_harness.cpp`) added as an end-to-end
+  safety net. Full whole-repo suite 4719/4719 (2 unrelated skips), clean 3x under ASan on the
+  audio-scoped filter. See `plan_audio.md`'s `AUD-04-008`/`AUD-04-009` entries for full detail.
 - **`AUD-15-001`** — fresh one-off ASan+UBSan sweep of the audio-scoped test subset (§7's filter
   list): 579/579 pass, zero `ERROR: AddressSanitizer`/UBSan `runtime error:` findings.
   `LeakSanitizer` flags ~15KB/20 allocations in the full run, all traced to `<unknown module>`/
