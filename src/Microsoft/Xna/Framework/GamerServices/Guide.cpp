@@ -267,6 +267,21 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         GuideKeyboardInputAction* pendingKeyboardInput_ = nullptr;
 
+        // audit_net.md remediation (2026-07-18): the actual masking decision, shared by
+        // RenderPendingKeyboardInputEXT (the real on-screen draw) and
+        // GetPendingKeyboardInputDisplayTextForTestingEXT (the test-only accessor exposing that
+        // same decision without needing pixel readback) - one '*' per typed UTF-16 code unit
+        // when UsePasswordMode is set, the real typed text otherwise. A single source of truth so
+        // the test accessor cannot silently drift from what actually gets drawn.
+        std::string ComputeDisplayText(const GuideKeyboardInputAction* action)
+        {
+            if (action->UsePasswordMode)
+            {
+                return std::string(action->Buffer.size(), '*');
+            }
+            return EncodeUtf16ToUtf8(action->Buffer);
+        }
+
         // Removes the last-typed code unit for Backspace, respecting surrogate pairs (removing a
         // low surrogate also removes its preceding high surrogate, so a single Backspace after
         // typing an emoji deletes the whole code point, not just half of it).
@@ -455,6 +470,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         return pendingKeyboardInput_->Description;
     }
 
+    std::string Guide::GetPendingKeyboardInputDisplayTextForTestingEXT()
+    {
+        if (pendingKeyboardInput_ == nullptr)
+        {
+            throw System::InvalidOperationException("No keyboard input is currently pending.");
+        }
+        return ComputeDisplayText(pendingKeyboardInput_);
+    }
+
     bool Guide::WasKeyboardInputCanceledEXT(System::IAsyncResult* result)
     {
         auto* action = dynamic_cast<GuideKeyboardInputAction*>(result);
@@ -498,16 +522,9 @@ namespace Microsoft::Xna::Framework::GamerServices
         // (a coarse but standard on-screen-keyboard convention; doesn't attempt to collapse a
         // surrogate pair into a single mask character). EndShowKeyboardInput's own returned text
         // is always the real typed characters, matching real XNA - only the on-screen rendering
-        // differs between the two overloads.
-        std::string displayText;
-        if (pendingKeyboardInput_->UsePasswordMode)
-        {
-            displayText.assign(pendingKeyboardInput_->Buffer.size(), '*');
-        }
-        else
-        {
-            displayText = EncodeUtf16ToUtf8(pendingKeyboardInput_->Buffer);
-        }
+        // differs between the two overloads. See ComputeDisplayText's own comment - this is the
+        // same decision GetPendingKeyboardInputDisplayTextForTestingEXT exposes for testing.
+        std::string displayText = ComputeDisplayText(pendingKeyboardInput_);
         if (displayText.empty())
         {
             displayText = " ";

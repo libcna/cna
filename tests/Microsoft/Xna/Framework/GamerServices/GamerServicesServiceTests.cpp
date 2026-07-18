@@ -478,12 +478,42 @@ TEST(GuideTest, RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPassword
     // No real Escape press occurred - rendering alone must never cancel/resolve the pending
     // request, matching RenderPendingMessageBoxEXT's own equivalent guarantee for mouse clicks.
     EXPECT_FALSE(result->getIsCompletedProperty());
+    // audit_net.md remediation (2026-07-18): the display-text assertion this test's own name
+    // ("SupportsPasswordMasking") always implied but never actually checked - EndShowKeyboardInput
+    // below only ever proves the real typed text round-trips, which is correct/expected even if
+    // masking were entirely broken. GetPendingKeyboardInputDisplayTextForTestingEXT reads the same
+    // masking decision RenderPendingKeyboardInputEXT itself draws (see ComputeDisplayText's own
+    // comment in Guide.cpp) - this genuinely fails if that branch is ever removed or broken.
+    EXPECT_EQ(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), "******");
 
     PressEnter();
     ASSERT_TRUE(result->getIsCompletedProperty());
     // usePasswordMode only masks the on-screen render - the real typed text still round-trips
     // through EndShowKeyboardInput exactly, matching real XNA (both overloads complete
     // identically; only on-screen display differs).
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "secret");
+    delete result;
+}
+
+// audit_net.md remediation (2026-07-18): the other direction of the same branch - without
+// usePasswordMode, the display text must be the real typed text unmasked. Together with the test
+// above, this covers both branches of ComputeDisplayText, so neither "always mask" nor "never
+// mask" could pass both tests.
+TEST(GuideTest, RenderPendingKeyboardInputDisplaysRealTextWhenPasswordModeIsOff) {
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    KeyboardInputGuard guard;
+
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "Enter name", "", "", System::AsyncCallback{}, std::any{}, false
+    );
+    TypeUtf16(u"secret");
+
+    EXPECT_EQ(Guide::GetPendingKeyboardInputDisplayTextForTestingEXT(), "secret");
+
+    PressEnter();
+    ASSERT_TRUE(result->getIsCompletedProperty());
     EXPECT_EQ(Guide::EndShowKeyboardInput(result), "secret");
     delete result;
 }

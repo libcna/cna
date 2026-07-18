@@ -212,6 +212,20 @@ namespace Microsoft::Xna::Framework::GamerServices
         NOXNA [[nodiscard]] static const std::string& GetPendingKeyboardInputDescriptionForTestingEXT();
 
         /**
+         * @brief NOXNA/test-only: gets the exact display text `RenderPendingKeyboardInputEXT`
+         * would currently draw for the typed buffer - one `'*'` per typed UTF-16 code unit when
+         * the pending request's `usePasswordMode` is true, the real typed text otherwise. Sourced
+         * from the same masking logic `RenderPendingKeyboardInputEXT` itself calls (not a
+         * reimplementation), so this genuinely fails if that masking branch is ever removed or
+         * broken - unlike `EndShowKeyboardInput`, which always returns the real typed text by
+         * design and so cannot itself prove masking happened on screen.
+         *
+         * @return The current display text, masked if password mode is on.
+         * @throws System::InvalidOperationException if no keyboard input is currently pending.
+         */
+        NOXNA [[nodiscard]] static std::string GetPendingKeyboardInputDisplayTextForTestingEXT();
+
+        /**
          * @brief NOXNA/EXT: gets whether the given completed BeginShowKeyboardInput operation was
          * canceled (Escape, or SimulateKeyboardInputCancelEXT) rather than confirmed with Enter.
          * Not part of the real XNA 4.0 Guide API - real XNA distinguishes this case via a null
