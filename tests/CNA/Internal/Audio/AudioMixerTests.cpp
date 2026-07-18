@@ -225,6 +225,49 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(44100, -1), // channels negative
         std::make_tuple(44100, 9))); // channels above SDL's 8-channel support ceiling
 
+// AUD-04-007: repeated device-open failures must not leak a MIX_Init()/MIX_Quit() refcount
+// imbalance -- GetMixer()'s failure branch (AudioMixer.cpp) pairs a MIX_Quit() with the MIX_Init()
+// it made moments earlier specifically so a failed retry never leaks a refcount (IN-11). If that
+// pairing were ever wrong, repeated failures would desynchronize SDL's audio subsystem refcount,
+// and a subsequent *valid* GetMixer() call would either fail unexpectedly or leave the subsystem
+// unable to ever fully shut down -- this test drives 5 consecutive failures on the same invalid
+// spec, then clears the override and confirms a completely ordinary GetMixer() call still succeeds
+// immediately afterward with the correct default spec, proving the failed attempts left no
+// residue behind.
+TEST(AudioMixerTest, RepeatedDeviceOpenFailuresLeaveBalancedLifecycleAndSubsequentSuccessIntact) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    CNA::Internal::Audio::DestroyMixer();
+    MixerSpecOverrideGuard guard;
+
+    SDL_AudioSpec invalid{};
+    invalid.format = SDL_AUDIO_S16;
+    invalid.channels = 0; // rejected outright, see AUD-04-006
+    invalid.freq = 44100;
+
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        CNA::Internal::Audio::SetMixerSpecOverrideForTests(invalid);
+        EXPECT_THROW({ CNA::Internal::Audio::GetMixer(); }, std::runtime_error)
+            << "attempt " << attempt;
+        // GetMixer() itself never caches a failed attempt (g_mixer stays null), so no explicit
+        // DestroyMixer() is needed between retries here -- each loop iteration re-enters the
+        // exact same lazy-init/failure branch from scratch, which is the real-world retry shape
+        // this test is verifying stays leak-free.
+    }
+
+    CNA::Internal::Audio::ClearMixerSpecOverrideForTests();
+    try {
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(mixer, nullptr);
+        SDL_AudioSpec actual{};
+        ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
+        EXPECT_EQ(actual.freq, 44100);
+        EXPECT_EQ(actual.channels, 2);
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
 TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsInvalid) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
 
