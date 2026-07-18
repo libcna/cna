@@ -6658,7 +6658,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Selection survives enumeration-order changes or explicitly documents them.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### SDLCORE-007 — Use acquisition timestamps from SDL sensor events — OPEN
+### SDLCORE-007 — Use acquisition timestamps from SDL sensor events — OPEN (real, deliberately-not-implemented conflict with READINGS-003 documented; small verified sub-finding included)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6671,6 +6671,72 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Injected delayed dispatch preserves original sample ordering/time.
   - Long-running clock-step tests do not move sensor timestamps backward.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (2026-07-18, external audit `audit_devices_2026-07-17.md`):**
+  investigated this task's first required-work bullet directly against the
+  pinned SDL source tree (`third_party/SDL/include/SDL3/SDL_events.h`/
+  `SDL_timer.h`) rather than assuming: `SDL_SensorEvent::timestamp` is
+  `Uint64`, nanoseconds, "populated using `SDL_GetTicksNS()`" (SDL's own
+  header doc comment, confirmed by grep across every `SDL_*Event` struct, not
+  just the sensor one). `SDL_GetTicksNS()` itself is documented as
+  "nanoseconds since **SDL library initialization**" — a monotonic,
+  process-relative clock with no fixed epoch of its own, distinct from
+  Android NDK's boot-time-based `ASensorEvent::timestamp` (a different clock
+  domain entirely, confirmed by `Detail::AndroidSensorSample::Timestamp`'s
+  own doc comment already citing this exact distinction). This confirms the
+  required work's premise: `event->sensor.timestamp` genuinely is a usable
+  acquisition-time monotonic value, not dispatch time, and genuinely does
+  need a calibrated conversion (an anchor pair — `SDL_GetTicksNS()` and
+  `getUtcNowProperty()` captured together once — plus periodic recalibration
+  to bound clock drift) to become a valid `DateTimeOffset`, exactly as this
+  task's second required-work bullet already specifies.
+  - **Found a real, direct conflict with `READINGS-003`, not assumed** —
+    `docs/devices-api-coverage.md`'s "Timestamp policy" section (added
+    2026-07-06, cited by name in comments at every reading-timestamp call
+    site across all four sensor classes) is an explicit, deliberate,
+    cross-sensor-class-consistent policy: **"one rule, applied identically
+    everywhere... always `getUtcNowProperty()` (wall-clock time of
+    dispatch/publish), never a raw platform/monotonic sensor timestamp."**
+    Its own stated rationale directly anticipates and rejects exactly the
+    mechanism this task's required work asks for: "using it directly would
+    silently produce a nonsensical `DateTimeOffset`... a monotonic boot-time
+    nanosecond counter cannot be converted to [a calendar point] without an
+    **unreliable, platform-specific boot-time-to-wall-clock offset
+    calculation**." This task's own required work is proposing to build
+    exactly that "unreliable... offset calculation" `READINGS-003` dismissed
+    — not a naive misunderstanding of the same tradeoff, but a genuine
+    disagreement about whether a *calibrated* (not raw/direct) version of
+    that offset calculation is reliable enough to be worth the complexity.
+  - **Deliberately not implemented, for three compounding reasons, not
+    just effort:**
+    1. Implementing this only for `Accelerometer`/`Gyroscope` (the only
+       classes with real SDL sensor events — `Compass`/`Motion` are
+       Android-NDK-backed, an entirely different clock domain this task's
+       own SDL-specific wording never addresses) would silently break
+       `READINGS-003`'s own "applied identically everywhere" guarantee,
+       which several already-passing tests
+       (`CompassTests`/`MotionTests.CurrentValueChangedPropagatesBackendTimestampExactly`)
+       implicitly rely on staying true project-wide, not just per-backend.
+    2. `READINGS-003`'s own reasoning that "dispatch happens promptly after
+       the OS delivers a sample, not deferred" means the real-world accuracy
+       gain from acquisition-time over dispatch-time is likely small for
+       this project's actual dispatch latency — the complexity of a
+       clock-step-safe, drift-bounded, nondecreasing-per-sensor calibrated
+       bridge (this task's own acceptance criteria demand exactly that
+       rigor) is a large cost for an unquantified, likely-small benefit.
+    3. Comparable in scope and risk to `LIFE-007`/`010`/`011`/`ANDR2-011` —
+       a genuine architecture addition (a new `NOXNA` monotonic-clock-bridge
+       subsystem), not a bounded bug fix — deliberately set aside rather
+       than picked up as a quick continuation item, consistent with how
+       those other large tasks were handled.
+  - **Recommendation, not a unilateral decision**: whether to (a) accept the
+    cross-class timestamp-policy inconsistency and build the SDL-only
+    calibrated bridge, (b) also build an equivalent Android-side bridge to
+    preserve consistency (a substantially larger task), or (c) treat this
+    task as superseded by `READINGS-003`'s own already-settled, well-tested
+    decision and close it as "intentionally not done, rationale documented in
+    `READINGS-003`" is a genuine product/architecture call this session
+    deliberately left for explicit human input rather than picking a side
+    autonomously — see `NEXTdevices.md`'s "Do not do yet" section.
 
 ### SDLCORE-008 — Remove avoidable allocation and linear work from SDL event dispatch — OPEN
 
