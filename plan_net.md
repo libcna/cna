@@ -1088,6 +1088,21 @@ torso -22%, groin resolved. **Still PARTIALLY FIXED** - garment capsule end caps
 adjacent uncovered body segments. Full detail, measurements and the proposed next fix are in
 `NEXTnet.md` section 3's own "Update (fourth remediation pass)" paragraph and section 6 item 16.
 
+**Update (2026-07-18, fifth independent audit, same day):** one more real bug, this time in the
+skinning rather than the geometry. `generate_body.fix_automatic_weights`' bend-joint blend tested
+only the *axial* distance from the joint along the child bone's axis, with no perpendicular limit -
+so it selected an infinite slab and forced parent/child weights onto vertices arbitrarily far from
+the joint sideways. Surfaced by the new `tools/avatar_builder/diagnose_avatar_mesh.py` `weights`
+check, which found `CNAAvatarPants` weighted to `Shoulder.L`/`Shoulder.R` (108/107 vertices) -
+those weights dragged hip and leg geometry along with the arms during `Wave`. Fixed by gating on
+perpendicular distance too. Result: male groin speckle 25 -> 0, female 5 -> 2, feet -65% versus the
+fourth-round audit's own measurements, near-black pixels 0.0% everywhere. A boundary-cap trim was
+also tried, measured to make Pants burial *worse* (21 -> 39), and reverted. This round also
+corrected an earlier wrong conclusion of this same investigation: the blue collar/cuff/waist bands
+are NOT deliberate trim design, they are the emergent remainder of garment caps buried inside
+adjacent body segments. **Still PARTIALLY FIXED.** See `NEXTnet.md` section 3's own "Update (fifth
+remediation pass)" paragraph.
+
 Goal (per decisions 4/4a/4b/4c): toy-like Xbox-Avatar-inspired look, fully original CNA assets,
 generated via `../mesh-craft` for body/head (and other feasible) geometry, feeding into the
 existing `tools/avatar_builder/` Blender pipeline for skeleton/skinning/animation (mesh-craft has

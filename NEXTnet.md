@@ -35,13 +35,22 @@ finally located the dominant root cause: an EasyGL shader-fidelity bug (Emissive
 by DiffuseColor twice) that made ambient light land as `ambient*diffuse²`, crushing dark
 materials — which is precisely why three earlier rounds of ambient-light increases had failed to
 fix the darkness. Near-black pixels are now 0.0% everywhere and two of the three named defects are
-largely resolved, but garment/body interpenetration remains, so **the avatar and this audit stay
-PARTIALLY FIXED** (section 3/6). **Do not assume a fifth pass wouldn't find more** — four
-consecutive independent audits each catching real gaps in the prior "done" claims is itself the
-strongest signal in this file: verify with fresh evidence, every time, regardless of how many
-prior passes already happened. Note also that three of those four rounds attacked the avatar's
-darkness at the *lighting* layer before anyone checked the *shader arithmetic* against FNA —
-when repeated tuning of a parameter fails to move a defect, suspect the formula, not the value.
+largely resolved. A **fifth** pass then found one more real bug — `fix_automatic_weights`' bend-
+joint blend selected an *infinite slab* perpendicular to the bone axis, with no perpendicular
+limit, which had weighted the Pants to `Shoulder.L`/`Shoulder.R` (108/107 vertices) and dragged
+hip and leg geometry along with the arms during `Wave`. With that fixed the groin is clean on both
+genders and the feet are down ~65% on the structural metric, and the rendered screenshots no
+longer show jagged black teeth, holes or blotches. Garment/body interpenetration still measurably
+remains, so **the avatar and this audit stay PARTIALLY FIXED** (section 3/6). **Do not assume a
+sixth pass wouldn't find more** — five consecutive independent audits each catching real gaps in
+the prior "done" claims is itself the strongest signal in this file: verify with fresh evidence,
+every time, regardless of how many prior passes already happened. Two generalizable lessons from
+this sequence: (1) three of the first four rounds attacked the avatar's darkness at the *lighting*
+layer before anyone checked the *shader arithmetic* against FNA — when repeated tuning of a
+parameter fails to move a defect, suspect the formula, not the value; (2) the fifth round's bug
+was invisible to every screenshot-based check and only surfaced once weights were *enumerated
+numerically* — when a visual defect resists visual debugging, measure the underlying data
+directly.
 Treat
 `plan_net.md`'s checkmarks as "this task's described work was completed at the time," not as "the
 underlying feature was fully correct" on first landing. The prior first-implementation pass
@@ -296,18 +305,52 @@ still fully recoverable via git history, see Task 11.3's write-up in `plan_net.m
     Foot-only shoes content makes it fail (`feet speckle 265 > 160`, exit 1) while that content's
     *global* metrics still pass — demonstrating exactly the blind spot the audit identified.
 
-  **Honestly still open (why this stays PARTIALLY FIXED):** the garment shells and the body still
-  interpenetrate broadly — the measured pair-wise audit shows Shirt-vs-Body crossing at 28%, and
-  Shirt/Pants/Shoes crossing each other. The general pattern is now precisely understood: *every
-  garment capsule's hemispherical end cap burrows into whichever adjacent body segment the
-  garment does not itself cover* (the shirt's lower cap into the Hips, and so on). That is why the
-  torso still shows irregular blue shirt fragments. Fixing it properly means changing how garment
-  shells are authored — most likely flat-capped `cylinder` primitives (mesh-craft supports them)
-  instead of `capsule`, so a garment ends in a clean hem ring rather than a bulging sphere, with
-  care taken that terminal extremities (toe, hand) stay covered. That is a deliberate redesign of
-  `_garment_to_mc3_xml`, with a full re-verification pass across both genders and all 8 demos, and
-  it was not attempted here rather than risk it half-done. **The avatar and this audit therefore
-  remain PARTIALLY FIXED.**
+  **Update (2026-07-18, fifth remediation pass) — the three named defects are now measurably
+  addressed, but the audit stays PARTIALLY FIXED.** A fifth pass found one more real bug, this time
+  in the *skinning* rather than the geometry:
+  - **`fix_automatic_weights`' bend-joint blend selected an infinite slab.** It tested only the
+    axial distance from the joint along the child bone's axis
+    (`abs((vertex - joint_pos).dot(axis)) > blend_radius → skip`) with no perpendicular limit, so
+    it forced parent/child weights onto vertices arbitrarily far from the joint *sideways*. For a
+    laterally-pointing arm bone that slab sweeps straight down through the torso, hips and legs.
+    Found with the new `tools/avatar_builder/diagnose_avatar_mesh.py` `weights` check, which
+    reported `CNAAvatarPants` influenced by `Shoulder.L` (108 vertices) and `Shoulder.R` (107) —
+    anatomically impossible for a garment covering Hips/UpperLeg/LowerLeg. Those weights dragged
+    hip and leg geometry along with the shoulders during arm animations, pulling garments away
+    from the body they cover — exactly the "Wave-pose Shoulder/UpperArm weight-blend" defect the
+    audit named. Fixed by gating on perpendicular distance too (a bounded cylinder around the
+    joint axis, not a slab); the Pants' top influences are now UpperLeg/LowerLeg with no Shoulder
+    weights at all.
+  - **Correction to this file's own earlier claim.** The third-round paragraph above concluded the
+    blue collar/cuff/waist bands were "legitimate design, not a bug". That was **wrong**, and the
+    fifth-round measurement disproves it: those bands are the *emergent remainder of garment caps
+    buried inside adjacent body segments* (Shirt→Head 19 vertices at worst -0.13m, →LowerArm 24,
+    →Hips/UpperLeg 13; Pants→Spine1 13), and their ragged edges were the low-poly intersection
+    curve. Left uncorrected above so the mistake stays visible rather than quietly rewritten.
+  - **A boundary-cap trim was tried and reverted.** Pulling each garment capsule's *boundary* end
+    in by its own radius (so the cap apex lands on the bone end instead of a radius beyond it) was
+    implemented and measured: it did not reduce burial and made the Pants measurably worse
+    (21 → 39 vertices inside the body). Reverted rather than kept on the strength of the theory.
+
+  Measured state after this pass, versus what the fourth-round audit saw (per-region speckle —
+  dark pixels adjacent to bright, the intersection-seam signature): male groin **25 → 0**, female
+  groin **5 → 2**, feet **295/296 combined → 104/96 (-65%)**, Wave torso **125 → 120**, near-black
+  pixels **0.0%** everywhere. The rendered male/female/Wave screenshots no longer show the jagged
+  black teeth, holes or blotches the audit reported.
+
+  **Honestly still open (why this stays PARTIALLY FIXED):** garment shells and the body do still
+  interpenetrate — the pair-wise measurement remains non-zero (Shirt-vs-Body crossings, plus
+  Shirt/Pants/Shoes crossing each other), and the Wave pose still shows a small ragged blue patch
+  where the raised arm meets the torso. The mechanism is precisely understood: *every garment
+  capsule's hemispherical end cap burrows into whichever adjacent body segment that garment does
+  not itself cover.* The remaining fix is a genuine redesign of `_garment_to_mc3_xml` — flat-capped
+  `cylinder` shells plus explicit joint spheres at interior joints, so a garment ends in a clean
+  hem ring instead of a bulging sphere, with terminal extremities (toe, hand) kept covered. Note
+  that Task 7.3 deliberately chose capsules over cylinder+sphere for the *body*, on evidence that
+  is no longer current (it predates the real CSG `<union>`, and was about `bpy.ops.object.join()`
+  failing to weld) — so that decision should be re-examined, not simply overridden. Not attempted
+  here rather than risk it half-done. **The avatar and this audit therefore remain PARTIALLY
+  FIXED.**
 - **`NEXTnet.md`'s own example command was broken** when followed from the repo root (see the
   working-directory note in section 5) — fixed in this same pass that added this subsection.
 
@@ -501,11 +544,12 @@ honestly open:**
     3) — needs its own design decision, not just a mechanical fix.
 15. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
     7.8/7.10).
-16. **Next logical step for item 3d above — the one remaining avatar defect class.** Garment
-    shells still interpenetrate the body because each garment capsule's *hemispherical end cap*
-    burrows into whichever adjacent body segment that garment does not itself cover (measured:
-    Shirt-vs-Body 28% of shirt vertices inside the body; Shirt/Pants/Shoes also cross each
-    other). The concrete proposed fix, in priority order:
+16. **Next logical step — the one remaining avatar defect class (still open after round 5).**
+    Garment shells still interpenetrate the body because each garment capsule's *hemispherical
+    end cap* burrows into whichever adjacent body segment that garment does not itself cover.
+    Note round 5 already tried and REVERTED the cheap version of this (trimming boundary caps by
+    one radius: it made Pants burial worse, 21 -> 39 vertices), so go straight to the real
+    redesign. The concrete proposed fix, in priority order:
     - Change `generate_clothes_meshcraft._garment_to_mc3_xml` to author garment shells as
       flat-capped `<cylinder>` primitives instead of `<capsule>` (mesh-craft supports cylinder -
       confirmed in `mc3/src/Mc3XmlParser.cpp`; it takes the same radius/height/segments shape, so
@@ -515,10 +559,14 @@ honestly open:**
       head) the body's own capsule cap extends past the bone tail, so a flat-capped garment there
       would let the body poke out. Those ends need the cylinder lengthened by roughly the body
       radius, or to keep a capsule cap.
-    - Re-verify with the tooling this round added, not by eye: the pair-wise crossing diagnostic
-      (signed distance + face-normal sign) to prove enclosure, then
-      `scripts/avatar_visual_regression_check.py` for the per-region speckle metric, then fresh
-      male/female/`Wave` screenshots at the exact repro commands.
+    - Re-examine Task 7.3's "capsules, not cylinder+sphere" decision first rather than silently
+      overriding it: its stated evidence (self-intersecting hip/crotch geometry) predates the real
+      CSG `<union>` and was about `bpy.ops.object.join()` failing to weld, so it may no longer
+      apply - but it is a documented decision and deserves an explicit re-derivation.
+    - Re-verify with the committed tooling, not by eye: `tools/avatar_builder/diagnose_avatar_mesh.py`
+      (`crossings` to prove enclosure, `weights` to catch spurious bone influences, `normals` for
+      CSG singularities), then `scripts/avatar_visual_regression_check.py` for the per-region
+      speckle metric, then fresh male/female/`Wave` screenshots at the exact repro commands.
 
 ## 7. Do not do yet
 
