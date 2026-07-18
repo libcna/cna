@@ -36,6 +36,15 @@ namespace Microsoft::Xna::Framework::Media
     namespace
     {
         bool g_visualizationEnabled = false;
+
+        // Whether a post-mix callback is ACTUALLY installed right now. Tracked separately from
+        // g_visualizationEnabled because the two can legitimately disagree: if uninstalling fails,
+        // the user-visible flag goes false (the caller asked for off, and no data is served) while
+        // a live callback is still writing. Without this, the early-return guard in the setter
+        // would see "already false" and never retry the uninstall, leaving the tap installed
+        // forever (found by external code review, plan_media.md MEDIA-226).
+        bool g_visualizationTapInstalled = false;
+
         CNA::Internal::Media::VisualizationCapture g_visualizationCapture;
     }
 
@@ -181,15 +190,19 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::setIsVisualizationEnabledProperty(bool value)
     {
-        if (g_visualizationEnabled == value)
+        // Early-out only when the request is genuinely already satisfied. Checking the flag alone
+        // was not enough: after a FAILED uninstall the flag is false while a callback is still
+        // installed, and a later set(false) would return here and never retry it (plan_media.md
+        // MEDIA-226).
+        if (g_visualizationEnabled == value && g_visualizationTapInstalled == value)
         {
             return;
         }
 
         // The flag is assigned only from what ACTUALLY happened, never up front. An earlier version
         // set it before even obtaining the mixer, so a GetMixer() failure left
-        // IsVisualizationEnabled reporting true with no mixer and no callback -- a caller would then
-        // poll forever for data that could never arrive (plan_media.md MEDIA-222).
+        // IsVisualizationEnabled reporting true with no mixer and no callback (plan_media.md
+        // MEDIA-222).
 #ifdef SOUND_ENABLED
         try
         {
@@ -197,36 +210,42 @@ namespace Microsoft::Xna::Framework::Media
 
             if (!value)
             {
-                // Disabling always ends with the flag false: with no mixer there is nothing to
-                // disable, and with one we remove the tap first (see below).
-                if (mixer != nullptr && MIX_SetPostMixCallback(mixer, nullptr, nullptr))
+                // Disabling always ends with the user-visible flag false: the caller asked for off
+                // and no data will be served either way.
+                g_visualizationEnabled = false;
+
+                if (mixer == nullptr)
                 {
-                    // Uninstall confirmed, so no callback can be writing -- safe to clear.
+                    // No mixer exists, so no callback can be running.
+                    g_visualizationTapInstalled = false;
                     g_visualizationCapture.Reset();
+                    return;
                 }
-                else if (mixer == nullptr)
+                if (MIX_SetPostMixCallback(mixer, nullptr, nullptr))
                 {
-                    // No mixer was ever created, so no callback can exist.
+                    // Uninstall confirmed -- nothing can be writing, so clearing is safe.
+                    g_visualizationTapInstalled = false;
                     g_visualizationCapture.Reset();
                 }
                 // Uninstall FAILED: the callback may still be live, so deliberately do NOT Reset()
                 // -- zeroing a buffer another thread is writing is the exact race MEDIA-216 fixed.
-                g_visualizationEnabled = false;
+                // g_visualizationTapInstalled stays true so a later call retries this.
                 return;
             }
 
             // Enabling: only report enabled once a tap is genuinely installed.
             if (mixer == nullptr)
             {
-                return; // stays false
+                return; // flag stays false
             }
             // Clear BEFORE installing: once the callback is live the audio thread owns the buffer.
             g_visualizationCapture.Reset();
             if (MIX_SetPostMixCallback(mixer, OnPostMix, nullptr))
             {
+                g_visualizationTapInstalled = true;
                 g_visualizationEnabled = true;
             }
-            // Install failed -> flag stays false, matching reality.
+            // Install failed -> both stay false, matching reality.
         }
         catch (const std::exception&)
         {
@@ -234,12 +253,14 @@ namespace Microsoft::Xna::Framework::Media
             // machine). No callback was ever installed, so clearing is safe -- but enabling must
             // NOT be reported as successful.
             g_visualizationCapture.Reset();
+            g_visualizationTapInstalled = false;
             g_visualizationEnabled = false;
         }
 #else
         // No audio backend compiled in: there is no audio thread, so the flag round-trips and the
         // buffer simply stays empty.
         g_visualizationEnabled = value;
+        g_visualizationTapInstalled = false;
         g_visualizationCapture.Reset();
 #endif
     }

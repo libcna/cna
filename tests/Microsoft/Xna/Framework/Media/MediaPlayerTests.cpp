@@ -273,7 +273,10 @@ TEST_F(MediaPlayerTest, GetVisualizationDataZeroesTheBuffersWhileDisabled)
 }
 
 // Enabling visualization must not crash or hang even with no audio device present (the headless
-// CI case) -- it degrades to "flag is on, data stays zero" (plan_media.md MEDIA-191).
+// CI case). NOTE: the old wording here said it degrades to "flag is on, data stays zero" -- that
+// stopped being true with MEDIA-222, which made the flag reflect reality: with no mixer the enable
+// simply does not take effect and the flag stays FALSE. Corrected rather than left contradicting
+// the code (plan_media.md MEDIA-225).
 TEST_F(MediaPlayerTest, EnablingVisualizationIsSafeWithoutAnAudioDevice)
 {
     EXPECT_NO_THROW(MediaPlayer::setIsVisualizationEnabledProperty(true));
