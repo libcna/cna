@@ -251,6 +251,22 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   (`tools/audio/mixer_destroy_active_{static,dynamic}_voice_harness.cpp`) added as an end-to-end
   safety net. Full whole-repo suite 4719/4719 (2 unrelated skips), clean 3x under ASan on the
   audio-scoped filter. See `plan_audio.md`'s `AUD-04-008`/`AUD-04-009` entries for full detail.
+  **Continuing further (2026-07-18, 22 more commits, `98bb596e`..`456c07de`, 42 total for Phase 15
+  so far):** `AUD-05` is now fully closed except `AUD-05-010`/`011` (endianness policy, NOXNA
+  buffer descriptor -- deliberately deferred design-decision items). `AUD-04`'s testable P0/P1
+  list is fully closed (remaining 10 items all need real hardware or a design decision). Closed
+  more `AUD-06` items (`011`/`012`/`013`-partial/`015`/`017`/`024`), 3 `AUD-11` items
+  (`004`/`012`/`013`), and `AUD-15-017`. Two more confirmed-real fixes beyond the AUD-04-008/009
+  pair: `AUD-06-017` widened the unsupported-format diagnostic to name channels/sampleRate
+  (previously only tag/bits/asset name); `AUD-06-024` wrapped WAV-wrapped decode failures
+  (`BuildViaWavWrapper`) in `ContentLoadException(assetContext, inner)` instead of letting a raw,
+  contextless `NotSupportedException` propagate -- both real gaps, not just tests. `AUD-06-015`
+  built and verified a genuine Xbox-endian fixture (real big-endian WAVEFORMATEX bytes) for
+  byte-swap logic that existed but had never been exercised, confirmed via a temporarily-disabled-
+  swap negative check. `AUD-11-012`/`013` empirically confirmed the `FACTWaveBankMiniWaveFormat`
+  bit-extraction and ADPCM samplesPerBlock formula against real FAudio source and real SDL3
+  MS-ADPCM decode output respectively. Full whole-repo suite green throughout, 4749/4749 pass (2
+  unrelated hardware skips) as of the latest commit.
 - **`AUD-15-001`** — fresh one-off ASan+UBSan sweep of the audio-scoped test subset (§7's filter
   list): 579/579 pass, zero `ERROR: AddressSanitizer`/UBSan `runtime error:` findings.
   `LeakSanitizer` flags ~15KB/20 allocations in the full run, all traced to `<unknown module>`/
