@@ -3121,7 +3121,20 @@ void main()
 "    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    gl_Position=uWVP*skinnedPos;\n"
-"    vNormal=normalize(mat3(skinMat)*aNormal);\n"
+// A vertex blended near-evenly between two bones whose current relative rotation is
+// close to 180 degrees (reachable in practice: wide weight-blend joint regions x a
+// large-angle animation pose, e.g. Wave) can make the linearly-blended skinMat's
+// rotational part nearly cancel out for this particular normal, so its transformed
+// length collapses toward zero. normalize() of a near-zero vector is numerically
+// unstable (can yield NaN), which then poisons the entire downstream lighting sum --
+// observed as solid-black blotches independent of ambient/diffuse light color, not a
+// plausible-but-wrong shading direction. Falls back to the untransformed bind-pose
+// normal for just that vertex rather than propagating NaN; XNA/FNA's own Skin() was
+// never validated against this degenerate case, so this is a numerical-safety guard,
+// not a deviation from its intended per-vertex transform.
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    float skinnedNormalLen=length(skinnedNormal);\n"
+"    vNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
 "    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
@@ -3268,7 +3281,12 @@ void main()
 "    vUV=aUV;\n"
 "    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "    vec3 worldPos=(uWorld*skinnedPos).xyz;\n"
-"    vec3 N=normalize(mat3(skinMat)*aNormal);\n"
+// Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
+// comment for the root cause) -- this vertex-lit sibling does the identical skinning
+// and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    float skinnedNormalLen=length(skinnedNormal);\n"
+"    vec3 N=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
 "    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"

@@ -92,11 +92,17 @@ def add_joint_sphere(name, location, radius):
 # Hips/Spine and Spine/Spine1 were added after Task 11.23b's FemaleIdleFixShoe (a 35 deg
 # Spine forward bend) revealed the same class of tear at the torso, confirming this
 # isn't an arms/legs-only problem -- any animated joint needs to be in this list.
+# audit_net.md remediation (2026-07-18): LowerLeg/Foot was missing from this list --
+# the ankle joint never got the smoothstep blend fix, so it kept automatic weighting's
+# near-binary per-vertex tear even at rest pose (confirmed: the feet/shoes were the
+# single darkest, most pose-independent artifact of everything the audit reported,
+# consistent with a static unfixed tear rather than a pose-dependent skinning issue).
 BEND_JOINTS = [
     ("Hips", "Spine"), ("Spine", "Spine1"),
     ("Shoulder.L", "UpperArm.L"), ("Shoulder.R", "UpperArm.R"),
     ("UpperArm.L", "LowerArm.L"), ("UpperArm.R", "LowerArm.R"),
     ("UpperLeg.L", "LowerLeg.L"), ("UpperLeg.R", "LowerLeg.R"),
+    ("LowerLeg.L", "Foot.L"), ("LowerLeg.R", "Foot.R"),
 ]
 
 

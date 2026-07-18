@@ -114,11 +114,21 @@ def _recalculate_smooth_normals(obj):
     end up pointing at a steep/grazing angle relative to the single fixed directional light this
     project's avatar demos use, rendering as near-black patches (confirmed by direct fresh
     screenshot inspection at the neck, shoulder-to-arm junctions, groin, and - worst - a large
-    dark mass across the chest during the Wave animation). Fixed by welding the duplicated
-    coincident vertices back into one shared vertex per position (`remove_doubles`, so smooth
-    shading has something to actually interpolate across), recalculating consistent outward
-    normals, then switching to smooth shading - standard practice for CSG/boolean-result meshes
-    that need to render smoothly rather than faceted.
+    dark mass across the chest during the Wave animation).
+
+    **Correction (2026-07-18, second-round independent audit):** a first version of this function
+    called `remove_doubles` + `shade_smooth()` and was verified only from a single, narrow camera
+    angle - a second, wider-angle/different-pose check (`--yaw 25` during `Wave`) found the
+    artifacts were still substantially present. Root cause of *that*: Blender's glTF importer
+    loads mc3togltf's exported NORMAL accessor as **custom split normals** (confirmed directly:
+    `mesh.has_custom_normals` reads `True` after import), which silently override the per-polygon
+    smooth-shading flag `shade_smooth()` sets - both in Blender's own viewport/render and in
+    whatever gets re-exported afterward. `shade_smooth()` alone was therefore close to a no-op on
+    the actual rendered/exported result; welding coincident vertices was real (confirmed: ~5900
+    removed) but bought little visually since the stale flat custom normals persisted regardless
+    of the shared-vertex topology underneath them. Fixed by explicitly clearing the custom split
+    normals (`mesh.customdata_custom_splitnormals_clear` before the final smooth-shading pass), so
+    Blender actually computes and exports fresh smooth normals from the (now welded) topology.
     """
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
@@ -128,7 +138,18 @@ def _recalculate_smooth_normals(obj):
     bpy.ops.mesh.remove_doubles(threshold=0.0001)
     bpy.ops.mesh.normals_make_consistent(inside=False)
     bpy.ops.object.mode_set(mode="OBJECT")
+    # Must run *after* leaving Edit Mode (it operates on the mesh's own custom-normals data
+    # layer, not the BMesh edit-mode representation) and *before* shade_smooth(), which is
+    # otherwise silently overridden by whatever custom split normals mc3togltf's own flat-normal
+    # glTF export left behind on import - confirmed directly via mesh.has_custom_normals.
+    # (Mesh.calc_normals_split() was removed in this Blender version's split-normals API rework -
+    # not needed anyway, since the custom-normals layer is already populated from glTF import.)
+    bpy.ops.mesh.customdata_custom_splitnormals_clear()
     bpy.ops.object.shade_smooth()
+    assert not obj.data.has_custom_normals, (
+        f"{obj.name}: custom split normals still present after customdata_custom_splitnormals_clear() - "
+        "shade_smooth() below would still be silently overridden."
+    )
 
 
 def _capsule_transform(head_mc3, tail_mc3):

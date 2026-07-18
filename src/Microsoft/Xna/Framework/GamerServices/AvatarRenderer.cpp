@@ -195,8 +195,16 @@ namespace Microsoft::Xna::Framework::GamerServices
         realEffect_->setViewProperty(view_);
         realEffect_->setProjectionProperty(projection_);
         realEffect_->SetBoneTransforms(boneTransforms);
-        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
+        // EnableDefaultLighting() must run *before* the custom ambient/key-light overrides
+        // below, not after - it unconditionally resets AmbientLightColor and all three
+        // DirectionalLights to XNA's own built-in defaults (confirmed via SkinnedEffect's
+        // own EnableDefaultLighting(), which is itself correct/FNA-faithful). Calling it
+        // after setAmbientLightColorProperty() silently discarded every custom ambient
+        // value this class ever set, floored at XNA's much dimmer default ambient
+        // (~0.05-0.18 instead of the intended 0.35) - the actual cause of shadowed/concave
+        // regions (joints, creases) rendering near-black regardless of avatar pose.
         realEffect_->EnableDefaultLighting();
+        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
         realEffect_->getDirectionalLight0Property().setEnabledProperty(true);
         realEffect_->getDirectionalLight0Property().setDirectionProperty(lightDirection_);
         realEffect_->getDirectionalLight0Property().setDiffuseColorProperty(lightColor_);
