@@ -30,7 +30,6 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
-#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -229,9 +228,23 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRathe
 
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
-    EXPECT_THROW(
-        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
-        System::NotSupportedException);
+
+    // AUD-06-024: BuildViaWavWrapper now re-throws the root SDL/backend decode failure as
+    // ContentLoadException(assetContext, inner) instead of letting the raw NotSupportedException
+    // propagate unadorned -- the asset name and format fields are now present, and the original
+    // "Invalid sample rate"-style root cause is preserved verbatim via the " ---> " inner-
+    // exception chain, not lost.
+    try
+    {
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("'test'"), std::string::npos) << what;
+        EXPECT_NE(what.find("--->"), std::string::npos) << what;
+    }
 }
 
 // AUD-06-015: Swap16/Swap32 (SoundEffectContentTypeReader.cpp) exist and are already wired to

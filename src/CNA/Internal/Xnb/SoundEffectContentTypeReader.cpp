@@ -128,9 +128,29 @@ namespace CNA::Internal::Xnb
 
             std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
             std::istringstream ss(s);
-            std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
-            loaded->setNameProperty(assetName);
-            return std::move(*loaded);
+
+            // AUD-06-024: SoundEffect::FromStream decodes the synthetic WAV via SDL3's own
+            // decoder, which can reject it (e.g. an invalid sample rate -- AUD-06-013) with a
+            // raw System::NotSupportedException that names nothing about the .xnb asset it came
+            // from. Re-throwing as ContentLoadException(assetContext, inner) preserves the root
+            // decoder error verbatim (ContentLoadException's inner-exception constructor appends
+            // `" ---> " + inner.what()`) while adding the asset name and format fields a caller
+            // actually needs to find the offending file.
+            try
+            {
+                std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
+                loaded->setNameProperty(assetName);
+                return std::move(*loaded);
+            }
+            catch (const std::exception& inner)
+            {
+                throw ContentLoadException(
+                    "'" + assetName + "': SoundEffectReader failed to decode WAV-wrapped audio "
+                    "(formatTag=" + std::to_string(wFormatTag) + ", bitsPerSample=" +
+                    std::to_string(wBitsPerSample) + ", channels=" + std::to_string(nChannels) +
+                    ", sampleRate=" + std::to_string(nSamplesPerSec) + ").",
+                    inner);
+            }
         }
     }
 
