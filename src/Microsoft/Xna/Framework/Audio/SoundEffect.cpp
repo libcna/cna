@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 #include <istream>
 #include <mutex>
 #include <vector>
@@ -78,6 +79,22 @@ namespace Microsoft::Xna::Framework::Audio
             bool  active = false; // false: pan == 0 at Play() time, matrix is the identity
             float ll = 1.0f, rl = 0.0f, lr = 0.0f, rr = 1.0f;
         };
+
+        // AUD-05-006: best-effort detection that the caller passed whole-file container bytes
+        // (a common misuse: WAV/RIFF, Ogg, MP3/ID3, or XNB) to a raw PCM16LE constructor instead
+        // of raw sample data. These constructors have no way to reject this outright -- a RIFF
+        // header, read as PCM16 samples, is still "valid" 16-bit data, just garbage -- so this
+        // only ever emits a diagnostic, never throws (see the constructor doc comment,
+        // AUD-05-005: the correct fix for real misuse is `SoundEffect(const std::string&)`
+        // instead, not a rejection here). Returns nullptr if no known signature is found.
+        const char* DetectLikelyContainerSignature(const SharpRuntime::bytecs* data, std::size_t len)
+        {
+            if (len >= 4 && std::memcmp(data, "RIFF", 4) == 0) return "RIFF/WAVE";
+            if (len >= 4 && std::memcmp(data, "OggS", 4) == 0) return "Ogg";
+            if (len >= 3 && std::memcmp(data, "ID3", 3) == 0) return "MP3 (ID3 tag)";
+            if (len >= 3 && data[0] == 'X' && data[1] == 'N' && data[2] == 'B') return "XNB";
+            return nullptr;
+        }
 
         // Applies the already-computed crossfeed matrix (see FireAndForgetPanState above) to
         // interleaved stereo PCM -- matches ApplyPanCrossfeed's identical transform in
@@ -266,6 +283,15 @@ namespace Microsoft::Xna::Framework::Audio
         }
 
 #ifdef SOUND_ENABLED
+        if (const char* sig = DetectLikelyContainerSignature(buffer.data() + off, cnt))
+        {
+            std::cerr << "[SoundEffect] Warning: raw PCM buffer starts with a " << sig
+                      << " signature, not raw PCM16LE sample data -- passing whole-file bytes "
+                      << "to this constructor decodes the container's header as audio samples, "
+                      << "producing garbage output. Use SoundEffect(const std::string&) to load "
+                      << "a file instead.\n";
+        }
+
         SDL_AudioSpec spec{};
         spec.format   = SDL_AUDIO_S16LE;
         spec.channels = static_cast<int>(channels);

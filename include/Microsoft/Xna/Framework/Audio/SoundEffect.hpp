@@ -60,7 +60,15 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Constructs a SoundEffect from a raw 16-bit PCM buffer.
          *
-         * @param buffer     PCM audio data.
+         * AUD-05-005: `buffer` must be headerless, little-endian, signed 16-bit PCM samples --
+         * NOT a WAV/RIFF file, not Ogg/MP3-compressed data, and not an XNB asset. Passing an
+         * entire file's bytes here (rather than just its raw sample data) is a common mistake:
+         * the leading container header (e.g. a WAV `RIFF`/`WAVE`/`fmt ` chunk) is misread as
+         * audio samples, producing loud noise or silence rather than a clean failure. Use
+         * `SoundEffect(const std::string&)` (the file-path constructor) to load a real audio
+         * file, including WAV, instead.
+         *
+         * @param buffer     Raw signed 16-bit PCM sample data (no container/file header).
          * @param sampleRate Sample rate in Hz.
          * @param channels   Channel layout (Mono or Stereo).
          */
@@ -71,7 +79,11 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Constructs a SoundEffect from a range within a PCM buffer with loop points.
          *
-         * @param buffer      PCM audio data.
+         * AUD-05-005: see the other raw-buffer constructor's doc comment -- `buffer` (or rather,
+         * the `[offset, offset + count)` range within it) must be headerless, little-endian,
+         * signed 16-bit PCM samples, not a WAV/container file's raw bytes.
+         *
+         * @param buffer      Raw signed 16-bit PCM sample data (no container/file header).
          * @param offset      Byte offset into the buffer.
          * @param count       Number of bytes to use.
          * @param sampleRate  Sample rate in Hz.

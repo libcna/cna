@@ -996,3 +996,73 @@ TEST(SoundEffectTest, DisposeAfterInstanceMoveConstructedOutOfScopeDisposesTheMo
     EXPECT_TRUE(dst->getIsDisposedProperty());
     EXPECT_EQ(dst->getStateProperty(), SoundState::Stopped);
 }
+
+// ---------------------------------------------------------------------------
+// AUD-05-006: passing whole-file container bytes (WAV/Ogg/MP3/XNB) to a raw PCM16LE constructor
+// is a common misuse this constructor can't reject outright (the container header still "looks
+// like" valid 16-bit samples to the backend) -- these tests confirm it's at least diagnosed via
+// stderr, never thrown (matches the constructor's doc comment, AUD-05-005: the fix for real
+// misuse is the file-path constructor instead, not a rejection here).
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, RawBufferStartingWithRiffSignatureEmitsDiagnosticWithoutThrowing)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm;
+    const char riff[] = "RIFF\x24\x08\x00\x00WAVEfmt ";
+    pcm.insert(pcm.end(), riff, riff + sizeof(riff) - 1);
+    pcm.resize(pcm.size() + 4 * 256, 0); // pad to a plausible sample-frame count
+
+    testing::internal::CaptureStderr();
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    }
+    catch (...)
+    {
+        testing::internal::GetCapturedStderr();
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_FALSE(fx->getIsDisposedProperty()); // never throws/rejects -- advisory only
+    EXPECT_NE(captured.find("RIFF"), std::string::npos) << "captured stderr: " << captured;
+}
+
+TEST(SoundEffectTest, RawBufferStartingWithXnbSignatureEmitsDiagnosticWithoutThrowing)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm{'X', 'N', 'B', 'w'};
+    pcm.resize(pcm.size() + 4 * 256, 0);
+
+    testing::internal::CaptureStderr();
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    }
+    catch (...)
+    {
+        testing::internal::GetCapturedStderr();
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_NE(captured.find("XNB"), std::string::npos) << "captured stderr: " << captured;
+}
+
+TEST(SoundEffectTest, RawBufferWithoutKnownSignatureEmitsNoDiagnostic)
+{
+    auto fx = makeEffect(); // all-zero PCM, no container signature
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    testing::internal::CaptureStderr();
+    auto second = std::make_unique<SoundEffect>(
+        std::vector<unsigned char>(4 * 256, 0), 44100, AudioChannels::Stereo);
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
+}
