@@ -53,7 +53,7 @@ namespace CNA::Internal::Media
         // resampler and rebuilds a fresh one on every seek; if that rebuild fails, audioCtx_ stays
         // valid (the codec itself is untouched) while swrCtx_ is left null, correctly reported here
         // as "no audio" from that point on rather than silently believed still available (found by
-        // external code review, plan_media.md MEDIA-168 -- this comment previously described an
+        // external code review, plan_media.md MEDIA-169 -- this comment previously described an
         // already-superseded SetupResampler()-during-initial-setup scenario Phase 13's MEDIA-162 fix
         // had already closed off, instead of the real, current path).
         [[nodiscard]] bool HasAudio()        const { return audioCtx_ != nullptr && swrCtx_ != nullptr; }

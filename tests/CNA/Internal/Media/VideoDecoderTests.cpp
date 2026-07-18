@@ -450,3 +450,48 @@ TEST(VideoDecoderTest, SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSee
     EXPECT_TRUE(samples.empty()) << "DrainAudio() returned " << samples.size()
                                   << " stale samples left over from before SeekToStart()";
 }
+
+// plan_media.md MEDIA-171 (found by external code review): MEDIA-167 replaced SeekToStart()'s
+// manual resampler-delay drain with a swr_free() + CreateResampler() recreation, and claimed
+// regression coverage from two existing tests -- but NEITHER actually covered it.
+// LoopedVideoKeepsPlayingPastItsDuration uses chroma_420.mkv, which has no audio stream at all
+// (ffprobe: one ffv1 video stream, nothing else), so it never enters SeekToStart()'s
+// `if (audioCtx_ && swrCtx_)` block. SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek
+// (directly above) only asserts the pending buffer is EMPTY after the seek -- which would pass even
+// MORE readily if the recreation left swrCtx_ null, since no audio would ever decode again.
+//
+// This is the missing direct proof: after a seek, the decoder must still have a WORKING resampler
+// (HasAudio() true) and must genuinely produce real audio samples again from further decoding.
+// Fails loudly if swr_free() were ever left without a successful CreateResampler() replacing it.
+TEST(VideoDecoderTest, SeekToStartRebuildsAWorkingResamplerSoAudioStillDecodesAfterTheSeek)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kAudioTail));
+    ASSERT_TRUE(decoder.HasAudio());
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    for (int i = 0; i < 5; ++i)
+    {
+        if (!decoder.NextFrame(rgba, pts)) break;
+    }
+    std::vector<float> samplesBefore;
+    decoder.DrainAudio(samplesBefore);
+    ASSERT_GT(samplesBefore.size(), 0u) << "fixture should produce audio before the seek at all";
+
+    decoder.SeekToStart();
+
+    // The resampler was freed and rebuilt by the seek -- it must be a real, working one, not null.
+    EXPECT_TRUE(decoder.HasAudio())
+        << "SeekToStart() left the decoder without a working resampler";
+
+    // ...and decoding after the seek must genuinely produce audio again through that new resampler.
+    for (int i = 0; i < 5; ++i)
+    {
+        if (!decoder.NextFrame(rgba, pts)) break;
+    }
+    std::vector<float> samplesAfter;
+    decoder.DrainAudio(samplesAfter);
+    EXPECT_GT(samplesAfter.size(), 0u)
+        << "no audio samples decoded after SeekToStart() -- the rebuilt resampler is not working";
+}

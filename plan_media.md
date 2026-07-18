@@ -1664,12 +1664,24 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `HasAudio()` (`MEDIA-160`) already correctly reports as "no audio," rather than thrown --
   `SeekToStart()` has no throwing contract anywhere else and is called from
   `VideoPlayer::GetTexture()`'s `isLooped_` branch with no surrounding `try`/`catch`.
-  *Accept:* the existing `LoopedVideoKeepsPlayingPastItsDuration` test (real looped playback,
-  genuinely exercising `SeekToStart()` with live audio via `VideoPlayer`) and
-  `SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek` both continue to pass unchanged,
-  confirming the simpler recreation-based approach doesn't regress real seek/loop behavior. No
-  dedicated test forces a genuine resampler-recreation failure at seek time, for the same
-  near-unreachable-failure-mode reason already documented at `MEDIA-94`/`MEDIA-160`/`MEDIA-162`.
+  *Accept (original claim -- FALSE, corrected by `MEDIA-171`):* this task originally claimed the
+  existing `LoopedVideoKeepsPlayingPastItsDuration` test covered it by "genuinely exercising
+  `SeekToStart()` with live audio via `VideoPlayer`," plus
+  `SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek`. **Both claims were wrong** (found by
+  external code review, `plan_media.md` `MEDIA-171`): `LoopedVideoKeepsPlayingPastItsDuration` uses
+  `chroma_420.mkv`, which has NO audio stream at all (ffprobe: one ffv1 video stream, nothing else),
+  so it never even enters `SeekToStart()`'s `if (audioCtx_ && swrCtx_)` block; and the
+  `pendingAudio_` test only asserts the buffer is *empty* after the seek, which would pass even more
+  readily if the recreation left `swrCtx_` null (no audio would ever decode again).
+  *Accept (actual, current):* new `VideoDecoderTest.SeekToStartRebuildsAWorkingResamplerSoAudioStillDecodesAfterTheSeek`
+  (`MEDIA-171`) is the real proof -- it decodes real audio before the seek, seeks, then asserts
+  `HasAudio()` is still true AND that further decoding genuinely produces new audio samples through
+  the rebuilt resampler. **Verified falsifiable by mutation testing**: with the
+  `swrCtx_ = CreateResampler(audioCtx_)` line temporarily removed, the new test fails on both
+  assertions while the old `pendingAudio_` test still passes -- directly demonstrating the old
+  coverage claim was empty and the new one is not. No dedicated test forces a genuine
+  resampler-recreation *failure* at seek time, for the same near-unreachable-failure-mode reason
+  documented at `MEDIA-94`/`MEDIA-160`/`MEDIA-162`.
 
 - [x] **MEDIA-168 — Fix a factual error `MEDIA-165`'s own correction paragraph introduced into
   `MEDIA-38`'s text.** `MEDIA-165`'s in-place correction of `MEDIA-38` claimed
@@ -1711,8 +1723,56 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 - [x] **MEDIA-170 — Full-suite regression run.** Confirm zero regressions from this seventh
   remediation pass, grepped in full (not a truncated tail).
   *Verified:* 4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
-  Gyroscope) -- 0 new tests added this phase (the `SeekToStart()` rewrite is covered by existing
-  real-playback tests per `MEDIA-167`'s own Accept note; the other two fixes are doc-only), zero
+  Gyroscope) -- 0 new tests added this phase. **This "covered by existing real-playback tests per
+  `MEDIA-167`'s own Accept note" justification was itself false** -- see `MEDIA-171` (Phase 15),
+  which found the cited test uses an audio-less fixture and added the real coverage. Zero
+  pre-existing tests broken. Grepped in full (`grep -c FAILED` on the complete log, not a truncated
+  tail).
+
+### Phase 15 — Eighth external review pass (2026-07-18, same day as Phase 8-14)
+
+> Applying MEDIA-126's own convention an eighth time. An eighth external adversarial review of
+> commit `56e391e7` (Phase 14's own fix commit) confirmed the `SeekToStart()` resampler-recreation
+> fix (`MEDIA-167`) factually correct as *code*, but found its claimed regression coverage was
+> entirely fictitious, plus a wrong task-ID cross-reference in the comment `MEDIA-169` had just
+> rewritten. Both findings are about claims made *about* correct code, not the code itself --
+> the third consecutive round where documentation/verification claims, not implementation, were the
+> defect.
+
+- [x] **MEDIA-171 — Add the real `SeekToStart()` audio-after-seek regression test; `MEDIA-167`'s
+  claimed coverage did not exist.** `MEDIA-167`'s Accept note asserted its resampler-recreation fix
+  was covered by `LoopedVideoKeepsPlayingPastItsDuration` ("genuinely exercising `SeekToStart()`
+  with live audio via `VideoPlayer`") and `SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek`.
+  Neither was true: the looped-playback test uses `chroma_420.mkv`, which has **no audio stream at
+  all** (verified via both `manifest.json` and a direct `ffprobe` run -- one ffv1 video stream,
+  nothing else), so it never enters `SeekToStart()`'s `if (audioCtx_ && swrCtx_)` block; and the
+  `pendingAudio_` test only asserts the pending buffer is *empty* after the seek, an assertion that
+  would pass even more readily if the recreation left `swrCtx_` null, since then no audio would ever
+  decode again. `MEDIA-167`'s fix was genuinely correct -- but nothing was actually proving it.
+  *Fix:* new `VideoDecoderTest.SeekToStartRebuildsAWorkingResamplerSoAudioStillDecodesAfterTheSeek`
+  decodes real audio from `audio_tail.mkv` before the seek (asserting non-zero samples so the
+  fixture's own audio is confirmed first), seeks, then asserts `HasAudio()` is still true AND that
+  five more decoded frames genuinely produce new audio samples through the rebuilt resampler.
+  *Accept:* **verified falsifiable by mutation testing**, not merely "it passes": with
+  `swrCtx_ = CreateResampler(audioCtx_)` temporarily removed from `SeekToStart()`, the new test
+  fails on both assertions (`HasAudio()` false; zero post-seek samples) while
+  `SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek` still passes -- directly
+  demonstrating both that the old coverage claim was empty and that the new test genuinely closes
+  it. Implementation then restored and confirmed byte-identical to the committed version
+  (`git diff` clean) before the real run.
+
+- [x] **MEDIA-172 — Fix a wrong task-ID cross-reference in `HasAudio()`'s comment.** `MEDIA-169`'s
+  rewrite of that comment attributed itself to `MEDIA-168` -- but `MEDIA-168` was the `MEDIA-38`
+  allocation-exception text correction; this comment rewrite was `MEDIA-169`. A reader following the
+  cross-reference would land on an unrelated task.
+  *Fix:* corrected to `MEDIA-169`.
+  *Accept:* doc-only; verified by re-reading both task entries to confirm which one actually covered
+  this comment.
+
+- [x] **MEDIA-173 — Full-suite regression run.** Confirm zero regressions from this eighth
+  remediation pass, grepped in full (not a truncated tail).
+  *Verified:* 4878 tests, 4876 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope) -- 1 new test added by this phase (`MEDIA-171`'s, mutation-verified falsifiable), zero
   pre-existing tests broken. Grepped in full (`grep -c FAILED` on the complete log, not a truncated
   tail).
 

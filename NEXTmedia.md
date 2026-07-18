@@ -4,17 +4,17 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-170`, Phases 0-14); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-173`, Phases 0-15); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 170/170 tasks checked off across 14 phases
+## 1. Status (2026-07-18) — 173/173 tasks checked off across 15 phases
 
-**Deliberately not calling this "complete."** Seven separate external adversarial reviews landed on
-this plan the same day (Phase 8 through 14 below), and every single one found real, specific,
+**Deliberately not calling this "complete."** Eight separate external adversarial reviews landed on
+this plan the same day (Phase 8 through 15 below), and every single one found real, specific,
 file-and-line-cited defects that a clean build and passing targeted tests did not surface — including
 in the fix commits written *in response to* the previous review. Read this status as "all
 currently-known findings are fixed, full regression is green" rather than "nothing is left to find."
-Any future review of this code should get the same independent, skeptical treatment the last seven
-did — see §1g's closing lesson.
+Any future review of this code should get the same independent, skeptical treatment the last eight
+did — see §1h's closing lesson.
 
 **Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
 this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
@@ -647,9 +647,10 @@ documentation errors introduced by the immediately preceding round's own correct
    (`SeekToStart()`'s resampler recreation, introduced in this very phase by `MEDIA-167`).
 
 Full-suite regression after Phase 14: **4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware
-skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail. No new tests added
-(`MEDIA-167` is covered by the existing real-playback `LoopedVideoKeepsPlayingPastItsDuration` test;
-the other two fixes are doc-only).
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail. No new tests added —
+**and this phase's claim that `MEDIA-167` was "covered by the existing real-playback
+`LoopedVideoKeepsPlayingPastItsDuration` test" was itself false**, corrected in Phase 15 below
+(`MEDIA-171`): that fixture has no audio stream at all.
 
 **Lesson reinforced a seventh time, with a new wrinkle:** two of three findings this round were
 *documentation errors introduced by the previous round's own correction commit* — not gaps in the
@@ -658,6 +659,40 @@ documentation problem. **Writing a correction is not exempt from the same verify
 code discipline as writing the original code — a paragraph explaining "here's what the code actually
 does" needs the same line-by-line check as the code itself, especially right after being told the
 previous version of that exact paragraph was wrong.**
+
+## 1h. Phase 15 — eighth external review pass (2026-07-18, same day as Phase 8-14)
+
+An *eighth* external review, this time of the Phase 14 fix commit (`56e391e7`), confirmed the
+`SeekToStart()` resampler-recreation fix factually correct as code — but found its claimed
+regression coverage was entirely fictitious:
+
+1. **`MEDIA-167`'s claimed test coverage did not exist** (`MEDIA-171`) — its Accept note asserted
+   coverage from `LoopedVideoKeepsPlayingPastItsDuration` ("genuinely exercising `SeekToStart()`
+   with live audio"), but that test uses `chroma_420.mkv`, which has **no audio stream at all**
+   (confirmed via `manifest.json` and a direct `ffprobe` run), so it never enters `SeekToStart()`'s
+   audio block. The second cited test only asserts the pending buffer is *empty* post-seek — which
+   would pass even more readily if the fix were broken and no audio decoded at all. Fixed by adding
+   `SeekToStartRebuildsAWorkingResamplerSoAudioStillDecodesAfterTheSeek`, which asserts `HasAudio()`
+   is still true after a seek AND that further decoding genuinely produces new audio samples.
+   **Verified falsifiable by mutation testing**: with the `CreateResampler()` call temporarily
+   removed, the new test fails both assertions while the old test still passes.
+2. **Wrong task-ID cross-reference** (`MEDIA-172`) — `HasAudio()`'s comment, rewritten by
+   `MEDIA-169`, attributed itself to `MEDIA-168` (which was the unrelated `MEDIA-38` text fix).
+   Corrected.
+
+Full-suite regression after Phase 15: **4878 tests, 4876 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail. 1 new test added.
+
+**Lesson reinforced an eighth time — the sharpest form yet:** for the third consecutive round, the
+defect was not in the code but in a *claim about* the code. This round's was the most consequential
+kind: **a false claim that a fix was tested.** The cited test passed, the fix was genuinely correct,
+and the suite was green — so nothing in the normal workflow surfaced that the test never touched the
+code path at all. **Before writing "covered by test X" in an Accept note, verify X actually
+exercises the changed path — check the fixture's real contents (`ffprobe`, the manifest), not just
+the test's name and general shape.** The strongest form of this check, now used for `MEDIA-171` and
+worth repeating for any load-bearing coverage claim: **temporarily break the fix and confirm the
+test actually fails** — a test that passes against deliberately-broken code proves it was never
+covering that code.
 
 ## 2. Correction to Phase 0's own build-verification record
 
