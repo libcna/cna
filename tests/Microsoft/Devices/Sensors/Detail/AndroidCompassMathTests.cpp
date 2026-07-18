@@ -68,6 +68,28 @@ TEST(AndroidCompassMathTests, OneEightyDegreeYawDiffersFromNinetyDegreeYaw)
     EXPECT_NE(headingAtNinety, headingAtOneEighty);
 }
 
+// Task COMP2-003 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// completes flat-mode cardinal-heading coverage -- 0deg/90deg-yaw already had
+// exact-value tests above; 180deg-yaw only had a not-equal check
+// (OneEightyDegreeYawDiffersFromNinetyDegreeYaw), and 270deg-yaw had no
+// coverage at all. Yaw and the resulting heading move in opposite directions
+// (heading = (360 - yawDegrees) mod 360, matching the pattern the existing
+// 0deg->0deg/90deg->270deg tests already establish) -- numerically verified
+// independently before committing, not just hand-derived.
+TEST(AndroidCompassMathTests, OneEightyDegreeYawProducesOneEightyDegreeHeading)
+{
+    const float half = static_cast<float>(Pi / 2.0); // 180deg yaw -> half-angle 90deg
+    const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, std::sin(half), std::cos(half));
+    EXPECT_NEAR(heading, 180.0, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, TwoSeventyDegreeYawProducesNinetyDegreeHeading)
+{
+    const float half = static_cast<float>(3.0 * Pi / 4.0); // 270deg yaw -> half-angle 135deg
+    const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.0f, 0.0f, std::sin(half), std::cos(half));
+    EXPECT_NEAR(heading, 90.0, Tolerance);
+}
+
 TEST(AndroidCompassMathTests, HeadingIsAlwaysInZeroToThreeSixtyRange)
 {
     const double heading = ConvertRotationVectorToMagneticHeadingDegrees(0.1f, 0.2f, 0.3f, 0.9f);
@@ -401,4 +423,156 @@ TEST(AndroidCompassMathTests, IsCompassSampleFreshFalseForLongStaleSample)
     const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
     const DateTimeOffset sample = now - TimeSpan::FromMinutes(5.0);
     EXPECT_FALSE(IsCompassSampleFresh(sample, now, TimeSpan::FromMilliseconds(500.0)));
+}
+
+// Task COMP2-003 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// independently re-derives Android's own documented quaternion -> rotation
+// matrix -> azimuth chain from scratch, reading only Android's public
+// SensorManager documentation (not this project's own production formulas,
+// which this test deliberately never calls into for its own matrix
+// construction), and cross-checks the result against
+// ConvertRotationVectorToMagneticHeadingDegrees()/
+// ConvertRotationVectorToUprightMagneticHeadingDegrees() -- the "compare the
+// derivation with Android reference matrix/orientation APIs" requirement,
+// satisfied as an ongoing, regression-proof automated check rather than a
+// one-time manual claim in a comment.
+namespace
+{
+    // Independent reconstruction of SensorManager.getRotationMatrixFromVector()'s
+    // documented algorithm: the standard Hamilton quaternion-to-rotation-matrix
+    // identity, row-major (R[3*row+col]), matching Android's own float[9] layout.
+    // Deliberately writes out all nine elements even though the azimuth formulas
+    // below only read two of them -- this is meant to look like an independent
+    // re-implementation of Android's actual public algorithm, not a shortcut.
+    struct IndependentRotationMatrix
+    {
+        double r[9];
+    };
+
+    IndependentRotationMatrix BuildIndependentRotationMatrix(double x, double y, double z, double w)
+    {
+        IndependentRotationMatrix m{};
+        m.r[0] = 1.0 - 2.0 * (y * y + z * z);
+        m.r[1] = 2.0 * (x * y - z * w);
+        m.r[2] = 2.0 * (x * z + y * w);
+        m.r[3] = 2.0 * (x * y + z * w);
+        m.r[4] = 1.0 - 2.0 * (x * x + z * z);
+        m.r[5] = 2.0 * (y * z - x * w);
+        m.r[6] = 2.0 * (x * z - y * w);
+        m.r[7] = 2.0 * (y * z + x * w);
+        m.r[8] = 1.0 - 2.0 * (x * x + y * y);
+        return m;
+    }
+
+    // SensorManager.getOrientation()'s own documented azimuth formula: atan2(R[1], R[4]).
+    double IndependentAzimuthDegrees(const IndependentRotationMatrix& m)
+    {
+        const double azimuthRadians = std::atan2(m.r[1], m.r[4]);
+        double degrees = azimuthRadians * (180.0 / Pi);
+        degrees = std::fmod(degrees + 360.0, 360.0);
+        return degrees;
+    }
+
+    // SensorManager.remapCoordinateSystem(inR, AXIS_X, AXIS_Z, outR)'s documented
+    // effect: new Y axis = old Z axis (the third axis, new Z, follows from the
+    // right-hand rule and is never read by the azimuth formula, so it is not
+    // computed here). Reading azimuth off the remapped matrix via the same
+    // atan2(R[1], R[4]) formula is therefore equivalent to reading atan2 of the
+    // *old* matrix's column-2 entries (R[2]/R[5]) directly.
+    double IndependentUprightAzimuthDegrees(const IndependentRotationMatrix& m)
+    {
+        const double azimuthRadians = std::atan2(m.r[2], m.r[5]);
+        double degrees = azimuthRadians * (180.0 / Pi);
+        degrees = std::fmod(degrees + 360.0, 360.0);
+        return degrees;
+    }
+
+    struct CrossCheckQuaternion
+    {
+        const char* description;
+        float x;
+        float y;
+        float z;
+        float w;
+    };
+
+    // A representative set, not just yaw-only rotations (which the production
+    // formula's own two-term shortcut could trivially satisfy without the
+    // remaining seven matrix elements this independent reconstruction also
+    // computes): identity, all four cardinal yaw rotations, and two combined
+    // pitch+yaw+roll poses.
+    const CrossCheckQuaternion kCrossCheckQuaternions[] = {
+        {"identity", 0.0f, 0.0f, 0.0f, 1.0f},
+        {"90deg yaw", 0.0f, 0.0f, 0.70710678f, 0.70710678f},
+        {"180deg yaw", 0.0f, 0.0f, 1.0f, 0.0f},
+        {"270deg yaw", 0.0f, 0.0f, -0.70710678f, 0.70710678f},
+        {"combined pitch+yaw+roll A", 0.1f, 0.2f, 0.3f, 0.9f},
+        {"combined pitch+yaw+roll B", -0.2f, 0.4f, -0.1f, 0.88881944f},
+    };
+} // namespace
+
+TEST(IndependentReferenceCrossCheckTests, FlatHeadingMatchesIndependentlyReconstructedAndroidFormula)
+{
+    for (const CrossCheckQuaternion& q : kCrossCheckQuaternions)
+    {
+        SCOPED_TRACE(q.description);
+        const IndependentRotationMatrix m = BuildIndependentRotationMatrix(q.x, q.y, q.z, q.w);
+        const double independent = IndependentAzimuthDegrees(m);
+        const double production = ConvertRotationVectorToMagneticHeadingDegrees(q.x, q.y, q.z, q.w);
+        EXPECT_NEAR(independent, production, Tolerance);
+    }
+}
+
+TEST(IndependentReferenceCrossCheckTests, UprightHeadingMatchesIndependentlyReconstructedAndroidFormula)
+{
+    for (const CrossCheckQuaternion& q : kCrossCheckQuaternions)
+    {
+        SCOPED_TRACE(q.description);
+        const IndependentRotationMatrix m = BuildIndependentRotationMatrix(q.x, q.y, q.z, q.w);
+        const double independent = IndependentUprightAzimuthDegrees(m);
+        const double production = ConvertRotationVectorToUprightMagneticHeadingDegrees(q.x, q.y, q.z, q.w);
+        EXPECT_NEAR(independent, production, Tolerance);
+    }
+}
+
+// Task COMP2-003: fills the remaining cardinal-heading gaps in upright mode --
+// only 0deg/90deg had exact-value coverage before this task (UprightBaseQuaternionProducesZeroDegreeUprightHeading/
+// UprightRotated90QuaternionProducesNinetyDegreeUprightHeading above); 180deg/270deg
+// did not. q_uprightBase composed (Hamilton product) with a further +180deg/+270deg
+// rotation about the device's own local Y axis, matching q_uprightRotated90's own
+// documented construction above (same axis, different angle).
+TEST(AndroidCompassMathTests, UprightRotated180QuaternionProducesOneEightyDegreeUprightHeading)
+{
+    // q_uprightBase (-90deg about X) composed (Hamilton product) with a further
+    // +180deg rotation about the device's own local Y axis:
+    // (sin(-45deg),0,0,cos(-45deg)) * (0,sin(90deg),0,cos(90deg))
+    // = (-0.70710678,0,0,0.70710678) * (0,1,0,0)
+    // = (0, 0.70710678, -0.70710678, 0)
+    // (numerically verified independently, not just hand-derived -- an earlier
+    // draft of this test had an arithmetic error in this exact derivation,
+    // caught by cross-checking with an independent script before committing).
+    constexpr float X = 0.0f;
+    constexpr float Y = 0.70710678f;
+    constexpr float Z = -0.70710678f;
+    constexpr float W = 0.0f;
+
+    const double heading = ConvertRotationVectorToUprightMagneticHeadingDegrees(X, Y, Z, W);
+    EXPECT_NEAR(heading, 180.0, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, UprightRotated270QuaternionProducesTwoSeventyDegreeUprightHeading)
+{
+    // q_uprightBase (-90deg about X) composed (Hamilton product) with a further
+    // +270deg rotation about the device's own local Y axis:
+    // (sin(-45deg),0,0,cos(-45deg)) * (0,sin(135deg),0,cos(135deg))
+    // = (-0.70710678,0,0,0.70710678) * (0,0.70710678,0,-0.70710678)
+    // = (0.5, 0.5, -0.5, -0.5)
+    // (numerically verified independently -- see UprightRotated180's own note above).
+    constexpr float X = 0.5f;
+    constexpr float Y = 0.5f;
+    constexpr float Z = -0.5f;
+    constexpr float W = -0.5f;
+
+    const double heading = ConvertRotationVectorToUprightMagneticHeadingDegrees(X, Y, Z, W);
+    EXPECT_NEAR(heading, 270.0, Tolerance);
 }

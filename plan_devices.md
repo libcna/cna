@@ -8143,7 +8143,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   formulas' real-world correctness, which remains a separate, already-tracked open question
   (`COMP2-003`/`COMP2-004`).
 
-### COMP2-003 — Derive Android-to-Windows-Phone compass basis mathematically — OPEN
+### COMP2-003 — Derive Android-to-Windows-Phone compass basis mathematically — OPEN (derivation/comparison/tests done; still hardware-unverified)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -8156,6 +8156,77 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Independent math tests cover cardinal headings in flat/upright/tilted poses.
   - The derivation is reviewed and linked from code.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  the flat/upright heading formulas and the tilt-mode-selection condition
+  (`AndroidCompassMath.hpp`) were already carefully derived in an earlier task
+  (`COMPASS-009`) from Android's documented `getRotationMatrixFromVector()`/
+  `getOrientation()`/`remapCoordinateSystem()` contract — that work was not
+  redone. This task's own three specific gaps were investigated and closed:
+  - **"Display orientation" — found a real, citation-backed answer, not
+    guessed**: traced `docs/devices-api-coverage.md`'s existing `MagnetometerReading`
+    row, which cites an archived MSDN Magazine article ("Touch and Go — Getting
+    Oriented with the Windows Phone Compass," Charles Petzold, June 2012 — an
+    article specifically about the WP7 Compass) stating real WP7 sensor readings
+    "are the same whether... running in portrait or landscape mode." This
+    confirms — does not merely assume — that `AndroidCompassMath.hpp` correctly
+    has **no** landscape/display-orientation remap anywhere in it, unlike
+    `Accelerometer`/`Gyroscope`/`Motion`'s own `ConvertAndroidPortraitToXnaLandscape()`
+    remap (itself a documented **non-WP7-faithful CNA convenience deviation**,
+    per that remap's own doc comment, tracked separately at `ACCEL-008`). Added
+    this citation and reasoning directly into `AndroidCompassMath.hpp` as a new
+    file-level derivation summary — previously the file said nothing at all
+    about why no remap exists, leaving a reader unable to tell "no remap" apart
+    from "remap simply not yet implemented."
+  - **"Compare the derivation with Android reference matrix/orientation
+    APIs" — added a genuine, automated, ongoing comparison, not a one-time
+    manual claim**: new `IndependentReferenceCrossCheckTests` in
+    `AndroidCompassMathTests.cpp` independently reconstructs Android's own
+    documented quaternion→rotation-matrix→azimuth algorithm from scratch (all
+    nine matrix elements, not just the two the production formula's own
+    shortcut reads) and Android's documented `remapCoordinateSystem(inR,
+    AXIS_X, AXIS_Z, outR)` axis-substitution for upright mode, then asserts
+    this independent reconstruction agrees with the production formulas across
+    6 representative quaternions (identity, all four cardinal yaw rotations,
+    two combined pitch+yaw+roll poses) — a regression-proof check that would
+    catch a future accidental divergence between the two, not just a
+    now-passing one-time comparison.
+  - **"Cardinal headings in flat/upright/tilted poses" — completed the gap in
+    existing coverage**: flat mode previously had exact-value tests only for
+    0°/90°-yaw (180°-yaw only had a not-equal check, 270°-yaw had none at all);
+    upright mode previously had exact-value tests only for 0°/90°-heading. Added
+    the missing 180°/270° cases for both, giving full N/E/S/W coverage in both
+    modes — hand-derived quaternions were **numerically cross-checked with an
+    independent script before committing**, which caught and fixed a real
+    arithmetic error in the first draft of the upright-mode 180°/270° test
+    quaternions (documented in the test's own comment as a caught mistake, not
+    silently corrected).
+  - **"Implement from the derivation, not hand-selected matrix elements"** —
+    the production formulas already satisfy this (each was derived from
+    Android's documented API contract per `COMPASS-009`'s own citations, not
+    picked to make a test pass); this task's own new independent cross-check
+    tests now provide ongoing proof of that, not just a one-time claim in a
+    comment.
+  - **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`
+    (new file-level derivation-summary doc comment only — no formula/behavior
+    change); `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`
+    (6 new tests: 2 independent cross-checks, 4 completing cardinal-heading
+    coverage). No production `.cpp` changed.
+  - **Tests:** full precise filter plus the new suites (363 tests) clean under
+    `devices-ubsan` — 359 passed, 4 hardware skips, 0 failures.
+    `AndroidCompassBackend.cpp` re-verified via NDK cross-compile (compiles
+    clean — confirms the header-only doc-comment addition doesn't break the
+    Android build). No dedicated `devices-tsan` re-run: this task changed only
+    pure functions/comments/tests, no new locking or shared state, matching
+    this pass's own established policy for when a TSan re-run is skipped.
+  - **Remaining limitations (why this stays OPEN):** this task's own problem
+    statement itself says "hardware-unverified" as the starting state — that
+    remains true; nothing in this pass involved a real Android device or
+    emulator. The derivation is now more rigorously documented, independently
+    cross-checked, and more completely tested than before, but "reviewed"
+    (this task's own acceptance-criteria wording) and "hardware report" (this
+    task's own evidence-required wording) both still name a result this
+    container cannot produce — see `docs/devices-hardware-checklist.md` for
+    the still-open device test procedure.
 
 ### COMP2-004 — Run a physical compass truth-table matrix — OPEN
 

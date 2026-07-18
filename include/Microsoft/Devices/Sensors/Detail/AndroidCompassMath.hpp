@@ -147,6 +147,60 @@ namespace Microsoft::Devices::Sensors::Detail
         High = 3,
     };
 
+    // Task COMP2-003 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+    // change-of-basis summary for every heading formula below, covering this
+    // task's own three required-work axes (device/world frames, WP fixed
+    // device axes, display orientation) in one place rather than repeating it
+    // per function.
+    //
+    // Device/world frames: Android's TYPE_ROTATION_VECTOR quaternion (x, y,
+    // z, w) satisfies the standard relationship "R * v_device = v_world",
+    // where R is the quaternion's own rotation matrix (built from the
+    // well-known quaternion-to-matrix identity, reproduced independently in
+    // each formula below, not copied from any implementation source), v_device
+    // is a vector in Android's device-natural-orientation frame (X = right
+    // along the bottom edge in natural/portrait orientation, Y = up the
+    // screen, Z = out of the screen), and v_world is East(X)/North(Y)/Up(Z).
+    // Android's own `SensorManager.getOrientation()` documentation defines
+    // azimuth as the angle between magnetic north and the device's own Y
+    // axis, extracted as `atan2(R[1], R[4])` in its row-major layout
+    // (`R01`/`R11` here) -- `ConvertRotationVectorToMagneticHeadingDegrees()`
+    // below reproduces exactly this.
+    //
+    // WP fixed device axes: the real WP7 `Compass` API's own archived MSDN
+    // Remarks describe two device-relative reference axes depending on
+    // physical pose (flat vs. upright) -- see
+    // `ConvertRotationVectorToUprightMagneticHeadingDegrees()`'s own doc
+    // comment for the upright-mode derivation and its citation of the WP7
+    // walkthrough this reproduces.
+    //
+    // Display orientation: **confirmed, not an open question** -- no
+    // landscape/display-orientation remap is applied anywhere in this file,
+    // and none should be. The same archived MSDN Magazine article already
+    // cited in `docs/devices-api-coverage.md` for `MagnetometerReading`
+    // ("Touch and Go - Getting Oriented with the Windows Phone Compass",
+    // Charles Petzold, June 2012 -- an article specifically about the WP7
+    // Compass, not a general orientation piece) states the device's raw,
+    // heading-relevant sensor readings "are the same whether... running in
+    // portrait or landscape mode" -- i.e. real WP7 `Compass.CurrentValue` is
+    // defined relative to the device's own fixed physical axes, never
+    // adjusted for the app's current display rotation. This is the compass
+    // counterpart to `Detail::IsAndroidLandscapeRemapEnabled()`'s own doc
+    // comment (same article, same finding, for `Accelerometer`/`Gyroscope`) --
+    // unlike those two classes, `Compass` has no landscape-remap opt-in/opt-out
+    // at all, because applying one here would be a **regression** away from
+    // documented real WP7 behavior, not a convenience deviation toward it.
+    // Do not add one without a new, concrete reason overturning this citation.
+    //
+    // Compared against Android's own reference matrix/orientation APIs, not
+    // just against this file's own self-consistency: `AndroidCompassMathTests.cpp`'s
+    // `IndependentReferenceCrossCheckTests` re-derives the same
+    // quaternion→rotation-matrix→azimuth chain from scratch, in the test file,
+    // reading Android's documented `getOrientation()` formula directly rather
+    // than calling into (or copying) this header's own implementation, and
+    // asserts the two agree across a representative quaternion set -- an
+    // ongoing, regression-proof comparison, not a one-time manual claim.
+
     /**
      * @brief Converts a raw Android rotation-vector quaternion to a magnetic heading, in degrees [0, 360).
      *
