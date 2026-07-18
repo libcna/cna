@@ -13,14 +13,20 @@ batches (examples, tests, tools) fanned out via the Workflow tool per decision D
 
 Direct-audit work so far: `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2),
 `backend-sdlrenderer` (2/2), `backend-dx3` (2/2, static-only per D-P4), `backend-easygl` (2/2, scoped-depth review
-of the 4733-line file per its own methodology note) — all fully AUDITED with genuine findings recorded (see
-below). **EasyGL's audit produced this pass's most severe finding (F1: dangling window-registry entry on
-constructor failure) and independently confirmed the skinned-normal-transform bug the mechanical batch had
-already surfaced from the test side (F2/F3).** Next: `backend-webgpu` (last single-file adapter), then the larger
-multi-file backends (`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`,
-`backend-vulkan`, `backend-d3dcommon` — the last of which should specifically check whether `Canvas`/`SdlGpu`/
-`WebGPU`'s own `RegisterForWindow` call sites share EasyGL's F1 ordering risk), then CNA core / Microsoft.Xna /
-Microsoft.Devices shards.
+of the 4733-line file), `backend-webgpu` (2/2, scoped-depth review of the 8805-line file — the largest in this
+audit) — **all 6 single-file backend adapters now fully AUDITED.** EasyGL's audit produced this pass's most severe
+finding (F1: dangling window-registry entry on constructor failure) and independently confirmed the
+skinned-normal-transform bug the mechanical batch had already surfaced from the test side (F2/F3); WebGPU's audit
+then confirmed the SAME skinned-normal-transform bug is present there too (its own comments admit a deliberate
+line-for-line port from EasyGL), making this now a suspected-systemic, priority cross-backend check — and
+separately confirmed WebGPU's own constructor does NOT share EasyGL's window-registration ordering bug (a model
+example of correct exception safety).
+
+Next: the larger multi-file backends (`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`,
+`backend-bgfx`, `backend-vulkan`, `backend-d3dcommon`) — each should specifically check (1) whether its own
+SkinnedEffect shader has the same missing/wrong normal-matrix transform, and (2) whether its own `RegisterForWindow`
+call site (if any) shares EasyGL's constructor-ordering risk — then CNA core / Microsoft.Xna / Microsoft.Devices
+shards.
 
 Three more mechanical-batch Workflows launched in parallel (same proven pattern as easygl): `examples-tests-bgfx`
 (98 files, run `wf_bcaa2d48-c2c`), `examples-tests-vulkan` (70 files, run `wf_97caa64c-71d`, after one transient
@@ -48,9 +54,9 @@ Next mechanical-batch candidates (same pattern, same prompt template): `examples
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **297** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
-  backend-dx3 ×2, backend-easygl ×2, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67)
-- PENDING: **2000** (+ 168 still in flight: bgfx 98, vulkan 70)
+- AUDITED so far: **299** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+  backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67)
+- PENDING: **1998** (+ 168 still in flight: bgfx 98, vulkan 70)
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 

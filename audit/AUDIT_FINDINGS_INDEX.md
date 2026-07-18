@@ -35,15 +35,19 @@ _(none recorded yet)_
   restore the render target after catching the MRT-unsupported exception is left with device-tracked state that
   doesn't match reality. Same "mutate before the fallible call" shape as the SpriteBatch::Begin() finding above.
   See [audit report](examples/sdlrenderer_rendertargets_mrt_throws_test.cpp.audit.md).
-- **EasyGL backend: `SkinnedEffect`'s shaders never apply the object's World transform to lighting normals at all
-  — CONFIRMED via direct source reading** (production-code root-cause of the finding three independent test-file
-  audits surfaced from the test side — see those reports below). `EnsureSkinnedProgram()`/
-  `EnsureSkinnedVertexLitProgram()` transform the normal with `mat3(skinMat)*aNormal` only; neither program even
-  registers a `uNormalMatrix` uniform location, unlike every non-skinned lit shader in the same file (which
-  correctly uses the inverse-transpose `uNormalMatrix`, itself a documented prior fix, Task 398). Any rotated
-  skinned model's lighting is wrong; invisible to every existing test because they all use `World=Identity`. See
-  [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F2, and the originating test
-  reports:
+- **CONFIRMED IN 2 BACKENDS: `SkinnedEffect`'s shaders never apply the object's World transform to lighting
+  normals at all.** `EnsureSkinnedProgram()`/`EnsureSkinnedVertexLitProgram()` (EasyGL) transform the normal with
+  `mat3(skinMat)*aNormal` only; neither registers a `uNormalMatrix` uniform, unlike every non-skinned lit shader
+  in the same file (which correctly uses the inverse-transpose `uNormalMatrix`, a documented prior fix, Task 398).
+  **`CreateSkinnedResources()` (WebGPU) has the byte-for-byte identical defect**, and its own surrounding comment
+  explicitly states the shader was "ported from `EasyGLGraphicsBackend::EnsureSkinnedProgram()`'s GLSL shader
+  line-for-line" — i.e. the bug was knowingly propagated as part of a deliberate cross-backend-consistency porting
+  practice. This makes it very likely every remaining backend with its own SkinnedEffect (Vulkan, Bgfx, D3D9,
+  D3D11, D3D12, SdlGpu) has the same defect. Any rotated skinned model's lighting is wrong; invisible to every
+  existing test because they all use `World=Identity`. See
+  [EasyGL audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F2,
+  [WebGPU audit report](src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp.audit.md) F1, and the
+  originating test reports:
   [easygl_skinnedeffect_preferperpixellighting_test.cpp](examples/easygl_skinnedeffect_preferperpixellighting_test.cpp.audit.md),
   [easygl_skinnedeffect_specular_test.cpp](examples/easygl_skinnedeffect_specular_test.cpp.audit.md),
   [easygl_skinnedpbreffect_golden_test.cpp](examples/easygl_skinnedpbreffect_golden_test.cpp.audit.md).
