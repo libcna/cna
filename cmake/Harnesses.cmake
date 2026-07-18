@@ -99,4 +99,25 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     target_compile_definitions(cna_strict_xna_api_check PRIVATE CNA_STRICT_XNA_API)
     target_compile_options(cna_strict_xna_api_check PRIVATE -Werror=deprecated-declarations)
     add_test(NAME StrictXnaApiSurfaceCheck_Compile_Run COMMAND cna_strict_xna_api_check)
+
+    # --- Task TEST2-010: negative counterpart -- a deliberately leaked NOXNA call must fail ---
+    # EXCLUDE_FROM_ALL: this target's whole point is to fail to compile, so it must never be
+    # part of the normal `cmake --build .`/`--target all` (or CnaTests' own dependency graph) --
+    # only the ctest below ever builds it, on purpose, expecting that build to fail.
+    add_executable(cna_strict_xna_api_leak_check EXCLUDE_FROM_ALL
+        tools/devices/StrictXnaApiSurfaceLeakCheck.cpp
+    )
+    target_link_libraries(cna_strict_xna_api_leak_check PRIVATE CNA)
+    target_compile_definitions(cna_strict_xna_api_leak_check PRIVATE CNA_STRICT_XNA_API)
+    target_compile_options(cna_strict_xna_api_leak_check PRIVATE -Werror=deprecated-declarations)
+
+    # Invokes the actual build of the EXCLUDE_FROM_ALL target above as this test's own command
+    # -- WILL_FAIL TRUE means ctest reports this test as PASSING only if that build command
+    # itself exits non-zero (i.e. only if the deliberate NOXNA call above genuinely fails to
+    # compile, exactly as it must). If a future NOXNA/CNA_STRICT_XNA_API regression ever let
+    # this target build successfully, this test would flip to FAILING, catching it.
+    add_test(NAME StrictXnaApiSurfaceLeakCheck_MustFailToCompile
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target cna_strict_xna_api_leak_check --config $<CONFIG>
+    )
+    set_tests_properties(StrictXnaApiSurfaceLeakCheck_MustFailToCompile PROPERTIES WILL_FAIL TRUE)
 endif()

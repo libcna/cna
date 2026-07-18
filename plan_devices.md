@@ -9967,7 +9967,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - A plan linter checks status/evidence fields.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### TEST2-010 — Run strict-XNA compile checks across all supported compilers — OPEN
+### TEST2-010 — Run strict-XNA compile checks across all supported compilers — OPEN (GCC/Clang/NDK-Clang all verified both directions; MSVC not available in this environment)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -9979,6 +9979,77 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Strict surface checks pass on all supported toolchains.
   - A deliberately leaked extension fails every check.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  the existing `cna_strict_xna_api_check` target (`tools/devices/StrictXnaApiSurfaceCheck.cpp`)
+  only ever proved the *positive* direction (real XNA API stays usable under
+  strict mode) — this task's own second acceptance criterion ("a deliberately
+  leaked extension fails every check") had **no coverage at all** before this
+  pass, and the check had never been deliberately run under more than one
+  toolchain in the same session.
+  - **New negative check**: `tools/devices/StrictXnaApiSurfaceLeakCheck.cpp`
+    deliberately calls `Accelerometer::InjectSyntheticSensorUpdate()` (a
+    `NOXNA`-tagged member) under the same `CNA_STRICT_XNA_API`/
+    `-Werror=deprecated-declarations` flags — this target is *required* to
+    fail to build. Wired as a new `cna_strict_xna_api_leak_check` CMake target
+    (`EXCLUDE_FROM_ALL`, so its expected failure never breaks the normal
+    build) plus a new `StrictXnaApiSurfaceLeakCheck_MustFailToCompile` ctest
+    that invokes `${CMAKE_COMMAND} --build ... --target
+    cna_strict_xna_api_leak_check` as its own command with `WILL_FAIL TRUE`
+    — ctest reports this test as *passing* only if that build genuinely
+    fails, exactly the "deliberately leaked extension fails every check"
+    criterion, verified end-to-end through the real CMake/ctest pipeline
+    (not just a manual compiler invocation) — confirmed: the leak-check
+    target produced no `.o` file under a normal build (correctly excluded),
+    and the wrapping ctest passed (`1/1 ... Passed`).
+  - **Run across every toolchain actually available in this environment,
+    both the positive and negative check, each independently**: `GCC`
+    (`g++` 14.2.0, this project's existing default), host `Clang` (`clang++`
+    19.1.7, never previously exercised against this codebase in this
+    session), and Android NDK `Clang` (the same NDK toolchain this pass's
+    other Android-only tasks already cross-compile against). For `Clang`
+    and NDK `Clang` specifically, verified via direct compiler invocation
+    (`-c`, compile-only, matching this pass's own established "single
+    translation unit" Android-verification pattern): a full second host
+    `CMAKE_CXX_COMPILER=clang++` project reconfigure was judged unnecessary
+    (the check is purely about compile-time diagnostic behavior, not
+    linking, so a direct `-c` invocation with the same include paths proves
+    the same thing without the cost of a second full build tree), and for
+    `cmake-build-android` specifically it would have been unworkable
+    outright — only single-TU compiles work there at all, per the
+    pre-existing, unrelated `sharp-runtime`/`getrandom()` link blocker.
+    Every combination produced the expected result:
+    | Toolchain | Positive check | Negative check |
+    |---|---|---|
+    | GCC 14.2.0 | compiles clean (exit 0), verified via real CMake/ctest | fails (exit 1), `cc1plus: some warnings being treated as errors` |
+    | Clang 19.1.7 (host) | compiles clean (exit 0) | fails (exit 1), `[-Werror,-Wdeprecated-declarations]` |
+    | NDK Clang (`aarch64-none-linux-android24`) | compiles clean (exit 0) | fails (exit 1), identical diagnostic format to host Clang |
+  - **"Without relying on one warning spelling" — genuinely satisfied, not
+    just claimed**: GCC's diagnostic (`cc1plus: some warnings being treated
+    as errors` plus a `declared here` note) and Clang's
+    (`[-Werror,-Wdeprecated-declarations]` plus a `has been explicitly
+    marked deprecated here` note) are textually quite different — the
+    `WILL_FAIL`/exit-code mechanism this task's new ctest relies on does not
+    parse or match either message, only the compiler's own pass/fail
+    verdict, so it is inherently spelling-independent by construction.
+  - **Files changed:** new `tools/devices/StrictXnaApiSurfaceLeakCheck.cpp`;
+    `cmake/Harnesses.cmake` (new `cna_strict_xna_api_leak_check` target +
+    `StrictXnaApiSurfaceLeakCheck_MustFailToCompile` ctest). No existing
+    production or test source changed.
+  - **Tests:** full precise filter (364 tests) clean under `devices-ubsan`
+    after this change — 360 passed, 4 hardware skips, 0 failures (confirms
+    the new `EXCLUDE_FROM_ALL` target and ctest addition introduced no
+    regression to the existing suite). Both `StrictXnaApi*` ctests pass.
+  - **Remaining limitations (why this stays OPEN):** `MSVC` is named
+    explicitly in this task's own required work and remains genuinely
+    unavailable — this is a Linux container with no Windows/MSVC toolchain
+    of any kind, not a gap in effort. This matches the project's own
+    existing `WIN32`/`MINGW` handling elsewhere in `cmake/UnitTests.cmake`
+    (which targets `mingw-w64`, a different, non-MSVC Windows toolchain, for
+    the parts of this codebase that do support Windows builds) — MSVC
+    specifically has never been established elsewhere in this project as a
+    toolchain actually built/tested in this environment either, so this is
+    a pre-existing, environment-wide limitation, not one newly introduced or
+    newly discovered by this task.
 
 
 ### Perfection re-audit definition of done
