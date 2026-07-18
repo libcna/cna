@@ -135,6 +135,32 @@ framework/runtime, not a game.
   constructor. Two new isolated-subprocess harnesses
   (`tools/audio/mixer_destroy_active_{static,dynamic}_voice_harness.cpp`). Full whole-repo suite
   green throughout, 4736/4736 pass (2 unrelated hardware skips) as of the latest commit.
+  **Continuing the same pass (2026-07-18, 10 more commits, `49d13276`..`94c99a9b`): AUD-06 is now
+  fully closed (0 remaining, all 25 tasks `[x]`).** `AUD-06-010`: the `.xnb`'s own stored `duration`
+  field is now used as a validation oracle against the actually-decoded duration (2x/0.5x
+  threshold, empirically calibrated against all 6 real fixtures). `AUD-06-014`: proved (with a
+  hand-built ~4:1-compression IMA-ADPCM fixture) that XNB loop points are frame-based end-to-end,
+  never confused with compressed byte offsets. `AUD-06-016`/`018`/`019`: golden-tested exact
+  byte-consumption across the three format-chunk size classes, the mono/stereo-only channel
+  policy, and loopless-vs-looped semantics (composition of two existing tests, no new gap besides
+  the loopless case). `AUD-06-020`: documented compressed-container + compressed-audio coverage by
+  composition (no real compressed-audio fixture exists in this corpus, and CNA has no LZX
+  *encoder* to synthesize one). `AUD-06-021`: genuine differential test against **real** FNA
+  logic -- built a standalone `mono`/`mcs`-compiled tool
+  (`tools/audio/fna_soundeffect_metadata_dump/`) that copies FNA's actual `SoundEffectReader.cs`
+  field-reading logic verbatim and ran it against all 6 real fixtures: **zero metadata
+  discrepancies** against CNA's own established behavior; decoded-*sample* differential testing is
+  documented as a genuine environment limitation (no FAudio build available here).
+  `AUD-06-022`/`023`: new deterministic property-based WAVEFORMATEX boundary-value sweep (1120
+  combinations) -- this is what **found a real bug**: the direct-PCM16 fast path never got
+  `AUD-06-024`'s exception-context treatment (only `BuildViaWavWrapper` did), so an invalid sample
+  rate let a raw, asset-context-free `System::NotSupportedException` escape. Fixed via a new
+  `BuildDirectPcm16()` helper mirroring `BuildViaWavWrapper`'s exact pattern, git-stash
+  regression-verified. `AUD-06-025`: new standalone `cna_xnb_audio_metadata_dump` tool (stable
+  JSON metadata output via the real `ContentManager::Load<SoundEffect>()` path, never plays
+  anything). Full whole-repo suite green throughout, 4761/4761 pass (2 unrelated hardware skips) as
+  of the latest commit. See `plan_audio.md`'s `AUD-06-*` entries for full evidence/citations on
+  each.
 - **Build (historical, Phase 9-14):** clean, rebuilt and reverified this pass (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/
   `P14-ORDER-001`/`P14-PARSER-001`, a second user-provided external audit's fixes, on top of
   `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001`, `P12-BANK-001`, `P11-PAN-002`,
@@ -1154,37 +1180,33 @@ Phase 9-14's closure was -- the user's own 2026-07-17 instruction authorized wor
 own recommended priority order (see `docs/cna_audio_deep_audit_2026-07-17.md`'s "Recommended
 implementation order" and `plan_audio.md`'s own priority rules):
 
-**Status as of the `AUD-04-008/009` close (2026-07-18): `AUD-02` structured diagnostics,
-`AUD-07-008`, `AUD-09`'s 5 golden Apply3D/Doppler cases, `AUD-10-005/006/013`, `AUD-11-001/002/
-008/009/010/011`, and all of `AUD-04-001` through `AUD-04-009` are now `[x]` -- the list below is
-refreshed accordingly; do not re-pick any of those.**
+**Status as of the `AUD-06` section close (2026-07-18, commit `94c99a9b`): `AUD-06` is now fully
+closed (all 25 tasks `[x]`, 0 open) -- do not re-pick anything from it.** Also closed this same
+pass, as before: `AUD-02` structured diagnostics, `AUD-07-008`, `AUD-09`'s 5 golden Apply3D/Doppler
+cases, `AUD-10-005/006/013`, `AUD-11-001/002/008/009/010/011/012/013`, all of `AUD-04-001` through
+`AUD-04-009`/`014`-`016`, and `AUD-15-017`. The list below is refreshed accordingly.
 
-1. **`AUD-04-002/003`** -- verify pitch is preserved when the requested mixer spec (44.1 kHz) and
-   the *physical device's own* native rate differ (48 kHz device, 44.1 kHz device, etc.). Still
-   genuinely open: `AUD-04-004`'s device-open floor-clamp test proved SDL3's OWN device-open floor
-   behavior but cannot exercise a real physical device offering something *other* than the floor
-   (the dummy driver has no independent native format of its own -- see `AUD-04-004`'s evidence
-   note). May need a real (non-dummy) audio backend in CI, or may have to stay documented-as-
-   untestable-headlessly if no such environment is available.
-2. **`AUD-04-010/011`** (P1) -- output-device change / device-loss-reopen handling. No code exists
-   for either today; needs a design decision on migration-vs-stop-with-event before implementing.
-3. **`AUD-04-014/015/016`** (P1) -- master-volume-applied-exactly-once, mixer-gain-consistency,
-   and extreme-aggregate-gain-NaN/clipping tests. Likely straightforward to verify/lock down given
-   the existing `MIX_SetMixerGain`/`MIX_SetTrackGain` composition (CP-16) is already understood
-   from this session's `AUD-04` work.
-4. **`AUD-05`'s remaining validation items** (`AUD-05-004/005/006/007/009/010-016`) -- loop-region
-   bounds validation, raw-PCM16LE-not-a-container documentation, RIFF/Ogg/XNB-signature misuse
-   detection, mono/stereo interleaving verification, endianness policy. The golden sample-rate
-   matrix (017-030) is already fully closed; these are the format-contract/validation items, a
-   different half of AUD-05 not yet started.
-5. **`AUD-06`'s remaining items** (`AUD-06-010/013/014/015`) -- XNB duration-as-validation-oracle,
-   WAVEFORMATEX coherence checks, loop-point-vs-decoded-frames validation, Xbox-endian fixtures.
-6. **`AUD-11`'s remaining items** -- streaming offset/alignment validation (`AUD-11-015/016`),
-   seek tables, wave caching; the WaveBank format-handling items (IMA-ADPCM/XMA/WMA/compact-XWB)
-   are all closed.
-7. **`AUD-15`'s remaining thread-safety/lifetime items** -- this session's `AUD-04-008/009` work
-   found two real memory-safety defects via exactly this kind of "what if X runs concurrently with
-   Y" testing; `AUD-15`'s own remaining 19 open items (concurrent submit/dispose races, Dispose-
+1. **`AUD-11`'s remaining P0 items** (`AUD-11-005/006/007/014/015/016`) -- compact/noncompact
+   metadata-size + segment-overlap validation, golden PCM8/PCM16 wave-bank entry tests, loop
+   regions using sample frames with codec-aware mapping, streaming offset/alignment validation,
+   streaming file-I/O failure handling. Natural next candidates: this session's XACT/WaveBank work
+   (`AUD-11-008/012/013`) already established the fixture-building and formula-verification
+   patterns these need.
+2. **`AUD-11`'s remaining P1/P2 items** (12 open: `017`-`028`) -- name-lookup edge cases, padding,
+   old XWB versions, seek tables, wave caching + concurrency safety, fuzzing, WAV-wrapper field
+   validation, an XWB inspection tool (mirrors `AUD-06-025`'s just-closed pattern).
+3. **`AUD-04`'s remaining items** (10 open) -- `AUD-04-002/003` (device-negotiation pitch
+   preservation) need a real, non-dummy audio backend to test meaningfully -- may have to stay
+   documented-as-untestable-headlessly. `AUD-04-010/011` (device change/loss handling) need a
+   design decision (migrate-vs-stop-with-event) before implementing -- confirm with the user first,
+   per §9. `AUD-04-012/013/017/018/019/020` (P1/P2 latency/capability/documentation items) are more
+   readily self-startable.
+4. **`AUD-05`'s remaining 2 items** (`AUD-05-010/011`, endianness policy + a NOXNA buffer
+   descriptor) are both deliberately-deferred design-decision items -- do not silently pick these,
+   confirm scope with the user first (see §9).
+5. **`AUD-15`'s remaining thread-safety/lifetime items** (18 open) -- this session's `AUD-04-008/009`
+   work found two real memory-safety defects via exactly this kind of "what if X runs concurrently
+   with Y" testing; `AUD-15`'s own remaining items (concurrent submit/dispose races, Dispose-
    during-callback, etc.) are a natural continuation of the same investigative approach.
 
 **Do not re-run a fresh full audit or restart from AUD-00** -- the audit and the 438-task plan
