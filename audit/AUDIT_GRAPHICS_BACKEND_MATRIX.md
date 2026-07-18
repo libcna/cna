@@ -1,6 +1,9 @@
 # AUDIT_GRAPHICS_BACKEND_MATRIX.md — Cross-Backend Capability Matrix
 
-**Status: SKELETON — to be populated during Pass 4, after per-backend per-file audits (Pass 2) provide evidence.**
+**Status: PARTIALLY POPULATED (2026-07-19).** All 16 backend shards are now directly audited (Pass 2 backend
+work complete). The cross-cutting defect matrix below is fully evidenced and populated. The full ~30-feature
+grid (presentation modes, disposal, sRGB/gamma, CI coverage, etc.) still needs the `xna-graphics`/`tests-*`
+shards (Task #4/#6) for several cells and remains SKELETON below.
 
 ## Confirmed backend list (verified against the repository, 2026-07-18)
 
@@ -38,16 +41,55 @@ line/file count.
 
 ## Feature-by-feature matrix
 
-**To be filled in during Pass 4** using the full feature list from the audit prompt §13 (init, device/adapter,
-presentation, resize, fullscreen, clear, render targets/MRT, backbuffer +readback, texture create/upload/readback/
-formats/compressed/mipmaps/cubemaps, depth/stencil, blend/rasterizer/sampler state, vertex/index buffers (static +
-dynamic), vertex declarations, primitive/indexed drawing, instancing, shader create/compile/bind/constants, effect
-plumbing, SpriteBatch paths, MSAA, sRGB/gamma, coordinate/clip-space/winding conventions, disposal, device
-reset/loss, error reporting, sync/stalls, shutdown, platform availability, CI coverage, test coverage) — classified
-per backend as `FULL` / `PARTIAL` / `STUB` / `UNSUPPORTED_INTENTIONALLY` / `MISSING_UNEXPECTEDLY` /
-`NOT_APPLICABLE` / `NOT_VERIFIED`, each with an evidence citation (symbol/file/test).
+**Full ~30-feature x 16-backend grid (init, presentation, MSAA, sRGB/gamma, disposal, CI coverage, etc.) is
+still to be populated** — many of those features' evidence lives in shards not yet audited (`xna-graphics`
+for disposal/effect semantics, `tests-*`/CI config for coverage). The sections below populate the
+**cross-cutting defect matrix**, which IS fully evidenced now that all 16 backend shards are directly
+audited (Pass 2 complete for backends) — this is the highest-value, freshest-evidence part of Pass 4 to do
+immediately; the remaining feature cells should be filled in as `xna-graphics`/`tests-*` shards are audited
+(Task #4/#6), since several features (disposal, effect-parameter plumbing) are only meaningfully verifiable
+against that XNA-facing code, not the backend internals alone.
 
-_(populated after Pass 2 backend shard audits complete — see AUDIT_PROGRESS.md for current phase)_
+### Cross-cutting defect matrix (fully evidenced — Pass 2 backend audits complete)
+
+Every row below cites the backend(s) confirmed to share the defect, confirmed NOT to share it (a genuine
+positive), and N/A where the defect class cannot apply (e.g. no deferred-recording model to have a
+render-target-scissor bug in). "?" = not yet directly checked (backend not yet reached this specific test,
+even though its own shard is otherwise audited). See `AUDIT_CROSS_CUTTING_FINDINGS.md` for full narrative detail
+on every row.
+
+| Defect | Confirmed AFFECTED | Confirmed CLEAN (positive) | N/A / not applicable |
+|---|---|---|---|
+| Fog formula backwards (pre-Task-1111 mirrored `(FogEnd-z)/(FogEnd-FogStart)` vs. correct `(z+FogEnd)/(FogEnd-FogStart)`) | Bgfx, Vulkan (**original source**), D3D11+D3D12 (shared D3DCommon, all 15 fog shaders) | EasyGL (fixed pre-session) | D3D9 vendored stock effects (real `ComputeFogVectorEXT()`, correct FNA port); D3D9 CNA-custom shaders have a *different* defect (object-space-only, see below), not this one |
+| SkinnedEffect world-space-normal-transform (complete omission variant) | EasyGL, WebGPU, Vulkan, SdlGpu, D3D11+D3D12, Bgfx — **ALL 14 backends with a SkinnedEffect implementation, exhaustively confirmed** | — | D3D9 vendored stock `SkinnedEffect.fx` (real Microsoft bytecode, bug structurally impossible) |
+| SkinnedEffect normal-transform narrower variant (raw World, not inverse-transpose, applied post-skin) | EasyGL, SdlGpu, D3D9 (`SkinnedVertexColor3D`/`PbrSkinned3D`), D3D11+D3D12 PBR-skinned | — | — |
+| EnvironmentMapEffect emissive/diffuse re-multiply (`(emissive+lightSum)*diffuse` instead of unscaled add) | Bgfx (**original**), WebGPU, Vulkan, SdlGpu | D3D9's own PBR shaders (`ambient+Lo+emissive`, correct); Vulkan's own PBR shaders (same correct pattern) | D3D11/D3D12 not yet directly re-checked for this specific bug in this pass |
+| SkinnedEffect Ambient/Emissive dropped for skinned draws | Vulkan (both fields), D3D11+D3D12 (Emissive half only) | EasyGL, Bgfx, SdlGpu, **D3D9** (4 independent confirmations of the "Ambient pre-folded into Emissive" convention — revises the likely root cause toward backend-side misconsumption, not an upstream `SkinnedEffect::FillGpuDrawParams()` defect) | D3D9 vendored stock `SkinnedEffect.fx` (structurally impossible, real bytecode) |
+| Missing Vulkan-NDC Y-flip (renders mirrored) | Vulkan only, 4 effect families (EnvironmentMapEffect, PbrEffect, SkinnedPbrEffect, InstancedEffect) | Vulkan's own other 14 shader families; D3D11/D3D12 correctly and deliberately never apply it (D3D clip space already matches XNA) | D3D9 (same D3D clip-space convention, no flip needed); sprite2d shaders project-wide (own pixel-to-NDC mapping) |
+| `SpriteBatch.SetTransformMatrix()` no-op | Vulkan only | EasyGL, Bgfx, D3D9, D3D11, WebGPU, SdlGpu, SdlRenderer, Canvas, Dx3, Software, Headless, Ascii (via delegation) | — |
+| `RegisterForWindow` dangling-pointer-on-construction-failure | EasyGL only | WebGPU, Canvas, SdlGpu (own different resource-leak risk instead), D3D11, D3D12, Bgfx, Vulkan, D3D9 (none of these 6 call `RegisterForWindow` at all) | Ascii, Software, Headless, SdlRenderer, Dx3 (not yet re-checked for this specific call in this pass) |
+| Stencil + Scissor + DepthBias completeness | D3D12 (Stencil+Scissor: completely non-functional, PSO hardcodes `StencilEnable=FALSE`/never sets `ScissorEnable`); Vulkan (Scissor only: silently ignored whenever a render target is bound, no Viewport-style disclosure); SdlGpu (DepthBias only: not yet emulated, disclosed) | **D3D9 (all 3, most complete of any backend — direct native render states, no emulation)**; Bgfx (all 3, via stencil-state-rebuild + scissor-flag + vertex-shader-Z-offset emulation); SdlGpu (Stencil+Scissor functional) | D3D9's immediate rendering model structurally cannot have Vulkan's RT-bound-scissor-bug shape at all |
+| Occlusion query multi-draw-per-Begin/End accumulation | D3D12 (each draw gets its own BeginQuery/EndQuery on the same heap slot, later draws overwrite earlier ones') | **D3D9 (structurally immune — immediate `Issue(BEGIN)`/`Issue(END)` around however many draws happen between them, natural GPU-level accumulation, no bookkeeping needed)** | — |
+| `SetDataOptions::NoOverwrite` has no destination-offset parameter (streaming semantics architecturally impossible) | D3D11, EasyGL, **D3D9 (3rd confirmed instance)** | — | Architecture-level `IVertexBufferBackend`/`IIndexBufferBackend` interface gap — likely project-wide; not yet checked on remaining backends |
+| Whole-cube mip regeneration touches all 6 faces even when only 1 changed | SdlGpu (`TextureCube`), D3D11 (`RenderTargetCube`) | **D3D12 (`RenderTargetCube`, regenerates only the active face)** | D3D9 (`RenderTargetCube` doesn't support mip regeneration at all — honestly disclosed scope gap, not a bug) |
+| Dead-code generic `VertexElementFormat` -> native-format helper header (correct logic, zero production call sites) | Bgfx (`BgfxVertexFormatHelper.hpp`), Vulkan (`VulkanVertexFormatHelper.hpp`) | — | Architecture pattern, not itself an XNA-facing behavior bug — worth checking remaining backends' own equivalent helper (if any) |
+
+### Notable per-backend architectural extremes (not defects, context for the matrix above)
+
+- **Largest single files**: Vulkan's `VulkanGraphicsBackend.cpp` (8954 lines, despite Vulkan being a
+  multi-file backend) is the single largest file in this entire audit — surpassing WebGPU's own genuinely
+  single-file backend (8805 lines) and EasyGL's own single-file backend (4733 lines). D3D9 (50 files, no
+  single file over ~1200 lines) sits at the opposite extreme of the same "monolithic vs. split" spectrum noted
+  in the file-count table above.
+- **Most XNA-authentic design goal, explicitly stated**: D3D9's own class-level doc comment states its goal as
+  "pixel-for-pixel indistinguishability from the original XNA 4.0 runtime, not mere feature parity" — a
+  stricter bar than D3D11/D3D12's own stated "parity, not authenticity," backed by concrete evidence
+  (61/66 byte-identical vendored-shader matches against Microsoft's real shipped bytecode, per
+  `compare_against_fxb.py`; real Reach/HiDef `D3DCAPS9`-backed profile enforcement; loud MRT-over-request
+  errors rather than silent degradation).
+- **Most complete PBR fragment shader**: Bgfx's, per that shard's own audit (real AlphaTest + real fog on top
+  of the base glTF BRDF) — though D3D9's and Vulkan's own PBR shaders both independently get the
+  emissive-combination formula right too (see matrix row above).
 
 ## EasyGL cross-comparison
 
