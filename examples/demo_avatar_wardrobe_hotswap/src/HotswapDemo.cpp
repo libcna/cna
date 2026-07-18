@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "../../common/ScreenshotEXT.hpp"
+#include "../../common/SimpleFontEXT.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -36,32 +37,10 @@ namespace
         return "?";
     }
 
-    // Task 8 (plan_net.md Phase 8): same pattern as demo_avatar's own AvatarDemo.
-    std::unique_ptr<SpriteFont> MakeSimpleFont(GraphicsDevice& device)
-    {
-        const std::vector<uint8_t> px = {255, 255, 255, 255};
-        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
-
-        std::vector<SharpRuntime::charcs> chars;
-        std::vector<Rectangle> bounds;
-        std::vector<Rectangle> cropping;
-        std::vector<Vector3> kerning;
-        for (char c = 32; c < 127; ++c)
-        {
-            chars.push_back(static_cast<SharpRuntime::charcs>(c));
-            // SpriteBatch::DrawString sizes each glyph's destination rectangle from `bounds`
-            // (glyphData), not `cropping` - a (0,0,1,1) bounds rect draws every character as a
-            // single sub-pixel dot instead of a visible block. Space is left zero-size so word
-            // gaps stay visible against the solid blocks used for every other printable
-            // character.
-            bounds.push_back(c == ' ' ? Rectangle(0, 0, 0, 0) : Rectangle(0, 0, 6, 10));
-            cropping.push_back(Rectangle(0, 0, 8, 14));
-            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
-        }
-
-        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
-                                             static_cast<SharpRuntime::charcs>(' '));
-    }
+    // Post-plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
+    // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
+    // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
+    // (every character rendered as an identical rectangle) by an independent audit.
 
     // Task 8.2: decision 5a's default text block, adapted per this task's own instruction (keep
     // the F1/Esc lines identical across every demo, customize the rest).
@@ -160,7 +139,7 @@ void HotswapDemo::LoadContent()
     spriteBatch_ = std::make_unique<SpriteBatch>(device);
     const std::vector<uint8_t> px = {255, 255, 255, 255};
     whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, px));
-    font_ = MakeSimpleFont(device);
+    font_ = CNAExamplesEXT::MakeSimpleFontEXT(device);
 
     getWindowProperty().setTitleProperty(
         "CNA Avatar Wardrobe Hotswap - hair: baked-in (Tab: cycle, F1: help, Esc: quit)");
@@ -233,12 +212,15 @@ void HotswapDemo::Draw(const GameTime& /*gameTime*/)
     if (showHelpEXT_)
     {
         constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
-        constexpr float kLineHeight = 18.0f;
+        // The real 5x7 bitmap font (CNAExamplesEXT::MakeSimpleFontEXT) is drawn at 1.5x scale -
+        // legible, and small enough that the longest help line still fits an 800px-wide window.
+        constexpr float kTextScale = 1.5f;
+        constexpr float kLineHeight = 13.0f;
         constexpr float kPadding = 12.0f;
         float longestLineWidth = 0.0f;
         for (const char* line : kHelpLines)
         {
-            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X);
+            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X * kTextScale);
         }
         const Rectangle panel(8, 8, static_cast<int>(longestLineWidth + kPadding * 2.0f),
                                static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
@@ -248,7 +230,8 @@ void HotswapDemo::Draw(const GameTime& /*gameTime*/)
         float y = panel.Y + kPadding;
         for (const char* line : kHelpLines)
         {
-            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255));
+            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255),
+                                      0.0f, Vector2::Zero, kTextScale, SpriteEffects::None, 0.0f);
             y += kLineHeight;
         }
         spriteBatch_->End();

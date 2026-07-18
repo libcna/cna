@@ -1185,20 +1185,29 @@ one-task-one-commit rule.
 
 ## Phase 8 — F1 help overlay for all avatar demos
 
-**Correction (2026-07-18, independent post-completion audit — read this before any "legible"
-claim below):** every "overlay legible"/"renders as legible blocky text" claim in this phase's
-task write-ups below is **inaccurate** and should be discounted. What was actually verified at the
-time was: the panel renders at the correct size, doesn't overflow, and every character produces a
-*visible* mark instead of an invisible sub-pixel dot (the real bug fixed in Task 8.5's own
-write-up below). What was **not** verified, and turned out to be false: that the rendered text is
-actually *readable*. `MakeSimpleFont` draws every non-space character as an identical solid
-rectangle — there is no letterform differentiation between 'a' and 'z' at all, so a player pressing
-F1 sees word/line structure but cannot read a single actual word. This was caught by a fresh,
-independent screenshot inspection, not by re-deriving anything new about the code. Remediation
-(a real embedded bitmap-font glyph table) is tracked as active follow-up work — see `NEXTnet.md`
-section 3/6 for current status. The rest of this phase's claims (panel sizing, hidden-by-default
-behavior, the dot-rendering bug fix itself, the pre-existing counter-text bug fix in
-`demo_avatar_multi_attach_stress`) remain accurate — only "legible"/"readable" is wrong.
+**Correction (2026-07-18, independent post-completion audit; fix landed same day — read this
+before any "legible" claim below):** every "overlay legible"/"renders as legible blocky text"
+claim in this phase's task write-ups below was **inaccurate** at the time this plan's own tasks
+were marked done. What was actually verified at the time was: the panel renders at the correct
+size, doesn't overflow, and every character produces a *visible* mark instead of an invisible
+sub-pixel dot (the real bug fixed in Task 8.5's own write-up below). What was **not** verified,
+and turned out to be false: that the rendered text was actually *readable*. `MakeSimpleFont` drew
+every non-space character as an identical solid rectangle — no letterform differentiation between
+'a' and 'z' at all, so a player pressing F1 saw word/line structure but couldn't read a single
+actual word. This was caught by a fresh, independent screenshot inspection, not by re-deriving
+anything new about the code.
+
+**Now fixed** (2026-07-18, same day as the correction above): `MakeSimpleFont` replaced everywhere
+by a new shared header, `examples/common/SimpleFontEXT.hpp`'s `CNAExamplesEXT::MakeSimpleFontEXT()`
+— a real 5x7 dot-matrix bitmap-font glyph atlas covering printable ASCII 32-126, where each
+character samples its own distinct atlas region instead of a uniform rectangle. Deliberately a
+*shared* header, not another per-demo copy — the old copy-paste convention is exactly what let the
+uniform-rectangle bug spread silently to all 8 demos in the first place. Rolled out to all 8
+avatar demos (drawn at 1.5x scale for legibility while keeping the longest help line within an
+800px window), verified with fresh screenshots of every one: text is now genuinely, fully readable
+English. See `NEXTnet.md` section 3 for the full remediation write-up. The rest of this phase's
+original claims (panel sizing, hidden-by-default behavior, the dot-rendering bug fix itself, the
+pre-existing counter-text bug fix in `demo_avatar_multi_attach_stress`) were already accurate.
 
 Per decision 5c, rolled out to **all** avatar-related demos (Phase 0 found 8:
 `demo_avatar`, `demo_avatar_animation_gallery`, `demo_avatar_appearance_tint_studio`,

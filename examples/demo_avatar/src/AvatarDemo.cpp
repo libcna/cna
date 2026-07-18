@@ -2,6 +2,7 @@
 
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
 #include "../../common/ScreenshotEXT.hpp"
+#include "../../common/SimpleFontEXT.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,36 +23,10 @@ namespace
     constexpr float kCameraHeight = 1.0f;
     constexpr float kTargetHeight = 0.9f; // roughly chest height on our ~1.7m-tall avatar
 
-    // Task 8.1 (plan_net.md Phase 8): the same 1x1-white-Texture2D-atlas SpriteFont pattern
-    // already duplicated across 11+ other demos (see demo_gamer_roster_hud/src/RosterGame.cpp's
-    // own MakeSimpleFont) - no shared examples/common/ header exists for this, so this is a
-    // deliberate copy, not a missed opportunity to share code (see this file's own AvatarDemo.hpp
-    // comment on the same point).
-    std::unique_ptr<SpriteFont> MakeSimpleFont(GraphicsDevice& device)
-    {
-        const std::vector<uint8_t> px = {255, 255, 255, 255};
-        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
-
-        std::vector<SharpRuntime::charcs> chars;
-        std::vector<Rectangle> bounds;
-        std::vector<Rectangle> cropping;
-        std::vector<Vector3> kerning;
-        for (char c = 32; c < 127; ++c)
-        {
-            chars.push_back(static_cast<SharpRuntime::charcs>(c));
-            // SpriteBatch::DrawString sizes each glyph's destination rectangle from `bounds`
-            // (glyphData), not `cropping` - a (0,0,1,1) bounds rect here previously drew every
-            // character as a single sub-pixel dot instead of a visible block. Space is left
-            // zero-size so word gaps stay visible against the solid blocks used for every other
-            // printable character.
-            bounds.push_back(c == ' ' ? Rectangle(0, 0, 0, 0) : Rectangle(0, 0, 6, 10));
-            cropping.push_back(Rectangle(0, 0, 8, 14));
-            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
-        }
-
-        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
-                                             static_cast<SharpRuntime::charcs>(' '));
-    }
+    // Post-plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
+    // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
+    // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
+    // (every character rendered as an identical rectangle) by an independent audit.
 
     // Task 8.2 (plan_net.md Phase 8): decision 5a's own default text block, verbatim - kept as
     // one line per array entry rather than embedded '\n's, since MakeSimpleFont's synthetic glyph
@@ -170,7 +145,7 @@ void AvatarDemo::LoadContent()
     spriteBatch_ = std::make_unique<SpriteBatch>(device);
     const std::vector<uint8_t> px = {255, 255, 255, 255};
     whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, px));
-    font_ = MakeSimpleFont(device);
+    font_ = CNAExamplesEXT::MakeSimpleFontEXT(device);
 
     getWindowProperty().setTitleProperty(
         (bodyType_ == AvatarBodyType::Female ? "CNA Avatar Demo [female] - " : "CNA Avatar Demo [male] - ")
@@ -255,16 +230,20 @@ void AvatarDemo::Draw(const GameTime&)
     if (showHelpEXT_)
     {
         constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
-        constexpr float kLineHeight = 18.0f;
+        // The real 5x7 bitmap font (CNAExamplesEXT::MakeSimpleFontEXT) is drawn at 2x scale -
+        // legible at native size, but small enough at 1x to be hard to read comfortably at
+        // typical window resolutions.
+        constexpr float kTextScale = 1.5f;
+        constexpr float kLineHeight = 13.0f;
         constexpr float kPadding = 12.0f;
-        // Measure via the actual SpriteFont rather than a hand-rolled char-count * advance
-        // guess - SpriteFont::spacing_ (1px, set in MakeSimpleFont) adds to the per-glyph
-        // kerning advance, so a naive strlen()*8 estimate silently undercounts and the longest
-        // line overflows the panel's right edge.
+        // Measure via the actual SpriteFont (at 1x, then scaled) rather than a hand-rolled
+        // char-count * advance guess - SpriteFont::spacing_/kerning already account for the
+        // real per-glyph advance, so a naive strlen()*N estimate would silently undercount and
+        // the longest line would overflow the panel's right edge.
         float longestLineWidth = 0.0f;
         for (const char* line : kHelpLines)
         {
-            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X);
+            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X * kTextScale);
         }
         const Rectangle panel(8, 8, static_cast<int>(longestLineWidth + kPadding * 2.0f),
                                static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
@@ -274,7 +253,8 @@ void AvatarDemo::Draw(const GameTime&)
         float y = panel.Y + kPadding;
         for (const char* line : kHelpLines)
         {
-            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255));
+            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255),
+                                      0.0f, Vector2::Zero, kTextScale, SpriteEffects::None, 0.0f);
             y += kLineHeight;
         }
         spriteBatch_->End();

@@ -96,16 +96,21 @@ Task 11.3's write-up in `plan_net.md`).
 
 ## 3. Known gaps (honest, not glossed over)
 
-### Confirmed by an independent post-completion audit (2026-07-18) — active remediation, see section 6
+### Confirmed by an independent post-completion audit (2026-07-18) — remediation status below
 
-- **F1 overlay text is not actually readable.** `MakeSimpleFont`'s Phase 8 fix (section 2) stopped
-  every character from rendering as an invisible sub-pixel dot, but it still renders every
-  character as an *identical solid rectangle* — there is no letterform differentiation at all. A
-  player pressing F1 can see word/line structure but cannot read a single actual word. Confirmed
-  by direct fresh screenshot inspection, not just the audit's claim. This was a real overclaim in
-  Phase 8's own write-up ("legible blocky text") — the rendering *bug* was fixed, the underlying
-  *feature* (readable help text) was not delivered. **Remediation in progress** — needs a real
-  embedded bitmap-font glyph table, not more rectangle-tuning.
+- **F1 overlay text was not actually readable — ✅ FIXED (2026-07-18).** `MakeSimpleFont`'s Phase 8
+  fix stopped every character from rendering as an invisible sub-pixel dot, but it still rendered
+  every character as an *identical solid rectangle* — no letterform differentiation at all. Fixed
+  by replacing the per-demo `MakeSimpleFont` with a new shared header,
+  `examples/common/SimpleFontEXT.hpp`'s `CNAExamplesEXT::MakeSimpleFontEXT()` — a real 5x7
+  dot-matrix bitmap-font glyph atlas covering printable ASCII 32-126, where each character samples
+  its own distinct region of the atlas instead of a single uniform rectangle. Deliberately a
+  *shared* header this time (not another per-demo copy) — the old per-demo-copy convention is
+  exactly what let the original uniform-rectangle bug spread silently across all 8 demos in the
+  first place. Rolled out to all 8 avatar demos, verified with fresh screenshots of every one:
+  help text (and `demo_avatar_multi_attach_stress`'s own `Parts.size()` counter) is now genuinely,
+  fully readable English, not just correctly-spaced blocks. Text drawn at 1.5x scale (legible,
+  while still keeping the longest help line within an 800px-wide window).
 - **`Guide.cpp`'s Phase 3 work is genuinely incomplete**, confirmed by direct code read:
   `BeginShowKeyboardInput`'s `title`/`description` parameters are unused (commented out in the
   signature itself); `getIsVisibleProperty()` is hardcoded `return false;` and the setter is a
@@ -219,11 +224,11 @@ No `.clang-format` or other lint/format config was found in the repo — none is
 
 ## 6. Next smallest tasks
 
-**Active remediation (user-prioritized, 2026-07-18, all 4 items) — in progress:**
+**Active remediation (user-prioritized, 2026-07-18, all 4 items):**
 
-1. **F1 overlay real readable font** (highest priority) — replace `MakeSimpleFont`'s
-   uniform-rectangle-per-character approach with a real embedded bitmap-font glyph table so help
-   text is actually readable, across all 8 avatar demos.
+1. ~~**F1 overlay real readable font**~~ — ✅ **DONE.** New shared
+   `examples/common/SimpleFontEXT.hpp`, rolled out to all 8 avatar demos, verified with fresh
+   screenshots of every one. See section 3's own entry for detail.
 2. **Guide.cpp Phase 3 completion** — wire up `title`/`description` in the keyboard-input overlay,
    make `UsePasswordMode` actually mask displayed input, add a real cancel path, make
    `IsVisible`/its setter reflect actual overlay state.
