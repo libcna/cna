@@ -457,3 +457,54 @@ TEST_F(SoundEffectContentTypeReaderTest, PathologicallyLargeFormatLengthThrowsCl
         reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(),
         ContentLoadException);
 }
+
+// AUD-06-017: an unknown/unsupported format tag's diagnostic must name every field useful for
+// triaging against a real asset -- tag, bit depth, channels, sample rate, and the asset name --
+// not just tag/bits, matching the acceptance criterion exactly.
+TEST_F(SoundEffectContentTypeReaderTest, UnknownFormatTagDiagnosticIncludesAllRelevantFields)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);       // formatLength (no extension)
+    w16(0x270B);   // wFormatTag: a genuinely unknown/unassigned tag
+    w16(2);        // nChannels: stereo
+    w32(22050);    // nSamplesPerSec
+    w32(88200);    // nAvgBytesPerSec
+    w16(4);        // nBlockAlign
+    w16(24);       // wBitsPerSample: not a bit depth CNA supports for any known tag
+    w32(0);        // data length
+    w32(0);        // loopStart
+    w32(0);        // loopLength
+    w32(0);        // duration
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+
+    try
+    {
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("9995"), std::string::npos) << what;   // formatTag=0x270B decimal
+        EXPECT_NE(what.find("24"), std::string::npos) << what;     // bitsPerSample
+        EXPECT_NE(what.find("channels=2"), std::string::npos) << what;
+        EXPECT_NE(what.find("22050"), std::string::npos) << what;  // sampleRate
+        EXPECT_NE(what.find("'test'"), std::string::npos) << what; // asset name
+    }
+}

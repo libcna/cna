@@ -242,12 +242,17 @@ namespace CNA::Internal::Xnb
                 extensionData, loopStart, loopLength);
         }
 
+        // AUD-06-017: the diagnostic names every field useful for triaging an unsupported-format
+        // report against a real asset -- tag, bit depth, channel count, sample rate, and the
+        // asset name itself -- not just tag/bits, so a caller doesn't have to reproduce the
+        // failure with extra instrumentation just to see what channels/rate the file declared.
         throw ContentLoadException(
             "'" + input.getAssetNameProperty() + "': unsupported SoundEffect wave format "
             "(formatTag=" + std::to_string(wFormatTag) + ", bitsPerSample=" +
-            std::to_string(wBitsPerSample) + "). CNA's .xnb SoundEffectReader supports 8/16-bit "
-            "PCM, 32-bit IEEE float, and MS/IMA ADPCM; XMA2 has no decode path anywhere in this "
-            "stack (plan_audio.md AUD-06 support matrix).");
+            std::to_string(wBitsPerSample) + ", channels=" + std::to_string(nChannels) +
+            ", sampleRate=" + std::to_string(nSamplesPerSec) + "). CNA's .xnb SoundEffectReader "
+            "supports 8/16-bit PCM, 32-bit IEEE float, and MS/IMA ADPCM; XMA2 has no decode path "
+            "anywhere in this stack (plan_audio.md AUD-06 support matrix).");
     }
 
     void RegisterSoundEffectXnbReader()
