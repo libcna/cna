@@ -11,11 +11,11 @@ through D-P4 for the standing preflight decisions).
 core CNA internals, Microsoft.Xna/Devices public API) audited directly by the main agent; large mechanical
 batches (examples, tests, tools) fanned out via the Workflow tool per decision D-P1.
 
-Direct-audit work so far: `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2) — all fully
-AUDITED with genuine findings recorded (see below). Next: continue single-file backend adapters
-(`backend-sdlrenderer`, `backend-dx3`, `backend-easygl`, `backend-webgpu`), then the larger multi-file backends
-(`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`, `backend-vulkan`,
-`backend-d3dcommon`), then CNA core / Microsoft.Xna / Microsoft.Devices shards.
+Direct-audit work so far: `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2),
+`backend-sdlrenderer` (2/2) — all fully AUDITED with genuine findings recorded (see below). Next: continue
+single-file backend adapters (`backend-dx3`, `backend-easygl`, `backend-webgpu`), then the larger multi-file
+backends (`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`,
+`backend-vulkan`, `backend-d3dcommon`), then CNA core / Microsoft.Xna / Microsoft.Devices shards.
 
 Background Workflow in flight: `examples-tests-easygl` (218 files, run ID `wf_0b3830f6-648`) — first mechanical
 batch, testing the hybrid pattern before scaling it to the remaining ~700 example files and ~400 test files. A
@@ -29,8 +29,8 @@ this audit.
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **6** (backend-common ×2, backend-headless ×2, backend-software ×2)
-- PENDING: **2291** (+ 218 currently IN_PROGRESS via the background workflow, not yet reflected in manifest until
+- AUDITED so far: **8** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2)
+- PENDING: **2289** (+ 218 currently IN_PROGRESS via the background workflow, not yet reflected in manifest until
   the workflow's results are processed)
 - IN_PROGRESS: **0** manifest-tracked (workflow-in-flight files remain PENDING in the manifest until processed)
 - BLOCKED: **0**
@@ -45,7 +45,7 @@ this audit.
 
 ## Last completed file
 
-`include/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp` (backend-software shard, direct audit).
+`include/CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp` (backend-sdlrenderer shard, direct audit).
 
 ## Next exact files/subsystem
 
