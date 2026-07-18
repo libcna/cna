@@ -9,6 +9,10 @@ namespace CNA::Internal::Audio
 {
     /// Returns the shared SDL3_mixer device, creating it on first call.
     ///
+    /// AUD-04-005: the requested spec is always the fixed reference S16 stereo 44100 Hz --
+    /// deliberately never native-device or platform-specific. See NEXTaudio.md's "Mixer
+    /// output-format policy" for the full rationale.
+    ///
     /// AUDIO-002: thread-safe as of this fix -- first-use creation and DestroyMixer() below now
     /// share a single mutex, so concurrent first callers can no longer both race through
     /// MIX_Init()/MIX_CreateMixerDevice(), and a call concurrent with DestroyMixer() can no

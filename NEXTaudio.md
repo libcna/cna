@@ -928,6 +928,40 @@ current list of accepted deviations from FNA/XNA behavior.
 | XACT parser | `CNA/Internal/Audio/XactParser.cpp`, `XactTypes.hpp` | Hand-written `.xgs`/`.xsb`/`.xwb` reader — FACT is **not** used |
 | sharp-runtime | `../sharp-runtime/` | `System.*` types, primitive aliases, exception hierarchy |
 
+### Mixer output-format policy (AUD-04-005)
+
+**Fixed-reference.** `AudioMixer::GetMixer()` always requests S16 stereo 44100 Hz from
+`MIX_CreateMixerDevice()`, regardless of what the actual output device's native format is.
+Rationale:
+
+1. This exact spec is also SDL3's own hard floor for every physical playback device it opens
+   (`DEFAULT_AUDIO_PLAYBACK_FORMAT/CHANNELS/FREQUENCY` = S16/2/44100, `SDL_sysaudio.h`,
+   confirmed empirically by AUD-04-004's device-open test) — requesting anything at or below
+   this floor would be silently raised to it anyway, so there is no achievable
+   *lower*-quality fixed reference to request instead.
+2. XNA/XACT content is almost always authored at 44100 Hz stereo; matching it as the mixer's
+   own reference avoids an unnecessary extra resample step for the common case. SDL/SDL3_mixer
+   resamples per source regardless of which fixed rate is chosen, so picking a different fixed
+   reference would only relocate where resampling happens, never eliminate it.
+3. **Native-device** (request whatever the OS reports as the default device's format) was
+   considered and rejected: it would make pitch-affecting resample ratios vary per machine/
+   driver/output device, directly undermining the deterministic, reproducible-behavior goal the
+   whole Phase 15 audit exists to establish, and it would reintroduce the "which physical rate
+   did we actually get" observability gap AUD-04-001 was built to close.
+4. **Platform-specific** was considered and rejected for the same reason — no platform-specific
+   quality/latency need has been identified in this codebase's own testing that fixed-reference
+   doesn't already satisfy, and it would multiply the verification matrix (AUD-04-002/003 already
+   have to cover rate-mismatch correctness even under a single fixed policy).
+
+**Consequence:** any source or WaveBank content decoded at a sample rate other than 44100 Hz
+always crosses exactly one resample step (source rate → 44100 Hz) inside SDL3_mixer/SDL3's own
+resampler — never zero, never two. This is the same resampler AUD-03's golden-audio harness
+(`OfflineAudioRendererTests.cpp`) has already empirically verified preserves frequency within
+0.1% end-to-end for 22050/44100/48000/96000 Hz sources into a 44100 Hz mixer. The still-open risk
+is *device*-level, not this policy: whether the physical output device itself ever gets opened
+above 44100 Hz (e.g. an OS default at 48/96/192 kHz) without CNA observing it — AUD-04-002/003,
+still open.
+
 ### Data flow (playback)
 
 ```
