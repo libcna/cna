@@ -1929,6 +1929,42 @@ TEST(XactParserTest, ParseXwbTruncatedFileThrows)
     EXPECT_THROW(ParseXwb(tiny), std::runtime_error);
 }
 
+// AUD-11-017/018: found via ASan, not just inspection -- a genuine heap-buffer-overflow, distinct
+// from the generic "too small to even have a header" truncation above. `wbFlags`/`entryCount`
+// (8 bytes total) are read via bounds-checked `ctx.u32()`, but the 64-byte bankName field right
+// after them used a raw `strnlen(p, 64)` with no check that 64 real bytes actually remained --
+// for a file truncated to end exactly there, this read past the buffer's real heap allocation
+// before the (bounds-checked) `ctx.skip(64)` immediately after it ever got a chance to catch the
+// truncation. A standalone repro against this exact fixture shape reproduced a real ASan
+// heap-buffer-overflow report before the fix (capping the strnlen scan to the real remaining
+// bytes first, mirroring cstr()'s own established AUDIO-PARSER-001 pattern); this test only
+// checks the resulting exception, since ASan itself (not a plain gtest assertion) is what proves
+// the absence of the OOB read -- see this session's ASan-verified investigation notes in
+// plan_audio.md's AUD-11-017 entry.
+TEST(XactParserTest, ParseXwbTruncatedExactlyAtBankNameFieldThrowsNotOob)
+{
+    constexpr uint32_t headerSize = 48;
+    std::vector<uint8_t> data;
+    auto w32 = [&data](uint32_t v) {
+        data.push_back(static_cast<uint8_t>(v)); data.push_back(static_cast<uint8_t>(v >> 8));
+        data.push_back(static_cast<uint8_t>(v >> 16)); data.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const char magic[4] = { 'W', 'B', 'N', 'D' };
+    data.insert(data.end(), magic, magic + 4);
+    w32(1); // version
+    for (int i = 0; i < 5; ++i)
+    {
+        w32(headerSize); // segOffset[i]: all point right after the header
+        w32(0);          // segLength[i]
+    }
+    w32(0u); // wbFlags
+    w32(1u); // entryCount
+    // File ends here -- exactly 0 bytes remain for the 64-byte bankName field that would follow.
+
+    EXPECT_THROW(ParseXwb(data), std::runtime_error);
+}
+
 TEST(XactParserTest, ParseXsbTruncatedFileThrows)
 {
     std::vector<uint8_t> tiny(10, 0);

@@ -545,9 +545,20 @@ namespace CNA::Internal::Audio
         uint32_t wbFlags             = ctx.u32();
         uint32_t entryCount          = ctx.u32();
         {
-            // Bank name (64 bytes, null-terminated)
+            // AUD-11-017/018 (found via ASan): Bank name (64 bytes, null-terminated). The old
+            // `strnlen(p, 64)` scanned up to 64 bytes from `p` regardless of how many real bytes
+            // actually remained in the buffer -- for a truncated/corrupt file with fewer than 64
+            // bytes left here, this reads past the end of `fileData`'s heap allocation before the
+            // `ctx.skip(64)` right below ever gets a chance to catch the truncation. Confirmed as
+            // a genuine, empirically reproduced ASan heap-buffer-overflow (a standalone repro
+            // against a deliberately truncated fixture), not just a theoretical concern -- capping
+            // the scan to the real remaining bytes first, mirroring `cstr()`'s own established
+            // AUDIO-PARSER-001 pattern, means `strnlen` never reads past `ctx.end`; the `skip(64)`
+            // immediately after still throws cleanly on a genuinely truncated file, exactly as
+            // before, just without an OOB read on the way there.
             const char* p = reinterpret_cast<const char*>(ctx.cur);
-            result.bankName = std::string(p, strnlen(p, 64));
+            const std::size_t nameMaxLen = std::min<std::size_t>(64, static_cast<std::size_t>(ctx.end - ctx.cur));
+            result.bankName = std::string(p, strnlen(p, nameMaxLen));
             ctx.skip(64);
         }
         uint32_t entryMetaDataSize   = ctx.u32();
@@ -756,8 +767,15 @@ namespace CNA::Internal::Audio
             ctx.seek(segOffset[3]);
             for (uint32_t i = 0; i < entryCount; ++i)
             {
+                // AUD-11-017/018: entryNameElemSize is a fully unvalidated uint32_t read straight
+                // from the file -- capping the strnlen scan to the real remaining bytes first
+                // (same fix and same reasoning as the bankName field above) means a corrupt/huge
+                // value can't drive an out-of-bounds read here either; the ctx.skip() right after
+                // still throws cleanly on a genuinely truncated file.
                 const char* p = reinterpret_cast<const char*>(ctx.cur);
-                result.entryNames[i] = std::string(p, strnlen(p, entryNameElemSize));
+                const std::size_t nameMaxLen = std::min<std::size_t>(
+                    entryNameElemSize, static_cast<std::size_t>(ctx.end - ctx.cur));
+                result.entryNames[i] = std::string(p, strnlen(p, nameMaxLen));
                 ctx.skip(entryNameElemSize);
             }
         }
@@ -861,8 +879,13 @@ namespace CNA::Internal::Audio
             wc.seek(static_cast<uint32_t>(wavebankNameOffset));
             for (uint8_t i = 0; i < wavebankCount; ++i)
             {
+                // AUD-11-017/018: same fix and reasoning as XWB's bankName/entryNames fields --
+                // cap the strnlen scan to the real remaining bytes first so a truncated/corrupt
+                // file can't drive an out-of-bounds read here; wc.skip(64) right after still
+                // throws cleanly on genuine truncation.
                 const char* p = reinterpret_cast<const char*>(wc.cur);
-                result.wavebankNames[i] = std::string(p, strnlen(p, 64));
+                const std::size_t nameMaxLen = std::min<std::size_t>(64, static_cast<std::size_t>(wc.end - wc.cur));
+                result.wavebankNames[i] = std::string(p, strnlen(p, nameMaxLen));
                 wc.skip(64);
             }
         }
