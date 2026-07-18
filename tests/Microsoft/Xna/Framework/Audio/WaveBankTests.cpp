@@ -149,6 +149,63 @@ namespace
         return data;
     }
 
+    // AUD-11-010/011 (2026-07-17 deep audit): minimal compact .xwb with one entry tagged as XMA
+    // (compact format tag 1) -- CNA has no XMA decode path anywhere in this stack (SDL3 doesn't
+    // decode XMA either), so GetSoundEffect() must return nullptr cleanly rather than crash or
+    // silently construct a garbage SoundEffect from the raw compressed bytes.
+    std::vector<uint8_t> BuildXmaXwbFixtureBytes(const std::string& bankName)
+    {
+        constexpr uint32_t headerSize       = 48;
+        constexpr uint32_t bankDataSize     = 96;
+        constexpr uint32_t entryCount       = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength   = 64;
+        constexpr uint32_t alignment        = 4;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, bankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (1u)                                  // format tag: XMA
+            | (1u << 2)                              // channels: mono
+            | (44100u << 5)                          // sample rate
+            | (2u << 23)
+            | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        AppendU32(data, 0u); // entry 0: offset=0, deviation=0 (last/only entry)
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
     // AUDIO-ADPCM-001 (2026-07-17 deep audit follow-up): minimal compact .xwb with one mono
     // MS-ADPCM entry, real block-aligned payload (not silence -- SDL's real MS-ADPCM decoder
     // must actually parse a full block header + nibble data, which a run of zero bytes alone
@@ -343,6 +400,16 @@ namespace
         static const std::string path = WriteFixture(
             "cna_wavebank_test", "fixtureadpcm.xwb",
             BuildAdpcmXwbFixtureBytes(kWaveBankAdpcmName));
+        return path;
+    }
+
+    constexpr const char* kWaveBankXmaName = "TestWaveBankXma";
+
+    const std::string& XwbXmaFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "fixturexma.xwb",
+            BuildXmaXwbFixtureBytes(kWaveBankXmaName));
         return path;
     }
 
@@ -982,6 +1049,20 @@ TEST(WaveBankTest, GetSoundEffectForAdpcmEntrySucceeds)
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not construct WaveBank/AudioEngine";
     }
+}
+
+// AUD-11-010/011 (2026-07-17 deep audit): CNA has no XMA/WMA decode path anywhere in this stack
+// (SDL3 doesn't decode either) -- GetSoundEffect() must return nullptr cleanly for an XMA-tagged
+// entry, not crash or silently construct a garbage SoundEffect from the raw compressed bytes. This
+// does NOT require an audio device -- GetSoundEffect() rejects the format before ever touching the
+// mixer, so unlike the ADPCM test above this can run unconditionally.
+TEST(WaveBankTest, GetSoundEffectForXmaEntryReturnsNullCleanly)
+{
+    AudioEngine& engine = SharedEngine();
+    WaveBank wb(&engine, XwbXmaFixturePath());
+    ASSERT_TRUE(wb.getIsPreparedProperty());
+
+    EXPECT_EQ(WaveBankTestAccess::GetSoundEffect(wb, 0), nullptr);
 }
 
 // ===================== GetTypeName =====================

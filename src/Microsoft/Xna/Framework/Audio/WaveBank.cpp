@@ -325,8 +325,19 @@ namespace Microsoft::Xna::Framework::Audio
             }
             else
             {
-                std::cerr << "[WaveBank] Unsupported format " << static_cast<int>(entry.format)
-                          << " for wave " << waveIndex << "\n";
+                // AUD-11-010/011 (2026-07-17 deep audit, A-11): XMA/XMA2 and WMA have no decode
+                // path anywhere in this stack -- both are proprietary codecs SDL3 does not decode
+                // (unlike PCM/float/MS-ADPCM/IMA-ADPCM, which SDL3's own WAV loader handles
+                // natively, see WavWrapper.hpp). This is a genuine, permanent capability gap, not
+                // a bug to silently swallow -- name the bank and a human-readable format so a
+                // "missing sound" symptom is traceable to this exact cause from the log alone,
+                // matching CHECKLIST.md's documented accepted deviation.
+                const char* formatName =
+                    entry.format == XwbFormat::XMA ? "XMA/XMA2" :
+                    entry.format == XwbFormat::WMA ? "WMA" : "unknown";
+                std::cerr << "[WaveBank] Wave " << waveIndex << " in bank \"" << getBankName()
+                          << "\" uses " << formatName << " compression, which has no decode path "
+                          << "(CHECKLIST.md accepted deviation) -- sound will be missing\n";
                 return nullptr;
             }
         }

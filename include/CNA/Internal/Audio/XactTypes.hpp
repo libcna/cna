@@ -104,7 +104,15 @@ namespace CNA::Internal::Audio
 
     // ── XWB ─────────────────────────────────────────────────────────────────
 
-    /** @brief Wave data encoding format, as stored in a .XWB wave bank entry. */
+    /**
+     * @brief Wave data encoding format, as stored in a .XWB wave bank entry.
+     *
+     * AUD-11-009 (2026-07-17 deep audit): this 2-bit field (confirmed against FACT.h's
+     * FACT_WAVEBANKMINIFORMAT_TAG_* constants) has exactly these 4 values -- there is no
+     * separate IMA-ADPCM tag at the WaveBank level. `ADPCM` here always means MS-ADPCM;
+     * IMA-ADPCM is only a concern for the XNB SoundEffectReader path (a different container
+     * format with its own, wider WAVEFORMATEX wFormatTag field), not WaveBank entries.
+     */
     enum class XwbFormat : uint8_t { PCM = 0, XMA = 1, ADPCM = 2, WMA = 3 };
 
     /** @brief One wave entry parsed from a .XWB wave bank file. */
