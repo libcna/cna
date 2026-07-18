@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -1182,4 +1183,36 @@ TEST(SoundEffectTest, TwoFrameRawBufferHasExactTwoFrameDuration)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
+}
+
+// AUD-05-013: MIX_LoadRawAudio (unlike the separate MIX_LoadRawAudioNoCopy, which CNA does not
+// use) eagerly copies the source bytes via SDL_LoadFile_IO into its own buffer -- confirmed by
+// reading third_party/SDL_mixer/src/SDL_mixer.c's MIX_LoadAudioWithProperties: the
+// `else if (!ondemand)` precache branch, which MIX_LoadRawAudio's call chain always takes since
+// it never sets MIX_PROP_AUDIO_LOAD_ONDEMAND_BOOLEAN (only MIX_LoadRawAudioNoCopy does). This
+// empirically locks that source-reading down: the source buffer is overwritten then destroyed
+// immediately after construction, before the SoundEffect is used again.
+TEST(SoundEffectTest, RawBufferLifetimeIsIndependentOfSourceMemoryAfterConstruction)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        auto source = std::make_unique<std::vector<unsigned char>>(4 * 1024, 0x00);
+        fx = std::make_unique<SoundEffect>(*source, 44100, AudioChannels::Stereo);
+
+        // Overwrite then free the source buffer -- if MIX_LoadRawAudio held a pointer into it
+        // instead of copying, this would corrupt or crash on the next SoundEffect access.
+        std::fill(source->begin(), source->end(), static_cast<unsigned char>(0xCD));
+        source.reset();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_NEAR(fx->getDurationProperty().getTotalSecondsProperty(), 1024.0 / 44100.0, 1e-6);
+    EXPECT_NO_THROW(fx->CreateInstance().Play());
 }
