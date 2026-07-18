@@ -167,6 +167,7 @@ namespace Microsoft::Xna::Framework::Media
         // --- Albums ---
         std::unordered_map<std::string, std::vector<Album*>> albumsByArtistName;
         std::unordered_map<std::string, std::vector<Album*>> albumsByGenreName;
+        std::map<std::pair<std::string, std::string>, Album*> albumByKey; // for Song::Album back-refs
         std::vector<Album*> allAlbums;
         for (const auto& key : albumOrder)
         {
@@ -190,6 +191,7 @@ namespace Microsoft::Xna::Framework::Media
                 albumArtPathByKey[key], albumSongs.get()));
             ownedGroupSongCollections_.push_back(std::move(albumSongs));
             allAlbums.push_back(album.get());
+            albumByKey[key] = album.get();
             albumsByArtistName[artistName].push_back(album.get());
             if (!genreName.empty()) albumsByGenreName[genreName].push_back(album.get());
             ownedAlbums_.push_back(std::move(album));
@@ -208,6 +210,36 @@ namespace Microsoft::Xna::Framework::Media
             auto* collection = new AlbumCollection(albumsByArtistName[name]);
             artistByName[name]->SetAlbums(collection);
             ownedGroupAlbumCollections_.emplace_back(collection);
+        }
+
+        // --- Song -> Album/Artist/Genre back-references (plan_media.md MEDIA-177) ---
+        // XNA's Song exposes Album/Artist/Genre, but CNA had none of those members at all until
+        // MEDIA-174 (FNA omits them too, which is why every earlier audit against FNA missed it).
+        // Populated in a dedicated final pass, after every group object exists, so the pointers
+        // written here are the same ones getAlbumsProperty()/getArtistsProperty()/
+        // getGenresProperty() hand out. Storing raw pointers is safe across the owning vectors'
+        // reallocation: ownedAlbums_/ownedArtists_/ownedGenres_ hold unique_ptrs, so growing the
+        // vector moves the smart pointers but never the heap objects they point at.
+        for (const auto& indexed : musicIndex.GetSongs())
+        {
+            Song* song = songByPath_[indexed.path];
+            if (song == nullptr) continue;
+
+            if (!indexed.genre.empty())
+            {
+                auto it = genreByName.find(indexed.genre);
+                if (it != genreByName.end()) song->genre_ = it->second;
+            }
+            if (!indexed.artist.empty())
+            {
+                auto it = artistByName.find(indexed.artist);
+                if (it != artistByName.end()) song->artist_ = it->second;
+            }
+            if (!indexed.artist.empty() && !indexed.album.empty())
+            {
+                auto it = albumByKey.find(std::make_pair(indexed.artist, indexed.album));
+                if (it != albumByKey.end()) song->album_ = it->second;
+            }
         }
 
         // --- Playlists ---

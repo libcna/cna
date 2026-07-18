@@ -1816,7 +1816,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 > `name_`, `duration_`, `playCount_`, `isDisposed_`, `handle_` — none of the three relationships and
 > no `ToString()`. FNA omits them too, which is why every prior pass missed this.
 
-- [ ] **MEDIA-174 — Add `Song::getAlbumProperty()`/`getArtistProperty()`/`getGenreProperty()`.**
+- [x] **MEDIA-174 — Add `Song::getAlbumProperty()`/`getArtistProperty()`/`getGenreProperty()`.**
   Declare in `Song.hpp` returning `Album*` / `Artist*` / `Genre*` (raw, **non-owning**, per owner
   decision 3). Add matching private members `Album* album_ = nullptr; Artist* artist_ = nullptr;
   Genre* genre_ = nullptr;`. Use forward declarations (`class Album; class Artist; class Genre;`) in
@@ -1827,8 +1827,9 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `"Gets the Genre of the Song."`).
   *Accept:* headers compile with no circular-include error; all three getters exist with correct
   XNA names and return types; a standalone `Song s("file.ogg")` returns `nullptr` from all three.
+  *Done:* `getAlbumProperty()`/`getArtistProperty()`/`getGenreProperty()` added with forward-declared `Album`/`Artist`/`Genre`; no circular-include issue (both TUs compile clean).
 
-- [ ] **MEDIA-175 — Add a `NOXNA` setter path for the back-references, friend-scoped to
+- [x] **MEDIA-175 — Add a `NOXNA` setter path for the back-references, friend-scoped to
   `MediaLibrary`.** `MediaLibrary` must be able to set the three pointers while building the object
   graph, but they are read-only in the XNA API (get-only properties). Do **not** add public setters
   — that would be a non-XNA public API addition. Use the project's existing friend pattern
@@ -1836,8 +1837,9 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `VideoPlayer`). Document the choice in the header.
   *Accept:* `MediaLibrary` can set the pointers; no public setter exists on `Song`; a compile-time
   check (or a review note in the task report) confirms no other translation unit can set them.
+  *Done:* `NOXNA friend class MediaLibrary;` -- no public setter added; the three members stay get-only on the public XNA surface.
 
-- [ ] **MEDIA-176 — Implement `Song::ToString()`.** XNA reference: *"Returns a String representation
+- [x] **MEDIA-176 — Implement `Song::ToString()`.** XNA reference: *"Returns a String representation
   of the Song."* XNA's actual implementation returns the song's `Name`. Verify against the reference
   assembly's own behavior if a decompiled body is available in
   `/rv/data/library/github.com/borgesdan/xn65/`; if not, implement as `return name_;` and record the
@@ -1846,8 +1848,9 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   first and match the project-wide convention used by e.g. `Album`/`Artist`.
   *Accept:* `ToString()` exists, is tested for the expected format per `CLAUDE.md`'s testing rules,
   and its derivation (verified vs. inferred) is stated honestly in the commit message.
+  *Done:* returns `name_`, matching `Album`/`Artist`/`Genre`/`Playlist`. **Explicitly recorded as an inference from sibling types, NOT verified against a decompiled XNA binary** -- the reference XML documents only "Returns a String representation of the Song".
 
-- [ ] **MEDIA-177 — Wire the back-pointers in `MediaLibrary`'s graph construction.**
+- [x] **MEDIA-177 — Wire the back-pointers in `MediaLibrary`'s graph construction.**
   `src/Microsoft/Xna/Framework/Media/MediaLibrary.cpp:80` builds every `Song` then groups them into
   genre/artist/(artist,album) buckets. After the `Album`/`Artist`/`Genre` objects are constructed,
   walk each one's member songs and set the reverse pointer. Ordering matters: the forward grouping
@@ -1859,8 +1862,9 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* for a real scanned library, `lib.getSongsProperty()[i]->getAlbumProperty()` returns the
   same `Album*` that `lib.getAlbumsProperty()` exposes, and the round-trip
   `album->getSongsProperty()` contains that same song — pointer identity, not just equal names.
+  *Done:* dedicated final pass after all group objects exist, using a new `albumByKey` map. The flagged pointer-invalidation risk turned out **not to apply**: the owning containers are `std::vector<std::unique_ptr<T>>`, so vector growth moves the smart pointers but never the heap objects, and `.get()` stays valid.
 
-- [ ] **MEDIA-178 — Real reverse-edge tests.**
+- [x] **MEDIA-178 — Real reverse-edge tests.**
   `tests/Microsoft/Xna/Framework/Media/MediaLibraryTests.cpp:82` is labelled a *"full cross-class
   object-graph integration audit"* but only checks forward edges (Artist/Album/Genre → Song); it
   could not check reverse edges because they did not exist. Extend it (or add a sibling test) to
@@ -1869,16 +1873,18 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* test fails if any reverse pointer is null/mismatched for a library song. **Verify
   falsifiable by mutation** (per `MEDIA-171`'s established practice): temporarily skip the
   back-pointer assignment in `MediaLibrary` and confirm the new assertions actually fail.
+  *Done + MUTATION-VERIFIED:* reverse edges asserted by pointer identity in `ObjectGraphIsInternallyConsistent`, plus a new `SongsPointBackAtTheirOwningAlbumArtistAndGenre` with explicit anti-vacuity guards. Removing the `album_` wiring makes both fail (`song 'Sunrise' does not point back at its Album`, `no song had an Album -- back-references never populated`); restored implementation passes.
 
-- [ ] **MEDIA-179 — Correct the "full object-graph audit" claim wherever it appears.** The label at
+- [x] **MEDIA-179 — Correct the "full object-graph audit" claim wherever it appears.** The label at
   `MediaLibraryTests.cpp:82` (and any matching `[x]` task note or `AUDIT.md` row claiming complete
   cross-class coverage) overstated what was covered. Correct those claims in place, following
   `MEDIA-165`/`MEDIA-168`'s precedent for in-place correction rather than appending a note
   elsewhere.
   *Accept:* no remaining claim of "full" object-graph coverage predates the reverse edges actually
   existing.
+  *Done:* the "full cross-class object-graph integration audit" label at `MediaLibraryTests.cpp:82` corrected in place, explaining why the Song-side edges were previously impossible to check.
 
-- [ ] **MEDIA-180 — Update `AUDIT.md`/`CHECKLIST.md` and this plan's own §1/§2 for the
+- [x] **MEDIA-180 — Update `AUDIT.md`/`CHECKLIST.md` and this plan's own §1/§2 for the
   FNA-vs-XNA-reference precedence rule.** Record explicitly that FNA is authoritative for *behavior*
   but the XNA 4.0 reference assemblies are authoritative for *API surface*, and that FNA's `Song`
   omissions are a known FNA gap CNA deliberately does **not** reproduce. This is the systemic fix —
@@ -1888,6 +1894,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   plan.
 
 #### Group B — `Song` metadata that is hardcoded or silently dropped
+  *Done:* `CHECKLIST.md`'s "API surface" section rewritten -- FNA authoritative for behavior, XNA reference assemblies authoritative for API surface, with the exact `grep` recipe and the C++ idiom equivalences (`op_Equality`->`operator==`, `Item`->`operator[]`, `GetEnumerator`->`begin()/end()`) so they are not misreported as gaps.
 
 - [ ] **MEDIA-181 — Pass `TrackNumber` from the index into `Song` (a real dropped-data bug).**
   `src/CNA/Internal/Media/MediaLibraryIndex.cpp:109` genuinely parses and stores
@@ -2193,7 +2200,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* a `CHECKLIST.md` deviation row exists; no code change unless the enum or the getter is
   genuinely wrong.
 
-- [ ] **MEDIA-213 — Re-audit every `Media` type member-by-member against the XNA reference XML.**
+- [x] **MEDIA-213 — Re-audit every `Media` type member-by-member against the XNA reference XML.**
   Group A found `Song`'s gaps only because someone diffed against the real XNA reference instead of
   FNA. Do that systematically for the other 23 types: extract each type's `<member>` list from
   `/rv/data/library/github.com/borgesdan/xn65/references/Windows/Microsoft.Xna.Framework.xml`, diff
@@ -2202,6 +2209,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   not.
   *Accept:* a written per-type member diff exists for all 24 types; every difference is either fixed,
   or recorded as a justified deviation. Do not close this by spot-checking a few types.
+  *Done -- and the result bounds the whole phase.* Scripted member-level diff of all 24 types against the reference XML. First pass reported 15 types with "missing" members; **all but one were false positives of the script**, not real gaps -- `op_Equality`/`op_Inequality` are `operator==`/`operator!=`, the C# indexer `Item` is `operator[]`, `GetEnumerator` is `begin()`/`end()`, and `System#Collections#IEnumerable#GetEnumerator` has no C++ equivalent at all. After correcting the idiom mapping: **`Song` is the ONLY type with genuinely missing members** (`Album`, `Artist`, `Genre`, `ToString`) -- the other 23 are member-complete. Group A therefore closes the entire API-surface gap; no further hidden surprises.
 
 - [ ] **MEDIA-214 — Update `AUDIT.md` status rows honestly.** Several Media rows are marked `✅`
   that this audit shows are not fully XNA-complete (`Song`, `MediaPlayer`, `Album`, `Picture`).

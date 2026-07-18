@@ -41,6 +41,21 @@ namespace Microsoft::Xna::Framework::Media
         return name_;
     }
 
+    Album* Song::getAlbumProperty() const
+    {
+        return album_;
+    }
+
+    Artist* Song::getArtistProperty() const
+    {
+        return artist_;
+    }
+
+    Genre* Song::getGenreProperty() const
+    {
+        return genre_;
+    }
+
     System::TimeSpan Song::getDurationProperty() const
     {
         return duration_;
@@ -99,6 +114,17 @@ namespace Microsoft::Xna::Framework::Media
     int Song::GetHashCode() const
     {
         return static_cast<int>(std::hash<std::string>{}(handle_));
+    }
+
+    std::string Song::ToString() const
+    {
+        // The XNA reference documents only "Returns a String representation of the Song" without
+        // specifying the string. Returning the name matches what Album/Artist/Genre/Playlist in
+        // this same namespace already do (each returns its own name_), so Song follows the
+        // established convention rather than inventing a different format -- plan_media.md
+        // MEDIA-176. This is a documented inference from sibling types, NOT a behavior verified
+        // against a decompiled XNA binary.
+        return name_;
     }
 
     const std::string& Song::getHandle() const

@@ -79,9 +79,14 @@ TEST_F(MediaLibraryTestFixture, GetTypeNameIsFullyQualified)
     EXPECT_EQ(library->GetTypeName(), "Microsoft.Xna.Framework.Media.MediaLibrary");
 }
 
-// plan_media.md MEDIA-69: full cross-class object-graph integration audit -- walks every
-// relationship round-trip to confirm the object graph is internally consistent, not just
-// individually populated.
+// plan_media.md MEDIA-69: cross-class object-graph integration audit -- walks every relationship
+// round-trip to confirm the object graph is internally consistent, not just individually populated.
+//
+// This was originally labelled a "full" audit, which overstated it (corrected per plan_media.md
+// MEDIA-179): until MEDIA-174 there were no Song->Album/Artist/Genre members at all, so the
+// Song-side reverse edges below were structurally impossible to check. CNA inherited that gap
+// straight from FNA, whose own Song.cs omits those XNA members -- see MEDIA-180 for the resulting
+// "FNA is authoritative for behavior, the XNA reference assemblies for API surface" rule.
 TEST_F(MediaLibraryTestFixture, ObjectGraphIsInternallyConsistent)
 {
     // Every Genre's Albums/Songs actually belong to that Genre, and vice versa.
@@ -92,9 +97,33 @@ TEST_F(MediaLibraryTestFixture, ObjectGraphIsInternallyConsistent)
             ASSERT_NE(album->getGenreProperty(), nullptr);
             EXPECT_TRUE(album->getGenreProperty()->Equals(genre));
         }
+        // Reverse edge (MEDIA-177/178): a Genre's member song must point back at that same Genre
+        // object -- pointer identity, not merely a matching name.
         for (Song* song : *genre->getSongsProperty())
         {
-            EXPECT_NE(song, nullptr);
+            ASSERT_NE(song, nullptr);
+            EXPECT_EQ(song->getGenreProperty(), genre)
+                << "song '" << song->getNameProperty() << "' does not point back at its Genre";
+        }
+    }
+
+    // Reverse edges from the Artist and Album sides (MEDIA-177/178).
+    for (Artist* artist : *library->getArtistsProperty())
+    {
+        for (Song* song : *artist->getSongsProperty())
+        {
+            ASSERT_NE(song, nullptr);
+            EXPECT_EQ(song->getArtistProperty(), artist)
+                << "song '" << song->getNameProperty() << "' does not point back at its Artist";
+        }
+    }
+    for (Album* album : *library->getAlbumsProperty())
+    {
+        for (Song* song : *album->getSongsProperty())
+        {
+            ASSERT_NE(song, nullptr);
+            EXPECT_EQ(song->getAlbumProperty(), album)
+                << "song '" << song->getNameProperty() << "' does not point back at its Album";
         }
     }
 
@@ -347,4 +376,83 @@ TEST_F(MediaLibrarySavePictureTest, SavePictureFromStreamThrowsArgumentNullExcep
     MediaLibrary library;
     EXPECT_THROW(library.SavePicture("name", static_cast<System::IO::Stream*>(nullptr)),
                  System::ArgumentNullException);
+}
+
+// plan_media.md MEDIA-174/177/178: Song::Album/Artist/Genre are real XNA 4.0 members that CNA
+// simply did not have until Phase 16 -- FNA's own Song.cs omits them, so every prior audit against
+// FNA (eight adversarial review rounds) structurally could not surface the gap. This asserts the
+// forward round-trip by POINTER IDENTITY: the Album a song points at must be the very same object
+// the library exposes, and that album's own SongCollection must contain the song back.
+TEST_F(MediaLibraryTestFixture, SongsPointBackAtTheirOwningAlbumArtistAndGenre)
+{
+    bool checkedAtLeastOneAlbum = false;
+    bool checkedAtLeastOneArtist = false;
+    bool checkedAtLeastOneGenre = false;
+
+    for (Song* song : *library->getSongsProperty())
+    {
+        ASSERT_NE(song, nullptr);
+
+        if (Album* album = song->getAlbumProperty())
+        {
+            checkedAtLeastOneAlbum = true;
+            // The pointer must be one the library actually owns and exposes.
+            bool inLibrary = false;
+            for (Album* a : *library->getAlbumsProperty()) if (a == album) inLibrary = true;
+            EXPECT_TRUE(inLibrary) << "Song::Album points outside the library's own AlbumCollection";
+
+            bool roundTrip = false;
+            for (Song* s : *album->getSongsProperty()) if (s == song) roundTrip = true;
+            EXPECT_TRUE(roundTrip) << "album does not list back the song that points at it";
+        }
+
+        if (Artist* artist = song->getArtistProperty())
+        {
+            checkedAtLeastOneArtist = true;
+            bool inLibrary = false;
+            for (Artist* a : *library->getArtistsProperty()) if (a == artist) inLibrary = true;
+            EXPECT_TRUE(inLibrary);
+
+            bool roundTrip = false;
+            for (Song* s : *artist->getSongsProperty()) if (s == song) roundTrip = true;
+            EXPECT_TRUE(roundTrip);
+        }
+
+        if (Genre* genre = song->getGenreProperty())
+        {
+            checkedAtLeastOneGenre = true;
+            bool inLibrary = false;
+            for (Genre* g : *library->getGenresProperty()) if (g == genre) inLibrary = true;
+            EXPECT_TRUE(inLibrary);
+
+            bool roundTrip = false;
+            for (Song* s : *genre->getSongsProperty()) if (s == song) roundTrip = true;
+            EXPECT_TRUE(roundTrip);
+        }
+    }
+
+    // Guard against the assertions above being vacuously satisfied by an all-null graph -- the
+    // exact "test passes against broken code" failure mode MEDIA-171 was created to prevent.
+    EXPECT_TRUE(checkedAtLeastOneAlbum)  << "no song had an Album -- back-references never populated";
+    EXPECT_TRUE(checkedAtLeastOneArtist) << "no song had an Artist -- back-references never populated";
+    EXPECT_TRUE(checkedAtLeastOneGenre)  << "no song had a Genre -- back-references never populated";
+}
+
+// A Song that never came from a library scan has no library context, so all three return nullptr
+// (owner decision: nullptr rather than empty singletons, matching C# null semantics for a get-only
+// reference property) -- plan_media.md MEDIA-174.
+TEST(SongLibraryBackReferenceTest, StandaloneSongHasNoAlbumArtistOrGenre)
+{
+    Song song("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", "Standalone");
+    EXPECT_EQ(song.getAlbumProperty(), nullptr);
+    EXPECT_EQ(song.getArtistProperty(), nullptr);
+    EXPECT_EQ(song.getGenreProperty(), nullptr);
+}
+
+// plan_media.md MEDIA-176: XNA declares Song.ToString(); CNA had no override at all (inherited
+// System::Object's default). Matches Album/Artist/Genre/Playlist, which all return their own name.
+TEST(SongLibraryBackReferenceTest, ToStringReturnsTheSongName)
+{
+    Song song("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", "My Song Name");
+    EXPECT_EQ(song.ToString(), "My Song Name");
 }

@@ -11,6 +11,14 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+    // Forward-declared to break the Song <-> Album/Artist/Genre include cycle: each of those types
+    // exposes a SongCollection of its members, and Song points back at all three. Matches the same
+    // pattern Album.hpp already uses to forward-declare SongCollection (plan_media.md MEDIA-174).
+    class Album;
+    class Artist;
+    class Genre;
+    class MediaLibrary;
+
     /** @brief Represents a song that can be played through MediaPlayer. */
     class Song final : public System::Object, public System::IDisposable
     {
@@ -41,6 +49,34 @@ namespace Microsoft::Xna::Framework::Media
          * @return Song name string.
          */
         [[nodiscard]] const std::string& getNameProperty() const;
+
+        /**
+         * @brief Gets the Album on which the Song appears.
+         *
+         * Only songs obtained from a MediaLibrary scan belong to an album; a song constructed
+         * directly from a file path (or loaded from an XNB) has no library context and returns
+         * nullptr, matching the null a C# get-only reference property would yield.
+         *
+         * @return Non-owning pointer to the containing Album, or nullptr if this song is not part
+         *         of a media library.
+         */
+        [[nodiscard]] Album* getAlbumProperty() const;
+
+        /**
+         * @brief Gets the Artist of the Song.
+         *
+         * @return Non-owning pointer to the containing Artist, or nullptr if this song is not part
+         *         of a media library.
+         */
+        [[nodiscard]] Artist* getArtistProperty() const;
+
+        /**
+         * @brief Gets the Genre of the Song.
+         *
+         * @return Non-owning pointer to the containing Genre, or nullptr if this song is not part
+         *         of a media library.
+         */
+        [[nodiscard]] Genre* getGenreProperty() const;
 
         /**
          * @brief Gets the playback duration of this song.
@@ -139,6 +175,13 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] int GetHashCode() const;
 
         /**
+         * @brief Returns a String representation of the Song.
+         *
+         * @return Song name string.
+         */
+        [[nodiscard]] std::string ToString() const override;
+
+        /**
          * @brief Gets the backend file path or handle used by this song.
          *
          * @return Handle/path string.
@@ -163,7 +206,23 @@ namespace Microsoft::Xna::Framework::Media
         /** @brief Returns whether two songs are not equal. */
         friend bool operator!=(const Song& song1, const Song& song2);
 
+        // Album/Artist/Genre are get-only in the XNA API, so no public setter exists for them.
+        // MediaLibrary is the only thing that may populate them: it owns the Album/Artist/Genre
+        // objects and is the only component that knows the song-to-group mapping. Friendship keeps
+        // the write path internal instead of widening the public XNA surface with a non-XNA setter
+        // (plan_media.md MEDIA-175) -- same approach VideoPlayer already uses to reach
+        // Video::parent_.
+        NOXNA friend class MediaLibrary;
+
     private:
+        // Non-owning back-pointers into the MediaLibrary that produced this song; null for any
+        // song not created by a library scan. The library outlives the songs it owns, so these do
+        // not dangle in normal use -- the same non-owning-pointer contract Album::songs_ already
+        // relies on (plan_media.md MEDIA-174).
+        Album*  album_  = nullptr;
+        Artist* artist_ = nullptr;
+        Genre*  genre_  = nullptr;
+
         std::string name_;
         System::TimeSpan duration_;
         SharpRuntime::intcs playCount_;

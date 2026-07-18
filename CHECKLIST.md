@@ -18,14 +18,47 @@ Use this checklist for every `.cs` file ported from FNA to CNA.
 - [ ] No public member is left undocumented
 - [ ] No bare `///` comments on public API declarations (only `/** */` blocks allowed)
 
-### API surface (compare line-by-line with FNA source)
+### API surface (compare against the XNA reference assemblies, NOT only FNA)
+
+> **FNA is authoritative for BEHAVIOR. The XNA 4.0 reference assemblies are authoritative for API
+> SURFACE.** FNA is a reimplementation targeting what games actually call on desktop, and it
+> genuinely **omits public members that exist in XNA 4.0** — members tied to Xbox 360/Zune/Windows
+> Phone concepts, or that FNA's own backends cannot populate, are dropped rather than stubbed.
+> Auditing "CNA vs FNA" can therefore come back clean while real API surface is missing.
+>
+> **Confirmed case (2026-07-18, `plan_media.md` MEDIA-174/180):** XNA's `Song` declares `Album`,
+> `Artist`, `Genre` and `ToString()`. FNA's `src/Media/Song.cs` has none of them, so CNA had none
+> either — and **eight consecutive adversarial review rounds all missed it**, because every one of
+> them also audited against FNA. It was only found by diffing against the original Microsoft
+> reference assemblies.
+>
+> **Reference location:**
+> `/rv/data/library/github.com/borgesdan/xn65/references/Windows/Microsoft.Xna.Framework.xml`
+> (plus the sibling `.Video.xml`, `.Graphics.xml`, `.Net.xml`, … for their namespaces).
+>
+> **Mechanical check — do this per type, it takes seconds:**
+> ```bash
+> grep -E 'name="[PMF]:Microsoft\.Xna\.Framework\.<Ns>\.<Type>\.' Microsoft.Xna.Framework.xml
+> ```
+> Map `P:` → `getXProperty`/`setXProperty`, `M:` → same method name, `F:` → enum value/constant.
+> Note the established C++ idiom equivalents so they are not misreported as gaps:
+> `op_Equality`/`op_Inequality` → `operator==`/`operator!=`; the C# indexer `Item` → `operator[]`;
+> `GetEnumerator` → `begin()`/`end()`; `System#Collections#IEnumerable#GetEnumerator` → no C++
+> equivalent, N/A.
+>
+> If FNA and the reference disagree about a member **existing**, implement per the reference and
+> record the FNA divergence below. "FNA doesn't have it either" is **not** a justification — that is
+> exactly the reasoning that let the `Song` gap survive eight reviews.
+
+- [ ] Type's full member list extracted from the XNA reference XML and diffed against CNA
 - [ ] All public fields / constants present
 - [ ] All public properties mapped to `getXProperty()` / `setXProperty()`
 - [ ] All public methods present with correct signatures
 - [ ] All public static methods present
 - [ ] All events present as `System::EventHandler<TArgs>` fields
 - [ ] All `ref`/`out` overloads present as value-ref pairs
-- [ ] `operator==` / `operator!=` present if FNA defines them
+- [ ] `operator==` / `operator!=` present if the XNA reference defines `op_Equality`/`op_Inequality`
+- [ ] Behavior of each member verified against FNA (FNA still wins on semantics)
 
 ### Inheritance
 - [ ] All interfaces from FNA implemented (e.g. `IEquatable<T>` → `System::IEquatable<T>`, `IComparable<T>` → `System::IComparable<T>`, `IDisposable` → `System::IDisposable`)
