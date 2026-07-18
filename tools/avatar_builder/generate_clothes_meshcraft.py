@@ -131,6 +131,12 @@ def build_clothes(armature_obj, materials, bones=None, height_scale=1.0, styles=
     bones_by_name = {name: (head, tail) for name, _parent, head, tail, _connected in bones}
     resolved_styles = {**generate_clothes.DEFAULT_STYLES, **(styles or {})}
 
+    # Derived exactly the same way generate_body_meshcraft.build_body derives its own, so the
+    # two cannot drift apart again - see the fix_automatic_weights call below for why they must
+    # match.
+    _radii = generate_body_meshcraft.BONE_RADII
+    body_blend_radius = (sum(_radii.values()) / len(_radii)) * 1.6
+
     garment_objs = {}
     for garment_slot, style_name in resolved_styles.items():
         bone_names, padding, material_part = generate_clothes.GARMENT_STYLES[garment_slot][style_name]
@@ -150,7 +156,17 @@ def build_clothes(armature_obj, materials, bones=None, height_scale=1.0, styles=
         armature_obj.select_set(True)
         bpy.context.view_layer.objects.active = armature_obj
         bpy.ops.object.parent_set(type="ARMATURE_AUTO")
-        generate_body.fix_automatic_weights(obj, bones)
+        # audit_net.md remediation (2026-07-18, fourth round): pass the SAME blend_radius the
+        # body itself is skinned with (generate_body_meshcraft.build_body's own
+        # `avg_radius * 1.6`), instead of silently taking fix_automatic_weights' 0.08 default.
+        # A garment skinned with a different joint-blend width than the body it covers deforms
+        # differently from that body at every animated joint - so under a pose like `Wave` the
+        # two surfaces cross, and the render alternates between garment and skin along a
+        # low-poly intersection curve. That is the real source of the "dark blotches" the audit
+        # reported across the Wave-pose torso/shoulder: measured here as body=0.1474 vs
+        # garment=0.08, an ~84% mismatch, which is largest exactly at the wide-radius torso and
+        # shoulder joints where the artifact was worst.
+        generate_body.fix_automatic_weights(obj, bones, blend_radius=body_blend_radius)
 
         garment_objs[garment_slot] = obj
 
