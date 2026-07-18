@@ -122,6 +122,11 @@ Organize by category as entries accumulate.
   real risk for any genuine multi-face cube-map-generation workflow, and a needless performance cost (5/6 of the
   `GenerateMips()` work is wasted) even when correctness isn't at stake. Worth checking every other backend's
   `RenderTargetCube`/`TextureCube` mip-regeneration trigger for the same "whole-resource, not per-face" shape.
+  **UPDATE — genuine positive counter-example found: `D3D12RenderTargetCubeBackend::GenerateMipsEXT()` correctly
+  regenerates mips for ONLY the actually-drawn-to face** (`face = activeFace_`, correct per-face subresource
+  indexing `level + face*levelCount_`), despite D3D12 otherwise sharing almost every other cross-backend finding
+  with its sibling D3D11. A useful reminder that even closely-related sibling backends can diverge on specific
+  implementation details — don't assume a finding transfers without checking.
 
 - **Vulkan-specific: `VulkanSpriteBatchBackend` never overrides `SetTransformMatrix()` at all** (confirmed by an
   exhaustive `grep` across every `.hpp`/`.cpp` file in `src/CNA/Internal/Backends/Vulkan/` and
@@ -142,6 +147,48 @@ Organize by category as entries accumulate.
   No test found anywhere in this codebase exercising a non-Identity `SpriteBatch.Begin(transformMatrix)` on
   Vulkan specifically that would have caught this.
 
+- **HIGH, D3D12-specific: `StencilState` (all fields) and `RasterizerState.ScissorTestEnable`/`DepthBias`/
+  `SlopeScaleDepthBias` are completely non-functional — accepted by the public API, silently discarded before
+  ever reaching a PSO.** `D3D12GraphicsBackend::ApplyDepthStencilState()` receives all 11 stencil-related
+  parameters as literally-named commented-out unused parameters (`bool /*stencilEnable*/, int /*stencilFunc*/,
+  ...`) and never stores or forwards any of them; `ApplyRasterizerState()` does the identical thing for
+  `scissorTestEnable`/`depthBias`/`slopeScaleDepthBias`. `D3D12PipelineStateCache.cpp` confirms why: every PSO is
+  built with `ds.StencilEnable = FALSE` hardcoded (line 99) and `RasterizerState.ScissorEnable` left at its
+  zero-initialized `FALSE` default (never set anywhere) — so even if the C++ layer *did* track these values,
+  D3D12 semantics require the bound PSO's own `ScissorEnable`/`StencilEnable` flags to gate whether the GPU
+  applies scissor/stencil testing at all, and those flags are always off. `RSSetScissorRects()` **is** called at
+  several sites in `D3D12GraphicsBackend.cpp` — but since the PSO's `ScissorEnable` is always `FALSE`, setting the
+  rectangle has no visible effect; the call is necessary but not sufficient in D3D12's model.
+  **This is a real, currently-active regression relative to `D3D11`**, whose own `D3D11DepthStencilStateCache`/
+  `D3D11RasterizerStateCache` (already audited, `backend-d3d11` shard) correctly implement full dynamic stencil
+  (including two-sided mode) and scissor support. Any XNA feature relying on stencil-buffer techniques (mirrors,
+  decals, shadow volumes, outline effects, per-pixel clipping via the stencil buffer) or `ScissorRectangle`-based
+  clipping (a very common technique for UI/viewport masking) silently does nothing on this D3D12 backend.
+  **Honestly, if quietly, disclosed** in both files' own comments as a deliberate first-implementation scope cut
+  (DX-107/DX-118's own plan rows), not a hidden defect — but the practical severity (2 real, commonly-used XNA
+  features completely non-functional) makes this one of the most significant single-backend findings in this
+  audit. No test found exercising `ScissorRectangle`/`StencilState` on D3D12 that would surface this (unsurprising
+  given this codebase currently has no Windows-native CI for D3D12 per D-P4).
+
+- **MEDIUM-HIGH, D3D12-specific: `OcclusionQuery` only captures the LAST draw call when multiple draws occur
+  between `Begin()`/`End()`, not the cumulative/combined total XNA's real semantics require.**
+  `D3D12GraphicsBackend`'s draw-recording methods (`DrawColoredPrimitives`, `DrawIndexedColoredPrimitives`,
+  `DrawPrimitivesExImpl`, `DrawInstancedPrimitivesEx` — confirmed via grep, all 4) each independently wrap their
+  own single command-list submission in its own `BeginQuery`/`EndQuery` pair on the same query-heap slot
+  (index 0) whenever an occlusion query is active. Since a D3D12 query-heap slot holds only one result at a time,
+  issuing a 2nd draw's `BeginQuery` before the 1st draw's result is resolved **overwrites** the 1st draw's
+  captured samples — so a real XNA usage pattern (multiple draws between one `OcclusionQuery.Begin()`/`.End()`
+  pair, expecting the combined/total visible-sample count across all of them) silently returns only the last
+  draw's count on this backend. `D3D12OcclusionQueryBackend.cpp`'s own `Begin()` comment self-discloses this is
+  "correct for exactly one draw call between Begin()/End()" and refers the reader to "this class's own header doc
+  comment for the multi-draw gap" — **but the referenced header (`D3D12OcclusionQueryBackend.hpp`) does not
+  actually document this gap anywhere** (confirmed via grep — zero matches for "multi-draw" or similar in that
+  file), a documentation-cross-reference inconsistency on top of the real limitation itself. The same `.cpp`
+  comment also discloses a genuinely useful empirical finding: `BeginQuery`/`EndQuery` **must** be recorded within
+  the same command-list submission as the draw(s) they bracket (a Vulkan/vkd3d-proton requirement) — confirmed via
+  the comment's own account of reproducing a real bug (`PixelCount()` reporting 0 for a visible full-viewport
+  triangle) before this constraint was understood and fixed.
+
 ## Duplicated backend logic
 
 _(pending — revisit once more backends are audited)_
@@ -152,7 +199,17 @@ _(pending)_
 
 ## Recurring performance risk patterns
 
-_(pending)_
+- **D3D12-specific: every `SetData`/`SetDataWithOptions()` call on a vertex/index buffer performs a full
+  synchronous GPU stall (create an UPLOAD-heap staging buffer, copy, submit, wait on a fence), regardless of the
+  `SetDataOptions` hint.** `D3D12VertexBufferBackend::SetDataWithOptions()` takes `SetDataOptions /*options*/` as
+  a literally-unused parameter — `Discard`/`NoOverwrite`/`None` are all treated identically. Unlike D3D11/EasyGL
+  (which at least attempt a `Map`/`Unmap`-based no-stall path even though the destination-offset architecture gap
+  limits its real benefit — see the `NoOverwrite` entry above), D3D12 never even attempts to avoid the stall.
+  Correctness is unaffected (the uploaded data is always right), but this is a real, confirmed performance
+  regression relative to every other backend for per-frame dynamic-buffer-heavy workloads (e.g. `SpriteBatch`,
+  particle systems). A reasonable, disclosed first-implementation simplification (matches this backend's other
+  "everything is synchronous for now" choices, e.g. `D3D12OcclusionQueryBackend`'s own explicit rationale), not a
+  silently-introduced defect — but worth flagging for a future performance-focused pass on this backend.
 
 ## Systematic FNA parity gaps
 
@@ -417,6 +474,19 @@ _(pending)_
   actively used today** in both `D3D11GraphicsBackend.cpp` (lines 1655, 1531/1577) and
   `D3D12GraphicsBackend.cpp` (lines 2001, 1865/1926) — found while auditing the `backend-d3dcommon` shard. A
   5th-6th instance of this audit's recurring documentation-rot pattern.
+- **`D3D12RootSignatureCache.hpp`'s class-level doc comment claims every root signature uses
+  `D3D12_STATIC_SAMPLER_DESC` static samplers ("fixed at shader-authoring time... this project's own
+  D3D11SamplerCache-driven dynamic sampler binding is a D3D11-specific convenience, not an XNA-level requirement
+  D3D12 must match")** — **stale**: `D3D12RootSignatureCache.cpp`'s actual current implementation (per its own
+  "DX-119" comment) was later upgraded to `NumStaticSamplers = 0` + real per-slot `D3D12_ROOT_PARAMETER_TYPE_
+  DESCRIPTOR_TABLE` sampler descriptor tables, populated dynamically at draw time from a genuine
+  `D3D12SamplerCache` — i.e. D3D12 DOES now have full dynamic `SamplerState` support, matching D3D11, but the
+  header's own class-level comment was never updated to reflect the DX-119 upgrade. Not a functional bug (the
+  `.cpp` is correct) — a 7th documentation-rot instance, found while auditing `backend-d3d12`.
+- **`D3D12Textures.hpp`'s own header comment claims "Cube/3D texture variants... are deliberately NOT implemented
+  in this pass"** (referencing DX-109) — **stale**: `D3D12TextureCube.hpp`/`.cpp` (66/260 lines) and
+  `D3D12Texture3D.hpp`/`.cpp` (56/290 lines) both exist as real, substantial implementations in the same shard,
+  added by later tasks without this comment being revisited. An 8th documentation-rot instance.
 - **Tests asserting metadata/capacity instead of actual data content or actual code-path execution**: a recurring
   shape across the EasyGL example-test shard — `easygl_vertexbuffer_setdata_test.cpp` (capacity getters only, never
   checks uploaded bytes), `easygl_dynamic_buffer_stress_test.cpp` (index-buffer half never actually draws

@@ -14,6 +14,18 @@ _(none recorded yet)_
 
 ### HIGH
 
+- **D3D12-specific: `StencilState` (all fields) and `RasterizerState.ScissorTestEnable`/`DepthBias`/
+  `SlopeScaleDepthBias` are completely non-functional.** `ApplyDepthStencilState()`/`ApplyRasterizerState()`
+  receive these parameters as literally-commented-out unused (`/*stencilEnable*/`, etc.) and never forward them;
+  every PSO hardcodes `StencilEnable = FALSE` and leaves `ScissorEnable` at its zero-init `FALSE` default. A real
+  regression relative to D3D11 (which fully implements both). Honestly disclosed in-code as a first-implementation
+  scope cut, not hidden — but 2 commonly-used XNA features (stencil-buffer effects, scissor-based clipping) are
+  completely inert on this backend. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **D3D12-specific: `OcclusionQuery` only captures the LAST draw call when multiple draws occur between
+  `Begin()`/`End()`**, not the combined total XNA's real semantics require — every draw-recording method wraps
+  its own `BeginQuery`/`EndQuery` pair on the same query-heap slot, so a 2nd draw's query overwrites the 1st's
+  result. Referenced in-code as documented in the header, but the header doesn't actually contain that
+  documentation. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **Vulkan-specific: `SpriteBatch.Begin(transformMatrix)`'s transform is silently dropped —
   `VulkanSpriteBatchBackend` never overrides `SetTransformMatrix()`, confirmed by an exhaustive grep across the
   entire Vulkan backend directory (zero matches).** Every other checked backend (EasyGL, Bgfx, D3D9, D3D11,
