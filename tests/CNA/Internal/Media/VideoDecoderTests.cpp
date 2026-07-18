@@ -364,3 +364,32 @@ TEST(VideoDecoderTest, CloseResetsState)
     EXPECT_EQ(decoder.GetWidth(), 0);
     EXPECT_EQ(decoder.GetHeight(), 0);
 }
+
+// plan_media.md MEDIA-146 (found by external code review): NextFrame()'s EAGAIN packet-retention
+// flag used to be a function-local variable, so a packet retained after avcodec_send_packet()
+// returned EAGAIN was silently lost the moment the very next avcodec_receive_frame() call (almost
+// always the next thing that happens, since EAGAIN on send means "drain output first") returned a
+// buffered frame and the function returned to the caller -- across that call boundary the flag
+// reset to false and the retained packet was overwritten by the next av_read_frame() without ever
+// being resent, dropping that video frame. ffprobe independently confirms chroma_420.mkv has
+// exactly 50 real video frames (`nb_read_frames=50`); decoding the entire file end-to-end and
+// counting exactly 50, with strictly increasing timestamps and no gap, is a real, deterministic
+// regression guard against any frame silently going missing, not just "decoding didn't throw."
+TEST(VideoDecoderTest, DecodesTheFullFileWithoutSilentlyDroppingAnyFrame)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kChroma420));
+
+    int frameCount = 0;
+    double lastPts = -1.0;
+    std::vector<uint8_t> frame;
+    double pts = 0.0;
+    while (decoder.NextFrame(frame, pts))
+    {
+        EXPECT_GT(pts, lastPts) << "frame " << frameCount << " PTS did not strictly increase";
+        lastPts = pts;
+        ++frameCount;
+    }
+
+    EXPECT_EQ(frameCount, 50);
+}

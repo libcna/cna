@@ -116,6 +116,14 @@ namespace CNA::Internal::Media
         AVPacket*        pkt_      = nullptr;
         SwrContext*      swrCtx_   = nullptr;
 
+        // Must survive across NextFrame() calls, not just within one: a video packet retained
+        // after send_packet() returns EAGAIN is almost always followed by receive_frame()
+        // immediately yielding a buffered frame on the very next outer-loop iteration, which
+        // returns to the caller before the pending packet is ever resent. A function-local flag
+        // loses that state on the next call, silently dropping the retained frame (found by
+        // external code review, plan_media.md MEDIA-146).
+        bool havePendingVideoPacket_ = false;
+
         int    videoStream_ = -1;
         int    audioStream_ = -1;
         int    width_       = 0;

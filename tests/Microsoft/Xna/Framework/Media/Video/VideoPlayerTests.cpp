@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <chrono>
+#include <cstdio>
+#include <fstream>
 #include <thread>
 
 #include <gtest/gtest.h>
@@ -136,9 +138,9 @@ TEST(VideoPlayerTest, PlayRealFixtureProducesATextureOfCorrectSize)
 
 // plan_media.md MEDIA-131 regression (found by external code review): Play() left the newly
 // opened SDL audio stream paused forever -- SDL_OpenAudioDeviceStream() opens every stream paused
-// by default, and ReconfigureAudioAndVideoOutputForCurrentTracks() only resumes it when
-// state_ == Playing, but OpenDecoder() (which calls that helper) used to run entirely before
-// Play() itself ever set state_ to Playing. Every video with audio played completely silently.
+// by default, and ReconfigureAudioOutputForCurrentTrack() only resumes it when state_ == Playing,
+// but OpenDecoder() (which calls that helper) used to run entirely before Play() itself ever set
+// state_ to Playing. Every video with audio played completely silently.
 // This uses multi_track_audio.mkv (has a real audio track) since chroma_420.mkv has none.
 TEST(VideoPlayerTest, PlayGenuinelyResumesTheAudioStreamNotJustOpensIt)
 {
@@ -362,6 +364,45 @@ TEST(VideoPlayerTest, SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleR
     EXPECT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 44100); // track 1
 }
 
+// plan_media.md MEDIA-148 (found by external code review): before this fix, a single combined
+// ReconfigureAudioAndVideoOutputForCurrentTracks() always tore down and reopened the SDL audio
+// stream on every SetVideoTrackEXT() call, even a video-only switch -- discarding whatever audio
+// was already queued for playback for no reason. The fix split it into independent
+// ReconfigureVideoOutputForCurrentTrack()/ReconfigureAudioOutputForCurrentTrack() halves. This
+// proves the split holds: the audio stream's own pointer identity survives a video track switch
+// untouched (a torn-down-and-reopened stream would be a different SDL_AudioStream*).
+TEST(VideoPlayerTest, SetVideoTrackEXTDoesNotTearDownTheUnrelatedAudioStream)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    SDL_AudioStream* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
+    ASSERT_NE(before, nullptr);
+
+    player.SetVideoTrackEXT(0);
+
+    EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), before);
+}
+
+// The symmetric half of MEDIA-148: an audio-only track switch must not needlessly reallocate the
+// video frame texture either.
+TEST(VideoPlayerTest, SetAudioTrackEXTDoesNotRecreateTheUnrelatedVideoTexture)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    auto* before = player.GetTexture();
+    ASSERT_NE(before, nullptr);
+
+    player.SetAudioTrackEXT(1);
+
+    EXPECT_EQ(player.GetTexture(), before);
+}
+
 // plan_media.md MEDIA-90: the ordering half of the same bug -- a track preference set BEFORE
 // Play() (not just mid-playback, as the test above covers) must still apply to the real decoder
 // used for the SDL audio stream/texture created inside Play() -> OpenDecoder(), not just be
@@ -376,4 +417,55 @@ TEST(VideoPlayerTest, AudioTrackPreferenceSetBeforePlayAppliesToTheOpenedDecoder
     player.Play(&video);
 
     EXPECT_EQ(VideoPlayerTestAccess::GetDecoderSampleRate(player), 44100); // track 1, not the default
+}
+
+// plan_media.md MEDIA-149 (found by external code review): OpenDecoder()'s try/catch around the
+// first-frame decode used to only reset state_ to Stopped on failure, leaving decoder_,
+// audioStream_, frameTexture_ and video_->parent_ all still allocated/set -- state_ claimed
+// nothing was open while every actual resource said otherwise. The fix calls the same
+// CloseDecoder() the rest of the class already relies on for a consistent teardown. Corrupts real
+// H264 macroblock data inside the FIRST video packet (byte offset verified via ffprobe pkt_pos to
+// fall inside the keyframe packet, not a later one) so the exception is thrown by the very first
+// decoder_->NextFrame() call inside OpenDecoder()'s try block, not several frames in -- reusing
+// the same corruption technique VideoDecoderTests.cpp's CorruptedMidStreamDataThrowsRatherThan-
+// SilentlyEndingCleanly already established for this fixture.
+TEST(VideoPlayerTest, PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNotHalfOpen)
+{
+    std::ifstream src("tests/assets/media/video/corrupt_test_h264.mp4", std::ios::binary);
+    ASSERT_TRUE(src.is_open());
+    std::vector<char> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+    ASSERT_GT(bytes.size(), 100u);
+    src.close();
+
+    const std::string corruptedPath =
+        "tests/assets/media/video/.player_first_frame_corrupted_fixture.mp4";
+    {
+        std::size_t start = bytes.size() * 3 / 10;
+        std::size_t length = std::min<std::size_t>(16, bytes.size() - start);
+        for (std::size_t i = start; i < start + length; ++i)
+        {
+            bytes[i] = static_cast<char>(static_cast<unsigned char>(bytes[i]) ^ 0xFF);
+        }
+        std::ofstream out(corruptedPath, std::ios::binary);
+        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    }
+
+    GraphicsDevice gd;
+    Video video(corruptedPath, &gd);
+    VideoPlayer player;
+
+    EXPECT_THROW(player.Play(&video), std::runtime_error);
+
+    EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
+    EXPECT_EQ(player.getVideoProperty(), nullptr);
+    EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), nullptr);
+    EXPECT_EQ(player.GetTexture(), nullptr);
+
+    // The player must still be fully usable afterward, not left in some broken half-open state.
+    Video secondVideo(kFixture, &gd);
+    EXPECT_NO_THROW(player.Play(&secondVideo));
+    EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
+
+    player.Stop();
+    std::remove(corruptedPath.c_str());
 }

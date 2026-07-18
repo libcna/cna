@@ -200,14 +200,19 @@ namespace Microsoft::Xna::Framework::Media
         void ApplyVolume();
         [[nodiscard]] double GetElapsedSeconds() const;
 
-        // (Re)creates the SDL audio stream and the frame texture to match whatever track is
-        // currently active on `decoder_`. Called once from OpenDecoder() after track preferences
-        // are applied, and again from SetAudioTrackEXT()/SetVideoTrackEXT() when a track is
-        // switched mid-playback -- a track switch can change sample rate/channel count or video
-        // dimensions, and an already-open SDL stream/texture sized for the previous track would
-        // otherwise silently keep the stale format/size (plan_media.md MEDIA-90, a real bug found
-        // by external code review).
-        void ReconfigureAudioAndVideoOutputForCurrentTracks();
+        // (Re)creates the frame texture to match whatever video track is currently active on
+        // `decoder_`. A track switch can change frame dimensions, and an already-created texture
+        // sized for the previous track would otherwise silently keep the stale size (plan_media.md
+        // MEDIA-90, a real bug found by external code review).
+        void ReconfigureVideoOutputForCurrentTrack();
+
+        // (Re)creates the SDL audio stream to match whatever audio track is currently active on
+        // `decoder_`. Split from the video-side reconfiguration (plan_media.md MEDIA-148, found by
+        // external code review): the two used to be one function always called together, so
+        // switching only the video track tore down and reopened the SDL audio stream too,
+        // discarding whatever audio was already queued for playback -- and vice versa for an
+        // audio-only switch needlessly recreating the video texture.
+        void ReconfigureAudioOutputForCurrentTrack();
 
         bool isDisposed_ = false;
         bool isLooped_   = false;

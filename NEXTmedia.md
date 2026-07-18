@@ -4,9 +4,17 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-145`, Phases 0-9); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-151`, Phases 0-10); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — `plan_media.md` COMPLETE (145/145 tasks, all 9 phases)
+## 1. Status (2026-07-18) — 151/151 tasks checked off across 10 phases
+
+**Deliberately not calling this "complete."** Three separate external adversarial reviews landed on
+this plan the same day (Phase 8, 9, and 10 below), and every single one found real, specific,
+file-and-line-cited defects that a clean build and passing targeted tests did not surface —
+including in the fix commits written *in response to* the previous review. Read this status as "all
+currently-known findings are fixed, full regression is green" rather than "nothing is left to find."
+Any future review of this code should get the same independent, skeptical treatment the last three
+did — see §1c's closing lesson.
 
 **Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
 this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
@@ -414,6 +422,50 @@ targeted tests passed; a fix for one bug can introduce another, especially in sh
 functions (`ReconfigureAudioAndVideoOutputForCurrentTracks()` here) called from multiple call sites
 with different preconditions.
 
+## 1c. Phase 10 — third external review pass (2026-07-18, same day as Phase 8/9)
+
+A *third* external review, this time of Phase 9's own fix commit (`9b80500d`), confirmed the
+audio-silence regression and the track-switching bug were genuinely fixed — no new regression this
+round — but found the Phase 9 fix itself was still incomplete on five specific points:
+
+1. **The EAGAIN retry itself didn't survive across `NextFrame()` calls** (`MEDIA-146`) —
+   `havePendingVideoPacket` was a function-local flag. The very next `avcodec_receive_frame()` call
+   after setting it almost always immediately returns a buffered frame (that's what unblocked the
+   EAGAIN), and the function returns to the caller *before* the retained packet is ever resent — so
+   the *next* call to `NextFrame()` started with the flag reset to `false`, and the retained packet
+   was silently overwritten by the next `av_read_frame()` call. The exact bug `MEDIA-128`/`MEDIA-140`
+   set out to fix, recurring across call boundaries instead of within one call. Fixed by making it a
+   class member (`havePendingVideoPacket_`), reset in `Close()`.
+2. **The resampler's own internal buffer was never flushed at EOF** (`MEDIA-147`) — only the audio
+   *codec* was flushed (Phase 9's own `MEDIA-141` fix), never `SwrContext` itself. Practical impact is
+   small today (the resampler only does format conversion, not a real rate change, in every fixture
+   this repo has), but it's a real completeness gap for any future path with a genuine rate change.
+   Fixed with `swr_get_delay()` + a null-source `swr_convert()` call at EOF.
+3. **A shared reconfiguration helper still destroyed the unrelated side on a track switch**
+   (`MEDIA-148`) — `ReconfigureAudioAndVideoOutputForCurrentTracks()` always tore down and recreated
+   *both* the SDL audio stream and the video texture, so `SetVideoTrackEXT()` discarded queued audio
+   and `SetAudioTrackEXT()` needlessly reallocated the texture. Split into independent
+   `ReconfigureVideoOutputForCurrentTrack()`/`ReconfigureAudioOutputForCurrentTrack()`, each called
+   only by the setter that actually needs it (`OpenDecoder()` still calls both, for the initial open).
+4. **`Play()`'s exception path left the player half-open** (`MEDIA-149`) — Phase 9's own
+   `try`/`catch` (added to fix `MEDIA-139`) only reset `state_` to `Stopped` on a first-frame-decode
+   failure, but left `decoder_`/`audioStream_`/`frameTexture_`/`video_->parent_` all still
+   allocated/set — `state_` claimed nothing was open while every real resource said otherwise. Fixed
+   by calling the same `CloseDecoder()` every other exit path already uses.
+5. **A stale open-item note in this file** (`MEDIA-150`) — §5 still listed a dedicated
+   `VideoPlayer`-level `audio_tail.mkv` test as future work, even though Phase 9 already added and
+   closed exactly that (`NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDuration`). Corrected
+   in place rather than deleted, so the closure is visible in the historical record.
+
+Full-suite regression after Phase 10: **4871 tests, 4869 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full (`grep -c FAILED` on the complete log), not a
+truncated tail. 4 new tests added by this phase, 0 pre-existing tests broken.
+
+**Lesson reinforced a third time:** every one of the last three review rounds found real, specific,
+file-and-line-cited defects that "the build is clean and the targeted tests pass" did not surface on
+its own — a self-verification blind spot, not a one-off. Treat "N/N complete" as a claim needing its
+own independent adversarial pass, every time, not a status to state and move on from.
+
 ## 2. Correction to Phase 0's own build-verification record
 
 Phase 0's commit `eb3c48a3` states the full `CnaTests` run showed "506 pre-existing failures, all one
@@ -511,11 +563,13 @@ not required for "not just stubs" — surfaced during this plan's own design/aud
   interceptor) that doesn't exist in this repo today. Only worth building if this specific hardening
   ever needs direct proof beyond code review — the corrupt/truncated-fixture and I/O-error-vs-EOF
   halves of the same task are already covered.
-- **A `VideoPlayer`-level `audio_tail.mkv` EOS-drain test** (Phase 8, `MEDIA-130`): the real
-  audio-drain-on-EOF bug is fixed and covered indirectly by `VideoDecoder`-level tests
-  (`AudioTailFixtureHasAudio`/`DrainAudioProducesRealSamplesAfterDecodingFrames`), but a dedicated
-  `VideoPlayer::Play()`+loop-until-`Stopped()` test against `audio_tail.mkv` specifically (proving
-  the fix at the `VideoPlayer` layer, not just `VideoDecoder`) would be a stronger regression guard.
+- ~~A `VideoPlayer`-level `audio_tail.mkv` EOS-drain test~~ — **closed in Phase 9** (`MEDIA-145`):
+  `VideoPlayerTests.cpp`'s `NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDuration` is
+  exactly this dedicated `VideoPlayer::Play()`+loop-until-`Stopped()` test against
+  `audio_tail.mkv`. This bullet was left stale after Phase 9 landed (flagged by a third external
+  code review of Phase 9's own fix commit, `plan_media.md` MEDIA-150) — corrected here rather than
+  removed outright, so a future reader can see the open item really was closed, not silently
+  dropped.
 - **`MediaPlayer::Update()`'s no-`SOUND_ENABLED` fallback is untestable in this project's current
   build matrix** (Phase 8, `MEDIA-32`/`MEDIA-135`): `SOUND_ENABLED` is unconditionally defined for
   every build configuration `cmake/CnaLibrary.cmake` produces, so the `#else` branch that actually

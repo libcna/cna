@@ -43,5 +43,15 @@ namespace Microsoft::Xna::Framework::Media
         {
             return player.audioStream_ != nullptr && SDL_AudioStreamDevicePaused(player.audioStream_);
         }
+
+        // Raw pointer identity, not just presence/pause-state -- proves a track switch that
+        // shouldn't touch the audio stream at all (e.g. a video-only track switch) genuinely left
+        // it alone rather than tearing it down and reopening a new one, which would discard
+        // whatever audio was already queued for playback (plan_media.md MEDIA-148, found by
+        // external code review).
+        static SDL_AudioStream* GetAudioStreamPtr(const VideoPlayer& player)
+        {
+            return player.audioStream_;
+        }
     };
 }

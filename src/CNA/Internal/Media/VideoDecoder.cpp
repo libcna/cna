@@ -127,6 +127,10 @@ namespace CNA::Internal::Media
 
     void VideoDecoder::Close()
     {
+        // av_packet_free() below unrefs any packet still retained by an in-progress EAGAIN retry
+        // -- reset the flag too so a fresh Open() never starts with stale "resend on first call"
+        // state left over from the previous file.
+        havePendingVideoPacket_ = false;
         if (pkt_)      { av_packet_free(&pkt_);          pkt_ = nullptr; }
         if (frame_)    { av_frame_free(&frame_);          frame_ = nullptr; }
         if (swrCtx_)   { swr_free(&swrCtx_);              swrCtx_ = nullptr; }
@@ -505,14 +509,12 @@ namespace CNA::Internal::Media
     {
         if (!fmtCtx_ || !videoCtx_) return false;
 
-        // If a previous call left a video packet that avcodec_send_packet() rejected with
-        // EAGAIN (its internal buffer was full -- FFmpeg's documented contract is "drain via
-        // receive_frame, then resend this exact packet"), it must be retried before reading any
-        // new packet from the demuxer -- av_read_frame() would otherwise overwrite pkt_ and lose
-        // it, silently dropping that video frame (found by external code review, plan_media.md
-        // MEDIA-128).
-        bool havePendingVideoPacket = false;
-
+        // havePendingVideoPacket_ is a class member (see VideoDecoder.hpp) -- a video packet
+        // retained here after send_packet() returns EAGAIN must survive not just this call's loop
+        // but potentially several NextFrame() calls: the very next receive_frame() below almost
+        // always yields a buffered frame immediately, returning to the caller before the pending
+        // packet is resent (found by external code review, plan_media.md MEDIA-146; supersedes the
+        // MEDIA-128 fix, which used a function-local flag that lost this state across calls).
         while (true)
         {
             // Try to receive a decoded frame from codec
@@ -539,7 +541,7 @@ namespace CNA::Internal::Media
                     std::string("VideoDecoder: video decode error: ") + errBuf);
             }
 
-            if (havePendingVideoPacket)
+            if (havePendingVideoPacket_)
             {
                 // receive_frame (just above) has now had a chance to drain the codec's internal
                 // buffer -- retry sending the packet that got EAGAIN before reading anything new.
@@ -547,12 +549,12 @@ namespace CNA::Internal::Media
                 if (sendRet == 0)
                 {
                     av_packet_unref(pkt_);
-                    havePendingVideoPacket = false;
+                    havePendingVideoPacket_ = false;
                 }
                 else if (sendRet != AVERROR(EAGAIN))
                 {
                     av_packet_unref(pkt_);
-                    havePendingVideoPacket = false;
+                    havePendingVideoPacket_ = false;
                     char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
                     av_strerror(sendRet, errBuf, sizeof(errBuf));
                     throw std::runtime_error(
@@ -623,7 +625,7 @@ namespace CNA::Internal::Media
                         // Keep pkt_ alive (do NOT unref) -- retried at the top of the outer loop,
                         // right after the receive_frame call that should relieve the backpressure
                         // this EAGAIN is reporting, instead of silently dropping this video frame.
-                        havePendingVideoPacket = true;
+                        havePendingVideoPacket_ = true;
                     }
                     else
                     {
@@ -708,6 +710,37 @@ namespace CNA::Internal::Media
                 pendingAudio_.insert(pendingAudio_.end(), buf.begin(), buf.end());
             }
         }
+
+        if (!pkt)
+        {
+            // pkt == nullptr is the EOF flush call -- the audio *codec's* own buffered frames were
+            // just drained above via avcodec_receive_frame(), but SwrContext keeps a separate
+            // internal buffer of its own (format/rate-conversion delay). FFmpeg's documented flush
+            // contract for that is a null source pointer/zero count; skipping it silently drops
+            // whatever the resampler was still holding at end-of-stream (found by external code
+            // review, plan_media.md MEDIA-147).
+            int delaySamples = static_cast<int>(swr_get_delay(swrCtx_, audioCtx_->sample_rate));
+            if (delaySamples > 0)
+            {
+                std::vector<float> buf(static_cast<std::size_t>(delaySamples) * channels_);
+                uint8_t* outPtr = reinterpret_cast<uint8_t*>(buf.data());
+                int converted = swr_convert(swrCtx_, &outPtr, delaySamples, nullptr, 0);
+                if (converted < 0)
+                {
+                    char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                    av_strerror(converted, errBuf, sizeof(errBuf));
+                    av_frame_free(&aFrame);
+                    throw std::runtime_error(
+                        std::string("VideoDecoder: audio resampler flush error: ") + errBuf);
+                }
+                if (converted > 0)
+                {
+                    buf.resize(static_cast<std::size_t>(converted) * channels_);
+                    pendingAudio_.insert(pendingAudio_.end(), buf.begin(), buf.end());
+                }
+            }
+        }
+
         av_frame_free(&aFrame);
     }
 

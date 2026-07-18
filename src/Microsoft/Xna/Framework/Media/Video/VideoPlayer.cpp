@@ -66,7 +66,7 @@ namespace Microsoft::Xna::Framework::Media
         SDL_SetAudioStreamGain(audioStream_, isMuted_ ? 0.0f : volume_);
     }
 
-    void VideoPlayer::ReconfigureAudioAndVideoOutputForCurrentTracks()
+    void VideoPlayer::ReconfigureVideoOutputForCurrentTrack()
     {
         if (!decoder_) return;
 
@@ -84,6 +84,11 @@ namespace Microsoft::Xna::Framework::Media
         {
             frameTexture_.reset();
         }
+    }
+
+    void VideoPlayer::ReconfigureAudioOutputForCurrentTrack()
+    {
+        if (!decoder_) return;
 
         // SDL audio stream, sized to whichever audio track is currently active. Always torn down
         // and recreated rather than reused -- a stale stream opened for a different sample
@@ -138,7 +143,7 @@ namespace Microsoft::Xna::Framework::Media
     {
         CloseDecoder();
         // CloseDecoder() unconditionally resets video_ to nullptr (it's also the standalone
-        // Stop()/Dispose() path) -- restore it here so ReconfigureAudioAndVideoOutputForCurrentTracks()
+        // Stop()/Dispose() path) -- restore it here so ReconfigureVideoOutputForCurrentTrack()
         // below (and getVideoProperty(), for the rest of this call) see the real Video being
         // opened, not a stale null.
         video_ = video;
@@ -178,8 +183,8 @@ namespace Microsoft::Xna::Framework::Media
         if (videoTrack_ >= 0) decoder_->SetVideoStream(videoTrack_);
         video->parent_ = this;
 
-        // Set state_ to Playing BEFORE ReconfigureAudioAndVideoOutputForCurrentTracks() runs --
-        // that helper only calls SDL_ResumeAudioStreamDevice() when state_ == Playing (so a
+        // Set state_ to Playing BEFORE ReconfigureAudioOutputForCurrentTrack() runs -- that
+        // function only calls SDL_ResumeAudioStreamDevice() when state_ == Playing (so a
         // mid-playback track switch while genuinely Paused doesn't wrongly resume audio), but
         // state_ is still Stopped here (CloseDecoder() just reset it) since Play() itself doesn't
         // set it to Playing until after this whole function returns. Left as Stopped, this
@@ -188,14 +193,21 @@ namespace Microsoft::Xna::Framework::Media
         // with audio played completely silently (found by external code review).
         state_ = MediaState::Playing;
 
-        ReconfigureAudioAndVideoOutputForCurrentTracks();
+        ReconfigureVideoOutputForCurrentTrack();
+        ReconfigureAudioOutputForCurrentTrack();
 
         // Decode and display first frame immediately. NextFrame() can now throw
         // std::runtime_error for a genuine decode error (plan_media.md MEDIA-39/128) -- state_ was
         // set to Playing above (needed for the resume call in
-        // ReconfigureAudioAndVideoOutputForCurrentTracks() just above), so if this throws, revert
-        // it back to Stopped before propagating, matching this function's own pre-existing
-        // contract that a failed Play() leaves the player in the Stopped state.
+        // ReconfigureAudioOutputForCurrentTrack() just above), so if this throws, the player must
+        // not be left half-open: decoder_/audioStream_/frameTexture_/video_->parent_ are all
+        // already live at this point, and merely resetting state_ to Stopped (the original fix)
+        // left every one of them still allocated behind a state_ that claims nothing is open --
+        // getVideoProperty() would keep returning the video, and a second Play() call would rely
+        // on CloseDecoder() being idempotent by luck rather than by contract (found by external
+        // code review, plan_media.md MEDIA-149). CloseDecoder() performs the full, already-correct
+        // teardown (including its own state_ = Stopped) and is safe to call here since every
+        // resource it releases was in fact opened above.
         try
         {
             double pts = 0.0;
@@ -216,7 +228,7 @@ namespace Microsoft::Xna::Framework::Media
         }
         catch (...)
         {
-            state_ = MediaState::Stopped;
+            CloseDecoder();
             throw;
         }
     }
@@ -307,8 +319,11 @@ namespace Microsoft::Xna::Framework::Media
             decoder_->SetAudioStream(track);
             // A mid-playback switch can change sample rate/channel count -- the already-open SDL
             // audio stream (opened for the previous track) must be recreated to match, not left
-            // stale (plan_media.md MEDIA-90, a real bug found by external code review).
-            ReconfigureAudioAndVideoOutputForCurrentTracks();
+            // stale (plan_media.md MEDIA-90, a real bug found by external code review). Only the
+            // audio side is touched -- reconfiguring the video texture too (as a single combined
+            // helper used to do) would be a needless texture reallocation for a change that has no
+            // effect on it (plan_media.md MEDIA-148, found by external code review).
+            ReconfigureAudioOutputForCurrentTrack();
         }
     }
 
@@ -321,7 +336,11 @@ namespace Microsoft::Xna::Framework::Media
             decoder_->SetVideoStream(track);
             // A mid-playback switch can change frame dimensions -- the already-created texture
             // (sized for the previous track) must be recreated to match (plan_media.md MEDIA-90).
-            ReconfigureAudioAndVideoOutputForCurrentTracks();
+            // Only the video side is touched -- reconfiguring the SDL audio stream too (as a single
+            // combined helper used to do) tore down and reopened it on every video-only track
+            // switch, discarding whatever audio was already queued for playback for no reason
+            // (plan_media.md MEDIA-148, found by external code review).
+            ReconfigureVideoOutputForCurrentTrack();
         }
     }
 

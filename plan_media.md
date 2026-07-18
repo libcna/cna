@@ -1221,6 +1221,105 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   run reliably in isolation (`--gtest_filter` on just that one test), not only as part of the full
   suite, ruling out cross-test ordering/resource effects as a confound for these specific fixes.
 
+### Phase 10 — Third external review pass (2026-07-18, same day as Phase 8/9)
+
+> Applying MEDIA-126's own convention a third time. A third external adversarial review of commit
+> `9b80500d` (Phase 9's own fix commit) confirmed the audio-silence regression and the track-switch
+> bug were genuinely fixed, but found the Phase 9 fix itself was still incomplete on five specific
+> points -- no new regression this time, but real, confirmed completeness gaps in the EAGAIN retry
+> mechanism, the audio/video reconfiguration coupling, resampler flushing, `Play()`'s exception
+> safety, and a stale doc note. Every claim was independently re-derived from the actual code before
+> any fix was written (per this plan's own established practice, not taken at face value).
+
+- [x] **MEDIA-146 — Fix a real bug in Phase 9's own EAGAIN retry: the pending-packet flag didn't
+  survive across `NextFrame()` calls.** `havePendingVideoPacket` (added in Phase 9 to fix
+  `MEDIA-128`'s "video packet retained after EAGAIN gets silently dropped" bug) was a function-local
+  `bool` declared at the top of `NextFrame()`. The retry sequence is: video packet send returns
+  EAGAIN → flag set true, packet retained → outer loop retries `avcodec_receive_frame()` → that call
+  almost always immediately yields a buffered frame (that's what unblocked the EAGAIN in the first
+  place) → the function returns `true` to the caller *before the retained packet is ever resent*.
+  Because the flag was local, the *next* call to `NextFrame()` started with it reset to `false`, so
+  the retained packet was silently overwritten by the next `av_read_frame()` call without ever
+  reaching the decoder -- the exact bug `MEDIA-128` set out to fix, now happening across call
+  boundaries instead of within one call.
+  *Fix:* `havePendingVideoPacket` is now a class member (`havePendingVideoPacket_` in
+  `VideoDecoder.hpp`), reset to `false` in `Close()` (which also unrefs any packet it still holds via
+  `av_packet_free()`) so a fresh `Open()` never inherits stale retry state from a previous file.
+  *Accept:* new `VideoDecoderTest.DecodesTheFullFileWithoutSilentlyDroppingAnyFrame` decodes
+  `chroma_420.mkv` end-to-end via a real `NextFrame()` loop and asserts exactly 50 frames (ffprobe's
+  independently-verified `nb_read_frames`) with strictly increasing PTS -- a genuine, deterministic
+  guard against any frame silently going missing, not just "decoding didn't throw."
+
+- [x] **MEDIA-147 — Flush the resampler's own internal buffer at EOF, not just the audio codec.**
+  Phase 8's `MEDIA-130` fix called `ProcessAudioPacket(nullptr)` at EOF to flush the audio *codec*
+  (draining any frames it was still holding via `avcodec_receive_frame`), but `swr_convert()` was
+  only ever called with real decoded frame data, never with a null source to flush `SwrContext`'s own
+  separate internal buffer (format/rate-conversion delay). Practical impact today is small --
+  `SetupResampler()` configures the same sample rate in and out (format conversion only, no real rate
+  change) -- but it is a real completeness gap, not a hypothetical one: any future path with a real
+  rate change would silently lose the resampler's final buffered samples at EOF.
+  *Fix:* `ProcessAudioPacket(nullptr)`'s EOF branch now also calls `swr_get_delay()` to size a buffer
+  and `swr_convert(swrCtx_, ..., nullptr, 0)` to drain it, with the same error-checking/throw
+  discipline as every other FFmpeg call in this function.
+  *Accept:* covered by the existing `AudioTailFixtureHasAudio`/`DrainAudioProducesRealSamplesAfterDecodingFrames`/
+  full-suite regression run (MEDIA-151 below) -- no fixture in this repo currently forces a non-trivial
+  resampler delay, so this is a correctness fix verified by code review + "doesn't throw, doesn't
+  regress existing audio output," not a fixture engineered to prove non-zero flushed-sample content
+  (documented, not silently claimed otherwise).
+
+- [x] **MEDIA-148 — Split the combined audio/video reconfiguration helper: a track switch on one
+  side was tearing down the other.** `ReconfigureAudioAndVideoOutputForCurrentTracks()` (added in
+  Phase 8) always destroyed and recreated *both* the SDL audio stream *and* the frame texture,
+  regardless of which track actually changed. Calling `SetVideoTrackEXT()` -- even to reselect the
+  already-active index, a legitimate no-op call -- unconditionally tore down and reopened the SDL
+  audio stream too, discarding whatever audio was already queued for playback. `SetAudioTrackEXT()`
+  had the symmetric problem, needlessly reallocating the video texture on every audio-only switch.
+  *Fix:* split into `ReconfigureVideoOutputForCurrentTrack()` (texture only) and
+  `ReconfigureAudioOutputForCurrentTrack()` (SDL stream only, including the resume-on-Playing logic).
+  `OpenDecoder()` calls both (the initial open touches everything); `SetAudioTrackEXT()` calls only
+  the audio half; `SetVideoTrackEXT()` calls only the video half.
+  *Accept:* new `VideoPlayerTest.SetVideoTrackEXTDoesNotTearDownTheUnrelatedAudioStream` captures the
+  `SDL_AudioStream*` pointer identity before/after a video-track switch and asserts it's unchanged (a
+  torn-down-and-reopened stream would be a different pointer); the symmetric
+  `SetAudioTrackEXTDoesNotRecreateTheUnrelatedVideoTexture` does the same for `GetTexture()`'s
+  pointer identity across an audio-track switch.
+
+- [x] **MEDIA-149 — `Play()`'s exception path left the player half-open, not actually closed.**
+  `OpenDecoder()`'s `try`/`catch` around the first-frame decode (added in Phase 9 to fix `MEDIA-139`)
+  only reset `state_` back to `MediaState::Stopped` on failure -- `decoder_`, `audioStream_`,
+  `frameTexture_`, and `video_->parent_` were all left exactly as they were: fully allocated/set.
+  `state_ == Stopped` implies nothing is open everywhere else in this class, but here every actual
+  resource said otherwise -- `getVideoProperty()` kept returning the video that supposedly failed to
+  play, and a second `Play()` call only worked by relying on `CloseDecoder()` being idempotent by
+  luck, not by contract.
+  *Fix:* the `catch` block now calls `CloseDecoder()` (the same full, already-correct teardown every
+  other exit path in this class already uses -- it performs its own `state_ = Stopped` too) instead of
+  just reassigning `state_` directly.
+  *Accept:* new `VideoPlayerTest.PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNotHalfOpen`
+  corrupts real H264 macroblock data inside the *first* video packet of `corrupt_test_h264.mp4`
+  (offset verified via `ffprobe -show_entries frame=pkt_pos` to fall inside the keyframe packet, not a
+  later one, so the very first `decoder_->NextFrame()` call inside `OpenDecoder()`'s `try` block is
+  the one that throws) and asserts `state_ == Stopped`, `getVideoProperty() == nullptr`, no audio
+  stream, no texture, *and* that the player is still fully usable for a subsequent `Play()` call on a
+  good file afterward.
+
+- [x] **MEDIA-150 — Fix a stale open-item note in `NEXTmedia.md`.** §5's "real open follow-ups" list
+  still described a dedicated `VideoPlayer`-level `audio_tail.mkv` EOS-drain test as future work,
+  even though Phase 9 (`MEDIA-145`) already added exactly that test
+  (`NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDuration`). Left stale after Phase 9 landed.
+  *Fix:* the bullet now records the item as closed (struck through, with the task ID and test name),
+  rather than silently deleting the line (a future reader should be able to see it really was closed,
+  not just vanish from the list).
+
+- [x] **MEDIA-151 — Full-suite regression run.** Confirm zero regressions from this third
+  remediation pass, grepped in full (not a truncated tail).
+  *Verified:* 4871 tests, 4869 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope) -- 4 new tests added by this phase (`DecodesTheFullFileWithoutSilentlyDroppingAnyFrame`,
+  `SetVideoTrackEXTDoesNotTearDownTheUnrelatedAudioStream`,
+  `SetAudioTrackEXTDoesNotRecreateTheUnrelatedVideoTexture`,
+  `PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNotHalfOpen`), zero pre-existing tests
+  broken. Grepped in full (`grep -c FAILED` on the complete log, not a truncated tail).
+
 ---
 
 ## 6. Recommended order and milestones
