@@ -320,6 +320,59 @@ namespace
         return data;
     }
 
+    // AUD-11-003 (2026-07-17 deep audit): compact .xwb with a caller-specified `alignment` field
+    // (normally a small constant like 4) -- used to build both a zero-alignment fixture and an
+    // alignment value large enough to overflow the `rawOffsetUnits[i] * alignment` multiplication
+    // in 32-bit arithmetic.
+    std::vector<uint8_t> BuildCompactXwbFixtureWithAlignment(uint32_t alignment, uint32_t rawOffsetUnits)
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 20;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "AUD-11-003", 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        AppendU32(data, rawOffsetUnits & 0x1FFFFFu); // single (last) entry, deviation=0
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
     // Compact .xwb whose single (and therefore last) entry's offset lies past the end of the
     // wave-data segment -- the "remainder of segment" length computation must throw rather than
     // underflow (regression fixture for IN-3's second underflow site).
@@ -1304,6 +1357,25 @@ TEST(XactParserTest, CompactWaveBankThrowsWhenDeviationExceedsGapToNextEntry)
 TEST(XactParserTest, CompactWaveBankThrowsWhenLastEntryOffsetExceedsWaveDataSegment)
 {
     EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithOffsetPastSegment()), std::runtime_error);
+}
+
+// AUD-11-003 (2026-07-17 deep audit): a zero alignment would silently collapse every compact
+// entry's offset to 0 (every entry claiming the same start) instead of failing loudly.
+TEST(XactParserTest, CompactWaveBankThrowsOnZeroAlignment)
+{
+    EXPECT_THROW(ParseXwb(BuildCompactXwbFixtureWithAlignment(0, 1)), std::runtime_error);
+}
+
+// AUD-11-003: rawOffsetUnits (up to 21 bits) times an unconstrained alignment can overflow
+// 32-bit arithmetic and silently wrap to a wrong-but-plausible offset instead of failing loudly.
+// Chosen so the WRAPPED 32-bit product is exactly 0 (0x100000 * 0x1000 == 2^32, wraps to 0) --
+// a small, entirely plausible-looking offset that would NOT trip the pre-existing "offset exceeds
+// wave-data segment" check on its own, unlike a wrap that happens to still land on a huge value.
+TEST(XactParserTest, CompactWaveBankThrowsWhenOffsetMultiplicationOverflows32Bits)
+{
+    EXPECT_THROW(
+        ParseXwb(BuildCompactXwbFixtureWithAlignment(0x1000u, 0x100000u)),
+        std::runtime_error);
 }
 
 TEST(XactParserTest, CompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)

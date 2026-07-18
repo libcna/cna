@@ -554,6 +554,17 @@ namespace CNA::Internal::Audio
 
         if (isCompact)
         {
+            // AUD-11-003 (2026-07-17 deep audit): `alignment` is an unvalidated uint32_t read
+            // straight from the file. Zero would silently make every compact entry's offset
+            // collapse to 0 (every entry claiming the same start, not a crash but genuinely wrong
+            // data -- a real "distorted/missing audio" symptom class, not just a theoretical
+            // hardening concern); an oversized value could overflow the `rawOffsetUnits[i] *
+            // alignment` multiplication below in 32-bit arithmetic and silently wrap to a wrong
+            // (but still in-bounds-looking) offset. D7: throw rather than silently produce wrong
+            // data, same policy already applied to the deviation/offset checks further down.
+            if (alignment == 0)
+                throw std::runtime_error("XWB: corrupt compact wave bank (zero alignment)");
+
             // Compact format: 32-bit per entry: dwOffset (21 bits, units of `alignment`),
             // dwLengthDeviation (11 bits). The deviation is how many bytes shorter than the
             // aligned span the real audio is, not the length itself, so a non-last entry's
@@ -602,7 +613,14 @@ namespace CNA::Internal::Audio
 
             for (uint32_t i = 0; i < entryCount; ++i)
             {
-                uint32_t offset = rawOffsetUnits[i] * alignment;
+                // AUD-11-003: compute in 64-bit and validate before narrowing -- rawOffsetUnits[i]
+                // is up to 21 bits and alignment is a fully unconstrained uint32_t from the file,
+                // so their product can exceed UINT32_MAX and silently wrap in 32-bit arithmetic,
+                // producing a wrong-but-plausible-looking dataOffset instead of failing loudly.
+                const uint64_t offset64 = static_cast<uint64_t>(rawOffsetUnits[i]) * alignment;
+                if (offset64 > 0xFFFFFFFFu)
+                    throw std::runtime_error("XWB: corrupt compact entry (offset overflows 32 bits)");
+                uint32_t offset = static_cast<uint32_t>(offset64);
 
                 result.entries[i].format          = static_cast<XwbFormat>(compactFmtTag);
                 result.entries[i].channels        = compactChannels;
