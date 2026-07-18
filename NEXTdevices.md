@@ -429,6 +429,25 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     logic touching SDL at all — already safe by construction. **Left OPEN**: the one
     genuinely dangerous call site (`SDL_CloseHaptic` UAF) remains hardware-unverified;
     "stress exception exit and plugin/library unload" not attempted.
+32. `PERF2-002` (`03eb0945`) — existing stress tests topped out at 50–400 iterations,
+    far short of this task's own "at least 100k" threshold. Added one new
+    100,000-cycle construct/probe/Start/Stop/Dispose test per class:
+    `Accelerometer`/`Gyroscope` (real backend, unsupported here so each cycle is
+    construct→probe→throw-on-`Start()`→`Dispose()`, still real SDL
+    subsystem/enumeration interaction every cycle), `Compass`/`Motion` (fake backend,
+    matching every other host-runnable test for those two classes), and
+    `VibrateController` (the **real** `SdlHapticVibrateBackend`, not a fake — adapted
+    to 100k probe/`Start`/`Stop` cycles against its one process-lifetime singleton,
+    since it has no per-cycle construct/`Dispose`). New shared
+    `tests/Microsoft/Devices/Detail/ProcSelfResourceCounters.hpp` (Linux-only
+    `/proc/self/fd`/`/proc/self/status` counters) — every test asserts an *exact*
+    return to baseline, not a loose tolerance. All 5 clean under `devices-ubsan`/
+    `-tsan`/`-asan` (0 FD/thread growth, 0 sanitizer reports). **Left OPEN**: this
+    task's own acceptance criteria explicitly name `LSan` — re-confirmed in this pass
+    (not just cited from an earlier finding) that `ASAN_OPTIONS=detect_leaks=1`
+    produces zero `LeakSanitizer` output against these tests, consistent with `LSan`
+    remaining non-functional in this container (needs `ptrace`, unavailable here) —
+    genuinely blocked on the container, not on unfinished implementation.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -686,11 +705,37 @@ tractability):
   value-semantics audit) has not been started this pass.
 - `VIB2-005`–`007` — remaining Vibrate items (`005` needs a direct-backend Android
   validation; `006`/`007` are host-testable design/behavior questions).
-- `PERF2-001`–`003`, `TEST2-002`/`004`–`006`/`010` — remaining P1 perf/test-infra items.
-  `TEST2-005` ("Build a native fault-injection layer") is now referenced by four
+- `PERF2-001`/`003`, `TEST2-002`/`004`–`006`/`010` — remaining P1 perf/test-infra items
+  (`PERF2-002` done this pass, see Section 2). A dedicated survey (2026-07-18) rated
+  these: `TEST2-002` (consolidated clean-checkout sanitizer sweep across the exact
+  Devices filter + lifecycle tests, zero-unexplained-reports) is **tractable-now,
+  lowest risk** — this session already does exactly this kind of verification
+  ad hoc after every task, just never as one consolidated, explicitly documented
+  pass; recommended next. `TEST2-004` (deterministic interleaving hooks/barriers
+  replacing sleep-based stress) is real, host-tractable engineering scope.
+  `PERF2-001` (microbenchmark suite with CI baseline storage) is tractable but
+  medium-sized. `PERF2-003` (8–24 hour soak) cannot run in one session — a short,
+  honestly-labeled smoke-test substitute is the realistic option, not the literal
+  ask. `TEST2-006` needs 3+ real Android devices. `TEST2-010` (multi-compiler
+  strict-XNA check) is tractable for GCC/Clang/NDK-Clang (all available here) but
+  not MSVC (this is a Linux host) — partial coverage only.
+  `TEST2-005` ("Build a native fault-injection layer") is referenced by four
   closed-but-OPEN tasks (`VIB2-003`/`004`, `ANDR2-002`, `SDLCORE-005`) as the thing that
-  would let their acceptance criteria actually be verified — worth prioritizing highly
-  if picked up, since it unblocks re-closing multiple tasks at once, not just its own.
+  would let their acceptance criteria actually be verified — highest cross-task value,
+  but "abstract every native call" is large; a scoped subset (e.g. just the SDL
+  haptic calls) is more realistic for one pass than the full thing.
+- `COMP2-003`/`MOT2-001` — deriving the Android→WP compass basis / Android
+  rotation-vector→XNA attitude transform mathematically is genuinely hardware-independent
+  (only the final "hardware report" confirmation is gated) — same tractable shape as
+  `COMP2-001` earlier this session. `COMP2-004`/`005`/`MOT2-009`/`010` need physical
+  devices/measurements. `MOT2-006` is genuinely unimplemented state-machine work,
+  comparable in scope to `LIFE-007`/`010` — do not pick up as a quick continuation.
+  `MOT2-008` (canonical timestamp semantics) likely intersects `READINGS-003`/
+  `SDLCORE-007` territory — scope carefully before starting, don't assume it's separate.
+  `ANDR2-007` is Android's own version of the `READINGS-003`/`SDLCORE-007` conflict
+  just settled (leave deferred) — very likely the same outcome if picked up.
+  `ANDR2-012`/`015`/`VIB2-005` need real hardware. `ANDR2-014` (fake-NDK-adapter +
+  fuzz harness) is large architecture, comparable to `TEST2-005`.
 - A genuinely new design need surfaced twice this pass (`ANDR2-002`'s "app lifecycle
   changes" and `SDLCORE-005`'s mid-session live-disconnect bullet): neither the SDL
   sensor path nor the Android bridge has any mechanism for an **already-started**
@@ -746,13 +791,14 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 31 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 32 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
-BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011 --
-see Section 2 for commit hashes and a one-line summary of each), plus a
+BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011,
+PERF2-002 -- see Section 2 for commit hashes and a one-line summary of each,
+including PERF2-002's own new 100k-cycle lifecycle leak tests), plus a
 separate, unrelated re-verification round of the *older* `audit_devices.md`
 (6 `DEV-AUD-*` findings, commit `422ed4c4` -- see Section 2's own dated
 entry). All five `BASE2-*` P1 tasks are now done. `DEVPERF-004` found a real,
