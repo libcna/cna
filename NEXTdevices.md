@@ -253,6 +253,32 @@ resolution notes as the template.
     separately-scoped, out-of-scope location work, not merely unverified — a fourth
     distinct "why OPEN" flavor this pass (documentation-complete, feature-blocked).
 
+**2026-07-18: independent re-verification of `audit_devices.md` (a *different*, older
+audit than Section 16 — 6 findings `DEV-AUD-001` through `006`, all marked `CLOSED` on
+2026-07-16, 4 commits `ce8153ed`..`a74f4d73`).** A user-supplied external review found
+only 2 of 6 were genuinely fully resolved. Verified the review's own claims directly
+(re-ran the exact test filter, got identical numbers — 420/416/4/0) before acting on it,
+rather than trusting it blindly. See the (corrected) `project_devices_audit_remediation`
+memory for the full per-finding breakdown. Commit `422ed4c4`:
+- Fixed 2 real, concrete bugs: `Motion.hpp`'s `Calibrate` doc comment said "the compass
+  component" (copy-paste leftover from `Compass.hpp`); `docs/devices-android.md` falsely
+  claimed no `Motion` vector remap exists at all (it does, `MOTION-012`) and that no CI
+  infrastructure exists anywhere (`devices-tests.yml` now exists, just unconfirmed green).
+- Corrected 1 stale status-tracking gap: `VERIFY-001`'s recorded `358`-test count had
+  gone stale exactly as its own entry warned — added a fresh, dated re-verification
+  entry (`420`/`416`/`4`/`0`) rather than editing the historical number in place.
+- Added 1 cross-reference amendment: `ANDROID-BRIDGE-005`'s "no platform-independent
+  test seam is possible" conclusion is superseded by `ANDR2-014`'s later finding that a
+  fake-NDK-adapter seam *is* achievable — noted so `CLOSED` isn't mistaken for "no
+  remaining gap in this area."
+- Re-examined 1 finding (`DEV-AUD-004`/`ANDROID-BRIDGE-006`) and **left it alone** — its
+  own resolution note already honestly distinguishes "re-examination task done" from
+  "underlying limitation resolved" (matches `Accelerometer`'s own identical, permanently
+  accepted callback-destruction boundary) — don't reopen this one without a new, concrete
+  reason, the reviewer's "still unsupported" framing doesn't mean it was mishandled.
+- Confirmed 2 claims as accurate, no fix needed: `docs/hardware-qa-reports/` genuinely
+  doesn't exist; "no physical Android device used" is already honestly stated.
+
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
 NDK cross-compile of the exact translation unit each time (`cmake-build-android`,
