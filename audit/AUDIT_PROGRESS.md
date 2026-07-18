@@ -12,11 +12,15 @@ core CNA internals, Microsoft.Xna/Devices public API) audited directly by the ma
 batches (examples, tests, tools) fanned out via the Workflow tool per decision D-P1.
 
 Direct-audit work so far: `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2),
-`backend-sdlrenderer` (2/2), `backend-dx3` (2/2, static-only per D-P4 — Windows/DirectDraw, not buildable here) —
-all fully AUDITED with genuine findings recorded (see below). Next: continue single-file backend adapters
-(`backend-easygl` — the big 4733-line one — then `backend-webgpu`), then the larger multi-file backends
-(`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`, `backend-vulkan`,
-`backend-d3dcommon`), then CNA core / Microsoft.Xna / Microsoft.Devices shards.
+`backend-sdlrenderer` (2/2), `backend-dx3` (2/2, static-only per D-P4), `backend-easygl` (2/2, scoped-depth review
+of the 4733-line file per its own methodology note) — all fully AUDITED with genuine findings recorded (see
+below). **EasyGL's audit produced this pass's most severe finding (F1: dangling window-registry entry on
+constructor failure) and independently confirmed the skinned-normal-transform bug the mechanical batch had
+already surfaced from the test side (F2/F3).** Next: `backend-webgpu` (last single-file adapter), then the larger
+multi-file backends (`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`,
+`backend-vulkan`, `backend-d3dcommon` — the last of which should specifically check whether `Canvas`/`SdlGpu`/
+`WebGPU`'s own `RegisterForWindow` call sites share EasyGL's F1 ordering risk), then CNA core / Microsoft.Xna /
+Microsoft.Devices shards.
 
 Three more mechanical-batch Workflows launched in parallel (same proven pattern as easygl): `examples-tests-bgfx`
 (98 files, run `wf_bcaa2d48-c2c`), `examples-tests-vulkan` (70 files, run `wf_97caa64c-71d`, after one transient
@@ -44,9 +48,9 @@ Next mechanical-batch candidates (same pattern, same prompt template): `examples
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **228** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2,
-  backend-dx3 ×2, examples-tests-easygl ×218)
-- PENDING: **2069** (+ 235 in flight via 3 parallel background workflows: bgfx 98, vulkan 70, sdlrenderer 67)
+- AUDITED so far: **230** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2,
+  backend-dx3 ×2, backend-easygl ×2, examples-tests-easygl ×218)
+- PENDING: **2067** (+ 235 in flight via 3 parallel background workflows: bgfx 98, vulkan 70, sdlrenderer 67)
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 

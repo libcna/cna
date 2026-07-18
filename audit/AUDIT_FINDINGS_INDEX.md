@@ -14,15 +14,24 @@ _(none recorded yet)_
 
 ### HIGH
 
-- **EasyGL backend: skinned-effect shaders never transform the normal into world space (missing
-  WorldInverseTranspose step), diverging from FNA — invisible to every existing test because they all use an
-  Identity World matrix.** Confirmed via production-code reading (not just test analysis) across three
-  independent test files' audits: `EnsureSkinnedProgram()`/`EnsureSkinnedVertexLitProgram()` (SkinnedEffect) and
-  `EnsurePbrSkinnedProgram()` (SkinnedPbrEffect) all transform the normal with the raw World/bone matrix instead
-  of the correct inverse-transpose. This is a **production backend defect**, not merely a test gap — every
-  existing skinned-lighting/skinned-PBR test happens to use `World=Identity`, where the raw and inverse-transpose
-  matrices coincide, masking the bug. Needs verification/deepening when `backend-easygl` is directly audited (not
-  yet reached at time of writing). See
+- **EasyGL backend: a constructor failure after `RegisterForWindow()` but before construction completes leaves a
+  dangling entry in `IGraphicsBackend`'s static window registry.** Independently discovered via direct production
+  code reading (not from the test batch). `EasyGLGraphicsBackend`'s constructor calls `RegisterForWindow(window,
+  this)` early, then `SDL_GL_CreateContext` can throw shortly after (a real, reachable failure mode — unsupported
+  GLES3 context, headless/CI environment, driver issue). The registry entry is never cleaned up since the
+  destructor never runs on a failed construction. `SdlInputBridge.cpp`/`Mouse.cpp` both dereference
+  `GetForWindow()`'s result unconditionally — a subsequent mouse/input event on that window would be a
+  use-after-free. **The most severe confirmed finding in this audit so far.** See
+  [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F1.
+- **EasyGL backend: `SkinnedEffect`'s shaders never apply the object's World transform to lighting normals at all
+  — CONFIRMED via direct source reading** (production-code root-cause of the finding three independent test-file
+  audits surfaced from the test side — see those reports below). `EnsureSkinnedProgram()`/
+  `EnsureSkinnedVertexLitProgram()` transform the normal with `mat3(skinMat)*aNormal` only; neither program even
+  registers a `uNormalMatrix` uniform location, unlike every non-skinned lit shader in the same file (which
+  correctly uses the inverse-transpose `uNormalMatrix`, itself a documented prior fix, Task 398). Any rotated
+  skinned model's lighting is wrong; invisible to every existing test because they all use `World=Identity`. See
+  [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F2, and the originating test
+  reports:
   [easygl_skinnedeffect_preferperpixellighting_test.cpp](examples/easygl_skinnedeffect_preferperpixellighting_test.cpp.audit.md),
   [easygl_skinnedeffect_specular_test.cpp](examples/easygl_skinnedeffect_specular_test.cpp.audit.md),
   [easygl_skinnedpbreffect_golden_test.cpp](examples/easygl_skinnedpbreffect_golden_test.cpp.audit.md).
@@ -63,6 +72,10 @@ _(none recorded yet)_
   attempting to create new ones; on failure, every subsequent `Clear`/`Present`/`ReadBackbuffer` call dereferences
   a null surface pointer. See
   [audit report](src/CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.cpp.audit.md) F1.
+- **EasyGL backend: `SkinnedPbrEffect`'s shader uses the raw `uWorld` matrix instead of the inverse-transpose
+  normal matrix** for its normal/tangent transform — correct only for rotation/uniform-scale World transforms,
+  wrong for non-uniform scale. A narrower-scope sibling of the HIGH finding above. See
+  [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F3.
 
 ### LOW / recurring test-authoring patterns (from the `examples-tests-easygl` mechanical batch, 218 files)
 

@@ -18,9 +18,17 @@ Organize by category as entries accumulate.
 - **Silent-default-degradation risk in `IGraphicsBackend`** (see `include/CNA/Internal/Backends/Common/
   IGraphicsBackend.hpp.audit.md` F1): most optional 3D-state/effect-parameter methods default to a silent no-op
   or colored-fallback rather than a negotiable capability, with `SupportsCapability()` defaulting to `true` for
-  everything. SdlRenderer's audit confirms the *good* counter-pattern (every unsupported method explicitly
-  overridden to throw); worth checking during Pass 4 whether other backends follow SdlRenderer's discipline or
+  everything. SdlRenderer's and Dx3's audits both confirm the *good* counter-pattern (every unsupported method
+  explicitly overridden to throw); worth checking during Pass 4 whether other backends follow that discipline or
   IGraphicsBackend's riskier default.
+- **CONFIRMED LIVE BUG (not just theoretical risk): `IGraphicsBackend::RegisterForWindow`/`windowRegistry()`'s
+  register-in-constructor/unregister-in-destructor convention has no protection against a constructor that
+  registers early and then throws before completing.** `EasyGLGraphicsBackend`'s own audit (F1) found a concrete,
+  reachable instance: `RegisterForWindow` runs before `SDL_GL_CreateContext`, which can throw. The destructor
+  (which would unregister) never runs on a failed construction, leaving a dangling pointer that
+  `SdlInputBridge`/`Mouse` would dereference on the next input event. **Check `Canvas`/`SdlGpu`/`WebGPU` (the
+  other three `RegisterForWindow` callers) for the same ordering risk when their shards are audited** — this may
+  be a systemic pattern across all four callers, not an EasyGL-specific mistake.
 
 ## Duplicated backend logic
 
@@ -36,14 +44,16 @@ _(pending)_
 
 ## Systematic FNA parity gaps
 
-- **EasyGL skinned-effect shaders skip the WorldInverseTranspose normal transform** (SkinnedEffect's
-  `EnsureSkinnedProgram`/`EnsureSkinnedVertexLitProgram` and SkinnedPbrEffect's `EnsurePbrSkinnedProgram`) —
-  discovered incidentally while auditing 3 EasyGL example tests (`examples-tests-easygl` shard), all of which use
-  `World=Identity` and so cannot detect it. This is a genuine, uncorroborated-by-any-existing-test FNA parity gap
-  in production code (any game applying a non-uniform-scale or rotated World transform to a skinned model would
-  get incorrectly-lit normals). **High priority to verify directly when `backend-easygl`'s own shard is audited**
-  (not yet reached). See `AUDIT_FINDINGS_INDEX.md` HIGH section for the three test reports that surfaced this.
-  (see also — pending — Pass 3 in AUDIT_PROGRESS.md)_
+- **CONFIRMED (direct source verification): EasyGL skinned-effect shaders skip the WorldInverseTranspose normal
+  transform.** First surfaced incidentally by 3 EasyGL example-test audits (`examples-tests-easygl` shard, all
+  using `World=Identity` so unable to prove it), then independently confirmed by direct reading of
+  `EasyGLGraphicsBackend.cpp` during the `backend-easygl` direct audit: `EnsureSkinnedProgram`/
+  `EnsureSkinnedVertexLitProgram` never register or use a `uNormalMatrix` uniform at all (normal transformed only
+  by the bone-skin matrix), and `EnsurePbrSkinnedProgram` uses the raw `uWorld` matrix instead of the correct
+  inverse-transpose. All three are regressions relative to a correctness bar (`uNormalMatrix` =
+  `transpose(inverse(world3x3))`, Task 398) this same file already meets for every *non-skinned* lit shader. See
+  `AUDIT_FINDINGS_INDEX.md` HIGH/MEDIUM sections and
+  `audit/src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md` F2/F3 for full detail.
 
 ## Recurring testing gaps
 
