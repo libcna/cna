@@ -723,6 +723,68 @@ TEST(VibrateControllerTests, StartLeftRightWithOutOfRangeDurationThrowsAndNeverR
     EXPECT_EQ(fake->StartLeftRightCallCount, 0);
 }
 
+// Task VIB2-006 (2026-07-18, external audit `audit_devices_2026-07-17.md`): closes the gap the
+// existing StartWithIntensityZeroDoesNotThrow test (above) leaves open -- that test only proves
+// intensity 0.0 doesn't throw, not what actually happens to it. Confirms Start(duration, 0.0f)
+// genuinely forwards as an active zero-strength Start() call (StartCallCount increments,
+// LastStartIntensity is exactly 0.0f) -- **not** silently translated into an implicit Stop()
+// call (StopCallCount stays 0). This is the deliberate policy VibrateController.hpp's own
+// Start(TimeSpan, float) doc comment now states explicitly, backed by SDL's own documented
+// SDL_PlayHapticRumble() contract ("strength of the rumble to play as a 0-1 float value" --
+// third_party/SDL/include/SDL3/SDL_haptic.h -- 0 is explicitly inside that documented valid
+// range, not a special/invalid case SDL itself treats differently).
+TEST(VibrateControllerTests, StartWithIntensityZeroForwardsAsAnActiveZeroStrengthStartNotAnImplicitStop)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(50), 0.0f);
+
+    EXPECT_EQ(fake->StartCallCount, 1);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+    EXPECT_EQ(fake->StopCallCount, 0);
+}
+
+// Task VIB2-006: "Stop when idle" -- Stop() before any Start()/StartLeftRight() call must still
+// forward cleanly to the backend (a real haptic backend's own Stop() is expected to be a safe
+// no-op against a device that was never started -- SDL's own SDL_StopHapticRumble() doc comment
+// carries no "must already be playing" precondition), not throw or silently no-op at the
+// VibrateController layer itself.
+TEST(VibrateControllerTests, StopWhenIdleForwardsToBackendWithoutThrowing)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    EXPECT_NO_THROW(controller->Stop());
+
+    EXPECT_EQ(fake->StopCallCount, 1);
+    EXPECT_EQ(fake->StartCallCount, 0);
+}
+
+// Task VIB2-006: "Start while active" -- a second Start() call while a first is still nominally
+// active (no Stop()/duration-elapsed between them) must forward as its own independent Start()
+// call, replacing (not queuing behind, not rejecting) the previous one -- matches
+// SdlHapticVibrateBackend::Start()'s own real behavior (SDL_PlayHapticRumble() on an
+// already-playing rumble effect simply restarts it with the new parameters, confirmed by
+// reading third_party/SDL/src/haptic/SDL_haptic.c directly: SDL_PlayHapticRumble() does not
+// check or reject a still-playing rumble state before calling through to the platform effect
+// API). Verified at the VibrateController layer via the fake backend (the real backend's own
+// exact restart semantics remain hardware-unverified, matching every other VIB2-* real-SDL-call
+// finding this pass).
+TEST(VibrateControllerTests, StartWhileAlreadyActiveForwardsAsANewIndependentStartCall)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(500), 0.3f);
+    controller->Start(TimeSpan::FromMilliseconds(100), 0.9f);
+
+    EXPECT_EQ(fake->StartCallCount, 2);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.9f);
+    EXPECT_EQ(fake->LastStartDuration, TimeSpan::FromMilliseconds(100));
+    EXPECT_EQ(fake->StopCallCount, 0); // Replacement, not an implicit stop-then-start.
+}
+
 TEST(VibrateControllerTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
 {
     {

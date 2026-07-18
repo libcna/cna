@@ -9575,7 +9575,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Stop and 0/5-second boundary behavior match the reference policy.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### VIB2-006 — Verify zero-duration, repeated Start and intensity-zero semantics — OPEN
+### VIB2-006 — Verify zero-duration, repeated Start and intensity-zero semantics — OPEN (controller-level semantics verified and documented; real-backend mutual exclusion stays hardware-unverified)
 
 - **Priority:** P2
 - **Area:** Perfection re-audit
@@ -9588,6 +9588,60 @@ test is not sufficient for an Android coordinate/fusion claim.
   - All edge sequences are deterministic and leak-free.
   - Strict Start(TimeSpan) behavior matches the oracle.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - **"Intensity zero" — already decided by an earlier task (`DEVICES-0030`),
+    not re-litigated, but strengthened and, crucially, actually verified**:
+    `VibrateController.hpp`'s own doc comment already documented "intensity
+    0.0f is not special-cased into an implicit Stop()" — but the only
+    existing test for this (`StartWithIntensityZeroDoesNotThrow`) checked
+    exactly that: it doesn't throw, not what the call actually forwards.
+    New `StartWithIntensityZeroForwardsAsAnActiveZeroStrengthStartNotAnImplicitStop`
+    uses `FakeVibrateBackend` to confirm `Start(duration, 0.0f)` genuinely
+    calls `Start()` (not `Stop()`) with `LastStartIntensity == 0.0f`.
+    Strengthened the doc comment with a real citation: SDL's own
+    `SDL_PlayHapticRumble()` contract documents `strength` as "a 0-1 float
+    value" (`third_party/SDL/include/SDL3/SDL_haptic.h`) — `0` is explicitly
+    inside the documented valid range, not a special case SDL itself treats
+    differently, confirmed by reading `SDL_haptic.c`'s actual implementation
+    (clamps to `[0,1]`, no early-reject for `0`).
+  - **"Start while active" / "Stop when idle" — new, real tests, not
+    previously covered at all**: `StartWhileAlreadyActiveForwardsAsANewIndependentStartCall`
+    (a second `Start()` while the first is still nominally active forwards as
+    its own independent call, replacing — not queuing behind or rejecting —
+    the first; confirmed against `SDL_PlayHapticRumble()`'s own actual
+    implementation, which updates and restarts an already-playing effect
+    unconditionally, no "already playing" rejection) and
+    `StopWhenIdleForwardsToBackendWithoutThrowing` (`Stop()` before any
+    `Start()` forwards cleanly, does not throw).
+  - **"Replacement between simple and left/right effects"**: confirmed by
+    reading `SdlHapticVibrateBackend.cpp` directly that `Start()`/
+    `StartLeftRight()` already call `DestroyLeftRightEffectIfAny()`/stop the
+    simple rumble respectively before switching modes (mutual exclusion is
+    already implemented, not missing) — existing tests
+    (`StartThenStartLeftRightThenStopDoesNotThrow`,
+    `StartLeftRightThenStartThenStopDoesNotThrow`,
+    `AlternatingStartAndStartLeftRightRepeatedlyDoesNotThrow`) already
+    exercise this sequence against the real backend, but (like every other
+    real-`SdlHapticVibrateBackend` test in this file) can only prove "does
+    not throw/crash" — no real haptic device exists in this container to
+    observe whether the *actual* SDL-level mode switch takes effect
+    correctly. Not a new gap introduced or newly discovered by this task;
+    matches the standing limitation this file's own comments already state
+    for every real-backend test.
+  - **Files changed:** `include/Microsoft/Devices/VibrateController.hpp`
+    (doc comment strengthened, no behavior change);
+    `tests/Microsoft/Devices/VibrateControllerTests.cpp` (3 new tests). No
+    production `.cpp` changed.
+  - **Tests:** full precise filter plus new suites (367 tests) clean under
+    `devices-ubsan` — 363 passed, 4 hardware skips, 0 failures.
+  - **Remaining limitations (why this stays OPEN):** "all edge sequences are
+    deterministic and leak-free" and "Strict `Start(TimeSpan)` behavior
+    matches the oracle" both ultimately require observing the *real*
+    `SdlHapticVibrateBackend`'s interaction with actual SDL haptic state
+    (mode-switch correctness, leak-freedom of the underlying SDL effect
+    handles across rapid switches) — this container has no haptic device to
+    open, the same limitation every other `VIB2-*` real-hardware task this
+    pass already carries.
 
 ### VIB2-007 — Audit gamepad-haptic exclusion and selection cost — OPEN
 
