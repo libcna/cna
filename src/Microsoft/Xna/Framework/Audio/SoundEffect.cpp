@@ -3,6 +3,8 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <istream>
@@ -94,6 +96,31 @@ namespace Microsoft::Xna::Framework::Audio
             if (len >= 3 && std::memcmp(data, "ID3", 3) == 0) return "MP3 (ID3 tag)";
             if (len >= 3 && data[0] == 'X' && data[1] == 'N' && data[2] == 'B') return "XNB";
             return nullptr;
+        }
+
+        // AUD-05-007: best-effort detection that raw PCM16 statistics look implausible for real
+        // audio (e.g. float32 data byte-reinterpreted as PCM16, or Ogg/MP3-compressed data
+        // without a recognizable header). Compressed/encoded bitstreams are specifically designed
+        // to approach maximum byte-level entropy (~8 bits/byte, statistically close to random
+        // noise); real quantized 16-bit audio essentially never does, even for loud/percussive
+        // content -- adjacent samples/channels stay correlated, and typical byte-value
+        // distributions are skewed rather than uniform. Advisory only, like
+        // DetectLikelyContainerSignature above -- never throws, no release rejection, and the
+        // 7.9-bit threshold (out of a theoretical max of 8.0) is deliberately conservative to
+        // avoid flagging genuinely loud/noisy game audio.
+        bool LooksImplausiblyHighEntropyForPcm16(const SharpRuntime::bytecs* data, std::size_t len)
+        {
+            if (len < 256) return false; // too short to estimate entropy meaningfully
+            std::array<std::size_t, 256> histogram{};
+            for (std::size_t i = 0; i < len; ++i) histogram[data[i]]++;
+            double entropy = 0.0;
+            for (std::size_t count : histogram)
+            {
+                if (count == 0) continue;
+                double p = static_cast<double>(count) / static_cast<double>(len);
+                entropy -= p * std::log2(p);
+            }
+            return entropy > 7.9;
         }
 
         // Applies the already-computed crossfeed matrix (see FireAndForgetPanState above) to
@@ -290,6 +317,14 @@ namespace Microsoft::Xna::Framework::Audio
                       << "to this constructor decodes the container's header as audio samples, "
                       << "producing garbage output. Use SoundEffect(const std::string&) to load "
                       << "a file instead.\n";
+        }
+        else if (LooksImplausiblyHighEntropyForPcm16(buffer.data() + off, cnt))
+        {
+            std::cerr << "[SoundEffect] Warning: raw PCM buffer has implausibly high byte-level "
+                      << "entropy for real 16-bit audio -- this often indicates compressed "
+                      << "(Ogg/MP3, without a recognizable header) or otherwise non-PCM16 data "
+                      << "(e.g. float32 samples byte-reinterpreted as PCM16) was passed to this "
+                      << "constructor instead of raw PCM16LE samples.\n";
         }
 
         SDL_AudioSpec spec{};

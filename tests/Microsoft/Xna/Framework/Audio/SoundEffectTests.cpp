@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <type_traits>
 #include <vector>
@@ -1062,6 +1064,66 @@ TEST(SoundEffectTest, RawBufferWithoutKnownSignatureEmitsNoDiagnostic)
     testing::internal::CaptureStderr();
     auto second = std::make_unique<SoundEffect>(
         std::vector<unsigned char>(4 * 256, 0), 44100, AudioChannels::Stereo);
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
+}
+
+// ---------------------------------------------------------------------------
+// AUD-05-007: raw PCM16 statistics that look implausible for real audio (e.g. compressed data
+// without a recognizable container signature, or float32 samples byte-reinterpreted as PCM16)
+// should also be diagnosed -- via byte-level entropy, since compressed/encoded bitstreams
+// approach maximum entropy while real quantized audio essentially never does.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, RawBufferWithHighEntropyRandomDataEmitsDiagnosticWithoutThrowing)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    // Deterministic PRNG (fixed seed) -- genuinely high-entropy bytes, a reasonable proxy for
+    // compressed/encoded data's own near-uniform byte distribution.
+    std::mt19937 rng(12345);
+    std::uniform_int_distribution<int> dist(0, 255);
+    std::vector<unsigned char> pcm(4 * 1024);
+    for (auto& b : pcm) b = static_cast<unsigned char>(dist(rng));
+
+    testing::internal::CaptureStderr();
+    std::unique_ptr<SoundEffect> fx;
+    try
+    {
+        fx = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
+    }
+    catch (...)
+    {
+        testing::internal::GetCapturedStderr();
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::string captured = testing::internal::GetCapturedStderr();
+
+    ASSERT_NE(fx, nullptr);
+    EXPECT_FALSE(fx->getIsDisposedProperty()); // never throws/rejects -- advisory only
+    EXPECT_NE(captured.find("entropy"), std::string::npos) << "captured stderr: " << captured;
+}
+
+TEST(SoundEffectTest, RawBufferWithRealSineWaveEmitsNoEntropyDiagnostic)
+{
+    auto fx = makeEffect(); // sanity: confirm a device is available before the real assertion
+    if (!fx) GTEST_SKIP() << "no audio device";
+
+    // A real, continuous 440 Hz tone -- correlated sample-to-sample, nowhere near the entropy
+    // of compressed/random data. Must not false-positive.
+    const int frames = 1024;
+    std::vector<unsigned char> pcm(static_cast<std::size_t>(frames) * 4); // stereo S16
+    auto* samples = reinterpret_cast<int16_t*>(pcm.data());
+    for (int i = 0; i < frames; ++i)
+    {
+        const double t = static_cast<double>(i) / 44100.0;
+        const auto s = static_cast<int16_t>(30000.0 * std::sin(2.0 * 3.14159265358979 * 440.0 * t));
+        samples[i * 2 + 0] = s;
+        samples[i * 2 + 1] = s;
+    }
+
+    testing::internal::CaptureStderr();
+    auto second = std::make_unique<SoundEffect>(pcm, 44100, AudioChannels::Stereo);
     std::string captured = testing::internal::GetCapturedStderr();
 
     EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
