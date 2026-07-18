@@ -6,7 +6,7 @@
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
 > (`MEDIA-1`–`MEDIA-215`, Phases 0-16); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **41 of 48 done, 7 open (all Group D, deferred by the owner)**
+## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **44 of 51 done, 7 open (all Group D, deferred by the owner)**
 
 > **Phase 16 is open work, not a review of a fix commit.** A full **XNA 4.0 API-parity audit**
 > (against the original Microsoft reference assemblies, *not* FNA) found that while all 24 public

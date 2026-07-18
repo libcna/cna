@@ -288,7 +288,13 @@ TEST_F(MediaPlayerTest, EnablingVisualizationIsSafeWithoutAnAudioDevice)
 // This asserts the observable contract that follows from it -- IsVisualizationEnabled must never
 // report true when no tap could be installed, because a caller would then poll forever for data
 // that can never arrive. On a machine where the tap DOES install, it must report true.
-TEST_F(MediaPlayerTest, IsVisualizationEnabledNeverClaimsEnabledWithoutAWorkingTap)
+// NOTE ON WHAT THIS DOES *NOT* COVER (plan_media.md MEDIA-222): the whole suite runs with a dummy
+// SDL audio driver, so GetMixer() always succeeds here and the no-mixer/failed-install branch is
+// never exercised. GetMixer() also caches its device, so a later test cannot force it to fail
+// either. That branch is therefore correct BY CONSTRUCTION (the flag is assigned only from what
+// actually happened, never up front) and NOT by this test -- an earlier name for this test,
+// "...NeverClaimsEnabledWithoutAWorkingTap", overclaimed exactly that.
+TEST_F(MediaPlayerTest, VisualizationEnabledStateStaysConsistentWithGetVisualizationData)
 {
     MediaPlayer::setIsVisualizationEnabledProperty(true);
     const bool enabled = MediaPlayer::getIsVisualizationEnabledProperty();

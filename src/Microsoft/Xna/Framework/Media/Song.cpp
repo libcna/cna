@@ -190,6 +190,20 @@ namespace Microsoft::Xna::Framework::Media
         }
 
         std::string rest = uri.substr(colon + 1);
+
+        // Strip the query and fragment: System.Uri.LocalPath returns ONLY the path component, so
+        // "file:///music/song.mp3?v=1#intro" resolves to "/music/song.mp3". Keeping them made the
+        // path unopenable and produced a misleading FileNotFoundException naming a filename that
+        // was never asked for (plan_media.md MEDIA-223).
+        //
+        // Done BEFORE percent-decoding, deliberately: a '?' or '#' that is percent-encoded
+        // (%3F / %23) is a LITERAL character in the filename, not a delimiter, and decoding first
+        // would truncate the path at it.
+        const std::size_t frag = rest.find('#');
+        if (frag != std::string::npos) rest.erase(frag);
+        const std::size_t query = rest.find('?');
+        if (query != std::string::npos) rest.erase(query);
+
         std::string path;
 
         if (rest.rfind("//", 0) == 0)

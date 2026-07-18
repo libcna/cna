@@ -185,61 +185,62 @@ namespace Microsoft::Xna::Framework::Media
         {
             return;
         }
-        g_visualizationEnabled = value;
 
+        // The flag is assigned only from what ACTUALLY happened, never up front. An earlier version
+        // set it before even obtaining the mixer, so a GetMixer() failure left
+        // IsVisualizationEnabled reporting true with no mixer and no callback -- a caller would then
+        // poll forever for data that could never arrive (plan_media.md MEDIA-222).
 #ifdef SOUND_ENABLED
-        // Install/remove the tap itself, so a game that never enables visualization pays no
-        // per-buffer cost at all on the audio thread (plan_media.md MEDIA-188).
-        // GetMixer() creates the shared device on first call, matching how the playback paths in
-        // this file already acquire it (see LoadSong). It throws if the device cannot be created
-        // -- e.g. a machine with no audio hardware at all -- in which case visualization simply
-        // stays flagged on with no data, which GetVisualizationData already handles by returning
-        // zeroed arrays (plan_media.md MEDIA-191).
         try
         {
-            if (MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer())
+            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+
+            if (!value)
             {
-                // MIX_SetPostMixCallback returns bool, and ignoring it is not cosmetic here: on
-                // an install failure the flag would claim visualization is on while no data can
-                // ever arrive, and on an UNINSTALL failure the audio thread may still be writing
-                // into a buffer we are about to zero -- reintroducing the very race MEDIA-216
-                // fixed (plan_media.md MEDIA-220).
-                if (value)
+                // Disabling always ends with the flag false: with no mixer there is nothing to
+                // disable, and with one we remove the tap first (see below).
+                if (mixer != nullptr && MIX_SetPostMixCallback(mixer, nullptr, nullptr))
                 {
-                    // Clear BEFORE installing the tap: once the callback is live the audio thread
-                    // owns the buffer, so resetting it afterwards would race with a write in
-                    // flight (plan_media.md MEDIA-216).
+                    // Uninstall confirmed, so no callback can be writing -- safe to clear.
                     g_visualizationCapture.Reset();
-                    if (!MIX_SetPostMixCallback(mixer, OnPostMix, nullptr))
-                    {
-                        // No tap means no data will ever arrive, so reporting "enabled" would be a
-                        // lie. Revert to the state the caller can actually rely on.
-                        g_visualizationEnabled = false;
-                    }
                 }
-                else
+                else if (mixer == nullptr)
                 {
-                    // Remove the tap FIRST, then clear -- the reverse order let the audio thread
-                    // keep writing into a buffer the game thread was zeroing.
-                    if (MIX_SetPostMixCallback(mixer, nullptr, nullptr))
-                    {
-                        g_visualizationCapture.Reset();
-                    }
-                    // Uninstall failed: the callback may still be live, so deliberately do NOT
-                    // Reset() -- zeroing a buffer another thread is writing is exactly the race
-                    // being avoided. The stale samples are harmless; GetVisualizationData() gates
-                    // on the (now false) enabled flag anyway.
+                    // No mixer was ever created, so no callback can exist.
+                    g_visualizationCapture.Reset();
                 }
+                // Uninstall FAILED: the callback may still be live, so deliberately do NOT Reset()
+                // -- zeroing a buffer another thread is writing is the exact race MEDIA-216 fixed.
+                g_visualizationEnabled = false;
+                return;
             }
+
+            // Enabling: only report enabled once a tap is genuinely installed.
+            if (mixer == nullptr)
+            {
+                return; // stays false
+            }
+            // Clear BEFORE installing: once the callback is live the audio thread owns the buffer.
+            g_visualizationCapture.Reset();
+            if (MIX_SetPostMixCallback(mixer, OnPostMix, nullptr))
+            {
+                g_visualizationEnabled = true;
+            }
+            // Install failed -> flag stays false, matching reality.
         }
         catch (const std::exception&)
         {
-            // No audio device: no callback was ever installed, so no thread can be writing and
-            // clearing here is safe.
+            // GetMixer() throws when no audio device can be created at all (e.g. a headless
+            // machine). No callback was ever installed, so clearing is safe -- but enabling must
+            // NOT be reported as successful.
             g_visualizationCapture.Reset();
+            g_visualizationEnabled = false;
         }
 #else
-        g_visualizationCapture.Reset(); // no audio backend, so no concurrent writer
+        // No audio backend compiled in: there is no audio thread, so the flag round-trips and the
+        // buffer simply stays empty.
+        g_visualizationEnabled = value;
+        g_visualizationCapture.Reset();
 #endif
     }
 

@@ -2341,6 +2341,45 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   construction, not by a test that would catch a regression of it. Group D (`MEDIA-192`..`198`)
   remains deferred by the project owner.
 
+- [x] **MEDIA-222 — Stop `IsVisualizationEnabled` reporting a state that never happened.** An
+  eleventh review found the flag was assigned **before** the mixer was even obtained, so when
+  `GetMixer()` threw (a machine with no audio device at all) the `catch` cleared the buffer but left
+  the flag `true` -- reporting visualization as on with no mixer and no callback. That directly
+  contradicted `MEDIA-220`'s own claim, and the test I named
+  `...NeverClaimsEnabledWithoutAWorkingTap` did not actually verify it.
+  *Fix:* `setIsVisualizationEnabledProperty()` restructured so the flag is assigned **only from what
+  actually happened**, never up front: enabling sets `true` solely after
+  `MIX_SetPostMixCallback` confirms the install; a null mixer, a failed install, or a thrown
+  `GetMixer()` all leave it `false`. Disabling always ends `false`, still skipping `Reset()` when
+  the uninstall could not be confirmed (`MEDIA-216`'s race).
+  *Accept -- with the limitation stated plainly:* the branch is correct **by construction, not by
+  test**. The suite runs with a dummy SDL audio driver so `GetMixer()` always succeeds, and it
+  caches its device, so no later test can force the failure. The overclaiming test name was
+  corrected to `VisualizationEnabledStateStaysConsistentWithGetVisualizationData`, with an in-file
+  note recording exactly which branch is uncovered and why -- rather than leaving a name that
+  implies coverage that does not exist.
+
+- [x] **MEDIA-223 — Strip query and fragment in `FromUri`, matching `Uri.LocalPath`.** Everything
+  after `file:` was treated as path, so `file:///music/song.mp3?version=1#intro` tried to open a
+  file literally named `song.mp3?version=1#intro` and failed with a `FileNotFoundException` naming
+  a filename nobody asked for. `System.Uri.LocalPath` returns only the path component.
+  *Fix:* fragment then query are removed **before** percent-decoding -- deliberately in that order,
+  because a percent-encoded `?`/`#` (`%3F`/`%23`) is a **literal filename character**, not a
+  delimiter, and decoding first would truncate a legitimate path at it.
+  *Accept + MUTATION-VERIFIED:* `FromUriIgnoresQueryAndFragment` covers query, fragment and both
+  together; `FromUriTreatsPercentEncodedDelimitersAsLiteralFilenameCharacters` covers the mirror
+  case by creating a real file named `q?.ogg` and opening it via `%3F`. Reverting the strip fails
+  the first.
+
+- [x] **MEDIA-224 — Full-suite regression for this round.**
+  *Verified:* 4919 tests, 4917 passed, 0 failed, 2 pre-existing hardware skips. Grepped on the
+  complete log.
+  **Still genuinely open, unchanged and not claimed otherwise:** no TSAN/threaded test and no
+  end-to-end "play real audio, assert non-zero captured data" test for visualization; the
+  no-audio-device branch of `MEDIA-222` is unreachable from this suite; Group D
+  (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten -- including
+  `AudioDurationProbe`'s always-zero stub there) remains deferred by the project owner.
+
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
 
