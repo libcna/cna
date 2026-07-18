@@ -57,6 +57,12 @@ _(none recorded yet)_
   LessEqual.** Same file, same method; the `depthFunc` parameter is discarded and the rasterizer always does
   `reject if depth > stored`. See
   [audit report](src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp.audit.md) F2.
+- **Dx3 backend: a failed resize (`SetVirtualResolution`) destroys the working primary/backbuffer surfaces before
+  confirming the replacement succeeds, leaving the backend permanently unusable.**
+  `Dx3GraphicsBackend::Impl::CreateSurfaces` releases the old DirectDraw surfaces unconditionally before
+  attempting to create new ones; on failure, every subsequent `Clear`/`Present`/`ReadBackbuffer` call dereferences
+  a null surface pointer. See
+  [audit report](src/CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.cpp.audit.md) F1.
 
 ### LOW / recurring test-authoring patterns (from the `examples-tests-easygl` mechanical batch, 218 files)
 

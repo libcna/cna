@@ -12,10 +12,16 @@ core CNA internals, Microsoft.Xna/Devices public API) audited directly by the ma
 batches (examples, tests, tools) fanned out via the Workflow tool per decision D-P1.
 
 Direct-audit work so far: `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2),
-`backend-sdlrenderer` (2/2) — all fully AUDITED with genuine findings recorded (see below). Next: continue
-single-file backend adapters (`backend-dx3`, `backend-easygl`, `backend-webgpu`), then the larger multi-file
-backends (`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`,
-`backend-vulkan`, `backend-d3dcommon`), then CNA core / Microsoft.Xna / Microsoft.Devices shards.
+`backend-sdlrenderer` (2/2), `backend-dx3` (2/2, static-only per D-P4 — Windows/DirectDraw, not buildable here) —
+all fully AUDITED with genuine findings recorded (see below). Next: continue single-file backend adapters
+(`backend-easygl` — the big 4733-line one — then `backend-webgpu`), then the larger multi-file backends
+(`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`, `backend-vulkan`,
+`backend-d3dcommon`), then CNA core / Microsoft.Xna / Microsoft.Devices shards.
+
+Three more mechanical-batch Workflows launched in parallel (same proven pattern as easygl): `examples-tests-bgfx`
+(98 files, run `wf_bcaa2d48-c2c`), `examples-tests-vulkan` (70 files, run `wf_97caa64c-71d`, after one transient
+"model temporarily unavailable" retry), `examples-tests-sdlrenderer` (67 files, run `wf_afb2b5fa-e2b`) — all
+in flight as of this update.
 
 Background Workflow COMPLETE: `examples-tests-easygl` (218 files, run ID `wf_0b3830f6-648`, 28 agents, 0 errors,
 ~1.8M subagent tokens, ~30 min wall-clock) — the first mechanical-batch trial, and it worked very well: all 218
@@ -38,10 +44,10 @@ Next mechanical-batch candidates (same pattern, same prompt template): `examples
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **226** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2,
-  examples-tests-easygl ×218)
-- PENDING: **2071**
-- IN_PROGRESS: **0**
+- AUDITED so far: **228** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2,
+  backend-dx3 ×2, examples-tests-easygl ×218)
+- PENDING: **2069** (+ 235 in flight via 3 parallel background workflows: bgfx 98, vulkan 70, sdlrenderer 67)
+- IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
 ## Findings recorded so far (see AUDIT_FINDINGS_INDEX.md for full detail)
