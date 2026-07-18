@@ -2253,6 +2253,54 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   **this phase's closure must not use the word "complete"** for the plan as a whole — nine review
   rounds have now each found real defects after a "done" claim.
 
+#### Group I — Ninth external review (2026-07-18): thread safety and URI handling
+
+> A ninth review of commit `6a2b2847` confirmed Groups A-H genuinely fixed, then found two real
+> defects neither the XNA-reference audit nor any earlier round had thought to look for: a formal
+> data race in the new visualization capture, and a `FromUri` that never actually supported the
+> URIs its own documentation promised. Group D (`MEDIA-192`..`198`) is **deferred by the project
+> owner**, not resolved.
+
+- [x] **MEDIA-216 — Fix a formal data race in `VisualizationCapture`.** `Push()` (audio thread)
+  wrote plain `float`s into `buffer_` while `Read()` (game thread) read them. My own header called
+  this a tolerable "torn read" -- that was **wrong**: a concurrent non-atomic read/write in C++ is a
+  **data race, i.e. undefined behaviour**, not merely an imprecise value.
+  *Fix:* sample storage is now `std::array<std::atomic<float>, Capacity>` accessed with
+  `memory_order_relaxed` -- well-defined at effectively zero cost, since a relaxed load/store of a
+  naturally-aligned float lowers to the same instruction a plain access would on every mainstream
+  platform. What remains deliberately tolerated is a *logically* torn window (samples spanning two
+  callback batches): a one-frame visual artefact, not UB, and the comment now says so accurately.
+  *Also fixed, same finding:* `Reset()` ran BEFORE the post-mix callback was removed on disable, so
+  the audio thread could still be writing into a buffer the game thread was zeroing. Ordering is now
+  enable = reset-then-install, disable = uninstall-then-reset, with the no-device and
+  no-`SOUND_ENABLED` paths resetting only where no callback can exist.
+  *Accept -- with an honest gap:* existing visualization tests stay green, but they are **sequential**.
+  There is still no TSAN build and no end-to-end "play real audio, assert non-zero captured data"
+  test, exactly as the reviewer noted. **The race is fixed by construction (atomics + ordering), NOT
+  by a test that would have caught it.** A threaded/TSAN harness is recorded as genuinely open work
+  rather than claimed as covered.
+
+- [x] **MEDIA-217 — Make `Song::FromUri` actually accept file URIs.** The header promised
+  "File URI or local path", but the implementation passed the raw string straight to the `Song`
+  constructor, which then asked `std::filesystem::exists` about a literal `"file:///..."` -- so a
+  real file URI **always** failed, and the only test covered a plain path. FNA resolves this via
+  `Uri.LocalPath` and throws `InvalidOperationException("Only local file URIs are supported for
+  now")` for any non-file scheme (`Song.cs`).
+  *Fix:* parse the scheme; no scheme -> plain path (unchanged -- every existing caller relies on it);
+  `file` -> strip the authority, percent-decode the path, drop the leading slash of a Windows-style
+  `/C:/...` path; any other scheme -> throw, matching FNA's message.
+  *Accept + MUTATION-VERIFIED:* four new tests (real absolute file URI, percent-decoded spaces,
+  `http`/`https` rejection, plain path still works); reverting to the raw pass-through fails three of
+  them. **Note the first version of these tests was itself wrong** -- it used `file://relative/path`,
+  where `relative` is actually the URI *authority*, not a path -- and was corrected to build absolute
+  URIs from the fixture's real location.
+
+- [x] **MEDIA-218 — Full-suite regression for this round.**
+  *Verified:* 4915 tests, 4913 passed, 0 failed, 2 pre-existing hardware skips. The first run aborted
+  on `ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose` (`double free or corruption`) -- the **same
+  pre-existing `Net`/ENet flakiness already isolated and documented in Phase 12** (`MEDIA-161`), not
+  a Media regression: the suite re-ran clean and that test passes 23/23 in isolation.
+
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
 

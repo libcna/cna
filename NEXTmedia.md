@@ -6,7 +6,7 @@
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
 > (`MEDIA-1`–`MEDIA-215`, Phases 0-16); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **35 of 42 done, 7 open (all Group D)**
+## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **38 of 45 done, 7 open (all Group D, deferred by the owner)**
 
 > **Phase 16 is open work, not a review of a fix commit.** A full **XNA 4.0 API-parity audit**
 > (against the original Microsoft reference assemblies, *not* FNA) found that while all 24 public
@@ -26,6 +26,13 @@
 > them done on the basis of "the CMake looks right" is exactly the unevidenced claim this plan has
 > been repeatedly caught by, so they stay open. `MEDIA-198` defines the honest platform-support
 > matrix that must record what was actually built and run versus merely written.
+>
+> **Group I (`MEDIA-216`..`218`)** closed a ninth review's findings: a formal data race in the
+> visualization ring buffer (plain floats shared across the audio/game threads -- now
+> `std::atomic<float>` with relaxed ordering, plus corrected Reset/callback ordering) and a
+> `Song::FromUri` that never actually accepted the file URIs its own docs promised. **Known
+> open gap: visualization has no TSAN or threaded end-to-end test** -- the race is fixed by
+> construction, not by a test that would have caught it.
 >
 > **Root cause worth remembering: this plan named FNA as the
 > authoritative reference, but FNA's own `Song.cs` omits those XNA members** — so auditing against
