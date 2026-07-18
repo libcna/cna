@@ -1,23 +1,60 @@
-# NEXT.md — `feature/graphics` remaining `plan_graphics.md` backlog (2026-07-18)
+# NEXT.md — `feature/graphics` session handoff (2026-07-18)
 
 > **This section is current for `feature/graphics` (this checkout).** Everything below the
 > `---` divider that follows is stale, D3D9-branch-scoped content (`feature/dx9`) that ended up
 > merged into this file's history via `develop` — it is NOT about this branch and should not be
 > read as current status here. Left in place rather than deleted since it may still be a useful
-> historical record for the D3D9 work itself; just don't confuse it with the list below.
+> historical record for the D3D9 work itself; just don't confuse it with the section below.
 >
-> **Remaining open items in `plan_graphics.md`** (37 `⬜` + 1 `🟨`, as of 2026-07-18 — re-grep
+> ## Session summary (2026-07-17 → 2026-07-18) — read this first on a clean context
+>
+> Three large, sequential efforts landed this session, each fully merged into both
+> `feature/graphics` and `develop`, pushed to `origin`:
+>
+> 1. **`plan_cnj.md` Phase 14 completed in full** — glTF import gaps (multi-UV-set diagnostics,
+>    morph target CLI/.cnj serialization, CUBICSPLINE interpolation, DualTextureEffect occlusion
+>    fix, Draco mesh compression, angle-weighted tangent generation, `KHR_texture_transform`/
+>    `KHR_lights_punctual`/`KHR_materials_emissive_strength`), then **PBR (`PbrEffect`/
+>    `SkinnedPbrEffect`) + `SkinnedEffect.VertexColorEnabled` ported to all 7 remaining graphics
+>    backends** (Vulkan, Bgfx, SdlGpu, WebGPU unskinned-only, D3D9/D3D11/D3D12 compile-verified
+>    only). See `plan_cnj.md`'s own top banner and Phases 14A–14J for full detail — this file does
+>    not duplicate it.
+> 2. **`plan_webgpu.md` grew substantially** — render state (blend/rasterizer/cull/wireframe/
+>    scissor/viewport/sampler/depth-stencil), `RenderTarget2D`/`RenderTargetCube`, MSAA,
+>    `EnvironmentMapEffect`, real instancing, `Texture3D`, `Texture2D`/`TextureCube` `GetData()`
+>    readback, and real linear-filtered mip generation. **`plan_webgpu.md`'s own top banner has a
+>    full, current "Remaining work" summary — read it directly, don't re-derive it here.** Only
+>    genuinely open item found requiring cross-backend design work: compressed (DXT/BC) texture
+>    upload needs a shared `ImageData`/`Texture2D.cpp` change, not a backend-local fix (no CNA
+>    backend anywhere does real native compressed upload today).
+> 3. **`plan_graphics.md` Task 863 closed** — `Texture3D`/`TextureCube` now inherit `Texture`
+>    (matching FNA), closing the "cannot be sampled by any shader" architectural gap. EasyGL-only
+>    implementation (`BindTexture3D`, mirroring the existing `BindTextureCube`/Task 1081 path);
+>    Vulkan/Bgfx/WebGPU/SDL_Renderer/D3D9-12 are explicitly deferred follow-ups, not started.
+>    **Found and logged a genuine, unrelated pre-existing bug while independently re-verifying
+>    this task**: see Task 1115 below.
+>
+> **Operational notes worth knowing before continuing on this machine:**
+> - Run test/graphics-window commands with `DISPLAY=:99` (a dedicated Xvfb display), never `:0` —
+>   check `CNA_TEST_DISPLAY` in each build dir's `CMakeCache.txt` isn't stale before trusting a
+>   `ctest` run; `ctest --test-dir <dir>` also changes each test's CWD, breaking fixture-relative
+>   paths — run `CnaTests` directly from the repo root instead when in doubt.
+> - This machine is shared with other concurrent Claude Code agents — cap build parallelism at
+>   `-j4`, never `-j$(nproc)`; pause starting new heavy work at CPU Tctl ≥85°C (resume at ≤75°C,
+>   but always finish in-flight work regardless of temperature); low free RAM alone isn't urgent
+>   if swap still has headroom.
+>
+> **Remaining open items in `plan_graphics.md`** (35 `⬜` + 1 `🟨`, as of 2026-07-18 — re-grep
 > `plan_graphics.md` for `⬜|🟨` to confirm this hasn't drifted before trusting it blindly):
 >
-> **Needs a project-owner decision before any code, not a normal task:**
-> - **Task 863** — `Texture3D` sampling in shaders is structurally impossible today: CNA's
->   `Texture3D : GraphicsResource` (not `Texture`) can't go into `TextureCollection`, and
->   `ShaderEffect`/`IEffectBackend` has no texture-binding API for any texture type. Needs a real
->   architecture choice between (a) make `Texture3D`/`TextureCube` inherit `Texture` to match FNA
->   (touches `EffectParameter`, `TextureCollection`, every backend's texture-bind code), or (b) a
->   parallel `Texture3D`-specific GPU-binding path outside `TextureCollection`. **Under discussion
->   with the project owner as of 2026-07-18 — see the live conversation, not this file, for the
->   resolution once decided; update this row once it lands.**
+> **New, found this session, no architecture decision needed:**
+> - **Task 1115** — `EasyGL_AvatarRenderer_TintRouting`/`cna_test_avatar_tint_routing` fails with
+>   an almost-exact "2x expected brightness, then clamped to 255" pixel pattern — a real, specific,
+>   currently-unexplained defect (probably some tint/color value applied twice in
+>   `AvatarRenderer`'s real tint path), NOT the same bug Task 908 already fixed (that one was "no
+>   rendered content at all" from CCW culling). Confirmed pre-existing and unrelated to anything
+>   from this session (reproduces byte-identically before/after Task 863's merge). Not
+>   investigated further — needs its own dedicated task to trace where the doubling happens.
 >
 > **Real bugs on specific backends (each independently scoped, no architecture decision needed):**
 > - **869** — `GraphicsDevice` state properties (`BlendState`/`DepthStencilState`/`RasterizerState`)
