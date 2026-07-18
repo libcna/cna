@@ -59,6 +59,15 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /// WEBGPU-51: real CPU readback of an arbitrary Texture2D backend, via the same staged
+        /// MAP_READ-buffer/aligned-row/async-map-and-poll technique WEBGPU-91's ReadBackbuffer()
+        /// and WebGPURenderTargetBackend::GetData() already established -- copies the WHOLE
+        /// requested mip level to a temporary readback buffer (this texture is always
+        /// WGPUTextureFormat_RGBA8Unorm, so unlike the swapchain/RenderTarget2D there is never a
+        /// BGRA byte-swap to worry about), then extracts the @p x,@p y,@p w,@p h sub-rectangle
+        /// from the mapped memory on the CPU side.
+        void GetData(int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         [[nodiscard]] WGPUTextureView View() const override { return view_; }
@@ -177,6 +186,13 @@ namespace CNA::Internal::Backends::WebGPU
 
         void SetData(int face, int level, int x, int y, int w, int h,
                     const void* data, int dataLength) override;
+        /// WEBGPU-113: real per-face CPU readback, closing this class's former no-op
+        /// `ITextureCubeBackend::GetData()` default. Same staged-copy/row-alignment/async-map
+        /// technique as `WebGPUTextureBackend::GetData()` (WEBGPU-51), with `origin.z = face`
+        /// selecting the requested array layer (this backend's cube-face convention: 0=+X, 1=-X,
+        /// 2=+Y, 3=-Y, 4=+Z, 5=-Z, matching `IRenderTargetCubeBackend`'s own documented mapping).
+        void GetData(int face, int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         /// The single `WGPUTextureViewDimension_Cube` view sampled by `texture_cube<f32>` in
@@ -188,6 +204,47 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
         int size_ = 0;
+        int mipLevels_ = 1;
+    };
+
+    /// WEBGPU-57/112: a plain volume (3D) texture -- `WGPUTextureDimension_3D`, uploaded/read back
+    /// via `wgpuQueueWriteTexture`/a staged `wgpuCommandEncoderCopyTextureToBuffer` readback
+    /// exactly like `WebGPUTextureBackend`'s own 2D equivalents, just with a third (depth) extent
+    /// dimension. Mirrors `VulkanTexture3DBackend`'s minimal scope: upload/readback only, no
+    /// render-target-ness (XNA's `Texture3D` itself is never renderable). Mip-level COUNT uses the
+    /// same width/height-only `CalculateMipLevels()` formula as `Texture3D.cpp` (depth does not
+    /// participate in the count, matching FNA's `Texture3D` constructor) -- wgpu-native still
+    /// halves the actual per-level depth extent automatically (standard 3D-texture mip rules),
+    /// this only affects how many levels are allocated.
+    class WebGPUTexture3DBackend final : public ITexture3DBackend
+    {
+    public:
+        WebGPUTexture3DBackend(WebGPUGraphicsBackend& owner, int width, int height, int depth, bool mipMap);
+        ~WebGPUTexture3DBackend() override;
+
+        WebGPUTexture3DBackend(const WebGPUTexture3DBackend&) = delete;
+        WebGPUTexture3DBackend& operator=(const WebGPUTexture3DBackend&) = delete;
+
+        void SetData(int level, int x, int y, int z,
+                    int w, int h, int depth,
+                    const void* data, int dataLength) override;
+        /// Same staged-copy/row-alignment/async-map technique as `WebGPUTextureBackend::GetData()`
+        /// (WEBGPU-51), extended to a 3rd (depth) dimension: the whole requested level is copied
+        /// to a temporary readback buffer sized `alignedBytesPerRow * levelHeight * levelDepth`,
+        /// then the @p x,@p y,@p z,@p w,@p h,@p depth sub-volume is extracted from the mapped
+        /// memory on the CPU side.
+        void GetData(int level, int x, int y, int z,
+                    int w, int h, int depth,
+                    void* data, int dataLength) const override;
+
+        [[nodiscard]] WGPUTexture Texture() const { return texture_; }
+
+    private:
+        WebGPUGraphicsBackend* owner_ = nullptr;
+        WGPUTexture texture_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
         int mipLevels_ = 1;
     };
 
@@ -470,6 +527,12 @@ namespace CNA::Internal::Backends::WebGPU
         /// `EnvironmentMapEffect.EnvironmentMap` -- see `WebGPUTextureCubeBackend`'s own doc
         /// comment for the documented TextureCube/RenderTargetCube parity gaps this does NOT close.
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+
+        /// WEBGPU-57/112: real volume (3D) texture creation -- see `WebGPUTexture3DBackend`'s own
+        /// doc comment. `surfaceFormat` is currently ignored (always `WGPUTextureFormat_RGBA8Unorm`,
+        /// matching `WebGPUTextureBackend`/`WebGPUTextureCubeBackend`'s own established convention
+        /// for this backend).
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
 
     private:
         friend class WebGPURenderTargetBackend;

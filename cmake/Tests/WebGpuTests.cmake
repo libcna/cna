@@ -146,4 +146,24 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_msaa examples/webgpu_msaa_test.cpp)
     cna_register_backend_test(NAME WebGPU_Msaa COMMAND cna_test_webgpu_msaa
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-51: WebGPUTextureBackend::GetData() -- real staged-copy CPU readback for an arbitrary
+    # Texture2D backend (previously the ITextureBackend::GetData() no-op default, since only the
+    # swapchain (ReadBackbuffer, WEBGPU-91) and RenderTarget2D (WEBGPU-53/54) had real readback).
+    cna_webgpu_test(cna_test_webgpu_texture2d_getdata examples/webgpu_texture2d_getdata_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Texture2D_GetData COMMAND cna_test_webgpu_texture2d_getdata
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-113: WebGPUTextureCubeBackend::GetData() -- real per-face staged-copy CPU readback,
+    # closing the no-op default WEBGPU-56/74 deliberately left in place. Also exercises a real
+    # TextureCube mip level 1 SetData()/GetData() round trip (untested since WEBGPU-56/74).
+    cna_webgpu_test(cna_test_webgpu_texturecube_getdata examples/webgpu_texturecube_getdata_test.cpp)
+    cna_register_backend_test(NAME WebGPU_TextureCube_GetData COMMAND cna_test_webgpu_texturecube_getdata
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-57/112: WebGPUTexture3DBackend / CreateTexture3D() -- this backend's first Texture3D
+    # (volume texture) support (previously IGraphicsBackend's own nullptr-returning default).
+    cna_webgpu_test(cna_test_webgpu_texture3d examples/webgpu_texture3d_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Texture3D COMMAND cna_test_webgpu_texture3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
