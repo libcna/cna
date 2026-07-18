@@ -92,6 +92,16 @@ _(pending)_
   single defect** (2 backends, 6 shader variants, all traced to the same root formula) — high priority for the
   Pass 3 systematic FNA parity sweep and Pass 4 backend matrix to determine its true full extent (D3D9/D3D11/D3D12/
   SdlGpu/WebGPU/Software/SdlRenderer/Dx3/Canvas/Ascii/Headless not yet checked for the same formula).
+  **UPDATE (direct source read of the shared `D3DCommon` shaders ahead of the `backend-d3d11`/`backend-d3d12`
+  shard audits): `src/CNA/Internal/Backends/D3DCommon/shaders/skinned3d.vert.hlsl` — compiled into BOTH D3D11 and
+  D3D12 — has the identical mirrored formula, `(FogStartEnd.y - input.Position.z) / max(FogStartEnd.y -
+  FogStartEnd.x, 1e-6)` (algebraically `(FogEnd-z)/(FogEnd-FogStart)`).** This file's own header comment claims
+  the formula "matches EasyGL/Bgfx's established SkinnedEffect fog formula exactly" — a **false claim**: EasyGL's
+  real formula is the corrected, post-Task-1111 one; only Bgfx's is the mirrored/wrong one this comment actually
+  matches. This is revealing as a likely propagation mechanism: a later port copied whichever prior instance was
+  most convenient (Bgfx's) while believing, incorrectly, that it agreed with EasyGL's (since-fixed) version,
+  rather than re-deriving the formula from FNA. **Raises the confirmed count to 3 backend-groups at the
+  shader-source level: Bgfx, Vulkan, and D3D11+D3D12 (shared D3DCommon source).**
 - **CONFIRMED IN 3 BACKENDS: skinned-effect shaders skip the WorldInverseTranspose normal transform** (EasyGL,
   WebGPU — see below — and now **Vulkan**: `skinned3d.vert.glsl`/`skinned3d_vertexlit.vert.glsl` compute the lit
   normal as `mat3(skinMat)*aNormal` with no World-space composition, per `vulkan_skinnedeffect_preferperpixellighting_test.cpp`'s
@@ -106,6 +116,30 @@ _(pending)_
   to a single copy-pasted shader family; it recurs independently in D3D9's own hand-written PBR-skinning shader
   too, suggesting a shared conceptual mistake (skinning-then-forgetting-the-outer-normal-matrix) rather than one
   line of source propagating verbatim across every instance.
+  **UPDATE: now confirmed in 2 more backends via direct source reads, both explicitly self-documented as ported
+  from an existing (buggy) instance rather than independently reintroduced:**
+  (a) **SdlGpu** — `skinned3d.vert.glsl`/`skinned_colored3d.vert.glsl` (found via `sdlgpu_skinned_test.cpp`,
+  `sdlgpu_skinnedeffect_vertexcolor_test.cpp`, `sdlgpu_smoke_test.cpp`'s audits) transform the normal by the
+  bone-skin matrix alone with **no world-space contribution at all**, and the shader's own comment "explicitly
+  acknowledges the omission was ported from Vulkan" (per the `sdlgpu_smoke_test.cpp` audit); SdlGpu's
+  `pbr_skinned3d.vert.glsl` (via `sdlgpu_skinnedpbreffect_test.cpp`) has the narrower "raw `mat3(World)` instead of
+  inverse-transpose" variant, inconsistent with its own correct non-skinned sibling `pbr3d.vert.glsl`.
+  (b) **D3D11 + D3D12 (shared `D3DCommon` source)** — found via direct source reading ahead of those shards'
+  own full audits: `src/CNA/Internal/Backends/D3DCommon/shaders/skinned3d.vert.hlsl` (`output.Normal =
+  normalize(mul(input.Normal, (float3x3)skinMat))`, no `World` composed in at all) carries an explicit header
+  comment stating it was **"Ported line-by-line from `src/CNA/Internal/Backends/Vulkan/shaders/skinned3d.vert.glsl`"**
+  — the clearest, most explicit first-hand confirmation yet of the Vulkan→D3DCommon porting chain (mirroring the
+  already-confirmed EasyGL→WebGPU chain below). The sibling `pbr_skinned3d.vert.hlsl` has the narrower "raw
+  `World`, not inverse-transpose" variant (`output.Normal = normalize(mul(mul(input.Normal, skinNormalMat),
+  (float3x3)World))`), **self-documented in its own comment**: "plain World (NOT the inverse-transpose
+  pbr3d.vert.hlsl's unskinned sibling uses)" — i.e. the author of this shader already knew the correct convention
+  (visible one file away) and used the wrong one anyway for the skinned variant. `skinned3d_vertexlit.vert.hlsl`
+  and both `.frag.hlsl` siblings in the same directory have not yet been fully read to confirm/rule out the same
+  pattern — queued for the `backend-d3dcommon`/`backend-d3d11`/`backend-d3d12` shard audits.
+  **This raises the confirmed-at-shader-source-level count to 5 of 14 backends: EasyGL, WebGPU, Vulkan, SdlGpu,
+  D3D11+D3D12 (shared D3DCommon)** — only Bgfx's *own* skinned shader source (as opposed to its already-audited
+  *test* files, which only infer the bug from masked test behavior) remains unconfirmed at the direct-source-read
+  level among backends with a SkinnedEffect implementation.
 - **NEW: a *second*, distinct fog defect — "object-space-only fog" (ignores World/View for the Z used in the fog
   calculation), separate from the Task-1111 mirrored-formula bug above.** Confirmed in D3D9's own custom shaders:
   `SkinnedVertexColor3D.hlsl` (via `d3d9_skinnedvertexcolor_test.cpp`'s audit) and, per that same report, also
@@ -126,17 +160,26 @@ _(pending)_
   files (`vulkan_env_map_test.cpp`, `_amount_one_test.cpp`, `_amount_zero_test.cpp`, `_combined_test.cpp`,
   `_eyeposition_test.cpp`) — all masked because their scenes are symmetric enough (identity View, centered camera,
   center-pixel-only sampling) that a vertical mirror is invisible to the specific pixel each test checks.
-- **CONFIRMED IN 2 BACKENDS (Bgfx, WebGPU), suspected in Vulkan: `EnvironmentMapEffect`'s fragment shader
+  **UPDATE: a 5th masked instance found** in the `examples-tests-generic` batch —
+  `environmentmapeffect_alphascaledlerp_test.cpp` (a shared cross-backend test file, registered on Vulkan among
+  others) exercises this exact shader and is masked for the identical reason (identity View, center-pixel-only
+  sampling).
+- **CONFIRMED IN 4 BACKENDS (Bgfx, WebGPU, Vulkan, SdlGpu): `EnvironmentMapEffect`'s fragment shader
   re-multiplies `EmissiveColor` by `DiffuseColor`** instead of adding it unscaled (FNA's `Lighting.fxh` convention,
   explicitly confirmed by this project's own `EnvironmentMapEffect.cpp` comment stating the unscaled-add is
   required to "match FNA"). Confirmed across 5 Bgfx test files (`bgfx_environmentmapeffect_eyeposition_test.cpp`,
-  `_fresnel_test.cpp`, `_multilight_test.cpp`, `_specular_test.cpp`, `_worldtransform_test.cpp`) and now also
-  **WebGPU** (`webgpu_envmap3d_test.cpp`'s audit, directly reading `WebGPUGraphicsBackend::CreateEnvMapResources()`'s
-  fragment shader: `litRGB=(emissiveAmount+lightSum)*diffuseColor`) — all masked because no test in either family
-  varies `DiffuseColor` away from its default white or `EmissiveColor`/`AmbientLightColor` away from black. Vulkan
-  test-file phrasing suggests it shares the same bug (still unconfirmed pending a dedicated check of Vulkan's own
-  env-map shader source). **A third systemic, multi-backend defect for this audit, alongside the fog-formula and
-  skinned-normal-transform bugs** — priority check for every remaining backend's `EnvironmentMapEffect` shader.
+  `_fresnel_test.cpp`, `_multilight_test.cpp`, `_specular_test.cpp`, `_worldtransform_test.cpp`), **WebGPU**
+  (`webgpu_envmap3d_test.cpp`'s audit, directly reading `WebGPUGraphicsBackend::CreateEnvMapResources()`'s
+  fragment shader: `litRGB=(emissiveAmount+lightSum)*diffuseColor`), **Vulkan** (previously only suspected from
+  test-file phrasing; now independently confirmed via the `examples-tests-generic` batch's direct read of Vulkan's
+  own `env_map3d.frag.glsl` while auditing `environmentmapeffect_alphascaledlerp_test.cpp` — resolving the prior
+  "unconfirmed" note), and now **SdlGpu** (`src/CNA/Internal/Backends/SdlGpu/shaders/env_map3d.frag.glsl`, found
+  via `sdlgpu_envmap_test.cpp`'s and `sdlgpu_smoke_test.cpp`'s audits: `litRGB = (emissiveAmount + lightSum) *
+  DiffuseColor`, byte-for-byte the same formula shape) — all masked because no test in any family varies
+  `DiffuseColor` away from its default white or `EmissiveColor`/`AmbientLightColor` away from black. **A third
+  systemic, multi-backend defect for this audit, alongside the fog-formula and skinned-normal-transform bugs, now
+  the 4-backend-widest of the three** — remaining unchecked: D3D9/D3D11/D3D12/Software/SdlRenderer/Dx3/Canvas/
+  Ascii/Headless's own `EnvironmentMapEffect` shaders.
 - **NEW, WebGPU-specific: `SpriteBatch`'s clip-space mapping is always backbuffer-relative, never
   render-target-relative.** `WebGPUGraphicsBackend::QueueSprite()` derives its clip-space viewport exclusively
   from the backbuffer's physical/virtual size via `ComputeLogicalViewport()`, never from the currently-bound
@@ -181,6 +224,26 @@ _(pending)_
 - **Recommend a full CTest-registration sweep (Pass 6) to enumerate every currently-failing/expected-to-fail test
   across all backends** and confirm each either passes, is properly marked `WILL_FAIL`, or is tracked as a known
   open issue — this pair suggests there may be more.
+- **INDEPENDENTLY RE-VERIFIED BY DIRECT BUILD+EXECUTION (twice: once by the auditing subagent, then re-confirmed
+  first-hand during synthesis): `EasyGL_AvatarRenderer_TintRouting` is a currently-failing CTest, registered with
+  no `WILL_FAIL`/skip annotation** (`examples/avatar_tint_routing_integration_test.cpp`, `examples-tests-generic`
+  shard). Configured a scoped `EASYGL`-backend debug build, built only `cna_test_avatar_tint_routing`, and ran
+  `ctest -R EasyGL_AvatarRenderer_TintRouting` directly: **`Failed`, 0/1 passed**, actual output:
+  `[FAIL] AvatarTintRoutingIntegration: left=(81,51,31) right=(41,181,255); expected: left=HairColor(40,25,15),
+  right=ShirtColor(20,90,155)`. The deltas are large (up to 41 on the red channel, 100 on the blue channel) — bigger
+  than a merely-mistuned tolerance alone would suggest, so while the subagent's root-cause analysis (the test's own
+  `±20` tolerance never re-tuned for the real `(Ambient+lightSum)*Diffuse` FNA formula given this scene's
+  fully-saturated `Ambient`+`Light0` choice) may be *a* contributing factor, the magnitude here warrants a closer
+  look during Pass 6/the `xna-gamerservices` shard audit rather than treating "tolerance-only" as fully settled.
+  **Notably, the sibling `Vulkan_AvatarRenderer_TintRouting` variant currently *passes* — but only by
+  coincidence**: a separately-confirmed, independent defect (`SkinnedEffect::FillGpuDrawParams` never sets
+  `ambientColor`; Vulkan's `FillExtPushConst` has no `emissiveColor` slot at all — see the Vulkan-specific
+  `AmbientLightColor`/`EmissiveColor` no-op entry above) silently drops the same ambient term that's
+  over-tolerating the EasyGL failure, and the two errors happen to cancel out on Vulkan specifically. **This is a
+  third, independent confirmation of the "documentation/test rot" pattern above, but more severe**: unlike the
+  other instances (stale comments describing already-fixed behavior), this one is an actually-red, currently-
+  registered CTest that a normal `ctest` run shows failing today — raising the priority of the Pass 6
+  CTest-registration sweep from "recommended" to "should specifically re-run this exact test name first."
 
 ## API design: bare public fields instead of the project's own get/set convention
 
@@ -188,8 +251,10 @@ _(pending)_
   all, unlike every other property on the class — a direct violation of this project's own explicit C# property
   convention (`CLAUDE.md`). Confirmed via both `bgfx_basiceffect_texture_vertexcolor_enabled_test.cpp` and
   `vulkan_basiceffect_vertexcolor_enabled_test.cpp`'s audits (independently discovered in two different backend
-  test batches, exercising the same production `BasicEffect.hpp`/`.cpp`, not a backend-specific issue). Worth a
-  priority check when the `xna-graphics` shard reaches `BasicEffect` for whether this is the only such lapse.
+  test batches, exercising the same production `BasicEffect.hpp`/`.cpp`, not a backend-specific issue), and now a
+  **3rd time** via `examples/basic_effect_test.cpp` (`examples-tests-generic` shard, `fx.VertexColorEnabled =
+  true` used directly as a bare field). Worth a priority check when the `xna-graphics` shard reaches `BasicEffect`
+  for whether this is the only such lapse.
 
 ## Recurring testing gaps
 
@@ -236,3 +301,16 @@ _(pending)_
 ## Build-system inconsistencies
 
 _(pending)_
+
+## Production correctness bugs outside the graphics-backend layer
+
+- **HIGH: `SpriteFont::MeasureString`/`SpriteBatch::DrawString` dereference an `unordered_map::end()` iterator with
+  no check, reachable via fully public API.** Found while auditing `examples/sprite_font_test.cpp`
+  (`examples-tests-generic` shard): the test sets `DefaultCharacter` (via `setDefaultCharacterProperty`, which
+  performs no validation) to a character not present in the font's own character map, one call short of exercising
+  the bug. Tracing the production code (`SpriteFont.cpp:101-111`, `SpriteBatch.cpp:457-465`) confirmed both
+  methods' `DefaultCharacter`-fallback lookup path dereferences the map iterator unconditionally, so a caller who
+  sets a bad `DefaultCharacter` and then measures/draws a genuinely-missing glyph hits undefined behavior. **FNA's
+  real behavior is to throw `KeyNotFoundException`** — this is a real, non-backend-specific FNA-parity gap in
+  `Microsoft::Xna::Framework::Graphics::SpriteFont`/`SpriteBatch` themselves (not a rendering-backend bug), and
+  should be flagged prominently when the `xna-graphics` shard reaches these two files.

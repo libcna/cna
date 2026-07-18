@@ -14,6 +14,37 @@ _(none recorded yet)_
 
 ### HIGH
 
+- **`EasyGL_AvatarRenderer_TintRouting` is a currently-failing CTest, registered with no `WILL_FAIL` annotation —
+  independently re-confirmed by direct build+execution during synthesis (not just relayed from the audit
+  subagent).** `ctest -R EasyGL_AvatarRenderer_TintRouting`: **Failed**, `left=(81,51,31) right=(41,181,255);
+  expected: left=HairColor(40,25,15), right=ShirtColor(20,90,155)`. The sibling `Vulkan_AvatarRenderer_TintRouting`
+  passes only by coincidence (a separate, independently-confirmed Vulkan `SkinnedEffect` ambient/emissive-forwarding
+  bug cancels out the same miscalibration that fails on EasyGL). See
+  [audit report](examples/avatar_tint_routing_integration_test.cpp.audit.md) and `AUDIT_CROSS_CUTTING_FINDINGS.md`
+  (CI-masking risk).
+- **`SpriteFont::MeasureString`/`SpriteBatch::DrawString` dereference an `unordered_map::end()` iterator with no
+  check, reachable via fully public API** — setting `DefaultCharacter` (no validation in `setDefaultCharacterProperty`)
+  to a character absent from the font's own map, then measuring/drawing a genuinely-missing glyph, is undefined
+  behavior in `SpriteFont.cpp:101-111`/`SpriteBatch.cpp:457-465`. FNA throws `KeyNotFoundException` in the
+  equivalent case. See [audit report](examples/sprite_font_test.cpp.audit.md) and
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Production correctness bugs outside the graphics-backend layer).
+- **`env_map3d.frag.glsl`'s `EmissiveColor`-re-multiply bug now confirmed in a 4th backend, SdlGpu** (after
+  Bgfx/WebGPU/Vulkan) — same `(emissiveAmount+lightSum)*DiffuseColor` shape. See
+  [audit report](examples/sdlgpu_envmap_test.cpp.audit.md),
+  [audit report](examples/sdlgpu_smoke_test.cpp.audit.md), and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **The skinned-normal-transform bug (missing world-space normal-matrix contribution) is now confirmed at the
+  shader-source level in 5 of 14 backends: EasyGL, WebGPU, Vulkan, SdlGpu, and D3D11+D3D12 (shared `D3DCommon`
+  source).** The shared `D3DCommon/shaders/skinned3d.vert.hlsl` (compiled into both D3D11 and D3D12) carries an
+  explicit header comment stating it was **"Ported line-by-line from
+  `src/CNA/Internal/Backends/Vulkan/shaders/skinned3d.vert.glsl,"`** the clearest direct evidence yet of the
+  cross-backend porting chain that propagated this bug (alongside the already-confirmed EasyGL→WebGPU chain).
+  SdlGpu's own shader comment "explicitly acknowledges the omission was ported from Vulkan" too (per
+  `sdlgpu_smoke_test.cpp`'s audit). The related but distinct "raw World instead of inverse-transpose" variant
+  (rather than a complete omission) is separately confirmed in `pbr_skinned3d.vert.hlsl` (D3DCommon, shared
+  D3D11/D3D12), `pbr_skinned3d.vert.glsl` (SdlGpu), `EnsurePbrSkinnedProgram` (EasyGL), and D3D9's own
+  `PbrSkinned3D.hlsl`. Only Bgfx's *own* skinned shader source remains unconfirmed at the direct-source-read level
+  (only inferred so far from masked test behavior). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity
+  gaps) for full detail and every originating test/source reference.
 - **EasyGL backend: a constructor failure after `RegisterForWindow()` but before construction completes leaves a
   dangling entry in `IGraphicsBackend`'s static window registry.** Independently discovered via direct production
   code reading (not from the test batch). `EasyGLGraphicsBackend`'s constructor calls `RegisterForWindow(window,
@@ -30,19 +61,20 @@ _(none recorded yet)_
   `(FogEnd-z)/(FogEnd-FogStart)` formula instead of the FNA-correct `(z+FogEnd)/(FogEnd-FogStart)`. **This is this
   audit's single most widely-confirmed defect.** Full detail and all 6 originating test-file reports in
   `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity gaps).
-- **CONFIRMED IN A 3RD BACKEND: Vulkan's `skinned3d.vert.glsl`/`skinned3d_vertexlit.vert.glsl` share the same
-  missing-world-space-normal-transform defect already confirmed in EasyGL and WebGPU.** See
-  `AUDIT_CROSS_CUTTING_FINDINGS.md` and `examples/vulkan_skinnedeffect_preferperpixellighting_test.cpp.audit.md`.
+- *(superseded by the 5-backend skinned-normal-transform entry above)* Vulkan's `skinned3d.vert.glsl`/
+  `skinned3d_vertexlit.vert.glsl` share the same missing-world-space-normal-transform defect already confirmed in
+  EasyGL and WebGPU. See `examples/vulkan_skinnedeffect_preferperpixellighting_test.cpp.audit.md`.
 - **Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned shaders
   never consume `emissiveColor`** — silently drops `AmbientLightColor`/`EmissiveColor` for skinned models on
-  Vulkan only. Confirmed across 4 test files; see `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+  Vulkan only. Confirmed across 4 test files; this is also the reason `Vulkan_AvatarRenderer_TintRouting`
+  coincidentally passes despite the EasyGL sibling failing (see the currently-failing-CTest entry above). See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip every other core Vulkan 3D vertex shader has**,
-  rendering `EnvironmentMapEffect` scenes vertically mirrored. Confirmed across 5 test files; see
-  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **CONFIRMED IN 2 BACKENDS (Bgfx, WebGPU): `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor`
-  by `DiffuseColor` instead of adding it unscaled** (FNA's real `Lighting.fxh` convention). Confirmed across 5
-  Bgfx test files and `webgpu_envmap3d_test.cpp`; Vulkan suspected but unconfirmed. See
-  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+  rendering `EnvironmentMapEffect` scenes vertically mirrored. Confirmed across 5 test files (a 5th masked instance
+  since found via `environmentmapeffect_alphascaledlerp_test.cpp`); see `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- *(superseded by the 4-backend entry above)* `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor`
+  by `DiffuseColor` instead of adding it unscaled (FNA's real `Lighting.fxh` convention) — now confirmed in Bgfx,
+  WebGPU, Vulkan (resolving the prior "suspected"), and SdlGpu. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **WebGPU-specific: `SpriteBatch`'s clip-space mapping is always backbuffer-relative, never render-target-relative**
   — drawing into an off-screen target of a different size mis-maps sprite placement. See
   [audit report](examples/webgpu_rendertargetcube_test.cpp.audit.md) and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
