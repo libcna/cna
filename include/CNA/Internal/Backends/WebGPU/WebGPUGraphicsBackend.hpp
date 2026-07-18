@@ -156,6 +156,41 @@ namespace CNA::Internal::Backends::WebGPU
         int appliedMultiSampleCount_ = 0;
     };
 
+    /// WEBGPU-56/74 (EnvironmentMapEffect): a minimal, read-only-after-upload cube-map texture
+    /// backend -- just enough for a game to build a `TextureCube` via `SetData()` and use it as
+    /// `EnvironmentMapEffect.EnvironmentMap`. A WebGPU cube map is a plain `WGPUTextureDimension_2D`
+    /// texture with 6 array layers (`WGPUTextureUsage_CUBE_COMPATIBLE` does not exist as a distinct
+    /// flag in this API the way Vulkan/D3D need one -- the view alone selects
+    /// `WGPUTextureViewDimension_Cube`), matching `EasyGLTextureCubeBackend`'s own
+    /// `CalculateCubeMipLevels()` mip-count convention. Deliberately NOT a full `TextureCube`/
+    /// `RenderTargetCube` implementation: `GetData()` keeps `ITextureCubeBackend`'s own no-op
+    /// default (no CPU readback), and there is no `WebGPURenderTargetCubeBackend` at all -- both
+    /// remain a separate, larger follow-up (`WEBGPU-56`/`113` in `plan_webgpu.md`).
+    class WebGPUTextureCubeBackend final : public ITextureCubeBackend
+    {
+    public:
+        WebGPUTextureCubeBackend(WebGPUGraphicsBackend& owner, int size, bool mipMap);
+        ~WebGPUTextureCubeBackend() override;
+
+        WebGPUTextureCubeBackend(const WebGPUTextureCubeBackend&) = delete;
+        WebGPUTextureCubeBackend& operator=(const WebGPUTextureCubeBackend&) = delete;
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                    const void* data, int dataLength) override;
+
+        [[nodiscard]] WGPUTexture Texture() const { return texture_; }
+        /// The single `WGPUTextureViewDimension_Cube` view sampled by `texture_cube<f32>` in
+        /// env_map3d.wgsl's fragment shader.
+        [[nodiscard]] WGPUTextureView CubeView() const { return cubeView_; }
+
+    private:
+        WebGPUGraphicsBackend* owner_ = nullptr;
+        WGPUTexture texture_ = nullptr;
+        WGPUTextureView cubeView_ = nullptr;
+        int size_ = 0;
+        int mipLevels_ = 1;
+    };
+
     class WebGPUVertexBufferBackend final : public IVertexBufferBackend
     {
     public:
@@ -394,6 +429,15 @@ namespace CNA::Internal::Backends::WebGPU
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        // WEBGPU-27/38/68: real per-instance mat4 world transform via a genuine second
+        // WGPUVertexStepMode_Instance vertex buffer binding -- see instancedShader_'s own doc
+        // comment. params.instanceVb == nullptr falls back to a real (non-instanced)
+        // DrawIndexedPrimitivesEx() dispatch, matching every other backend's identical fallback
+        // (VulkanGraphicsBackend::DrawInstancedPrimitivesEx's own precedent).
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
 
         void QueueSprite(const ITextureBackend& texture,
                          const IWebGPUSamplable& samplable,
@@ -421,6 +465,11 @@ namespace CNA::Internal::Backends::WebGPU
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
+        /// WEBGPU-56/74: minimal cube-map texture creation, sufficient for
+        /// `EnvironmentMapEffect.EnvironmentMap` -- see `WebGPUTextureCubeBackend`'s own doc
+        /// comment for the documented TextureCube/RenderTargetCube parity gaps this does NOT close.
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
 
     private:
         friend class WebGPURenderTargetBackend;
@@ -970,6 +1019,145 @@ namespace CNA::Internal::Backends::WebGPU
         std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTexturePipelines_;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTextureColoredPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
+
+        // WEBGPU-25/36/74: env_map3d.wgsl -- EnvironmentMapEffect's cube-map reflection shader,
+        // ported from VulkanGraphicsBackend's env_map3d.{vert,frag}.glsl (cross-checked against
+        // EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()'s identical GLSL formula before
+        // porting -- both already agree field-for-field). Stride 32
+        // (VertexPositionNormalTexture, the same vertex layout as lit_textured3d.wgsl). Group 0
+        // binding 0 is a small Transform UBO (mvp+world, 128 bytes -- WebGPU has no push constants,
+        // so this stands in for Vulkan's own 128-byte push-constant range); binding 1 is the larger
+        // EnvMapParams UBO (240 bytes: eye position, diffuse, emissive+envMapAmount, all 3
+        // directional lights, envMapSpecular+fresnelFactor/fresnelEnabled, fog, and a
+        // CPU-precomputed 3x3 normal matrix packed as 3 vec4f columns -- WGSL has no inverse(),
+        // the same reason CreateLitTexturedResources()'s own LitLightParams UBO precomputes one).
+        // Group 1 is a genuinely new 3-binding shape (mirrors dualTextureBindGroupLayout_'s own
+        // 3-binding group 1, swapping the second texture_2d for a texture_cube): one shared
+        // sampler + a 2D base texture + a texture_cube<f32> reflection map. Both textures fall back
+        // to a 1x1 default (white 2D / white cube) when EnvironmentMapEffect leaves that map
+        // unbound, matching EnsurePbrDefaultTextures()'s own "map absent" convention. No fog
+        // deferral here -- unlike every other WebGPU 3D shader, EnvironmentMapEffect's own fog
+        // support already exists in the reference GLSL this was ported from, so it is wired in.
+        struct EnvMapDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> transformUniforms{};  ///< group 0 binding 0: mvp (16) + world (16)
+            std::array<float, 60> envMapUniforms{};     ///< group 0 binding 1: 15 vec4f (240 bytes)
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+            /// EnvironmentMapEffect::Texture -- may legitimately be null (falls back to a 1x1
+            /// white texture at render time), unlike every other stride-32+ effect family, which
+            /// requires a non-null texture0 at dispatch time.
+            const IWebGPUSamplable* texture = nullptr;
+            /// EnvironmentMapEffect::EnvironmentMap -- may legitimately be null (falls back to a
+            /// 1x1 white cube map at render time, matching VulkanGraphicsBackend's own
+            /// defaultWhiteCubeView_ fallback).
+            const WebGPUTextureCubeBackend* envMap = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
+        };
+        void CreateEnvMapResources();
+        void DestroyEnvMapResources();
+        /// Lazily creates the 1x1 white 2D texture / 1x1 white cube map used whenever
+        /// EnvironmentMapEffect::Texture/EnvironmentMap is left unbound. Mirrors
+        /// EnsurePbrDefaultTextures()'s own lazy-at-first-draw pattern (not tied to surface
+        /// format/sample count, so it does not need to be recreated by
+        /// CreateEnvMapResources()/ClearAllPipelineCaches()).
+        void EnsureEnvMapDefaultTextures();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineEnvMap3D(WGPUPrimitiveTopology topology,
+                                                                      bool depthTest, bool depthWrite,
+                                                                      int depthFunc,
+                                                   bool blend, const BlendKeyParams& blendParams,
+                                                   int cullMode, bool wireframe,
+                                                   float depthBias, float slopeScaleDepthBias);
+        void QueueEnvMapDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                             const Matrix& world, const Matrix& view, const Matrix& projection,
+                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderEnvMapDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule envMapShader_ = nullptr;
+        WGPUBindGroupLayout envMapBindGroupLayout_ = nullptr;         ///< group 0: Transform UBO (binding 0) + EnvMapParams UBO (binding 1)
+        WGPUBindGroupLayout envMapTextureBindGroupLayout_ = nullptr; ///< group 1: sampler + texture_2d + texture_cube
+        WGPUPipelineLayout envMapPipelineLayout_ = nullptr;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> envMapPipelines_;
+        std::vector<EnvMapDrawCommand> envMapDrawCommands_;
+        std::unique_ptr<WebGPUTextureBackend> envMapDefaultWhiteTexture_;
+        std::unique_ptr<WebGPUTextureCubeBackend> envMapDefaultWhiteCube_;
+
+        // WEBGPU-27/38/68: instanced3d.wgsl -- a genuinely SECOND vertex buffer binding
+        // (WGPUVertexStepMode_Instance) carrying a per-instance mat4 world transform, ported from
+        // VulkanGraphicsBackend's instanced3d.{vert,frag}.glsl / GetOrCreatePipelineInstanced3D().
+        // Unlike every bind-group-shaped "genuinely new" family above (dual-texture/env-map), a
+        // second vertex buffer needs NO new WGPUBindGroupLayout at all -- vertex buffers are set
+        // via wgpuRenderPassEncoderSetVertexBuffer(), completely separate from bind groups -- so
+        // this reuses coloredBindGroupLayout_/coloredPipelineLayout_ UNCHANGED (group 0 only, the
+        // same 128-byte Uniforms shape as colored3d.wgsl: mvp replaced by vp -- world comes from
+        // the per-instance stream, mirroring FillInstancedPushConst()'s own deliberate choice to
+        // ignore the caller's own World matrix entirely rather than combine it). The flat
+        // diffuseColor-only fragment output also matches instanced3d.frag.glsl exactly (no
+        // lighting/texture -- this shader family has neither).
+        struct InstancedDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            std::vector<std::uint8_t> instVbData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            std::uint32_t instanceCount = 1;
+            /// Real per-vertex/per-instance buffer strides (not hardcoded), so the pipeline's own
+            /// WGPUVertexBufferLayout::arrayStride genuinely matches each buffer's declared
+            /// stride -- a real, deliberate improvement over VulkanGraphicsBackend's own instanced3d
+            /// pipeline, which hardcodes a 64-byte (sizeof(mat4)) instance binding stride
+            /// regardless of the instance vertex buffer's own declared stride (latent, harmless
+            /// only because every existing caller happens to always use a plain mat4-only instance
+            /// declaration).
+            std::size_t pvStride = 16;
+            std::size_t instVbStride = 64;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+        };
+        void CreateInstancedResources();
+        void DestroyInstancedResources();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, std::size_t instVbStride,
+                                                                         WGPUPrimitiveTopology topology,
+                                                                         bool depthTest, bool depthWrite, int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias);
+        void RenderInstancedDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule instancedShader_ = nullptr;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> instancedPipelines_;
+        std::vector<InstancedDrawCommand> instancedDrawCommands_;
 
         // pbr3d.wgsl -- PbrEffect's real glTF 2.0 metallic-roughness BRDF (GGX distribution +
         // Smith-Schlick-GGX visibility + Schlick Fresnel), ported from
