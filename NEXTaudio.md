@@ -267,6 +267,34 @@ framework/runtime, not a game.
   memory `feedback_fork_ignored_research_only.md` for the full incident. `AUD-07-005`/`006` remain
   open, legitimate, not-yet-done tasks; whoever picks them up should design and verify them fresh
   rather than trusting the discarded WIP.
+- **Continuing the same pass (2026-07-18, later still), commits `a55b4e8b`/`9842b498`/`2aa7c1d6`:**
+  `AUD-15-021` investigated further (git-stash bisection across ~30 preceding test suites, direct
+  `/proc` FD/thread/RSS measurement, a fresh TSAN sweep) — several real hypotheses ruled out
+  (no FD/thread/memory leak, not a single bad preceding suite, not caught by TSAN either) but
+  root cause still not found; needs `gdb`/`valgrind` (not installed in this sandbox, no
+  passwordless `sudo`) to make further efficient progress. `AUD-15-008` closed for real: the one
+  genuinely forbidden real-time-callback operation found (`OnFireAndForgetStopped`'s cleanup
+  queue took a `std::mutex` + did a `std::vector::push_back` that could reallocate, both
+  forbidden on the mixer thread) was rewritten as a lock-free intrusive Treiber-stack push —
+  verified via the full `SoundEffect`/`SoundEffectInstance` suites (182/182, 5x + ASan, clean).
+  **New, important finding — `AUD-15-022`:** while regression-testing `AUD-15-008`, found a
+  SEPARATE, **100%-reproducible-in-isolation** heap-corruption crash (`corrupted double-linked
+  list` at process exit) with a small, fast repro: `--gtest_filter='CueTest.*:
+  DynamicSoundEffectInstanceTest.*'` alone (149 tests, ~3.5s). Bisected down to: needs the full
+  combination of `CueTest` + the full `DynamicSoundEffectInstanceTest` suite + specifically
+  **this session's own two new stress tests** (`AUD-15-006`'s `StressProducerConsumer...` and
+  `AUD-07-003`'s `StressSubmitFloatBufferEXT...`) all present together — removing just the stress
+  tests makes it vanish (3/3 clean), but no smaller sub-combination reproduces it either, pointing
+  at a real corruption-caused-early/detected-late pattern that ASan does not catch (3/3 clean
+  under ASan). **Reassuring scope check done immediately:** the full whole-repo suite (`./CnaTests`,
+  no filter, 4788 tests) and the normal audio-scoped filter both ran clean 3x right after this was
+  found — this does NOT appear to break the normal CI-style test run, only the narrow isolated
+  repro. Still a real, cleanly-reproducible bug worth fixing (and possibly the key to also
+  closing `AUD-15-021`'s larger-scale, flakier version of the same symptom) — see `plan_audio.md`'s
+  `AUD-15-022` entry for the full bisection trail. **Both `AUD-15-021` and `AUD-15-022` are now
+  blocked on the same tooling gap** (`gdb`/`valgrind`, neither installed, no passwordless `sudo`
+  in this sandbox) — if a future session has that access, or the user grants it via
+  `! sudo apt-get install -y gdb valgrind`, that is the single highest-value next step for both.
 - **CLI/tools/apps:** none in the framework itself — this is a library/framework, not an
   application. `cna_demo_sound`/`cna_demo_2d` are example programs exercising the Audio API; they
   aren't part of `--target CnaTests` and are easy to forget to rebuild.
@@ -1251,6 +1279,23 @@ along the way. Item 5's "18 open" count in `AUD-15` is now lower; check `plan_au
 for the current open list rather than trusting the count below. `AUD-07-005`/`006` (frame-alignment
 validation for `SubmitBuffer`/`SubmitFloatBufferEXT`) are legitimate, open, well-scoped P0 tasks
 worth picking up next in that area -- design and verify fresh (see the process note in §2).**
+
+**Final status update for this pass (2026-07-18, commits `a55b4e8b`/`9842b498`/`2aa7c1d6`, latest
+HEAD): `AUD-11-025` (item 1 below, already noted closed above) and `AUD-15-008` are now BOTH
+closed -- item 1's "most concrete, well-scoped next task" framing below is stale, do not re-pick
+`AUD-11-025`. `AUD-15-008`'s evidence: the one real forbidden-operation site found
+(`OnFireAndForgetStopped`'s cleanup queue, mutex+reallocating-vector on the mixer thread) was
+rewritten lock-free; see §2 and `plan_audio.md`'s own `AUD-15-008` entry.
+**Two open, undiagnosed, `gdb`/`valgrind`-blocked investigations now exist side by side:**
+`AUD-15-021` (flaky, ~20-40%, needs ~1300 tests) and `AUD-15-022` (new, 100%-reproducible-in-
+isolation with just `CueTest.*:DynamicSoundEffectInstanceTest.*`, likely tied to this session's own
+`AUD-15-006`/`AUD-07-003` stress tests -- see §2's fuller writeup and `plan_audio.md`'s own entry
+for the full bisection trail). **Recommended next step, in order:** (1) if `gdb`/`valgrind` become
+available, tackle `AUD-15-022` first -- it is the cleaner, faster, 100%-reproducible repro and may
+turn out to also explain `AUD-15-021`; (2) otherwise, `AUD-07-005`/`006` (frame-alignment
+validation, real open P0 tasks, no special tooling needed -- see the process note in §2) or the
+remaining `AUD-15` P1 items (`009`-`016`, benchmarks and hardening, see item 5 below) are both
+good, self-contained, non-blocked next picks.**
 
 1. **`AUD-11-025`** (P1) -- WaveBank `Dispose()` racing a concurrent `GetSoundEffect()` decode is
    a confirmed real gap (investigated, documented, not yet fixed). Needs the same
