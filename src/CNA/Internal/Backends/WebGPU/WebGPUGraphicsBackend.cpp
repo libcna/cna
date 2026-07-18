@@ -144,6 +144,24 @@ namespace CNA::Internal::Backends::WebGPU
             state.completed = true;
         }
 
+        // WEBGPU-58: Supports4xMsaa()'s own error-scope round trip -- captures whether the scoped
+        // wgpuDeviceCreateTexture() call (a scratch sampleCount=4 probe texture) actually succeeded
+        // on THIS concrete adapter/device, rather than assuming the WebGPU spec's "count must be 1
+        // or 4" text is honored by every real implementation.
+        struct ErrorScopeState
+        {
+            bool completed = false;
+            bool ok = false;
+        };
+
+        void OnPopErrorScope(WGPUPopErrorScopeStatus status, WGPUErrorType type, WGPUStringView,
+                             void* userdata1, void*)
+        {
+            auto& state = *static_cast<ErrorScopeState*>(userdata1);
+            state.ok = (status == WGPUPopErrorScopeStatus_Success && type == WGPUErrorType_NoError);
+            state.completed = true;
+        }
+
         // See IWebGPUSamplable's own doc comment (WebGPUGraphicsBackend.hpp): resolves any
         // ITextureBackend* to its WGPU-sampleable view, safely degrading to nullptr (treated as
         // "unbound" by every Render*Draws() call site's existing null check) for a null input or
@@ -648,7 +666,10 @@ namespace CNA::Internal::Backends::WebGPU
         depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
         depthDescriptor.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthDescriptor.mipLevelCount = 1;
-        depthDescriptor.sampleCount = 1;
+        // WEBGPU-58: matches the colour attachment's own sample count exactly, whatever that ends
+        // up being below (wgpu-native validation requires every attachment in a render pass to
+        // agree) -- 1 outside MSAA, identical to this texture's behaviour before MSAA existed.
+        depthDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
         depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
         if (depthTexture_ == nullptr)
         {
@@ -669,6 +690,53 @@ namespace CNA::Internal::Backends::WebGPU
             colorTexture_ = nullptr;
             throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D depth-stencil view");
         }
+
+        // WEBGPU-58: mirror the owner's CURRENT global sampleCount_ unconditionally -- see this
+        // class's own top-of-class doc comment (WebGPUGraphicsBackend.hpp) for why the per-instance
+        // requested multiSampleCount argument is intentionally not read here at all. colorTexture_/
+        // colorView_ above stay single-sample regardless -- they become the resolve
+        // destination (still what View()/GetData() read from) once this multisampled texture
+        // exists alongside them.
+        if (owner_->sampleCount_ > 1)
+        {
+            WGPUTextureDescriptor msaaDescriptor{};
+            msaaDescriptor.label = StringView("CNA WebGPU RenderTarget2D MSAA Colour");
+            msaaDescriptor.usage = WGPUTextureUsage_RenderAttachment;
+            msaaDescriptor.dimension = WGPUTextureDimension_2D;
+            msaaDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
+            msaaDescriptor.format = colorFormat_;
+            msaaDescriptor.mipLevelCount = 1;
+            msaaDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
+            msaaColorTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &msaaDescriptor);
+            if (msaaColorTexture_ == nullptr)
+            {
+                wgpuTextureViewRelease(depthView_);
+                wgpuTextureRelease(depthTexture_);
+                wgpuTextureViewRelease(colorView_);
+                wgpuTextureRelease(colorTexture_);
+                depthView_ = nullptr;
+                depthTexture_ = nullptr;
+                colorView_ = nullptr;
+                colorTexture_ = nullptr;
+                throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D MSAA colour texture");
+            }
+            msaaColorView_ = wgpuTextureCreateView(msaaColorTexture_, nullptr);
+            if (msaaColorView_ == nullptr)
+            {
+                wgpuTextureRelease(msaaColorTexture_);
+                wgpuTextureViewRelease(depthView_);
+                wgpuTextureRelease(depthTexture_);
+                wgpuTextureViewRelease(colorView_);
+                wgpuTextureRelease(colorTexture_);
+                msaaColorTexture_ = nullptr;
+                depthView_ = nullptr;
+                depthTexture_ = nullptr;
+                colorView_ = nullptr;
+                colorTexture_ = nullptr;
+                throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D MSAA colour view");
+            }
+            appliedMultiSampleCount_ = owner_->sampleCount_;
+        }
     }
 
     WebGPURenderTargetBackend::~WebGPURenderTargetBackend()
@@ -679,6 +747,8 @@ namespace CNA::Internal::Backends::WebGPU
         // identical destructor guard.
         if (owner_ != nullptr && owner_->currentRenderTarget_ == this)
             owner_->currentRenderTarget_ = nullptr;
+        if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
+        if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
         if (colorView_ != nullptr) wgpuTextureViewRelease(colorView_);
@@ -988,6 +1058,8 @@ namespace CNA::Internal::Backends::WebGPU
                 if (sampler != nullptr) wgpuSamplerRelease(sampler);
                 sampler = nullptr;
             }
+            if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
+            if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
             if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
             if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
             if (surfaceConfigured_ && surface_ != nullptr) wgpuSurfaceUnconfigure(surface_);
@@ -1025,6 +1097,8 @@ namespace CNA::Internal::Backends::WebGPU
                 wgpuSamplerRelease(sampler);
             sampler = nullptr;
         }
+        if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
+        if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
         if (readbackBuffer_ != nullptr) wgpuBufferRelease(readbackBuffer_);
@@ -1160,6 +1234,7 @@ namespace CNA::Internal::Backends::WebGPU
             physicalWidth_ = width;
             physicalHeight_ = height;
             RecreateDepthTexture();
+            RecreateMsaaColorTexture();
             return;
         }
         if (!force && surfaceConfigured_ && width == physicalWidth_ && height == physicalHeight_)
@@ -1223,6 +1298,7 @@ namespace CNA::Internal::Backends::WebGPU
         physicalHeight_ = height;
         surfaceConfigured_ = true;
         RecreateDepthTexture();
+        RecreateMsaaColorTexture();
         if (formatChanged || spritePipelineBlend_ == nullptr)
             CreateSpriteResources();
         if (formatChanged || coloredShader_ == nullptr)
@@ -1262,10 +1338,40 @@ namespace CNA::Internal::Backends::WebGPU
                                        static_cast<std::uint32_t>(physicalHeight_), 1};
         descriptor.format = WGPUTextureFormat_Depth24PlusStencil8;
         descriptor.mipLevelCount = 1;
-        descriptor.sampleCount = 1;
+        // WEBGPU-58: must match the colour attachment's own sample count exactly (wgpu-native
+        // validation requires every attachment in a render pass to agree) -- 1 outside MSAA,
+        // identical to this texture's behaviour before MSAA existed.
+        descriptor.sampleCount = static_cast<std::uint32_t>(sampleCount_);
         depthTexture_ = wgpuDeviceCreateTexture(device_, &descriptor);
         if (depthTexture_ != nullptr)
             depthView_ = wgpuTextureCreateView(depthTexture_, nullptr);
+    }
+
+    void WebGPUGraphicsBackend::RecreateMsaaColorTexture()
+    {
+        if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
+        if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
+        msaaColorView_ = nullptr;
+        msaaColorTexture_ = nullptr;
+        if (sampleCount_ <= 1 || physicalWidth_ <= 0 || physicalHeight_ <= 0 ||
+            surfaceFormat_ == WGPUTextureFormat_Undefined)
+            return;
+
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU Backbuffer MSAA Colour");
+        // RENDER_ATTACHMENT only: this texture is never sampled directly (the swapchain's own
+        // single-sample texture is the only thing ever read back/presented -- see
+        // EnsureFrameRendered()'s resolveTarget usage), so no TextureBinding usage is needed.
+        descriptor.usage = WGPUTextureUsage_RenderAttachment;
+        descriptor.dimension = WGPUTextureDimension_2D;
+        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(physicalWidth_),
+                                       static_cast<std::uint32_t>(physicalHeight_), 1};
+        descriptor.format = surfaceFormat_;
+        descriptor.mipLevelCount = 1;
+        descriptor.sampleCount = static_cast<std::uint32_t>(sampleCount_);
+        msaaColorTexture_ = wgpuDeviceCreateTexture(device_, &descriptor);
+        if (msaaColorTexture_ != nullptr)
+            msaaColorView_ = wgpuTextureCreateView(msaaColorTexture_, nullptr);
     }
 
     void WebGPUGraphicsBackend::DestroySpriteResources()
@@ -1380,7 +1486,10 @@ struct VertexOutput {
         pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = WGPUCullMode_None;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -1558,7 +1667,10 @@ struct VertexOutput {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -1786,7 +1898,10 @@ struct VertexOutput {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -1868,7 +1983,10 @@ struct VertexOutput {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -2212,7 +2330,10 @@ struct VertexOutput {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -2293,7 +2414,10 @@ struct VertexOutput {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -2554,7 +2678,10 @@ struct VertexOutput {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -2823,7 +2950,10 @@ struct VertexOutput {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -3203,12 +3333,21 @@ struct VertexOutput {
         if (!framePending_)
             return true;
 
+        // WEBGPU-58: backBuffer (the swapchain's own single-sample texture) is always the RESOLVE
+        // destination while MSAA is active -- the actual render-pass colour attachment is the
+        // persistent msaaColorView_ instead. wgpu-native performs the multisample resolve
+        // automatically as the render pass ends (no separate explicit resolve command); storeOp
+        // stays Store (not Discard) on the multisampled attachment so a future frame's
+        // WGPULoadOp_Load (when no Clear() was queued that frame) still observes real content,
+        // exactly like the pre-MSAA behaviour of Load-ing straight from the swapchain texture.
         WGPUTextureView backBuffer = wgpuTextureCreateView(acquiredTexture_, nullptr);
+        const bool useMsaa = sampleCount_ > 1 && msaaColorView_ != nullptr;
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU Frame Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
         WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-        colorAttachment.view = backBuffer;
+        colorAttachment.view = useMsaa ? msaaColorView_ : backBuffer;
+        colorAttachment.resolveTarget = useMsaa ? backBuffer : nullptr;
         colorAttachment.loadOp = clearColorPending_ ? WGPULoadOp_Clear : WGPULoadOp_Load;
         colorAttachment.storeOp = WGPUStoreOp_Store;
         colorAttachment.clearValue = clearColor_;
@@ -3327,8 +3466,15 @@ struct VertexOutput {
         encoderDescriptor.label = StringView("CNA WebGPU RenderTarget Encoder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
 
+        // WEBGPU-58: ColorAttachmentView() is the multisampled texture's view while this target
+        // is multisampled (mirroring the owner's global sampleCount_ -- see
+        // WebGPURenderTargetBackend's own class comment), with target->View()'s single-sample
+        // colorView_ as the resolveTarget wgpu-native resolves into automatically; both are the
+        // same texture/view (no resolve) when this target is not multisampled, identical to
+        // before MSAA existed.
         WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-        colorAttachment.view = target->View();
+        colorAttachment.view = target->ColorAttachmentView();
+        colorAttachment.resolveTarget = target->ResolveTargetView();
         // RenderTargetUsage.DiscardContents (XNA's own default) means content is not guaranteed
         // to survive between separate SetRenderTarget bind cycles -- mirrors
         // VulkanRenderTargetBackend::GetRenderPass()'s own discardContents=!preserveContents_
@@ -3600,6 +3746,143 @@ struct VertexOutput {
         }
     }
 
+    bool WebGPUGraphicsBackend::Supports4xMsaa()
+    {
+        if (msaa4xSupported_ >= 0)
+            return msaa4xSupported_ != 0;
+
+        // Pessimistic default if the probe itself cannot even run (e.g. called before the device/
+        // surface format are known -- should not happen in practice, ApplyMultiSampleCount() is
+        // only ever reachable after construction, but defend anyway).
+        msaa4xSupported_ = 0;
+        if (device_ == nullptr || instance_ == nullptr || surfaceFormat_ == WGPUTextureFormat_Undefined)
+            return false;
+
+        // WEBGPU-58: the WebGPU spec text says GPUMultisampleState.count "must be 1 or 4", but
+        // this backend verifies it empirically against the concrete adapter/device/surfaceFormat_
+        // combination actually in use here (e.g. a software Vulkan/llvmpipe fallback under a
+        // headless Xvfb CI run) rather than trusting spec-compliance blindly -- a scoped
+        // WGPUErrorFilter_Validation error scope around a scratch sampleCount=4 RENDER_ATTACHMENT
+        // texture creation, mirroring this file's own WaitForCompletion()-based async-callback
+        // pattern used for adapter/device requests and buffer maps.
+        wgpuDevicePushErrorScope(device_, WGPUErrorFilter_Validation);
+
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU MSAA Support Probe");
+        descriptor.usage = WGPUTextureUsage_RenderAttachment;
+        descriptor.dimension = WGPUTextureDimension_2D;
+        descriptor.size = WGPUExtent3D{4, 4, 1};
+        descriptor.format = surfaceFormat_;
+        descriptor.mipLevelCount = 1;
+        descriptor.sampleCount = 4;
+        WGPUTexture probe = wgpuDeviceCreateTexture(device_, &descriptor);
+        if (probe != nullptr)
+            wgpuTextureRelease(probe);
+
+        ErrorScopeState state;
+        WGPUPopErrorScopeCallbackInfo callback{};
+        callback.mode = WGPUCallbackMode_AllowProcessEvents;
+        callback.callback = OnPopErrorScope;
+        callback.userdata1 = &state;
+        wgpuDevicePopErrorScope(device_, callback);
+        WaitForCompletion(instance_, state.completed, "MSAA support probe");
+
+        msaa4xSupported_ = (probe != nullptr && state.ok) ? 1 : 0;
+        return msaa4xSupported_ != 0;
+    }
+
+    int WebGPUGraphicsBackend::PickSampleCount(int requestedMultiSampleCount)
+    {
+        if (requestedMultiSampleCount < 2)
+            return 1;
+        return Supports4xMsaa() ? 4 : 1;
+    }
+
+    void WebGPUGraphicsBackend::ClearAllPipelineCaches()
+    {
+        // WEBGPU-58 finding: merely releasing the cached WGPURenderPipeline objects and
+        // recreating them from the EXISTING, long-lived coloredShader_/coloredBindGroupLayout_/
+        // coloredPipelineLayout_ (and the equivalent members for every other 3D shader family) is
+        // NOT enough -- empirically verified (via a standalone probe reusing this backend's own
+        // real device_/queue_) that a WGPUShaderModule/WGPUBindGroupLayout/WGPUPipelineLayout
+        // that has ALREADY been used to create at least one WGPURenderPipeline, when reused
+        // UNCHANGED to create a NEW pipeline with a DIFFERENT WGPUMultisampleState.count, silently
+        // produces a pipeline that does not actually render/resolve correctly on this wgpu-native
+        // version/driver -- with no validation error at all (pipeline creation succeeds, the
+        // draw call succeeds, only the final pixels are wrong). A completely fresh shader module
+        // + bind group layout + pipeline layout combination (identical WGSL source, identical
+        // layout shape) at the new sample count renders correctly. The safe, general fix is to
+        // fully tear down and recreate every 3D/sprite shader module, bind group layout, pipeline
+        // layout AND pipeline cache -- not merely the pipeline objects -- exactly once whenever
+        // sampleCount_ actually changes (this is why every one of the CreateXResources() functions
+        // below starts with its own DestroyXResources() call). Order matches ConfigureSurface()'s
+        // own dependency chain (CreateTexturedResources()/CreateLitTexturedResources()/
+        // CreateAlphaTestResources()/CreateSkinnedResources() need coloredBindGroupLayout_/
+        // texturedBindGroupLayout_ to already exist; CreateSkinnedPbrResources() needs
+        // pbrBindGroupLayout1_ from CreatePbrResources()).
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined)
+            return;
+        CreateSpriteResources();
+        CreateColoredResources();
+        CreateTexturedResources();
+        CreateLitTexturedResources();
+        CreateAlphaTestResources();
+        CreateDualTextureResources();
+        CreatePbrResources();
+        CreateSkinnedResources();
+        CreateSkinnedPbrResources();
+    }
+
+    int WebGPUGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount)
+    {
+        const int newSampleCount = PickSampleCount(requestedMultiSampleCount);
+        if (newSampleCount == sampleCount_)
+            return GetMultiSampleCount();
+
+        sampleCount_ = newSampleCount;
+
+        // Every previously-created 3D/sprite pipeline baked the OLD sampleCount_ into its own
+        // WGPUMultisampleState.count -- release them all so the next Queue*Draw()/RenderSprites()
+        // lazily rebuilds with the new value (mirrors
+        // VulkanGraphicsBackend::ApplyMultiSampleCount()'s identical "invalidate every pipeline
+        // cache" approach; a rare, not-a-hot-path event).
+        ClearAllPipelineCaches();
+
+        // The backbuffer's own depth buffer and (while MSAA is now active) multisampled colour
+        // buffer must be rebuilt at the new sample count/current physical size.
+        RecreateDepthTexture();
+        RecreateMsaaColorTexture();
+
+        // Both of the textures just (re)created above have entirely UNDEFINED initial GPU
+        // content -- unlike a normal resize (where RecreateDepthTexture() alone runs but a
+        // Clear() almost always follows soon after anyway), nothing else guarantees
+        // clearDepthPending_/clearColorPending_ are still true at this exact moment: if the very
+        // last Clear() before this call already consumed them (clearDepthPending_ reset to false
+        // at EnsureFrameRendered()'s own tail), the NEXT render pass would use
+        // WGPULoadOp_Load on a depth attachment that was never actually cleared, reading
+        // whatever undefined bytes the driver happened to leave there -- which, for a
+        // LessEqual-vs-a-cleared-1.0 depth test, is observably non-deterministic (some drivers
+        // zero-initialize fresh allocations, some reuse recently-freed memory verbatim) rather
+        // than a hard failure, making this exact bug easy to miss in ad-hoc testing. Force a real
+        // clear on the next render pass for all three attachments to guarantee well-defined
+        // content regardless of what any earlier Clear() call already consumed.
+        clearColorPending_ = true;
+        clearDepthPending_ = true;
+        clearStencilPending_ = true;
+
+        if (sampleCount_ > 1)
+            SDL_Log("[WebGPU] MultiSampleCount reset to %dx", sampleCount_);
+        else
+            SDL_Log("[WebGPU] MultiSampleCount reset to disabled (1x)");
+
+        return GetMultiSampleCount();
+    }
+
+    int WebGPUGraphicsBackend::GetMultiSampleCount() const
+    {
+        return sampleCount_ > 1 ? sampleCount_ : 0;
+    }
+
     bool WebGPUGraphicsBackend::TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const
     {
         const LogicalViewport viewport = ComputeLogicalViewport();
@@ -3646,13 +3929,14 @@ struct VertexOutput {
             throw std::runtime_error("CNA WebGPU: RenderTarget2D mip-chain regeneration "
                                      "(mipMap=true) is not implemented on this backend yet -- see "
                                      "plan_webgpu.md WEBGPU-53/54");
-        // WEBGPU-58: multiSampleCount is accepted but not yet honoured -- every WebGPU
-        // RenderTarget2D is currently single-sample. WebGPURenderTargetBackend does not override
-        // GetMultiSampleCount(), so it correctly reports 0 (IRenderTargetBackend's own "not
-        // supported by this backend" default) rather than silently claiming a sample count that
-        // was never actually applied -- RenderTarget2D::RenderTarget2D() reads this back into its
-        // own MultiSampleCount property, matching FNA3D_GetMaxMultiSampleCount's real-clamped-
-        // value contract.
+        // WEBGPU-58: the per-instance requested multiSampleCount argument is intentionally NOT
+        // read here -- WebGPURenderTargetBackend's own constructor unconditionally mirrors this
+        // backend's CURRENT global sampleCount_ instead (see that class's own top-of-class doc
+        // comment for exactly why a per-instance opt-out is unsafe given this backend's single
+        // shared pipeline sample count). RenderTarget2D::RenderTarget2D() reads the real applied
+        // value back via GetMultiSampleCount() into its own MultiSampleCount property, matching
+        // FNA3D_GetMaxMultiSampleCount's real-clamped-value contract -- 0 whenever the backend has
+        // no MSAA active, exactly as before this task.
         (void) multiSampleCount;
         return std::make_unique<WebGPURenderTargetBackend>(*this, w, h, depthFormat, preserveContents);
     }
@@ -4922,7 +5206,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -5803,7 +6090,10 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
@@ -6296,7 +6586,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
-        pipeline.multisample.count = 1;
+        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
+        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
+        // before MSAA existed.
+        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;

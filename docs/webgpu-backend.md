@@ -274,10 +274,14 @@ actually pointed at one — fixed by introducing `IWebGPUSamplable` (mirroring
 helper everywhere a texture pointer is stored, so an incompatible type now safely resolves to
 "unbound" instead of undefined behaviour.
 
-MSAA (`WEBGPU-58`) and mip-chain regeneration are deliberately deferred, not silently
-under-delivered: `CreateRenderTarget2D()` throws a clear error for `mipMap=true`, and
-`GetMultiSampleCount()` honestly reports 0 regardless of the requested `multiSampleCount` (the
-`IRenderTargetBackend` default). `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
+Mip-chain regeneration is deliberately deferred, not silently under-delivered:
+`CreateRenderTarget2D()` throws a clear error for `mipMap=true`. MSAA (`WEBGPU-58`) was attempted
+2026-07-18: the backend-global `sampleCount_`, `ApplyMultiSampleCount()`'s empirically-probed
+clamped-return-value contract, and `WebGPURenderTargetBackend`'s unconditional mirroring of that
+global sample count are all implemented and verified (`WebGPU_Msaa` Checks A/C/D-1-of-2), but a
+genuine multisample-resolved render does **not** yet work end-to-end through the real
+`GraphicsDevice`/`BasicEffect` draw path (`WebGPU_Msaa` Checks B/D-2-of-2/E FAIL) — see `WEBGPU-58`'s
+`plan_webgpu.md` row for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
 trip and a real `BasicEffect` draw round trip via `GetData()`, a depth+stencil-tested target (a
 farther red quad loses to a nearer green one, with a genuine `ClearOptions::Stencil` clear — this
 also closed `WEBGPU-8`/`9`'s previously-unexercised stencil-attachment gap), sampling all 3 targets
@@ -314,8 +318,10 @@ open in `plan_webgpu.md`:
   dispatch are all now implemented, see above);
 - single-target `RenderTarget2D` (colour + depth/stencil round trip, real 3D-draw dispatch,
   sampling back through `SpriteBatch`) is now implemented, see below; `RenderTargetCube`, 3D
-  textures, compressed formats, MSAA (backbuffer or render target) and multiple simultaneous
-  render targets (MRT) remain open;
+  textures, compressed formats and multiple simultaneous render targets (MRT) remain open; MSAA
+  (backbuffer or render target) has real infrastructure (global sample count, clamped
+  `ApplyMultiSampleCount()`, RT mirroring) but genuine multisample-resolved rendering is not yet
+  working end-to-end — see `WEBGPU-58`;
 - `Texture2D.GetData()` (arbitrary-texture readback — distinct from the now-implemented backbuffer
   readback, `WEBGPU-51`);
 - full BlendState, RasterizerState (cull mode/wireframe), viewport, scissor and stencil-operation

@@ -78,11 +78,29 @@ namespace CNA::Internal::Backends::WebGPU
     /// Depth24PlusStencil8, regardless of the requested DepthFormat, mirroring
     /// VulkanGraphicsBackend's own "always allocate a combined depth+stencil buffer using the
     /// device-wide format regardless of the exact value requested" documented simplification --
-    /// see IGraphicsBackend::CreateRenderTarget2D's own doc comment). MSAA (WEBGPU-58) and mip
-    /// regeneration are deliberately NOT implemented yet: GetMultiSampleCount() always returns 0
-    /// (the IRenderTargetBackend default, honestly reporting "not supported by this backend" per
-    /// its own doc comment) and CreateRenderTarget2D() throws for mipMap=true rather than silently
-    /// under-delivering a requested mip chain.
+    /// see IGraphicsBackend::CreateRenderTarget2D's own doc comment). Mip regeneration is
+    /// deliberately NOT implemented yet: CreateRenderTarget2D() throws for mipMap=true rather
+    /// than silently under-delivering a requested mip chain.
+    /// WEBGPU-58: MSAA is real, but -- unlike VulkanRenderTargetBackend's own per-instance
+    /// "requestedMultiSampleCount>0 AND owner_->sampleCount_>1" opt-in gate -- this backend
+    /// unconditionally mirrors the OWNER's CURRENT global sampleCount_ at construction time,
+    /// ignoring the per-instance requested value entirely (the same "regardless of the exact
+    /// value requested" simplification already established for DepthFormat above). This is
+    /// necessary, not just simpler: WebGPUGraphicsBackend's ~10 GetOrCreatePipeline*3D() families
+    /// bake ONE single backend-global WGPUMultisampleState.count into every pipeline object (see
+    /// that class's own sampleCount_ comment) rather than selecting between an MSAA/non-MSAA
+    /// pipeline variant per draw target the way Vulkan's RecordCommandBuffer() does -- so a
+    /// RenderTarget2D that opted OUT of MSAA while the backend's own sampleCount_ is > 1 would be
+    /// pipeline-INCOMPATIBLE (a hard wgpu-native validation error) the moment anything drew 3D
+    /// content into it, not merely sub-optimal. Reported via GetMultiSampleCount() as the real,
+    /// applied value (0 when the backend has no MSAA active), matching
+    /// IRenderTargetBackend::GetMultiSampleCount()'s own "real, device-clamped value" contract.
+    /// A known, narrow, documented gap: an instance created BEFORE a later
+    /// WebGPUGraphicsBackend::ApplyMultiSampleCount() call changes sampleCount_ does not get
+    /// retroactively resized/promoted -- exactly like VulkanGraphicsBackend::ApplyMultiSampleCount()
+    /// itself does not touch any already-live VulkanRenderTargetBackend either. This is expected
+    /// to be rare in practice (games normally finish GraphicsDeviceManager.ApplyChanges() before
+    /// LoadContent() creates any RenderTarget2D instances).
     class WebGPURenderTargetBackend final : public IRenderTargetBackend, public IWebGPUSamplable
     {
     public:
@@ -102,9 +120,22 @@ namespace CNA::Internal::Backends::WebGPU
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
 
+        /// Always the single-sample colour view: the resolve destination sampled back through
+        /// SpriteBatch/BasicEffect.Texture/GetData(), regardless of whether this instance is
+        /// currently multisampled (WEBGPU-58) -- unaffected by MSAA, matching this member's
+        /// pre-existing role exactly.
         [[nodiscard]] WGPUTextureView View() const override { return colorView_; }
         [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
         [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
+        /// WEBGPU-58: the actual render-pass colour attachment to draw into -- the multisampled
+        /// texture's view when this instance is multisampled, otherwise the same single-sample
+        /// colorView_ that View() returns (identical to before MSAA existed).
+        [[nodiscard]] WGPUTextureView ColorAttachmentView() const { return msaaColorView_ != nullptr ? msaaColorView_ : colorView_; }
+        /// WEBGPU-58: the render pass's resolveTarget -- colorView_ when multisampled (wgpu-native
+        /// resolves into it automatically as the pass ends), or nullptr otherwise (no resolve
+        /// needed/possible for a single-sample attachment).
+        [[nodiscard]] WGPUTextureView ResolveTargetView() const { return msaaColorView_ != nullptr ? colorView_ : nullptr; }
 
     private:
         WebGPUGraphicsBackend* owner_ = nullptr;
@@ -116,6 +147,13 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUTextureView colorView_ = nullptr;
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
+        /// WEBGPU-58: only non-null when this instance mirrors the owner's sampleCount_ > 1 at
+        /// construction time -- see this class's own top-of-class doc comment.
+        WGPUTexture msaaColorTexture_ = nullptr;
+        WGPUTextureView msaaColorView_ = nullptr;
+        /// The real, applied MSAA sample count captured once at construction (0 = none),
+        /// returned verbatim by GetMultiSampleCount().
+        int appliedMultiSampleCount_ = 0;
     };
 
     class WebGPUVertexBufferBackend final : public IVertexBufferBackend
@@ -261,6 +299,14 @@ namespace CNA::Internal::Backends::WebGPU
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        /// WEBGPU-58: reconfigures this backend's single GLOBAL MSAA sample count in place --
+        /// mirroring VulkanGraphicsBackend::ApplyMultiSampleCount()'s own "one value, invalidate
+        /// every pipeline cache, rebuild lazily" design (see sampleCount_'s own comment for why
+        /// this is a backend-wide value rather than a per-pipeline-cache-key dimension). Returns
+        /// the real, device-clamped applied count (0 = disabled) via GetMultiSampleCount().
+        int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
+        /// WEBGPU-58: the backbuffer's real, applied MSAA sample count (0 = none).
+        [[nodiscard]] int GetMultiSampleCount() const override;
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         bool TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const override;
 
@@ -396,6 +442,37 @@ namespace CNA::Internal::Backends::WebGPU
         void CreateColoredResources();
         void DestroyColoredResources();
         void RecreateDepthTexture();
+        // WEBGPU-58: (re)creates/destroys the backbuffer's own multisampled colour texture
+        // (msaaColorTexture_/msaaColorView_), sized to physicalWidth_/physicalHeight_ at the
+        // CURRENT sampleCount_ -- a no-op (leaves both null) whenever sampleCount_ <= 1. Called
+        // alongside RecreateDepthTexture() from ConfigureSurface() (resize) and
+        // ApplyMultiSampleCount() (MSAA-count change) -- the same two triggers that already
+        // invalidate the depth texture.
+        void RecreateMsaaColorTexture();
+        // WEBGPU-58: releases every WGPURenderPipeline in all 15 pipeline-cache maps (WEBGPU-30)
+        // plus the two fixed SpriteBatch pipelines, without touching any shader
+        // module/bind-group-layout/pipeline-layout (none of those depend on sampleCount_) --
+        // called only from ApplyMultiSampleCount() when sampleCount_ actually changes, mirroring
+        // VulkanGraphicsBackend::ApplyMultiSampleCount()'s own "clear every pipeline cache, rebuild
+        // lazily on next use" approach. Every GetOrCreatePipeline*3D() reads the NEW sampleCount_
+        // the next time it is called for a given cache key, since none of them treat msaa as part
+        // of Make3DPipelineKey() (WEBGPU-30's own documented scope).
+        void ClearAllPipelineCaches();
+        // WEBGPU-58: PickSampleCount(requested)'s own device-capability half -- empirically
+        // verifies (via a scratch wgpuDeviceCreateTexture + WGPUErrorFilter_Validation error-scope
+        // round trip, not merely assumed from the WebGPU spec's "count must be 1 or 4" text) that
+        // this concrete adapter/device/surfaceFormat_ combination can really create a
+        // sampleCount=4 RENDER_ATTACHMENT texture. Cached after the first call (a real GPU
+        // round-trip, not free) since ApplyMultiSampleCount() may be called more than once.
+        [[nodiscard]] bool Supports4xMsaa();
+        // WEBGPU-58: clamps a requested MultiSampleCount to this backend's only two legal
+        // WGPUMultisampleState.count values (1 or 4 -- unlike Vulkan's 1/2/4/8/16/32/64 range,
+        // wgpu-native/WebGPU has no adjustable per-device "max sample count" limit at all; see
+        // Supports4xMsaa()'s own comment). Mirrors VulkanGraphicsBackend's own PickSampleCount()
+        // "highest legal value <= requested that the device actually supports" semantics: a
+        // requested count in [2,4] rounds down to 1 unless 4x is supported (in which case it
+        // rounds UP to 4, since 4 is the only value above 1), and anything >= 4 clamps down to 4.
+        [[nodiscard]] int PickSampleCount(int requestedMultiSampleCount);
         void RenderSprites(WGPURenderPassEncoder pass);
         void RenderColoredDraws(WGPURenderPassEncoder pass);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
@@ -448,6 +525,25 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUTextureFormat surfaceFormat_ = WGPUTextureFormat_Undefined;
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
+
+        // WEBGPU-58: single backend-GLOBAL MSAA sample count (1 = disabled), mirroring
+        // VulkanGraphicsBackend::sampleCount_'s own "one value shared by every pipeline;
+        // invalidate/rebuild everything on an (expected-rare) change" simplification -- NOT a new
+        // per-pipeline-cache-key dimension (Make3DPipelineKey()/WEBGPU-30 is unchanged). Every one
+        // of the ~10 GetOrCreatePipeline*3D() families plus the 2 fixed SpriteBatch pipelines bake
+        // this SAME value into their own WGPUMultisampleState.count. Only ever 1 or 4 -- see
+        // PickSampleCount()'s own comment for why WebGPU has no wider range here, unlike Vulkan.
+        int sampleCount_ = 1;
+        // Cached result of Supports4xMsaa()'s own real device-capability probe: -1 = not probed
+        // yet, 0 = unsupported, 1 = supported.
+        int msaa4xSupported_ = -1;
+        // WEBGPU-58: the backbuffer's own multisampled colour attachment, only non-null while
+        // sampleCount_ > 1 -- the swapchain's own per-frame texture (acquiredTexture_) becomes the
+        // RESOLVE target every frame instead of being drawn into directly (see
+        // EnsureFrameRendered()). Recreated by RecreateMsaaColorTexture() on resize/MSAA-count
+        // change, exactly like depthTexture_/depthView_ above.
+        WGPUTexture msaaColorTexture_ = nullptr;
+        WGPUTextureView msaaColorView_ = nullptr;
 
         WGPUShaderModule spriteShader_ = nullptr;
         WGPUBindGroupLayout spriteBindGroupLayout_ = nullptr;

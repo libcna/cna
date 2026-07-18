@@ -42,9 +42,13 @@
 //   sRGB-encoded space") -- 0/255 channel values are gamma-invariant at both encoding endpoints,
 //   so this check exercises target separation specifically, without also depending on that
 //   unrelated, pre-existing question.
-// Check F -- MultiSampleCount property fidelity: requesting 4 must still report 0 (MSAA,
-//   WEBGPU-58, is a separate, not-yet-implemented follow-up) -- asserts the backend is honest
-//   about that, not silently claiming a sample count it never actually applied.
+// Check F -- MultiSampleCount property fidelity: this test's own GraphicsDeviceManager never
+//   enables PreferMultiSampling, so the backend's global sample count (WEBGPU-58) stays 1 (no
+//   MSAA) throughout -- requesting 4 on this specific RenderTarget2D instance must still report
+//   0, since WebGPURenderTargetBackend unconditionally mirrors the BACKEND's own current global
+//   state (not the per-instance request -- see that class's own doc comment), which is disabled
+//   here. See examples/webgpu_msaa_test.cpp for full MSAA coverage (backbuffer AND
+//   RenderTarget2D, with MSAA actually engaged).
 // Check G -- CreateRenderTarget2D(mipMap=true) throws a clear exception rather than silently
 //   creating a single-level target while the XNA layer expects a full mip chain (a deliberate,
 //   documented scope cut -- see plan_webgpu.md WEBGPU-53/54).
@@ -273,14 +277,18 @@ protected:
                   "Check E (other half): the render target itself really did receive Clear(Red)");
         }
 
-        // Check F: MultiSampleCount property fidelity -- MSAA (WEBGPU-58) is a separate,
-        // not-yet-implemented follow-up; requesting 4 must still honestly report 0.
+        // Check F: MultiSampleCount property fidelity -- this test's GraphicsDeviceManager never
+        // enables PreferMultiSampling, so the backend's own global MSAA sample count (WEBGPU-58)
+        // stays disabled throughout; a RenderTarget2D unconditionally mirrors that backend-global
+        // state (not its own per-instance request), so requesting 4 here must still honestly
+        // report 0. See examples/webgpu_msaa_test.cpp for the counterpart with MSAA actually
+        // engaged.
         {
             RenderTarget2D rtMsaaRequest(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                         DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
             check(rtMsaaRequest.getMultiSampleCountProperty() == 0,
                   "Check F: RenderTarget2D MultiSampleCount request 4 -> honestly reports 0 "
-                  "(MSAA not yet implemented, WEBGPU-58)");
+                  "(backend's own global MSAA is disabled in this test -- see webgpu_msaa_test.cpp)");
         }
 
         // Check G: mipMap=true is a deliberate, documented scope cut -- must throw a clear
