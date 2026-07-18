@@ -172,10 +172,27 @@ namespace CNA::Internal::Backends::WebGPU
             return tex != nullptr ? dynamic_cast<const IWebGPUSamplable*>(tex) : nullptr;
         }
 
+        // WEBGPU-114: the IWebGPUCubeSamplable sibling of ResolveSamplable() above -- resolves any
+        // ITextureCubeBackend* (WebGPUTextureCubeBackend OR WebGPURenderTargetCubeBackend) to its
+        // whole-cube sampling view, safely degrading to nullptr for a null input or an incompatible
+        // concrete type.
+        [[nodiscard]] const IWebGPUCubeSamplable* ResolveCubeSamplable(const ITextureCubeBackend* tex)
+        {
+            return tex != nullptr ? dynamic_cast<const IWebGPUCubeSamplable*>(tex) : nullptr;
+        }
+
         [[nodiscard]] std::uint32_t AlignBytesPerRow(std::uint32_t bytesPerRow)
         {
             constexpr std::uint32_t kAlignment = 256;
             return (bytesPerRow + kAlignment - 1) / kAlignment * kAlignment;
+        }
+
+        // WEBGPU-51/57/112/113: mip-level dimension helper shared by every GetData()/texture
+        // constructor below that needs a specific level's real width/height/depth -- mirrors
+        // Texture2D.cpp's own file-local mipDim(base, level) formula exactly (max(1, base>>level)).
+        [[nodiscard]] int MipDim(int base, int level)
+        {
+            return std::max(1, base >> level);
         }
 
         // XNA CompareFunction ordinals -> WGPUCompareFunction (mirrors Vulkan's own ToVkCompareOp):
@@ -572,7 +589,14 @@ namespace CNA::Internal::Backends::WebGPU
 
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU Texture2D");
-        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+        // WEBGPU-51: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
+        // readback (added alongside that method -- every texture created before GetData() existed
+        // never needed it). WEBGPU-52: RenderAttachment is required by GenerateMips2D()'s
+        // render-pass-based mip blit (see that method's own doc comment) -- only actually used
+        // when mipLevels_ > 1 and initial pixel data is supplied below, but declared
+        // unconditionally since usage flags are fixed at texture-creation time.
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
+                           WGPUTextureUsage_CopySrc | WGPUTextureUsage_RenderAttachment;
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
         descriptor.format = WGPUTextureFormat_RGBA8Unorm;
@@ -623,6 +647,19 @@ namespace CNA::Internal::Backends::WebGPU
             upload = tightlyPacked.data();
         }
         UpdatePixelsLevel(0, upload, width_, height_);
+
+        // WEBGPU-52: real, genuinely-linear-filtered mip generation from level 0 -- see
+        // WebGPUGraphicsBackend::EnsureMipBlitPipeline()'s own doc comment for the full rationale
+        // and the deliberate divergence this introduces from FNA and every sibling CNA backend
+        // (which only auto-regenerate mips for a RENDER TARGET being unbound, not a plain
+        // Texture2D). Placed here (not just in the constructor) so a LATER Texture2D::SetData()
+        // call that replaces level 0 (the only backend entry point XNA-layer SetData(level=0,...)
+        // ever calls, even for a partial sub-rectangle -- see Texture2D.cpp's own
+        // getMipBuffer()-backed whole-level re-upload) regenerates the mip chain again too,
+        // consistent with WebGPUTextureCubeBackend::SetData()'s identical per-level-0-write
+        // trigger. A no-op when mipLevels_ == 1.
+        if (mipLevels_ > 1)
+            owner_->GenerateMips2D(texture_, width_, height_, mipLevels_);
     }
 
     void WebGPUTextureBackend::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
@@ -641,6 +678,105 @@ namespace CNA::Internal::Backends::WebGPU
         const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
         const std::size_t byteCount = static_cast<std::size_t>(levelW) * static_cast<std::size_t>(levelH) * 4u;
         wgpuQueueWriteTexture(owner_->Queue(), &destination, rgba, byteCount, &layout, &extent);
+    }
+
+    // WEBGPU-51: real CPU readback for an arbitrary Texture2D -- reuses the exact staged
+    // MAP_READ-buffer/aligned-row/async-map-and-poll technique WEBGPU-91's ReadBackbuffer() and
+    // WebGPURenderTargetBackend::GetData() already established (see both for the precedent).
+    // Copies the WHOLE requested mip level to a temporary buffer, then extracts the x/y/w/h
+    // sub-rectangle from the mapped memory -- this texture is always WGPUTextureFormat_RGBA8Unorm
+    // (see the constructor above), so unlike the swapchain/a RenderTarget2D there is never a
+    // BGRA byte-swap to apply.
+    void WebGPUTextureBackend::GetData(int level, int x, int y, int w, int h,
+                                        void* data, int dataLength) const
+    {
+        if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
+            return;
+        if (level < 0 || level >= mipLevels_)
+            throw std::out_of_range("CNA WebGPU: Texture2D.GetData: mip level out of range");
+
+        const int levelW = MipDim(width_, level);
+        const int levelH = MipDim(height_, level);
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelW) * 4u);
+        const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelH);
+
+        WGPUBufferDescriptor bufferDescriptor{};
+        bufferDescriptor.label = StringView("CNA WebGPU Texture2D Readback Buffer");
+        bufferDescriptor.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        bufferDescriptor.size = bufferSize;
+        WGPUBuffer readbackBuffer = wgpuDeviceCreateBuffer(owner_->Device(), &bufferDescriptor);
+        if (readbackBuffer == nullptr)
+            throw std::runtime_error("CNA WebGPU: Texture2D.GetData: failed to create readback buffer");
+
+        WGPUCommandEncoderDescriptor encoderDescriptor{};
+        encoderDescriptor.label = StringView("CNA WebGPU Texture2D Readback Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
+
+        WGPUTexelCopyTextureInfo source{};
+        source.texture = texture_;
+        source.mipLevel = static_cast<std::uint32_t>(level);
+        source.origin = WGPUOrigin3D{0, 0, 0};
+        source.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferInfo destination{};
+        destination.buffer = readbackBuffer;
+        destination.layout.offset = 0;
+        destination.layout.bytesPerRow = bytesPerRow;
+        destination.layout.rowsPerImage = static_cast<std::uint32_t>(levelH);
+
+        const WGPUExtent3D copySize{static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
+        wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU Texture2D Readback Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(owner_->Queue(), 1, &commandBuffer);
+        wgpuCommandBufferRelease(commandBuffer);
+
+        BufferMapState mapState;
+        WGPUBufferMapCallbackInfo callbackInfo{};
+        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.callback = OnBufferMap;
+        callbackInfo.userdata1 = &mapState;
+        wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
+        WaitForCompletion(owner_->Instance(), mapState.completed, "Texture2D readback buffer map");
+        if (mapState.status != WGPUMapAsyncStatus_Success)
+        {
+            wgpuBufferRelease(readbackBuffer);
+            throw std::runtime_error("CNA WebGPU: Texture2D.GetData: readback buffer map failed: " + mapState.error);
+        }
+
+        const auto* mapped = static_cast<const std::uint8_t*>(
+            wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
+        auto* out = static_cast<std::uint8_t*>(data);
+        const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
+        {
+            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+        }
+        else
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const int sy = y + row;
+                for (int col = 0; col < w; ++col)
+                {
+                    const int sx = x + col;
+                    std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                    if (sx < 0 || sx >= levelW || sy < 0 || sy >= levelH)
+                    {
+                        d[0] = d[1] = d[2] = d[3] = 0;
+                        continue;
+                    }
+                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
+                                            static_cast<std::size_t>(sx) * 4;
+                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+                }
+            }
+        }
+        wgpuBufferUnmap(readbackBuffer);
+        wgpuBufferRelease(readbackBuffer);
     }
 
     // WEBGPU-56/74: minimal cube-map texture backend, just enough for
@@ -663,7 +799,13 @@ namespace CNA::Internal::Backends::WebGPU
 
         WGPUTextureDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU TextureCube");
-        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+        // WEBGPU-113: CopySrc is required by GetData()'s wgpuCommandEncoderCopyTextureToBuffer()
+        // readback (added alongside that method). WEBGPU-52: RenderAttachment is required by
+        // GenerateMipsCubeFace()'s render-pass-based mip blit -- see that method's own doc
+        // comment; only actually used when mipLevels_ > 1, declared unconditionally since usage
+        // flags are fixed at texture-creation time.
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
+                           WGPUTextureUsage_CopySrc | WGPUTextureUsage_RenderAttachment;
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 6};
         descriptor.format = WGPUTextureFormat_RGBA8Unorm;
@@ -726,6 +868,557 @@ namespace CNA::Internal::Backends::WebGPU
         layout.rowsPerImage = static_cast<std::uint32_t>(h);
         const WGPUExtent3D extent{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h), 1};
         wgpuQueueWriteTexture(owner_->Queue(), &destination, data, required, &layout, &extent);
+
+        // WEBGPU-52: real, genuinely-linear-filtered mip generation for THIS face, from its own
+        // level 0 -- see WebGPUGraphicsBackend::EnsureMipBlitPipeline()'s own doc comment for the
+        // full rationale and the deliberate divergence this introduces from FNA and every sibling
+        // CNA backend. Triggers on every level-0 write (even a partial sub-rectangle, matching
+        // this method's own existing per-call granularity) rather than only once at "the first
+        // full-face upload", since TextureCube -- unlike Texture2D -- has no single constructor-
+        // time initial-pixel-data moment to hook; a game that calls SetData(face, level=0, ...)
+        // more than once simply regenerates that face's mips again each time, which is correct
+        // (if not maximally efficient). A no-op when mipLevels_ == 1.
+        if (level == 0 && mipLevels_ > 1)
+            owner_->GenerateMipsCubeFace(texture_, face, size_, mipLevels_);
+    }
+
+    // WEBGPU-113: real per-face CPU readback, same staged-copy/row-alignment/async-map technique
+    // as WebGPUTextureBackend::GetData() (WEBGPU-51) -- origin.z = face selects the array layer,
+    // matching SetData()'s own established convention above. Always RGBA8Unorm, so no BGRA swap.
+    void WebGPUTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                            void* data, int dataLength) const
+    {
+        if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
+            return;
+        if (face < 0 || face >= 6)
+            throw std::out_of_range("CNA WebGPU: TextureCube.GetData: face must be 0..5");
+        if (level < 0 || level >= mipLevels_)
+            throw std::out_of_range("CNA WebGPU: TextureCube.GetData: mip level out of range");
+
+        const int levelSize = MipDim(size_, level);
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelSize) * 4u);
+        const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelSize);
+
+        WGPUBufferDescriptor bufferDescriptor{};
+        bufferDescriptor.label = StringView("CNA WebGPU TextureCube Readback Buffer");
+        bufferDescriptor.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        bufferDescriptor.size = bufferSize;
+        WGPUBuffer readbackBuffer = wgpuDeviceCreateBuffer(owner_->Device(), &bufferDescriptor);
+        if (readbackBuffer == nullptr)
+            throw std::runtime_error("CNA WebGPU: TextureCube.GetData: failed to create readback buffer");
+
+        WGPUCommandEncoderDescriptor encoderDescriptor{};
+        encoderDescriptor.label = StringView("CNA WebGPU TextureCube Readback Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
+
+        WGPUTexelCopyTextureInfo source{};
+        source.texture = texture_;
+        source.mipLevel = static_cast<std::uint32_t>(level);
+        source.origin = WGPUOrigin3D{0, 0, static_cast<std::uint32_t>(face)};
+        source.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferInfo destination{};
+        destination.buffer = readbackBuffer;
+        destination.layout.offset = 0;
+        destination.layout.bytesPerRow = bytesPerRow;
+        destination.layout.rowsPerImage = static_cast<std::uint32_t>(levelSize);
+
+        const WGPUExtent3D copySize{static_cast<std::uint32_t>(levelSize), static_cast<std::uint32_t>(levelSize), 1};
+        wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU TextureCube Readback Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(owner_->Queue(), 1, &commandBuffer);
+        wgpuCommandBufferRelease(commandBuffer);
+
+        BufferMapState mapState;
+        WGPUBufferMapCallbackInfo callbackInfo{};
+        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.callback = OnBufferMap;
+        callbackInfo.userdata1 = &mapState;
+        wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
+        WaitForCompletion(owner_->Instance(), mapState.completed, "TextureCube readback buffer map");
+        if (mapState.status != WGPUMapAsyncStatus_Success)
+        {
+            wgpuBufferRelease(readbackBuffer);
+            throw std::runtime_error("CNA WebGPU: TextureCube.GetData: readback buffer map failed: " + mapState.error);
+        }
+
+        const auto* mapped = static_cast<const std::uint8_t*>(
+            wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
+        auto* out = static_cast<std::uint8_t*>(data);
+        const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
+        {
+            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+        }
+        else
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const int sy = y + row;
+                for (int col = 0; col < w; ++col)
+                {
+                    const int sx = x + col;
+                    std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                    if (sx < 0 || sx >= levelSize || sy < 0 || sy >= levelSize)
+                    {
+                        d[0] = d[1] = d[2] = d[3] = 0;
+                        continue;
+                    }
+                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
+                                            static_cast<std::size_t>(sx) * 4;
+                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+                }
+            }
+        }
+        wgpuBufferUnmap(readbackBuffer);
+        wgpuBufferRelease(readbackBuffer);
+    }
+
+    // WEBGPU-114: see this class's own header doc comment for the full architecture summary.
+    WebGPURenderTargetCubeBackend::WebGPURenderTargetCubeBackend(WebGPUGraphicsBackend& owner, int size,
+                                                                  int depthFormat, bool mipMap)
+        : owner_(&owner), size_(size)
+    {
+        if (size_ <= 0)
+            throw std::invalid_argument("CNA WebGPU: RenderTargetCube size must be positive");
+        // WEBGPU-114: mip-chain regeneration is not implemented -- same documented scope cut, for
+        // the same reason, as CreateRenderTarget2D()'s own mipMap=true throw (see that function's
+        // own comment: silently under-delivering a requested mip chain is worse than a clear
+        // exception when RenderTargetCube::RenderTargetCube() has already told the XNA layer to
+        // expect one).
+        if (mipMap)
+            throw std::runtime_error("CNA WebGPU: RenderTargetCube mip-chain regeneration "
+                                     "(mipMap=true) is not implemented on this backend -- see "
+                                     "plan_webgpu.md WEBGPU-114");
+        // Always allocates a Depth24PlusStencil8 attachment regardless of the requested
+        // depthFormat -- identical simplification to WebGPURenderTargetBackend's own constructor
+        // (see that class's constructor comment for the full rationale).
+        (void) depthFormat;
+
+        // Colour texture: this instance's own surfaceFormat_ snapshot (matching
+        // WebGPURenderTargetBackend's own choice), NOT WGPUTextureFormat_RGBA8Unorm
+        // (WebGPUTextureCubeBackend's own convention for a plain upload-only TextureCube) --
+        // every GetOrCreatePipeline*3D() hardcodes `target.format = surfaceFormat_`, so a 3D draw
+        // into a cube face must match that format to stay pipeline-compatible.
+        colorFormat_ = owner_->surfaceFormat_;
+        if (colorFormat_ == WGPUTextureFormat_Undefined)
+            throw std::runtime_error("CNA WebGPU: cannot create a RenderTargetCube before the "
+                                     "swapchain surface format is known");
+
+        WGPUTextureDescriptor colorDescriptor{};
+        colorDescriptor.label = StringView("CNA WebGPU RenderTargetCube Color");
+        colorDescriptor.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding |
+                                WGPUTextureUsage_CopySrc;
+        colorDescriptor.dimension = WGPUTextureDimension_2D;
+        colorDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 6};
+        colorDescriptor.format = colorFormat_;
+        colorDescriptor.mipLevelCount = 1;
+        colorDescriptor.sampleCount = 1;
+        texture_ = wgpuDeviceCreateTexture(owner_->Device(), &colorDescriptor);
+        if (texture_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube colour texture");
+
+        WGPUTextureViewDescriptor cubeViewDescriptor{};
+        cubeViewDescriptor.label = StringView("CNA WebGPU RenderTargetCube Cube View");
+        cubeViewDescriptor.format = colorFormat_;
+        cubeViewDescriptor.dimension = WGPUTextureViewDimension_Cube;
+        cubeViewDescriptor.baseMipLevel = 0;
+        cubeViewDescriptor.mipLevelCount = 1;
+        cubeViewDescriptor.baseArrayLayer = 0;
+        cubeViewDescriptor.arrayLayerCount = 6;
+        cubeViewDescriptor.aspect = WGPUTextureAspect_All;
+        cubeView_ = wgpuTextureCreateView(texture_, &cubeViewDescriptor);
+        if (cubeView_ == nullptr)
+        {
+            wgpuTextureRelease(texture_);
+            texture_ = nullptr;
+            throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube cube view");
+        }
+
+        for (int face = 0; face < 6; ++face)
+        {
+            WGPUTextureViewDescriptor faceViewDescriptor{};
+            faceViewDescriptor.label = StringView("CNA WebGPU RenderTargetCube Face View");
+            faceViewDescriptor.format = colorFormat_;
+            faceViewDescriptor.dimension = WGPUTextureViewDimension_2D;
+            faceViewDescriptor.baseMipLevel = 0;
+            faceViewDescriptor.mipLevelCount = 1;
+            faceViewDescriptor.baseArrayLayer = static_cast<std::uint32_t>(face);
+            faceViewDescriptor.arrayLayerCount = 1;
+            faceViewDescriptor.aspect = WGPUTextureAspect_All;
+            faceViews_[static_cast<std::size_t>(face)] = wgpuTextureCreateView(texture_, &faceViewDescriptor);
+            if (faceViews_[static_cast<std::size_t>(face)] == nullptr)
+            {
+                for (int cleanupFace = 0; cleanupFace < face; ++cleanupFace)
+                    wgpuTextureViewRelease(faceViews_[static_cast<std::size_t>(cleanupFace)]);
+                wgpuTextureViewRelease(cubeView_);
+                wgpuTextureRelease(texture_);
+                cubeView_ = nullptr;
+                texture_ = nullptr;
+                throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube face view");
+            }
+        }
+
+        // Depth+stencil: one shared attachment reused across all 6 faces -- safe because only one
+        // face is ever bound/rendered-into at a time (see WebGPUGraphicsBackend::
+        // currentRenderTargetCubeFace_'s own doc comment).
+        WGPUTextureDescriptor depthDescriptor{};
+        depthDescriptor.label = StringView("CNA WebGPU RenderTargetCube DepthStencil");
+        depthDescriptor.usage = WGPUTextureUsage_RenderAttachment;
+        depthDescriptor.dimension = WGPUTextureDimension_2D;
+        depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
+        depthDescriptor.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthDescriptor.mipLevelCount = 1;
+        depthDescriptor.sampleCount = 1;
+        depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
+        if (depthTexture_ == nullptr)
+        {
+            for (WGPUTextureView view : faceViews_) wgpuTextureViewRelease(view);
+            wgpuTextureViewRelease(cubeView_);
+            wgpuTextureRelease(texture_);
+            cubeView_ = nullptr;
+            texture_ = nullptr;
+            throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil texture");
+        }
+        depthView_ = wgpuTextureCreateView(depthTexture_, nullptr);
+        if (depthView_ == nullptr)
+        {
+            wgpuTextureRelease(depthTexture_);
+            for (WGPUTextureView view : faceViews_) wgpuTextureViewRelease(view);
+            wgpuTextureViewRelease(cubeView_);
+            wgpuTextureRelease(texture_);
+            depthTexture_ = nullptr;
+            cubeView_ = nullptr;
+            texture_ = nullptr;
+            throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil view");
+        }
+    }
+
+    WebGPURenderTargetCubeBackend::~WebGPURenderTargetCubeBackend()
+    {
+        // RenderTargetCube::Dispose() (mirroring RenderTarget2D's own Task 717 precedent) already
+        // refuses to dispose a render target still bound on its GraphicsDevice -- kept as
+        // defense-in-depth, mirroring WebGPURenderTargetBackend's own identical destructor guard.
+        if (owner_ != nullptr && owner_->currentRenderTargetCubeFace_ == this)
+        {
+            owner_->currentRenderTargetCubeFace_ = nullptr;
+            owner_->currentRenderTargetCubeFaceIndex_ = -1;
+        }
+        if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
+        if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
+        for (WGPUTextureView view : faceViews_)
+            if (view != nullptr) wgpuTextureViewRelease(view);
+        if (cubeView_ != nullptr) wgpuTextureViewRelease(cubeView_);
+        if (texture_ != nullptr) wgpuTextureRelease(texture_);
+    }
+
+    void WebGPURenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        if (owner_ == nullptr || face < 0 || face >= 6) return;
+        if (owner_->currentRenderTargetCubeFace_ == this && owner_->currentRenderTargetCubeFaceIndex_ == face)
+            return; // already the current target/face -- nothing to flush/switch.
+
+        // WEBGPU-114: flush whatever was previously bound (backbuffer / a RenderTarget2D / a
+        // DIFFERENT face of this or another RenderTargetCube) into its own render pass before
+        // switching to this face -- mirrors WebGPUGraphicsBackend::SetRenderTarget2D()'s own
+        // eager-flush-on-switch design, generalised via FlushCurrentRenderTarget() so a cube face
+        // is just as much a distinct "target identity" as a RenderTarget2D or the backbuffer.
+        owner_->FlushCurrentRenderTarget();
+        owner_->currentRenderTarget_ = nullptr;
+        owner_->currentRenderTargetCubeFace_ = this;
+        owner_->currentRenderTargetCubeFaceIndex_ = face;
+    }
+
+    void WebGPURenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        if (owner_ != nullptr && owner_->currentRenderTargetCubeFace_ == this)
+        {
+            owner_->currentRenderTargetCubeFace_ = nullptr;
+            owner_->currentRenderTargetCubeFaceIndex_ = -1;
+        }
+    }
+
+    // WEBGPU-114: real per-face CPU readback -- same staged-copy/row-alignment/async-map
+    // technique as WebGPUTextureCubeBackend::GetData() (WEBGPU-113), plus the on-demand-flush
+    // check WebGPURenderTargetBackend::GetData() (WEBGPU-53/54) established for a still-bound
+    // render target.
+    void WebGPURenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                void* data, int dataLength) const
+    {
+        if (owner_ == nullptr || w <= 0 || h <= 0 || data == nullptr)
+            return;
+        if (face < 0 || face >= 6)
+            throw std::out_of_range("CNA WebGPU: RenderTargetCube.GetData: face must be 0..5");
+        if (level != 0)
+            throw std::invalid_argument("CNA WebGPU: RenderTargetCube.GetData: mip level > 0 is "
+                                        "not supported on this backend (no mip chain, see "
+                                        "plan_webgpu.md WEBGPU-114)");
+
+        if (owner_->currentRenderTargetCubeFace_ == this)
+            owner_->RenderPendingDrawsToRenderTargetCubeFace(
+                const_cast<WebGPURenderTargetCubeBackend*>(this), owner_->currentRenderTargetCubeFaceIndex_);
+
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(size_) * 4u);
+        const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(size_);
+
+        WGPUBufferDescriptor bufferDescriptor{};
+        bufferDescriptor.label = StringView("CNA WebGPU RenderTargetCube Readback Buffer");
+        bufferDescriptor.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        bufferDescriptor.size = bufferSize;
+        WGPUBuffer readbackBuffer = wgpuDeviceCreateBuffer(owner_->Device(), &bufferDescriptor);
+        if (readbackBuffer == nullptr)
+            throw std::runtime_error("CNA WebGPU: RenderTargetCube.GetData: failed to create readback buffer");
+
+        WGPUCommandEncoderDescriptor encoderDescriptor{};
+        encoderDescriptor.label = StringView("CNA WebGPU RenderTargetCube Readback Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
+
+        WGPUTexelCopyTextureInfo source{};
+        source.texture = texture_;
+        source.mipLevel = 0;
+        source.origin = WGPUOrigin3D{0, 0, static_cast<std::uint32_t>(face)};
+        source.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferInfo destination{};
+        destination.buffer = readbackBuffer;
+        destination.layout.offset = 0;
+        destination.layout.bytesPerRow = bytesPerRow;
+        destination.layout.rowsPerImage = static_cast<std::uint32_t>(size_);
+
+        const WGPUExtent3D copySize{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
+        wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU RenderTargetCube Readback Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(owner_->Queue(), 1, &commandBuffer);
+        wgpuCommandBufferRelease(commandBuffer);
+
+        BufferMapState mapState;
+        WGPUBufferMapCallbackInfo callbackInfo{};
+        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.callback = OnBufferMap;
+        callbackInfo.userdata1 = &mapState;
+        wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
+        WaitForCompletion(owner_->Instance(), mapState.completed, "RenderTargetCube readback buffer map");
+        if (mapState.status != WGPUMapAsyncStatus_Success)
+        {
+            wgpuBufferRelease(readbackBuffer);
+            throw std::runtime_error("CNA WebGPU: RenderTargetCube.GetData: readback buffer map "
+                                     "failed: " + mapState.error);
+        }
+
+        const auto* mapped = static_cast<const std::uint8_t*>(
+            wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
+        const bool isBgra = (colorFormat_ == WGPUTextureFormat_BGRA8Unorm ||
+                             colorFormat_ == WGPUTextureFormat_BGRA8UnormSrgb);
+        auto* out = static_cast<std::uint8_t*>(data);
+        const std::size_t requiredLength = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u;
+        if (mapped == nullptr || static_cast<std::size_t>(dataLength) < requiredLength)
+        {
+            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+        }
+        else
+        {
+            for (int row = 0; row < h; ++row)
+            {
+                const int sy = y + row;
+                for (int col = 0; col < w; ++col)
+                {
+                    const int sx = x + col;
+                    std::uint8_t* d = out + (static_cast<std::size_t>(row) * w + col) * 4;
+                    if (sx < 0 || sx >= size_ || sy < 0 || sy >= size_)
+                    {
+                        d[0] = d[1] = d[2] = d[3] = 0;
+                        continue;
+                    }
+                    const std::uint8_t* s = mapped + static_cast<std::size_t>(sy) * bytesPerRow +
+                                            static_cast<std::size_t>(sx) * 4;
+                    if (isBgra) { d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = s[3]; }
+                    else        { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3]; }
+                }
+            }
+        }
+        wgpuBufferUnmap(readbackBuffer);
+        wgpuBufferRelease(readbackBuffer);
+    }
+
+    // WEBGPU-57/112: a plain WGPUTextureDimension_3D volume texture -- upload/readback only (no
+    // render-target-ness, matching Texture3D's own XNA semantics: it is never a draw target). Mip
+    // level COUNT mirrors Texture3D.cpp's own CalculateMipLevels(width, height) (depth does not
+    // participate in the count); wgpu-native still halves the actual per-level depth extent
+    // automatically like every other dimension (standard 3D mip rules), independent of this count.
+    WebGPUTexture3DBackend::WebGPUTexture3DBackend(WebGPUGraphicsBackend& owner, int width, int height,
+                                                    int depth, bool mipMap)
+        : owner_(&owner), width_(width), height_(height), depth_(depth)
+    {
+        if (width_ <= 0 || height_ <= 0 || depth_ <= 0)
+            throw std::invalid_argument("CNA WebGPU: Texture3D dimensions must be positive");
+
+        mipLevels_ = 1;
+        if (mipMap)
+        {
+            int w = width_, h = height_;
+            while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++mipLevels_; }
+        }
+
+        WGPUTextureDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU Texture3D");
+        descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst | WGPUTextureUsage_CopySrc;
+        descriptor.dimension = WGPUTextureDimension_3D;
+        descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_),
+                                       static_cast<std::uint32_t>(depth_)};
+        descriptor.format = WGPUTextureFormat_RGBA8Unorm;
+        descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
+        descriptor.sampleCount = 1;
+        texture_ = wgpuDeviceCreateTexture(owner.Device(), &descriptor);
+        if (texture_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Texture3D");
+    }
+
+    WebGPUTexture3DBackend::~WebGPUTexture3DBackend()
+    {
+        if (texture_ != nullptr) wgpuTextureRelease(texture_);
+    }
+
+    void WebGPUTexture3DBackend::SetData(int level, int x, int y, int z,
+                                          int w, int h, int depth,
+                                          const void* data, int dataLength)
+    {
+        if (level < 0 || level >= mipLevels_)
+            throw std::out_of_range("CNA WebGPU: Texture3D.SetData: level out of range");
+        if (data == nullptr || w <= 0 || h <= 0 || depth <= 0)
+            throw std::invalid_argument("CNA WebGPU: invalid Texture3D SetData region");
+        const std::size_t required =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * static_cast<std::size_t>(depth) * 4u;
+        if (dataLength < 0 || static_cast<std::size_t>(dataLength) < required)
+            throw std::invalid_argument("CNA WebGPU: Texture3D SetData buffer too small for region");
+
+        WGPUTexelCopyTextureInfo destination{};
+        destination.texture = texture_;
+        destination.mipLevel = static_cast<std::uint32_t>(level);
+        destination.origin = WGPUOrigin3D{static_cast<std::uint32_t>(x), static_cast<std::uint32_t>(y),
+                                          static_cast<std::uint32_t>(z)};
+        destination.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferLayout layout{};
+        layout.bytesPerRow = static_cast<std::uint32_t>(w * 4);
+        layout.rowsPerImage = static_cast<std::uint32_t>(h);
+        const WGPUExtent3D extent{static_cast<std::uint32_t>(w), static_cast<std::uint32_t>(h),
+                                  static_cast<std::uint32_t>(depth)};
+        wgpuQueueWriteTexture(owner_->Queue(), &destination, data, required, &layout, &extent);
+    }
+
+    // Same staged-copy/row-alignment/async-map technique as WebGPUTextureBackend::GetData()
+    // (WEBGPU-51), extended to a 3rd (depth) dimension: the WHOLE requested level's volume is
+    // copied to a temporary readback buffer (alignedBytesPerRow * levelHeight * levelDepth), then
+    // the x/y/z/w/h/depth sub-volume is extracted from the mapped memory on the CPU side.
+    void WebGPUTexture3DBackend::GetData(int level, int x, int y, int z,
+                                          int w, int h, int depth,
+                                          void* data, int dataLength) const
+    {
+        if (owner_ == nullptr || w <= 0 || h <= 0 || depth <= 0 || data == nullptr)
+            return;
+        if (level < 0 || level >= mipLevels_)
+            throw std::out_of_range("CNA WebGPU: Texture3D.GetData: level out of range");
+
+        const int levelW = MipDim(width_, level);
+        const int levelH = MipDim(height_, level);
+        const int levelDepth = MipDim(depth_, level);
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelW) * 4u);
+        const std::uint64_t sliceBytes = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelH);
+        const std::uint64_t bufferSize = sliceBytes * static_cast<std::uint64_t>(levelDepth);
+
+        WGPUBufferDescriptor bufferDescriptor{};
+        bufferDescriptor.label = StringView("CNA WebGPU Texture3D Readback Buffer");
+        bufferDescriptor.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        bufferDescriptor.size = bufferSize;
+        WGPUBuffer readbackBuffer = wgpuDeviceCreateBuffer(owner_->Device(), &bufferDescriptor);
+        if (readbackBuffer == nullptr)
+            throw std::runtime_error("CNA WebGPU: Texture3D.GetData: failed to create readback buffer");
+
+        WGPUCommandEncoderDescriptor encoderDescriptor{};
+        encoderDescriptor.label = StringView("CNA WebGPU Texture3D Readback Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(owner_->Device(), &encoderDescriptor);
+
+        WGPUTexelCopyTextureInfo source{};
+        source.texture = texture_;
+        source.mipLevel = static_cast<std::uint32_t>(level);
+        source.origin = WGPUOrigin3D{0, 0, 0};
+        source.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferInfo destination{};
+        destination.buffer = readbackBuffer;
+        destination.layout.offset = 0;
+        destination.layout.bytesPerRow = bytesPerRow;
+        destination.layout.rowsPerImage = static_cast<std::uint32_t>(levelH);
+
+        const WGPUExtent3D copySize{static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH),
+                                    static_cast<std::uint32_t>(levelDepth)};
+        wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU Texture3D Readback Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(owner_->Queue(), 1, &commandBuffer);
+        wgpuCommandBufferRelease(commandBuffer);
+
+        BufferMapState mapState;
+        WGPUBufferMapCallbackInfo callbackInfo{};
+        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.callback = OnBufferMap;
+        callbackInfo.userdata1 = &mapState;
+        wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
+        WaitForCompletion(owner_->Instance(), mapState.completed, "Texture3D readback buffer map");
+        if (mapState.status != WGPUMapAsyncStatus_Success)
+        {
+            wgpuBufferRelease(readbackBuffer);
+            throw std::runtime_error("CNA WebGPU: Texture3D.GetData: readback buffer map failed: " + mapState.error);
+        }
+
+        const auto* mapped = static_cast<const std::uint8_t*>(
+            wgpuBufferGetConstMappedRange(readbackBuffer, 0, bufferSize));
+        auto* out = static_cast<std::uint8_t*>(data);
+        const std::size_t requiredLength =
+            static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * static_cast<std::size_t>(depth) * 4u;
+        if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength)
+        {
+            if (dataLength > 0) std::memset(data, 0, static_cast<std::size_t>(dataLength));
+        }
+        else
+        {
+            for (int slice = 0; slice < depth; ++slice)
+            {
+                const int sz = z + slice;
+                for (int row = 0; row < h; ++row)
+                {
+                    const int sy = y + row;
+                    for (int col = 0; col < w; ++col)
+                    {
+                        const int sx = x + col;
+                        std::uint8_t* d = out + (static_cast<std::size_t>(slice) * w * h +
+                                                 static_cast<std::size_t>(row) * w + col) * 4;
+                        if (sx < 0 || sx >= levelW || sy < 0 || sy >= levelH || sz < 0 || sz >= levelDepth)
+                        {
+                            d[0] = d[1] = d[2] = d[3] = 0;
+                            continue;
+                        }
+                        const std::uint8_t* s = mapped + static_cast<std::size_t>(sz) * sliceBytes +
+                                                static_cast<std::size_t>(sy) * bytesPerRow +
+                                                static_cast<std::size_t>(sx) * 4;
+                        d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = s[3];
+                    }
+                }
+            }
+        }
+        wgpuBufferUnmap(readbackBuffer);
+        wgpuBufferRelease(readbackBuffer);
     }
 
     WebGPURenderTargetBackend::WebGPURenderTargetBackend(WebGPUGraphicsBackend& owner, int width, int height,
@@ -1226,6 +1919,12 @@ namespace CNA::Internal::Backends::WebGPU
                 wgpuSamplerRelease(sampler);
             sampler = nullptr;
         }
+        // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment.
+        if (mipBlitPipeline_ != nullptr) wgpuRenderPipelineRelease(mipBlitPipeline_);
+        if (mipBlitPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(mipBlitPipelineLayout_);
+        if (mipBlitBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(mipBlitBindGroupLayout_);
+        if (mipBlitShader_ != nullptr) wgpuShaderModuleRelease(mipBlitShader_);
+        if (mipBlitSampler_ != nullptr) wgpuSamplerRelease(mipBlitSampler_);
         if (msaaColorView_ != nullptr) wgpuTextureViewRelease(msaaColorView_);
         if (msaaColorTexture_ != nullptr) wgpuTextureRelease(msaaColorTexture_);
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
@@ -3414,7 +4113,7 @@ struct VertexOutput {
         // texture/cube at render time, matching VulkanGraphicsBackend's own default-white fallback.
         // ResolveSamplable()/the dynamic_cast below are both already null-safe.
         command.texture = ResolveSamplable(params.texture0);
-        command.envMap = dynamic_cast<const WebGPUTextureCubeBackend*>(params.envMap);
+        command.envMap = ResolveCubeSamplable(params.envMap);
         command.textureFilter = slotSamplers_[0].filter;
         command.addressU = slotSamplers_[0].addressU;
         command.addressV = slotSamplers_[0].addressV;
@@ -3806,6 +4505,230 @@ struct VertexOutput {
         if (samplerCache_[index] == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create sampler");
         return samplerCache_[index];
+    }
+
+    // WEBGPU-52: lazily creates the shader/bind-group-layout/pipeline-layout/pipeline/sampler
+    // used by GenerateMipsForLayer() -- see this method's own header doc comment for the full
+    // rationale and the deliberate FNA/cross-backend divergence this introduces. A minimal
+    // full-screen-triangle vertex shader (the standard 3-vertex, no-vertex-buffer trick: each
+    // vertex's clip position/UV is derived purely from @builtin(vertex_index)) plus a fragment
+    // shader that samples the previous mip level through a real linear sampler -- this is what
+    // makes the result a genuine filtered downsample, not a nearest-neighbor copy.
+    void WebGPUGraphicsBackend::EnsureMipBlitPipeline()
+    {
+        if (mipBlitPipeline_ != nullptr)
+            return;
+
+        static constexpr char shaderSource[] = R"WGSL(
+struct VSOut {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+@vertex fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VSOut {
+    var output: VSOut;
+    let x = f32((vertexIndex << 1u) & 2u);
+    let y = f32(vertexIndex & 2u);
+    output.position = vec4f(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
+    output.uv = vec2f(x, y);
+    return output;
+}
+@group(0) @binding(0) var mipSampler: sampler;
+@group(0) @binding(1) var mipSource: texture_2d<f32>;
+@fragment fn fs_main(input: VSOut) -> @location(0) vec4f {
+    return textureSample(mipSource, mipSampler, input.uv);
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU MipBlit WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        mipBlitShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        if (mipBlitShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create MipBlit shader");
+
+        std::array<WGPUBindGroupLayoutEntry, 2> layoutEntries{};
+        layoutEntries[0].binding = 0;
+        layoutEntries[0].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
+        layoutEntries[1].binding = 1;
+        layoutEntries[1].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[1].texture.sampleType = WGPUTextureSampleType_Float;
+        layoutEntries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+        layoutEntries[1].texture.multisampled = false;
+        WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
+        bindLayoutDescriptor.label = StringView("CNA WebGPU MipBlit BindGroupLayout");
+        bindLayoutDescriptor.entryCount = layoutEntries.size();
+        bindLayoutDescriptor.entries = layoutEntries.data();
+        mipBlitBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
+
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU MipBlit PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = 1;
+        pipelineLayoutDescriptor.bindGroupLayouts = &mipBlitBindGroupLayout_;
+        mipBlitPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        WGPUColorTargetState target{};
+        target.format = WGPUTextureFormat_RGBA8Unorm;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = mipBlitShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU MipBlit Pipeline");
+        pipeline.layout = mipBlitPipelineLayout_;
+        pipeline.vertex.module = mipBlitShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 0;
+        pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        // Always single-sample -- a plain Texture2D/TextureCube is never multisampled, regardless
+        // of this backend's own global sampleCount_ (unlike the swapchain/RenderTarget2D
+        // pipelines, which must match sampleCount_ to stay render-pass compatible).
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+        // No depthStencil: this is its own dedicated colour-only render pass, not sharing the
+        // swapchain/RenderTarget2D's depth attachment the way SpriteBatch's pipeline must.
+        mipBlitPipeline_ = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (mipBlitPipeline_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create MipBlit pipeline");
+
+        WGPUSamplerDescriptor samplerDescriptor{};
+        samplerDescriptor.label = StringView("CNA WebGPU MipBlit Sampler");
+        samplerDescriptor.addressModeU = WGPUAddressMode_ClampToEdge;
+        samplerDescriptor.addressModeV = WGPUAddressMode_ClampToEdge;
+        samplerDescriptor.addressModeW = WGPUAddressMode_ClampToEdge;
+        samplerDescriptor.magFilter = WGPUFilterMode_Linear;
+        samplerDescriptor.minFilter = WGPUFilterMode_Linear;
+        samplerDescriptor.mipmapFilter = WGPUMipmapFilterMode_Linear;
+        samplerDescriptor.lodMaxClamp = 32.0f;
+        samplerDescriptor.maxAnisotropy = 1;
+        mipBlitSampler_ = wgpuDeviceCreateSampler(device_, &samplerDescriptor);
+        if (mipBlitSampler_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create MipBlit sampler");
+    }
+
+    // WEBGPU-52: one render pass per mip level, each sampling the previous level (via the real
+    // linear mipBlitSampler_) into the next level's own single-mip render-attachment view -- see
+    // EnsureMipBlitPipeline()'s own doc comment for why this, not a hypothetical filtered "blit"
+    // call (wgpu-native has none). All levels for this ONE layer are recorded into a single
+    // command encoder and submitted together; per-level transient views/bind-groups are released
+    // only AFTER submission (matching EnsureFrameRendered()'s own pendingBindGroupReleases_/
+    // pendingBufferReleases_ precedent for resources a not-yet-submitted encoder still
+    // references), not eagerly like RenderSprites()'s per-draw bind groups (whose referenced
+    // views are long-lived texture members, unlike these transient single-mip-level views).
+    void WebGPUGraphicsBackend::GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height, int mipLevels)
+    {
+        if (texture == nullptr || mipLevels <= 1 || width <= 0 || height <= 0)
+            return;
+        EnsureMipBlitPipeline();
+
+        WGPUCommandEncoderDescriptor encoderDescriptor{};
+        encoderDescriptor.label = StringView("CNA WebGPU MipBlit Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
+
+        std::vector<WGPUTextureView> pendingViews;
+        std::vector<WGPUBindGroup> pendingGroups;
+        pendingViews.reserve(static_cast<std::size_t>(mipLevels - 1) * 2u);
+        pendingGroups.reserve(static_cast<std::size_t>(mipLevels - 1));
+
+        int srcW = width;
+        int srcH = height;
+        for (int level = 1; level < mipLevels; ++level)
+        {
+            const int dstW = std::max(1, srcW / 2);
+            const int dstH = std::max(1, srcH / 2);
+
+            WGPUTextureViewDescriptor srcViewDescriptor{};
+            srcViewDescriptor.label = StringView("CNA WebGPU MipBlit Source View");
+            srcViewDescriptor.format = WGPUTextureFormat_RGBA8Unorm;
+            srcViewDescriptor.dimension = WGPUTextureViewDimension_2D;
+            srcViewDescriptor.baseMipLevel = static_cast<std::uint32_t>(level - 1);
+            srcViewDescriptor.mipLevelCount = 1;
+            srcViewDescriptor.baseArrayLayer = static_cast<std::uint32_t>(layer);
+            srcViewDescriptor.arrayLayerCount = 1;
+            srcViewDescriptor.aspect = WGPUTextureAspect_All;
+            WGPUTextureView srcView = wgpuTextureCreateView(texture, &srcViewDescriptor);
+            if (srcView == nullptr)
+                throw std::runtime_error("CNA WebGPU: MipBlit: failed to create source view");
+
+            WGPUTextureViewDescriptor dstViewDescriptor = srcViewDescriptor;
+            dstViewDescriptor.label = StringView("CNA WebGPU MipBlit Destination View");
+            dstViewDescriptor.baseMipLevel = static_cast<std::uint32_t>(level);
+            WGPUTextureView dstView = wgpuTextureCreateView(texture, &dstViewDescriptor);
+            if (dstView == nullptr)
+            {
+                wgpuTextureViewRelease(srcView);
+                throw std::runtime_error("CNA WebGPU: MipBlit: failed to create destination view");
+            }
+            pendingViews.push_back(srcView);
+            pendingViews.push_back(dstView);
+
+            std::array<WGPUBindGroupEntry, 2> entries{};
+            entries[0].binding = 0;
+            entries[0].sampler = mipBlitSampler_;
+            entries[1].binding = 1;
+            entries[1].textureView = srcView;
+            WGPUBindGroupDescriptor bindGroupDescriptor{};
+            bindGroupDescriptor.label = StringView("CNA WebGPU MipBlit BindGroup");
+            bindGroupDescriptor.layout = mipBlitBindGroupLayout_;
+            bindGroupDescriptor.entryCount = entries.size();
+            bindGroupDescriptor.entries = entries.data();
+            WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindGroupDescriptor);
+            if (bindGroup == nullptr)
+                throw std::runtime_error("CNA WebGPU: MipBlit: failed to create bind group");
+            pendingGroups.push_back(bindGroup);
+
+            WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+            colorAttachment.view = dstView;
+            colorAttachment.loadOp = WGPULoadOp_Clear;
+            colorAttachment.storeOp = WGPUStoreOp_Store;
+            colorAttachment.clearValue = WGPUColor{0.0, 0.0, 0.0, 0.0};
+
+            WGPURenderPassDescriptor passDescriptor{};
+            passDescriptor.label = StringView("CNA WebGPU MipBlit RenderPass");
+            passDescriptor.colorAttachmentCount = 1;
+            passDescriptor.colorAttachments = &colorAttachment;
+            WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+            wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(dstW), static_cast<float>(dstH), 0.0f, 1.0f);
+            wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, static_cast<std::uint32_t>(dstW), static_cast<std::uint32_t>(dstH));
+            wgpuRenderPassEncoderSetPipeline(pass, mipBlitPipeline_);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+            wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+            wgpuRenderPassEncoderEnd(pass);
+            wgpuRenderPassEncoderRelease(pass);
+
+            srcW = dstW;
+            srcH = dstH;
+        }
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU MipBlit Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        wgpuCommandBufferRelease(commandBuffer);
+
+        for (WGPUBindGroup bg : pendingGroups) wgpuBindGroupRelease(bg);
+        for (WGPUTextureView view : pendingViews) wgpuTextureViewRelease(view);
+    }
+
+    void WebGPUGraphicsBackend::GenerateMips2D(WGPUTexture texture, int width, int height, int mipLevels)
+    {
+        GenerateMipsForLayer(texture, 0, width, height, mipLevels);
+    }
+
+    void WebGPUGraphicsBackend::GenerateMipsCubeFace(WGPUTexture texture, int face, int size, int mipLevels)
+    {
+        GenerateMipsForLayer(texture, face, size, size, mipLevels);
     }
 
     WebGPUGraphicsBackend::LogicalViewport WebGPUGraphicsBackend::ComputeLogicalViewport() const
@@ -4404,6 +5327,144 @@ struct VertexOutput {
         framePending_ = false;
     }
 
+    // WEBGPU-114: the cube-face counterpart of RenderPendingDrawsToRenderTarget() immediately
+    // above -- near-identical structure, with two differences: (1) the colour attachment is one
+    // face's own single-layer 2D view (no MSAA/resolveTarget -- this class does not implement
+    // MSAA at all, see its own doc comment) and (2) content is ALWAYS discarded on each bind cycle
+    // (RenderTargetUsage::DiscardContents behaviour unconditionally), since
+    // IGraphicsBackend::CreateRenderTargetCube's own signature -- unlike CreateRenderTarget2D's --
+    // has no preserveContents parameter to thread a RenderTargetCube's real usage_ value through
+    // in the first place; this is a pre-existing common-interface gap, not something introduced
+    // here (see plan_webgpu.md's WEBGPU-114 row).
+    void WebGPUGraphicsBackend::RenderPendingDrawsToRenderTargetCubeFace(WebGPURenderTargetCubeBackend* target, int face)
+    {
+        WGPUCommandEncoderDescriptor encoderDescriptor{};
+        encoderDescriptor.label = StringView("CNA WebGPU RenderTargetCube Encoder");
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device_, &encoderDescriptor);
+
+        WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+        colorAttachment.view = target->ColorAttachmentView(face);
+        colorAttachment.resolveTarget = nullptr;
+        const bool doClearColor = true; // see this function's own top comment: always discard.
+        colorAttachment.loadOp = doClearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
+        colorAttachment.storeOp = WGPUStoreOp_Store;
+        colorAttachment.clearValue = clearColor_;
+
+        WGPURenderPassDepthStencilAttachment depthAttachment{};
+        depthAttachment.view = target->DepthView();
+        depthAttachment.depthLoadOp = WGPULoadOp_Clear;
+        depthAttachment.depthStoreOp = WGPUStoreOp_Store;
+        depthAttachment.depthClearValue = clearDepth_;
+        depthAttachment.depthReadOnly = false;
+        depthAttachment.stencilLoadOp = WGPULoadOp_Clear;
+        depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
+        depthAttachment.stencilClearValue = clearStencil_;
+        depthAttachment.stencilReadOnly = false;
+
+        WGPURenderPassDescriptor passDescriptor{};
+        passDescriptor.label = StringView("CNA WebGPU RenderTargetCube RenderPass");
+        passDescriptor.colorAttachmentCount = 1;
+        passDescriptor.colorAttachments = &colorAttachment;
+        passDescriptor.depthStencilAttachment = &depthAttachment;
+        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+
+        // Scissor/viewport/blend-constant/reference-stencil: same "whatever's currently stored"
+        // model as RenderPendingDrawsToRenderTarget()'s identical block.
+        const std::uint32_t fullW = static_cast<std::uint32_t>(std::max(0, target->GetSize()));
+        const std::uint32_t fullH = fullW;
+        if (scissorEnabled_)
+        {
+            const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(scissorX_, 0, target->GetSize()));
+            const std::uint32_t sy = static_cast<std::uint32_t>(std::clamp(scissorY_, 0, target->GetSize()));
+            const std::uint32_t sw = std::min(static_cast<std::uint32_t>(scissorW_), fullW - std::min(sx, fullW));
+            const std::uint32_t sh = std::min(static_cast<std::uint32_t>(scissorH_), fullH - std::min(sy, fullH));
+            wgpuRenderPassEncoderSetScissorRect(pass, sx, sy, sw, sh);
+        }
+        else
+        {
+            wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
+        }
+        if (viewportSet_)
+        {
+            const float vx = static_cast<float>(std::clamp(viewportX_, 0, target->GetSize()));
+            const float vy = static_cast<float>(std::clamp(viewportY_, 0, target->GetSize()));
+            const float vw = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportW_)),
+                                                          fullW - std::min(static_cast<std::uint32_t>(vx), fullW)));
+            const float vh = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportH_)),
+                                                          fullH - std::min(static_cast<std::uint32_t>(vy), fullH)));
+            wgpuRenderPassEncoderSetViewport(pass, vx, vy, std::max(vw, 1.0f), std::max(vh, 1.0f),
+                                             viewportMinDepth_, viewportMaxDepth_);
+        }
+        else
+        {
+            wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(fullW), static_cast<float>(fullH),
+                                             0.0f, 1.0f);
+        }
+        const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
+        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+        wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
+
+        RenderColoredDraws(pass);
+        RenderTexturedDraws(pass);
+        RenderLitTexturedDraws(pass);
+        RenderAlphaTestDraws(pass);
+        RenderDualTextureDraws(pass);
+        RenderEnvMapDraws(pass);
+        RenderInstancedDraws(pass);
+        RenderPbrDraws(pass);
+        RenderSkinnedDraws(pass);
+        RenderSkinnedPbrDraws(pass);
+        RenderSprites(pass);
+        wgpuRenderPassEncoderEnd(pass);
+        wgpuRenderPassEncoderRelease(pass);
+
+        WGPUCommandBufferDescriptor commandBufferDescriptor{};
+        commandBufferDescriptor.label = StringView("CNA WebGPU RenderTargetCube Commands");
+        WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, &commandBufferDescriptor);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuQueueSubmit(queue_, 1, &commandBuffer);
+        wgpuCommandBufferRelease(commandBuffer);
+
+        for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
+        for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
+        pendingBindGroupReleases_.clear();
+        pendingBufferReleases_.clear();
+
+        spriteCommands_.clear();
+        clearColorPending_ = false;
+        clearDepthPending_ = false;
+        clearStencilPending_ = false;
+        framePending_ = false;
+    }
+
+    // WEBGPU-114: single shared "flush whatever is currently bound into its own render pass"
+    // entry point -- extends the pre-existing SetRenderTarget2D()-only switch logic (previously
+    // an inline if/else choosing between RenderPendingDrawsToRenderTarget() and
+    // EnsureFrameRendered()) to a 3rd case, a currently-bound RenderTargetCube face, so switching
+    // between ANY pair of {backbuffer, RenderTarget2D, RenderTargetCube face} always flushes the
+    // OUTGOING one first. Deliberately does not touch currentRenderTarget_/
+    // currentRenderTargetCubeFace_ itself -- every call site immediately reassigns them right
+    // after calling this, exactly like the pre-existing SetRenderTarget2D() body did.
+    void WebGPUGraphicsBackend::FlushCurrentRenderTarget()
+    {
+        if (currentRenderTarget_ != nullptr)
+        {
+            RenderPendingDrawsToRenderTarget(currentRenderTarget_);
+        }
+        else if (currentRenderTargetCubeFace_ != nullptr)
+        {
+            RenderPendingDrawsToRenderTargetCubeFace(currentRenderTargetCubeFace_, currentRenderTargetCubeFaceIndex_);
+        }
+        else
+        {
+            // Flushes whatever Clear()/draws were queued against the backbuffer so far this
+            // frame, exactly like a mid-frame ReadBackbuffer() call already does -- see
+            // EnsureFrameRendered()'s own comment. A no-op (beyond a possible early swapchain
+            // acquisition) if nothing was actually queued for the backbuffer yet this frame.
+            EnsureFrameRendered();
+        }
+    }
+
     void WebGPUGraphicsBackend::Present()
     {
         if (!EnsureFrameRendered())
@@ -4754,7 +5815,13 @@ struct VertexOutput {
     void WebGPUGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         auto* newTarget = rt != nullptr ? static_cast<WebGPURenderTargetBackend*>(rt) : nullptr;
-        if (newTarget == currentRenderTarget_)
+        // WEBGPU-114: a currently-bound RenderTargetCube face must NOT be treated as "no change"
+        // just because newTarget (a RenderTarget2D pointer, possibly nullptr) happens to equal
+        // currentRenderTarget_ (also nullptr while a cube face is bound, since the two are
+        // mutually exclusive -- see currentRenderTargetCubeFace_'s own doc comment) -- this is the
+        // path SetRenderTargetCubeFace(nullptr, face)'s IGraphicsBackend default takes to restore
+        // the backbuffer, and it must genuinely flush the cube face's own pending draws.
+        if (newTarget == currentRenderTarget_ && currentRenderTargetCubeFace_ == nullptr)
             return;
 
         // WEBGPU-53/54: this backend renders every Clear()/3D-draw/SpriteBatch command queued
@@ -4774,19 +5841,13 @@ struct VertexOutput {
         // changes to any existing Queue*Draw()/*DrawCommand struct, whereas (b) would add a
         // target-tag field and per-target grouping logic to every one of those ~10 families -- a
         // much larger change for a backend that, unlike Vulkan, has no pre-existing per-draw
-        // deferred/replay infrastructure to extend.
-        if (currentRenderTarget_ != nullptr)
-        {
-            RenderPendingDrawsToRenderTarget(currentRenderTarget_);
-        }
-        else
-        {
-            // Flushes whatever Clear()/draws were queued against the backbuffer so far this
-            // frame, exactly like a mid-frame ReadBackbuffer() call already does -- see
-            // EnsureFrameRendered()'s own comment. A no-op (beyond a possible early swapchain
-            // acquisition) if nothing was actually queued for the backbuffer yet this frame.
-            EnsureFrameRendered();
-        }
+        // deferred/replay infrastructure to extend. WEBGPU-114 extends the same choice to a
+        // RenderTargetCube face, generalised into FlushCurrentRenderTarget() so it applies
+        // regardless of which of the 3 kinds of target ({backbuffer, RenderTarget2D, cube face})
+        // is currently bound.
+        FlushCurrentRenderTarget();
+        currentRenderTargetCubeFace_ = nullptr;
+        currentRenderTargetCubeFaceIndex_ = -1;
 
         if (newTarget != nullptr)
             newTarget->BindAsRenderTarget();
@@ -4798,6 +5859,22 @@ struct VertexOutput {
         int size, bool mipMap, int /*surfaceFormat*/)
     {
         return std::make_unique<WebGPUTextureCubeBackend>(*this, size, mipMap);
+    }
+
+    // WEBGPU-114: this backend's first real RenderTargetCube support -- see
+    // WebGPURenderTargetCubeBackend's own doc comment for exactly what is/isn't implemented
+    // (no mip regen, no MSAA -- both deliberate, documented scope cuts).
+    std::unique_ptr<IRenderTargetCubeBackend> WebGPUGraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
+    {
+        (void) multiSampleCount; // see WebGPURenderTargetCubeBackend's own doc comment: ignored.
+        return std::make_unique<WebGPURenderTargetCubeBackend>(*this, size, depthFormat, mipMap);
+    }
+
+    std::unique_ptr<ITexture3DBackend> WebGPUGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+    {
+        return std::make_unique<WebGPUTexture3DBackend>(*this, w, h, depth, mipMap);
     }
 
     std::unique_ptr<IVertexBufferBackend> WebGPUGraphicsBackend::CreateVertexBuffer(int vertexCapacity)

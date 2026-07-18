@@ -45,6 +45,22 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] virtual WGPUTextureView View() const = 0;
     };
 
+    /// WEBGPU-114: the cube-map sibling of IWebGPUSamplable -- lets both WebGPUTextureCubeBackend
+    /// (upload-only) and WebGPURenderTargetCubeBackend (render-into) resolve safely to their own
+    /// whole-cube WGPUTextureViewDimension_Cube view wherever a GpuDrawParams::envMap needs to be
+    /// sampled (EnvironmentMapEffect), via a dynamic_cast that degrades to nullptr for a null or
+    /// incompatible-type input -- exact same pattern IWebGPUSamplable already established for
+    /// ITextureBackend/texture0. Before this, EnvMapDrawCommand::envMap was hardcoded to
+    /// `const WebGPUTextureCubeBackend*`, so a RenderTargetCube (a different concrete class) bound
+    /// as EnvironmentMapEffect.EnvironmentMap would silently fail that cast and render with the
+    /// 1x1 white cube fallback instead of the real dynamically-rendered content.
+    class IWebGPUCubeSamplable
+    {
+    public:
+        virtual ~IWebGPUCubeSamplable() = default;
+        [[nodiscard]] virtual WGPUTextureView CubeView() const = 0;
+    };
+
     class WebGPUTextureBackend final : public ITextureBackend, public IWebGPUSamplable
     {
     public:
@@ -59,6 +75,15 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
+        /// WEBGPU-51: real CPU readback of an arbitrary Texture2D backend, via the same staged
+        /// MAP_READ-buffer/aligned-row/async-map-and-poll technique WEBGPU-91's ReadBackbuffer()
+        /// and WebGPURenderTargetBackend::GetData() already established -- copies the WHOLE
+        /// requested mip level to a temporary readback buffer (this texture is always
+        /// WGPUTextureFormat_RGBA8Unorm, so unlike the swapchain/RenderTarget2D there is never a
+        /// BGRA byte-swap to worry about), then extracts the @p x,@p y,@p w,@p h sub-rectangle
+        /// from the mapped memory on the CPU side.
+        void GetData(int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         [[nodiscard]] WGPUTextureView View() const override { return view_; }
@@ -163,10 +188,10 @@ namespace CNA::Internal::Backends::WebGPU
     /// flag in this API the way Vulkan/D3D need one -- the view alone selects
     /// `WGPUTextureViewDimension_Cube`), matching `EasyGLTextureCubeBackend`'s own
     /// `CalculateCubeMipLevels()` mip-count convention. Deliberately NOT a full `TextureCube`/
-    /// `RenderTargetCube` implementation: `GetData()` keeps `ITextureCubeBackend`'s own no-op
-    /// default (no CPU readback), and there is no `WebGPURenderTargetCubeBackend` at all -- both
-    /// remain a separate, larger follow-up (`WEBGPU-56`/`113` in `plan_webgpu.md`).
-    class WebGPUTextureCubeBackend final : public ITextureCubeBackend
+    /// `RenderTargetCube` implementation (was true through WEBGPU-113): `GetData()` now has a real
+    /// per-face readback (see below), and `WebGPURenderTargetCubeBackend` (WEBGPU-114) now exists
+    /// too, giving this backend real render-into-a-cube-face support.
+    class WebGPUTextureCubeBackend final : public ITextureCubeBackend, public IWebGPUCubeSamplable
     {
     public:
         WebGPUTextureCubeBackend(WebGPUGraphicsBackend& owner, int size, bool mipMap);
@@ -177,17 +202,129 @@ namespace CNA::Internal::Backends::WebGPU
 
         void SetData(int face, int level, int x, int y, int w, int h,
                     const void* data, int dataLength) override;
+        /// WEBGPU-113: real per-face CPU readback, closing this class's former no-op
+        /// `ITextureCubeBackend::GetData()` default. Same staged-copy/row-alignment/async-map
+        /// technique as `WebGPUTextureBackend::GetData()` (WEBGPU-51), with `origin.z = face`
+        /// selecting the requested array layer (this backend's cube-face convention: 0=+X, 1=-X,
+        /// 2=+Y, 3=-Y, 4=+Z, 5=-Z, matching `IRenderTargetCubeBackend`'s own documented mapping).
+        void GetData(int face, int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
         /// The single `WGPUTextureViewDimension_Cube` view sampled by `texture_cube<f32>` in
         /// env_map3d.wgsl's fragment shader.
-        [[nodiscard]] WGPUTextureView CubeView() const { return cubeView_; }
+        [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
 
     private:
         WebGPUGraphicsBackend* owner_ = nullptr;
         WGPUTexture texture_ = nullptr;
         WGPUTextureView cubeView_ = nullptr;
         int size_ = 0;
+        int mipLevels_ = 1;
+    };
+
+    /// WEBGPU-114: off-screen render target backing a RenderTargetCube -- the cube-map sibling of
+    /// WebGPURenderTargetBackend (RenderTarget2D, WEBGPU-53/54). Owns ONE shared 6-array-layer
+    /// colour `WGPUTexture` (exactly like WebGPUTextureCubeBackend's own texture_) plus ONE shared
+    /// `size_`x`size_` depth+stencil texture reused across all 6 faces -- safe because, mirroring
+    /// VulkanRenderTargetCubeBackend's identical "one shared depth image" choice, only ever ONE
+    /// face is bound/rendered-into at a time (this backend's whole architecture is
+    /// one-render-target-current-at-once; see WebGPUGraphicsBackend::currentRenderTargetCubeFace_).
+    /// Each face gets its own `WGPUTextureViewDimension_2D` view (`faceViews_[face]`,
+    /// `baseArrayLayer = face`) used as that face's own render-pass colour attachment, plus ONE
+    /// `WGPUTextureViewDimension_Cube` view spanning all 6 layers (`cubeView_`) for sampling back as
+    /// `EnvironmentMapEffect.EnvironmentMap` (through `IWebGPUCubeSamplable` -- CNA's
+    /// `ITextureCubeBackend` has no plain-2D sampling path, only the cube one, matching XNA's own
+    /// RenderTargetCube/TextureCube API shape).
+    ///
+    /// Deliberately, honestly NOT implemented (documented scope cuts, matching
+    /// WebGPURenderTargetBackend's own precedent): mip-chain regeneration (`mipMap=true` throws,
+    /// same as `CreateRenderTarget2D`) and MSAA (the `multiSampleCount` constructor argument is
+    /// ignored; `GetMultiSampleCount()` always reports 0) -- unlike `WebGPURenderTargetBackend`,
+    /// this class does not attempt to mirror the backend's global `sampleCount_`, since a
+    /// multisampled array texture resolved per-layer is meaningfully more machinery (a per-face
+    /// MSAA colour view/resolve target, still only one live at a time) than this task's time
+    /// budget affords landing well-tested; see `plan_webgpu.md`'s `WEBGPU-114` row.
+    class WebGPURenderTargetCubeBackend final : public IRenderTargetCubeBackend, public IWebGPUCubeSamplable
+    {
+    public:
+        WebGPURenderTargetCubeBackend(WebGPUGraphicsBackend& owner, int size, int depthFormat, bool mipMap);
+        ~WebGPURenderTargetCubeBackend() override;
+
+        WebGPURenderTargetCubeBackend(const WebGPURenderTargetCubeBackend&) = delete;
+        WebGPURenderTargetCubeBackend& operator=(const WebGPURenderTargetCubeBackend&) = delete;
+
+        [[nodiscard]] int GetSize() const override { return size_; }
+        void BindAsRenderTargetFace(int face) override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+        /// WEBGPU-114: real per-face CPU readback, same staged-copy technique as
+        /// `WebGPUTextureCubeBackend::GetData()` (WEBGPU-113); flushes this face's own pending
+        /// draws first if it is still the currently-bound render target (mirrors
+        /// `WebGPURenderTargetBackend::GetData()`'s identical on-demand-flush pattern).
+        void GetData(int face, int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
+
+        [[nodiscard]] WGPUTexture Texture() const { return texture_; }
+        /// The whole-cube sampling view (all 6 layers) -- IWebGPUCubeSamplable's contract.
+        [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
+        /// This face's own single-layer 2D view, used as a render-pass colour attachment.
+        [[nodiscard]] WGPUTextureView ColorAttachmentView(int face) const { return faceViews_[static_cast<std::size_t>(face)]; }
+        /// The one depth+stencil view shared by all 6 faces (only one is ever bound at once).
+        [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
+
+    private:
+        WebGPUGraphicsBackend* owner_ = nullptr;
+        int size_ = 0;
+        /// Mirrors owner_->surfaceFormat_ at construction time (see this class's own .cpp
+        /// constructor comment) -- captured so GetData() can decide whether a BGRA->RGBA byte
+        /// swap is needed, exactly like WebGPURenderTargetBackend::colorFormat_'s identical role.
+        WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
+        WGPUTexture texture_ = nullptr;
+        WGPUTextureView cubeView_ = nullptr;
+        std::array<WGPUTextureView, 6> faceViews_{};
+        WGPUTexture depthTexture_ = nullptr;
+        WGPUTextureView depthView_ = nullptr;
+    };
+
+    /// WEBGPU-57/112: a plain volume (3D) texture -- `WGPUTextureDimension_3D`, uploaded/read back
+    /// via `wgpuQueueWriteTexture`/a staged `wgpuCommandEncoderCopyTextureToBuffer` readback
+    /// exactly like `WebGPUTextureBackend`'s own 2D equivalents, just with a third (depth) extent
+    /// dimension. Mirrors `VulkanTexture3DBackend`'s minimal scope: upload/readback only, no
+    /// render-target-ness (XNA's `Texture3D` itself is never renderable). Mip-level COUNT uses the
+    /// same width/height-only `CalculateMipLevels()` formula as `Texture3D.cpp` (depth does not
+    /// participate in the count, matching FNA's `Texture3D` constructor) -- wgpu-native still
+    /// halves the actual per-level depth extent automatically (standard 3D-texture mip rules),
+    /// this only affects how many levels are allocated.
+    class WebGPUTexture3DBackend final : public ITexture3DBackend
+    {
+    public:
+        WebGPUTexture3DBackend(WebGPUGraphicsBackend& owner, int width, int height, int depth, bool mipMap);
+        ~WebGPUTexture3DBackend() override;
+
+        WebGPUTexture3DBackend(const WebGPUTexture3DBackend&) = delete;
+        WebGPUTexture3DBackend& operator=(const WebGPUTexture3DBackend&) = delete;
+
+        void SetData(int level, int x, int y, int z,
+                    int w, int h, int depth,
+                    const void* data, int dataLength) override;
+        /// Same staged-copy/row-alignment/async-map technique as `WebGPUTextureBackend::GetData()`
+        /// (WEBGPU-51), extended to a 3rd (depth) dimension: the whole requested level is copied
+        /// to a temporary readback buffer sized `alignedBytesPerRow * levelHeight * levelDepth`,
+        /// then the @p x,@p y,@p z,@p w,@p h,@p depth sub-volume is extracted from the mapped
+        /// memory on the CPU side.
+        void GetData(int level, int x, int y, int z,
+                    int w, int h, int depth,
+                    void* data, int dataLength) const override;
+
+        [[nodiscard]] WGPUTexture Texture() const { return texture_; }
+
+    private:
+        WebGPUGraphicsBackend* owner_ = nullptr;
+        WGPUTexture texture_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
         int mipLevels_ = 1;
     };
 
@@ -471,8 +608,23 @@ namespace CNA::Internal::Backends::WebGPU
         /// comment for the documented TextureCube/RenderTargetCube parity gaps this does NOT close.
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
 
+        /// WEBGPU-57/112: real volume (3D) texture creation -- see `WebGPUTexture3DBackend`'s own
+        /// doc comment. `surfaceFormat` is currently ignored (always `WGPUTextureFormat_RGBA8Unorm`,
+        /// matching `WebGPUTextureBackend`/`WebGPUTextureCubeBackend`'s own established convention
+        /// for this backend).
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+
+        /// WEBGPU-114: real render-into-a-cube-face support -- see `WebGPURenderTargetCubeBackend`'s
+        /// own doc comment for exactly what this does and does not implement (no mip regen, no MSAA).
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool mipMap = false,
+                                                                          int multiSampleCount = 0) override;
+
     private:
         friend class WebGPURenderTargetBackend;
+        friend class WebGPURenderTargetCubeBackend;
+        friend class WebGPUTextureBackend;
+        friend class WebGPUTextureCubeBackend;
         struct LogicalViewport
         {
             float x = 0.0f;
@@ -552,6 +704,19 @@ namespace CNA::Internal::Backends::WebGPU
         // every draw command with a target and replaying grouped-by-target at final-flush time,
         // closer to VulkanGraphicsBackend's own deferred-recording model) was chosen.
         void RenderPendingDrawsToRenderTarget(WebGPURenderTargetBackend* target);
+        // WEBGPU-114: the cube-face counterpart of RenderPendingDrawsToRenderTarget() -- same
+        // "one deferred render pass, flushed the instant the bound target changes" model, just
+        // targeting one face's own ColorAttachmentView(face)/the shared DepthView() instead of a
+        // RenderTarget2D's own single pair.
+        void RenderPendingDrawsToRenderTargetCubeFace(WebGPURenderTargetCubeBackend* target, int face);
+        // WEBGPU-114: single shared "flush whatever is currently bound" entry point -- used by
+        // both SetRenderTarget2D() and WebGPURenderTargetCubeBackend::BindAsRenderTargetFace() so
+        // switching between ANY combination of {backbuffer, RenderTarget2D, a RenderTargetCube
+        // face} always flushes the OUTGOING target's own pending draws into its own render pass
+        // first, exactly like the pre-existing RenderTarget2D-only switch logic did. Does not
+        // itself clear/reassign currentRenderTarget_/currentRenderTargetCubeFace_ -- callers own
+        // that, mirroring the pre-existing SetRenderTarget2D() call-then-assign structure.
+        void FlushCurrentRenderTarget();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
         [[nodiscard]] WGPUSampler GetOrCreateSampler(int textureFilter, int addressU, int addressV);
         // WEBGPU-82: full per-slot SamplerState cache (filter + address mode + anisotropy), used
@@ -562,6 +727,38 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
         [[noreturn]] static void ThrowUnsupported3DDraw(const char* method);
+
+        // WEBGPU-52: real, genuinely-linear-filtered mip generation for a plain Texture2D/
+        // TextureCube, via a render pass per mip level that draws a full-screen triangle sampling
+        // the PREVIOUS level through a real linear WGPUSampler into the NEXT level's own
+        // render-attachment view -- wgpu-native has no vkCmdBlitImage-equivalent filtered-
+        // downsample primitive (verified against this project's pinned wgpu-native v29.0.1.1
+        // webgpu.h: wgpuCommandEncoderCopyTextureToTexture is a raw same-size copy, nothing else
+        // resembling a blit exists), so this is the same technique other WebGPU-based engines use.
+        // IMPORTANT, DELIBERATE DIVERGENCE (documented, not silently introduced): unlike every
+        // other CNA graphics backend (VulkanGraphicsBackend/EasyGLGraphicsBackend), which only
+        // regenerate mip content for a RENDER TARGET being unbound (matching real FNA3D's
+        // OPENGL_ResolveTarget/vkCmdBlitImage-on-unbind semantics -- a PLAIN Texture2D/TextureCube
+        // never auto-generates mip content from level 0 in FNA/XNA itself, matching every other
+        // CNA backend's own plain-texture behaviour too), this WebGPU-only helper DOES generate
+        // real mip content for a plain Texture2D/TextureCube automatically whenever mipMap=true
+        // AND non-empty initial pixel data is supplied at construction time. This makes WebGPU's
+        // plain-texture mip behaviour genuinely BETTER (never garbage/undefined content at
+        // level>0) but ALSO genuinely DIFFERENT from FNA and every sibling CNA backend for the
+        // identical public Texture2D/TextureCube(mipMap=true) constructor call -- see
+        // plan_webgpu.md's WEBGPU-52 row and docs/webgpu-backend.md for the full investigation
+        // this finding is based on. Explicit per-level SetData(level>0, ...) calls made AFTER
+        // construction are, as before, never auto-regenerated (matches every other backend).
+        void EnsureMipBlitPipeline();
+        // Shared implementation: generates levels 1..mipLevels-1 of ONE array layer of `texture`
+        // from that layer's own level 0. GenerateMips2D()/GenerateMipsCubeFace() are thin
+        // wrappers (layer=0 for a plain 2D texture, layer=face for one cube face).
+        void GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height, int mipLevels);
+        // Generates levels 1..mipLevels-1 of a plain (non-array) 2D texture from level 0.
+        void GenerateMips2D(WGPUTexture texture, int width, int height, int mipLevels);
+        // Generates levels 1..mipLevels-1 of ONE array layer (cube face) of a 6-layer texture,
+        // leaving the other 5 faces' mip chains untouched -- called once per face.
+        void GenerateMipsCubeFace(WGPUTexture texture, int face, int size, int mipLevels);
 
         SDL_Window* window_ = nullptr;
         void* metalView_ = nullptr;
@@ -602,6 +799,17 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUBuffer spriteVertexBuffer_ = nullptr;
         std::uint64_t spriteVertexCapacityBytes_ = 0;
         std::array<WGPUSampler, 18> samplerCache_{};
+
+        // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment. Created
+        // lazily on first use (a game that never requests mipMap=true with initial pixel data
+        // never pays for these). Always targets WGPUTextureFormat_RGBA8Unorm, matching
+        // WebGPUTextureBackend/WebGPUTextureCubeBackend's own fixed format -- no per-format cache
+        // needed, unlike the ~10 GetOrCreatePipeline*3D() families.
+        WGPUShaderModule mipBlitShader_ = nullptr;
+        WGPUBindGroupLayout mipBlitBindGroupLayout_ = nullptr;
+        WGPUPipelineLayout mipBlitPipelineLayout_ = nullptr;
+        WGPURenderPipeline mipBlitPipeline_ = nullptr;
+        WGPUSampler mipBlitSampler_ = nullptr;
 
         std::vector<SpriteCommand> spriteCommands_;
         int physicalWidth_ = 0;
@@ -703,6 +911,14 @@ namespace CNA::Internal::Backends::WebGPU
         // restore the backbuffer via SetRenderTarget(nullptr) before Present(), same convention
         // every other CNA backend already assumes).
         WebGPURenderTargetBackend* currentRenderTarget_ = nullptr;
+
+        // WEBGPU-114: the cube-face sibling of currentRenderTarget_ above -- non-null exactly
+        // when a RenderTargetCube face is the currently-bound render target (mutually exclusive
+        // with currentRenderTarget_; only one of the two, or neither -- the backbuffer -- is ever
+        // set). currentRenderTargetCubeFaceIndex_ is only meaningful while
+        // currentRenderTargetCubeFace_ is non-null.
+        WebGPURenderTargetCubeBackend* currentRenderTargetCubeFace_ = nullptr;
+        int currentRenderTargetCubeFaceIndex_ = -1;
 
         // Phase 57/63 vertical slice: DrawColoredPrimitives()/DrawIndexedColoredPrimitives() only
         // (VertexPositionColor, stride 16 -- see plan_webgpu.md's Phase 57 entry-point note). The
@@ -1067,8 +1283,11 @@ namespace CNA::Internal::Backends::WebGPU
             const IWebGPUSamplable* texture = nullptr;
             /// EnvironmentMapEffect::EnvironmentMap -- may legitimately be null (falls back to a
             /// 1x1 white cube map at render time, matching VulkanGraphicsBackend's own
-            /// defaultWhiteCubeView_ fallback).
-            const WebGPUTextureCubeBackend* envMap = nullptr;
+            /// defaultWhiteCubeView_ fallback). WEBGPU-114: IWebGPUCubeSamplable rather than the
+            /// concrete WebGPUTextureCubeBackend, so a WebGPURenderTargetCubeBackend (a distinct
+            /// concrete class) bound as EnvironmentMapEffect.EnvironmentMap resolves correctly too
+            /// -- see IWebGPUCubeSamplable's own doc comment.
+            const IWebGPUCubeSamplable* envMap = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
