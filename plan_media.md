@@ -2440,10 +2440,12 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   The previous round dismissed the reviewer's differing count as "test registration differing
   between build configurations" **without evidence** -- an unsupported claim of exactly the kind
   this plan keeps being caught by.
-  *Investigated properly:* the difference is **Draco**. Three tests are gated behind
-  `#ifdef CNA_DRACO_AVAILABLE` (`RuntimeGltfModelTest.LoadsDracoCompressedTriangleDirectlyFromGltf`,
+  *Investigated -- but the investigation was itself wrong on the count; corrected by `MEDIA-230`.*
+  The difference is **Draco**. **Four** tests are gated behind `#ifdef CNA_DRACO_AVAILABLE`:
+  `RuntimeGltfModelTest.LoadsDracoCompressedTriangleDirectlyFromGltf`,
   `GltfImportCoreTest.ExtractMeshDecodesDracoCompressedTriangle`,
-  `GltfImportCoreTest.ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWithNoTangentAccessor`).
+  `GltfImportCoreTest.ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWithNoTangentAccessor`
+  and `GltfToCnjToolTest.ConvertsDracoCompressedTriangleAndLoadsBackThroughContentManager`.
   Draco 1.5.6 **is** installed on this machine, but the `cmake-build-tests` directory predated the
   Draco integration, so its cached configuration had it off. Re-running CMake detects it
   (`CNA: Draco found (1.5.6)`) and the counts line up.
@@ -2451,6 +2453,34 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   freshly-configured build reports -- they were measured in that stale build directory. The results
   themselves were unaffected (zero Media failures either way), but the counts should be read with
   that caveat rather than treated as canonical.
+
+- [x] **MEDIA-230 — Correct `MEDIA-229`'s own count, and stop citing pre-merge regression numbers.**
+  A fourteenth review found two errors in `MEDIA-229` -- the task whose entire point was to replace
+  a hand-waved claim with evidence. Both were mine:
+  * **It said three Draco-gated tests; there are four.** The one missed is
+    `GltfToCnjToolTest.ConvertsDracoCompressedTriangleAndLoadsBackThroughContentManager`. The cause
+    was a sloppy search: I grepped for `#ifdef` within three lines *before* a `TEST`, which silently
+    skips any file where the guard sits further away. Re-counted by walking `#ifdef`..`#endif`
+    across **every** test file, which finds all four.
+  * **Every "4919 tests" figure in this plan predates the `36ac9656` merge** and was measured in a
+    stale build directory. Those numbers verified the Media branch in isolation -- they never
+    verified the current merged HEAD, so quoting them as full-suite evidence for HEAD was wrong.
+  *Corrected evidence, measured on the actual current HEAD (`52fe5835`) with a freshly configured
+  build:* **5312 tests, 5308 passed, 0 failed, 4 pre-existing hardware skips** (Accelerometer/
+  Gyroscope × 2). All four Draco tests genuinely ran.
+  *Lesson worth keeping:* a task written specifically to be rigorous about a number still got the
+  number wrong, because the *method* (a proximity grep) was never checked. Counting something is
+  not evidence unless the counting method is itself verified.
+
+- [x] **MEDIA-231 — Re-baseline the plan's regression figures on the merged tree.**
+  Earlier phases legitimately measured `feature/media` alone; after `a3f88c94`/`36ac9656` merged it
+  into `develop`, the meaningful figure is the merged one. Recorded here once rather than
+  rewriting every historical phase note (which would falsify what was actually observed at the
+  time): **historical per-phase counts are branch-only and pre-merge; the current merged HEAD
+  measures 5312/5308/0.** Future rounds should quote the merged number.
+  **Unchanged and still open:** no TSAN/threaded or end-to-end audio test for visualization; the
+  no-mixer and failed-uninstall branches remain unreachable from this suite; Group D
+  (`MEDIA-192`..`198`) remains deferred by the project owner.
 
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
