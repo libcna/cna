@@ -373,3 +373,70 @@ TEST(OfflineAudioRendererTest, ZeroTrackGainRendersSilenceNotNaN)
     EXPECT_FALSE(ContainsNaNOrInf(result.samples));
     EXPECT_DOUBLE_EQ(MeasureRms(result.samples, 1), 0.0);
 }
+
+// ---------------------------------------------------------------------------
+// AUD-04-015: mixer/track gain changes must affect an ALREADY-PLAYING ("active") voice live, not
+// only voices created after the change -- MIX_Generate() can be called repeatedly to pull
+// successive chunks from the same still-playing track, so a gain change between two calls (with
+// no new track created) directly tests the "active voice" half of the acceptance criterion.
+// (AUD-04-014's tests above, each creating a brand-new track already reflecting the gain passed
+// at creation time, already cover the "future voices" half -- there is no code path where a
+// freshly created track could see a stale gain, since MIX_SetTrackGain/MIX_SetMixerGain are
+// called before MIX_PlayTrack in every one of those tests.)
+// ---------------------------------------------------------------------------
+
+TEST(OfflineAudioRendererTest, MixerGainChangeMidPlaybackAffectsActiveVoiceOnNextChunk)
+{
+    // 1s of source so a two-chunk, 0.1s-each render can't exhaust it.
+    auto pcm = GenerateSineWaveS16(440.0, 44100, 1, 1.0);
+
+    ASSERT_TRUE(MIX_Init());
+    SDL_AudioSpec renderSpec{};
+    renderSpec.format = SDL_AUDIO_F32;
+    renderSpec.channels = 1;
+    renderSpec.freq = 44100;
+    MIX_Mixer* mixer = MIX_CreateMixer(&renderSpec);
+    ASSERT_NE(mixer, nullptr);
+
+    SDL_AudioSpec sourceSpec{};
+    sourceSpec.format = SDL_AUDIO_S16LE;
+    sourceSpec.channels = 1;
+    sourceSpec.freq = 44100;
+    SDL_IOStream* io = SDL_IOFromConstMem(pcm.data(), pcm.size());
+    ASSERT_NE(io, nullptr);
+    MIX_Audio* audio = MIX_LoadRawAudio_IO(mixer, io, &sourceSpec, true);
+    ASSERT_NE(audio, nullptr);
+
+    MIX_Track* track = MIX_CreateTrack(mixer);
+    ASSERT_NE(track, nullptr);
+    ASSERT_TRUE(MIX_SetTrackAudio(track, audio));
+    ASSERT_TRUE(MIX_SetTrackGain(track, 1.0f));
+    ASSERT_TRUE(MIX_PlayTrack(track, 0));
+
+    const int chunkFrames = 4410; // 0.1s
+    const std::size_t chunkBytes = static_cast<std::size_t>(chunkFrames) * sizeof(float);
+
+    std::vector<uint8_t> raw1(chunkBytes);
+    ASSERT_GE(MIX_Generate(mixer, raw1.data(), static_cast<int>(chunkBytes)), 0);
+
+    // Change gain on the SAME still-playing track -- no new track, no Stop/Play cycle.
+    ASSERT_TRUE(MIX_SetTrackGain(track, 0.25f));
+
+    std::vector<uint8_t> raw2(chunkBytes);
+    ASSERT_GE(MIX_Generate(mixer, raw2.data(), static_cast<int>(chunkBytes)), 0);
+
+    MIX_DestroyTrack(track);
+    MIX_DestroyAudio(audio);
+    MIX_DestroyMixer(mixer);
+    MIX_Quit();
+
+    std::vector<float> samples1(chunkFrames), samples2(chunkFrames);
+    std::memcpy(samples1.data(), raw1.data(), chunkBytes);
+    std::memcpy(samples2.data(), raw2.data(), chunkBytes);
+
+    const double rms1 = MeasureRms(samples1, 1);
+    const double rms2 = MeasureRms(samples2, 1);
+    ASSERT_GT(rms1, 0.0);
+    EXPECT_NEAR(rms2 / rms1, 0.25, 0.02)
+        << "gain change mid-playback did not take effect on the already-active voice's next chunk";
+}
