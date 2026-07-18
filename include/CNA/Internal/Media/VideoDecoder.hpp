@@ -49,11 +49,17 @@ namespace CNA::Internal::Media
         /// Seeks to the beginning of the stream.
         void SeekToStart();
 
-        /// Switches the active audio stream to the trackIndex-th audio stream (0-based).
-        void SetAudioStream(int trackIndex);
+        /// Switches the active audio stream to the trackIndex-th audio stream (0-based). Returns
+        /// true if a different stream is now active (a genuine switch happened, decode state was
+        /// discarded), false if trackIndex was already active or out of range (a true no-op) --
+        /// callers that recreate downstream resources (SDL audio streams, textures) after a switch
+        /// need to know whether anything actually changed, not just that the call didn't throw
+        /// (plan_media.md MEDIA-154, found by external code review).
+        bool SetAudioStream(int trackIndex);
 
-        /// Switches the active video stream to the trackIndex-th video stream (0-based).
-        void SetVideoStream(int trackIndex);
+        /// Switches the active video stream to the trackIndex-th video stream (0-based). Same
+        /// return-value contract as SetAudioStream() above.
+        bool SetVideoStream(int trackIndex);
 
         /// Decodes the next video frame into RGBA output buffer.
         /// @param rgbaOut  output buffer; resized to width*height*4 bytes.

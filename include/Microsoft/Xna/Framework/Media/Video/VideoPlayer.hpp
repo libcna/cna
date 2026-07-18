@@ -200,6 +200,17 @@ namespace Microsoft::Xna::Framework::Media
         void ApplyVolume();
         [[nodiscard]] double GetElapsedSeconds() const;
 
+        // Hands whatever decoder_->DrainAudio() produced to the SDL stream (if one exists) and
+        // always clears audioBuffer_ afterward -- including when audioStream_ is null (no audio
+        // device available, or a video-only track). The old inline version at both call sites only
+        // cleared the buffer inside the `if (audioStream_)` branch, so a video playing with no
+        // audio device accumulated its ENTIRE decoded audio track in memory for the rest of
+        // playback (potentially hundreds of MB for a long video), and CloseDecoder() never cleared
+        // it either -- stale audio from a failed-device Play() could then be fed to a genuinely
+        // opened stream on a later successful Play() (found by external code review, plan_media.md
+        // MEDIA-153).
+        void DrainAndFlushAudioBuffer();
+
         // (Re)creates the frame texture to match whatever video track is currently active on
         // `decoder_`. A track switch can change frame dimensions, and an already-created texture
         // sized for the previous track would otherwise silently keep the stale size (plan_media.md

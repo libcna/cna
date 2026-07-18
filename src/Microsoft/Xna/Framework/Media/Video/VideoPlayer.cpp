@@ -193,23 +193,19 @@ namespace Microsoft::Xna::Framework::Media
         // with audio played completely silently (found by external code review).
         state_ = MediaState::Playing;
 
-        ReconfigureVideoOutputForCurrentTrack();
-        ReconfigureAudioOutputForCurrentTrack();
-
-        // Decode and display first frame immediately. NextFrame() can now throw
-        // std::runtime_error for a genuine decode error (plan_media.md MEDIA-39/128) -- state_ was
-        // set to Playing above (needed for the resume call in
-        // ReconfigureAudioOutputForCurrentTrack() just above), so if this throws, the player must
-        // not be left half-open: decoder_/audioStream_/frameTexture_/video_->parent_ are all
-        // already live at this point, and merely resetting state_ to Stopped (the original fix)
-        // left every one of them still allocated behind a state_ that claims nothing is open --
-        // getVideoProperty() would keep returning the video, and a second Play() call would rely
-        // on CloseDecoder() being idempotent by luck rather than by contract (found by external
-        // code review, plan_media.md MEDIA-149). CloseDecoder() performs the full, already-correct
-        // teardown (including its own state_ = Stopped) and is safe to call here since every
-        // resource it releases was in fact opened above.
+        // The whole rest of this function -- texture/audio-stream (re)creation AND the first-frame
+        // decode -- is wrapped in one try block. MEDIA-149's own fix only wrapped the first-frame
+        // decode, leaving an exception thrown by ReconfigureVideoOutputForCurrentTrack()'s
+        // Texture2D construction (or, in principle, a future throwing path inside the audio-side
+        // reconfigure) to bypass CloseDecoder() entirely: state_ was already Playing and
+        // decoder_/video_/video->parent_ were already live at that point, same half-open-player
+        // problem MEDIA-149 fixed for the narrower first-frame-decode case (found by external code
+        // review, plan_media.md MEDIA-152).
         try
         {
+            ReconfigureVideoOutputForCurrentTrack();
+            ReconfigureAudioOutputForCurrentTrack();
+
             double pts = 0.0;
             if (decoder_->NextFrame(rgbaBuffer_, pts) && frameTexture_)
             {
@@ -217,20 +213,25 @@ namespace Microsoft::Xna::Framework::Media
                                            static_cast<int>(rgbaBuffer_.size() / 4));
                 lastFramePts_ = pts;
             }
-            decoder_->DrainAudio(audioBuffer_);
-            if (audioStream_ && !audioBuffer_.empty())
-            {
-                SDL_PutAudioStreamData(audioStream_,
-                                       audioBuffer_.data(),
-                                       static_cast<int>(audioBuffer_.size() * sizeof(float)));
-                audioBuffer_.clear();
-            }
+            DrainAndFlushAudioBuffer();
         }
         catch (...)
         {
             CloseDecoder();
             throw;
         }
+    }
+
+    void VideoPlayer::DrainAndFlushAudioBuffer()
+    {
+        decoder_->DrainAudio(audioBuffer_);
+        if (audioStream_ && !audioBuffer_.empty())
+        {
+            SDL_PutAudioStreamData(audioStream_,
+                                   audioBuffer_.data(),
+                                   static_cast<int>(audioBuffer_.size() * sizeof(float)));
+        }
+        audioBuffer_.clear();
     }
 
     void VideoPlayer::CloseDecoder()
@@ -241,6 +242,10 @@ namespace Microsoft::Xna::Framework::Media
             audioStream_ = nullptr;
             SDL_QuitSubSystem(SDL_INIT_AUDIO); // paired with the SDL_InitSubSystem() call that opened it
         }
+        // audioBuffer_ can hold undrained decoded samples if the player is being torn down with no
+        // audio device open (plan_media.md MEDIA-153) -- clear it so a later, successful Play() on
+        // a real device never gets stale audio from a previous, unrelated playback prepended to it.
+        audioBuffer_.clear();
         if (video_) video_->parent_ = nullptr;
         frameTexture_.reset();
         decoder_.reset();
@@ -316,14 +321,21 @@ namespace Microsoft::Xna::Framework::Media
         audioTrack_ = track;
         if (decoder_)
         {
-            decoder_->SetAudioStream(track);
             // A mid-playback switch can change sample rate/channel count -- the already-open SDL
             // audio stream (opened for the previous track) must be recreated to match, not left
             // stale (plan_media.md MEDIA-90, a real bug found by external code review). Only the
             // audio side is touched -- reconfiguring the video texture too (as a single combined
             // helper used to do) would be a needless texture reallocation for a change that has no
-            // effect on it (plan_media.md MEDIA-148, found by external code review).
-            ReconfigureAudioOutputForCurrentTrack();
+            // effect on it (plan_media.md MEDIA-148, found by external code review). Only run at
+            // all if SetAudioStream() reports a genuine switch happened -- re-selecting the
+            // already-active track (or an out-of-range index, which the decoder also treats as a
+            // no-op) used to still tear down and reopen the SDL stream for nothing, discarding
+            // whatever audio was already queued (plan_media.md MEDIA-154, found by external code
+            // review).
+            if (decoder_->SetAudioStream(track))
+            {
+                ReconfigureAudioOutputForCurrentTrack();
+            }
         }
     }
 
@@ -333,14 +345,19 @@ namespace Microsoft::Xna::Framework::Media
         videoTrack_ = track;
         if (decoder_)
         {
-            decoder_->SetVideoStream(track);
             // A mid-playback switch can change frame dimensions -- the already-created texture
             // (sized for the previous track) must be recreated to match (plan_media.md MEDIA-90).
             // Only the video side is touched -- reconfiguring the SDL audio stream too (as a single
             // combined helper used to do) tore down and reopened it on every video-only track
             // switch, discarding whatever audio was already queued for playback for no reason
-            // (plan_media.md MEDIA-148, found by external code review).
-            ReconfigureVideoOutputForCurrentTrack();
+            // (plan_media.md MEDIA-148, found by external code review). Only run at all if
+            // SetVideoStream() reports a genuine switch happened -- re-selecting the already-active
+            // track (or an out-of-range index) used to still reallocate the texture for nothing
+            // (plan_media.md MEDIA-154, found by external code review).
+            if (decoder_->SetVideoStream(track))
+            {
+                ReconfigureVideoOutputForCurrentTrack();
+            }
         }
     }
 
@@ -379,14 +396,7 @@ namespace Microsoft::Xna::Framework::Media
             // success branch below would silently strand that final batch of audio, undermining
             // the very "wait for queued audio to drain" check right below this
             // (plan_media.md MEDIA-41 -- a real, confirmed bug found by external code review).
-            decoder_->DrainAudio(audioBuffer_);
-            if (audioStream_ && !audioBuffer_.empty())
-            {
-                SDL_PutAudioStreamData(audioStream_,
-                                       audioBuffer_.data(),
-                                       static_cast<int>(audioBuffer_.size() * sizeof(float)));
-                audioBuffer_.clear();
-            }
+            DrainAndFlushAudioBuffer();
 
             if (!gotFrame)
             {

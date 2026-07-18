@@ -1320,6 +1320,102 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNotHalfOpen`), zero pre-existing tests
   broken. Grepped in full (`grep -c FAILED` on the complete log, not a truncated tail).
 
+### Phase 11 — Fourth external review pass (2026-07-18, same day as Phase 8/9/10)
+
+> Applying MEDIA-126's own convention a fourth time. A fourth external adversarial review of commit
+> `8f23f747` (Phase 10's own fix commit) confirmed three of Phase 10's five fixes fully sound
+> (EAGAIN retention, resampler flush, the audio/video reconfiguration split), found the
+> `Play()`-exception-safety fix only covered the narrower first-frame-decode case, and found two
+> further real defects independent of anything Phase 10 touched: an unbounded in-memory audio-buffer
+> accumulation with no audio device, and Phase 10's own reconfiguration split still doing needless
+> (and, for audio, destructive) work on a same-track reselect. Every claim independently re-derived
+> from the actual code before any fix was written.
+
+- [x] **MEDIA-152 — Widen `OpenDecoder()`'s `try` block to cover the reconfiguration calls, not
+  just the first-frame decode.** `MEDIA-149`'s fix wrapped only `decoder_->NextFrame()` +
+  `DrainAndFlushAudioBuffer()` in `try`/`catch`, but `state_ = MediaState::Playing` and both
+  `ReconfigureVideoOutputForCurrentTrack()`/`ReconfigureAudioOutputForCurrentTrack()` calls ran
+  *before* that `try` block started. An exception thrown from `Texture2D` construction inside the
+  video-side reconfigure (in principle possible, e.g. an OOM/GPU failure) would bypass
+  `CloseDecoder()` entirely -- the exact half-open-player problem `MEDIA-149` set out to fix for the
+  narrower first-frame-decode case, left open for this earlier window.
+  *Fix:* the `try` block now starts immediately after `state_ = MediaState::Playing;`, wrapping both
+  reconfigure calls and the first-frame decode/audio-drain in one block; the `catch` still calls
+  `CloseDecoder()`.
+  *Accept:* no dedicated fault-injection test was written for this specific window -- neither
+  reconfigure function has a reachable, deterministic throw path with this repo's real fixtures
+  today (`ReconfigureAudioOutputForCurrentTrack()` degrades gracefully on device failure by design;
+  `Texture2D`'s `(device, w, h)` constructor has no dimension validation that a real decoded video's
+  always-positive width/height could trigger), matching this plan's own established precedent
+  (`MEDIA-94`) for not building disproportionate fault-injection infrastructure for a defensive-only
+  code path. Verified by code review and the full-suite regression run (`MEDIA-156`) showing the
+  widened `try` scope changes no existing behavior.
+
+- [x] **MEDIA-153 — Fix unbounded in-memory audio-buffer accumulation with no audio device.**
+  `decoder_->DrainAudio(audioBuffer_)` ran unconditionally every decode iteration (both in
+  `OpenDecoder()`'s first-frame path and `GetTexture()`'s catch-up loop), but `audioBuffer_.clear()`
+  only ran inside `if (audioStream_)`. A video with a real audio track but no audio device available
+  (device open failure, or a genuinely headless environment) accumulated its ENTIRE decoded audio
+  track in memory for the rest of playback -- potentially hundreds of MB to GB for a long video --
+  and `CloseDecoder()` never cleared it either, so stale audio from a failed-device `Play()` could be
+  fed to a genuinely opened stream on a later successful `Play()`. This directly contradicted the
+  existing "gracefully degrade to video-only" design intent for a missing audio device.
+  *Fix:* factored the drain-and-feed logic (duplicated at both call sites) into a new private
+  `DrainAndFlushAudioBuffer()` that always calls `audioBuffer_.clear()` at the end, regardless of
+  whether `audioStream_` exists or the feed happened; also cleared in `CloseDecoder()` for the same
+  reason.
+  *Accept:* new `VideoPlayerTest.AudioBufferDoesNotAccumulateWithoutAnAudioDevice` uses a new
+  `VideoPlayerTestAccess::SimulateAudioDeviceBecomingUnavailable()` (tears down a real, already-open
+  stream the same way the graceful-degradation path already does) against `audio_tail.mkv` (a real
+  audio track), then asserts `audioBuffer_` is exactly empty after every `GetTexture()` call across
+  15 iterations -- a direct, deterministic proof, not a size-threshold heuristic.
+
+- [x] **MEDIA-154 — Fix `VideoPlayer`'s track setters still doing needless/destructive work on a
+  same-track reselect.** `VideoDecoder::SetAudioStream()`/`SetVideoStream()` (fixed in `MEDIA-131`)
+  correctly no-op at the decoder level when re-selecting the already-active track or an out-of-range
+  index, but `VideoPlayer::SetAudioTrackEXT()`/`SetVideoTrackEXT()` called their reconfigure helper
+  *unconditionally* regardless of the decoder call's actual outcome. Since
+  `ReconfigureAudioOutputForCurrentTrack()` always tears down and reopens the SDL stream, calling
+  `SetAudioTrackEXT()` with the already-active (or an invalid) track index still discarded whatever
+  audio was queued for playback -- the exact `MEDIA-148` problem, on the "nothing actually changed"
+  axis instead of the "wrong side reconfigured" axis `MEDIA-148` fixed. The video side had the
+  symmetric (non-destructive but still wasteful) texture-reallocation issue.
+  *Fix:* `VideoDecoder::SetAudioStream()`/`SetVideoStream()` now return `bool` (true only on a
+  genuine switch); `VideoPlayer::SetAudioTrackEXT()`/`SetVideoTrackEXT()` only call their respective
+  reconfigure helper when the decoder call returns `true`.
+  *Accept:* new `ReselectingTheSameAudioTrackDoesNotTearDownTheStream`,
+  `ReselectingTheSameVideoTrackDoesNotRecreateTheTexture`, and
+  `SelectingAnOutOfRangeAudioTrackDoesNotTearDownTheStream` all assert pointer identity
+  (`SDL_AudioStream*`/`Texture2D*`) is preserved across the no-op call, extending Phase 10's
+  cross-axis pointer-identity technique to the same-track-reselect and out-of-range cases.
+
+- [x] **MEDIA-155 — Fix two `VideoDecoder` internal-state-reset gaps found alongside the above.**
+  (1) `Close()` reset every other decode-state member but left `pendingAudio_` untouched -- a caller
+  that reuses the same `VideoDecoder` instance across `Close()`+`Open()` (the class's own public
+  contract makes no promise against this, even though `VideoPlayer` itself always allocates a fresh
+  instance) would have its first `DrainAudio()` call after the second `Open()` return stale samples
+  decoded from the *previous* file. (2) `SeekToStart()` flushed both codec contexts but didn't reset
+  `havePendingVideoPacket_` (the `MEDIA-146` retention flag) or unref the packet it might be holding
+  -- a packet retained from *before* the seek refers to compressed data at the old read position;
+  resending it to the just-flushed codec context on the next `NextFrame()` call would hand the
+  decoder a now-out-of-place packet with no relevant prior state.
+  *Fix:* `Close()` now also calls `pendingAudio_.clear()`. `SeekToStart()` now also unrefs `pkt_` and
+  resets `havePendingVideoPacket_` to `false` when a packet was pending.
+  *Accept:* new `VideoDecoderTest.CloseClearsAnyUndrainedPendingAudioFromThePreviousFile` decodes a
+  few frames without draining, closes, reopens a different file on the same instance, and asserts
+  `DrainAudio()` returns nothing left over. The `SeekToStart()` half is verified by code review only
+  (matching this plan's own honesty precedent, `MEDIA-94`/`MEDIA-152`): reliably forcing a genuine
+  `avcodec_send_packet` EAGAIN *and* triggering a seek within that exact retry window in the same
+  test, with this repo's real fixtures, is impractical fault-injection infrastructure disproportionate
+  to the fix's own low real-world likelihood -- the reviewer's own report reached the same conclusion
+  ("practical probability is small").
+
+- [x] **MEDIA-156 — Full-suite regression run.** Confirm zero regressions from this fourth
+  remediation pass, grepped in full (not a truncated tail).
+  *Verified:* 4876 tests, 4874 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope) -- 5 new tests added by this phase, zero pre-existing tests broken. Grepped in full
+  (`grep -c FAILED` on the complete log, not a truncated tail).
+
 ---
 
 ## 6. Recommended order and milestones

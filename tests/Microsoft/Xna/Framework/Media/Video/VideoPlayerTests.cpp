@@ -469,3 +469,89 @@ TEST(VideoPlayerTest, PlayOnAFirstFrameDecodeFailureLeavesThePlayerFullyClosedNo
     player.Stop();
     std::remove(corruptedPath.c_str());
 }
+
+// plan_media.md MEDIA-153 (found by external code review): decoder_->DrainAudio(audioBuffer_) ran
+// unconditionally every decode iteration, but audioBuffer_.clear() only ran inside
+// `if (audioStream_)` -- with no audio device (e.g. this simulated failure, or a genuinely headless
+// system), audioBuffer_ accumulated the ENTIRE decoded audio track in memory for the rest of
+// playback, and CloseDecoder() never cleared it either. Uses SimulateAudioDeviceBecomingUnavailable
+// to exercise the no-device path deterministically (this sandbox's own audio driver may or may not
+// fail on its own) against audio_tail.mkv, which genuinely has an audio track.
+TEST(VideoPlayerTest, AudioBufferDoesNotAccumulateWithoutAnAudioDevice)
+{
+    GraphicsDevice gd;
+    Video video(kAudioTailFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    ASSERT_TRUE(VideoPlayerTestAccess::HasAudioStream(player));
+    VideoPlayerTestAccess::SimulateAudioDeviceBecomingUnavailable(player);
+    ASSERT_FALSE(VideoPlayerTestAccess::HasAudioStream(player));
+
+    for (int i = 0; i < 15; ++i)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        player.GetTexture();
+        // DrainAndFlushAudioBuffer() always clears audioBuffer_ at the end, whether or not there
+        // was a stream to feed -- so right after any GetTexture() call it must be empty, not just
+        // "bounded."
+        EXPECT_EQ(VideoPlayerTestAccess::GetAudioBufferSize(player), 0u)
+            << "iteration " << i;
+    }
+
+    player.Stop();
+}
+
+// plan_media.md MEDIA-154 (found by external code review): VideoDecoder::SetAudioStream()/
+// SetVideoStream() correctly no-op at the decoder level when re-selecting the already-active track
+// (or an out-of-range index), but VideoPlayer::SetAudioTrackEXT()/SetVideoTrackEXT() used to call
+// their reconfigure helper unconditionally regardless, tearing down and reopening the SDL audio
+// stream (discarding whatever was queued) or reallocating the texture for a "switch" that never
+// actually happened. Extends the Phase 10 pointer-identity technique
+// (SetVideoTrackEXTDoesNotTearDownTheUnrelatedAudioStream) to the same-track-reselect case.
+TEST(VideoPlayerTest, ReselectingTheSameAudioTrackDoesNotTearDownTheStream)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    SDL_AudioStream* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
+    ASSERT_NE(before, nullptr);
+
+    player.SetAudioTrackEXT(0); // track 0 is already active -- a true no-op
+
+    EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), before);
+}
+
+TEST(VideoPlayerTest, ReselectingTheSameVideoTrackDoesNotRecreateTheTexture)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    auto* before = player.GetTexture();
+    ASSERT_NE(before, nullptr);
+
+    player.SetVideoTrackEXT(0); // track 0 is already active -- a true no-op
+
+    EXPECT_EQ(player.GetTexture(), before);
+}
+
+// An out-of-range track index is also a true no-op at the decoder level -- must not tear down the
+// stream either.
+TEST(VideoPlayerTest, SelectingAnOutOfRangeAudioTrackDoesNotTearDownTheStream)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    SDL_AudioStream* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
+    ASSERT_NE(before, nullptr);
+
+    player.SetAudioTrackEXT(99); // out of range -- multi_track_audio.mkv has only 2 audio tracks
+
+    EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), before);
+}

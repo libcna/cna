@@ -393,3 +393,32 @@ TEST(VideoDecoderTest, DecodesTheFullFileWithoutSilentlyDroppingAnyFrame)
 
     EXPECT_EQ(frameCount, 50);
 }
+
+// plan_media.md MEDIA-155 (found by external code review): Close() reset every other decode-state
+// member but left pendingAudio_ untouched. A caller that reuses the same VideoDecoder instance
+// (Close() then Open() again, rather than allocating a fresh instance every time -- VideoPlayer
+// itself always allocates fresh, but the class's own contract should not depend on that) would have
+// its first DrainAudio() call after the second Open() return stale samples decoded from the FIRST
+// file, never actually cleared.
+TEST(VideoDecoderTest, CloseClearsAnyUndrainedPendingAudioFromThePreviousFile)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kAudioTail));
+    ASSERT_TRUE(decoder.HasAudio());
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    for (int i = 0; i < 5; ++i)
+    {
+        if (!decoder.NextFrame(rgba, pts)) break;
+    }
+    // Deliberately do NOT drain here -- pendingAudio_ should now hold real, undrained samples.
+
+    decoder.Close();
+    ASSERT_TRUE(decoder.Open(kChroma420)); // a different file, reusing the same instance
+
+    std::vector<float> samples;
+    decoder.DrainAudio(samples);
+    EXPECT_TRUE(samples.empty()) << "DrainAudio() returned " << samples.size()
+                                  << " stale samples left over from the previous file";
+}

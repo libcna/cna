@@ -143,6 +143,11 @@ namespace CNA::Internal::Media
         width_ = height_ = 0;
         fps_ = 0.0f;
         durationSec_ = 0.0;
+        // pendingAudio_ holds decoded-but-not-yet-drained samples from whatever file was open --
+        // left uncleared, a caller that reuses this same VideoDecoder instance (Close() then
+        // Open() again) would have its first DrainAudio() call after the new Open() return stale
+        // samples from the PREVIOUS file (found by external code review, plan_media.md MEDIA-155).
+        pendingAudio_.clear();
     }
 
     void VideoDecoder::SeekToStart()
@@ -151,6 +156,18 @@ namespace CNA::Internal::Media
         av_seek_frame(fmtCtx_, -1, 0, AVSEEK_FLAG_BACKWARD);
         if (videoCtx_) avcodec_flush_buffers(videoCtx_);
         if (audioCtx_) avcodec_flush_buffers(audioCtx_);
+        // A video packet retained by an in-progress EAGAIN retry (havePendingVideoPacket_) refers
+        // to compressed data read from BEFORE this seek -- resending it to the codec context just
+        // flushed above would hand a now-out-of-place packet to a decoder with no relevant prior
+        // state, at best wasted work and at worst a spurious decode error. Reset both the flag and
+        // the packet's own held reference so the next NextFrame() call starts clean, reading fresh
+        // packets from the new (seeked) position instead (found by external code review,
+        // plan_media.md MEDIA-155).
+        if (havePendingVideoPacket_)
+        {
+            av_packet_unref(pkt_);
+            havePendingVideoPacket_ = false;
+        }
     }
 
     AVCodecContext* VideoDecoder::AllocAndConfigureCodecContext(
@@ -257,9 +274,9 @@ namespace CNA::Internal::Media
         return true;
     }
 
-    void VideoDecoder::SetAudioStream(int trackIndex)
+    bool VideoDecoder::SetAudioStream(int trackIndex)
     {
-        if (!fmtCtx_ || trackIndex < 0) return;
+        if (!fmtCtx_ || trackIndex < 0) return false;
         int found = 0;
         for (int i = 0; i < (int)fmtCtx_->nb_streams; ++i)
         {
@@ -271,21 +288,23 @@ namespace CNA::Internal::Media
                     // recreate the codec context anyway, throwing away all decode state for no
                     // reason -- harmless for audio (no keyframe concept), but pointless work.
                     // Kept as a no-op for consistency with SetVideoStream()'s own fix below (found
-                    // by external code review, plan_media.md MEDIA-131).
-                    if (i != audioStream_)
-                    {
-                        OpenAudioStreamByIndex(i);
-                    }
-                    return;
+                    // by external code review, plan_media.md MEDIA-131). The bool return (found by
+                    // a later external review, plan_media.md MEDIA-154) lets VideoPlayer skip its
+                    // own downstream reconfiguration entirely when this was a true no-op, instead
+                    // of tearing down and reopening the SDL stream for a switch that never happened.
+                    if (i == audioStream_) return false;
+                    OpenAudioStreamByIndex(i);
+                    return true;
                 }
                 ++found;
             }
         }
+        return false; // trackIndex out of range -- also a true no-op.
     }
 
-    void VideoDecoder::SetVideoStream(int trackIndex)
+    bool VideoDecoder::SetVideoStream(int trackIndex)
     {
-        if (!fmtCtx_ || trackIndex < 0) return;
+        if (!fmtCtx_ || trackIndex < 0) return false;
         int found = 0;
         for (int i = 0; i < (int)fmtCtx_->nb_streams; ++i)
         {
@@ -303,16 +322,16 @@ namespace CNA::Internal::Media
                     // -- plan_media.md MEDIA-39/128) throws "Cannot decode non-keyframe without
                     // valid keyframe" instead of silently producing a garbage frame. Found by
                     // external code review testing exactly this "re-select the same track"
-                    // scenario, plan_media.md MEDIA-131.
-                    if (i != videoStream_)
-                    {
-                        OpenVideoStreamByIndex(i);
-                    }
-                    return;
+                    // scenario, plan_media.md MEDIA-131. See SetAudioStream() above for why this
+                    // now returns bool (plan_media.md MEDIA-154).
+                    if (i == videoStream_) return false;
+                    OpenVideoStreamByIndex(i);
+                    return true;
                 }
                 ++found;
             }
         }
+        return false; // trackIndex out of range -- also a true no-op.
     }
 
     // ---------------------------------------------------------------------------

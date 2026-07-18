@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
+
+#include <SDL3/SDL.h>
 #include <SDL3/SDL_audio.h>
 
 #include "CNA/Internal/Media/VideoDecoder.hpp"
@@ -52,6 +55,30 @@ namespace Microsoft::Xna::Framework::Media
         static SDL_AudioStream* GetAudioStreamPtr(const VideoPlayer& player)
         {
             return player.audioStream_;
+        }
+
+        // Size of the transient decoded-audio scratch buffer -- needed to prove it doesn't grow
+        // unboundedly when there's no audio stream to drain it into (plan_media.md MEDIA-153,
+        // found by external code review).
+        static std::size_t GetAudioBufferSize(const VideoPlayer& player)
+        {
+            return player.audioBuffer_.size();
+        }
+
+        // Simulates the audio device becoming unavailable mid-playback (e.g. what
+        // ReconfigureAudioOutputForCurrentTrack() already does gracefully when
+        // SDL_OpenAudioDeviceStream() itself fails) by tearing down a real, already-open stream the
+        // same way that function's own failure path does, without touching any other state. Lets a
+        // test exercise the "no audio device" code path deterministically against a fixture that
+        // genuinely has audio, rather than depending on this sandbox's real audio driver failing.
+        static void SimulateAudioDeviceBecomingUnavailable(VideoPlayer& player)
+        {
+            if (player.audioStream_)
+            {
+                SDL_DestroyAudioStream(player.audioStream_);
+                player.audioStream_ = nullptr;
+                SDL_QuitSubSystem(SDL_INIT_AUDIO);
+            }
         }
     };
 }

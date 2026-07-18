@@ -4,17 +4,17 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-151`, Phases 0-10); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-156`, Phases 0-11); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 151/151 tasks checked off across 10 phases
+## 1. Status (2026-07-18) — 156/156 tasks checked off across 11 phases
 
-**Deliberately not calling this "complete."** Three separate external adversarial reviews landed on
-this plan the same day (Phase 8, 9, and 10 below), and every single one found real, specific,
+**Deliberately not calling this "complete."** Four separate external adversarial reviews landed on
+this plan the same day (Phase 8, 9, 10, and 11 below), and every single one found real, specific,
 file-and-line-cited defects that a clean build and passing targeted tests did not surface —
 including in the fix commits written *in response to* the previous review. Read this status as "all
 currently-known findings are fixed, full regression is green" rather than "nothing is left to find."
-Any future review of this code should get the same independent, skeptical treatment the last three
-did — see §1c's closing lesson.
+Any future review of this code should get the same independent, skeptical treatment the last four
+did — see §1d's closing lesson.
 
 **Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
 this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
@@ -465,6 +465,54 @@ truncated tail. 4 new tests added by this phase, 0 pre-existing tests broken.
 file-and-line-cited defects that "the build is clean and the targeted tests pass" did not surface on
 its own — a self-verification blind spot, not a one-off. Treat "N/N complete" as a claim needing its
 own independent adversarial pass, every time, not a status to state and move on from.
+
+## 1d. Phase 11 — fourth external review pass (2026-07-18, same day as Phase 8/9/10)
+
+A *fourth* external review, this time of Phase 10's own fix commit (`8f23f747`), confirmed three of
+Phase 10's five fixes fully sound (EAGAIN retention, resampler flush, the audio/video reconfigure
+split) but found the `Play()`-exception-safety fix incomplete, plus two further real defects:
+
+1. **`OpenDecoder()`'s exception safety still had a gap** (`MEDIA-152`) — `MEDIA-149`'s `try` block
+   only wrapped the first-frame decode, not the two reconfigure calls immediately before it. An
+   exception from `Texture2D` construction inside the reconfigure step would still bypass
+   `CloseDecoder()`. Fixed by widening the `try` block to start right after
+   `state_ = MediaState::Playing`. No dedicated fault-injection test — neither reconfigure function
+   has a reachable, deterministic throw path with this repo's real fixtures today, matching the
+   `MEDIA-94` precedent for not over-building test infrastructure for a defensive-only path.
+2. **Unbounded audio-buffer accumulation with no audio device** (`MEDIA-153`) —
+   `decoder_->DrainAudio(audioBuffer_)` ran every iteration, but `audioBuffer_.clear()` only ran
+   inside `if (audioStream_)`. A video with real audio but no audio device accumulated its entire
+   decoded audio track in memory for the rest of playback (potentially hundreds of MB to GB), and
+   `CloseDecoder()` never cleared it either. Fixed by factoring the drain-and-feed logic into a new
+   `DrainAndFlushAudioBuffer()` that always clears the buffer, and clearing it in `CloseDecoder()`
+   too.
+3. **Track setters still did needless/destructive work on a same-track reselect** (`MEDIA-154`) —
+   `VideoDecoder::SetAudioStream()`/`SetVideoStream()` correctly no-op at the decoder level for an
+   already-active or out-of-range track, but `VideoPlayer::SetAudioTrackEXT()`/`SetVideoTrackEXT()`
+   called their reconfigure helper unconditionally anyway — the `MEDIA-148` problem on a different
+   axis (nothing changed, not the wrong side reconfigured). Fixed: both `VideoDecoder` setters now
+   return `bool` (true only on a genuine switch), and `VideoPlayer` only reconfigures when true.
+4. **Two `VideoDecoder` internal-state-reset gaps** (`MEDIA-155`) — `Close()` never cleared
+   `pendingAudio_` (stale samples could leak into a reused instance's next file), and
+   `SeekToStart()` never reset the `MEDIA-146` pending-video-packet flag/reference (a packet
+   retained from before a seek could be resent to the just-flushed codec, referring to data at the
+   old read position). Both fixed. The `pendingAudio_` half has a direct deterministic test; the
+   `SeekToStart()` half is verified by code review only — the reviewer's own report reached the same
+   conclusion that reliable fault injection here is impractical.
+
+Full-suite regression after Phase 11: **4876 tests, 4874 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail. 5 new tests added, 0
+pre-existing tests broken.
+
+**Lesson reinforced a fourth time:** this review, like the second and third, found gaps specifically
+in a *fix commit* written in response to the prior review — not new symptoms of the original bug,
+but a fix that was directionally correct yet didn't fully close its own stated problem (exception
+safety wrapped one throw site but not an adjacent one) or introduced a new, narrower variant of a
+problem it had just fixed on a different axis (`MEDIA-148`'s cross-track coupling fix left the
+same-track-reselect case unfixed). Four rounds in, the pattern holds: verify every fix commit as
+skeptically as the code it was responding to, and check whether a fix's own stated scope ("switching
+tracks") was quietly narrower than the bug's real scope ("any call to this setter, including a
+no-op one").
 
 ## 2. Correction to Phase 0's own build-verification record
 
