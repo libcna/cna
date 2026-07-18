@@ -4,17 +4,17 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-166`, Phases 0-13); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-170`, Phases 0-14); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 166/166 tasks checked off across 13 phases
+## 1. Status (2026-07-18) — 170/170 tasks checked off across 14 phases
 
-**Deliberately not calling this "complete."** Six separate external adversarial reviews landed on
-this plan the same day (Phase 8, 9, 10, 11, 12, and 13 below), and every single one found real,
-specific, file-and-line-cited defects that a clean build and passing targeted tests did not surface
-— including in the fix commits written *in response to* the previous review. Read this status as
-"all currently-known findings are fixed, full regression is green" rather than "nothing is left to
-find." Any future review of this code should get the same independent, skeptical treatment the last
-six did — see §1f's closing lesson.
+**Deliberately not calling this "complete."** Seven separate external adversarial reviews landed on
+this plan the same day (Phase 8 through 14 below), and every single one found real, specific,
+file-and-line-cited defects that a clean build and passing targeted tests did not surface — including
+in the fix commits written *in response to* the previous review. Read this status as "all
+currently-known findings are fixed, full regression is green" rather than "nothing is left to find."
+Any future review of this code should get the same independent, skeptical treatment the last seven
+did — see §1g's closing lesson.
 
 **Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
 this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
@@ -618,6 +618,46 @@ wrinkle is finding #3: a commit message asserted a documentation correction that
 never made. **A commit message's own claims about what changed are not proof — verify the diff
 itself, especially for claims like "corrected the text" or "fixed the docs," which are easy to
 believe without opening the file.**
+
+## 1g. Phase 14 — seventh external review pass (2026-07-18, same day as Phase 8-13)
+
+A *seventh* external review, this time of the Phase 13 fix commit (`94892fb2`), confirmed the
+transactional audio-switch fix (`MEDIA-162`) and the audio EAGAIN retry (`MEDIA-164`) fully sound,
+then found three more real defects — one a genuine robustness gap in a just-landed fix, two pure
+documentation errors introduced by the immediately preceding round's own correction work:
+
+1. **`SeekToStart()`'s resampler-delay drain loop still couldn't guarantee a clean reset**
+   (`MEDIA-167`) — `MEDIA-163`'s bounded loop was real progress but could still exit via its own
+   8-iteration bound or a `swr_convert()` error with delay left unconfirmed-drained, and didn't
+   distinguish a genuine negative error from "nothing more produced." Fixed by discarding the whole
+   approach: `SeekToStart()` now `swr_free()`s the resampler and rebuilds a fresh one via
+   `CreateResampler()` — a new `SwrContext` has zero delay by construction, sidestepping the
+   draining question entirely.
+2. **`MEDIA-165`'s own correction of `MEDIA-38`'s text introduced a new factual error**
+   (`MEDIA-168`) — it claimed `Open()`-time allocation null-checks "do throw," but every one of them
+   (video codec context, audio codec context, `frame_`/`pkt_`) actually gracefully `return false`,
+   matching `Open()`'s own non-throwing contract. The one genuine throw in this family is
+   `ProcessAudioPacket()`'s decode-time `av_frame_alloc()`, a different call entirely. Fixed by
+   editing `MEDIA-38`'s correction paragraph again, in place, verified line-by-line against the
+   actual code this time.
+3. **`HasAudio()`'s doc comment went stale the moment `MEDIA-162` landed** (`MEDIA-169`) — it
+   described a resampler-failure scenario ("inside `SetupResampler()`" during initial setup) that
+   Phase 13's transactional rewrite had already made impossible, referencing a function name that no
+   longer existed. Fixed by rewriting the comment to describe the real, current divergence path
+   (`SeekToStart()`'s resampler recreation, introduced in this very phase by `MEDIA-167`).
+
+Full-suite regression after Phase 14: **4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail. No new tests added
+(`MEDIA-167` is covered by the existing real-playback `LoopedVideoKeepsPlayingPastItsDuration` test;
+the other two fixes are doc-only).
+
+**Lesson reinforced a seventh time, with a new wrinkle:** two of three findings this round were
+*documentation errors introduced by the previous round's own correction commit* — not gaps in the
+code, but factual mistakes made while writing prose ABOUT the code, while trying to fix a different
+documentation problem. **Writing a correction is not exempt from the same verify-against-the-actual-
+code discipline as writing the original code — a paragraph explaining "here's what the code actually
+does" needs the same line-by-line check as the code itself, especially right after being told the
+previous version of that exact paragraph was wrong.**
 
 ## 2. Correction to Phase 0's own build-verification record
 

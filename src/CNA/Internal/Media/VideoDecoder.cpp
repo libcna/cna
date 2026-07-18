@@ -188,24 +188,24 @@ namespace CNA::Internal::Media
             // SwrContext keeps its own internal delay buffer, separate from pendingAudio_ -- any
             // samples still held there from before the seek would otherwise surface intermixed
             // with the first freshly-decoded post-seek audio, an audible discontinuity artifact.
-            // Discarded (not kept, unlike MEDIA-147's EOF flush) because a seek is a genuine
-            // timeline discontinuity -- there is no "before" audio worth preserving across it.
-            // Loops until swr_get_delay() reports nothing left (rather than trusting a single
-            // fixed-size call to fully empty it in one shot) and checks swr_convert()'s own return
-            // each iteration, stopping on either a genuine error or "nothing more was produced" --
-            // matching this file's own MEDIA-39 standard of checking every swr_convert() call
-            // rather than assuming a best-effort discard can't also be a symptom of a real problem
-            // (found by external code review, plan_media.md MEDIA-163). Bounded to guard against a
-            // pathological non-terminating drain rather than looping forever.
-            for (int guard = 0; guard < 8; ++guard)
-            {
-                int delaySamples = static_cast<int>(swr_get_delay(swrCtx_, audioCtx_->sample_rate));
-                if (delaySamples <= 0) break;
-                std::vector<float> discard(static_cast<std::size_t>(delaySamples) * channels_);
-                uint8_t* outPtr = reinterpret_cast<uint8_t*>(discard.data());
-                int converted = swr_convert(swrCtx_, &outPtr, delaySamples, nullptr, 0);
-                if (converted <= 0) break;
-            }
+            // MEDIA-163's own attempt at this (a bounded manual drain loop) still couldn't
+            // *guarantee* the delay reached zero -- it could exit via its own iteration bound or a
+            // swr_convert() error with real delay left unconfirmed-drained, and silently discarded
+            // a genuine negative return without distinguishing it from "nothing more produced"
+            // (found by external code review, plan_media.md MEDIA-167). Discarding the whole
+            // resampler and building a fresh one via the same CreateResampler() every other
+            // audio-open path already uses sidesteps the question entirely -- a brand-new
+            // SwrContext has zero internal delay by construction, no draining required.
+            swr_free(&swrCtx_);
+            swrCtx_ = CreateResampler(audioCtx_);
+            // A recreation failure here is a genuine (if very unlikely) degradation -- the same
+            // codec context that already built a working resampler once fails to do so again.
+            // Left as swrCtx_ == nullptr rather than thrown: SeekToStart() has no throwing
+            // contract anywhere else, is called from VideoPlayer::GetTexture()'s isLooped_ branch
+            // with no surrounding try/catch, and HasAudio() (MEDIA-160) already correctly reports
+            // "no audio" for a null swrCtx_ -- matching this file's existing graceful
+            // audio-unavailable degradation pattern rather than introducing a new throw path a
+            // non-throwing caller isn't prepared for.
         }
 
         // A video packet retained by an in-progress EAGAIN retry (havePendingVideoPacket_) refers

@@ -417,17 +417,25 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   clear, documented C++ exception instead of risking a null dereference." *Accept (original):* "a
   fault-injection test throws cleanly instead of crashing; ASan-clean."
   **Correction (Phase 12, `MEDIA-160`/`MEDIA-162`, found by external code review, `plan_media.md`
-  `MEDIA-165`): the "throw" wording above was never actually implemented, and this checkbox should
-  not have been left claiming it was.** `avcodec_alloc_context3()`/`AllocAndConfigureCodecContext()`
-  null-checks ARE real and do throw where a null dereference was otherwise possible (`Open()`'s
-  `frame_`/`pkt_` allocation check, `NextFrame()`'s decode-error throws). But
+  `MEDIA-165`; this paragraph itself corrected again in Phase 13→14, `MEDIA-168`, after a second
+  external review caught it repeating a *different* factual error): the "throw" wording above was
+  never actually implemented, and this checkbox should not have been left claiming it was.**
+  `avcodec_alloc_context3()`/`AllocAndConfigureCodecContext()` null-checks are real, but -- like
+  every other allocation-failure path inside `Open()` (the video codec context, `frame_`/`pkt_`) --
+  they gracefully `return false` (`Open()`'s own established, non-throwing `bool` contract), not
+  throw; an earlier version of this very correction paragraph incorrectly claimed they "do throw,"
+  which was itself wrong (found by external code review, `plan_media.md` `MEDIA-168`). The one place
+  in this general family that genuinely does throw is `ProcessAudioPacket()`'s own
+  `av_frame_alloc()` for the per-packet decode frame -- a *decode-time* allocation inside a function
+  whose contract (like `NextFrame()`'s) already allows throwing, unlike `Open()`-time allocations.
   `swr_alloc_set_opts2()`/`swr_init()` failure specifically was deliberately changed to graceful
   degradation instead of a throw (see `MEDIA-160`'s own reasoning: `Open()`'s established
   non-throwing `bool` contract, relied on unwrapped by dozens of call sites, shouldn't be broken for
   one failure mode; a throw immediately caught back into the same degrade-to-"no audio" behavior
-  would be a no-op complication). This is the actual, correct fix for this specific failure mode —
-  the *original* Accept criterion's "throw a clear exception" wording was simply wrong for this case
-  and is retracted here, not merely left unmet.
+  would be a no-op complication) -- consistent with, not an exception to, how every other
+  `Open()`-time allocation failure in this function already behaves. This is the actual, correct fix
+  for this specific failure mode — the *original* Accept criterion's "throw a clear exception"
+  wording was simply wrong for this case and is retracted here, not merely left unmet.
   *Accept (actual, current):* `HasAudio()` requires both `audioCtx_` and `swrCtx_` (`MEDIA-160`);
   `OpenAudioStreamByIndex()`/`Open()`'s audio setup both build+verify the resampler before
   committing to using that audio track at all, so a resampler failure never leaves a half-broken
@@ -1630,6 +1638,83 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   Gyroscope) -- 0 new tests added this phase (all four fixes verified by code review + full-suite
   non-regression, per each task's own Accept note above), zero pre-existing tests broken. Grepped in
   full (`grep -c FAILED` on the complete log, not a truncated tail).
+
+### Phase 14 — Seventh external review pass (2026-07-18, same day as Phase 8-13)
+
+> Applying MEDIA-126's own convention a seventh time. A seventh external adversarial review of
+> commit `94892fb2` (Phase 13's own fix commit) confirmed the transactional audio-switch fix
+> (`MEDIA-162`) and the audio EAGAIN retry (`MEDIA-164`) fully sound, then found `MEDIA-163`'s
+> resampler-discard loop still didn't *guarantee* a clean reset, `MEDIA-38`'s just-corrected text
+> (`MEDIA-165`) contained its own new factual error, and `HasAudio()`'s doc comment had gone stale
+> the moment `MEDIA-162` landed. Every claim independently re-derived from the actual code before
+> any fix was written.
+
+- [x] **MEDIA-167 — Replace `SeekToStart()`'s manual resampler-delay drain loop with a full
+  resampler recreation.** `MEDIA-163`'s bounded drain loop was a real improvement over `MEDIA-159`'s
+  original single unchecked call, but still couldn't *guarantee* the delay reached zero: it could
+  exit via its own 8-iteration bound or a `swr_convert()` error with real delay left
+  unconfirmed-drained, and treated a genuine negative return identically to "nothing more
+  produced" rather than distinguishing them -- itself inconsistent with the very `MEDIA-39`
+  standard it was written to satisfy.
+  *Fix:* discard the drain loop entirely. `SeekToStart()` now `swr_free()`s the existing `swrCtx_`
+  and rebuilds a fresh one via the same `CreateResampler()` every other audio-open path already
+  uses (`MEDIA-162`) -- a brand-new `SwrContext` has zero internal delay by construction, so there
+  is no draining question left to answer. A recreation failure (extremely unlikely -- the same
+  codec context already built a working resampler once) is left as `swrCtx_ == nullptr`, which
+  `HasAudio()` (`MEDIA-160`) already correctly reports as "no audio," rather than thrown --
+  `SeekToStart()` has no throwing contract anywhere else and is called from
+  `VideoPlayer::GetTexture()`'s `isLooped_` branch with no surrounding `try`/`catch`.
+  *Accept:* the existing `LoopedVideoKeepsPlayingPastItsDuration` test (real looped playback,
+  genuinely exercising `SeekToStart()` with live audio via `VideoPlayer`) and
+  `SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek` both continue to pass unchanged,
+  confirming the simpler recreation-based approach doesn't regress real seek/loop behavior. No
+  dedicated test forces a genuine resampler-recreation failure at seek time, for the same
+  near-unreachable-failure-mode reason already documented at `MEDIA-94`/`MEDIA-160`/`MEDIA-162`.
+
+- [x] **MEDIA-168 — Fix a factual error `MEDIA-165`'s own correction paragraph introduced into
+  `MEDIA-38`'s text.** `MEDIA-165`'s in-place correction of `MEDIA-38` claimed
+  `AllocAndConfigureCodecContext()`'s null-checks (and `Open()`'s `frame_`/`pkt_` allocation check)
+  "do throw" -- factually wrong. Every `Open()`-time allocation failure in this file (the video
+  codec context at `VideoDecoder.cpp:60`, the audio codec context, `frame_`/`pkt_` at
+  `VideoDecoder.cpp:126`) gracefully `return false`/call `Close()`, matching `Open()`'s own
+  established non-throwing `bool` contract -- none of them throw. The one place that genuinely does
+  throw for an allocation failure is `ProcessAudioPacket()`'s `av_frame_alloc()` for the per-packet
+  decode frame, a *decode-time* allocation inside a function whose contract (like `NextFrame()`'s)
+  already permits throwing, which is a different call entirely from the ones `MEDIA-165`'s text
+  cited.
+  *Fix:* `MEDIA-38`'s correction paragraph edited again in place (not merely re-appended elsewhere,
+  matching this plan's own established precedent for in-place task-note correction) to accurately
+  describe every `Open()`-time allocation failure as gracefully degrading, and to correctly
+  attribute the one genuine throw in this family to `ProcessAudioPacket()`'s decode-time frame
+  allocation instead.
+  *Accept:* verified by re-reading `Open()`/`AllocAndConfigureCodecContext()`/`ProcessAudioPacket()`
+  line-by-line against the corrected text before committing (the same discipline `MEDIA-165` itself
+  was supposed to have applied but didn't).
+
+- [x] **MEDIA-169 — Update `HasAudio()`'s stale doc comment to describe the current, real
+  divergence path.** `MEDIA-160`'s original comment described `audioCtx_` staying non-null after a
+  resampler failure "inside `SetupResampler()`" during initial setup -- a scenario `MEDIA-162`'s
+  Phase 13 transactional rewrite had already closed off entirely (both `Open()` and
+  `OpenAudioStreamByIndex()` now free `audioCtx_`/never touch it at all on a resampler failure),
+  and which referenced a function name (`SetupResampler()`) that no longer exists after `MEDIA-162`
+  renamed it to `CreateResampler()`. The comment survived, unedited, describing an
+  already-impossible state instead of the real one `MEDIA-167` (this same phase) just introduced:
+  a resampler-recreation failure inside `SeekToStart()`.
+  *Fix:* comment rewritten to describe the actual current divergence path (`SeekToStart()`'s
+  resampler recreation, `MEDIA-167`) and to explicitly note that the two `Open()`-time paths can no
+  longer diverge at all post-`MEDIA-162`, so `HasAudio()`'s dual-check remains meaningful for a
+  different, real reason than the one originally documented.
+  *Accept:* doc-only change; verified by re-reading `Open()`/`OpenAudioStreamByIndex()`/
+  `SeekToStart()`'s current (post-`MEDIA-162`/`MEDIA-167`) code to confirm the new comment's claims
+  are accurate, the same verification `MEDIA-168` applied to its own correction.
+
+- [x] **MEDIA-170 — Full-suite regression run.** Confirm zero regressions from this seventh
+  remediation pass, grepped in full (not a truncated tail).
+  *Verified:* 4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope) -- 0 new tests added this phase (the `SeekToStart()` rewrite is covered by existing
+  real-playback tests per `MEDIA-167`'s own Accept note; the other two fixes are doc-only), zero
+  pre-existing tests broken. Grepped in full (`grep -c FAILED` on the complete log, not a truncated
+  tail).
 
 ---
 

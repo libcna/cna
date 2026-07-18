@@ -42,12 +42,20 @@ namespace CNA::Internal::Media
         [[nodiscard]] int  GetHeight()       const { return height_; }
         [[nodiscard]] float GetFPS()         const { return fps_; }
         [[nodiscard]] double GetDuration()   const { return durationSec_; }
-        // Requires a working resampler too, not just an opened audio codec -- if
-        // swr_alloc_set_opts2()/swr_init() failed inside SetupResampler(), audioCtx_ stays
-        // non-null (the codec itself opened fine) but ProcessAudioPacket() silently discards every
-        // decoded audio frame (it early-returns without swrCtx_), so a caller checking only
-        // audioCtx_ would believe a video has playable audio that in fact never produces a single
-        // sample (found by external code review, plan_media.md MEDIA-160).
+        // Requires a working resampler too, not just an opened audio codec -- ProcessAudioPacket()
+        // silently discards every decoded audio frame without a working swrCtx_ (it early-returns),
+        // so a caller checking only audioCtx_ would believe a video has playable audio that in fact
+        // never produces a single sample (found by external code review, plan_media.md MEDIA-160).
+        // Open()/OpenAudioStreamByIndex() both build+verify the resampler transactionally before
+        // ever committing to using a track at all (MEDIA-162), so audioCtx_ and swrCtx_ can no
+        // longer diverge through either of those paths -- the one remaining way they can is a
+        // resampler-recreation failure inside SeekToStart() (MEDIA-167), which frees the old
+        // resampler and rebuilds a fresh one on every seek; if that rebuild fails, audioCtx_ stays
+        // valid (the codec itself is untouched) while swrCtx_ is left null, correctly reported here
+        // as "no audio" from that point on rather than silently believed still available (found by
+        // external code review, plan_media.md MEDIA-168 -- this comment previously described an
+        // already-superseded SetupResampler()-during-initial-setup scenario Phase 13's MEDIA-162 fix
+        // had already closed off, instead of the real, current path).
         [[nodiscard]] bool HasAudio()        const { return audioCtx_ != nullptr && swrCtx_ != nullptr; }
         [[nodiscard]] int GetSampleRate()    const { return sampleRate_; }
         [[nodiscard]] int GetChannels()      const { return channels_; }
