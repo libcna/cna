@@ -24,6 +24,7 @@
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
+#include "SoundEffectTestAccess.hpp"
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
@@ -35,6 +36,7 @@ using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
+using Microsoft::Xna::Framework::Audio::SoundEffectTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
 using Microsoft::Xna::Framework::Vector3;
 
@@ -2060,4 +2062,61 @@ TEST_F(SoundEffectInstanceTest, BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTh
            "started playing -- it must play exactly once, then only the loop region repeats";
     EXPECT_GT(ctx.totalFrames.load(), static_cast<long long>(loopFrames) * 5)
         << "expected several real wraps of the loop region within the observation window";
+}
+
+// AUD-15-005: stress test creating/playing/destroying thousands of short-lived instances from a
+// shared SoundEffect, checking for leaks or unbounded internal registry growth
+// (SoundEffect::Impl::instances, the per-effect live-instance list used for the Dispose cascade,
+// T-3G) -- not just "does it crash," but "does the bookkeeping actually stay bounded." Real games
+// commonly create-play-discard many short SoundEffectInstances per frame (footsteps, impacts,
+// UI blips) from a small set of shared SoundEffect assets, exactly this pattern.
+//
+// This test was originally written using only indirect signals (wall-clock timing over 5000
+// iterations, plus "does one more instance still work afterwards"). Verified by deliberately
+// breaking SoundEffect::UnregisterInstance() into a no-op and re-running: the test still PASSED
+// (12ms, no crash) with the registry silently leaking 5000 stale pointers. Root cause: 5000 plain
+// vector push_backs are trivially fast even while "leaking" (no super-linear blowup at this
+// scale), and each loop iteration's SoundEffectInstance reuses the same stack slot, so a stale
+// pointer left in the registry doesn't reliably fault when the registry is later walked -- unlike
+// a heap-based use-after-free, this is not something ASan reliably catches either. Replaced with a
+// direct introspection check (SoundEffectTestAccess::GetLiveInstanceCount) that asserts the
+// registry size directly, both mid-stress (bounded, not accumulating without limit) and at zero
+// once every instance has gone out of scope -- re-verified to genuinely fail against the same
+// broken UnregisterInstance() probe before this fix was accepted.
+TEST_F(SoundEffectInstanceTest, StressCreatePlayDisposeThousandsOfShortLivedInstancesFromSharedEffect)
+{
+    REQUIRE_DEVICE();
+
+    ASSERT_EQ(SoundEffectTestAccess::GetLiveInstanceCount(*effect_), 0u)
+        << "registry should start empty before the stress loop";
+
+    constexpr int kIterations = 5000;
+
+    for (int i = 0; i < kIterations; ++i)
+    {
+        SoundEffectInstance inst = instance();
+        inst.Play();
+        // Deliberately destroyed (via scope exit) without an explicit Stop()/Dispose() call --
+        // the destructor's own Dispose() cascade must handle a still-"playing" instance cleanly,
+        // exactly like a real game dropping a fire-and-forget sound's instance handle.
+
+        // Each instance is registered on construction and must be unregistered again by the time
+        // its scope exits -- the registry must never accumulate more than the single in-flight
+        // instance from this iteration. A leaking UnregisterInstance() would show up here as a
+        // monotonically growing count (1, 2, 3, ... 5000), not a bounded one.
+        ASSERT_LE(SoundEffectTestAccess::GetLiveInstanceCount(*effect_), 1u)
+            << "live-instance registry grew unboundedly at iteration " << i
+            << " -- UnregisterInstance() is not removing disposed instances";
+    }
+
+    // After all 5000 instances have gone out of scope, the registry must be back to exactly zero.
+    EXPECT_EQ(SoundEffectTestAccess::GetLiveInstanceCount(*effect_), 0u)
+        << "live-instance registry did not shrink back to zero after all instances were destroyed";
+
+    // The shared SoundEffect itself must still work correctly after all that churn -- proving
+    // Impl::instances wasn't left corrupted (e.g. containing dangling pointers from improperly
+    // unregistered instances) by the high-churn create/destroy cycle.
+    SoundEffectInstance finalInstance = instance();
+    finalInstance.Play();
+    EXPECT_EQ(finalInstance.getStateProperty(), SoundState::Playing);
 }

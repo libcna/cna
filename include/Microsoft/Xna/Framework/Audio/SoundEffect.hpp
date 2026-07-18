@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <istream>
 #include <memory>
 #include <string>
@@ -20,6 +21,7 @@ namespace Microsoft::Xna::Framework::Audio
     class SoundEffect final : public System::Object, public System::IDisposable
     {
         friend class SoundEffectInstance;
+        NOXNA friend struct SoundEffectTestAccess;
 
     private:
         class Impl;
@@ -48,6 +50,12 @@ namespace Microsoft::Xna::Framework::Audio
         // to unregister itself long after the original SoundEffect object is gone.
         static void RegisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
         static void UnregisterInstance(const std::shared_ptr<void>& keepAlive, SoundEffectInstance* instance);
+
+        // AUD-15-005: test-only introspection into Impl::instances' real size, so a stress test
+        // can directly verify the live-instance registry actually shrinks back down instead of
+        // only inferring it indirectly (e.g. via wall-clock timing, which turned out not to
+        // reliably catch a deliberately-broken UnregisterInstance() at a few thousand entries).
+        [[nodiscard]] std::size_t GetLiveInstanceCountInternal() const;
 
     public:
         /**

@@ -52,6 +52,11 @@ namespace Microsoft::Xna::Framework::Audio
         v.erase(std::remove(v.begin(), v.end(), instance), v.end());
     }
 
+    std::size_t SoundEffect::GetLiveInstanceCountInternal() const
+    {
+        return impl_ ? impl_->instances.size() : 0;
+    }
+
     // --- static members ---
 
     float SoundEffect::MasterVolume_   = 1.0f;
