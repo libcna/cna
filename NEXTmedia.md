@@ -4,9 +4,19 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-173`, Phases 0-15); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-215`, Phases 0-16); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 173/173 tasks checked off across 15 phases
+## 1. Status (2026-07-18) — 173 done (Phases 0-15), **42 OPEN** (Phase 16)
+
+> **Phase 16 is open work, not a review of a fix commit.** A full **XNA 4.0 API-parity audit**
+> (against the original Microsoft reference assemblies, *not* FNA) found that while all 24 public
+> type names are present, there are real member/behavior/platform gaps: `Song` is missing
+> `Album`/`Artist`/`Genre`/`ToString()` entirely, visualization is a pure stub, `TrackNumber` is
+> parsed then dropped, and `Video`/`VideoPlayer` are a **link error** (not a clean failure) on
+> Windows/Android/Emscripten. 42 tasks (`MEDIA-174`–`MEDIA-215`) are written up in `plan_media.md`
+> Phase 16, grouped A-H, none started. **Root cause worth remembering: this plan named FNA as the
+> authoritative reference, but FNA's own `Song.cs` omits those XNA members** — so auditing against
+> FNA structurally could not find them. See `MEDIA-180`/`MEDIA-213`.
 
 **Deliberately not calling this "complete."** Eight separate external adversarial reviews landed on
 this plan the same day (Phase 8 through 15 below), and every single one found real, specific,

@@ -1776,6 +1776,449 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   pre-existing tests broken. Grepped in full (`grep -c FAILED` on the complete log, not a truncated
   tail).
 
+### Phase 16 — Full XNA 4.0 API-parity audit remediation (2026-07-18)
+
+> **Different in kind from Phases 8-15.** Those were each a review of the *previous phase's own fix
+> commit*. This phase comes from a **full API-parity audit of CNA Media against the original
+> Microsoft XNA 4.0 reference assemblies** (`/rv/data/library/github.com/borgesdan/xn65/references/
+> Windows/Microsoft.Xna.Framework.xml`), not against FNA. That distinction is the root cause of the
+> largest finding here: `plan_media.md` §1 named **FNA** as the authoritative reference, but FNA's
+> own `src/Media/Song.cs` *omits XNA members* (`Album`/`Artist`/`Genre`/`ToString`). Auditing
+> against FNA therefore could not surface an entire class of gap — CNA faithfully reproduced FNA's
+> own incompleteness. **Where FNA and the XNA 4.0 reference assemblies disagree about the existence
+> of a public member, the XNA reference wins** (`CLAUDE.md`'s own rule: "MUST strictly adhere to the
+> XNA 4.0 API specification"; FNA is authoritative for *behavior*, not for *API completeness*).
+>
+> **Audit result:** 24/24 public type names present (full type-level parity). Gaps are at the
+> member, behavior, and platform level.
+>
+> **Project owner decisions taken for this phase (2026-07-18, explicit):**
+> 1. **Visualization → full real implementation.** `Mix_SetPostMix` PCM tap + a from-scratch radix-2
+>    FFT in `CNA::Internal::Media`. Both `Samples` and `Frequencies` must carry real data. No new
+>    third-party dependency.
+> 2. **Video → real FFmpeg on ALL platforms, no `NotSupportedException` stubs.** Windows, Android
+>    and Emscripten must genuinely build and run `Video`/`VideoPlayer`/`VideoDecoder`. The
+>    stub-fallback option was explicitly rejected. See `MEDIA-198`'s escalation rule for what to do
+>    if a platform proves genuinely infeasible — **do not silently fall back to stubs.**
+> 3. **`Song::Album`/`Artist`/`Genre` → `nullptr` for non-library songs**, non-owning raw
+>    back-pointers set by `MediaLibrary`, mirroring the existing non-owning `Album::songs_` pattern.
+> 4. **Full compatibility long tail in scope:** additional audio formats, embedded album art, real
+>    scaled thumbnails, and real `IsRated`/`Rating` parsing.
+>
+> **Nothing in this phase is implemented yet — it defines the work only.** Tasks are grouped A-H;
+> groups are independently shippable and can be worked in parallel except where a task names a
+> dependency.
+
+#### Group A — `Song`'s missing XNA members (`Album`, `Artist`, `Genre`, `ToString`)
+
+> **Root finding.** The XNA 4.0 reference documents `Song.Album`, `Song.Artist`, `Song.Genre` and
+> `Song.ToString()`. CNA's `Song` (`include/Microsoft/Xna/Framework/Media/Song.hpp:166`) stores only
+> `name_`, `duration_`, `playCount_`, `isDisposed_`, `handle_` — none of the three relationships and
+> no `ToString()`. FNA omits them too, which is why every prior pass missed this.
+
+- [ ] **MEDIA-174 — Add `Song::getAlbumProperty()`/`getArtistProperty()`/`getGenreProperty()`.**
+  Declare in `Song.hpp` returning `Album*` / `Artist*` / `Genre*` (raw, **non-owning**, per owner
+  decision 3). Add matching private members `Album* album_ = nullptr; Artist* artist_ = nullptr;
+  Genre* genre_ = nullptr;`. Use forward declarations (`class Album; class Artist; class Genre;`) in
+  `Song.hpp` to avoid a circular include — `Album.hpp` already forward-declares `SongCollection` for
+  exactly this reason, follow that established pattern. These are **XNA members, not `NOXNA`** — do
+  not mark them. Full Doxygen per `CLAUDE.md`, `@brief` text taken from the XNA reference
+  (`"Gets the Album on which the Song appears."`, `"Gets the Artist of the Song."`,
+  `"Gets the Genre of the Song."`).
+  *Accept:* headers compile with no circular-include error; all three getters exist with correct
+  XNA names and return types; a standalone `Song s("file.ogg")` returns `nullptr` from all three.
+
+- [ ] **MEDIA-175 — Add a `NOXNA` setter path for the back-references, friend-scoped to
+  `MediaLibrary`.** `MediaLibrary` must be able to set the three pointers while building the object
+  graph, but they are read-only in the XNA API (get-only properties). Do **not** add public setters
+  — that would be a non-XNA public API addition. Use the project's existing friend pattern
+  (`NOXNA friend class MediaLibrary;` in `Song`, matching how `Video::parent_` is already reached by
+  `VideoPlayer`). Document the choice in the header.
+  *Accept:* `MediaLibrary` can set the pointers; no public setter exists on `Song`; a compile-time
+  check (or a review note in the task report) confirms no other translation unit can set them.
+
+- [ ] **MEDIA-176 — Implement `Song::ToString()`.** XNA reference: *"Returns a String representation
+  of the Song."* XNA's actual implementation returns the song's `Name`. Verify against the reference
+  assembly's own behavior if a decompiled body is available in
+  `/rv/data/library/github.com/borgesdan/xn65/`; if not, implement as `return name_;` and record the
+  inference explicitly in the task report (do **not** claim it was verified if it wasn't — see the
+  `MEDIA-171` lesson). Must be `override` if `System::Object` declares a virtual `ToString()`; check
+  first and match the project-wide convention used by e.g. `Album`/`Artist`.
+  *Accept:* `ToString()` exists, is tested for the expected format per `CLAUDE.md`'s testing rules,
+  and its derivation (verified vs. inferred) is stated honestly in the commit message.
+
+- [ ] **MEDIA-177 — Wire the back-pointers in `MediaLibrary`'s graph construction.**
+  `src/Microsoft/Xna/Framework/Media/MediaLibrary.cpp:80` builds every `Song` then groups them into
+  genre/artist/(artist,album) buckets. After the `Album`/`Artist`/`Genre` objects are constructed,
+  walk each one's member songs and set the reverse pointer. Ordering matters: the forward grouping
+  must complete first so the owning objects exist and their addresses are stable — confirm the
+  containers holding them (`ownedAlbums_` etc.) do not reallocate afterwards, or set the pointers in
+  a dedicated final pass after all grouping is done. **A `std::vector` of owned objects that grows
+  later will invalidate every pointer already handed out** — this is the single highest-risk detail
+  in Group A; verify the container/ownership strategy explicitly.
+  *Accept:* for a real scanned library, `lib.getSongsProperty()[i]->getAlbumProperty()` returns the
+  same `Album*` that `lib.getAlbumsProperty()` exposes, and the round-trip
+  `album->getSongsProperty()` contains that same song — pointer identity, not just equal names.
+
+- [ ] **MEDIA-178 — Real reverse-edge tests.**
+  `tests/Microsoft/Xna/Framework/Media/MediaLibraryTests.cpp:82` is labelled a *"full cross-class
+  object-graph integration audit"* but only checks forward edges (Artist/Album/Genre → Song); it
+  could not check reverse edges because they did not exist. Extend it (or add a sibling test) to
+  assert every reverse edge by **pointer identity** for a real scanned fixture library, plus
+  `nullptr` for a standalone `Song`.
+  *Accept:* test fails if any reverse pointer is null/mismatched for a library song. **Verify
+  falsifiable by mutation** (per `MEDIA-171`'s established practice): temporarily skip the
+  back-pointer assignment in `MediaLibrary` and confirm the new assertions actually fail.
+
+- [ ] **MEDIA-179 — Correct the "full object-graph audit" claim wherever it appears.** The label at
+  `MediaLibraryTests.cpp:82` (and any matching `[x]` task note or `AUDIT.md` row claiming complete
+  cross-class coverage) overstated what was covered. Correct those claims in place, following
+  `MEDIA-165`/`MEDIA-168`'s precedent for in-place correction rather than appending a note
+  elsewhere.
+  *Accept:* no remaining claim of "full" object-graph coverage predates the reverse edges actually
+  existing.
+
+- [ ] **MEDIA-180 — Update `AUDIT.md`/`CHECKLIST.md` and this plan's own §1/§2 for the
+  FNA-vs-XNA-reference precedence rule.** Record explicitly that FNA is authoritative for *behavior*
+  but the XNA 4.0 reference assemblies are authoritative for *API surface*, and that FNA's `Song`
+  omissions are a known FNA gap CNA deliberately does **not** reproduce. This is the systemic fix —
+  without it, the same class of gap can recur in any future namespace ported by reading FNA alone.
+  *Accept:* the rule is written down somewhere a future porting session will actually read
+  (`CLAUDE.md` is owner-controlled; `CHECKLIST.md` is the right home) and cross-referenced from this
+  plan.
+
+#### Group B — `Song` metadata that is hardcoded or silently dropped
+
+- [ ] **MEDIA-181 — Pass `TrackNumber` from the index into `Song` (a real dropped-data bug).**
+  `src/CNA/Internal/Media/MediaLibraryIndex.cpp:109` genuinely parses and stores
+  `song.trackNumber = tags.trackNumber`, but `MediaLibrary.cpp:80` constructs `Song` with only
+  `(path, title)` or `(path, title, durationMs)` — the value is **parsed and then thrown away**, and
+  `Song::getTrackNumberProperty()` returns a hardcoded `0`. This is unfinished implementation, not
+  unavailable information. Add a `NOXNA` constructor overload (or a friend-scoped setter, matching
+  `MEDIA-175`'s decision) carrying the track number, and store it in a real `trackNumber_` member.
+  *Accept:* a fixture with a real track-number tag reports that number through
+  `Song::getTrackNumberProperty()` after a library scan. Test must use a fixture whose tag value is
+  independently confirmed (via `ffprobe`/the manifest) — **and must be mutation-verified**: with the
+  wiring removed, the test must fail.
+
+- [ ] **MEDIA-182 — Parse ID3v2 `POPM` (Popularimeter) into a real rating.** Extend
+  `CNA::Internal::Media::AudioTagParser` (`TryReadId3v2`) to read the `POPM` frame: email/identifier
+  string (null-terminated), one byte rating 0-255, then an optional play-count. Add
+  `int rating = 0; bool hasRating = false;` to the `AudioTags` struct
+  (`include/CNA/Internal/Media/AudioTagParser.hpp:12`).
+  **Scale conversion is the key detail:** XNA's `Song.Rating` is a 0-10 value; ID3v2 `POPM` is
+  0-255 where 0 means "unrated". Define and document the mapping (recommended: `0 → unrated`,
+  otherwise `round(popm * 10.0 / 255.0)` clamped to 1-10). Record the chosen mapping in
+  `CHECKLIST.md`'s deviation table, since XNA/FNA define no such conversion.
+  *Accept:* a fixture with a known `POPM` byte yields the documented 0-10 value; a file with no
+  `POPM` yields `hasRating == false`.
+
+- [ ] **MEDIA-183 — Parse the Vorbis-comment `RATING` field.** The Ogg/FLAC equivalent of `POPM`.
+  Convention is inconsistent in the wild (some writers use 0-100, some 0-5, some 0-10). Pick and
+  document one interpretation (recommended: treat as 0-100 and map to 0-10, since that is the most
+  common convention among taggers that write `RATING`), and note the ambiguity honestly in the
+  deviation table rather than pretending it is unambiguous.
+  *Accept:* a fixture with a known `RATING` comment maps to the documented 0-10 value.
+
+- [ ] **MEDIA-184 — Wire rating into `Song::getRatingProperty()`/`getIsRatedProperty()`.** Both are
+  currently hardcoded (`src/Microsoft/Xna/Framework/Media/Song.cpp:54`: `IsRated → false`,
+  `Rating → 0`). Carry the parsed values through `MediaLibraryIndex` → `MediaLibrary` → `Song` the
+  same way `MEDIA-181` does for track number. `IsRated` must mean "the user has rated this song",
+  i.e. a real rating tag was present — not merely "rating != 0".
+  *Accept:* a rated fixture reports `IsRated == true` and the correct 0-10 `Rating`; an unrated
+  fixture reports `false`/`0`. Mutation-verified.
+
+- [ ] **MEDIA-185 — Decide and document `Song::IsProtected` formally.** XNA: *"Gets a value that
+  indicates whether the song is DRM protected content."* CNA scans plain local files with no DRM
+  container support, so `false` is the *correct* answer for everything CNA can currently index — but
+  it is currently an undocumented hardcoded literal that reads like an unfinished stub. Either (a)
+  keep `false` and add a `CHECKLIST.md` deviation row explaining *why* it is correct rather than
+  unimplemented, or (b) if any indexable format can carry DRM (e.g. an `M4P`/FairPlay file
+  encountered by `MEDIA-186`'s format expansion), detect and report it honestly.
+  *Accept:* `IsProtected`'s value is justified in writing, not merely hardcoded. If (b) applies,
+  add the detection.
+
+#### Group C — Real visualization (owner decision 1)
+
+> `MediaPlayer::getIsVisualizationEnabledProperty()` returns hardcoded `false`
+> (`src/Microsoft/Xna/Framework/Media/MediaPlayer.cpp:154`), the setter is a no-op, and
+> `GetVisualizationData()` does nothing (`:273`). `tests/.../MediaPlayerTests.cpp:240` currently
+> *asserts the stub behavior*, i.e. it locks the gap in as expected behavior. `VisualizationData`
+> itself is already correct and complete: `Size = 256`, public `freq`/`samp` arrays, and
+> `getFrequenciesProperty()`/`getSamplesProperty()` matching the XNA reference exactly.
+
+- [ ] **MEDIA-186 — Add `CNA::Internal::Media::VisualizationCapture`: a lock-free PCM ring buffer
+  fed by `Mix_SetPostMix`.** New `include/CNA/Internal/Media/VisualizationCapture.hpp` + `.cpp`.
+  `Mix_SetPostMix(callback, userdata)` delivers the final mixed stream. **Critical constraint: the
+  callback runs on SDL's audio thread**, so it must be real-time safe — no allocation, no locking,
+  no exceptions. Use a fixed-size buffer with atomic indices (single-producer/single-consumer).
+  Handle the mixer's actual output format: query via `Mix_QuerySpec` (format may be
+  `AUDIO_S16`/`AUDIO_F32`, 1 or 2 channels) and convert to mono float in [-1, 1] for the buffer.
+  *Accept:* a real playing song produces non-zero, bounded samples in the ring buffer; ThreadSanitizer
+  (or documented reasoning about the atomics) shows no data race between the audio and main threads.
+
+- [ ] **MEDIA-187 — Implement a from-scratch radix-2 FFT
+  (`CNA::Internal::Media::VisualizationFFT`).** No new dependency (owner decision 1). 512-point
+  real-input FFT producing 256 magnitude bins to fill `VisualizationData::Size`. Apply a Hann window
+  before the transform to reduce spectral leakage. Normalize magnitudes to a documented range —
+  XNA's own normalization is not specified in the reference, so **pick one, document it in
+  `CHECKLIST.md`, and do not claim XNA-exact parity for the magnitude scale** (recommended: divide
+  by `N/2` so a full-scale sine maps to ~1.0).
+  *Accept:* unit tests with synthetic inputs — a pure sine at a known frequency puts its peak in the
+  expected bin; DC input puts energy in bin 0; silence gives all zeros. These are deterministic and
+  need no audio device.
+
+- [ ] **MEDIA-188 — Make `IsVisualizationEnabled` a real, functional gate.** Setter must install
+  (`true`) or remove (`false`) the `Mix_SetPostMix` hook and reset the ring buffer; the getter must
+  return the real stored state. XNA semantics: visualization is off by default and must be enabled
+  before `GetVisualizationData` returns anything meaningful. Capture must be genuinely off (no
+  postmix callback installed at all) when disabled, so there is zero cost for games that never use
+  it.
+  *Accept:* getter round-trips the setter; with it `false`, no postmix callback is installed
+  (verifiable via a test-access accessor, following `VideoPlayerTestAccess`'s established pattern).
+
+- [ ] **MEDIA-189 — Implement `GetVisualizationData(VisualizationData&)` for real.** Fill
+  `data.samp` from the most recent 256 captured samples and `data.freq` from `MEDIA-187`'s FFT over
+  the current window. Define behavior when visualization is disabled or nothing is playing:
+  recommended is to leave the arrays zero-filled (matching `VisualizationData`'s
+  zero-initialized constructor) rather than throwing — document it.
+  *Accept:* while a real fixture song is playing with visualization enabled, at least one call
+  returns non-zero sample data AND non-zero frequency data.
+
+- [ ] **MEDIA-190 — Replace the stub-conserving test.**
+  `tests/Microsoft/Xna/Framework/Media/MediaPlayerTests.cpp:240` currently asserts the *broken*
+  behavior (always-false, never-filled) as if it were correct — the same "test locks in the gap"
+  antipattern `MEDIA-129` already fixed once elsewhere in this plan. Rewrite it to assert the real
+  behavior.
+  *Accept:* the old assertions are gone (not merely supplemented); the new test genuinely fails
+  against the pre-`MEDIA-189` implementation. **Mutation-verify this**, per `MEDIA-171`.
+
+- [ ] **MEDIA-191 — Handle the no-audio-device / `SOUND_ENABLED`-off case.** In a headless CI or a
+  no-`SOUND_ENABLED` build there is no mixer to hook. Visualization must degrade to
+  "enabled flag round-trips, data stays zero" without crashing or hanging, consistent with how the
+  rest of the Media stack already degrades. Note the existing project-wide caveat that
+  `SOUND_ENABLED` is currently defined in every build configuration (`MEDIA-135`), so the `#else`
+  branch remains untestable until a no-audio build variant exists — do not claim otherwise.
+  *Accept:* the visualization tests pass in the existing headless test environment.
+
+#### Group D — Real FFmpeg on every platform (owner decision 2)
+
+> `cmake/CnaLibrary.cmake:32` currently deletes `VideoDecoder.cpp`, `Video.cpp` and `VideoPlayer.cpp`
+> from the build whenever `CNA_FFMPEG_AVAILABLE` is off (set off for `MINGW`/`WIN32`/`EMSCRIPTEN`/
+> `ANDROID` at `:8`), while the public headers stay installed — so any game touching `Video` or
+> `VideoPlayer` on those platforms gets an **unresolved-symbol link error**, not a clean runtime
+> failure. `AudioDurationProbe::ProbeDurationMS` also unconditionally returns `0` there
+> (`src/CNA/Internal/Media/AudioDurationProbe.cpp:32`), silently zeroing every library
+> `Song`/`Album`/`Playlist` duration.
+>
+> **Owner explicitly rejected the `NotSupportedException`-stub approach.** The target is genuine
+> FFmpeg availability on all four currently-excluded configurations.
+
+- [ ] **MEDIA-192 — Windows (MSVC): acquire and link FFmpeg.** Highest-priority platform for XNA
+  parity. Evaluate and pick one acquisition strategy, then wire it: (a) `vcpkg` manifest mode
+  (`ffmpeg[avcodec,avformat,avutil,swresample]`), (b) a pinned prebuilt package (e.g. gyan.dev /
+  BtbN release) downloaded and cached by CMake like the existing pinned-`wgpu-native` pattern
+  already used for the WebGPU backend, or (c) `FetchContent` + a real FFmpeg build (slowest, most
+  reproducible). Record the decision and its trade-offs. Must respect the existing
+  `CNA_FFMPEG_ROOT`-style override convention for offline/reproducible builds if one exists.
+  *Accept:* a Windows build produces a `CNA` static library containing `VideoDecoder`/`Video`/
+  `VideoPlayer` symbols, and a Windows test run decodes a real fixture. **Note: this sandbox is
+  Linux-only and cannot verify a Windows build** — the task is not closeable from here; it needs a
+  real Windows toolchain. Do not mark it `[x]` on the basis of "the CMake looks right."
+
+- [ ] **MEDIA-193 — MinGW: same, or an explicit documented exclusion.** `cmake/CnaLibrary.cmake:8`
+  currently lumps `MINGW` in with the excluded set. FFmpeg is readily available under MSYS2
+  (`mingw-w64-x86_64-ffmpeg`), so this should be achievable; verify whether the existing exclusion
+  was a real limitation or an untested assumption carried forward.
+  *Accept:* MinGW builds with video support, or the exclusion is justified in writing with the
+  specific blocking reason.
+
+- [ ] **MEDIA-194 — Android: build/link FFmpeg via the NDK.** Requires per-ABI (`arm64-v8a`,
+  `armeabi-v7a`, `x86_64`) prebuilt `.so`/`.a` artifacts wired through the Android CMake toolchain.
+  Consider a documented minimal decoder set (`--disable-everything --enable-decoder=h264,aac,...`)
+  to keep APK size sane, and record which codecs the resulting build actually supports.
+  *Accept:* an Android build links, and the supported-codec list is documented (a real device/
+  emulator decode test if the project has any Android CI; otherwise state clearly that only the
+  build was verified).
+
+- [ ] **MEDIA-195 — Emscripten: build FFmpeg to WASM, or escalate.** **This is the highest-risk item
+  in the phase.** FFmpeg can be compiled to WASM (ffmpeg.wasm demonstrates it), but the cost is
+  substantial: large `.wasm` payload, threading/SIMD flags to reconcile with CNA's existing
+  Emscripten settings, and no filesystem in the browser (`avformat_open_input` on a path needs
+  MEMFS/fetch plumbing that CNA's `Video(fileName)` API assumes). Investigate first, then either
+  implement or **escalate to the project owner with concrete findings** — per the owner's "no silent
+  stubs" instruction, do not quietly reintroduce a `NotSupportedException` fallback here.
+  *Accept:* either a working Emscripten video build, or a written escalation stating exactly what
+  blocks it and what the realistic options are (with sizes/effort), for the owner to decide.
+
+- [ ] **MEDIA-196 — Remove the source-exclusion filter once platforms genuinely build.** Delete the
+  `list(FILTER CNA_SOURCES EXCLUDE ...)` block at `cmake/CnaLibrary.cmake:33` for every platform
+  that `MEDIA-192`-`195` actually fixed. **Blocked by those tasks** — removing the filter before a
+  platform really has FFmpeg converts a link error into a *configure/compile* error, which is worse.
+  *Accept:* no platform both installs the `Video`/`VideoPlayer` headers and omits their
+  implementations.
+
+- [ ] **MEDIA-197 — Remove `AudioDurationProbe`'s `#else` zero-returning branch.** Once FFmpeg is
+  universal, the fallback at `AudioDurationProbe.cpp:32` becomes dead code and should be deleted
+  rather than left as a trap that silently zeroes durations. **Blocked by `MEDIA-196`.** If any
+  platform remains without FFmpeg after `MEDIA-195`'s escalation, keep the branch but make its
+  consequences visible (the current comment says callers treat 0 as "unknown" — verify that is
+  actually true of every caller, including `Album`/`Playlist` duration summation, and that a library
+  full of zero-duration songs is distinguishable from a real zero).
+  *Accept:* durations are real on every supported platform, or the remaining gap is precisely scoped.
+
+- [ ] **MEDIA-198 — Escalation rule + honest platform-support matrix.** Add a table to
+  `NEXTmedia.md`/`AUDIT.md` recording, per platform, whether video is: genuinely working
+  (build+decode verified), building-but-unverified, or blocked-with-reason. **Explicit instruction
+  from the owner: if a platform cannot be made to work, come back and say so — do not substitute a
+  stub and call the task done.** This task exists so that outcome is recorded honestly rather than
+  papered over.
+  *Accept:* the matrix exists and each row states exactly what was verified and how (build only vs.
+  real decode), with no row claiming more than was actually run.
+
+#### Group E — Audio format coverage (owner decision 4)
+
+- [ ] **MEDIA-199 — Extend the scanned-extension filter.** `HasSupportedAudioExtension`
+  (`src/CNA/Internal/Media/MediaLibraryIndex.cpp:25`) currently accepts only `.ogg`, `.oga`, `.mp3`,
+  `.wav`. Add at minimum `.flac`, `.m4a`, `.aac`, `.opus`. **Coordinate with playback:** the library
+  must not index files SDL3_mixer cannot actually play, or `MediaPlayer::Play()` will fail on a song
+  the library advertises. Verify which of these the project's SDL3_mixer build genuinely supports
+  (it depends on which decoders were compiled in) and either gate the list on that or document the
+  mismatch.
+  *Accept:* each newly accepted extension is either confirmed playable by the current SDL3_mixer
+  build, or explicitly documented as "indexed but may not play, pending mixer codec support."
+
+- [ ] **MEDIA-200 — FLAC tag parsing (`VORBIS_COMMENT` metadata block).** FLAC stores Vorbis
+  comments in a native metadata block, not an Ogg container — `TryReadVorbisComments` currently
+  expects the Ogg framing and will not find them. Add FLAC's `fLaC` magic + `METADATA_BLOCK_HEADER`
+  walk to locate the `VORBIS_COMMENT` block (type 4), then reuse the existing comment-parsing code.
+  *Accept:* a real FLAC fixture with known tags yields correct title/artist/album/genre/track.
+
+- [ ] **MEDIA-201 — M4A/AAC tag parsing (iTunes `ilst` atoms).** MPEG-4 metadata lives in
+  `moov.udta.meta.ilst` atoms (`©nam`, `©ART`, `©alb`, `©gen`, `trkn`), a completely different
+  format from both ID3v2 and Vorbis comments. Requires a minimal MP4 atom walker in
+  `AudioTagParser`. Keep it strictly bounded (this is a tag reader, not a demuxer) and reject
+  malformed input rather than reading past buffer ends — the corrupt-input hardening standard set by
+  `MEDIA-39`/`MEDIA-40` applies here too.
+  *Accept:* a real M4A fixture yields correct tags; a deliberately truncated/corrupt M4A is rejected
+  without a crash or out-of-bounds read (ASan-clean).
+
+- [ ] **MEDIA-202 — OPUS tag parsing (`OpusTags` header).** Ogg-Opus stores an `OpusTags` packet
+  that is Vorbis-comment-shaped but with its own magic signature and header layout. Verify whether
+  the existing `TryReadVorbisComments` already tolerates it (it may, if it scans for the comment
+  structure rather than strictly parsing Ogg-Vorbis headers) — **check before writing new code**,
+  and if it already works, say so rather than adding redundant parsing.
+  *Accept:* a real Opus fixture yields correct tags; the task report states whether new code was
+  needed or the existing path already handled it.
+
+- [ ] **MEDIA-203 — Author real fixtures for every new format.** Follow the established fixture
+  practice from Phase 0 and Phase 6 (`tests/assets/media/music/`, each with a `manifest.json`
+  recording the ground-truth tag values). Generate with `ffmpeg`, and record the exact command used
+  so the fixtures are reproducible. Include at least one file per format with a full tag set
+  (title/artist/album/genre/track/rating where the format supports it).
+  *Accept:* fixtures exist, `manifest.json` documents their real tag values, and the manifest was
+  cross-checked against `ffprobe` output rather than assumed.
+
+- [ ] **MEDIA-204 — End-to-end library-scan tests for the new formats.** A scan of a directory
+  containing all supported formats must produce correct `Song`/`Album`/`Artist`/`Genre` grouping
+  across formats — e.g. an MP3 and a FLAC from the same album group into one `Album`.
+  *Accept:* mixed-format grouping verified against the manifest's ground truth.
+
+#### Group F — Real album art (owner decision 4)
+
+- [ ] **MEDIA-205 — Expand album-art filename conventions.** `MediaLibrary.cpp:29` tries only
+  `cover.jpg` and `folder.jpg`. Add at least `cover.png`, `folder.png`, `front.jpg`, `front.png`,
+  `album.jpg`, `albumart.jpg`, and make matching case-insensitive (Linux filesystems are
+  case-sensitive; real-world libraries are inconsistent). Define and document precedence order.
+  *Accept:* each convention is found by a fixture; precedence is deterministic and documented.
+
+- [ ] **MEDIA-206 — Extract embedded ID3v2 `APIC` album art.** Parse the `APIC` frame: text encoding
+  byte, MIME type (null-terminated), picture type byte, description (null-terminated, encoding
+  dependent), then the raw image bytes. Prefer picture type `0x03` (front cover) when several are
+  present. This closes the long-standing `R2`/`MEDIA-123` follow-up. Feed the extracted bytes into
+  the existing `CNA::Internal::Graphics::ImageLoader` path that file-based art already uses, so both
+  sources converge on one code path.
+  *Accept:* an MP3 fixture with embedded front-cover art returns real image data from
+  `Album::GetAlbumArt()`, with correct dimensions per the manifest.
+
+- [ ] **MEDIA-207 — Extract embedded Vorbis/FLAC `METADATA_BLOCK_PICTURE` art.** The Ogg/FLAC
+  equivalent: a base64-encoded (in Vorbis comments) or raw (in FLAC metadata block type 6) structure
+  carrying picture type, MIME, description, dimensions and image data. Same front-cover preference
+  and same `ImageLoader` convergence as `MEDIA-206`.
+  *Accept:* an Ogg fixture and a FLAC fixture with embedded art both return real image data.
+
+- [ ] **MEDIA-208 — Define art-source precedence and `HasArt` semantics.** With file-based and two
+  embedded sources, precedence must be explicit (recommended: embedded front cover, then filename
+  conventions — embedded art is per-track and more reliably correct than a shared folder image;
+  document whichever is chosen). `Album::getHasArtProperty()` must agree exactly with whether
+  `GetAlbumArt()` will actually return data — a `HasArt == true` that yields nothing is precisely
+  the class of "claims coverage it doesn't have" defect this plan has now been burned by repeatedly.
+  *Accept:* `HasArt` and `GetAlbumArt()` agree for every fixture combination (art in file only,
+  embedded only, both, neither), asserted as an explicit test matrix.
+
+#### Group G — Real thumbnails (owner decision 4)
+
+- [ ] **MEDIA-209 — Implement genuine downscaling for `Album::GetThumbnail()`.**
+  `src/Microsoft/Xna/Framework/Media/Album.cpp:71` currently just calls `GetAlbumArt()` and returns
+  the full-size image, so `GetThumbnail` is a synonym rather than a thumbnail. Implement real
+  downscaling. Decide and document the target size (XNA does not specify one; recommended: fit
+  within 128×128 preserving aspect ratio) and the filter (box/bilinear — a simple box filter is
+  adequate and dependency-free). Check whether `CNA::Internal::Graphics::ImageLoader` or the
+  graphics stack already exposes a resize helper before writing a new one.
+  *Accept:* the returned stream decodes to an image genuinely smaller than the source, with aspect
+  ratio preserved, asserted numerically against a fixture of known dimensions.
+
+- [ ] **MEDIA-210 — Same for `Picture::GetThumbnail()`.** `src/Microsoft/Xna/Framework/Media/
+  Picture.cpp:61` has the identical issue. Share the downscaling helper with `MEDIA-209` rather than
+  duplicating it.
+  *Accept:* as above, for a picture fixture; one shared implementation, not two.
+
+- [ ] **MEDIA-211 — Thumbnail caching/lifetime review.** `GetThumbnail`/`GetAlbumArt` return
+  `System::IO::Stream*` — confirm who owns and frees the returned stream, and that generating a
+  thumbnail on every call is not an unbounded allocation leak. This is an existing-ownership audit,
+  not new functionality, but downscaling makes each call more expensive and the leak (if any) more
+  visible.
+  *Accept:* ownership is documented in the headers; repeated calls do not leak (ASan/valgrind-clean
+  over a loop).
+
+#### Group H — Closure
+
+- [ ] **MEDIA-212 — `MediaSource`: verify the `WindowsMediaConnect` gap is documentation-only.**
+  `MediaSourceType` already declares both `LocalDevice = 0` and `WindowsMediaConnect = 4`, matching
+  XNA — so the *type* is complete and the audit's finding is narrower than it first reads. What is
+  absent is *discovery* of WMC devices, which was an Xbox 360/WMP-era feature with no meaningful
+  desktop equivalent. Confirm `MediaSource::GetAvailableMediaSources()` returning only a
+  `LocalDevice` entry is the correct desktop behavior, and record it as a documented, justified
+  deviation rather than an unfinished feature.
+  *Accept:* a `CHECKLIST.md` deviation row exists; no code change unless the enum or the getter is
+  genuinely wrong.
+
+- [ ] **MEDIA-213 — Re-audit every `Media` type member-by-member against the XNA reference XML.**
+  Group A found `Song`'s gaps only because someone diffed against the real XNA reference instead of
+  FNA. Do that systematically for the other 23 types: extract each type's `<member>` list from
+  `/rv/data/library/github.com/borgesdan/xn65/references/Windows/Microsoft.Xna.Framework.xml`, diff
+  against CNA's public API, and record every difference. **This is the task most likely to find
+  further real gaps** — the `Song` finding proves the method works and that FNA-only auditing does
+  not.
+  *Accept:* a written per-type member diff exists for all 24 types; every difference is either fixed,
+  or recorded as a justified deviation. Do not close this by spot-checking a few types.
+
+- [ ] **MEDIA-214 — Update `AUDIT.md` status rows honestly.** Several Media rows are marked `✅`
+  that this audit shows are not fully XNA-complete (`Song`, `MediaPlayer`, `Album`, `Picture`).
+  Downgrade them to `⚠️` with specific caveats until their respective groups above are done, then
+  raise them again only with the specific evidence stated.
+  *Accept:* no `✅` row overstates the state at the moment it is written.
+
+- [ ] **MEDIA-215 — Full-suite regression run + honest closure note.** Build, run the complete
+  `CnaTests` suite, `grep -c FAILED` on the **complete** log (never a truncated tail — see
+  `feedback_verify_full_test_output`), and record real counts. **Every new test added by this phase
+  must be mutation-verified falsifiable** (temporarily break the implementation, confirm the test
+  fails) before its task is marked done — this is now standing practice after `MEDIA-171`, where an
+  Accept note claimed coverage from a test whose fixture had no audio at all.
+  *Accept:* real counts recorded; per-task mutation verification stated explicitly, not implied; and
+  **this phase's closure must not use the word "complete"** for the plan as a whole — nine review
+  rounds have now each found real defects after a "done" claim.
+
 ---
 
 ## 6. Recommended order and milestones
