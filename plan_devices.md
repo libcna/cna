@@ -6851,7 +6851,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Dropped events do not construct reading/event objects or snapshot subscribers unnecessarily.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### SDLCORE-011 — Audit process shutdown and static destruction ordering — OPEN
+### SDLCORE-011 — Audit process shutdown and static destruction ordering — OPEN (implementation done; the one genuinely dangerous call site needs real hardware to reproduce under ASan)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6864,6 +6864,91 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No SDL call occurs after global SDL shutdown.
   - ASan/TSan shutdown loops are clean.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):** confirmed this
+  task's own problem statement against the actual source, not assumed: `Microsoft::
+  Devices::VibrateController::getDefaultProperty()` returns a function-local static
+  singleton (`static VibrateController instance;`) whose destructor (via its owned
+  `Detail::SdlHapticVibrateBackend`) makes real `SDL_CloseHaptic()`/
+  `SDL_QuitSubSystem()` calls — confirmed by reading `SdlHapticVibrateBackend.cpp`'s
+  destructor directly, previously entirely unguarded.
+  - **New `Detail::DevicesShutdownCoordinator`** (`include/Microsoft/Devices/Detail/
+    DevicesShutdownCoordinator.hpp`, header-only, an atomic flag) — the "explicit
+    Devices shutdown invoked before SDL_Quit" this task's required work asks for.
+    `SdlHapticVibrateBackend::~SdlHapticVibrateBackend()` now checks `IsShutdown()`
+    and skips its native calls once set, matching this task's "avoid native calls
+    after the coordinator is closed" bullet; member resets still run unconditionally
+    (harmless bookkeeping).
+  - **Read SDL's own source directly (`third_party/SDL/src/SDL.c`/`SDL_haptic.c`/
+    `SDL_log.c`, read-only reference, never modified per that tree's own `CLAUDE.md`)
+    rather than assuming a uniform risk, and found two genuinely different
+    outcomes:**
+    - `SDL_CloseHaptic()` against a device `SDL_Quit()` already closed internally
+      **is a real heap-use-after-free**: `SDL_QuitHaptics()` calls `SDL_CloseHaptic()`
+      on every still-open device, which frees the device struct
+      (`SDL_SetObjectValid(..., false)` then `SDL_free(haptic)`); a later
+      `SDL_CloseHaptic()` call's own first action, `CHECK_HAPTIC_MAGIC(haptic)`,
+      dereferences that now-freed pointer. Reasoned directly from source, genuinely
+      dangerous — but **not empirically reproduced under ASan in this container**:
+      needs a real, successfully-`SDL_OpenHaptic()`-opened device (`haptic_`
+      non-null), never available here (same limitation `VIB2-003`/`004` already
+      carry). SDL's `dummy` haptic backend (`third_party/SDL/src/haptic/dummy/`) is a
+      compile-time backend choice (`SDL_HAPTIC_DUMMY`), not runtime-selectable — not
+      usable here without rebuilding SDL itself differently, out of scope.
+    - `SDL_QuitSubSystem(SDL_INIT_HAPTIC)` after `SDL_Quit()`, by contrast, **was
+      checked and found already safe** by SDL's own refcount-gated
+      `SDL_ShouldQuitSubsystem()` design — a redundant call after every subsystem's
+      refcount already hit zero is a documented-safe no-op. **This was verified
+      empirically, not just reasoned about**: the new
+      `tools/devices/shutdown_ordering_harness.cpp` (which only reaches this branch
+      in this container — a real device is never opened, so `haptic_` stays null)
+      ran clean under `cmake-build-devices-asan`, **with and without** the
+      coordinator's guard active (a `--skip-shutdown-call` flag bypasses it) — no
+      ASan report either way. The guard on this call is kept as defense that doesn't
+      depend on SDL's internal refcount implementation staying exactly as it is
+      today, not because this specific call was ever proven dangerous — an important
+      correction from an earlier draft of this note that had prematurely claimed
+      "confirmed reproducible under ASan" before actually running the harness both
+      ways.
+  - **New standalone harness + regression test**: `tools/devices/
+    shutdown_ordering_harness.cpp` (touches `VibrateController::getDefaultProperty()`,
+    calls the coordinator's `Shutdown()`, then the real `SDL_Quit()`, then returns
+    from `main()` — triggering the singleton's static destructor after `SDL_Quit()`
+    already ran, the exact real-world ordering hazard) plus
+    `DevicesShutdownOrderingTests.cpp` (spawns it via `posix_spawn`, mirroring
+    `AudioMixerTests.cpp`'s established "needs a fresh process" precedent — the real
+    `SDL_Quit()` cannot run inside the shared `CnaTests` process itself). New
+    `DevicesShutdownCoordinatorTests.cpp` (4 tests) covers the coordinator's own
+    state transitions directly, fully host-testable.
+  - **Files changed:** new `include/Microsoft/Devices/Detail/
+    DevicesShutdownCoordinator.hpp`, `tools/devices/shutdown_ordering_harness.cpp`,
+    `tests/Microsoft/Devices/Detail/{DevicesShutdownCoordinatorTests,
+    DevicesShutdownOrderingTests}.cpp`; `src/Microsoft/Devices/Detail/
+    SdlHapticVibrateBackend.cpp` (destructor wiring); `cmake/Harnesses.cmake`/
+    `cmake/UnitTests.cmake` (new harness target + spawn-test wiring, matching the
+    `cna_audio_no_hardware_harness`/`AudioMixerTests.cpp` precedent exactly, including
+    the same `WIN32 OR EMSCRIPTEN OR ANDROID` exclusion for the POSIX-only spawn
+    test).
+  - **Tests:** full precise filter plus the three new suites (352 tests) clean under
+    `devices-ubsan` — 348 passed, 4 pre-existing hardware-only skips, 0 failures.
+    Re-verified clean under `devices-tsan` (3 runs on `VibrateControllerTests`/
+    `DevicesShutdownCoordinatorTest`/`DevicesShutdownOrderingTest`, 0 `WARNING:
+    ThreadSanitizer`). `SdlHapticVibrateBackend.cpp` re-verified via NDK
+    cross-compile. Harness run directly under `cmake-build-devices-asan`, both with
+    and without the guard active — 0 ASan reports either way (see above for why that
+    specific outcome doesn't prove the `SDL_CloseHaptic()` danger one way or the
+    other, only the `SDL_QuitSubSystem()` one).
+  - **Remaining limitations (why this stays OPEN):** (1) `SDL_CloseHaptic()`'s
+    confirmed-from-source use-after-free is the one genuinely dangerous call site
+    this task exists to close, and it remains empirically unverified — real hardware
+    (or an SDL rebuilt with `SDL_HAPTIC_DUMMY`, out of this task's scope) is needed to
+    actually open a `haptic_` and exercise that branch under ASan; (2) `SdlSensorSubsystem<TSensor>`
+    (`Accelerometer`/`Gyroscope`'s subsystem) was checked and confirmed to have **no**
+    destructor logic touching SDL at all (no custom destructor, `sensor_` is a raw,
+    never-`SDL_CloseSensor()`'d pointer) — already safe re destruction-ordering by
+    construction, not something this task needed to add a guard to; (3) "stress...
+    exception exit and plugin/library unload" from the required work was not
+    attempted — the normal-exit scenario this task's harness covers is the
+    only one confirmed reachable/reproducible in this environment.
 
 ### SDLCORE-012 — Share haptic serialization process-wide — OPEN
 

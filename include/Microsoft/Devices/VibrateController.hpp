@@ -168,6 +168,12 @@ namespace Microsoft::Devices
          * it's a fire-and-forget static design), but not tagged since it's
          * not a new *public API surface* addition a game would ever call
          * directly.
+         *
+         * Runs at process-exit static teardown, a point this codebase does
+         * not control relative to the application's own SDL_Quit() call —
+         * see Detail::DevicesShutdownCoordinator's own doc comment (Task
+         * SDLCORE-011) for why that matters and what the application must
+         * do about it.
          */
         ~VibrateController();
 

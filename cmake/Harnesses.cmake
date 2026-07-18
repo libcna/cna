@@ -51,6 +51,28 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
+# --- Task SDLCORE-011: standalone SDL_Quit()-ordering harness ---
+# A tiny standalone (non-GTest) executable that touches
+# VibrateController::getDefaultProperty()'s function-local static singleton, then calls the real
+# SDL_Quit() before main() returns (which is when that singleton's destructor actually runs, as
+# part of process-exit static teardown) -- reproducing the exact ordering hazard
+# Detail::DevicesShutdownCoordinator exists to close. The shared CnaTests binary cannot exercise
+# this: calling the real SDL_Quit() there would tear down SDL process-wide for every other test
+# sharing that binary. See tools/devices/shutdown_ordering_harness.cpp's own top-of-file comment
+# for the "--skip-shutdown-call" flag used to confirm under ASan that this reproduces a genuine
+# heap-use-after-free when the fix's guard is bypassed.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_devices_shutdown_ordering_harness
+        tools/devices/shutdown_ordering_harness.cpp
+    )
+    target_link_libraries(cna_devices_shutdown_ordering_harness
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+        SDL3::SDL3
+    )
+endif()
+
 # --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
 # Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see

@@ -48,6 +48,14 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Audio/AudioMixerTests\\.cpp$")
     endif()
 
+    # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
+    # (posix_spawn, poll, sys/wait.h) to spawn tools/devices/shutdown_ordering_harness.cpp as an
+    # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
+    # Excluded on the same platforms and for the same reasons.
+    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )
@@ -114,6 +122,16 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_audio_no_hardware_harness)
         target_compile_definitions(CnaTests PRIVATE
             CNA_AUDIO_NO_HARDWARE_HARNESS_PATH="$<TARGET_FILE:cna_audio_no_hardware_harness>"
+        )
+    endif()
+
+    if(TARGET cna_devices_shutdown_ordering_harness)
+        # Same reasoning as cna_net_two_process_harness above, for
+        # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) -- calls the real SDL_Quit(),
+        # which must not run inside the shared CnaTests process itself.
+        add_dependencies(CnaTests cna_devices_shutdown_ordering_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH="$<TARGET_FILE:cna_devices_shutdown_ordering_harness>"
         )
     endif()
 

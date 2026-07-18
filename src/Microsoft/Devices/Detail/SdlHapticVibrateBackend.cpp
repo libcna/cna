@@ -2,6 +2,7 @@
 
 #include "Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp"
 
+#include "Microsoft/Devices/Detail/DevicesShutdownCoordinator.hpp"
 #include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 
 #include <algorithm>
@@ -175,20 +176,46 @@ namespace Microsoft::Devices::Detail
     {
         std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
 
+        // Task SDLCORE-011 (2026-07-18, external audit
+        // `audit_devices_2026-07-17.md`): if the application has already
+        // called Detail::DevicesShutdownCoordinator::Shutdown() (which it
+        // must do before its own SDL_Quit() call whenever a
+        // VibrateController might still be alive), SDL_Quit() has already
+        // reclaimed every SDL-owned resource this destructor would
+        // otherwise try to release itself. See DevicesShutdownCoordinator's
+        // own doc comment for the full, honestly-scoped rationale: skipping
+        // SDL_CloseHaptic() here specifically closes a genuine
+        // heap-use-after-free reasoned directly from SDL's own source
+        // (confirmed, not assumed) but not empirically reproducible under
+        // ASan in this container (needs a real, opened haptic_, never
+        // available here); skipping SDL_QuitSubSystem() below was checked
+        // and found unnecessary for safety against SDL's *current*
+        // refcount-based idempotent implementation, kept anyway as defense
+        // that does not depend on that internal detail staying as it is.
+        // Member resets below still run unconditionally regardless (harmless
+        // bookkeeping, not native calls).
+        const bool devicesShutDown = DevicesShutdownCoordinator::IsShutdown();
+
         // SDL_CloseHaptic() implicitly invalidates any effect still uploaded
         // on this device (SDL3 does not require destroying uploaded effects
         // before closing their owning device) — no separate
         // SDL_DestroyHapticEffect() call is needed here.
         if (haptic_ != nullptr)
         {
-            SDL_CloseHaptic(haptic_);
+            if (!devicesShutDown)
+            {
+                SDL_CloseHaptic(haptic_);
+            }
             haptic_ = nullptr;
         }
         leftRightEffectId_ = -1;
 
         if (subsystemHeld_)
         {
-            SDL_QuitSubSystem(SDL_INIT_HAPTIC);
+            if (!devicesShutDown)
+            {
+                SDL_QuitSubSystem(SDL_INIT_HAPTIC);
+            }
             subsystemHeld_ = false;
         }
     }
