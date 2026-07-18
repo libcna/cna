@@ -1031,6 +1031,37 @@ likely the `Neck` bone's own radius (0.06) being much thinner than `Head` (0.15)
 not more CSG/normals work. The previously-documented shoe-area artifact also remains, unchanged.
 See `NEXTnet.md` section 3/6 for current status.
 
+**Correction (2026-07-18, second independent audit, same day as the "completely gone" claim
+above):** that claim was checked against fresh `--yaw 0`/`--yaw 25 --clip Wave` screenshots and
+did **not** hold up - pronounced dark areas remained at head/neck, shoulders, torso, groin, legs,
+and shoes, worse under `Wave`, for both genders. Re-investigated from scratch (not assuming the
+above analysis was correct just because it was recent). Found three further, distinct, previously
+undiagnosed root causes, each fixed with measured before/after pixel-sampling evidence, not a
+visual glance:
+
+1. `AvatarRenderer::DrawRealEXT()` called `EnableDefaultLighting()` *after* setting a custom
+   ambient light color, silently resetting it back to XNA's own dim built-in default on every
+   draw call - the actual dominant cause of shadowed regions reading far darker than intended.
+   Fixed by reordering the two calls.
+2. `AvatarAppearanceEXT`'s default `ShoesColor` (`0.05, 0.05, 0.05`) was dark enough that no
+   realistic lighting fix could make shoe shading read as anything but solid black - confirmed via
+   pixel sampling that showed zero change from either lighting or skinning-weight fixes. Raised to
+   `(0.14, 0.14, 0.16)`.
+3. `generate_body.py`'s `BEND_JOINTS` never included `LowerLeg`→`Foot`, leaving the ankle with
+   automatic weighting's original near-binary tear even at rest pose. Added.
+
+Measured result (same repro commands as above): average non-background brightness rose from
+237-240 to 297-303 (sum of R+G+B out of 765); the fraction of very-dark pixels roughly halved,
+8.5-10.5% down to 4.9-6.3%. Real, measured, **partial** progress - not a second "completely gone"
+claim. The `Wave`-pose torso still shows visible dark blotches after all three fixes; two further
+hypotheses (a degenerate-skinned-normal NaN guard, and narrowing `blend_radius` from `1.6x` to
+`0.8x` average bone radius) were tested and neither produced a clear, measured improvement - most
+likely a residual linear-blend-skinning limitation at the `Shoulder`/`UpperArm` region under
+`Wave`'s large joint rotation (confirmed CNA's shader matches real FNA/XNA's own `SkinnedEffect.fx`
+linear-blend approach exactly, so this needs further content-side weight-painting work, not a
+shader change). Not yet resolved. See `NEXTnet.md` section 3 for the full writeup with exact
+measurements, and section 6 for current task status.
+
 Goal (per decisions 4/4a/4b/4c): toy-like Xbox-Avatar-inspired look, fully original CNA assets,
 generated via `../mesh-craft` for body/head (and other feasible) geometry, feeding into the
 existing `tools/avatar_builder/` Blender pipeline for skeleton/skinning/animation (mesh-craft has

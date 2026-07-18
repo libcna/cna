@@ -11,17 +11,24 @@ fidelity to FNA (`/rv/data/library/github.com/FNA-XNA/FNA` for most namespaces,
 unit tests.
 
 **Current phase:** `plan_net.md` ("2026-07-07 Re-Audit and Hardening") is fully checked off
-(104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **An independent
-post-completion audit (2026-07-18) found that several of the plan's own "done" claims overstated
-what was actually delivered - all 4 findings are now fixed** (F1 font readability, Guide.cpp's
-keyboard-input overlay, avatar CSG seam/shading artifacts, this file's own broken example command)
-— see section 3 below for the full writeup. Treat `plan_net.md`'s checkmarks as "this task's
-described work was completed at the time," not as "the underlying feature was fully correct" on
-first landing - several needed a same-day follow-up fix after independent verification caught what
-a first pass missed. The prior first-implementation pass (132/132 tasks) is complete; its own
-archive file (`plan_net_20260707.md`) no longer exists in the working tree (deleted by a later,
-separate, deliberate repo-wide cleanup commit, `e86b7cba` — still fully recoverable via git
-history, see Task 11.3's write-up in `plan_net.md`).
+(104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **Two independent
+post-completion audits (2026-07-18) each found that "done" claims in this file and `plan_net.md`
+overstated what was actually delivered.** The first audit's 4 findings (F1 font readability,
+Guide.cpp's keyboard-input overlay, avatar visual artifacts, this file's own broken example
+command) were addressed same-day; a **second** independent audit then re-verified that pass
+against fresh runtime evidence and found the avatar claim ("seams completely gone") itself did not
+hold up under wider-angle/`Wave`-pose screenshots the first pass hadn't checked, plus two more
+real gaps (pre-handshake `SendAppData` still silently dropped despite being "observable" now, and
+the Guide password-masking test never actually checked the masked text). All four of the second
+audit's findings are addressed below (section 3) with a genuinely more skeptical bar this time:
+the avatar section explicitly separates *measured, verified* improvement from what is *still
+honestly open*, rather than repeating a "completely gone"-style claim. Treat `plan_net.md`'s
+checkmarks as "this task's described work was completed at the time," not as "the underlying
+feature was fully correct" on first landing — and treat any single independent-verification pass
+as capable of missing things too, not as a final word. The prior first-implementation pass
+(132/132 tasks) is complete; its own archive file (`plan_net_20260707.md`) no longer exists in the
+working tree (deleted by a later, separate, deliberate repo-wide cleanup commit, `e86b7cba` —
+still fully recoverable via git history, see Task 11.3's write-up in `plan_net.md`).
 
 **Key architectural decisions (see `CLAUDE.md` for the full rules):**
 - Strict separation: `Microsoft::Xna::Framework::*` types must match real XNA/FNA behavior exactly.
@@ -137,24 +144,50 @@ history, see Task 11.3's write-up in `plan_net.md`).
   - 10 new tests added (`GamerServicesServiceTests.cpp`), all passing; all 32 pre-existing
     `GuideTest` cases still pass unmodified. Full suite re-run after the fix: same 36 pre-existing,
     already-documented XNB/Content-fixture failures, zero Guide/Net regressions.
-- **Avatar visual seam/shading artifacts — ✅ FIXED (2026-07-18).** Root cause confirmed by
-  reading mesh-craft's own `mc3togltf/src/CsgEvaluator.cpp` directly: its CSG union evaluator
-  computes flat per-triangle face normals with duplicated (non-shared) vertices at every merge
-  seam - some of those flat normals point at a steep/grazing angle relative to the single
-  fixed-direction light these demos use, rendering as near-black patches. A non-manifold-edge
-  analysis of the exported mesh confirmed **zero real holes** at the head/neck - it was a shading
-  defect, not missing geometry. Fixed by adding `_recalculate_smooth_normals()` to
-  `generate_body_meshcraft.py` (reused by `generate_clothes_meshcraft.py`): welds the CSG-
-  duplicated coincident vertices (confirmed real: 5932 welded on the body alone), recalculates
-  consistent outward normals, switches to smooth shading. Regenerated both genders' content
-  end-to-end and verified with fresh screenshots: the neck/shoulder/groin dark seams are
-  completely gone in T-pose; the `Wave`-pose chest darkness shrank from covering nearly the whole
-  torso to a small patch near the shoulder joint. 134/134 Avatar/SkinnedModel tests still pass
-  (content + Python-tooling change only, no C++ touched).
-  **Honestly still open** (distinct root causes, found during this same investigation): a
-  residual dark area on the head/neck front, confirmed **not** a geometric hole - most likely the
-  `Neck` bone radius (0.06) being much thinner than `Head`/`Spine1` (0.15/0.14), a proportion-
-  tuning follow-up, not more CSG/normals work. The shoe-area artifact also remains, unchanged.
+- **Avatar visual seam/shading artifacts — ⚠️ PARTIALLY FIXED, honestly still open (2026-07-18,
+  second remediation pass).** The first pass's own "seams completely gone" claim above did **not**
+  hold up: a second independent audit's fresh `--yaw 0`/`--yaw 25 --clip Wave` screenshots (the
+  exact repro commands, run from `cmake-build-debug`) still showed pronounced black areas at
+  head/neck, shoulders, torso, groin, legs, and shoes, for both genders and worse under `Wave`.
+  Re-investigated from scratch rather than trusting the prior "done" mark. Found and fixed **three
+  distinct, independently-confirmed** real bugs (all verified with before/after pixel sampling,
+  not a glance at a screenshot):
+  1. `AvatarRenderer::DrawRealEXT()` called `SkinnedEffect::EnableDefaultLighting()` *after*
+     setting a custom ambient light color, silently discarding it back to XNA's own dim built-in
+     default (~0.05-0.18 instead of the intended 0.35) on every single draw call — the actual
+     cause of shadowed/concave regions (joints, creases) rendering much darker than intended,
+     regardless of pose. Fixed by reordering: `EnableDefaultLighting()` now runs first, custom
+     ambient/key-light overrides after.
+  2. `AvatarAppearanceEXT`'s default `ShoesColor` (`0.05, 0.05, 0.05`) was dark enough that no
+     realistic light contribution could make shoe shading read as anything but a featureless
+     black blob — confirmed by pixel sampling that neither the ambient fix above nor a bend-joint
+     weight fix changed a single foot pixel; the flat base color itself was the actual, sole cause.
+     Raised to `(0.14, 0.14, 0.16)` in both `AvatarAppearanceEXT.hpp` and
+     `generate_materials.py`'s `MATERIAL_COLORS`, which it's meant to mirror.
+  3. `generate_body.py`'s `BEND_JOINTS` list (the smoothstep parent/child weight blend that fixes
+     automatic-weighting tears at animated joints) never included `LowerLeg`→`Foot` — the ankle
+     kept the original near-binary weight tear even at rest pose. Added.
+  Measured, honest end state (male/female T-pose, male `Wave`, exact audit repro commands):
+  average non-background brightness rose from 237-240 to 297-303 out of 765 (sum of R+G+B), and
+  the fraction of very-dark pixels (sum<30) roughly halved, from 8.5-10.5% down to 4.9-6.3%. This
+  is real, measured, **partial** progress — explicitly not a claim of full resolution.
+  **Honestly still open:** the `Wave`-pose torso still shows visible dark blotches under close
+  inspection even after all three fixes above. Two hypotheses were tested and found *not* to
+  explain it: (a) a defensive `normalize()`-degenerate-normal guard added to both EasyGL skinned
+  shader variants (harmless, kept as a legitimate robustness improvement, but proven via exact
+  before/after pixel diff to change zero pixels of the Wave-pose darkness); (b) narrowing
+  `generate_body_meshcraft.py`'s `blend_radius` from `1.6x` to `0.8x` average bone radius (tested,
+  reverted — no clear, reproducible improvement on quantitative measurement despite an initially
+  promising visual impression). The most likely remaining cause is a residual linear-blend-
+  skinning artifact at the `Shoulder`/`UpperArm` weight-blend region under `Wave`'s large joint
+  rotation — confirmed CNA's EasyGL skinned shader matches real FNA/XNA's own `SkinnedEffect.fx`
+  `Skin()` function's linear-blend approach exactly (read directly from
+  `/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/HLSL/SkinnedEffect.fx`),
+  so this is an inherent, well-known limitation of linear blend skinning itself to mitigate via
+  further content-side weight-painting tuning, not a CNA shader deviation to "fix" against XNA
+  fidelity. Not yet resolved; a good next step for a future session, verified the same way this
+  session verified everything else — fresh runtime screenshots at the exact repro commands, not
+  tests or non-manifold analysis alone.
 - **`NEXTnet.md`'s own example command was broken** when followed from the repo root (see the
   working-directory note in section 5) — fixed in this same pass that added this subsection.
 
@@ -209,9 +242,15 @@ history, see Task 11.3's write-up in `plan_net.md`).
   `export_gltf.py` → `.glb` → `tools/avatar_asset_pipeline/convert_avatar.py --embedded-clips` →
   `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`, loaded at runtime via `SkinnedModelTypeReader`.
 - **Demos:** 24+ executables under `examples/`, each building to a standalone binary directly under
-  `cmake-build-debug/`. No shared `examples/common/` library exists for the F1-overlay
-  `MakeSimpleFont`/rectangle-drawing helper — deliberately duplicated per demo, matching this
-  project's established convention (see any Phase 8 commit's own comment for why).
+  `cmake-build-debug/`. A shared `examples/common/` header-only library **does** exist:
+  `examples/common/SimpleFontEXT.hpp`'s `CNAExamplesEXT::MakeSimpleFontEXT()` — a real 5x7
+  dot-matrix bitmap font, rolled out to all 8 avatar demos' F1 overlays (see section 3's own F1
+  entry). It deliberately replaced the *old* per-demo-copied `MakeSimpleFont` convention, which is
+  exactly what let that convention's original glyph-bounds bug spread silently across 19 files in
+  the first place (section 3) — **the 10 other, non-avatar demos that still have their own
+  per-demo copy of the old, buggy `MakeSimpleFont` have not been migrated to this shared header**
+  (see section 6 item 8's own optional-follow-up note); only the 8 avatar demos this plan actually
+  touches were.
 - **Testing scope for this hardening pass:** EASYGL graphics backend, `cmake-build-debug` only.
 - **Invariant to preserve:** one task = one commit; every behavior change needs a test that
   provably fails without the fix (revert-verify-restore discipline used throughout this project).
@@ -253,7 +292,7 @@ No `.clang-format` or other lint/format config was found in the repo — none is
 
 ## 6. Next smallest tasks
 
-**Active remediation (user-prioritized, 2026-07-18, all 4 items):**
+**First-round remediation (user-prioritized, 2026-07-18, all 4 items) — done:**
 
 1. ~~**F1 overlay real readable font**~~ — ✅ **DONE.** New shared
    `examples/common/SimpleFontEXT.hpp`, rolled out to all 8 avatar demos, verified with fresh
@@ -262,26 +301,54 @@ No `.clang-format` or other lint/format config was found in the repo — none is
    renders title/description/typed-text (masked when `UsePasswordMode`), real Escape-to-cancel
    plus `SimulateKeyboardInputCancelEXT()`/`WasKeyboardInputCanceledEXT()`, `IsVisible` now
    reflects real pending state. 10 new tests, all passing. See section 3's own entry for detail.
-3. ~~**Avatar visual seam/shading artifacts**~~ — ✅ **DONE.** Root cause: mesh-craft's CSG
-   evaluator exports flat per-triangle normals with duplicated coincident vertices at merge seams;
-   fixed by welding + recalculating smooth normals in `generate_body_meshcraft.py`/
-   `generate_clothes_meshcraft.py`, then regenerating content. Neck/shoulder/groin seams gone,
-   `Wave`-pose chest darkness drastically reduced. See section 3's own entry for detail and the
-   two distinct, still-open residual issues (head/neck proportion gap, shoe-area artifact).
+3. ~~**Avatar visual seam/shading artifacts**~~ — this round's own "DONE" mark was **the specific
+   claim the second audit found false** (see below) - left struck through here for the historical
+   record, not as a currently-accurate status. See item 3b below for the real, current status.
+4. ~~**`NEXTnet.md`'s own broken example command**~~ — ✅ **DONE**, and still accurate.
 
-**All 4 user-prioritized items are now done. Not yet started, not this session's active scope:**
+**Second-round remediation (independent audit, 2026-07-18, all 4 items) — done, except 3b remains
+honestly open:**
 
-4. **Optional follow-up:** fix the same `MakeSimpleFont` glyph-bounds bug (section 3) in the 10
+3b. **Avatar visual artifacts — ⚠️ PARTIALLY FIXED, not closed.** Three distinct real bugs found
+    and fixed with measured before/after evidence (ambient-lighting clobbering in
+    `AvatarRenderer::DrawRealEXT`, near-black default `ShoesColor`, missing `LowerLeg`→`Foot`
+    bend-joint weight blend) - see section 3's own entry for full detail, measurements, and what
+    remains open (`Wave`-pose torso darkness, most likely a linear-blend-skinning limitation
+    needing further content-side weight-painting work, not yet resolved).
+5. ~~**Pre-handshake `SendAppData` still functionally dropped**~~ — ✅ **DONE.** Was reachable via
+   the real public `LocalNetworkGamer::SendData` path (verified first, per the audit's own
+   instruction) but only counted, never delivered. Now a bounded (64-entry, oldest-evicted)
+   per-session queue, flushed the moment both sender and target resolve a wire-id, preserving
+   payload/target/order/`SendDataOptions`. Proven via a real end-to-end delivery test over the
+   actual ENet wire (`AppDataQueuedBeforeSecondLocalGamerIsWiredIsDeliveredOnceResolved`), not
+   just a drop counter. See `include/CNA/Internal/Net/ENetBackend.hpp`'s own updated doc comments.
+6. ~~**Contradictory documentation** (this file, `plan_net.md`)~~ — ✅ **DONE.** This very pass:
+   removed the "all 4 findings are now fixed" and "seams completely gone" overclaims, corrected
+   the stale "no shared `examples/common` helper" claim below (item 4), described the avatar's
+   real, measured, partial status instead.
+7. ~~**Guide password-masking test didn't check masking**~~ — ✅ **DONE.**
+   `GetPendingKeyboardInputDisplayTextForTestingEXT()` exposes the same masking decision
+   `RenderPendingKeyboardInputEXT` itself draws (`ComputeDisplayText`, a single shared source of
+   truth) — the test now asserts `"******"` directly, and a sibling test covers the
+   password-mode-off branch. Adversarially verified: temporarily removed the masking branch,
+   confirmed the test failed with the exact expected mismatch, restored it, confirmed all 43
+   `GuideTest` cases pass again.
+
+**Not yet started, not this session's active scope:**
+
+8. **Optional follow-up:** fix the same `MakeSimpleFont` glyph-bounds bug (section 3) in the 10
    other pre-existing demos it also affects (unrelated plans/subsystems, large blast radius —
    check in before starting, per section 7).
-5. **Optional follow-up:** real friend-list population for `SignedInGamer::GetFriends()` (section
+9. **Optional follow-up:** real friend-list population for `SignedInGamer::GetFriends()` (section
    3) — needs its own design decision, not just a mechanical fix.
-6. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
-   7.8/7.10).
-7. **Optional follow-up, newly found:** the `Neck` bone radius (0.06 in `BONE_RADII`, much
-   thinner than `Head`/`Spine1`'s 0.15/0.14) leaves a visible recessed collar gap on the avatar's
-   head/neck front - a proportion-tuning fix, not more CSG/normals work.
-8. **Optional follow-up:** the previously-documented shoe-area dark artifact remains unchanged.
+10. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
+    7.8/7.10).
+11. **Next logical step for item 3b above:** the `Wave`-pose torso darkness. Confirmed not caused
+    by degenerate-normal NaN propagation (defensive guard added, zero measured effect) or purely
+    by `blend_radius` width (narrowing tested and reverted, no clear improvement) - most likely
+    needs targeted weight-painting changes specifically at the `Shoulder`/`UpperArm` blend region,
+    verified the same way this session verified everything else (fresh runtime screenshots at the
+    exact `--yaw 25 --clip Wave` repro command, not tests or non-manifold analysis alone).
 
 ## 7. Do not do yet
 
