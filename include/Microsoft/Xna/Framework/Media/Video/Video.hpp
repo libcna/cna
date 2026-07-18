@@ -23,15 +23,23 @@ namespace Microsoft::Xna::Framework::Media
     {
     public:
         /**
-         * @brief Creates a Video from a file path and a graphics device (XNB constructor).
+         * @brief Creates a Video from a file path and a graphics device (raw-file constructor).
          *
+         * Probes the file directly for width/height/frame rate. Note: this label was previously
+         * swapped with the 7-argument constructor's below -- this one is the raw-file/probing
+         * constructor, the 7-argument one is the XNB-sourced constructor.
+         *
+         * @throws System::IO::FileNotFoundException If no file exists at fileName.
          * @param fileName File path to the video file.
          * @param device   GraphicsDevice used for frame rendering.
          */
         NOXNA Video(std::string fileName, Graphics::GraphicsDevice* device);
 
         /**
-         * @brief Creates a Video with explicit metadata (raw-file constructor).
+         * @brief Creates a Video with explicit, trusted metadata (XNB constructor).
+         *
+         * Does not touch the file at construction time -- matches FNA's own "we have to wait
+         * until VideoPlayer tries to load this before throwing Exceptions" design.
          *
          * @param fileName       File path to the video file.
          * @param device         GraphicsDevice used for frame rendering.
@@ -70,6 +78,9 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Gets the type of audio content in this video.
          *
+         * Metadata only -- see VideoSoundtrackType's own doc comment. Nothing in playback logic,
+         * on either FNA or CNA, ever branches on this value.
+         *
          * @return VideoSoundtrackType value.
          */
         [[nodiscard]] VideoSoundtrackType getVideoSoundtrackTypeProperty() const;
@@ -91,25 +102,34 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Creates a Video from a URI and a graphics device.
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param uri    File URI or local path.
          * @param device GraphicsDevice used for frame rendering.
          * @return Pointer to the newly created Video.
          */
-        static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
+        NOXNA static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
 
         /**
          * @brief Selects which audio stream to use when the file contains multiple audio tracks.
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param track Zero-based audio stream index.
          */
-        void SetAudioTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetAudioTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Selects which video stream to use when the file contains multiple video tracks.
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param track Zero-based video stream index.
          */
-        void SetVideoTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetVideoTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Returns the file path this Video was loaded from.

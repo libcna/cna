@@ -38,6 +38,8 @@ namespace Microsoft::Xna::Framework::Media
     class VideoPlayer final : public System::Object, public System::IDisposable
     {
     public:
+        NOXNA friend struct VideoPlayerTestAccess;
+
         /** @brief Constructs a VideoPlayer in the stopped state. */
         VideoPlayer();
 
@@ -123,6 +125,7 @@ namespace Microsoft::Xna::Framework::Media
          * Decodes the next frame if the playback clock has advanced past the
          * last decoded presentation timestamp.
          *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @return Pointer to the frame Texture2D, or nullptr if no video is active.
          */
         Graphics::Texture2D* GetTexture();
@@ -130,32 +133,52 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Starts playback of the given video from the beginning.
          *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         * @throws System::InvalidOperationException If the video's declared width/height/frame
+         *         rate does not match what the decoded file actually reports.
          * @param video Video to play.
          */
         void Play(Video* video);
 
-        /** @brief Stops playback and resets the playback position. */
+        /**
+         * @brief Stops playback and resets the playback position.
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         */
         void Stop();
 
-        /** @brief Pauses playback at the current position. */
+        /**
+         * @brief Pauses playback at the current position.
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         */
         void Pause();
 
-        /** @brief Resumes playback from the paused position. */
+        /**
+         * @brief Resumes playback from the paused position.
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         */
         void Resume();
 
         /**
          * @brief Selects which audio track to use (0-based index among audio streams).
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @param track Zero-based audio stream index.
          */
-        void SetAudioTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetAudioTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Selects which video track to use (0-based index among video streams).
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @param track Zero-based video stream index.
          */
-        void SetVideoTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetVideoTrackEXT(SharpRuntime::intcs track);
 
         /** @brief Stores basic video file metadata (width, height, fps). */
         struct VideoInfo
@@ -176,6 +199,31 @@ namespace Microsoft::Xna::Framework::Media
         void CloseDecoder();
         void ApplyVolume();
         [[nodiscard]] double GetElapsedSeconds() const;
+
+        // Hands whatever decoder_->DrainAudio() produced to the SDL stream (if one exists) and
+        // always clears audioBuffer_ afterward -- including when audioStream_ is null (no audio
+        // device available, or a video-only track). The old inline version at both call sites only
+        // cleared the buffer inside the `if (audioStream_)` branch, so a video playing with no
+        // audio device accumulated its ENTIRE decoded audio track in memory for the rest of
+        // playback (potentially hundreds of MB for a long video), and CloseDecoder() never cleared
+        // it either -- stale audio from a failed-device Play() could then be fed to a genuinely
+        // opened stream on a later successful Play() (found by external code review, plan_media.md
+        // MEDIA-153).
+        void DrainAndFlushAudioBuffer();
+
+        // (Re)creates the frame texture to match whatever video track is currently active on
+        // `decoder_`. A track switch can change frame dimensions, and an already-created texture
+        // sized for the previous track would otherwise silently keep the stale size (plan_media.md
+        // MEDIA-90, a real bug found by external code review).
+        void ReconfigureVideoOutputForCurrentTrack();
+
+        // (Re)creates the SDL audio stream to match whatever audio track is currently active on
+        // `decoder_`. Split from the video-side reconfiguration (plan_media.md MEDIA-148, found by
+        // external code review): the two used to be one function always called together, so
+        // switching only the video track tore down and reopened the SDL audio stream too,
+        // discarding whatever audio was already queued for playback -- and vice versa for an
+        // audio-only switch needlessly recreating the video texture.
+        void ReconfigureAudioOutputForCurrentTrack();
 
         bool isDisposed_ = false;
         bool isLooped_   = false;

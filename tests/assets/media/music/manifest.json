@@ -1,0 +1,83 @@
+{
+  "producer": "ffmpeg 7.1.5 (lavfi sine-tone sources), synthetic fixture authored for plan_media.md Phase 0",
+  "provenance": "100% self-generated synthetic audio (sine-wave tones) and metadata -- no third-party content, no NOTICE.md/THIRD_PARTY_NOTICES.md entry required (MEDIA-8)",
+  "purpose": "plan_media.md MEDIA-3/MEDIA-5: real tagged audio fixtures for AudioTagParser (MEDIA-47..51), MediaLibraryIndex (MEDIA-52..54), and PlaylistParser (MEDIA-57/58) tests",
+  "songs": [
+    {
+      "path": "Artist One/Album Alpha/01 - Sunrise.ogg",
+      "format": "ogg/vorbis",
+      "durationSeconds": 2.0,
+      "tagging": "real Vorbis comment header (verified via raw-string inspection: 'title=Sunrise', 'artist=Artist One', 'album=Album Alpha', 'genre=Rock', 'tracknumber=1')",
+      "tags": { "title": "Sunrise", "artist": "Artist One", "album": "Album Alpha", "genre": "Rock", "tracknumber": "1" }
+    },
+    {
+      "path": "Artist One/Album Beta/01 - Twilight.mp3",
+      "format": "mp3",
+      "durationSeconds": 2.037551,
+      "tagging": "real ID3v2.4 (confirmed via raw header bytes: 49 44 33 04 = \"ID3\" + major version 4)",
+      "tags": { "title": "Twilight", "artist": "ARTIST ONE", "album": "Album Beta", "genre": "Electronic", "track": "1" },
+      "note": "artist tag is a deliberate case-variant of 'Artist One' -- exercises MEDIA-54's case-insensitive Artist normalization (D10): must group into the same Artist as Sunrise's/Étoile's 'Artist One'/'Artist Two' tags, not create a duplicate 'ARTIST ONE' entry. Displayed Name should keep whichever casing was scanned first."
+    },
+    {
+      "path": "Artist Two/Album Gamma/01 - Nocturne.wav",
+      "format": "wav/pcm_s16le",
+      "durationSeconds": 2.0,
+      "tagging": "none (deliberately untagged)",
+      "expectedFallback": { "artist": "Artist Two", "album": "Album Gamma", "title": "Nocturne" },
+      "note": "exercises MEDIA-51's filename/folder fallback heuristic: Artist=grandparent dir name, Album=parent dir name, Title=filename (extension stripped). Has no genre (untagged files don't get a genre from the fallback heuristic), so it will not appear in any Genre grouping -- that's expected, not a bug."
+    },
+    {
+      "path": "Artist Two/Album Delta/02 - Daybreak.mp3",
+      "format": "mp3",
+      "durationSeconds": 2.037551,
+      "tagging": "real ID3v2.3 (confirmed via raw header bytes: 49 44 33 03 = \"ID3\" + major version 3)",
+      "tags": { "title": "Daybreak", "artist": "Artist Two", "album": "Album Delta", "genre": "Rock", "track": "2" }
+    },
+    {
+      "path": "Artist Two/Album Delta/03 - Étoile.ogg",
+      "format": "ogg/vorbis",
+      "durationSeconds": 2.0,
+      "tagging": "real Vorbis comment header",
+      "tags": { "title": "Étoile", "artist": "Artist Two", "album": "Album Delta", "genre": "Rock", "tracknumber": "3" },
+      "note": "non-ASCII title/filename -- exercises UTF-8 handling in both AudioTagParser and PlaylistParser. Referenced from International.m3u8 (MEDIA-58)."
+    }
+  ],
+  "expectedGrouping": {
+    "artists": {
+      "Artist One": { "albums": ["Album Alpha", "Album Beta"], "songCount": 2 },
+      "Artist Two": { "albums": ["Album Gamma", "Album Delta"], "songCount": 3 }
+    },
+    "genres": {
+      "Rock": ["Sunrise", "Daybreak", "Étoile"],
+      "Electronic": ["Twilight"]
+    },
+    "albumArt": {
+      "Album Alpha": "cover.jpg present (200x200 solid-color JPEG) -- exercises MEDIA-65 HasArt=true / GetAlbumArt returning real content",
+      "Album Beta": "no cover file -- exercises MEDIA-65 HasArt=false",
+      "Album Gamma": "no cover file",
+      "Album Delta": "no cover file"
+    }
+  },
+  "playlists": [
+    {
+      "path": "Favorites.m3u",
+      "entries": [
+        "Artist One/Album Alpha/01 - Sunrise.ogg",
+        "Artist One/Album Beta/01 - Twilight.mp3",
+        "Artist Two/Album Delta/02 - Daybreak.mp3",
+        "Nonexistent/Missing Track.mp3 (deliberately missing -- MEDIA-57 skip-not-fatal test)"
+      ],
+      "expectedResolvedCount": 3
+    },
+    {
+      "path": "International.m3u8",
+      "encoding": "UTF-8",
+      "entries": [
+        "Artist Two/Album Delta/03 - Étoile.ogg",
+        "Artist One/Album Alpha/01 - Sunrise.ogg"
+      ],
+      "expectedResolvedCount": 2,
+      "note": "exercises MEDIA-58's M3U8 UTF-8 handling via the non-ASCII 'Étoile' filename/title (verified as valid UTF-8, not mojibake, at authoring time)."
+    }
+  ]
+}

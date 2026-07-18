@@ -1,74 +1,94 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Picture.hpp"
 
-#include <stdexcept>
+#include <vector>
+
+#include "CNA/Internal/Media/ThumbnailGenerator.hpp"
+#include "System/IO/MemoryStream.hpp"
+
+#include <functional>
+#include <utility>
+
+#include "System/IO/FileStream.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
+    Picture::Picture(std::string name, PictureAlbum* album, SharpRuntime::intcs width,
+                      SharpRuntime::intcs height, std::chrono::system_clock::time_point date,
+                      std::string path)
+        : name_(std::move(name)), album_(album), width_(width), height_(height), date_(date),
+          path_(std::move(path))
+    {
+    }
+
     void Picture::Dispose()
     {
-        // TODO: implement picture resource cleanup
-        throw std::runtime_error("not implemented");
+        // A Picture is a non-owning view into MediaLibrary's real data -- nothing picture-specific
+        // to release, only the disposed flag itself.
+        isDisposed_ = true;
     }
 
     PictureAlbum* Picture::getAlbumProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return album_;
     }
 
     std::chrono::system_clock::time_point Picture::getDateProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return date_;
     }
 
     SharpRuntime::intcs Picture::getHeightProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return height_;
     }
 
     bool Picture::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return isDisposed_;
     }
 
     std::string Picture::getNameProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     SharpRuntime::intcs Picture::getWidthProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return width_;
     }
 
-    void* Picture::GetImage()
+    System::IO::Stream* Picture::GetImage()
     {
-        // TODO: implement image data retrieval
-        throw std::runtime_error("not implemented");
+        return new System::IO::FileStream(path_);
     }
 
-    void* Picture::GetThumbnail()
+    System::IO::Stream* Picture::GetThumbnail()
     {
-        // TODO: implement thumbnail retrieval
-        throw std::runtime_error("not implemented");
+        // Same fix as Album::GetThumbnail -- this was a synonym for GetImage() returning the
+        // full-size picture, sharing one downscaler rather than duplicating it (MEDIA-210).
+        std::vector<uint8_t> png;
+        if (CNA::Internal::Media::ThumbnailGenerator::CreatePngThumbnail(path_, png))
+        {
+            return new System::IO::MemoryStream(
+                png.data(), static_cast<SharpRuntime::intcs>(png.size()));
+        }
+        return new System::IO::FileStream(path_);
     }
 
     bool Picture::Equals(const Picture* other) const
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return other != nullptr && path_ == other->path_;
+    }
+
+    int Picture::GetHashCode() const
+    {
+        return static_cast<int>(std::hash<std::string>{}(path_));
     }
 
     std::string Picture::ToString() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     const std::string& Picture::GetTypeName() const
@@ -79,13 +99,11 @@ namespace Microsoft::Xna::Framework::Media
 
     bool operator==(const Picture& lhs, const Picture& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return lhs.Equals(&rhs);
     }
 
     bool operator!=(const Picture& lhs, const Picture& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return !(lhs == rhs);
     }
 }

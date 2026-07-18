@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/MediaQueue.hpp"
 
-#include <stdexcept>
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
@@ -37,9 +37,13 @@ namespace Microsoft::Xna::Framework::Media
 
     Song* MediaQueue::operator[](SharpRuntime::intcs index) const
     {
+        // FNA throws ArgumentOutOfRangeException (implicitly, via the underlying List<T>
+        // indexer -- MediaQueue.cs). Matches the majority project precedent (BoundingBox/
+        // VertexBuffer/NetworkSessionProperties), not TouchCollection's std::out_of_range
+        // outlier -- see plan_media.md Section 2 item 7.
         if (index < 0 || index >= getCountProperty())
         {
-            throw std::out_of_range("index");
+            throw System::ArgumentOutOfRangeException("index");
         }
 
         return songs_[static_cast<std::size_t>(index)].get();

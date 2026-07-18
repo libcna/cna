@@ -184,6 +184,24 @@ namespace Microsoft::Xna::Framework::Media
         /** @brief Releases backend media resources if initialized. Called at application exit. */
         NOXNA static void ProgramExit();
 
+        /**
+         * @brief Fallback song-end detector for builds without a native track-stopped signal
+         * (i.e. without SOUND_ENABLED).
+         *
+         * Compares elapsed playback time against the song's known duration. Only reports "ended"
+         * when duration is genuinely known (greater than zero) -- an unset/zero Duration (e.g. a
+         * Song constructed without one) can't be detected this way, so playback simply never
+         * auto-advances in that case, rather than false-triggering immediately at time zero.
+         * Always compiled (not gated by SOUND_ENABLED) so it can be exercised directly by tests
+         * regardless of which audio backend a given build has.
+         *
+         * @param activeSong The currently active song (may be nullptr).
+         * @param elapsed    Elapsed playback time since the song started.
+         * @return true if the song should be considered ended.
+         */
+        NOXNA [[nodiscard]] static bool DetectSongEndedByElapsedTime(
+            Song* activeSong, System::TimeSpan elapsed);
+
     private:
         static bool isMuted_;
         static bool isRepeating_;

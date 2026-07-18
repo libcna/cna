@@ -79,6 +79,7 @@ target_compile_definitions(CNA
         $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
+        $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
 )
 
 if(CNA_DRACO_AVAILABLE)

@@ -1,50 +1,56 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Playlist.hpp"
 
-#include <stdexcept>
+#include <functional>
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Media
 {
+    Playlist::Playlist(std::string name, SongCollection* songs, System::TimeSpan duration)
+        : name_(std::move(name)), songs_(songs), duration_(duration)
+    {
+    }
+
     void Playlist::Dispose()
     {
-        // TODO: implement playlist resource cleanup
-        throw std::runtime_error("not implemented");
+        // A Playlist is a non-owning view into MediaLibrary's real data -- nothing
+        // playlist-specific to release, only the disposed flag itself.
+        isDisposed_ = true;
     }
 
     System::TimeSpan Playlist::getDurationProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return duration_;
     }
 
     bool Playlist::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return isDisposed_;
     }
 
     std::string Playlist::getNameProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     SongCollection* Playlist::getSongsProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return songs_;
     }
 
     bool Playlist::Equals(const Playlist* other) const
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return other != nullptr && name_ == other->name_;
+    }
+
+    int Playlist::GetHashCode() const
+    {
+        return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
     std::string Playlist::ToString() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     const std::string& Playlist::GetTypeName() const
@@ -53,15 +59,18 @@ namespace Microsoft::Xna::Framework::Media
         return typeName;
     }
 
+    // FNA's real operator== has a ReferenceEquals-then-Equals null-check shape, since its
+    // parameters are nullable C# object references; CNA's operator overloads across this whole
+    // namespace instead take C++ references (see Genre/Artist/Album/Picture/PictureAlbum), which
+    // cannot represent "null" the same way -- Equals() is called directly, matching that
+    // project-wide convention rather than reintroducing null-handling a reference can't express.
     bool operator==(const Playlist& lhs, const Playlist& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return lhs.Equals(&rhs);
     }
 
     bool operator!=(const Playlist& lhs, const Playlist& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return !(lhs == rhs);
     }
 }

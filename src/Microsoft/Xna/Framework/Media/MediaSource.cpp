@@ -1,35 +1,35 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/MediaSource.hpp"
 
-#include <stdexcept>
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Media
 {
-    MediaSource::MediaSource()
+    MediaSource::MediaSource(MediaSourceType type, std::string name)
+        : type_(type), name_(std::move(name))
     {
     }
 
     MediaSourceType MediaSource::getMediaSourceTypeProperty() const
     {
-        // TODO: implement media source type retrieval
-        throw std::runtime_error("not implemented");
+        return type_;
     }
 
     std::string MediaSource::getNameProperty() const
     {
-        // TODO: implement media source name retrieval
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     std::vector<MediaSource*> MediaSource::GetAvailableMediaSources()
     {
-        return {};
+        // No real "device enumeration" concept on desktop -- there is exactly one real source,
+        // the local device itself (plan_media.md MEDIA-61; no FNA logic to port, see plan §0).
+        return { new MediaSource(MediaSourceType::LocalDevice, "Local Device") };
     }
 
     std::string MediaSource::ToString() const
     {
-        // TODO: implement media source string representation
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     const std::string& MediaSource::GetTypeName() const

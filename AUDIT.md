@@ -1424,28 +1424,28 @@ never reached `GestureDetector`) to real and gesture-tested (`plan_input.md` Pha
 
 | Class / Enum | Status | Notes |
 |---|---|---|
-| Album | ✅ | API complete (stub behavior) |
-| AlbumCollection | ✅ | API complete |
-| Artist | ✅ | API complete (stub behavior) |
-| ArtistCollection | ✅ | API complete |
-| Genre | ✅ | API complete (stub behavior) |
-| GenreCollection | ✅ | API complete |
-| MediaLibrary | ✅ | API complete (stub behavior) |
-| MediaPlayer | ✅ | Implemented (SDL_mixer) |
+| Album | ✅ | Real thumbnails (genuinely downscaled, `MEDIA-209`) and embedded ID3v2 APIC / FLAC PICTURE cover art (`MEDIA-206`/`207`) as of Phase 16; `HasArt` is asserted to agree exactly with what `GetAlbumArt()` can deliver. Real, from-scratch local-library implementation (FNA itself is a permanent `NotImplementedException` stub — no upstream behavior to match); backed by `MediaLibraryIndex`, grouped by (Name, Artist) |
+| AlbumCollection | ✅ | Real; backed by `CNA::Internal::Media::MediaCollectionBase<Album>` |
+| Artist | ✅ | Real, from-scratch (see Album's note); case-insensitive name dedup against tag-casing inconsistencies (`plan_media.md` D10) |
+| ArtistCollection | ✅ | Real; backed by `MediaCollectionBase<Artist>` |
+| Genre | ✅ | Real, from-scratch (see Album's note) |
+| GenreCollection | ✅ | Real; backed by `MediaCollectionBase<Genre>` |
+| MediaLibrary | ✅ | Real, from-scratch orchestrator: synchronous point-in-time scan of real OS Music/Pictures folders (`CNA::Internal::Media::MediaLibraryPaths`) at construction, builds the whole Song/Album/Artist/Genre/Picture/PictureAlbum/Playlist object graph (`plan_media.md` §4, MEDIA-46..69) |
+| MediaPlayer | ✅ | Implemented (SDL3_mixer). Visualization is **genuinely functional as of Phase 16** (`MIX_SetPostMixCallback` PCM tap + a from-scratch radix-2 FFT, `MEDIA-186`..`191`); it was a pure stub before, with a test that asserted the broken behavior as if it were the specification |
 | MediaQueue | ✅ | API complete |
-| MediaSource | ✅ | API complete |
+| MediaSource | ✅ | Real; `GetAvailableMediaSources()` returns one real `LocalDevice` entry. All 4 XNA members present. `WindowsMediaConnect` device *discovery* is deliberately not implemented — an Xbox 360/WMP-era concept with no desktop equivalent; the enum value itself exists (`MEDIA-212`) |
 | MediaSourceType (enum) | ✅ | Complete |
 | MediaState (enum) | ✅ | Complete |
-| Picture | ✅ | API complete (stub behavior) |
-| PictureAlbum | ✅ | API complete (stub behavior) |
-| PictureAlbumCollection | ✅ | API complete |
-| PictureCollection | ✅ | API complete |
-| Playlist | ✅ | API complete (stub behavior) |
-| PlaylistCollection | ✅ | API complete |
-| Song | ✅ | API complete |
-| SongCollection | ✅ | API complete |
-| Video | ✅ | API complete |
-| VideoPlayer | ✅ | Implemented (FFmpeg) |
+| Picture | ✅ | Real downscaled thumbnails as of Phase 16 (`MEDIA-210`; `GetThumbnail()` used to be a synonym for `GetImage()`). Real, from-scratch (see Album's note); dimensions via the existing `CNA::Internal::Graphics::ImageLoader` (reused, not reimplemented) |
+| PictureAlbum | ✅ | Real, from-scratch; real filesystem-tree-mirroring parent/child structure |
+| PictureAlbumCollection | ✅ | Real; backed by `MediaCollectionBase<PictureAlbum>` |
+| PictureCollection | ✅ | Real; backed by `MediaCollectionBase<Picture>` |
+| Playlist | ✅ | Real, from-scratch; backed by a real M3U/M3U8 parser (`plan_media.md` D5) |
+| PlaylistCollection | ✅ | Real; backed by `MediaCollectionBase<Playlist>` |
+| Song | ✅ | API complete **as of Phase 16** — `Album`/`Artist`/`Genre`/`ToString()` were MISSING until `MEDIA-174`/`176` (CNA inherited the omission from FNA's own `Song.cs`; the previous ✅ here was inaccurate). `TrackNumber`/`IsRated`/`Rating` are now real tag-derived values, not hardcoded constants (`MEDIA-181`/`184`) |
+| SongCollection | ✅ | API complete; member-level diff against the XNA reference XML confirms no gaps (`MEDIA-213`) |
+| Video | ⚠️ | API complete on Linux/macOS (FFmpeg-backed). On Windows/Android/Emscripten, `Video.cpp` itself is excluded from the build (`cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE` gate) while the public header stays available -- referencing this class there is a link error, not a graceful runtime `NotSupportedException` (found by external code review, `plan_media.md` §10) |
+| VideoPlayer | ⚠️ | Implemented (FFmpeg) on Linux/macOS; same Windows/Android/Emscripten link-error caveat as `Video` above |
 | VideoSoundtrackType (enum) | ✅ | Complete |
 | VisualizationData | ✅ | API complete |
 

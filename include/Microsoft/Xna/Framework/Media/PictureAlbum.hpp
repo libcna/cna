@@ -9,14 +9,11 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+    class MediaLibrary;
     class PictureAlbumCollection;
     class PictureCollection;
 
-    /**
-     * @brief Represents a hierarchical album of pictures in the media library.
-     *
-     * @note Status: Stub — media library catalog access not implemented.
-     */
+    /** @brief Represents a hierarchical album of pictures in the media library. */
     class PictureAlbum final : public System::Object, public System::IDisposable
     {
     public:
@@ -89,6 +86,15 @@ namespace Microsoft::Xna::Framework::Media
         friend bool operator!=(const PictureAlbum& lhs, const PictureAlbum& rhs);
 
     private:
-        PictureAlbum();
+        friend class MediaLibrary;
+        PictureAlbum(std::string name, PictureAlbum* parent, std::string path);
+        void SetChildAlbumsAndPictures(PictureAlbumCollection* childAlbums, PictureCollection* pictures);
+
+        std::string name_;
+        PictureAlbum* parent_; // non-owning; nullptr for the root album
+        std::string path_;     // canonical path -- identity/equality key, not exposed publicly
+        PictureAlbumCollection* childAlbums_ = nullptr; // non-owning -- owned by MediaLibrary
+        PictureCollection* pictures_ = nullptr;         // non-owning
+        bool isDisposed_ = false;
     };
 }

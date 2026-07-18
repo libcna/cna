@@ -1,52 +1,51 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/ArtistCollection.hpp"
 
-#include <stdexcept>
-
 namespace Microsoft::Xna::Framework::Media
 {
+    ArtistCollection::ArtistCollection(std::vector<Artist*> artists)
+        : base_(std::move(artists))
+    {
+    }
+
     void ArtistCollection::Dispose()
     {
-        // TODO: implement collection cleanup
-        throw std::runtime_error("not implemented");
+        base_.Dispose();
     }
 
     SharpRuntime::intcs ArtistCollection::getCountProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.Count();
     }
 
     bool ArtistCollection::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.IsDisposed();
     }
 
     Artist* ArtistCollection::operator[](SharpRuntime::intcs index) const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.At(index);
     }
 
     ArtistCollection::iterator ArtistCollection::begin()
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     ArtistCollection::iterator ArtistCollection::end()
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     ArtistCollection::const_iterator ArtistCollection::begin() const
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     ArtistCollection::const_iterator ArtistCollection::end() const
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     const std::string& ArtistCollection::GetTypeName() const

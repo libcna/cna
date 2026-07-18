@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "System/IO/BinaryWriter.hpp"
+#include "System/IO/FileNotFoundException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -67,9 +68,15 @@ TEST_F(SongContentTypeReaderTest, ReferenceToNonexistentFileFallsBackToUnstrippe
     // pre-existing CNA behavior this reader inherits rather than works around; SongReader's own
     // fallback logic still ran correctly (it did fall back to the un-stripped path, matching FNA),
     // it's just that CNA's Song rejects that fallback instead of accepting it silently.
+    //
+    // plan_media.md MEDIA-10/MEDIA-75: Song's ctor now throws System::IO::FileNotFoundException
+    // (matching the established AudioEngine/SoundBank/WaveBank precedent) instead of a bare
+    // std::runtime_error -- confirms the corrected exception type propagates all the way through
+    // ContentManager::Load<Song>(), not just at the raw Song constructor level.
     ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed/song");
 
-    EXPECT_THROW(ReadSongFields(cm, "does_not_exist_song", "does_not_exist.wma", 1234), std::runtime_error);
+    EXPECT_THROW(ReadSongFields(cm, "does_not_exist_song", "does_not_exist.wma", 1234),
+                 System::IO::FileNotFoundException);
 }
 
 TEST_F(SongContentTypeReaderTest, ReferenceEndingInFourCharacterRealExtensionResolvesToRealFile)

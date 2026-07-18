@@ -10,11 +10,9 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
-    /**
-     * @brief Represents a media source device from which the media library reads content.
-     *
-     * @note Status: Stub — media source enumeration not implemented.
-     */
+    class MediaLibrary;
+
+    /** @brief Represents a media source device from which the media library reads content. */
     class MediaSource final : public System::Object
     {
     public:
@@ -50,6 +48,10 @@ namespace Microsoft::Xna::Framework::Media
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
-        MediaSource();
+        friend class MediaLibrary;
+        MediaSource(MediaSourceType type, std::string name);
+
+        MediaSourceType type_;
+        std::string name_;
     };
 }

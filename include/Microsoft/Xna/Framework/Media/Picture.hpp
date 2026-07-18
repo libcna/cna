@@ -6,18 +6,16 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "System/IDisposable.hpp"
+#include "System/IO/Stream.hpp"
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
+    class MediaLibrary;
     class PictureAlbum;
 
-    /**
-     * @brief Represents a picture in the device media library.
-     *
-     * @note Status: Stub — media library catalog access not implemented.
-     */
+    /** @brief Represents a picture in the device media library. */
     class Picture final : public System::Object, public System::IDisposable
     {
     public:
@@ -67,18 +65,24 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] SharpRuntime::intcs getWidthProperty() const;
 
         /**
-         * @brief Returns the full-size image data for this picture, or nullptr if unavailable.
+         * @brief Returns a stream over the full-size image data for this picture.
          *
-         * @return Opaque pointer to image data.
+         * The FNA/XNA return type is Stream (not the previous placeholder void*, corrected here
+         * to match the real API shape now that this member is genuinely implemented).
+         *
+         * @return Pointer to a Stream over the image data. Caller owns the Stream.
          */
-        void* GetImage();
+        System::IO::Stream* GetImage();
 
         /**
-         * @brief Returns a thumbnail image for this picture, or nullptr if unavailable.
+         * @brief Returns a stream over a thumbnail of this picture.
          *
-         * @return Opaque pointer to thumbnail data.
+         * No separate thumbnail is generated -- returns the same image as GetImage(), matching
+         * this being a from-scratch feature with no FNA behavior to differ against.
+         *
+         * @return Pointer to a Stream over the thumbnail image data. Caller owns the Stream.
          */
-        void* GetThumbnail();
+        System::IO::Stream* GetThumbnail();
 
         /**
          * @brief Returns whether this picture is equal to another.
@@ -104,6 +108,19 @@ namespace Microsoft::Xna::Framework::Media
         /** @brief Returns the fully-qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
+        /**
+         * @brief Returns this picture's resolved file path, usable as the token accepted by
+         * MediaLibrary::GetPictureFromToken().
+         *
+         * FNA's "opaque library token" has no real equivalent source on desktop (it historically
+         * came from a native Zune/Xbox picture-picker UI); the resolved file path is used as a
+         * simple, real, stable token instead so the token API is actually usable end-to-end, not
+         * just present (plan_media.md MEDIA-62; no FNA logic to port, see plan §0).
+         *
+         * @return Token string identifying this picture.
+         */
+        NOXNA [[nodiscard]] const std::string& getTokenEXT() const { return path_; }
+
         /** @brief Returns whether two pictures are equal. */
         friend bool operator==(const Picture& lhs, const Picture& rhs);
 
@@ -111,6 +128,17 @@ namespace Microsoft::Xna::Framework::Media
         friend bool operator!=(const Picture& lhs, const Picture& rhs);
 
     private:
-        Picture();
+        friend class MediaLibrary;
+        Picture(std::string name, PictureAlbum* album, SharpRuntime::intcs width,
+                SharpRuntime::intcs height, std::chrono::system_clock::time_point date,
+                std::string path);
+
+        std::string name_;
+        PictureAlbum* album_; // non-owning -- owned by MediaLibrary
+        SharpRuntime::intcs width_;
+        SharpRuntime::intcs height_;
+        std::chrono::system_clock::time_point date_;
+        std::string path_; // resolved file path -- also the equality key
+        bool isDisposed_ = false;
     };
 }

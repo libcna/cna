@@ -3,7 +3,10 @@
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 
+#include <filesystem>
 #include <utility>
+
+#include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
@@ -16,6 +19,17 @@ namespace Microsoft::Xna::Framework::Media
           soundtrackType_(VideoSoundtrackType::MusicAndDialog),
           duration_(System::TimeSpan::Zero)
     {
+        // FNA's raw-file constructor explicitly checks File.Exists and throws
+        // FileNotFoundException before ever touching the file (Video.cs). CNA's equivalent
+        // previously just probed via VideoDecoder::Open and silently left width_/height_/
+        // duration_ at 0 on failure, with no exception at all -- a real fidelity gap
+        // (plan_media.md MEDIA-44).
+        if (!std::filesystem::exists(fileName_))
+        {
+            throw System::IO::FileNotFoundException(
+                "Could not find file '" + fileName_ + "'.", fileName_);
+        }
+
         CNA::Internal::Media::VideoDecoder probe;
         if (probe.Open(fileName_))
         {

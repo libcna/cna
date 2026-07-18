@@ -14,6 +14,7 @@
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/Texture3DContentTypeReader.hpp"
 #include "CNA/Internal/Xnb/TextureCubeContentTypeReader.hpp"
+#include "CNA/Internal/Xnb/VideoContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReader.hpp"
 
 namespace CNA::Internal::Xnb
@@ -30,6 +31,7 @@ namespace CNA::Internal::Xnb
         RegisterSpriteFontXnbReader();
         RegisterSoundEffectXnbReader();
         RegisterSongXnbReader();
+        RegisterVideoXnbReader();
         RegisterStockEffectXnbReaders();
         RegisterModelXnbReaders();
         Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders();

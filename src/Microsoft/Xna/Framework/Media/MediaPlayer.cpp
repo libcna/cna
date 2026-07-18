@@ -2,8 +2,12 @@
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <stdexcept>
+
+#include "CNA/Internal/Media/VisualizationCapture.hpp"
+#include "CNA/Internal/Media/VisualizationFFT.hpp"
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
@@ -26,6 +30,15 @@ namespace Microsoft::Xna::Framework::Media
     MediaQueue   MediaPlayer::queue_;
     std::mt19937 MediaPlayer::random_(std::random_device{}());
 
+    // Visualization capture state (plan_media.md MEDIA-186/188). Kept outside the SOUND_ENABLED
+    // guard so IsVisualizationEnabled still round-trips in a no-audio build; only the actual
+    // post-mix tap below is audio-backend specific.
+    namespace
+    {
+        bool g_visualizationEnabled = false;
+        CNA::Internal::Media::VisualizationCapture g_visualizationCapture;
+    }
+
     bool         MediaPlayer::timerRunning_          = false;
     std::chrono::steady_clock::time_point MediaPlayer::timerStart_;
     std::chrono::duration<double> MediaPlayer::accumulatedTime_ =
@@ -43,6 +56,16 @@ namespace Microsoft::Xna::Framework::Media
         {
             // Called from the audio thread — only set a flag.
             g_songEnded.store(true, std::memory_order_relaxed);
+        }
+
+        // Runs on the AUDIO THREAD for every mixed buffer: must stay real-time safe (no
+        // allocation, no locking, no exceptions). VisualizationCapture::Push is written to that
+        // contract. SDL3_mixer hands us float32 PCM directly, so no format conversion is needed --
+        // only a downmix to mono (plan_media.md MEDIA-186).
+        void SDLCALL OnPostMix(void* /*userdata*/, MIX_Mixer* /*mixer*/,
+                                const SDL_AudioSpec* spec, float* pcm, int samples)
+        {
+            g_visualizationCapture.Push(pcm, samples, spec != nullptr ? spec->channels : 1);
         }
 
         void DestroyMusicAudio()
@@ -153,13 +176,72 @@ namespace Microsoft::Xna::Framework::Media
 
     bool MediaPlayer::getIsVisualizationEnabledProperty()
     {
-        // SDL3_mixer does not expose visualization data.
-        return false;
+        return g_visualizationEnabled;
     }
 
-    void MediaPlayer::setIsVisualizationEnabledProperty(bool /*value*/)
+    void MediaPlayer::setIsVisualizationEnabledProperty(bool value)
     {
-        // SDL3_mixer does not support visualization.
+        if (g_visualizationEnabled == value)
+        {
+            return;
+        }
+
+        // The flag is assigned only from what ACTUALLY happened, never up front. An earlier version
+        // set it before even obtaining the mixer, so a GetMixer() failure left
+        // IsVisualizationEnabled reporting true with no mixer and no callback -- a caller would then
+        // poll forever for data that could never arrive (plan_media.md MEDIA-222).
+#ifdef SOUND_ENABLED
+        try
+        {
+            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+
+            if (!value)
+            {
+                // Disabling always ends with the flag false: with no mixer there is nothing to
+                // disable, and with one we remove the tap first (see below).
+                if (mixer != nullptr && MIX_SetPostMixCallback(mixer, nullptr, nullptr))
+                {
+                    // Uninstall confirmed, so no callback can be writing -- safe to clear.
+                    g_visualizationCapture.Reset();
+                }
+                else if (mixer == nullptr)
+                {
+                    // No mixer was ever created, so no callback can exist.
+                    g_visualizationCapture.Reset();
+                }
+                // Uninstall FAILED: the callback may still be live, so deliberately do NOT Reset()
+                // -- zeroing a buffer another thread is writing is the exact race MEDIA-216 fixed.
+                g_visualizationEnabled = false;
+                return;
+            }
+
+            // Enabling: only report enabled once a tap is genuinely installed.
+            if (mixer == nullptr)
+            {
+                return; // stays false
+            }
+            // Clear BEFORE installing: once the callback is live the audio thread owns the buffer.
+            g_visualizationCapture.Reset();
+            if (MIX_SetPostMixCallback(mixer, OnPostMix, nullptr))
+            {
+                g_visualizationEnabled = true;
+            }
+            // Install failed -> flag stays false, matching reality.
+        }
+        catch (const std::exception&)
+        {
+            // GetMixer() throws when no audio device can be created at all (e.g. a headless
+            // machine). No callback was ever installed, so clearing is safe -- but enabling must
+            // NOT be reported as successful.
+            g_visualizationCapture.Reset();
+            g_visualizationEnabled = false;
+        }
+#else
+        // No audio backend compiled in: there is no audio thread, so the flag round-trips and the
+        // buffer simply stays empty.
+        g_visualizationEnabled = value;
+        g_visualizationCapture.Reset();
+#endif
     }
 
     // --- public methods ---
@@ -272,25 +354,62 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::GetVisualizationData(VisualizationData& data)
     {
-        (void)data;
-        // SDL3_mixer does not expose frequency/sample visualization data.
+        // XNA only produces visualization data while it is switched on; with it off (or with
+        // nothing captured yet) the arrays stay zeroed, matching VisualizationData's own
+        // zero-initialized construction rather than throwing (plan_media.md MEDIA-189).
+        if (!g_visualizationEnabled || !g_visualizationCapture.HasData())
+        {
+            data.samp.fill(0.0f);
+            data.freq.fill(0.0f);
+            return;
+        }
+
+        // Sample domain: the most recent VisualizationData::Size mono samples.
+        g_visualizationCapture.Read(data.samp.data(), data.samp.size());
+
+        // Frequency domain: FFT over a larger window ending at the same point, so the 256 bins
+        // XNA exposes come from a 512-sample transform rather than a needlessly short one.
+        std::array<float, CNA::Internal::Media::VisualizationFFT::InputSize> window{};
+        g_visualizationCapture.Read(window.data(), window.size());
+
+        std::array<float, CNA::Internal::Media::VisualizationFFT::BinCount> bins{};
+        CNA::Internal::Media::VisualizationFFT::ComputeMagnitudes(window, bins);
+
+        static_assert(CNA::Internal::Media::VisualizationFFT::BinCount ==
+                        static_cast<std::size_t>(VisualizationData::Size),
+                        "FFT bin count must match VisualizationData::Size");
+        std::copy(bins.begin(), bins.end(), data.freq.begin());
+    }
+
+    bool MediaPlayer::DetectSongEndedByElapsedTime(Song* activeSong, System::TimeSpan elapsed)
+    {
+        if (activeSong == nullptr)
+        {
+            return false;
+        }
+        System::TimeSpan duration = activeSong->getDurationProperty();
+        return duration > System::TimeSpan::Zero && elapsed >= duration;
     }
 
     void MediaPlayer::Update()
     {
-        if (queue_.getActiveSongProperty() == nullptr || getStateProperty() != MediaState::Playing)
+        Song* activeSong = queue_.getActiveSongProperty();
+        if (activeSong == nullptr || getStateProperty() != MediaState::Playing)
         {
             return;
         }
 
 #ifdef SOUND_ENABLED
-        if (!g_songEnded.exchange(false, std::memory_order_relaxed))
+        bool songEnded = g_songEnded.exchange(false, std::memory_order_relaxed);
+#else
+        // No native track-stopped signal in this build configuration -- fall back to comparing
+        // wall-clock elapsed time against the song's known duration (plan_media.md MEDIA-32).
+        bool songEnded = DetectSongEndedByElapsedTime(activeSong, TimerElapsed());
+#endif
+        if (!songEnded)
         {
             return;
         }
-#else
-        return;
-#endif
 
         numSongsInQueuePlayed_ += 1;
 
