@@ -55,7 +55,18 @@ namespace CNA::Internal::Audio
 
         void skip(std::size_t n)
         {
-            if (cur + n > end) throw std::runtime_error("XACT parse: skip past end");
+            // AUD-11-005: matches seek()'s own AUDIO-PARSER-001 fix below -- validate in the
+            // integer domain BEFORE ever forming `cur + n`. Computing that pointer first is
+            // undefined behavior for an adversarially large `n` (e.g. a caller-side field-size
+            // subtraction that underflowed to a huge uint32_t/size_t value), even though it
+            // doesn't reliably trip ASan/UBSan on a typical 64-bit target (the resulting pointer
+            // value usually still lands within the process's mapped address space, so neither the
+            // pointer-overflow nor address sanitizers have anything to flag unless it's actually
+            // dereferenced) -- it's still real UB per the standard, and defense-in-depth against a
+            // caller relying solely on this bounds check the way the compact XWB entry loop
+            // (XactParser.cpp) does.
+            const std::size_t remaining = static_cast<std::size_t>(end - cur);
+            if (n > remaining) throw std::runtime_error("XACT parse: skip past end");
             cur += n;
         }
 
@@ -564,6 +575,23 @@ namespace CNA::Internal::Audio
             // data, same policy already applied to the deviation/offset checks further down.
             if (alignment == 0)
                 throw std::runtime_error("XWB: corrupt compact wave bank (zero alignment)");
+
+            // AUD-11-005: entryMetaDataSize must be at least 4 to hold the compact per-entry u32
+            // (offsetUnits:21, deviation:11) the loop below unconditionally reads via ctx.u32().
+            // Unlike the non-compact branch's carefully graduated conditional reads (which
+            // structurally guarantee the bytes consumed never exceed entryMetaDataSize, however
+            // small it is), this branch has no such guard: an adversarial/corrupt value smaller
+            // than 4 would make `entryMetaDataSize - 4` (both uint32_t) underflow to a huge value
+            // passed straight to ctx.skip(). ctx.skip()'s own bounds check already prevents this
+            // from ever reading/writing out of bounds (confirmed empirically: neither GCC's nor
+            // Clang's ASan+UBSan flag anything for this exact pattern, since the resulting pointer
+            // value stays within the process's mapped address space and is only ever compared,
+            // never dereferenced) -- but relying on that generic "skip past end" catch instead of
+            // failing right here, with a diagnostic naming the actual problem, is worse for
+            // anyone debugging a real corrupt file. D7: throw rather than silently produce wrong
+            // data, same policy as the alignment check just above.
+            if (entryMetaDataSize < 4)
+                throw std::runtime_error("XWB: corrupt compact wave bank (entryMetaDataSize too small)");
 
             // Compact format: 32-bit per entry: dwOffset (21 bits, units of `alignment`),
             // dwLengthDeviation (11 bits). The deviation is how many bytes shorter than the

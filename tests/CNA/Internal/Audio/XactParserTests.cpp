@@ -427,6 +427,64 @@ namespace
         return data;
     }
 
+    // AUD-11-005: a corrupt/adversarial entryMetaDataSize smaller than 4 (the size of the
+    // compact per-entry u32 the parser unconditionally reads) makes `entryMetaDataSize - 4`
+    // (both uint32_t) underflow to a huge value passed straight to ctx.skip() -- unlike the
+    // non-compact path's carefully graduated conditional reads (which structurally guarantee
+    // `ctx.cur - entryPtr` never exceeds entryMetaDataSize), the compact path has no such
+    // guard. Must fail cleanly, not with UB pointer arithmetic or a crash.
+    std::vector<uint8_t> BuildCompactXwbFixtureWithEntryMetaDataSizeTooSmall()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 2; // too small: the compact entry itself is 4 bytes
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 8;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1); // version (<=43 -> no headerVersion field)
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "AUD-11-005", 64); // bank name
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0); // entryNameElementSize
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        // The one compact entry: a plausible, in-range offset/deviation -- the defect is in
+        // entryMetaDataSize itself, not this value.
+        AppendU32(data, (0u) | (0u << 21));
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
     // Compact .xwb with the channel field encoded as raw "2" (stereo) -- IN-7 regression
     // fixture, independent of any fixture that assumed the old (buggy) "field is channels
     // minus one" convention.
@@ -1376,6 +1434,26 @@ TEST(XactParserTest, CompactWaveBankThrowsWhenOffsetMultiplicationOverflows32Bit
     EXPECT_THROW(
         ParseXwb(BuildCompactXwbFixtureWithAlignment(0x1000u, 0x100000u)),
         std::runtime_error);
+}
+
+// AUD-11-005: entryMetaDataSize < 4 must fail cleanly (a specific, diagnostic exception), not
+// via UB pointer arithmetic inside ctx.skip() reached only by luck of the bounds check catching
+// the resulting huge value after the fact.
+TEST(XactParserTest, CompactWaveBankThrowsWhenEntryMetaDataSizeTooSmall)
+{
+    try
+    {
+        ParseXwb(BuildCompactXwbFixtureWithEntryMetaDataSizeTooSmall());
+        FAIL() << "expected std::runtime_error";
+    }
+    catch (const std::runtime_error& ex)
+    {
+        // Checks the specific, diagnostic message naming the real problem -- not just any
+        // exception (the pre-fix code already threw a generic "skip past end" from deep inside
+        // Ctx::skip(), which would make a plain EXPECT_THROW pass even without this fix).
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("entryMetaDataSize"), std::string::npos) << what;
+    }
 }
 
 TEST(XactParserTest, CompactWaveBankChannelFieldIsRawChannelCountNotMinusOne)
