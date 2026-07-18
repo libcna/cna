@@ -8488,7 +8488,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   matrix needs real reference data this session does not have. Left **OPEN**, consistent
   with `BASE2-001`/`002`/`003`.
 
-### BASE2-005 — Make event ordering and mutation semantics explicit — OPEN
+### BASE2-005 — Make event ordering and mutation semantics explicit — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -8500,6 +8500,60 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Deterministic tests cover reentrant update, add/remove handler and throwing handler.
   - Accelerometer dual events match reference order.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** confirmed by direct source reading (not assumed) that
+  `System::EventHandler<T>::Raise()` (sharp-runtime,
+  `include/System/EventHandler.hpp`) already (1) takes `const TEventArgs&`
+  — compile-time-enforced, no handler can mutate another handler's args —
+  and (2) copies `handlers_` into a local `snapshot` before iterating, so
+  `Add()`/`Remove()` during dispatch only ever affects the *next* `Raise()`
+  call, matching C# multicast-delegate semantics; this closes the "sender/
+  args semantics" and "handler list mutation during dispatch" acceptance
+  criteria by construction, not by new source changes to `EventHandler<T>`
+  itself.
+  - **Stale test found and fixed:** `AccelerometerTests.cpp`'s
+    `RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNotThrow` carried a
+    comment describing an *older*, already-fixed `Raise()` behavior (live
+    iteration over `handlers_` with a real iterator-invalidation risk) and
+    deliberately weakened its own assertion to `(void)secondHandlerInvoked;`
+    ("documents, rather than asserts"). Renamed to
+    `RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt`,
+    comment rewritten to describe the current, verified snapshot behavior,
+    and the assertion tightened to a real, deterministic check: the handler
+    removed mid-dispatch still fires in *that* dispatch, and is confirmed
+    gone only on the next one.
+  - **New test added:** `HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState`
+    — the "reentrant update" scenario named in this task's acceptance
+    criteria (a handler that triggers a brand-new dispatch from within
+    itself) had no test anywhere in this file before. Confirms no deadlock,
+    the outer and reentrant inner dispatch are both observed in the correct
+    order (`[1.0f, 2.0f]`), and `CurrentValue` reflects the inner update
+    once the outer handler returns.
+  - **"Throwing handler" and "dual events match reference order" criteria
+    were already covered by pre-existing, still-passing tests**, confirmed
+    still current rather than re-authored:
+    `ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose`,
+    `ThrowingNonStdExceptionDuringDispatchToInstancesForTestingIsObservable`,
+    `ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent`,
+    and `CurrentValueChangedFiresBeforeReadingChanged` (the real WP7 firing
+    order — `CurrentValueChanged` always first, `ReadingChanged` second —
+    is documented and preserved at `Accelerometer.cpp`'s
+    `SetCurrentValueAndMarkDataValid()` call site, Task `ACCEL-002`/`LIFE-004`).
+  - **Files changed:** `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`
+    only — no production source changes were needed; the underlying
+    guarantees already existed in sharp-runtime and in
+    `Accelerometer.cpp`'s existing dual-event ordering, this task's gap was
+    entirely in test coverage and one stale test comment.
+  - **Tests:** full `*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*SensorBase*`
+    filter (312 tests, 19 suites) passes clean under both the UBSan build
+    (`cmake-build-devices-ubsan`) and the TSan build
+    (`cmake-build-devices-tsan`) — 308 passed, 4 pre-existing hardware-only
+    skips, 0 failures, no sanitizer report in either build.
+  - **Scope note:** this task's problem statement was written as if it
+    needed an external WP7 oracle; it did not — the two concrete gaps
+    (a stale test comment describing already-fixed behavior, and a
+    genuinely untested reentrancy scenario) were both found by reading the
+    current source directly, the same "investigate before deferring"
+    pattern that found real bugs in `BASE2-001`/`BASE2-002`.
 
 ### BASE2-006 — Audit reading value semantics, hashing and formatting — OPEN
 

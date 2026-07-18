@@ -681,18 +681,25 @@ TEST(AccelerometerTests, NoDispatchAfterDispose)
     EXPECT_EQ(invokeCount, 1); // No new dispatch.
 }
 
-// Task DEVICES-0057: System::EventHandler<T>::Raise() (sharp-runtime)
-// iterates its live handlers_ vector directly (`for (auto& entry : handlers_)`)
-// rather than over a snapshot/copy — Add()/Remove() called reentrantly from
-// within a handler mutate that same vector while Raise()'s loop is still
-// using cached begin()/end() iterators over it. This is a sharp-runtime
-// concern, not something Microsoft::Devices can fix (see NEXT.md's "do not
-// fix bugs discovered in sharp-runtime" rule) — this test exists only to
-// confirm whether the specific pattern a real sensor callback might
-// plausibly do (unsubscribe a handler that hasn't run yet, from within an
-// earlier handler in the same dispatch) is actually reachable/dangerous in
-// this namespace's own usage, not to fix EventHandler<T> itself.
-TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNotThrow)
+// Task BASE2-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// this test's own comment and assertion were stale relative to
+// sharp-runtime's *current* System::EventHandler<T>::Raise() (re-read
+// directly, not assumed): `void Raise(...) { auto snapshot = handlers_; for
+// (auto& entry : snapshot) { ... } }` — it already takes a full copy of
+// handlers_ before iterating, matching C# multicast delegate semantics
+// (Add()/Remove()/Clear() during a Raise() only affect the *next* Raise()
+// call, per that method's own doc comment). The `DEVICES-0057`-era concern
+// this test originally named — Raise() iterating the *live* handlers_
+// vector directly, risking iterator invalidation from a reentrant
+// Add()/Remove() — no longer describes the current implementation; this is
+// not a sharp-runtime bug to defer to that project, it is a stale
+// description of already-fixed behavior in a cnadevices-side test. The
+// previously-observational-only outcome is therefore now a real,
+// deterministic guarantee, tightened into an actual assertion: a handler
+// mid-dispatch removing a different, not-yet-invoked handler in the same
+// batch does not stop that handler from running in *this* dispatch (its
+// removal only takes effect for the next one).
+TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchStillInvokesIt)
 {
     Accelerometer a;
     a.SetStartedForTesting(true);
@@ -721,12 +728,13 @@ TEST(AccelerometerTests, RemovingAnotherNotYetInvokedHandlerDuringDispatchDoesNo
 
     EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
 
-    // Documents, rather than asserts a specific "correct" outcome: whether
-    // the removed handler still ran depends on sharp-runtime's
-    // EventHandler<T>::Raise() iterator-invalidation behavior, which this
-    // test does not fix. Recorded here as an honest observation for
-    // whoever reads this test next, not a pass/fail contract.
-    (void)secondHandlerInvoked;
+    EXPECT_TRUE(secondHandlerInvoked);
+
+    // Confirms the removal itself did take effect, just not until the next
+    // Raise() -- a second dispatch must not invoke the removed handler again.
+    secondHandlerInvoked = false;
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f));
+    EXPECT_FALSE(secondHandlerInvoked);
 }
 
 TEST(AccelerometerTests, CurrentValueChangedReceivesExpectedReading)
@@ -785,6 +793,62 @@ TEST(AccelerometerTests, InjectSyntheticSensorUpdateUpdatesCurrentValueWhenMarke
     EXPECT_TRUE(a.getIsDataValidProperty());
     const Vector3 expectedAcceleration(rawX / StandardGravity, rawY / StandardGravity, rawZ / StandardGravity);
     EXPECT_EQ(a.getCurrentValueProperty().getAccelerationProperty(), expectedAcceleration);
+}
+
+// Task BASE2-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// "reentrant update" -- a handler that triggers a *new* dispatch from
+// within itself (as opposed to destroying the owner, or removing a
+// different handler, both already covered by other tests above) -- had no
+// test anywhere in this file. Safe by construction:
+// System::EventHandler<T>::Raise()'s own `snapshot` is a local variable,
+// not shared/member state, so a nested Raise() call (triggered by this
+// handler calling InjectSyntheticSensorUpdate() again) gets its own
+// independent snapshot with no shared iteration state to corrupt. This
+// test proves that reasoning holds in practice, not just in theory: guards
+// against infinite recursion with a one-shot flag, and confirms both the
+// outer and the reentrant inner dispatch are correctly observed, in the
+// right order (inner completes fully before the outer handler returns,
+// since the reentrant call is synchronous).
+TEST(AccelerometerTests, HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState)
+{
+    Accelerometer a;
+    a.SetSupportedForTesting(true);
+    a.SetStartedForTesting(true);
+
+    constexpr float StandardGravity = 9.80665f;
+    bool reentered = false;
+    std::vector<float> observedXValues;
+
+    a.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<AccelerometerReading>& args)
+    {
+        observedXValues.push_back(args.getSensorReadingProperty().getAccelerationProperty().X * StandardGravity);
+
+        if (!reentered)
+        {
+            reentered = true;
+            // Triggers a second, nested dispatch from within the first
+            // dispatch's own handler -- the actual reentrancy this test
+            // exists to exercise.
+            a.InjectSyntheticSensorUpdate(2.0f, 0.0f, 0.0f);
+        }
+    };
+
+    EXPECT_NO_THROW(a.InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+
+    // The inner (reentrant) dispatch runs to completion — including this
+    // same handler observing its own value — before the outer call's
+    // InjectSyntheticSensorUpdate(1.0f, ...) itself returns, so the inner
+    // value (2.0f) is observed first, then the outer handler's own
+    // remaining work resumes and finishes with the outer value (1.0f)
+    // already having been what triggered this whole chain.
+    ASSERT_EQ(observedXValues.size(), 2u);
+    EXPECT_FLOAT_EQ(observedXValues[0], 1.0f);
+    EXPECT_FLOAT_EQ(observedXValues[1], 2.0f);
+
+    // Final CurrentValue must reflect whichever update was dispatched last
+    // (the inner, reentrant one) — not the outer one that triggered it, and
+    // not some corrupted mix of both.
+    EXPECT_FLOAT_EQ(a.getCurrentValueProperty().getAccelerationProperty().X * StandardGravity, 2.0f);
 }
 
 // Task SENSORBASE-005: Stop() only clears started_/state_ bookkeeping
