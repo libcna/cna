@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,19 @@ namespace Microsoft::Xna::Framework::Audio
 
         struct XactWaveBankImpl;
         std::unique_ptr<XactWaveBankImpl> xactImpl_;
+
+        // AUD-11-025: guards every access to xactImpl_ itself (not just its cache contents --
+        // see XactWaveBankImpl's own cacheMutex, which only serializes concurrent
+        // GetSoundEffect() calls against each other). Dispose() calling xactImpl_.reset() with no
+        // synchronization at all, while GetSoundEffect() is concurrently mid-decode on another
+        // thread (holding a live reference into the same XactWaveBankImpl), would otherwise
+        // destroy the object -- including its own cacheMutex -- while still in use: a genuine
+        // use-after-free, and worse than a plain UAF if the other thread is actively blocked
+        // holding that mutex when it gets destroyed out from under it. Both GetSoundEffect() and
+        // Dispose() take this same mutex before touching xactImpl_, making XactWaveBankImpl's own
+        // cacheMutex now redundant (removed) since this outer lock already serializes the entire
+        // GetSoundEffect() body.
+        std::mutex xactImplMutex_;
 
         void Init(const std::string& filename);
         void InitStreaming(const std::string& filename);

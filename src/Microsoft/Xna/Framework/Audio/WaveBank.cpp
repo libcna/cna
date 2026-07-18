@@ -26,19 +26,12 @@ namespace Microsoft::Xna::Framework::Audio
     {
         CNA::Internal::Audio::XwbData data;
 
-        // Per-entry SoundEffect cache (optional: created on first request)
+        // Per-entry SoundEffect cache (optional: created on first request). Concurrency (both
+        // against other GetSoundEffect() calls and against Dispose()) is guarded by the owning
+        // WaveBank's own xactImplMutex_ (AUD-11-024/025), not a lock in here -- Dispose() needs
+        // to serialize against xactImpl_'s own destruction too, which a lock scoped to this
+        // pimpl's own lifetime could never do (see WaveBank.hpp's xactImplMutex_ comment).
         std::vector<std::optional<SoundEffect>> cache;
-
-        // AUD-11-024: guards the whole cache lookup-then-populate sequence in GetSoundEffect()
-        // below. Without this, two threads racing to first-use the same entry could both observe
-        // an empty `cached` slot and both proceed to decode+`emplace()` into the same
-        // std::optional<SoundEffect> concurrently -- a genuine data race (UB), not just a
-        // performance concern. Real XNA/FNA document no thread-safety guarantee for WaveBank
-        // either, but this plan's acceptance criterion ("simultaneous first use decodes once or
-        // safely duplicates") asks for it explicitly, and a single mutex over the whole function
-        // is the simplest, safe interpretation: every decode is fully serialized, so it always
-        // "decodes once," never duplicates or races.
-        std::mutex cacheMutex;
 
         explicit XactWaveBankImpl(CNA::Internal::Audio::XwbData d)
             : data(std::move(d))
@@ -224,13 +217,17 @@ namespace Microsoft::Xna::Framework::Audio
 
     const SoundEffect* WaveBank::GetSoundEffect(unsigned short waveIndex)
     {
+        // AUD-11-024/025: locked before the very first `xactImpl_` access (not just around the
+        // cache lookup-then-populate sequence) so this can never race Dispose()'s
+        // `xactImpl_.reset()` on another thread -- both the "is xactImpl_ still alive" check and
+        // everything that follows must happen under the same lock Dispose() takes, or a
+        // just-checked-non-null `xactImpl_` could be destroyed out from under this function
+        // between the check and its first real use. Also still serializes two threads racing to
+        // first-use the same entry against each other, exactly as before.
+        std::lock_guard<std::mutex> lock(xactImplMutex_);
+
         if (!xactImpl_ || waveIndex >= xactImpl_->data.entries.size())
             return nullptr;
-
-        // AUD-11-024: serializes the whole lookup-then-populate sequence below so two threads
-        // racing to first-use the same entry can never both observe an empty cache slot and both
-        // try to decode+populate it concurrently -- see XactWaveBankImpl::cacheMutex's own comment.
-        std::lock_guard<std::mutex> lock(xactImpl_->cacheMutex);
 
         auto& cached = xactImpl_->cache[waveIndex];
         if (cached.has_value())
@@ -404,7 +401,14 @@ namespace Microsoft::Xna::Framework::Audio
                 if (cue) cue->Dispose(); // idempotent; safe even if already disposed elsewhere
             activeCues_.clear();
 
-            xactImpl_.reset();
+            // AUD-11-025: takes the same lock GetSoundEffect() takes before its own first
+            // xactImpl_ access, so a concurrent GetSoundEffect() call on another thread either
+            // completes entirely before this reset() runs, or blocks here until reset() (and the
+            // isDisposed_ update) has finished -- never observes a half-destroyed xactImpl_.
+            {
+                std::lock_guard<std::mutex> lock(xactImplMutex_);
+                xactImpl_.reset();
+            }
             isDisposed_ = true;
         }
     }
