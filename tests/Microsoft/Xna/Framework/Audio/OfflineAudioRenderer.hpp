@@ -38,7 +38,10 @@ namespace CNA::Test::Audio
      * `sourceChannels` channels, `sourceSampleRate` Hz) once through a brand-new, fully offline
      * SDL3_mixer pipeline. `pitchRatio` is applied via MIX_SetTrackFrequencyRatio before playing
      * (1.0 = neutral). `looped` selects infinite looping (-1) vs play-once (0) for
-     * MIX_PROP_PLAY_LOOPS_NUMBER.
+     * MIX_PROP_PLAY_LOOPS_NUMBER. `trackGain`/`mixerGain` (AUD-04-014) are applied via
+     * MIX_SetTrackGain/MIX_SetMixerGain before playing, mirroring the two independent gain
+     * stages CNA's own SoundEffectInstance::Volume and SoundEffect::MasterVolume compose through
+     * (1.0 = neutral for both, matching every existing call site's unchanged behavior).
      */
     inline OfflineRenderResult RenderRawPcmOffline(
         const std::vector<uint8_t>& sourcePcm,
@@ -49,7 +52,9 @@ namespace CNA::Test::Audio
         int renderChannels,
         int framesToRender,
         float pitchRatio = 1.0f,
-        bool looped = false)
+        bool looped = false,
+        float trackGain = 1.0f,
+        float mixerGain = 1.0f)
     {
         OfflineRenderResult result;
         result.channels = renderChannels;
@@ -105,7 +110,9 @@ namespace CNA::Test::Audio
         }
 
         if (!MIX_SetTrackAudio(track, audio) ||
-            !MIX_SetTrackFrequencyRatio(track, pitchRatio))
+            !MIX_SetTrackFrequencyRatio(track, pitchRatio) ||
+            !MIX_SetTrackGain(track, trackGain) ||
+            !MIX_SetMixerGain(mixer, mixerGain))
         {
             MIX_DestroyTrack(track);
             MIX_DestroyAudio(audio);

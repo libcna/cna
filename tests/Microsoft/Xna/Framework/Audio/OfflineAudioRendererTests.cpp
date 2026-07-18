@@ -286,3 +286,90 @@ INSTANTIATE_TEST_SUITE_P(
         PitchCase{0.5f, 1.4142136},
         PitchCase{0.75f, 1.6817928},
         PitchCase{1.0f, 2.0}));
+
+// ---------------------------------------------------------------------------
+// AUD-04-014/016: master volume (SoundEffect.MasterVolume, applied via MIX_SetMixerGain) and
+// per-instance volume (SoundEffectInstance.Volume, applied via MIX_SetTrackGain) are two
+// independent multiplicative stages -- confirmed by reading real SDL3_mixer source
+// (MIX_SetTrackGain -> SDL_SetAudioStreamGain on track->output_stream, applied when the mixer's
+// group-mixing loop pulls from that stream; MIX_SetMixerGain -> mixer->gain, applied separately
+// by MixFloat32Audio when accumulating that already-track-gained sample into the group mix
+// buffer). These tests measure the real, decoded RMS amplitude to prove the composition is
+// exactly `trackGain * mixerGain`, not double-applied and not omitted.
+// ---------------------------------------------------------------------------
+
+TEST(OfflineAudioRendererTest, TrackGainAloneScalesRmsLinearly)
+{
+    auto pcm = GenerateSineWaveS16(440.0, 44100, 1, 0.2);
+    auto baseline = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                         1.0f, false, 1.0f, 1.0f);
+    auto halved = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                       1.0f, false, 0.5f, 1.0f);
+    ASSERT_TRUE(baseline.ok);
+    ASSERT_TRUE(halved.ok);
+
+    const double baselineRms = MeasureRms(baseline.samples, 1);
+    const double halvedRms = MeasureRms(halved.samples, 1);
+    ASSERT_GT(baselineRms, 0.0);
+    EXPECT_NEAR(halvedRms / baselineRms, 0.5, 0.01);
+}
+
+TEST(OfflineAudioRendererTest, MixerGainAloneScalesRmsLinearly)
+{
+    auto pcm = GenerateSineWaveS16(440.0, 44100, 1, 0.2);
+    auto baseline = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                         1.0f, false, 1.0f, 1.0f);
+    auto halved = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                       1.0f, false, 1.0f, 0.5f);
+    ASSERT_TRUE(baseline.ok);
+    ASSERT_TRUE(halved.ok);
+
+    const double baselineRms = MeasureRms(baseline.samples, 1);
+    const double halvedRms = MeasureRms(halved.samples, 1);
+    ASSERT_GT(baselineRms, 0.0);
+    EXPECT_NEAR(halvedRms / baselineRms, 0.5, 0.01);
+}
+
+// The core AUD-04-014 claim: both gains active together compose multiplicatively (0.5 * 0.5 =
+// 0.25), not additively, not double-applied (which would read as 0.25*0.25=0.0625), and not
+// omitting one factor (which would read as 0.5).
+TEST(OfflineAudioRendererTest, TrackAndMixerGainComposeMultiplicativelyNotDoubleAppliedOrOmitted)
+{
+    auto pcm = GenerateSineWaveS16(440.0, 44100, 1, 0.2);
+    auto baseline = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                         1.0f, false, 1.0f, 1.0f);
+    auto both = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                     1.0f, false, 0.5f, 0.5f);
+    ASSERT_TRUE(baseline.ok);
+    ASSERT_TRUE(both.ok);
+
+    const double baselineRms = MeasureRms(baseline.samples, 1);
+    const double bothRms = MeasureRms(both.samples, 1);
+    ASSERT_GT(baselineRms, 0.0);
+    EXPECT_NEAR(bothRms / baselineRms, 0.25, 0.01);
+}
+
+// AUD-04-016: extreme aggregate gain (both stages maxed high) must remain finite -- SDL3_mixer's
+// own float32 mixing pipeline has no hard clamp, but must never produce NaN/Inf regardless of how
+// large the composed gain is.
+TEST(OfflineAudioRendererTest, ExtremeAggregateGainRemainsFiniteNoNaNOrInf)
+{
+    auto pcm = GenerateSineWaveS16(440.0, 44100, 1, 0.2);
+    auto result = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                       1.0f, false, 1000.0f, 1000.0f);
+    ASSERT_TRUE(result.ok);
+    EXPECT_FALSE(ContainsNaNOrInf(result.samples));
+    EXPECT_GT(MeasurePeak(result.samples, 1), 0.0);
+}
+
+// AUD-04-016: zero aggregate gain (either stage zeroed) must render clean silence, not NaN
+// (a 0/0 or similar degenerate case some naive gain-ramp implementations mishandle).
+TEST(OfflineAudioRendererTest, ZeroTrackGainRendersSilenceNotNaN)
+{
+    auto pcm = GenerateSineWaveS16(440.0, 44100, 1, 0.2);
+    auto result = RenderRawPcmOffline(pcm, SDL_AUDIO_S16LE, 1, 44100, 44100, 1, 8820,
+                                       1.0f, false, 0.0f, 1.0f);
+    ASSERT_TRUE(result.ok);
+    EXPECT_FALSE(ContainsNaNOrInf(result.samples));
+    EXPECT_DOUBLE_EQ(MeasureRms(result.samples, 1), 0.0);
+}
