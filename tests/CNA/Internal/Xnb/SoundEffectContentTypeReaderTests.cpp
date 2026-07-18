@@ -566,3 +566,95 @@ TEST_F(SoundEffectContentTypeReaderTest, IncoherentBlockAlignForPcm8IsIgnoredNot
 
     EXPECT_NEAR(effect.getDurationProperty().getTotalSecondsProperty(), 10.0 / 44100.0, 1e-6);
 }
+
+// ---------------------------------------------------------------------------
+// AUD-06-010: the .xnb's own stored duration field (previously read-and-discarded) is now used as
+// a validation oracle -- a drastic disagreement with the actually-decoded duration throws, a
+// small/absent one does not. Calibrated against real MonoGame fixtures (all 6 already-passing
+// LoadsSuccessfully tests above have real nonzero stored-duration fields and continue to load
+// successfully, proving the generous 2x/0.5x threshold doesn't false-positive on legitimate
+// content).
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectContentTypeReaderTest, DrasticDurationOracleDisagreementThrowsWithBothValues)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);     // formatLength
+    w16(1);      // wFormatTag: PCM
+    w16(1);      // nChannels: mono
+    w32(44100);  // nSamplesPerSec
+    w32(88200);  // nAvgBytesPerSec
+    w16(2);      // nBlockAlign
+    w16(16);     // wBitsPerSample
+    // 4410 bytes = 2205 mono S16 frames = exactly 50ms of real audio at 44100 Hz.
+    w32(4410);
+    for (int i = 0; i < 4410; ++i) bytes.push_back(static_cast<uint8_t>(i));
+    w32(0); // loopStart
+    w32(0); // loopLength
+    w32(5000); // stored duration: 5000ms -- 100x the real ~50ms, a genuine structural-class disagreement
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+
+    try
+    {
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("'test'"), std::string::npos) << what;
+        EXPECT_NE(what.find("5000"), std::string::npos) << what;
+        EXPECT_NE(what.find("50"), std::string::npos) << what; // the decoded ~50ms value
+    }
+}
+
+TEST_F(SoundEffectContentTypeReaderTest, SmallDurationOracleDisagreementDoesNotThrow)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);
+    w16(1);
+    w16(1);
+    w32(44100);
+    w32(88200);
+    w16(2);
+    w16(16);
+    w32(4410); // exactly 50ms of real audio
+    for (int i = 0; i < 4410; ++i) bytes.push_back(static_cast<uint8_t>(i));
+    w32(0);
+    w32(0);
+    w32(52); // stored duration: 52ms -- a plausible whole-millisecond-rounding difference from 50ms
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    EXPECT_NO_THROW(reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>());
+}

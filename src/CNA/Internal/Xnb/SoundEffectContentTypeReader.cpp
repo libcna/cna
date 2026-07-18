@@ -101,6 +101,38 @@ namespace CNA::Internal::Xnb
         // 7 coefficient pairs(28) = 32 bytes.
         constexpr std::size_t kMinRealMsAdpcmExtensionSize = 32;
 
+        // AUD-06-010: uses the .xnb's own stored duration field as a validation oracle instead of
+        // discarding it -- a drastic disagreement with the actually-decoded duration is a strong
+        // signal of a real structural misinterpretation (wrong sample rate, wrong channel count,
+        // a doubled/halved frame count from a format mixup), not something a legitimately-authored
+        // asset would ever produce. Empirically calibrated against real MonoGame fixtures
+        // (tests/assets/xnb/monogame/...): uncompressed PCM/float match the stored duration
+        // exactly (to whole-millisecond rounding); ADPCM formats showed a few percent of
+        // legitimate block-rounding drift. `storedDurationMs == 0` is treated as "not meaningfully
+        // set" and skipped entirely -- many real assets across the ecosystem leave this field at
+        // its default, and it's not something FNA itself ever populates/validates either, so
+        // treating an unset value as an error would be a real compatibility regression. The 2x/0.5x
+        // threshold is deliberately generous: comfortably wider than any legitimate rounding drift
+        // observed, while still catching an order-of-magnitude-class misinterpretation.
+        void ValidateDecodedDurationAgainstStoredOracle(
+            const std::string& assetName, uint32_t storedDurationMs, const SoundEffect& effect)
+        {
+            if (storedDurationMs == 0) return;
+
+            const double decodedMs = effect.getDurationProperty().getTotalMillisecondsProperty();
+            if (decodedMs <= 0.0) return; // nothing meaningful to compare against
+
+            const double ratio = decodedMs / static_cast<double>(storedDurationMs);
+            if (ratio > 2.0 || ratio < 0.5)
+            {
+                throw ContentLoadException(
+                    "'" + assetName + "': decoded audio duration (" + std::to_string(decodedMs) +
+                    "ms) disagrees drastically with the .xnb's own stored duration (" +
+                    std::to_string(storedDurationMs) + "ms) -- likely a sample rate, channel "
+                    "count, or format misinterpretation.");
+            }
+        }
+
         // Builds a SoundEffect for any format SDL3's own WAV decoder understands natively (PCM
         // 8/16-bit, IEEE float, MS/IMA ADPCM) by wrapping the raw bytes in a minimal in-memory WAV
         // file and going through SoundEffect::FromStream -- the same technique WaveBank.cpp uses
@@ -224,7 +256,10 @@ namespace CNA::Internal::Xnb
 
         const int32_t loopStart = input.ReadInt32();
         const int32_t loopLength = input.ReadInt32();
-        input.ReadUInt32(); // duration in milliseconds -- unused, matches FNA
+        const uint32_t storedDurationMs = input.ReadUInt32(); // duration in milliseconds, per the
+        // .xnb format; FNA itself never reads this into anything (matches this reader's own prior
+        // "unused" behavior for every field except duration) -- AUD-06-010 uses it as an oracle
+        // instead of discarding it outright, see the check below.
 
         if (nChannels != 1 && nChannels != 2)
         {
@@ -249,6 +284,8 @@ namespace CNA::Internal::Xnb
                 static_cast<AudioChannels>(nChannels),
                 loopStart, loopLength);
             effect.setNameProperty(input.getAssetNameProperty());
+            ValidateDecodedDurationAgainstStoredOracle(
+                input.getAssetNameProperty(), storedDurationMs, effect);
             return effect;
         }
         if ((wFormatTag == kWaveFormatPcm && wBitsPerSample == 8) ||
@@ -256,10 +293,13 @@ namespace CNA::Internal::Xnb
             (wFormatTag == kWaveFormatMsAdpcm && wBitsPerSample == 4) ||
             (wFormatTag == kWaveFormatImaAdpcm && wBitsPerSample == 4))
         {
-            return BuildViaWavWrapper(
+            SoundEffect effect = BuildViaWavWrapper(
                 input.getAssetNameProperty(), data,
                 wFormatTag, nChannels, nSamplesPerSec, nAvgBytesPerSec, nBlockAlign, wBitsPerSample,
                 extensionData, loopStart, loopLength);
+            ValidateDecodedDurationAgainstStoredOracle(
+                input.getAssetNameProperty(), storedDurationMs, effect);
+            return effect;
         }
 
         // AUD-06-017: the diagnostic names every field useful for triaging an unsupported-format
