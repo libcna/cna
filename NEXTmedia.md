@@ -763,44 +763,88 @@ is queued as part of Phase 1 closure instead of redone in isolation.
 `SOFTWARE` remain available as a stronger-guarantee fallback if a future session's sandbox has no real
 display at all — not needed here since one exists.
 
-## 3. Environment/build notes for this session
+## 3. Environment / build notes — read this before touching anything
 
-- Submodules `third_party/SDL`, `third_party/SDL_image`, `third_party/SDL_mixer`, `vendor/googletest`
-  needed a one-time non-recursive `git submodule update --init <paths>` (were uninitialized at session
-  start) — done.
-- Build/test preset: `cmake --preset tests` (binaryDir `cmake-build-tests`, `EASYGL` backend,
-  `CNA_BUILD_TESTS=ON`) — this is the project's own designated tests preset, used instead of a
-  hand-rolled `cmake-build-debug` invocation.
-- `ffmpeg`/`ffprobe` (7.1.5, full codec set incl. `libvorbis`/`libmp3lame`/`ffv1`/`dav1d`),
-  ImageMagick (`convert`/`magick`), and Python 3 + PIL are available in this environment and were used
-  to author Phase 0's fixture corpus. No `mutagen`/`id3v2`/`eyeD3` installed — tag verification during
-  fixture authoring used `ffprobe`/raw byte inspection instead; not needed for the actual C++
-  `AudioTagParser` implementation work ahead.
-- CPU thermal pacing policy in effect throughout this session (project owner instruction, 2026-07-16,
-  threshold raised 2026-07-17): check `sensors` (`Tctl`/`CPU`) roughly every 10 min during heavy work
-  (builds, big test runs); if a check reads above **85°C**, finish the in-flight step but hold the next
-  build/heavy step until a re-check reads back at or below 70°C.
-- Established project-wide precedent found during Phase 1 (§2.7 in `plan_media.md`): out-of-range
-  indexer exceptions are a genuinely mixed precedent across the codebase (`BoundingBox`/`VertexBuffer`/
-  `NetworkSessionProperties` throw `System::ArgumentOutOfRangeException`; `TouchCollection` deliberately
-  throws `std::out_of_range` instead, undocumented in `CHECKLIST.md`). Media's `MediaQueue`/
-  `SongCollection` now follow the majority (`ArgumentOutOfRangeException`). The `TouchCollection`
-  outlier is Input-namespace, out of this plan's scope — flagged here as a candidate follow-up, not
-  fixed.
-- `EXPECT_THROW((void)expr, ExceptionType)` is the established idiom for a `[[nodiscard]]`-returning
-  `operator[]` under `EXPECT_THROW` (see `GameComponentCollectionTests.cpp`,
-  `SamplerStateCollectionTests.cpp`, `NetworkSessionPropertiesTests.cpp`) — used in the new
-  `MediaQueueTests.cpp`/`SongCollectionTests.cpp`.
+**Build and test:**
+- `cmake --preset tests` (binaryDir `cmake-build-tests`, `EASYGL` backend, `CNA_BUILD_TESTS=ON`).
+  Run `./cmake-build-tests/CnaTests`.
+- Submodules: `git submodule update --init` — **non-recursive on purpose.** SDL_image's and
+  SDL_mixer's own nested codec submodules are disabled by this project's CMake args, so `--recursive`
+  only adds a much slower, useless fetch.
+- **Grep the FULL test log for `FAILED`** (`grep -c FAILED log`), never a truncated tail. A run can
+  abort mid-suite and still look fine at the end.
 
-## 4. Immediate next steps
+**Traps that have actually cost time in this repo — all hit during Phase 16:**
+- **`easy-gl` and `meta-gl` are SIBLING repositories**, not submodules (`../easy-gl`, `../meta-gl`).
+  If someone is mid-edit in them, the `EASYGL` build fails with errors that look like they are yours
+  but are not. Check `git status` in those directories before debugging. A scratch
+  `-DCNA_GRAPHICS_BACKEND=SDL_RENDERER` build sidesteps them entirely — but note that backend has
+  ~20 pre-existing Graphics/Content failures of its own, so verify any failure against a clean
+  baseline before blaming your change.
+- **A stale `cmake-build-tests` silently changes the test count.** Ours predated the Draco
+  integration, so its cache had `CNA_DRACO_AVAILABLE` off and four Draco-gated tests never
+  registered. Re-run `cmake` on the build dir if a count looks wrong (`MEDIA-229`..`232`).
+- **`ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose` intermittently aborts the whole suite** with
+  `double free or corruption`. Pre-existing, unrelated to Media, verified by `git stash` — re-run
+  before investigating.
+- **The suite runs a dummy SDL audio driver.** `GetMixer()` therefore always succeeds and caches its
+  device, which is why the audio-failure branches in `MediaPlayer` are untestable here.
+- **`develop` is checked out in a different worktree** (`../cna`), so it cannot be checked out here.
+  To merge: `git worktree add --detach <sibling-path> origin/develop`, merge, build, run the FULL
+  suite, push, then `git worktree remove`. Place it **beside the other repos**, not in `/tmp`, or
+  `../easy-gl` will not resolve. Re-verify if `origin/develop` moves during your build — it did, and
+  a stale verification would have missed a real `Texture3D`/`TextureCube` API change.
 
-**`plan_media.md` is complete — all 126 tasks across all 7 phases, checked and verified.** There is
-no required next step for this plan itself. This file's role now is a pure handoff/reference
-document: a future session picking up Media-namespace work should read §1 for what was built and
-why, and §5 for the real, deliberately-deferred follow-ups that were surfaced but not required for
-this plan's own "not just stubs" goal. Any future Media re-audit should append a new phase to
-`plan_media.md` (see `MEDIA-126`'s own convention) rather than rewriting this history, and update
-this file's §1/§5 in place rather than starting a new NEXT file.
+**Tooling available:** `ffmpeg`/`ffprobe` 7.1.5 (full codec set), ImageMagick, Python 3 + PIL. No
+`mutagen`/`id3v2`/`eyeD3` — fixture tags are verified with `ffprobe` or raw byte inspection. ID3v2
+`POPM` cannot be written by ffmpeg at all; that fixture is hand-built byte-by-byte in Python
+(`MEDIA-182`).
+
+**CPU thermal pacing (project owner instruction, standing):** check `sensors` (`Tctl`) roughly every
+10 minutes during heavy work. At **≥85°C**, finish the in-flight step but do not start the next
+build/test run until a re-check reads **≤75°C**. Always finish work already started regardless of
+temperature. The owner has granted one-off "start now" overrides before; treat those as unblocking
+that moment only, not as repealing the rule.
+
+**Project conventions confirmed during this work:** out-of-range indexers throw
+`System::ArgumentOutOfRangeException` (majority precedent; `Input::Touch::TouchCollection` is a known
+outlier using `std::out_of_range`, out of scope here). `EXPECT_THROW((void)expr, T)` is the idiom for
+a `[[nodiscard]]` `operator[]`.
+
+## 4. Where to pick up
+
+**Do not read any "N/N complete" line in this repo as settled** — an earlier version of this very
+section claimed "plan_media.md is complete, all 126 tasks across all 7 phases" while nine further
+review rounds and 100+ tasks were still ahead of it. That sentence is exactly the failure mode this
+plan documents.
+
+**Actual state:** `plan_media.md` has 231 tasks (IDs run to `MEDIA-232`; `MEDIA-157` was never
+assigned). **224 done, 7 open.** All Media work is merged into `develop` (`cb053b71`).
+
+**If you are picking this up cold, in priority order:**
+
+1. **Group D (`MEDIA-192`..`198`) — deferred by the owner, do not start without checking.** Real
+   FFmpeg for `Video`/`VideoPlayer`/`VideoDecoder` on Windows, Android, Emscripten. The owner
+   explicitly **rejected** `NotSupportedException` stubs. **Not closeable from a Linux-only
+   sandbox** — and `MEDIA-198` requires a matrix recording what was actually built and run versus
+   merely written. If a platform proves infeasible (Emscripten is the likeliest), the owner's
+   instruction is to **escalate, not silently stub**.
+2. **A threaded/TSAN visualization test.** The single most valuable *closeable* gap. The data race
+   in `VisualizationCapture` is fixed by construction (`std::atomic<float>` + install/reset
+   ordering, `MEDIA-216`/`226`) but **nothing would catch a regression of it**. A `Push()`/`Read()`
+   test on two threads under ThreadSanitizer would.
+3. **`§5` follow-ups** — genuinely optional enhancements, none blocking.
+
+**Working conventions for this plan, learned the hard way:**
+- A re-audit **appends a new phase**; it never rewrites earlier phases (`MEDIA-126`). Corrections go
+  **in place with the error stated** — several tasks retract their own earlier conclusions
+  (`MEDIA-229`→`MEDIA-232`).
+- **Mutation-verify every new test**: break the implementation, confirm the test fails. This caught a
+  test that passed against deliberately broken code (`MEDIA-219`) and an Accept note citing a test
+  whose fixture had no audio at all (`MEDIA-171`).
+- **Verify the method, not just the result.** A task written specifically to be rigorous about a
+  count still got it wrong because the counting method (a proximity `grep`) was never checked
+  (`MEDIA-230`).
 
 ## 5. Open items / blocked
 
