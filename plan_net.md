@@ -990,16 +990,46 @@ effect this pass. (`SimulatedLatency`/`SimulatedPacketLoss` getters/setters alre
 
 **Correction (2026-07-18, independent post-completion audit):** this phase's own "Honest overall
 assessment" (below) undercounted the real, still-visible artifacts. Fresh screenshots (male,
-female, mid-`Wave`) confirm the core proportions genuinely are fixed (no more stick-thin limbs or
-a too-small head - that part of the assessment holds), but there is visible dark shading/seam
+female, mid-`Wave`) confirmed the core proportions genuinely are fixed (no more stick-thin limbs or
+a too-small head - that part of the assessment holds), but there was visible dark shading/seam
 distortion at the neck, both shoulder-to-upper-arm junctions, and the groin in the plain T-pose
 screenshots, and a large dark mass across the chest during `Wave` specifically - not just the
 single "residual shoe-area dark artifact" and "`Wave`-pose chest-band artifact" this phase
-originally disclosed. Likely a flat-recomputed-normals-at-CSG-union-seams shading issue (a known,
-already-disclosed limitation category of the mesh-craft merge - see
-`docs/avatar-real-rendering-ext.md`), but its actual visual extent was understated, not just
-under-labeled. Root cause not yet diagnosed as of this correction - tracked as active remediation,
-see `NEXTnet.md` section 3/6.
+originally disclosed.
+
+**Root cause found and fixed (2026-07-18, same day):** confirmed by reading mesh-craft's own
+`mc3togltf/src/CsgEvaluator.cpp` directly - its CSG union evaluator computes **flat per-triangle
+face normals** (that file's own comment: "Convert Manifold -> MeshData (flat face normals, no
+UVs)"), with a duplicated, non-shared vertex per adjacent flat-shaded triangle at every merge
+seam. On a rounded, capsule-based body this isn't just a "toy-like faceted look" (this module's
+own `generate_body_meshcraft.py` docstring previously and wrongly assumed) - at CSG union seams,
+some of those flat per-triangle normals point at a steep/grazing angle relative to the single
+fixed-direction light these avatar demos use, rendering as near-black patches. Confirmed
+non-manifold-edge analysis of the exported mesh found **zero holes** at the head/neck (the 4 edges
+found were a separate, tiny, unrelated gap near the upper leg) - the darkness was a shading defect,
+not missing geometry.
+
+**Fix:** added `_recalculate_smooth_normals()` to `generate_body_meshcraft.py` (reused by
+`generate_clothes_meshcraft.py` for the same reason) - welds the CSG-duplicated coincident
+vertices back into shared vertices (`bpy.ops.mesh.remove_doubles`, confirmed doing real work: 5932
+vertices welded on the body alone, 1290-1716 more per garment), recalculates consistent outward
+normals, then switches to smooth shading. Regenerated both male and female avatar content
+end-to-end (`generate_avatar.py` -> `convert_avatar.py --embedded-clips` -> `Content/`) and
+verified with fresh screenshots: the neck, shoulder, and groin dark seams are **completely gone**
+in the T-pose views (smooth gradient shading throughout); the `Wave`-pose chest darkness is
+reduced from covering nearly the entire torso to a small, localized patch near the raised-arm
+shoulder joint. Also verified via `demo_avatar_dual_compare` (shares the same regenerated content)
+- same improvement on both genders simultaneously. Full `CnaTests` suite re-run: 134/134
+Avatar/SkinnedModel tests pass, no regressions (this was a content + Python-tooling change only,
+no C++ touched).
+
+**Honestly still open, not fixed by this pass** (distinct root causes from the CSG-seam issue
+above, found during this same investigation, not silently dropped): a residual dark area on the
+head/neck front - confirmed via non-manifold-edge analysis to **not** be a geometric hole; most
+likely the `Neck` bone's own radius (0.06) being much thinner than `Head` (0.15) or `Spine1`
+(0.14) in `BONE_RADII`, creating a visible recessed collar gap - a proportion-tuning follow-up,
+not more CSG/normals work. The previously-documented shoe-area artifact also remains, unchanged.
+See `NEXTnet.md` section 3/6 for current status.
 
 Goal (per decisions 4/4a/4b/4c): toy-like Xbox-Avatar-inspired look, fully original CNA assets,
 generated via `../mesh-craft` for body/head (and other feasible) geometry, feeding into the

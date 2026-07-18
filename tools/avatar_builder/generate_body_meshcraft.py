@@ -104,6 +104,33 @@ def _mc3_position(point):
     return (x, z, y)
 
 
+def _recalculate_smooth_normals(obj):
+    """Post-plan_net.md remediation (2026-07-18, independent post-completion audit): mc3togltf's
+    CSG evaluator exports *flat* per-triangle normals (`mc3togltf/src/CsgEvaluator.cpp`'s own
+    comment: "Convert Manifold -> MeshData (flat face normals, no UVs)"), with duplicated
+    coincident vertices at every merge seam (one vertex copy per adjacent flat-shaded triangle).
+    On a rounded, capsule-based body this is not just a "faceted low-poly look" (this module's
+    own earlier docstring assumed) - at CSG union seams, some of those flat per-triangle normals
+    end up pointing at a steep/grazing angle relative to the single fixed directional light this
+    project's avatar demos use, rendering as near-black patches (confirmed by direct fresh
+    screenshot inspection at the neck, shoulder-to-arm junctions, groin, and - worst - a large
+    dark mass across the chest during the Wave animation). Fixed by welding the duplicated
+    coincident vertices back into one shared vertex per position (`remove_doubles`, so smooth
+    shading has something to actually interpolate across), recalculating consistent outward
+    normals, then switching to smooth shading - standard practice for CSG/boolean-result meshes
+    that need to render smoothly rather than faceted.
+    """
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.remove_doubles(threshold=0.0001)
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.ops.object.shade_smooth()
+
+
 def _capsule_transform(head_mc3, tail_mc3):
     """Given a bone's head/tail already in mc3's Y-up frame, returns (center, height,
     rotation_xyz_degrees) for a <capsule axis="y"> (mesh-craft's default capsule long-axis)
@@ -142,8 +169,14 @@ def bones_to_mc3_xml(bones, height_scale=1.0, head_scale=1.0):
     white placeholder (Task 11.19), confirmed by direct pixel inspection to carry zero real
     per-pixel detail already; the avatar's actual skin color comes from a runtime tint
     (`AvatarAppearanceEXT::setSkinColorProperty`), not texture sampling, so losing real UVs here
-    costs nothing visually. CSG's flat, recomputed-per-face normals suit this style too - a toy-
-    like low-poly look was always this pass's own target, not smooth photoreal shading."""
+    costs nothing visually.
+
+    **Correction (2026-07-18, independent post-completion audit):** this docstring previously
+    claimed CSG's flat, recomputed-per-face normals "suit this style" (a toy-like low-poly look).
+    That was wrong in practice, not just in framing - flat per-triangle normals at CSG union seams
+    render as near-black patches under this project's single fixed-direction lighting, not a cute
+    faceted look. `build_body()` below now calls `_recalculate_smooth_normals()` on the imported
+    mesh to fix this - see that function's own docstring for the full root-cause writeup."""
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<mc3 version="0.3" model="CNAAvatarBody" unit="meter" rotation_units="degrees" euler_order="XYZ">',
@@ -234,6 +267,11 @@ def build_body(armature_obj, bones=None, height_scale=1.0, head_scale=1.0, mc3to
     body_obj.select_set(True)
     bpy.context.view_layer.objects.active = body_obj
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    # Weld CSG's duplicated coincident vertices and recompute smooth normals - see this
+    # function's own docstring for why (flat per-triangle normals at union seams render as
+    # near-black patches, not a toy-like faceted look).
+    _recalculate_smooth_normals(body_obj)
 
     bpy.ops.object.select_all(action="DESELECT")
     body_obj.select_set(True)

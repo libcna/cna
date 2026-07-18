@@ -115,6 +115,10 @@ def _build_garment_meshcraft(garment_name, bone_names, padding, bones_by_name, h
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # Post-plan_net.md remediation (2026-07-18): same flat-CSG-normal fix as
+    # generate_body_meshcraft.py's own build_body() - see
+    # generate_body_meshcraft._recalculate_smooth_normals's docstring for the root cause.
+    generate_body_meshcraft._recalculate_smooth_normals(obj)
     return obj
 
 

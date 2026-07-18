@@ -11,15 +11,17 @@ fidelity to FNA (`/rv/data/library/github.com/FNA-XNA/FNA` for most namespaces,
 unit tests.
 
 **Current phase:** `plan_net.md` ("2026-07-07 Re-Audit and Hardening") is fully checked off
-(104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **However, an
-independent post-completion audit (2026-07-18) found that several of the plan's own "done" claims
-overstated what was actually delivered** — see section 3 below for the specifics and section 6 for
-the active remediation work now in progress. Treat `plan_net.md`'s checkmarks as "this task's
-described work was completed," not as "the underlying feature is fully correct/polished" — several
-were not. The prior first-implementation pass (132/132 tasks) is complete; its own archive file
-(`plan_net_20260707.md`) no longer exists in the working tree (deleted by a later, separate,
-deliberate repo-wide cleanup commit, `e86b7cba` — still fully recoverable via git history, see
-Task 11.3's write-up in `plan_net.md`).
+(104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **An independent
+post-completion audit (2026-07-18) found that several of the plan's own "done" claims overstated
+what was actually delivered - all 4 findings are now fixed** (F1 font readability, Guide.cpp's
+keyboard-input overlay, avatar CSG seam/shading artifacts, this file's own broken example command)
+— see section 3 below for the full writeup. Treat `plan_net.md`'s checkmarks as "this task's
+described work was completed at the time," not as "the underlying feature was fully correct" on
+first landing - several needed a same-day follow-up fix after independent verification caught what
+a first pass missed. The prior first-implementation pass (132/132 tasks) is complete; its own
+archive file (`plan_net_20260707.md`) no longer exists in the working tree (deleted by a later,
+separate, deliberate repo-wide cleanup commit, `e86b7cba` — still fully recoverable via git
+history, see Task 11.3's write-up in `plan_net.md`).
 
 **Key architectural decisions (see `CLAUDE.md` for the full rules):**
 - Strict separation: `Microsoft::Xna::Framework::*` types must match real XNA/FNA behavior exactly.
@@ -135,15 +137,24 @@ Task 11.3's write-up in `plan_net.md`).
   - 10 new tests added (`GamerServicesServiceTests.cpp`), all passing; all 32 pre-existing
     `GuideTest` cases still pass unmodified. Full suite re-run after the fix: same 36 pre-existing,
     already-documented XNB/Content-fixture failures, zero Guide/Net regressions.
-- **Avatar visual quality has more real artifacts than Phase 7 disclosed.** Fresh screenshots
-  (male, female, and mid-`Wave`) confirm the core proportions are genuinely fixed (no more
-  stick-thin limbs / too-small head), but there are visible dark shading/seam artifacts at the
-  neck, both shoulder-to-upper-arm junctions, the groin, and — worst — a large dark mass across
-  the chest during `Wave`, not just the single "residual shoe-area artifact" and "chest-band
-  artifact" the Phase 7 write-up described. Likely a flat-recomputed-normals-at-CSG-union-seams
-  shading issue (a known, disclosed limitation of the mesh-craft merge, per
-  `docs/avatar-real-rendering-ext.md`), but the *visual extent* was understated. **Needs deeper
-  diagnosis before a fix can be scoped** — see section 6.
+- **Avatar visual seam/shading artifacts — ✅ FIXED (2026-07-18).** Root cause confirmed by
+  reading mesh-craft's own `mc3togltf/src/CsgEvaluator.cpp` directly: its CSG union evaluator
+  computes flat per-triangle face normals with duplicated (non-shared) vertices at every merge
+  seam - some of those flat normals point at a steep/grazing angle relative to the single
+  fixed-direction light these demos use, rendering as near-black patches. A non-manifold-edge
+  analysis of the exported mesh confirmed **zero real holes** at the head/neck - it was a shading
+  defect, not missing geometry. Fixed by adding `_recalculate_smooth_normals()` to
+  `generate_body_meshcraft.py` (reused by `generate_clothes_meshcraft.py`): welds the CSG-
+  duplicated coincident vertices (confirmed real: 5932 welded on the body alone), recalculates
+  consistent outward normals, switches to smooth shading. Regenerated both genders' content
+  end-to-end and verified with fresh screenshots: the neck/shoulder/groin dark seams are
+  completely gone in T-pose; the `Wave`-pose chest darkness shrank from covering nearly the whole
+  torso to a small patch near the shoulder joint. 134/134 Avatar/SkinnedModel tests still pass
+  (content + Python-tooling change only, no C++ touched).
+  **Honestly still open** (distinct root causes, found during this same investigation): a
+  residual dark area on the head/neck front, confirmed **not** a geometric hole - most likely the
+  `Neck` bone radius (0.06) being much thinner than `Head`/`Spine1` (0.15/0.14), a proportion-
+  tuning follow-up, not more CSG/normals work. The shoe-area artifact also remains, unchanged.
 - **`NEXTnet.md`'s own example command was broken** when followed from the repo root (see the
   working-directory note in section 5) — fixed in this same pass that added this subsection.
 
@@ -251,10 +262,14 @@ No `.clang-format` or other lint/format config was found in the repo — none is
    renders title/description/typed-text (masked when `UsePasswordMode`), real Escape-to-cancel
    plus `SimulateKeyboardInputCancelEXT()`/`WasKeyboardInputCanceledEXT()`, `IsVisible` now
    reflects real pending state. 10 new tests, all passing. See section 3's own entry for detail.
-3. **Avatar visual seam/shading artifacts** — diagnose and fix the neck/shoulder/groin/chest dark
-   shading found by fresh screenshot inspection (section 3), likely a CSG-merge flat-normals issue.
+3. ~~**Avatar visual seam/shading artifacts**~~ — ✅ **DONE.** Root cause: mesh-craft's CSG
+   evaluator exports flat per-triangle normals with duplicated coincident vertices at merge seams;
+   fixed by welding + recalculating smooth normals in `generate_body_meshcraft.py`/
+   `generate_clothes_meshcraft.py`, then regenerating content. Neck/shoulder/groin seams gone,
+   `Wave`-pose chest darkness drastically reduced. See section 3's own entry for detail and the
+   two distinct, still-open residual issues (head/neck proportion gap, shoe-area artifact).
 
-**Not yet started, not this session's active scope:**
+**All 4 user-prioritized items are now done. Not yet started, not this session's active scope:**
 
 4. **Optional follow-up:** fix the same `MakeSimpleFont` glyph-bounds bug (section 3) in the 10
    other pre-existing demos it also affects (unrelated plans/subsystems, large blast radius —
@@ -263,6 +278,10 @@ No `.clang-format` or other lint/format config was found in the repo — none is
    3) — needs its own design decision, not just a mechanical fix.
 6. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
    7.8/7.10).
+7. **Optional follow-up, newly found:** the `Neck` bone radius (0.06 in `BONE_RADII`, much
+   thinner than `Head`/`Spine1`'s 0.15/0.14) leaves a visible recessed collar gap on the avatar's
+   head/neck front - a proportion-tuning fix, not more CSG/normals work.
+8. **Optional follow-up:** the previously-documented shoe-area dark artifact remains unchanged.
 
 ## 7. Do not do yet
 
@@ -284,8 +303,9 @@ No `.clang-format` or other lint/format config was found in the repo — none is
 ## 8. Resume prompt
 
 ```text
-Read NEXT.md first, section 3's "Confirmed by an independent post-completion audit" subsection and
-section 6's active remediation list. Continue whichever of the 3 active items (F1 font, Guide.cpp,
-avatar seams) is least complete. Before marking any of them done, verify with fresh
-screenshots/code reads, not just re-reading your own prior claims about them.
+Read NEXT.md first. All 4 user-prioritized remediation items (F1 font, Guide.cpp, avatar seams,
+this file's own broken command) are done as of 2026-07-18. Check with the user before starting any
+of section 6's "optional follow-up" items (items 4-8) - none are in plan_net.md's own original
+scope, and this file has already been burned once by claiming something was fixed without fresh
+verification (see section 3's own writeup) - don't repeat that on whichever item comes next.
 ```
