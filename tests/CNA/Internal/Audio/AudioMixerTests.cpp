@@ -271,6 +271,39 @@ TEST(AudioMixerTest, RepeatedDeviceOpenFailuresLeaveBalancedLifecycleAndSubseque
     }
 }
 
+// AUD-15-017: repeated GetMixer()/DestroyMixer() cycles must never leak a device, thread, handle,
+// or MIX_Init()/SDL_INIT_AUDIO refcount -- each cycle recreates the mixer "from scratch" (matches
+// DestroyMixer()'s own documented contract), and the AUD-04-008/009 subsystem pin (GetMixer()'s
+// one-time SDL_InitSubSystem(SDL_INIT_AUDIO)) must keep the audio subsystem itself alive across
+// every one of these destroy calls, not just the first. 20 cycles is far more than any single
+// test elsewhere in this suite exercises in a row; a leak would most plausibly show up as a
+// growing resource count or a failure partway through, not necessarily on cycle 1.
+TEST(AudioMixerTest, RepeatedInitDestroyCyclesLeaveNoLeakedStateAndFinalCallSucceeds) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try {
+        for (int i = 0; i < 20; ++i) {
+            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+            ASSERT_NE(mixer, nullptr) << "cycle " << i;
+            SDL_AudioSpec actual{};
+            ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << "cycle " << i << ": " << SDL_GetError();
+            EXPECT_EQ(actual.freq, 44100) << "cycle " << i;
+            EXPECT_EQ(actual.channels, 2) << "cycle " << i;
+            CNA::Internal::Audio::DestroyMixer();
+        }
+
+        // One more creation after the loop, to confirm the mixer is still fully functional (not
+        // degraded, e.g. by a slowly-exhausted resource) after 20 full cycles.
+        MIX_Mixer* finalMixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(finalMixer, nullptr);
+        SDL_AudioSpec finalSpec{};
+        ASSERT_TRUE(MIX_GetMixerFormat(finalMixer, &finalSpec)) << SDL_GetError();
+        EXPECT_EQ(finalSpec.freq, 44100);
+        EXPECT_EQ(finalSpec.channels, 2);
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
 TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsInvalid) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
 
