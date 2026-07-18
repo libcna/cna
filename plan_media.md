@@ -2214,7 +2214,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 #### Group H — Closure
   *Done (audit, no leak found):* both `GetAlbumArt()`/`GetThumbnail()` and `GetImage()`/`GetThumbnail()` return a heap `System::IO::Stream*` the CALLER owns and must delete -- unchanged by this work, and the existing tests already `delete` it. Thumbnail generation allocates only a `std::vector<uint8_t>` copied into a `MemoryStream` plus a transient `SDL_Surface`/`SDL_IOStream`, both released on every path including failure. Repeated calls allocate a fresh stream each time (no cache), which is the same contract as before -- deliberately not adding a cache, since correctness of ownership was the question and a cache would introduce invalidation concerns for no demonstrated need.
 
-- [ ] **MEDIA-212 — `MediaSource`: verify the `WindowsMediaConnect` gap is documentation-only.**
+- [x] **MEDIA-212 — `MediaSource`: verify the `WindowsMediaConnect` gap is documentation-only.**
   `MediaSourceType` already declares both `LocalDevice = 0` and `WindowsMediaConnect = 4`, matching
   XNA — so the *type* is complete and the audit's finding is narrower than it first reads. What is
   absent is *discovery* of WMC devices, which was an Xbox 360/WMP-era feature with no meaningful
@@ -2223,6 +2223,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   deviation rather than an unfinished feature.
   *Accept:* a `CHECKLIST.md` deviation row exists; no code change unless the enum or the getter is
   genuinely wrong.
+  *Done (verified, documentation only -- and the original finding was narrower than reported).* All 4 XNA `MediaSource` members are present and `MediaSourceType` already declares BOTH `LocalDevice = 0` and `WindowsMediaConnect = 4`. What is absent is only *discovery* of WMC devices -- an Xbox 360 / Windows Media Player-era streaming concept with no desktop equivalent -- so returning exactly one real `LocalDevice` entry is correct behavior, not an unfinished feature. Recorded as a justified deviation in `CHECKLIST.md`; no code change.
 
 - [x] **MEDIA-213 — Re-audit every `Media` type member-by-member against the XNA reference XML.**
   Group A found `Song`'s gaps only because someone diffed against the real XNA reference instead of
@@ -2235,13 +2236,14 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   or recorded as a justified deviation. Do not close this by spot-checking a few types.
   *Done -- and the result bounds the whole phase.* Scripted member-level diff of all 24 types against the reference XML. First pass reported 15 types with "missing" members; **all but one were false positives of the script**, not real gaps -- `op_Equality`/`op_Inequality` are `operator==`/`operator!=`, the C# indexer `Item` is `operator[]`, `GetEnumerator` is `begin()`/`end()`, and `System#Collections#IEnumerable#GetEnumerator` has no C++ equivalent at all. After correcting the idiom mapping: **`Song` is the ONLY type with genuinely missing members** (`Album`, `Artist`, `Genre`, `ToString`) -- the other 23 are member-complete. Group A therefore closes the entire API-surface gap; no further hidden surprises.
 
-- [ ] **MEDIA-214 — Update `AUDIT.md` status rows honestly.** Several Media rows are marked `✅`
+- [x] **MEDIA-214 — Update `AUDIT.md` status rows honestly.** Several Media rows are marked `✅`
   that this audit shows are not fully XNA-complete (`Song`, `MediaPlayer`, `Album`, `Picture`).
   Downgrade them to `⚠️` with specific caveats until their respective groups above are done, then
   raise them again only with the specific evidence stated.
   *Accept:* no `✅` row overstates the state at the moment it is written.
+  *Done:* `AUDIT.md`'s Media rows corrected. Most notably **`Song`'s row said 'API complete' when it was not** -- four XNA members were missing until `MEDIA-174`/`176`, so that ✅ was inaccurate at the time it was written; the row now states when it became true and why it was wrong before. `MediaPlayer`, `Album`, `Picture` and `MediaSource` rows updated with the specific Phase 16 evidence rather than left as bare ✅. Four new `CHECKLIST.md` deviation rows added covering the rating scales, the visualization/thumbnail magnitudes, the deliberate `.m4a` exclusion, and `MediaSource`'s WMC discovery gap.
 
-- [ ] **MEDIA-215 — Full-suite regression run + honest closure note.** Build, run the complete
+- [x] **MEDIA-215 — Full-suite regression run + honest closure note.** Build, run the complete
   `CnaTests` suite, `grep -c FAILED` on the **complete** log (never a truncated tail — see
   `feedback_verify_full_test_output`), and record real counts. **Every new test added by this phase
   must be mutation-verified falsifiable** (temporarily break the implementation, confirm the test
@@ -2252,6 +2254,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   rounds have now each found real defects after a "done" claim.
 
 ---
+  *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
 
 ## 6. Recommended order and milestones
 

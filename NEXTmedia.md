@@ -6,7 +6,7 @@
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
 > (`MEDIA-1`–`MEDIA-215`, Phases 0-16); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **22 of 42 done, 20 open**
+## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **35 of 42 done, 7 open (all Group D)**
 
 > **Phase 16 is open work, not a review of a fix commit.** A full **XNA 4.0 API-parity audit**
 > (against the original Microsoft reference assemblies, *not* FNA) found that while all 24 public
@@ -14,13 +14,20 @@
 > `Album`/`Artist`/`Genre`/`ToString()` entirely, visualization is a pure stub, `TrackNumber` is
 > parsed then dropped, and `Video`/`VideoPlayer` are a **link error** (not a clean failure) on
 > Windows/Android/Emscripten. 42 tasks (`MEDIA-174`–`MEDIA-215`) are written up in `plan_media.md`
-> Phase 16, grouped A-H. **Groups A, C, E are done and pushed** (`68001573`, `fa9cdddd`, `ae303e2f`,
-> `3551e5c4`): `Song` now has its missing XNA members, visualization is genuinely implemented
-> (post-mix tap + from-scratch FFT), `TrackNumber` is no longer dropped, and FLAC/Opus are indexed
-> and tag-parsed. `MEDIA-213`'s systematic audit bounded the whole phase: **`Song` was the only type
-> with genuinely missing members**; the other 23 are member-complete. Still open: Group B's rating
-> parsing (182-184), Group D's FFmpeg-everywhere work (192-198), Group F album art (205-208),
-> Group G thumbnails (209-211), Group H closure (212, 214, 215). **Root cause worth remembering: this plan named FNA as the
+> Phase 16, grouped A-H. **Groups A, B, C, E, F, G, H are done and pushed** — every implementable
+> group is complete. `Song` now has its missing XNA members and real tag-derived
+> TrackNumber/IsRated/Rating; visualization genuinely works (post-mix tap + from-scratch FFT);
+> FLAC/Opus are indexed and tag-parsed; embedded APIC/FLAC cover art is extracted; thumbnails are
+> really downscaled. `MEDIA-213`'s systematic audit bounded the phase: **`Song` was the only type
+> with genuinely missing members**; the other 23 are member-complete.
+>
+> **Still open: Group D only (`MEDIA-192`..`198`) — FFmpeg on Windows/Android/Emscripten.** These
+> cannot be closed from this Linux-only sandbox: verifying them needs the real toolchains. Marking
+> them done on the basis of "the CMake looks right" is exactly the unevidenced claim this plan has
+> been repeatedly caught by, so they stay open. `MEDIA-198` defines the honest platform-support
+> matrix that must record what was actually built and run versus merely written.
+>
+> **Root cause worth remembering: this plan named FNA as the
 > authoritative reference, but FNA's own `Song.cs` omits those XNA members** — so auditing against
 > FNA structurally could not find them. See `MEDIA-180`/`MEDIA-213`.
 
