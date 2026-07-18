@@ -2,8 +2,12 @@
 #include "Microsoft/Xna/Framework/Media/MediaPlayer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <stdexcept>
+
+#include "CNA/Internal/Media/VisualizationCapture.hpp"
+#include "CNA/Internal/Media/VisualizationFFT.hpp"
 
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
@@ -26,6 +30,15 @@ namespace Microsoft::Xna::Framework::Media
     MediaQueue   MediaPlayer::queue_;
     std::mt19937 MediaPlayer::random_(std::random_device{}());
 
+    // Visualization capture state (plan_media.md MEDIA-186/188). Kept outside the SOUND_ENABLED
+    // guard so IsVisualizationEnabled still round-trips in a no-audio build; only the actual
+    // post-mix tap below is audio-backend specific.
+    namespace
+    {
+        bool g_visualizationEnabled = false;
+        CNA::Internal::Media::VisualizationCapture g_visualizationCapture;
+    }
+
     bool         MediaPlayer::timerRunning_          = false;
     std::chrono::steady_clock::time_point MediaPlayer::timerStart_;
     std::chrono::duration<double> MediaPlayer::accumulatedTime_ =
@@ -43,6 +56,16 @@ namespace Microsoft::Xna::Framework::Media
         {
             // Called from the audio thread — only set a flag.
             g_songEnded.store(true, std::memory_order_relaxed);
+        }
+
+        // Runs on the AUDIO THREAD for every mixed buffer: must stay real-time safe (no
+        // allocation, no locking, no exceptions). VisualizationCapture::Push is written to that
+        // contract. SDL3_mixer hands us float32 PCM directly, so no format conversion is needed --
+        // only a downmix to mono (plan_media.md MEDIA-186).
+        void SDLCALL OnPostMix(void* /*userdata*/, MIX_Mixer* /*mixer*/,
+                                const SDL_AudioSpec* spec, float* pcm, int samples)
+        {
+            g_visualizationCapture.Push(pcm, samples, spec != nullptr ? spec->channels : 1);
         }
 
         void DestroyMusicAudio()
@@ -153,13 +176,41 @@ namespace Microsoft::Xna::Framework::Media
 
     bool MediaPlayer::getIsVisualizationEnabledProperty()
     {
-        // SDL3_mixer does not expose visualization data.
-        return false;
+        return g_visualizationEnabled;
     }
 
-    void MediaPlayer::setIsVisualizationEnabledProperty(bool /*value*/)
+    void MediaPlayer::setIsVisualizationEnabledProperty(bool value)
     {
-        // SDL3_mixer does not support visualization.
+        if (g_visualizationEnabled == value)
+        {
+            return;
+        }
+        g_visualizationEnabled = value;
+
+        // Capture starts clean so a freshly enabled visualizer never shows audio from before it
+        // was switched on.
+        g_visualizationCapture.Reset();
+
+#ifdef SOUND_ENABLED
+        // Install/remove the tap itself, so a game that never enables visualization pays no
+        // per-buffer cost at all on the audio thread (plan_media.md MEDIA-188).
+        // GetMixer() creates the shared device on first call, matching how the playback paths in
+        // this file already acquire it (see LoadSong). It throws if the device cannot be created
+        // -- e.g. a machine with no audio hardware at all -- in which case visualization simply
+        // stays flagged on with no data, which GetVisualizationData already handles by returning
+        // zeroed arrays (plan_media.md MEDIA-191).
+        try
+        {
+            if (MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer())
+            {
+                MIX_SetPostMixCallback(mixer, value ? OnPostMix : nullptr, nullptr);
+            }
+        }
+        catch (const std::exception&)
+        {
+            // No audio device: leave the flag as the caller set it, but capture stays empty.
+        }
+#endif
     }
 
     // --- public methods ---
@@ -272,8 +323,31 @@ namespace Microsoft::Xna::Framework::Media
 
     void MediaPlayer::GetVisualizationData(VisualizationData& data)
     {
-        (void)data;
-        // SDL3_mixer does not expose frequency/sample visualization data.
+        // XNA only produces visualization data while it is switched on; with it off (or with
+        // nothing captured yet) the arrays stay zeroed, matching VisualizationData's own
+        // zero-initialized construction rather than throwing (plan_media.md MEDIA-189).
+        if (!g_visualizationEnabled || !g_visualizationCapture.HasData())
+        {
+            data.samp.fill(0.0f);
+            data.freq.fill(0.0f);
+            return;
+        }
+
+        // Sample domain: the most recent VisualizationData::Size mono samples.
+        g_visualizationCapture.Read(data.samp.data(), data.samp.size());
+
+        // Frequency domain: FFT over a larger window ending at the same point, so the 256 bins
+        // XNA exposes come from a 512-sample transform rather than a needlessly short one.
+        std::array<float, CNA::Internal::Media::VisualizationFFT::InputSize> window{};
+        g_visualizationCapture.Read(window.data(), window.size());
+
+        std::array<float, CNA::Internal::Media::VisualizationFFT::BinCount> bins{};
+        CNA::Internal::Media::VisualizationFFT::ComputeMagnitudes(window, bins);
+
+        static_assert(CNA::Internal::Media::VisualizationFFT::BinCount ==
+                        static_cast<std::size_t>(VisualizationData::Size),
+                        "FFT bin count must match VisualizationData::Size");
+        std::copy(bins.begin(), bins.end(), data.freq.begin());
     }
 
     bool MediaPlayer::DetectSongEndedByElapsedTime(Song* activeSong, System::TimeSpan elapsed)

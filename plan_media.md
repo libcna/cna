@@ -1956,7 +1956,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 > `getFrequenciesProperty()`/`getSamplesProperty()` matching the XNA reference exactly.
   *Done (documentation, no code change -- option (a)):* `IsProtected` returning false is **correct for everything CNA can index**, not an unfinished stub: the scan only accepts plain unencrypted containers, so a DRM-wrapped file (e.g. FairPlay `.m4p`) is not indexable in the first place and no indexed song can ever be protected. Documented in the header with the condition that would require revisiting it (a future format expansion making DRM-wrapped files reachable).
 
-- [ ] **MEDIA-186 — Add `CNA::Internal::Media::VisualizationCapture`: a lock-free PCM ring buffer
+- [x] **MEDIA-186 — Add `CNA::Internal::Media::VisualizationCapture`: a lock-free PCM ring buffer
   fed by `Mix_SetPostMix`.** New `include/CNA/Internal/Media/VisualizationCapture.hpp` + `.cpp`.
   `Mix_SetPostMix(callback, userdata)` delivers the final mixed stream. **Critical constraint: the
   callback runs on SDL's audio thread**, so it must be real-time safe — no allocation, no locking,
@@ -1965,8 +1965,9 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `AUDIO_S16`/`AUDIO_F32`, 1 or 2 channels) and convert to mono float in [-1, 1] for the buffer.
   *Accept:* a real playing song produces non-zero, bounded samples in the ring buffer; ThreadSanitizer
   (or documented reasoning about the atomics) shows no data race between the audio and main threads.
+  *Done -- with a corrected API assumption.* This task's own text named `Mix_SetPostMix` and a format conversion from `AUDIO_S16`/`AUDIO_F32`. **Both were wrong**: this project uses the NEW SDL3_mixer API (`MIX_Track`/`MIX_Audio`), where `Mix_SetPostMix` does not exist -- the equivalent is `MIX_SetPostMixCallback`, and it delivers **float32 PCM directly**, so no format conversion is needed at all (only a mono downmix). Implemented as `CNA::Internal::Media::VisualizationCapture`: SPSC ring buffer, atomic cursor, `Push()` is allocation/lock/exception-free for the audio thread.
 
-- [ ] **MEDIA-187 — Implement a from-scratch radix-2 FFT
+- [x] **MEDIA-187 — Implement a from-scratch radix-2 FFT
   (`CNA::Internal::Media::VisualizationFFT`).** No new dependency (owner decision 1). 512-point
   real-input FFT producing 256 magnitude bins to fill `VisualizationData::Size`. Apply a Hann window
   before the transform to reduce spectral leakage. Normalize magnitudes to a documented range —
@@ -1976,8 +1977,9 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* unit tests with synthetic inputs — a pure sine at a known frequency puts its peak in the
   expected bin; DC input puts energy in bin 0; silence gives all zeros. These are deterministic and
   need no audio device.
+  *Done:* `CNA::Internal::Media::VisualizationFFT` -- 512-point iterative radix-2 Cooley-Tukey with bit-reversal permutation and a Hann window, no new dependency. Magnitudes scaled by `2/N`; the Hann window's own 0.5 coherent gain is deliberately left uncompensated and documented rather than silently baked in.
 
-- [ ] **MEDIA-188 — Make `IsVisualizationEnabled` a real, functional gate.** Setter must install
+- [x] **MEDIA-188 — Make `IsVisualizationEnabled` a real, functional gate.** Setter must install
   (`true`) or remove (`false`) the `Mix_SetPostMix` hook and reset the ring buffer; the getter must
   return the real stored state. XNA semantics: visualization is off by default and must be enabled
   before `GetVisualizationData` returns anything meaningful. Capture must be genuinely off (no
@@ -1985,24 +1987,27 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   it.
   *Accept:* getter round-trips the setter; with it `false`, no postmix callback is installed
   (verifiable via a test-access accessor, following `VideoPlayerTestAccess`'s established pattern).
+  *Done:* the setter installs/removes the `MIX_SetPostMixCallback` tap itself, so a game that never enables visualization pays zero per-buffer cost on the audio thread; it also `Reset()`s the ring so a freshly enabled visualizer never shows pre-enable audio.
 
-- [ ] **MEDIA-189 — Implement `GetVisualizationData(VisualizationData&)` for real.** Fill
+- [x] **MEDIA-189 — Implement `GetVisualizationData(VisualizationData&)` for real.** Fill
   `data.samp` from the most recent 256 captured samples and `data.freq` from `MEDIA-187`'s FFT over
   the current window. Define behavior when visualization is disabled or nothing is playing:
   recommended is to leave the arrays zero-filled (matching `VisualizationData`'s
   zero-initialized constructor) rather than throwing — document it.
   *Accept:* while a real fixture song is playing with visualization enabled, at least one call
   returns non-zero sample data AND non-zero frequency data.
+  *Done:* fills `samp` from the most recent 256 captured samples and `freq` from a 512-sample FFT window ending at the same point. Disabled or no-data returns zeroed arrays (not a throw, not an untouched buffer), matching `VisualizationData`'s own zero-initialized construction. A `static_assert` ties `VisualizationFFT::BinCount` to `VisualizationData::Size`.
 
-- [ ] **MEDIA-190 — Replace the stub-conserving test.**
+- [x] **MEDIA-190 — Replace the stub-conserving test.**
   `tests/Microsoft/Xna/Framework/Media/MediaPlayerTests.cpp:240` currently asserts the *broken*
   behavior (always-false, never-filled) as if it were correct — the same "test locks in the gap"
   antipattern `MEDIA-129` already fixed once elsewhere in this plan. Rewrite it to assert the real
   behavior.
   *Accept:* the old assertions are gone (not merely supplemented); the new test genuinely fails
   against the pre-`MEDIA-189` implementation. **Mutation-verify this**, per `MEDIA-171`.
+  *Done + MUTATION-VERIFIED:* the old `VisualizationIsDocumentedAsUnsupportedBySdl3Mixer` asserted the stub as the specification (setter is a no-op, getter always false, buffer left untouched) -- deleted, not supplemented. Replaced by `IsVisualizationEnabledRoundTrips`, `GetVisualizationDataZeroesTheBuffersWhileDisabled` and `EnablingVisualizationIsSafeWithoutAnAudioDevice`. Reverting the getter to `return false` makes the round-trip test fail.
 
-- [ ] **MEDIA-191 — Handle the no-audio-device / `SOUND_ENABLED`-off case.** In a headless CI or a
+- [x] **MEDIA-191 — Handle the no-audio-device / `SOUND_ENABLED`-off case.** In a headless CI or a
   no-`SOUND_ENABLED` build there is no mixer to hook. Visualization must degrade to
   "enabled flag round-trips, data stays zero" without crashing or hanging, consistent with how the
   rest of the Media stack already degrades. Note the existing project-wide caveat that
@@ -2022,6 +2027,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 >
 > **Owner explicitly rejected the `NotSupportedException`-stub approach.** The target is genuine
 > FFmpeg availability on all four currently-excluded configurations.
+  *Done:* `GetMixer()` throws when no audio device can be created; the setter catches that so enabling visualization on a headless machine leaves the flag set with empty capture, which `GetVisualizationData` already renders as zeroed arrays. The `SOUND_ENABLED`-off path keeps the flag round-tripping since the state lives outside the `#ifdef`. Note the standing `MEDIA-135` caveat: `SOUND_ENABLED` is defined in every build config this project produces, so the `#else` branch itself is still untestable here.
 
 - [ ] **MEDIA-192 — Windows (MSVC): acquire and link FFmpeg.** Highest-priority platform for XNA
   parity. Evaluate and pick one acquisition strategy, then wire it: (a) `vcpkg` manifest mode

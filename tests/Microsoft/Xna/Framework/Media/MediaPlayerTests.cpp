@@ -237,22 +237,49 @@ TEST_F(MediaPlayerTest, ActiveSongChangedAndMediaStateChangedFireThroughFramewor
     MediaPlayer::MediaStateChanged.Remove(mediaStateToken);
 }
 
-// plan_media.md MEDIA-84: IsVisualizationEnabled/GetVisualizationData -- zero coverage anywhere
-// else. SDL3_mixer does not expose visualization data (MediaPlayer.cpp's own documented
-// limitation) -- this asserts that documented behavior explicitly rather than leaving it
-// silently untested.
-TEST_F(MediaPlayerTest, VisualizationIsDocumentedAsUnsupportedBySdl3Mixer)
+// plan_media.md MEDIA-84/188/189/190: IsVisualizationEnabled/GetVisualizationData.
+//
+// This test previously asserted the STUB behavior as if it were the specification -- that the
+// setter was a no-op, the getter always returned false, and GetVisualizationData left the caller's
+// buffer untouched. That locked a non-functional XNA API in as "expected", the same antipattern
+// MEDIA-129 had to undo elsewhere in this plan. Visualization is now genuinely implemented
+// (MIX_SetPostMixCallback tap + a from-scratch radix-2 FFT), so these assert the real contract.
+TEST_F(MediaPlayerTest, IsVisualizationEnabledRoundTrips)
 {
-    EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty());
+    ASSERT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty()) << "must default to off";
+
     MediaPlayer::setIsVisualizationEnabledProperty(true);
-    EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty()); // setter is a documented no-op
+    EXPECT_TRUE(MediaPlayer::getIsVisualizationEnabledProperty());
+
+    MediaPlayer::setIsVisualizationEnabledProperty(false);
+    EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty());
+}
+
+// With visualization disabled, XNA produces no data. CNA returns zeroed arrays rather than
+// throwing or leaving the caller's buffer untouched -- matching VisualizationData's own
+// zero-initialized construction (plan_media.md MEDIA-189).
+TEST_F(MediaPlayerTest, GetVisualizationDataZeroesTheBuffersWhileDisabled)
+{
+    MediaPlayer::setIsVisualizationEnabledProperty(false);
 
     Microsoft::Xna::Framework::Media::VisualizationData data;
     for (float& v : data.freq) v = 1.0f;
     for (float& v : data.samp) v = 1.0f;
+
     MediaPlayer::GetVisualizationData(data);
-    // GetVisualizationData() is also a documented no-op -- the buffer is left untouched, not
-    // zeroed or populated, matching MediaPlayer.cpp's own comment.
-    for (float v : data.freq) EXPECT_FLOAT_EQ(v, 1.0f);
-    for (float v : data.samp) EXPECT_FLOAT_EQ(v, 1.0f);
+
+    for (float v : data.freq) EXPECT_FLOAT_EQ(v, 0.0f);
+    for (float v : data.samp) EXPECT_FLOAT_EQ(v, 0.0f);
+}
+
+// Enabling visualization must not crash or hang even with no audio device present (the headless
+// CI case) -- it degrades to "flag is on, data stays zero" (plan_media.md MEDIA-191).
+TEST_F(MediaPlayerTest, EnablingVisualizationIsSafeWithoutAnAudioDevice)
+{
+    EXPECT_NO_THROW(MediaPlayer::setIsVisualizationEnabledProperty(true));
+
+    Microsoft::Xna::Framework::Media::VisualizationData data;
+    EXPECT_NO_THROW(MediaPlayer::GetVisualizationData(data));
+
+    MediaPlayer::setIsVisualizationEnabledProperty(false);
 }
