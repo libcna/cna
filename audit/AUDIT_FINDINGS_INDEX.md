@@ -23,6 +23,33 @@ _(none recorded yet)_
   `GetForWindow()`'s result unconditionally — a subsequent mouse/input event on that window would be a
   use-after-free. **The most severe confirmed finding in this audit so far.** See
   [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F1.
+- **CONFIRMED IN 2 BACKENDS, 6 SHADER VARIANTS — the pre-Task-1111 fog formula (already proven wrong by this
+  project's own XNA-oracle diff and fixed in EasyGL) was never ported to Bgfx or Vulkan.** Bgfx's
+  `vs_alpha_test3d.sc`/`vs_colored3d.sc`/`vs_lit_textured3d.sc` and Vulkan's `textured3d.vert.glsl`/
+  `env_map3d.vert.glsl` (and by extension likely every other Vulkan 3D fog shader) all use the mirror-image
+  `(FogEnd-z)/(FogEnd-FogStart)` formula instead of the FNA-correct `(z+FogEnd)/(FogEnd-FogStart)`. **This is this
+  audit's single most widely-confirmed defect.** Full detail and all 6 originating test-file reports in
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity gaps).
+- **CONFIRMED IN A 3RD BACKEND: Vulkan's `skinned3d.vert.glsl`/`skinned3d_vertexlit.vert.glsl` share the same
+  missing-world-space-normal-transform defect already confirmed in EasyGL and WebGPU.** See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` and `examples/vulkan_skinnedeffect_preferperpixellighting_test.cpp.audit.md`.
+- **Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned shaders
+  never consume `emissiveColor`** — silently drops `AmbientLightColor`/`EmissiveColor` for skinned models on
+  Vulkan only. Confirmed across 4 test files; see `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip every other core Vulkan 3D vertex shader has**,
+  rendering `EnvironmentMapEffect` scenes vertically mirrored. Confirmed across 5 test files; see
+  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Bgfx/Vulkan-shared: `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor` by `DiffuseColor`
+  instead of adding it unscaled** (FNA's real `Lighting.fxh` convention). Confirmed across 5 Bgfx test files; see
+  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Bgfx-specific: `BgfxGraphicsBackend::EnsureViewState()` unconditionally clears color+depth+stencil on every
+  `Clear*()` call regardless of the requested `ClearOptions`** — a stencil-only clear silently wipes color and
+  depth too. See [audit report](examples/bgfx_graphicsdevice_clear_stencil_test.cpp.audit.md).
+- **Bgfx-specific: `bgfx_vertex_format_test.cpp`'s entire subject (`BgfxVertexFormatHelper.hpp`'s
+  `VertexElementFormatToBgfx`/`VertexElementUsageToBgfxAttrib`) is never called by production code** — real
+  `MakeBgfxLayout()` dispatches on hardcoded byte-size instead, and the test's own `UploadAndCheck()` never calls
+  `SetData`, so all 4 stride cases silently test the same hardcoded stride-16 layout. See
+  [audit report](examples/bgfx_vertex_format_test.cpp.audit.md).
 - **`SpriteBatch::Begin()` sets `begun_=true` before backend calls that can throw (`SetCustomEffect`/
   `SetTransformMatrix`/`SetSamplerFilter`/`Begin`); if one throws, the object is permanently stuck reporting
   "Begin has been called before calling End" on every subsequent `Begin()`, with no documented recovery besides
@@ -67,6 +94,18 @@ _(none recorded yet)_
   `DrawIndexedPrimitives`** despite its header comment claiming pixel-readback verification of dynamic index-buffer
   streaming — reduces to a static capacity assertion that would pass even if `SetData` were a no-op. See
   [easygl_dynamic_buffer_stress_test.cpp](examples/easygl_dynamic_buffer_stress_test.cpp.audit.md).
+
+### MEDIUM (continued, Bgfx/Vulkan batch)
+
+- **Two known-failing CTest targets registered with no `WILL_FAIL`/skip annotation**: `Bgfx_RenderTargetCube_DepthFormat`
+  (Task 952, still open) and `Bgfx_SkinnedEffect_WeightsPerVertex` (pre-existing failure since before commit
+  `0cb4a591`). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (CI-masking risk).
+- **`BasicEffect::VertexColorEnabled` is a bare public field with no property wrapper**, violating this project's
+  own C# property convention — confirmed via both Bgfx and Vulkan test audits exercising the same production
+  code. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Vulkan hardcodes full-target scissor for render-target passes**, ignoring `ScissorRectangle`/
+  `ScissorTestEnable` when a render target is bound. See
+  [audit report](examples/vulkan_scissor_test.cpp.audit.md).
 
 ### MEDIUM (continued)
 

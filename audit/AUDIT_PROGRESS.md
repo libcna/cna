@@ -54,11 +54,23 @@ Next mechanical-batch candidates (same pattern, same prompt template): `examples
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **299** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
-  backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67)
-- PENDING: **1998** (+ 168 still in flight: bgfx 98, vulkan 70)
+- AUDITED so far: **473** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+  backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, examples-tests-easygl ×218,
+  examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70)
+- PENDING: **1824**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
+
+**bgfx (98 files) and vulkan (70 files) batches both complete** (13+9 agents, 0 errors). Together with the earlier
+EasyGL batch, these produced this audit's most significant discovery: **the pre-Task-1111 fog formula fix
+(EasyGL-only) was never ported to Bgfx or Vulkan — confirmed in 6 shader variants across both backends**, this
+audit's single most widely-confirmed defect. Also confirmed: the skinned-normal-transform bug (EasyGL/WebGPU) now
+present in Vulkan too (3 backends); new Vulkan-specific bugs (ambient/emissive dropped for skinned models,
+missing Y-flip in EnvironmentMapEffect, scissor ignored on render-target passes); new Bgfx-specific bugs (Clear()
+ignores ClearOptions and always wipes color+depth+stencil, a vertex-format test whose entire subject is dead
+code); two known-failing CTest targets with no `WILL_FAIL` annotation; `BasicEffect::VertexColorEnabled`'s bare
+public field (no property wrapper) confirmed via two independent backend batches. Full detail in
+`AUDIT_CROSS_CUTTING_FINDINGS.md` and `AUDIT_FINDINGS_INDEX.md`.
 
 `examples-tests-sdlrenderer` batch complete (67 files, 9 agents, 0 errors). Notable findings: `SpriteBatch::Begin()`
 exception-safety bug (general, not backend-specific — permanently wedges the object if a backend call throws

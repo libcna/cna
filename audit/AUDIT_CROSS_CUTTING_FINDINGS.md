@@ -56,6 +56,47 @@ _(pending)_
 
 ## Systematic FNA parity gaps
 
+- **CONFIRMED IN 3+ BACKENDS: the pre-Task-1111 fog formula (proven wrong by this project's own XNA-oracle diff,
+  commit `74ad3bae`) was fixed in EasyGL but never ported to Bgfx or Vulkan.** EasyGL's fog formula
+  (`vFogFactor=(aPos.z+uFogEnd)/(uFogEnd-uFogStart)`) matches FNA's real `SetFogVector`/`ComputeFogFactor`;
+  Bgfx's and Vulkan's shared shaders instead use `(FogEnd-z)/(FogEnd-FogStart)` — the **mirror-image** formula
+  this project's own commit history already proved incorrect. Confirmed in **6 separate test-file audits across
+  2 backends**: Bgfx (`bgfx_alphatest_fog_test.cpp`, `bgfx_basiceffect_fog_test.cpp`,
+  `bgfx_basiceffect_lit_fog_test.cpp` — 3 distinct shaders: `vs_alpha_test3d.sc`, `vs_colored3d.sc`,
+  `vs_lit_textured3d.sc`) and Vulkan (`vulkan_basiceffect_fog_test.cpp`, `vulkan_basiceffect_textured3d_fog_test.cpp`,
+  `vulkan_environmentmapeffect_fog_test.cpp` — `textured3d.vert.glsl`, `env_map3d.vert.glsl`, and by extension
+  likely every other Vulkan 3D fog-capable shader). Each affected test's own expected values assert the *wrong*
+  (mirrored) fog behavior, matching the buggy shader rather than real FNA — meaning these tests would need their
+  expected values corrected, not just the shaders, once fixed. **This is now this audit's most widely-confirmed
+  single defect** (2 backends, 6 shader variants, all traced to the same root formula) — high priority for the
+  Pass 3 systematic FNA parity sweep and Pass 4 backend matrix to determine its true full extent (D3D9/D3D11/D3D12/
+  SdlGpu/WebGPU/Software/SdlRenderer/Dx3/Canvas/Ascii/Headless not yet checked for the same formula).
+- **CONFIRMED IN 3 BACKENDS: skinned-effect shaders skip the WorldInverseTranspose normal transform** (EasyGL,
+  WebGPU — see below — and now **Vulkan**: `skinned3d.vert.glsl`/`skinned3d_vertexlit.vert.glsl` compute the lit
+  normal as `mat3(skinMat)*aNormal` with no World-space composition, per `vulkan_skinnedeffect_preferperpixellighting_test.cpp`'s
+  audit). Same root cause, same "invisible because every test uses World=Identity" masking. See below for the
+  full EasyGL/WebGPU writeup — this note just adds Vulkan as a third confirmed instance.
+- **NEW, Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned
+  shaders never consume `emissiveColor`** — so `AmbientLightColor`/`EmissiveColor` are silently no-ops for skinned
+  models on Vulkan specifically (EasyGL forwards them correctly). Confirmed across 4 test files
+  (`vulkan_skinnedeffect_combined_test.cpp`, `_preferperpixellighting_test.cpp`, `_specular_test.cpp`,
+  `_vertexcolor_test.cpp` — the last of which explicitly identifies the defect in its own header comment and
+  deliberately routes around it by setting `AmbientLightColor=0`, per that file's audit).
+- **NEW, Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip present in every other core Vulkan 3D vertex
+  shader**, causing `EnvironmentMapEffect` scenes to render vertically mirrored on Vulkan. Confirmed across 4 test
+  files (`vulkan_env_map_test.cpp`, `_amount_one_test.cpp`, `_amount_zero_test.cpp`, `_combined_test.cpp`,
+  `_eyeposition_test.cpp`) — all masked because their scenes are symmetric enough (identity View, centered camera,
+  center-pixel-only sampling) that a vertical mirror is invisible to the specific pixel each test checks.
+- **NEW, Bgfx/Vulkan shared: `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor` by
+  `DiffuseColor`** instead of adding it unscaled (FNA's `Lighting.fxh` convention) — confirmed across 5 Bgfx test
+  files (`bgfx_environmentmapeffect_eyeposition_test.cpp`, `_fresnel_test.cpp`, `_multilight_test.cpp`,
+  `_specular_test.cpp`, `_worldtransform_test.cpp`), all masked because none of that 6-file test family varies
+  `DiffuseColor` away from its default. Test-file phrasing suggests Vulkan shares the same bug (unconfirmed pending
+  a dedicated check).
+- **NEW, Bgfx-specific: `BgfxGraphicsBackend::EnsureViewState()` unconditionally clears color+depth+stencil on
+  every `Clear*()` call regardless of the requested `ClearOptions`** — a stencil-only clear silently wipes color
+  and depth too. Confirmed via `bgfx_graphicsdevice_clear_stencil_test.cpp`'s audit.
+
 - **CONFIRMED SYSTEMIC, MULTI-BACKEND: skinned-effect shaders skip the WorldInverseTranspose normal transform.**
   First surfaced incidentally by 3 EasyGL example-test audits (`examples-tests-easygl` shard, all using
   `World=Identity` so unable to prove it), then independently confirmed by direct reading of
@@ -76,6 +117,28 @@ _(pending)_
   `audit/src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md` F2/F3, and
   `audit/src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp.audit.md` for full detail.
 
+## CI-masking risk: known-failing tests registered without an expected-failure annotation
+
+- `bgfx_rendertargetcube_depthformat_test.cpp` (`Bgfx_RenderTargetCube_DepthFormat` CTest target) asserts an
+  outcome the project's own `plan_graphics.md`/git log confirm is a still-open, known-failing case (Task 952) —
+  registered with no `WILL_FAIL`/skip annotation, meaning CI either already shows this red (masked among other
+  noise) or something else is suppressing it.
+- `bgfx_skinnedeffect_weightspervertex_test.cpp` (`Bgfx_SkinnedEffect_WeightsPerVertex`) is confirmed via git
+  history to have been a pre-existing CTest failure since before commit `0cb4a591` (2026-07-16), never fixed or
+  root-caused.
+- **Recommend a full CTest-registration sweep (Pass 6) to enumerate every currently-failing/expected-to-fail test
+  across all backends** and confirm each either passes, is properly marked `WILL_FAIL`, or is tracked as a known
+  open issue — this pair suggests there may be more.
+
+## API design: bare public fields instead of the project's own get/set convention
+
+- `BasicEffect::VertexColorEnabled` is a bare public field with no `getXProperty()`/`setXProperty()` wrapper at
+  all, unlike every other property on the class — a direct violation of this project's own explicit C# property
+  convention (`CLAUDE.md`). Confirmed via both `bgfx_basiceffect_texture_vertexcolor_enabled_test.cpp` and
+  `vulkan_basiceffect_vertexcolor_enabled_test.cpp`'s audits (independently discovered in two different backend
+  test batches, exercising the same production `BasicEffect.hpp`/`.cpp`, not a backend-specific issue). Worth a
+  priority check when the `xna-graphics` shard reaches `BasicEffect` for whether this is the only such lapse.
+
 ## Recurring testing gaps
 
 - **Documentation rot: header comments describing "known bugs"/"current limitations"/expected-throw assertions
@@ -84,22 +147,39 @@ _(pending)_
   and again in the `examples-tests-sdlrenderer` batch (67 files): `sdlrenderer_clearoptions_audit_test.cpp` and
   `sdlrenderer_rendertarget_depth_decision_test.cpp` both assert an expected-throw behavior for
   `ClearOptions`/`DepthBuffer` combinations that a later FNA-parity fix (commit `90f5db2c`) deliberately changed to
-  silently-masked-and-degrade instead — the tests were never updated to match. **This is now confirmed across two
-  independent mechanical-batch passes, strengthening the case that this is a systemic gap in this codebase's
-  process** (fixing behavior without a corresponding sweep of test/comment claims that describe the old behavior),
-  not incidental to any one subsystem. (Vulkan blend state "almost
-  entirely fake," `SetReferenceStencil` claimed universally missing, anisotropic filtering bugs claimed open,
-  `EnvironmentMapEffect`'s pre-fix shader formula documented instead of the current one, `GetData()` claimed
-  unimplemented). None of these are currently-live production bugs — the underlying code was actually fixed in
-  each case — but the stale comments actively mislead a future reader (including future audit passes) into
-  believing a fixed issue is still open, or vice versa risk under-trusting a test that's actually fine. Recommend
-  (not implemented by this audit) a periodic sweep specifically for "Task NNN"/"known bug"/"currently broken"-style
-  comments cross-checked against `git log`/current source, independent of any one file's own audit.
+  silently-masked-and-degrade instead — the tests were never updated to match. **Now confirmed across four
+  independent mechanical-batch passes** (EasyGL, SdlRenderer, Bgfx, Vulkan), strengthening the case that this is a
+  systemic gap in this codebase's process (fixing behavior without a corresponding sweep of test/comment claims
+  that describe the old behavior), not incidental to any one subsystem. Prior EasyGL-batch instances: Vulkan
+  blend state "almost entirely fake," `SetReferenceStencil` claimed universally missing, anisotropic filtering
+  bugs claimed open, `EnvironmentMapEffect`'s pre-fix shader formula documented instead of the current one,
+  `GetData()` claimed unimplemented. Bgfx/Vulkan batches added: `bgfx_basiceffect_specular_test.cpp`'s stale
+  pre-Task-1104 constant has **zero disclosure comment** (unlike its EasyGL sibling, which does disclose the
+  identical situation — inconsistent even in how the same underlying staleness is handled across ports);
+  `bgfx_render_target_cube_sample_test.cpp`/`_render_target_sample_test.cpp` describe already-fixed unsafe-cast
+  bugs (Task 873/874) as still unfixed; `bgfx_basiceffect_vertexcolor_enabled_test.cpp` makes a cull-state claim
+  superseded the day after the file was authored (Task 896); `vulkan_dualtextureeffect_alpha_test.cpp` repeats the
+  same stale "Vulkan BlendState almost entirely fake" (Task 868) claim; `vulkan_rendertarget2d_msaa_test.cpp`/
+  `_rendertargetcube_msaa_test.cpp` claim `PreferMultiSampling` never reaches Vulkan, fixed by Task 902 the same
+  day as the test's only commit. None of these are currently-live production bugs — the underlying code was
+  actually fixed in each case — but the stale comments actively mislead a future reader (including future audit
+  passes) into believing a fixed issue is still open. Recommend (not implemented by this audit) a periodic sweep
+  specifically for "Task NNN"/"known bug"/"currently broken"-style comments cross-checked against `git log`/
+  current source, independent of any one file's own audit.
 - **Tests asserting metadata/capacity instead of actual data content or actual code-path execution**: a recurring
   shape across the EasyGL example-test shard — `easygl_vertexbuffer_setdata_test.cpp` (capacity getters only, never
   checks uploaded bytes), `easygl_dynamic_buffer_stress_test.cpp` (index-buffer half never actually draws
-  indexed), `easygl_msaa_test.cpp` (scene can't distinguish MSAA-resolved from never-engaged). Worth watching for
-  the same shape in other backends' example-test shards during Pass 2.
+  indexed), `easygl_msaa_test.cpp` (scene can't distinguish MSAA-resolved from never-engaged). **Now also
+  confirmed in Bgfx**: `bgfx_vertex_format_test.cpp`'s `UploadAndCheck()` never actually calls `SetData`, so all 4
+  "stride 16/20/24/32" cases silently construct the same hardcoded stride-16 layout regardless of which
+  declaration is nominally under test — and more importantly, the actual production functions this whole file
+  exists to test (`BgfxVertexFormatHelper.hpp`'s `VertexElementFormatToBgfx`/`VertexElementUsageToBgfxAttrib`) are
+  **never called anywhere** by `BgfxGraphicsBackend.cpp`'s real `MakeBgfxLayout()`, which dispatches purely on
+  hardcoded byte-size instead — the test's entire subject may be dead code. Also `bgfx_render_target_usage_test.cpp`
+  (never reads back a pixel to verify Discard vs. Preserve contents) and
+  `bgfx_blendstate_separate_functions_test.cpp` (never reads the alpha channel, so `AlphaBlendFunction`'s
+  independence is inferred, not observed). Worth watching for the same shape in every remaining backend's
+  example-test shard.
 
 ## Build-system inconsistencies
 
