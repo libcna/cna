@@ -34,11 +34,14 @@
 > open gap: visualization has no TSAN or threaded end-to-end test** -- the race is fixed by
 > construction, not by a test that would have caught it.
 >
-> **Group I extended (..)** after a tenth review: file-URI semantics completed
-> (, UNC authority instead of silently dropping a remote host, drive-letter vs scheme),
-> and 's return value is now acted on so the enabled flag can never claim a
-> tap that failed to install. Notable: the first UNC test passed against deliberately broken code
-> and only mutation testing exposed it.
+> **Group I extended (`MEDIA-219`..`MEDIA-221`)** after a tenth review: file-URI semantics
+> completed (`file:/path`; a non-empty authority now becomes a UNC path instead of being silently
+> dropped, which had resolved a REMOTE URI to a local file; a Windows drive letter is no longer
+> mistaken for a scheme), and `MIX_SetPostMixCallback`'s return value is now acted on, so the
+> enabled flag can never claim a tap that failed to install and `Reset()` never races a callback
+> that failed to uninstall. **Notable:** the first version of the UNC test PASSED against
+> deliberately broken code (both behaviours threw `FileNotFoundException`), and only mutation
+> testing exposed it -- it was rewritten so correct and buggy behaviour give opposite results.
 >
 > **Root cause worth remembering: this plan named FNA as the
 > authoritative reference, but FNA's own `Song.cs` omits those XNA members** — so auditing against
