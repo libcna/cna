@@ -1,5 +1,33 @@
 # plan_media.md — Completing and implementing the FNA Media → CNA port (C++ / XNA 4.0)
 
+> ## STATUS (2026-07-18): 224 of 231 tasks done; merged into `develop` as `cb053b71`
+>
+> (IDs run to `MEDIA-232` but `MEDIA-157` was never assigned — skipped when Phase 13 was
+> numbered — so there are 231 real tasks, not 232. Verified by diffing the checkbox IDs
+> against the full range rather than assuming the highest ID equals the count.)
+>
+> **Open: 7 tasks, all Group D (`MEDIA-192`..`198`)** — real FFmpeg for `Video`/`VideoPlayer`/
+> `VideoDecoder` on Windows, Android and Emscripten, where they are currently excluded from the
+> build entirely (using them is a **link error**, and `AudioDurationProbe` returns 0).
+> **Deferred by the project owner.** `NotSupportedException` stubs were explicitly rejected.
+> **Not closeable from a Linux-only sandbox** — it needs the real toolchains, and `MEDIA-198`
+> requires recording what was actually built and run versus merely written.
+>
+> **Baseline on the merged tree: 5471 tests, 5467 passed, 0 failed, 4 pre-existing hardware skips.**
+> Per-phase counts recorded in Phases 8-16 below are *branch-only and pre-merge* (`MEDIA-231`).
+>
+> **Documented gaps that are NOT tracked as tasks** (do not let a summary upgrade these to "done"):
+> visualization has no TSAN/threaded/end-to-end test — its data race is fixed by construction, not
+> by a test that would catch a regression; the `GetMixer()`-failure and failed-uninstall branches are
+> unreachable from the suite; `.m4a`/`.aac`/WMA are deliberately not indexed because SDL3_mixer has
+> no AAC decoder.
+>
+> **Phase-history convention:** Phases 8-16 were appended by successive external review rounds and
+> are kept as written at the time. Corrections are made **in place with the error stated**, never by
+> quietly rewriting a claim — several tasks below explicitly retract their own earlier conclusions
+> (`MEDIA-229`→`MEDIA-232` is the clearest example).
+
+
 > **Scope:** exclusively `Microsoft::Xna::Framework::Media` + new internal `CNA::Internal::Media::*`
 > backend code + the one cross-cutting `CNA::Internal::Xnb::VideoContentTypeReader` addition (Phase 5).
 > **The Audio/Graphics/Input/Devices/Net namespaces are NOT part of this plan.**
@@ -13,7 +41,8 @@
 > supersedes a first-pass draft that reached 73 tasks; this version deliberately goes to finer
 > granularity (per-file compliance tasks, per-behavior test tasks matching `CHECKLIST.md`'s
 > per-overload testing mandate, and several real gaps the first pass missed) at the project owner's
-> explicit request for maximum thoroughness — **126 tasks**, not padded for a round number: every task
+> explicit request for maximum thoroughness — **126 tasks as first written** (now 232, after
+> nine external review rounds appended Phases 8-16), not padded for a round number: every task
 > below is an independently completable, individually justified unit of work. Matching `plan_audio.md`'s
 > own real history (an initial plan, then supplementary `P9-*`/`Phase 10` addenda as later audits found
 > more), any future re-audit findings should be appended as new phases here, not silently merged into
@@ -2552,4 +2581,9 @@ plus the SDL3_mixer/FFmpeg backends and content-pipeline integration it depends 
 convention check against `plan_audio.md`/`CHECKLIST.md`/`AUDIT.md` — cross-checked against each other,
 plus two direct source verifications (`FrameworkDispatcher` → `MediaPlayer::Update()` wiring;
 `CNA::Internal::Graphics::ImageLoader` reuse for picture metadata) that a first-pass draft did not
-perform. Nothing in this plan has been implemented — it defines the work only.*
+perform.*
+
+*That original note ended "Nothing in this plan has been implemented — it defines the work
+only." That was true when written and is **no longer true**: Phases 0-16 are implemented,
+tested and merged into `develop` (`cb053b71`), with only Group D outstanding. Corrected
+rather than deleted, so the document's own history stays visible.*
