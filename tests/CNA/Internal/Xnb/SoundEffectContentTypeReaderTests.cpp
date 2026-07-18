@@ -31,6 +31,8 @@
 #include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
+#include "../../../Microsoft/Xna/Framework/Audio/SoundEffectInstanceTestAccess.hpp"
+
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentReader;
@@ -657,4 +659,84 @@ TEST_F(SoundEffectContentTypeReaderTest, SmallDurationOracleDisagreementDoesNotT
     body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
     reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
     EXPECT_NO_THROW(reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>());
+}
+
+// ---------------------------------------------------------------------------
+// AUD-06-014: loop points are authored in the .xnb as decoded PCM sample-frame indices (XNA's
+// documented "expressed in samples" contract for loopStart/loopLength -- see FNA's
+// SoundEffectReader.cs, which forwards them completely uninterpreted). For a compressed format
+// (MS/IMA-ADPCM), the reader's WAV-wrapper path never touches `data.size()` (the *compressed*
+// byte count) anywhere near the loop values -- AppendSmplChunkIfLooped writes the raw XNB ints
+// straight into the WAV smpl chunk's Start/End fields, and SoundEffect::FromStream's
+// TryParseWavSmplChunk reads them back verbatim -- so there is no code path capable of
+// reinterpreting a compressed byte offset as a PCM frame index (or vice versa). This test proves
+// that empirically with a real compression ratio, not just by code inspection: a hand-built
+// IMA-ADPCM fixture (4 full 256-byte blocks, no wSamplesPerBlock extension, exactly matching
+// SDL3's own auto-derive formula in SDL_wave.c's IMA_ADPCM_Init) compresses 1024 bytes down to a
+// documented 2020-frame (~4:1) decode. Authored loop values (loopStart=1500, loopLength=400) are
+// deliberately chosen so they are sane relative to the real 2020-frame decoded output but would
+// be nonsensical if misread as byte offsets against the 1024-byte compressed buffer (loopStart
+// alone already exceeds it) -- proving the values that come out the other end are frame-based,
+// not byte-based. Per the resolved P9-VALIDATION-002 decision (SoundEffect.cpp), loop points are
+// intentionally not bounds-validated against the decoded length -- matches FNA's own internal
+// constructor -- so this test checks unit-correctness (frames, not bytes), not rejection.
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFramesNotCompressedBytes)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    constexpr uint16_t kBlockAlign = 256;
+    constexpr int kBlockCount = 4;
+    constexpr int kCompressedBytes = kBlockAlign * kBlockCount; // 1024
+    // SDL_wave.c's IMA_ADPCM_Init auto-derive formula (no wSamplesPerBlock supplied):
+    // blockdatasamples = (blockalign - 4*channels) * 8 / (bitspersample*channels);
+    // samplesperblock = blockdatasamples + 1.
+    constexpr int kSamplesPerBlock = (kBlockAlign - 4) * 8 / 4 + 1; // 505
+    constexpr int kDecodedFrames = kSamplesPerBlock * kBlockCount; // 2020
+
+    w32(16);        // formatLength -- 16, no extension (cbSize omitted, matches the real fixture's
+                     // own auto-derive path exercised by ImaAdpcmLoadsSuccessfully above)
+    w16(0x0011);     // wFormatTag: IMA-ADPCM
+    w16(1);          // nChannels: mono
+    w32(44100);      // nSamplesPerSec
+    w32(22343);      // nAvgBytesPerSec (informational only, not used by the decoder)
+    w16(kBlockAlign);
+    w16(4);          // wBitsPerSample
+    w32(kCompressedBytes);
+    // All-zero block data: IMA-ADPCM's differential decode has no structural validation on
+    // predictor/step-index/nibble values, so this decodes deterministically (to silence) without
+    // needing a "real" encoded waveform -- only the frame COUNT matters for this test.
+    for (int i = 0; i < kCompressedBytes; ++i) bytes.push_back(0);
+    w32(1500); // loopStart: sane as a frame index (< 2020 decoded frames), nonsensical as a byte
+               // offset (> 1024 compressed bytes)
+    w32(400);  // loopLength: loopStart+loopLength = 1900, still < 2020 decoded frames
+    w32(0);    // stored duration: 0 -- skip the AUD-06-010 oracle, not what this test is about
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+
+    auto effect = reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+
+    const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
+    EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0)
+        << "sanity check: the fixture must really compress ~4:1 (1024 bytes -> ~2020 frames) for "
+           "the byte-vs-frame distinction below to mean anything";
+
+    auto instance = effect.CreateInstance();
+    EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopStart(instance), 1500u);
+    EXPECT_EQ(Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess::LoopLength(instance), 400u);
 }
