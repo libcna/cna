@@ -236,6 +236,30 @@ namespace CNA::Internal::Media
         }
     }
 
+    // Vorbis comments have no standardised RATING scale: different taggers write 0-100, 0-5 or
+    // 0-10. 0-100 is treated as the source scale, being the most common convention among taggers
+    // that write RATING at all -- the ambiguity is real and is recorded in CHECKLIST.md rather
+    // than presented as settled (plan_media.md MEDIA-183).
+    void AudioTagParser::ApplyRatingIfPresent(AudioTags& out, const std::string& key,
+                                               const std::string& value)
+    {
+        std::string lower = ToLowerAscii(key);
+        if (lower != "rating") return;
+
+        try
+        {
+            const int raw = std::stoi(value);
+            if (raw <= 0) return; // 0/negative: treated as unrated, same as POPM's 0
+            const int scaled = (raw * 10 + 50) / 100;
+            out.rating = std::clamp(scaled, 1, 10);
+            out.hasRating = true;
+        }
+        catch (const std::exception&)
+        {
+            // Non-numeric RATING (some taggers write stars/text) -- ignore rather than guess.
+        }
+    }
+
     bool AudioTagParser::TryReadVorbisComments(const std::vector<uint8_t>& fileBytes, AudioTags& out)
     {
         // The identification + comment header packets are always near the start of a real Ogg
@@ -299,6 +323,7 @@ namespace CNA::Internal::Media
             if (eq != std::string::npos)
             {
                 ApplyFieldIfKnown(out, comment.substr(0, eq), comment.substr(eq + 1));
+                ApplyRatingIfPresent(out, comment.substr(0, eq), comment.substr(eq + 1));
                 any = true;
             }
         }
@@ -445,7 +470,27 @@ namespace CNA::Internal::Media
                 break; // malformed -- stop gracefully rather than reading out of bounds
             }
 
-            if (frameId == "TIT2" || frameId == "TPE1" || frameId == "TALB" ||
+            if (frameId == "POPM")
+            {
+                // POPM body: email/identifier (null-terminated), 1 rating byte, optional counter.
+                // A rating byte of 0 explicitly means "unrated" in the spec, so it must NOT be
+                // reported as a real rating of 0 (plan_media.md MEDIA-182).
+                uint32_t q = 0;
+                while (q < frameSize && fileBytes[pos + q] != 0) ++q;
+                if (q + 1 < frameSize)
+                {
+                    const uint8_t popm = fileBytes[pos + q + 1];
+                    if (popm > 0)
+                    {
+                        // 1-255 -> 1-10, rounded; never 0, since 0 is reserved for "unrated".
+                        int scaled = static_cast<int>((static_cast<int>(popm) * 10 + 127) / 255);
+                        out.rating = std::clamp(scaled, 1, 10);
+                        out.hasRating = true;
+                        out.fromRealTags = true;
+                    }
+                }
+            }
+            else if (frameId == "TIT2" || frameId == "TPE1" || frameId == "TALB" ||
                 frameId == "TCON" || frameId == "TRCK")
             {
                 std::string text = DecodeId3TextFrame(&fileBytes[pos], frameSize);

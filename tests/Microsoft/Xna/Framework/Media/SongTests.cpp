@@ -45,13 +45,16 @@ TEST(SongTest, IsProtectedIsAlwaysFalse)
     EXPECT_FALSE(song.getIsProtectedProperty());
 }
 
-TEST(SongTest, IsRatedIsAlwaysFalse)
+// A standalone Song has no scanned tag data, so "not rated" is correct here. Library songs DO
+// carry a real rating -- see MediaLibraryTests' LibrarySongsCarryTheirRealRatingFromTags
+// (plan_media.md MEDIA-184).
+TEST(SongTest, IsRatedIsFalseForAStandaloneSong)
 {
     Song song(kRealFixture);
     EXPECT_FALSE(song.getIsRatedProperty());
 }
 
-TEST(SongTest, RatingIsAlwaysZero)
+TEST(SongTest, RatingIsZeroForAStandaloneSong)
 {
     Song song(kRealFixture);
     EXPECT_EQ(song.getRatingProperty(), 0);

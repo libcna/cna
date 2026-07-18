@@ -117,6 +117,8 @@ namespace CNA::Internal::Media
         song.album = tags.album;
         song.genre = tags.genre.empty() ? std::string{} : NormalizeDisplayValue(tags.genre, genreCanonical_);
         song.trackNumber = tags.trackNumber;
+        song.rating      = tags.rating;
+        song.hasRating   = tags.hasRating;
 
         songs_.push_back(std::move(song));
     }

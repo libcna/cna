@@ -16,6 +16,18 @@ namespace CNA::Internal::Media
         std::string album;
         std::string genre;      // may be empty -- e.g. filename-fallback songs never get a genre
         int trackNumber = 0;
+
+        /// User rating on XNA's 0-10 scale, valid only when `hasRating` is true.
+        ///
+        /// Source formats disagree wildly: ID3v2 POPM is 0-255 (0 meaning "unrated"), while the
+        /// Vorbis `RATING` comment has no standard at all -- different taggers write 0-100, 0-5 or
+        /// 0-10. The chosen interpretations are documented in CHECKLIST.md; neither XNA nor FNA
+        /// defines a conversion, so these are CNA decisions (plan_media.md MEDIA-182/183).
+        int rating = 0;
+
+        /// True only if a real rating tag was present -- this is what XNA's Song.IsRated means
+        /// ("the user has rated this song"), which is NOT the same as `rating != 0`.
+        bool hasRating = false;
         bool fromRealTags = false; // true if a real embedded tag source was used, not the fallback
     };
 
@@ -66,5 +78,9 @@ namespace CNA::Internal::Media
         /// Derives Title/Album/Artist from the file's own path (filename, parent dir, grandparent
         /// dir respectively) when no real tags are available.
         static void ApplyFilenameFallback(const std::string& path, AudioTags& out);
+
+        /// Applies a Vorbis `RATING` comment, converting to XNA's 0-10 scale.
+        static void ApplyRatingIfPresent(AudioTags& out, const std::string& key,
+                                          const std::string& value);
     };
 }

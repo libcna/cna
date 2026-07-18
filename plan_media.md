@@ -1909,7 +1909,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   wiring removed, the test must fail.
   *Done + MUTATION-VERIFIED:* `trackNumber_` added to `Song`, set by `MediaLibrary` in the same friend-scoped pass as the back-references (no new ctor overload needed). New `LibrarySongsCarryTheirRealTrackNumberFromTags` asserts distinct manifest-verified values (Sunrise=1, Twilight=1, Daybreak=2, Étoile=3) so an all-zero or all-one implementation cannot accidentally pass; removing the wiring fails all four. `SongTest.TrackNumberIsAlwaysZero` renamed to `TrackNumberIsZeroForAStandaloneSong` -- it uses a standalone Song, for which 0 is genuinely correct, but its old name asserted stub semantics.
 
-- [ ] **MEDIA-182 — Parse ID3v2 `POPM` (Popularimeter) into a real rating.** Extend
+- [x] **MEDIA-182 — Parse ID3v2 `POPM` (Popularimeter) into a real rating.** Extend
   `CNA::Internal::Media::AudioTagParser` (`TryReadId3v2`) to read the `POPM` frame: email/identifier
   string (null-terminated), one byte rating 0-255, then an optional play-count. Add
   `int rating = 0; bool hasRating = false;` to the `AudioTags` struct
@@ -1920,21 +1920,24 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   `CHECKLIST.md`'s deviation table, since XNA/FNA define no such conversion.
   *Accept:* a fixture with a known `POPM` byte yields the documented 0-10 value; a file with no
   `POPM` yields `hasRating == false`.
+  *Done + MUTATION-VERIFIED:* ID3v2 `POPM` parsed (identifier, rating byte, optional counter). Mapping: **0 stays 'unrated'** (the spec reserves it), 1-255 -> 1-10 rounded, so a rated song never reports 0. **The fixture is hand-built byte-by-byte in Python** because ffmpeg cannot write POPM -- the same technique this project already established for hand-constructed `.xnb` containers. The test also asserts the OTHER frames still parse, proving the frame walk stays aligned across POPM rather than desynchronising on it.
 
-- [ ] **MEDIA-183 — Parse the Vorbis-comment `RATING` field.** The Ogg/FLAC equivalent of `POPM`.
+- [x] **MEDIA-183 — Parse the Vorbis-comment `RATING` field.** The Ogg/FLAC equivalent of `POPM`.
   Convention is inconsistent in the wild (some writers use 0-100, some 0-5, some 0-10). Pick and
   document one interpretation (recommended: treat as 0-100 and map to 0-10, since that is the most
   common convention among taggers that write `RATING`), and note the ambiguity honestly in the
   deviation table rather than pretending it is unambiguous.
   *Accept:* a fixture with a known `RATING` comment maps to the documented 0-10 value.
+  *Done:* Vorbis `RATING` comment parsed, treated as a **0-100** scale (80 -> 8). The ambiguity is real and is recorded honestly rather than presented as settled: different taggers write 0-100, 0-5 or 0-10, and there is no standard. Non-numeric values (some taggers write stars/text) are ignored rather than guessed at.
 
-- [ ] **MEDIA-184 — Wire rating into `Song::getRatingProperty()`/`getIsRatedProperty()`.** Both are
+- [x] **MEDIA-184 — Wire rating into `Song::getRatingProperty()`/`getIsRatedProperty()`.** Both are
   currently hardcoded (`src/Microsoft/Xna/Framework/Media/Song.cpp:54`: `IsRated → false`,
   `Rating → 0`). Carry the parsed values through `MediaLibraryIndex` → `MediaLibrary` → `Song` the
   same way `MEDIA-181` does for track number. `IsRated` must mean "the user has rated this song",
   i.e. a real rating tag was present — not merely "rating != 0".
   *Accept:* a rated fixture reports `IsRated == true` and the correct 0-10 `Rating`; an unrated
   fixture reports `false`/`0`. Mutation-verified.
+  *Done + MUTATION-VERIFIED:* `IsRated`/`Rating` carried end-to-end from tags through `MediaLibraryIndex` -> `MediaLibrary` -> `Song`, exactly like `TrackNumber`. **`IsRated` deliberately means 'a real rating tag was present', NOT `rating != 0`** -- both formats reserve 0 for unrated, so an explicit zero must still report false; that distinction is what XNA's `IsRated` actually means. Two fixtures encode the SAME result (8) by DIFFERENT routes (POPM byte 196 vs Vorbis RATING 80), so a bug in either conversion surfaces independently, plus an explicit unrated-song negative case. `SongTest.IsRatedIsAlwaysFalse`/`RatingIsAlwaysZero` renamed to `...ForAStandaloneSong` -- correct for a standalone Song, but the old names asserted stub semantics as the specification.
 
 - [x] **MEDIA-185 — Decide and document `Song::IsProtected` formally.** XNA: *"Gets a value that
   indicates whether the song is DRM protected content."* CNA scans plain local files with no DRM

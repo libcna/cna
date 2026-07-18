@@ -106,11 +106,13 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool getIsProtectedProperty() const;
 
         /**
-         * @brief Gets whether this song has a user rating.
+         * @brief Gets a value that indicates whether the song has been rated by the user.
          *
-         * Always returns false; matches FNA, which never varies this value on desktop.
+         * True only when the file carried a real rating tag (ID3v2 POPM or a Vorbis RATING
+         * comment). Deliberately NOT the same as "Rating != 0": both formats reserve 0 for
+         * "unrated", so an explicit zero must still report IsRated == false.
          *
-         * @return true if a rating has been set; otherwise false.
+         * @return true if the user has rated this song; otherwise false.
          */
         [[nodiscard]] bool getIsRatedProperty() const;
 
@@ -129,11 +131,13 @@ namespace Microsoft::Xna::Framework::Media
         NOXNA void setPlayCountProperty(SharpRuntime::intcs value);
 
         /**
-         * @brief Gets the user rating for this song.
+         * @brief Gets the user's rating for the Song, on XNA's 0-10 scale.
          *
-         * Always returns 0; matches FNA, which never varies this value on desktop.
+         * Populated from the file's own tags for library songs; 0 for a standalone song or an
+         * unrated file. Source scales differ per format and are converted -- see
+         * CNA::Internal::Media::AudioTags::rating and CHECKLIST.md for the documented mappings.
          *
-         * @return Rating value.
+         * @return Rating from 0 to 10, or 0 if unrated.
          */
         [[nodiscard]] SharpRuntime::intcs getRatingProperty() const;
 
@@ -233,6 +237,10 @@ namespace Microsoft::Xna::Framework::Media
         // already parsed the track number; it simply was never handed to Song, so this property
         // returned a hardcoded 0 for every song in the library.
         SharpRuntime::intcs trackNumber_ = 0;
+
+        // Real user rating parsed from the file's tags, 0-10 (plan_media.md MEDIA-184).
+        SharpRuntime::intcs rating_ = 0;
+        bool isRated_ = false;
 
         std::string name_;
         System::TimeSpan duration_;

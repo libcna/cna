@@ -73,7 +73,7 @@ namespace Microsoft::Xna::Framework::Media
 
     bool Song::getIsRatedProperty() const
     {
-        return false;
+        return isRated_;
     }
 
     SharpRuntime::intcs Song::getPlayCountProperty() const
@@ -88,7 +88,7 @@ namespace Microsoft::Xna::Framework::Media
 
     SharpRuntime::intcs Song::getRatingProperty() const
     {
-        return 0;
+        return rating_;
     }
 
     SharpRuntime::intcs Song::getTrackNumberProperty() const

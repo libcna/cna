@@ -278,6 +278,8 @@ namespace Microsoft::Xna::Framework::Media
             // handed to Song, so getTrackNumberProperty() returned a hardcoded 0 for every library
             // song -- real data parsed and then dropped (plan_media.md MEDIA-181).
             song->trackNumber_ = static_cast<SharpRuntime::intcs>(indexed.trackNumber);
+            song->rating_      = static_cast<SharpRuntime::intcs>(indexed.rating);
+            song->isRated_     = indexed.hasRating;
 
             if (!indexed.genre.empty())
             {

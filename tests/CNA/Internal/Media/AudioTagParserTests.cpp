@@ -266,3 +266,39 @@ TEST(AudioTagParserTest, ReturnsFalseForAFileWithNoEmbeddedArt)
         "tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", image));
     EXPECT_TRUE(image.empty());
 }
+
+// plan_media.md MEDIA-182: ID3v2 POPM (Popularimeter). Fixture is hand-built byte-by-byte because
+// ffmpeg cannot write POPM -- same technique this project already uses for hand-constructed .xnb
+// containers. The rating byte is 196, and 196*10/255 rounds to 8 on XNA's 0-10 scale.
+TEST(AudioTagParserTest, ReadsId3v2PopmRatingAndConvertsToXnaScale)
+{
+    auto tags = CNA::Internal::Media::AudioTagParser::ReadTags(
+        "tests/assets/media/music/Artist Six/Album Rated/04 - Rated Song.mp3");
+    EXPECT_TRUE(tags.hasRating);
+    EXPECT_EQ(tags.rating, 8) << "POPM byte 196 should map to 8 on the 0-10 scale";
+    // The hand-built tag's other frames must also parse, proving the frame walk stayed aligned
+    // across the POPM frame rather than desynchronising on it.
+    EXPECT_EQ(tags.title, "Rated Song");
+    EXPECT_EQ(tags.genre, "Soul");
+    EXPECT_EQ(tags.trackNumber, 4);
+}
+
+// plan_media.md MEDIA-183: the Vorbis RATING comment, treated as a 0-100 scale (80 -> 8).
+TEST(AudioTagParserTest, ReadsVorbisRatingCommentAndConvertsToXnaScale)
+{
+    auto tags = CNA::Internal::Media::AudioTagParser::ReadTags(
+        "tests/assets/media/music/Artist Seven/Album Vorbis Rated/02 - Vorbis Rated Song.flac");
+    EXPECT_TRUE(tags.hasRating);
+    EXPECT_EQ(tags.rating, 8) << "RATING=80 on the 0-100 scale should map to 8";
+    EXPECT_EQ(tags.artist, "Artist Seven");
+}
+
+// Both formats reserve 0 for "unrated", so an unrated file must report hasRating == false rather
+// than a real rating that happens to be zero -- that distinction IS what XNA's IsRated means.
+TEST(AudioTagParserTest, UnratedFileReportsNoRatingRatherThanARatingOfZero)
+{
+    auto tags = CNA::Internal::Media::AudioTagParser::ReadTags(
+        "tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg");
+    EXPECT_FALSE(tags.hasRating);
+    EXPECT_EQ(tags.rating, 0);
+}

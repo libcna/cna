@@ -20,6 +20,8 @@ namespace CNA::Internal::Media
         std::string album;
         std::string genre; // may be empty
         int trackNumber = 0;
+        int rating = 0;        // XNA 0-10 scale; meaningful only when hasRating is true
+        bool hasRating = false;
     };
 
     /// One-shot recursive scan of a Music root, building an in-memory index of every supported

@@ -519,3 +519,33 @@ TEST_F(MediaLibraryTestFixture, LibraryIndexesFlacAndOpusFilesWithTheirRealTags)
     EXPECT_EQ(opus->getGenreProperty()->getNameProperty(), "Ambient");
     EXPECT_EQ(opus->getTrackNumberProperty(), 9);
 }
+
+// plan_media.md MEDIA-184: Song::IsRated/Rating were hardcoded false/0. Now carried end-to-end
+// from the file's own tags, through MediaLibraryIndex and MediaLibrary, exactly like TrackNumber.
+// Both rated fixtures encode the SAME XNA value (8) by DIFFERENT routes -- an ID3v2 POPM byte of
+// 196 and a Vorbis RATING of 80 -- so a bug in either conversion shows up independently.
+TEST_F(MediaLibraryTestFixture, LibrarySongsCarryTheirRealRatingFromTags)
+{
+    Song* popmRated = nullptr;
+    Song* vorbisRated = nullptr;
+    Song* unrated = nullptr;
+    for (Song* s : *library->getSongsProperty())
+    {
+        if (s->getNameProperty() == "Rated Song")        popmRated = s;
+        if (s->getNameProperty() == "Vorbis Rated Song") vorbisRated = s;
+        if (s->getNameProperty() == "Sunrise")           unrated = s;
+    }
+
+    ASSERT_NE(popmRated, nullptr);
+    EXPECT_TRUE(popmRated->getIsRatedProperty());
+    EXPECT_EQ(popmRated->getRatingProperty(), 8);
+
+    ASSERT_NE(vorbisRated, nullptr);
+    EXPECT_TRUE(vorbisRated->getIsRatedProperty());
+    EXPECT_EQ(vorbisRated->getRatingProperty(), 8);
+
+    // The negative case matters just as much: an unrated song must not claim to be rated.
+    ASSERT_NE(unrated, nullptr);
+    EXPECT_FALSE(unrated->getIsRatedProperty());
+    EXPECT_EQ(unrated->getRatingProperty(), 0);
+}
