@@ -97,6 +97,24 @@ _(pending)_
   normal as `mat3(skinMat)*aNormal` with no World-space composition, per `vulkan_skinnedeffect_preferperpixellighting_test.cpp`'s
   audit). Same root cause, same "invisible because every test uses World=Identity" masking. See below for the
   full EasyGL/WebGPU writeup — this note just adds Vulkan as a third confirmed instance.
+  **D3D9 adds a nuanced 4th data point**: its *vendored* stock-effect shaders (SkinnedEffect.fx, byte-for-byte
+  from FNA, exempt from audit per D-5) do NOT have this bug — confirmed via `d3d9_drawex_test.cpp`'s audit, which
+  explicitly checked and found D3D9 shares neither the fog-formula nor the normal-transform defect for its stock
+  effects. **However, D3D9's own CNA-original (non-vendored) `PbrSkinned3D.hlsl` custom shader DOES have it** —
+  confirmed via `d3d9_pbr_test.cpp`'s audit (raw World instead of `WorldInverseTranspose` for the skinned
+  normal/tangent transform, masked by that test's own `World=Identity` scene) — meaning the defect isn't confined
+  to a single copy-pasted shader family; it recurs independently in D3D9's own hand-written PBR-skinning shader
+  too, suggesting a shared conceptual mistake (skinning-then-forgetting-the-outer-normal-matrix) rather than one
+  line of source propagating verbatim across every instance.
+- **NEW: a *second*, distinct fog defect — "object-space-only fog" (ignores World/View for the Z used in the fog
+  calculation), separate from the Task-1111 mirrored-formula bug above.** Confirmed in D3D9's own custom shaders:
+  `SkinnedVertexColor3D.hlsl` (via `d3d9_skinnedvertexcolor_test.cpp`'s audit) and, per that same report, also
+  `Pbr3D.hlsl`/`PbrSkinned3D.hlsl` — all compute fog from raw local-space vertex Z, never transforming it by
+  World/View first, unlike this same backend's own correct `ComputeFogVectorEXT()` path used for every vendored
+  stock effect. This matches a previously-recorded EasyGL memory note (`feedback_easygl_fog_object_space_only`)
+  about the identical class of mistake in that backend — worth checking whether EasyGL's own non-stock shaders
+  have the same issue, and treating "object-space-only fog in a CNA-original (non-vendored) shader" as its own
+  distinct pattern to watch for, separate from the vendored/ported stock-effect fog-formula bug.
 - **NEW, Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned
   shaders never consume `emissiveColor`** — so `AmbientLightColor`/`EmissiveColor` are silently no-ops for skinned
   models on Vulkan specifically (EasyGL forwards them correctly). Confirmed across 4 test files
@@ -108,12 +126,25 @@ _(pending)_
   files (`vulkan_env_map_test.cpp`, `_amount_one_test.cpp`, `_amount_zero_test.cpp`, `_combined_test.cpp`,
   `_eyeposition_test.cpp`) — all masked because their scenes are symmetric enough (identity View, centered camera,
   center-pixel-only sampling) that a vertical mirror is invisible to the specific pixel each test checks.
-- **NEW, Bgfx/Vulkan shared: `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor` by
-  `DiffuseColor`** instead of adding it unscaled (FNA's `Lighting.fxh` convention) — confirmed across 5 Bgfx test
-  files (`bgfx_environmentmapeffect_eyeposition_test.cpp`, `_fresnel_test.cpp`, `_multilight_test.cpp`,
-  `_specular_test.cpp`, `_worldtransform_test.cpp`), all masked because none of that 6-file test family varies
-  `DiffuseColor` away from its default. Test-file phrasing suggests Vulkan shares the same bug (unconfirmed pending
-  a dedicated check).
+- **CONFIRMED IN 2 BACKENDS (Bgfx, WebGPU), suspected in Vulkan: `EnvironmentMapEffect`'s fragment shader
+  re-multiplies `EmissiveColor` by `DiffuseColor`** instead of adding it unscaled (FNA's `Lighting.fxh` convention,
+  explicitly confirmed by this project's own `EnvironmentMapEffect.cpp` comment stating the unscaled-add is
+  required to "match FNA"). Confirmed across 5 Bgfx test files (`bgfx_environmentmapeffect_eyeposition_test.cpp`,
+  `_fresnel_test.cpp`, `_multilight_test.cpp`, `_specular_test.cpp`, `_worldtransform_test.cpp`) and now also
+  **WebGPU** (`webgpu_envmap3d_test.cpp`'s audit, directly reading `WebGPUGraphicsBackend::CreateEnvMapResources()`'s
+  fragment shader: `litRGB=(emissiveAmount+lightSum)*diffuseColor`) — all masked because no test in either family
+  varies `DiffuseColor` away from its default white or `EmissiveColor`/`AmbientLightColor` away from black. Vulkan
+  test-file phrasing suggests it shares the same bug (still unconfirmed pending a dedicated check of Vulkan's own
+  env-map shader source). **A third systemic, multi-backend defect for this audit, alongside the fog-formula and
+  skinned-normal-transform bugs** — priority check for every remaining backend's `EnvironmentMapEffect` shader.
+- **NEW, WebGPU-specific: `SpriteBatch`'s clip-space mapping is always backbuffer-relative, never
+  render-target-relative.** `WebGPUGraphicsBackend::QueueSprite()` derives its clip-space viewport exclusively
+  from the backbuffer's physical/virtual size via `ComputeLogicalViewport()`, never from the currently-bound
+  `RenderTarget2D`/`RenderTargetCube` face — so `SpriteBatch.Draw()` into an off-screen target of a different size
+  mis-maps its destination rectangle. Confirmed via `webgpu_rendertargetcube_test.cpp`'s audit, which found the
+  test file's own Check-C comment already self-discloses this exact defect (empirically observed, then
+  independently re-verified against production source) — a pre-existing, backend-wide gap currently uncovered by
+  any regression test.
 - **NEW, Bgfx-specific: `BgfxGraphicsBackend::EnsureViewState()` unconditionally clears color+depth+stencil on
   every `Clear*()` call regardless of the requested `ClearOptions`** — a stencil-only clear silently wipes color
   and depth too. Confirmed via `bgfx_graphicsdevice_clear_stencil_test.cpp`'s audit.

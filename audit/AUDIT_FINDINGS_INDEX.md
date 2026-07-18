@@ -39,8 +39,19 @@ _(none recorded yet)_
 - **Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip every other core Vulkan 3D vertex shader has**,
   rendering `EnvironmentMapEffect` scenes vertically mirrored. Confirmed across 5 test files; see
   `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **Bgfx/Vulkan-shared: `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor` by `DiffuseColor`
-  instead of adding it unscaled** (FNA's real `Lighting.fxh` convention). Confirmed across 5 Bgfx test files; see
+- **CONFIRMED IN 2 BACKENDS (Bgfx, WebGPU): `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor`
+  by `DiffuseColor` instead of adding it unscaled** (FNA's real `Lighting.fxh` convention). Confirmed across 5
+  Bgfx test files and `webgpu_envmap3d_test.cpp`; Vulkan suspected but unconfirmed. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **WebGPU-specific: `SpriteBatch`'s clip-space mapping is always backbuffer-relative, never render-target-relative**
+  — drawing into an off-screen target of a different size mis-maps sprite placement. See
+  [audit report](examples/webgpu_rendertargetcube_test.cpp.audit.md) and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **D3D9's own custom (non-vendored) `PbrSkinned3D.hlsl` shares the skinned-normal-transform bug** (4th confirmed
+  instance) — its *vendored* stock effects do not. See
+  [audit report](examples/d3d9_pbr_test.cpp.audit.md).
+- **NEW pattern: "object-space-only fog" in D3D9's own custom shaders** (`SkinnedVertexColor3D.hlsl`, `Pbr3D.hlsl`,
+  `PbrSkinned3D.hlsl`) — fog computed from raw local-space Z, ignoring World/View, distinct from the Task-1111
+  mirrored-formula bug. See [audit report](examples/d3d9_skinnedvertexcolor_test.cpp.audit.md) and
   `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **Bgfx-specific: `BgfxGraphicsBackend::EnsureViewState()` unconditionally clears color+depth+stencil on every
   `Clear*()` call regardless of the requested `ClearOptions`** — a stencil-only clear silently wipes color and

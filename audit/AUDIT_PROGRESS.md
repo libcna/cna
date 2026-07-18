@@ -82,14 +82,25 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **481** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **517** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8,
-  examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70)
-- PENDING: **1816** (+ 82 in flight via 4 parallel background workflows: sdlgpu 22, webgpu 22, generic 24, d3d9 14)
+  examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70,
+  examples-tests-webgpu ×22, examples-tests-d3d9 ×14)
+- PENDING: **1780** (+ 46 still in flight: sdlgpu 22, generic 24)
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~21% AUDITED so far** (481/2297), climbing to ~25% once the 4 in-flight batches land.
+**~22.5% AUDITED so far** (517/2297), climbing further once sdlgpu/generic land.
+
+`examples-tests-webgpu` (22 files) and `examples-tests-d3d9` (14 files) batches both complete, 0 errors. WebGPU
+batch added a THIRD backend to the EnvironmentMapEffect emissive bug (Bgfx, now WebGPU too) and a new
+WebGPU-specific bug (SpriteBatch's clip-space mapping is always backbuffer-relative, breaking sprite placement
+when drawing into a differently-sized render target). D3D9 batch produced a valuable **nuanced** result: D3D9's
+*vendored* stock-effect shaders share NEITHER the fog-formula NOR the skinned-normal-transform bug (clean) — but
+its own CNA-original custom PBR/skinned HLSL shaders (`PbrSkinned3D.hlsl`, `Pbr3D.hlsl`,
+`SkinnedVertexColor3D.hlsl`) share both the skinned-normal-transform bug (4th confirmed instance) AND a *second*,
+distinct "object-space-only fog" defect (ignores World/View for the Z used in fog, separate from the Task-1111
+mirrored-formula bug) that matches a previously-recorded EasyGL memory note about the same mistake pattern.
 
 ## Major discoveries so far (see AUDIT_FINDINGS_INDEX.md and AUDIT_CROSS_CUTTING_FINDINGS.md for full detail)
 
