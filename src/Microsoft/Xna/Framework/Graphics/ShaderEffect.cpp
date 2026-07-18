@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Logger.hpp"
@@ -77,6 +78,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void ShaderEffect::SetTexture(int unit, TextureCube& texture)
     {
         if (effectBackend_) effectBackend_->BindTextureCube(unit, &texture.GetBackend());
+    }
+
+    void ShaderEffect::SetTexture(int unit, Texture3D& texture)
+    {
+        if (effectBackend_) effectBackend_->BindTexture3D(unit, &texture.GetBackend());
     }
 
     ShaderEffect::~ShaderEffect() = default;

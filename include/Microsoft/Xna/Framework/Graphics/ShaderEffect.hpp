@@ -14,6 +14,7 @@ namespace CNA::Internal::Backends { class IEffectBackend; }
 namespace Microsoft::Xna::Framework::Graphics
 {
     class Texture2D;
+    class Texture3D;
     class TextureCube;
 
     /**
@@ -81,6 +82,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture Cube texture to bind.
          */
         NOXNA void SetTexture(int unit, TextureCube& texture);
+
+        /**
+         * @brief plan_graphics.md Task 863: binds a volume (3D) texture to an additional sampler
+         * unit, for a custom shader that declares a `sampler3D` uniform.
+         *
+         * @param unit    0-based sampler unit.
+         * @param texture Volume texture to bind.
+         */
+        NOXNA void SetTexture(int unit, Texture3D& texture);
 
         /**
          * @brief Task 1079: enables a `ShaderEffect` to drive a real 3D `GraphicsDevice::
