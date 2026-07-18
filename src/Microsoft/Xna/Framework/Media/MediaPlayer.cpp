@@ -199,20 +199,36 @@ namespace Microsoft::Xna::Framework::Media
         {
             if (MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer())
             {
+                // MIX_SetPostMixCallback returns bool, and ignoring it is not cosmetic here: on
+                // an install failure the flag would claim visualization is on while no data can
+                // ever arrive, and on an UNINSTALL failure the audio thread may still be writing
+                // into a buffer we are about to zero -- reintroducing the very race MEDIA-216
+                // fixed (plan_media.md MEDIA-220).
                 if (value)
                 {
                     // Clear BEFORE installing the tap: once the callback is live the audio thread
                     // owns the buffer, so resetting it afterwards would race with a write in
                     // flight (plan_media.md MEDIA-216).
                     g_visualizationCapture.Reset();
-                    MIX_SetPostMixCallback(mixer, OnPostMix, nullptr);
+                    if (!MIX_SetPostMixCallback(mixer, OnPostMix, nullptr))
+                    {
+                        // No tap means no data will ever arrive, so reporting "enabled" would be a
+                        // lie. Revert to the state the caller can actually rely on.
+                        g_visualizationEnabled = false;
+                    }
                 }
                 else
                 {
                     // Remove the tap FIRST, then clear -- the reverse order let the audio thread
                     // keep writing into a buffer the game thread was zeroing.
-                    MIX_SetPostMixCallback(mixer, nullptr, nullptr);
-                    g_visualizationCapture.Reset();
+                    if (MIX_SetPostMixCallback(mixer, nullptr, nullptr))
+                    {
+                        g_visualizationCapture.Reset();
+                    }
+                    // Uninstall failed: the callback may still be live, so deliberately do NOT
+                    // Reset() -- zeroing a buffer another thread is writing is exactly the race
+                    // being avoided. The stale samples are harmless; GetVisualizationData() gates
+                    // on the (now false) enabled flag anyway.
                 }
             }
         }

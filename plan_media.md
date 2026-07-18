@@ -2301,6 +2301,46 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   pre-existing `Net`/ENet flakiness already isolated and documented in Phase 12** (`MEDIA-161`), not
   a Media regression: the suite re-ran clean and that test passes 23/23 in isolation.
 
+- [x] **MEDIA-219 — Complete the URI semantics `MEDIA-217` left half-done.** A tenth review found
+  the file-URI handling still incomplete on three counts, plus a bad test of my own:
+  * **`file:/path`** (the authority-less form RFC 8089 also permits) was not recognised at all.
+  * **`file://server/share`** silently **dropped the authority**, resolving a REMOTE path to a
+    local one -- the worst of the three, since it succeeds against the wrong file rather than
+    failing.
+  * Any authority was treated as `localhost`.
+  * My `FromUriAcceptsARealFileUri` test claimed to check "two forms" but **built the identical
+    string twice** (`abs` already starts with `/`, so `"file://" + abs` IS the empty-authority
+    spelling).
+  *Fix:* scheme detection now ignores single-character "schemes" (a Windows drive letter is a path,
+  not a scheme); empty/`localhost` authority -> plain path; any other authority -> UNC
+  `//host/path`, matching `Uri.LocalPath`; `file:/path` handled; the duplicate test replaced by
+  `FromUriAcceptsEveryLocalFileUriSpelling` covering all three real spellings.
+  *Accept + MUTATION-VERIFIED -- and this is the notable part:* the first version of the UNC test
+  (`file://server/share/song.ogg`) **passed against the deliberately broken code**, because
+  dropping the authority yields `/share/song.ogg`, which is also missing. Only mutation testing
+  exposed it. Rewritten so correct and buggy behaviour give OPPOSITE results: the path after the
+  authority is a REAL existing file, so keeping the authority (UNC) correctly fails while dropping
+  it wrongly succeeds. It now genuinely fails against the bug.
+
+- [x] **MEDIA-220 — Act on `MIX_SetPostMixCallback`'s return value.** It returns `bool` and
+  `MEDIA-216` ignored it. Not cosmetic: on an **install** failure the flag claimed visualization was
+  on while no data could ever arrive (a caller would poll forever); on an **uninstall** failure the
+  audio thread might still be writing into a buffer `Reset()` was about to zero -- reintroducing
+  the exact race `MEDIA-216` had just fixed.
+  *Fix:* install failure reverts `g_visualizationEnabled` to `false`, so the property never claims
+  a capability that does not exist; uninstall failure deliberately **skips** `Reset()`, leaving
+  harmless stale samples rather than racing a live writer.
+  *Accept:* `IsVisualizationEnabledNeverClaimsEnabledWithoutAWorkingTap` asserts the observable
+  contract (never reports enabled without a working tap; zeroed arrays when it is not).
+
+- [x] **MEDIA-221 — Full-suite regression for this round.**
+  *Verified:* 4917 tests, 4915 passed, 0 failed, 2 pre-existing hardware skips. Grepped on the
+  complete log.
+  **Still genuinely open (not claimed as covered):** visualization has no TSAN/threaded test and no
+  end-to-end "play real audio, assert non-zero captured data" test -- the race is fixed by
+  construction, not by a test that would catch a regression of it. Group D (`MEDIA-192`..`198`)
+  remains deferred by the project owner.
+
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
 

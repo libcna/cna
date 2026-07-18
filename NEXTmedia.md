@@ -6,7 +6,7 @@
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
 > (`MEDIA-1`–`MEDIA-215`, Phases 0-16); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **38 of 45 done, 7 open (all Group D, deferred by the owner)**
+## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **41 of 48 done, 7 open (all Group D, deferred by the owner)**
 
 > **Phase 16 is open work, not a review of a fix commit.** A full **XNA 4.0 API-parity audit**
 > (against the original Microsoft reference assemblies, *not* FNA) found that while all 24 public
@@ -33,6 +33,12 @@
 > `Song::FromUri` that never actually accepted the file URIs its own docs promised. **Known
 > open gap: visualization has no TSAN or threaded end-to-end test** -- the race is fixed by
 > construction, not by a test that would have caught it.
+>
+> **Group I extended (..)** after a tenth review: file-URI semantics completed
+> (, UNC authority instead of silently dropping a remote host, drive-letter vs scheme),
+> and 's return value is now acted on so the enabled flag can never claim a
+> tap that failed to install. Notable: the first UNC test passed against deliberately broken code
+> and only mutation testing exposed it.
 >
 > **Root cause worth remembering: this plan named FNA as the
 > authoritative reference, but FNA's own `Song.cs` omits those XNA members** — so auditing against

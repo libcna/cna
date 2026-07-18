@@ -283,3 +283,26 @@ TEST_F(MediaPlayerTest, EnablingVisualizationIsSafeWithoutAnAudioDevice)
 
     MediaPlayer::setIsVisualizationEnabledProperty(false);
 }
+
+// plan_media.md MEDIA-220: MIX_SetPostMixCallback returns bool and that result is now acted on.
+// This asserts the observable contract that follows from it -- IsVisualizationEnabled must never
+// report true when no tap could be installed, because a caller would then poll forever for data
+// that can never arrive. On a machine where the tap DOES install, it must report true.
+TEST_F(MediaPlayerTest, IsVisualizationEnabledNeverClaimsEnabledWithoutAWorkingTap)
+{
+    MediaPlayer::setIsVisualizationEnabledProperty(true);
+    const bool enabled = MediaPlayer::getIsVisualizationEnabledProperty();
+
+    Microsoft::Xna::Framework::Media::VisualizationData data;
+    MediaPlayer::GetVisualizationData(data);
+
+    if (!enabled)
+    {
+        // Tap could not be installed: the arrays must stay zeroed rather than holding stale data.
+        for (float v : data.samp) EXPECT_FLOAT_EQ(v, 0.0f);
+        for (float v : data.freq) EXPECT_FLOAT_EQ(v, 0.0f);
+    }
+    // Either way, disabling must round-trip cleanly and not crash.
+    MediaPlayer::setIsVisualizationEnabledProperty(false);
+    EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty());
+}

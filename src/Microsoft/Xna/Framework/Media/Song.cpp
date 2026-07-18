@@ -165,20 +165,22 @@ namespace Microsoft::Xna::Framework::Media
     Song* Song::FromUri(const std::string& name, const std::string& uri)
     {
         // FNA resolves the URI via Uri.LocalPath and rejects anything that is not a local file
-        // ("Only local file URIs are supported for now" -- Song.cs). CNA takes a std::string
-        // rather than a System::Uri, so the equivalent parsing is done here: previously the raw
-        // string went straight to the Song constructor, which then asked std::filesystem::exists
-        // about a literal "file:///..." and always failed (plan_media.md MEDIA-217).
-        const std::size_t schemeEnd = uri.find("://");
-        if (schemeEnd == std::string::npos)
+        // ("Only local file URIs are supported for now" -- Song.cs). CNA takes a std::string rather
+        // than a System::Uri, so the equivalent parsing happens here: the raw string used to go
+        // straight to the Song constructor, which then asked std::filesystem::exists about a
+        // literal "file:///..." and always failed (plan_media.md MEDIA-217/219).
+        const std::size_t colon = uri.find(':');
+
+        // No scheme at all: a plain relative or absolute path, used as-is. (FNA combines a relative
+        // URI with TitleLocation.Path; CNA has no such content-root concept for Song, and every
+        // existing caller already passes a usable path.) A bare Windows drive letter like "C:/x" is
+        // a path, not a scheme -- a single-character "scheme" is never a real one.
+        if (colon == std::string::npos || colon <= 1)
         {
-            // No scheme at all: a plain relative or absolute path, used as-is. (FNA combines a
-            // relative URI with TitleLocation.Path; CNA has no such content-root concept for Song,
-            // and every existing caller already passes a usable path.)
             return new Song(uri, name);
         }
 
-        std::string scheme = uri.substr(0, schemeEnd);
+        std::string scheme = uri.substr(0, colon);
         std::transform(scheme.begin(), scheme.end(), scheme.begin(),
                         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
         if (scheme != "file")
@@ -187,17 +189,54 @@ namespace Microsoft::Xna::Framework::Media
                 "Only local file URIs are supported for now.");
         }
 
-        // Strip "file://", then the optional (empty or "localhost") authority, leaving the path.
-        std::string rest = uri.substr(schemeEnd + 3);
-        const std::size_t slash = rest.find('/');
-        if (slash == std::string::npos)
+        std::string rest = uri.substr(colon + 1);
+        std::string path;
+
+        if (rest.rfind("//", 0) == 0)
+        {
+            // "file://<authority>/<path>". RFC 8089 allows a non-empty authority, which .NET's
+            // Uri.LocalPath turns into a UNC path -- dropping it (as the first version of this fix
+            // did) would silently resolve a REMOTE path to a local one (plan_media.md MEDIA-219).
+            rest = rest.substr(2);
+            const std::size_t slash = rest.find('/');
+            const std::string authority = (slash == std::string::npos) ? rest : rest.substr(0, slash);
+            const std::string rawPath   = (slash == std::string::npos) ? std::string() : rest.substr(slash);
+
+            std::string lowerAuthority = authority;
+            std::transform(lowerAuthority.begin(), lowerAuthority.end(), lowerAuthority.begin(),
+                            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            if (authority.empty() || lowerAuthority == "localhost")
+            {
+                // The two spellings of "this machine": "file:///path" and "file://localhost/path".
+                if (rawPath.empty())
+                {
+                    throw System::InvalidOperationException(
+                        "Only local file URIs are supported for now.");
+                }
+                path = PercentDecode(rawPath);
+            }
+            else
+            {
+                // A real host: becomes a UNC path, matching Uri.LocalPath. Kept rather than
+                // rejected so the caller gets a genuine path-not-found if the share is unreachable,
+                // instead of this code silently pretending it was local.
+                path = "//" + PercentDecode(authority) + PercentDecode(rawPath);
+            }
+        }
+        else if (rest.rfind("/", 0) == 0)
+        {
+            // "file:/path" -- the authority-less form RFC 8089 also permits, which the first
+            // version of this fix did not recognise at all (plan_media.md MEDIA-219).
+            path = PercentDecode(rest);
+        }
+        else
         {
             throw System::InvalidOperationException(
                 "Only local file URIs are supported for now.");
         }
-        std::string path = PercentDecode(rest.substr(slash));
 
-        // "file:///C:/music/song.mp3" -> "C:/music/song.mp3" on Windows-style absolute paths.
+        // "file:///C:/music/song.mp3" -> "C:/music/song.mp3" for Windows-style absolute paths.
         if (path.size() >= 3 && path[0] == '/' &&
             std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':')
         {
