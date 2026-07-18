@@ -448,6 +448,23 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     produces zero `LeakSanitizer` output against these tests, consistent with `LSan`
     remaining non-functional in this container (needs `ptrace`, unavailable here) —
     genuinely blocked on the container, not on unfinished implementation.
+33. `TEST2-002` (`cd4c4c73`, docs-only) — one consolidated, dated sweep instead of
+    relying on this session's own ad hoc per-task verification: `--clean-first`
+    rebuild of `cmake-build-devices-ubsan`/`-tsan`/`-asan`, then the exact precise
+    Devices filter used throughout this pass (already includes every "lifecycle fuzz
+    test" this task names — `PERF2-002`'s 100k-cycle tests, `TEST2-001`'s stress
+    tests — confirmed by grep, no separately-named fuzz suite exists elsewhere).
+    UBSan/TSan (3 runs)/ASan all clean, 0 reports, 0 failures, 357/353 every time.
+    `LSan` explicitly forced on (`ASAN_OPTIONS=detect_leaks=1`) — zero output of any
+    kind, **re-confirming** (independently of `PERF2-002`'s own check) it's
+    non-functional in this container. Zero pre-existing/unrelated findings encountered
+    with this precise filter (the three already-tracked out-of-scope ones — `Vector3`
+    UBSan, sharp-runtime `TimeSpan::copy_count` TSan, `NetworkSession.cpp` ASan — all
+    live outside these suites). Dependency revisions + full logs recorded (logs kept
+    in this session's scratchpad, not committed — matches this project's existing
+    convention of recording exact counts/commands/revisions in `plan_devices.md`
+    itself rather than checking in raw build/run output). **Left OPEN**: only the
+    `LSan` half of "`ASan/LSan`" is unachievable here; everything else fully delivered.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -791,14 +808,15 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 32 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 33 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
 BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011,
-PERF2-002 -- see Section 2 for commit hashes and a one-line summary of each,
-including PERF2-002's own new 100k-cycle lifecycle leak tests), plus a
+PERF2-002, TEST2-002 -- see Section 2 for commit hashes and a one-line summary
+of each, including PERF2-002's own new 100k-cycle lifecycle leak tests and
+TEST2-002's own consolidated clean-checkout sanitizer sweep), plus a
 separate, unrelated re-verification round of the *older* `audit_devices.md`
 (6 `DEV-AUD-*` findings, commit `422ed4c4` -- see Section 2's own dated
 entry). All five `BASE2-*` P1 tasks are now done. `DEVPERF-004` found a real,
