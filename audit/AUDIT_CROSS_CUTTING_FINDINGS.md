@@ -108,6 +108,14 @@ Organize by category as entries accumulate.
   this pass — flagged as a priority check for whichever consumer(s) actually call `SetDataWithOptions` with
   `NoOverwrite` in a same-frame multi-draw streaming pattern (e.g. `SpriteBatch`'s dynamic vertex buffer, if it
   uses this path) when `xna-graphics`/`tests-xna-graphics` are audited.
+  **UPDATE — 3rd confirmed instance, found while auditing `backend-d3d9`: `D3D9VertexBufferBackend::Upload()`
+  calls `buffer_->Lock(0, byteCount, &locked, LockFlagsFor(options))` — hardcoded offset 0, identical shape to
+  D3D11/EasyGL.** `D3DLOCK_NOOVERWRITE` carries the same driver contract as D3D11's `D3D11_MAP_WRITE_NO_OVERWRITE`
+  (a promise the mapped range isn't being read by pending GPU work), so the same plausible-but-unreproduced
+  synchronization risk applies here too if any caller streams into this buffer across multiple same-frame draws.
+  3 independent backends (D3D11, EasyGL, D3D9) now share this exact interface-level gap — strong evidence this
+  is a project-wide `IVertexBufferBackend`/`IIndexBufferBackend` interface limitation, not a per-backend
+  implementation oversight; every future backend audit should check this same call chain by default.
 
 - **Recurring shape across 2 backends, 2 resource types: mip regeneration for a cube resource always touches
   ALL 6 faces, even when only one face's content actually changed.** First found in SdlGpu's own
@@ -361,6 +369,22 @@ _(pending)_
   about the identical class of mistake in that backend — worth checking whether EasyGL's own non-stock shaders
   have the same issue, and treating "object-space-only fog in a CNA-original (non-vendored) shader" as its own
   distinct pattern to watch for, separate from the vendored/ported stock-effect fog-formula bug.
+  **UPDATE — mechanism confirmed via direct read of `D3D9EffectDraw.cpp`: `ComputeFogVectorEXT()` (line 149) is
+  a faithful, correct port of FNA's real `EffectHelpers.SetFogVector`** — it builds a per-vertex dot-product fog
+  vector from the combined `World*View` matrix's own Z-row/column elements (`worldView.M13/M23/M33/M43`), a
+  materially more sophisticated and CORRECT mechanism than the simple scalar `(z+FogEnd)/(FogEnd-FogStart)`
+  formula the 3 CNA-custom shaders use with raw, untransformed local-space `Position.z`. This is not a case of
+  the same formula fed a wrong input — it's two structurally different fog algorithms coexisting in one
+  backend: the vendored stock effects get real FNA fidelity for free (byte-identical vendored bytecode + a
+  faithfully-ported constant-computation helper), while every CNA-original effect (`Instanced3D` has no fog at
+  all; `Pbr3D`/`PbrSkinned3D`/`SkinnedVertexColor3D` all use the simpler, object-space-only formula) diverges
+  from that same backend's own established-correct convention. The simpler formula's own *arithmetic shape* is
+  actually right (`(z+FogEnd)/(FogEnd-FogStart)`, matching FNA's scalar-formula convention used elsewhere in
+  this project, e.g. EasyGL) — only the missing World/View transform of the Z value feeding it is wrong. Net
+  effect: fog will look visibly inconsistent between stock-effect meshes and PBR/skinned-color meshes in the
+  same D3D9-rendered scene, especially under camera rotation (object-space Z stays fixed to the mesh's own local
+  orientation regardless of which way the camera is facing, while the real FNA algorithm correctly tracks
+  camera-relative depth).
 - **UPDATE — root-cause locus confirmed while auditing `backend-vulkan` directly: `VulkanGraphicsBackend::
   FillExtPushConst()` (the backend-side push-constant fill, shared by ext/lit-textured/skinned/pbr draws)
   faithfully copies `p.ambientColor` from the already-populated `GpuDrawParams` into the push constant —
@@ -372,6 +396,28 @@ _(pending)_
   `skinned3d_color`/`skinned3d_vertexlit`/`skinned3d_vertexlit_color`'s `FogParams` block) has no
   `emissiveColor` field declared at all — confirmed via full read of all 4 — so there is nowhere for the value
   to go even if the effect side did compute it.
+  **UPDATE — REVISED hypothesis, now backed by a 4th independent source (`backend-d3d9`'s own
+  `D3D9SkinnedVertexColorDraw.cpp`): `SkinnedEffect::FillGpuDrawParams()` likely does NOT leave `ambientColor`
+  unset by oversight — it appears to deliberately pre-fold `AmbientLightColor` into `params.emissiveColor`
+  for the skinned path specifically, by design, and route it through the `EmissiveColor` register/uniform
+  instead of a separate `AmbientColor` one.** `D3D9SkinnedVertexColorDraw.cpp` (line 150) uploads
+  `params.emissiveColor` to the `EmissiveColor` pixel-shader register with the explicit comment
+  "`SkinnedEffect::FillGpuDrawParams()` already pre-folds ambient into emissiveColor (matches
+  `DrawSkinnedEffectEXT`'s own identical upload of `params.emissiveColor` as `EmissiveColor`)" — i.e. D3D9's
+  own REAL, vendored stock `SkinnedEffect.fx` draw path (`DrawSkinnedEffectEXT`) does the identical thing. This
+  is the same convention Bgfx's own Task-899 fix comment independently described ("C++'s
+  `FillGpuDrawParams()` already pre-combines `AmbientLightColor*DiffuseColor` into `emissiveColor`, matching
+  EasyGL's already-working formula") and that SdlGpu's reused-lit-fragment-shader mechanism structurally
+  implements. **4 independent backends (EasyGL, Bgfx, SdlGpu, D3D9) now corroborate the same "ambient is
+  pre-folded into `emissiveColor` for skinned draws" convention** — which reframes Vulkan's and D3D11/D3D12's
+  bugs more precisely: it is very likely NOT that the upstream `SkinnedEffect::FillGpuDrawParams()` fails to
+  compute the right value at all, but that these 2 backend-groups' own skinned-shader consumption code reads
+  the WRONG field (a separate, likely-always-zero-for-skinned-draws `ambientColor`) instead of the RIGHT,
+  already-correctly-computed one (`emissiveColor`) — and, in Vulkan's/D3D11's/D3D12's case, additionally lack
+  any shader-side slot to receive `emissiveColor` even if they read it. This should be confirmed directly once
+  `SkinnedEffect.cpp`/`FillGpuDrawParams()` itself is audited (`xna-graphics` shard, Task #4) — but the balance
+  of cross-backend evidence now points at "2 backends misconsume an already-correct upstream value" rather
+  than "the upstream value itself is wrong."
 - **NEW, Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned
   shaders never consume `emissiveColor`** — so `AmbientLightColor`/`EmissiveColor` are silently no-ops for skinned
   models on Vulkan specifically (EasyGL forwards them correctly). Confirmed across 4 test files

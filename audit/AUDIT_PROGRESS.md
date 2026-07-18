@@ -12,7 +12,7 @@ the audit must continue fully autonomously per the original prompt's instruction
 Microsoft.Xna/Devices public API are audited **directly** by the main agent (judgment-heavy, FNA-parity/
 cross-backend work); large mechanical batches (examples, tests, tools) are fanned out via the Workflow tool.
 
-### Direct-audit backend work: 15 of 16 backend shards fully AUDITED
+### Direct-audit backend work: ALL 16 OF 16 BACKEND SHARDS FULLY AUDITED — MILESTONE COMPLETE
 
 `backend-common` (2/2), `backend-headless` (2/2), `backend-software` (2/2), `backend-sdlrenderer` (2/2, the
 backend itself, not the example-test shard), `backend-dx3` (2/2, static-only per D-P4), `backend-easygl` (2/2,
@@ -23,13 +23,29 @@ D3D11/D3D12 infrastructure — every one of the 34 `.hlsl` shader files individu
 non-shader files; `D3D11GraphicsBackend.cpp` at 1846 lines given a scoped-depth review matching the standard
 already applied to EasyGL/WebGPU's giant files), `backend-d3d12` (26/26 — the backend's own non-shader files;
 `D3D12GraphicsBackend.cpp` at 2331 lines, the largest single file in this backend, given a scoped-depth review),
-`backend-bgfx` (34/34 — resolved the skinned-normal-transform bug's final cross-backend confirmation), and
-**`backend-vulkan` (40/40 — all 35 `.glsl` shaders individually read in full; `VulkanGraphicsBackend.cpp` at
+`backend-bgfx` (34/34 — resolved the skinned-normal-transform bug's final cross-backend confirmation),
+`backend-vulkan` (40/40 — all 35 `.glsl` shaders individually read in full; `VulkanGraphicsBackend.cpp` at
 8954 lines, the single largest file in this entire audit, given a scoped-depth review; discovered the
 missing-Y-flip bug affects 3 MORE effect families beyond the already-known `EnvironmentMapEffect` instance
 — `PbrEffect`/`SkinnedPbrEffect`/`InstancedEffect` — including a demonstrably FALSE justifying comment in
 `pbr3d_skinned.vert.glsl`; discovered a new HIGH finding: `ScissorRectangle` is completely non-functional
-whenever a render target is bound, with no in-code disclosure unlike the paired Viewport limitation)**.
+whenever a render target is bound, with no in-code disclosure unlike the paired Viewport limitation), and
+**`backend-d3d9` (50/50 — the LAST backend shard; all 4 CNA-original custom shaders read in full plus the
+4 vendored-consumer draw-dispatch files; confirmed the "object-space-only fog" defect's precise mechanism
+(a real, faithful `ComputeFogVectorEXT()` FNA port for vendored stock effects vs. a simpler, wrong-input
+formula in 3 CNA-custom shaders); confirmed a 4th independent backend for the Ambient-pre-folded-into-
+Emissive convention, refining the Vulkan/D3D11/D3D12 root-cause hypothesis; confirmed a 3rd instance of the
+`SetDataOptions::NoOverwrite` no-destination-offset architecture gap; found the most architecturally simple
+AND complete native Stencil/Scissor/DepthBias implementation of any backend checked, structurally immune to
+both D3D12's occlusion-query bug and Vulkan's RT-bound-scissor bug by virtue of its immediate, non-deferred
+rendering model)**.
+
+**This completes direct audits of all 16 backend shards** (`backend-common`, `backend-headless`,
+`backend-software`, `backend-sdlrenderer`, `backend-dx3`, `backend-easygl`, `backend-webgpu`, `backend-ascii`,
+`backend-canvas`, `backend-d3dcommon`, `backend-d3d11`, `backend-d3d12`, `backend-sdlgpu`, `backend-bgfx`,
+`backend-vulkan`, `backend-d3d9`) — Task #2's direct-audit backend work is DONE. Remaining under Task #2 (per
+the manifest): populating `AUDIT_GRAPHICS_BACKEND_MATRIX.md` (Pass 4) from the now-complete cross-backend
+evidence base, and the mechanical `examples-tests-*`/`examples-demo_*` batches (tracked separately, Task #8).
 
 **Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
 `EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
@@ -37,11 +53,7 @@ defer registration until construction can no longer fail. `SdlGpu`, however, has
 resource-leak risk in the same area (see Findings below) — flagged in the cross-cutting doc but **not yet written
 up as a formal per-file finding**, since `backend-sdlgpu`'s own 27-file direct audit has not started yet.
 
-### Remaining backend shards — NOT YET STARTED (1 of 16, the LAST one)
-
-`backend-d3d9` (50, note D-5 vendored-shader boundary — the 12 vendored `.fx`/`.fxh` files are EXEMPT, only the
-C++ consumer code is in-scope; this is the last backend needed to complete the full D3D family and all 16
-backend shards).
+### Remaining backend shards — NONE. All 16 backend shards are AUDITED.
 
 **For each of these, specifically check**: (1) does its SkinnedEffect/SkinnedPbrEffect shader share the
 world-space-normal-transform bug (now confirmed at the shader-source level in 5 of 14 backends: EasyGL, WebGPU,
@@ -90,16 +102,16 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **756** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **806** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
-  backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, backend-bgfx ×34, backend-vulkan ×40, examples-tests-easygl ×218,
-  examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70, examples-tests-webgpu ×22,
-  examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22, examples-tests-generic ×24)
-- PENDING: **1541**
+  backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, backend-bgfx ×34, backend-vulkan ×40, backend-d3d9 ×50,
+  examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70,
+  examples-tests-webgpu ×22, examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22, examples-tests-generic ×24)
+- PENDING: **1491**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~32.9% AUDITED so far** (756/2297).
+**~35.1% AUDITED so far** (806/2297). **All 16 backend shards now fully audited.**
 
 `backend-bgfx` (34 files) is now fully audited — all 28 `.sc` shaders individually read, plus a scoped-depth
 review of the 695+3443-line main backend header/cpp, the vertex-format-helper header, the renderer-selection
@@ -332,32 +344,52 @@ audits) to confirm whether they share the same pattern.
 32. Two genuine positive findings for Vulkan's PBR shaders: both `pbr3d.frag.glsl` and `pbr3d_skinned.frag.glsl`
     correctly add EmissiveColor unscaled (`ambient + Lo + emissive`), unlike the EnvironmentMapEffect
     emissive-remultiply bug confirmed in the same backend and 4 others.
+33. **D3D9's "object-space-only fog" defect's precise mechanism is now understood**: `ComputeFogVectorEXT()`
+    (used by every vendored stock effect) is a faithful, correct port of FNA's real `EffectHelpers.SetFogVector`
+    (a per-vertex dot-product fog vector from the `World*View` matrix's own Z-row/column elements) — while the
+    3 CNA-custom shaders (`Pbr3D`/`PbrSkinned3D`/`SkinnedVertexColor3D`) use a simpler scalar formula fed raw,
+    untransformed local-space Z instead. Not a case of the same formula fed a wrong input — two structurally
+    different fog algorithms coexist in one backend, causing visibly inconsistent fog between stock-effect and
+    CNA-custom-shader meshes in the same scene, especially under camera rotation.
+34. **4th independent backend (D3D9) confirms the "Ambient pre-folded into Emissive for skinned draws"
+    convention** (after EasyGL, Bgfx's Task-899 fix comment, SdlGpu's reused-fragment-shader mechanism) —
+    `D3D9SkinnedVertexColorDraw.cpp`'s own explicit comment states this directly, matching the real vendored
+    `SkinnedEffect.fx`'s own identical upload convention. This REVISES the earlier hypothesis that
+    `SkinnedEffect::FillGpuDrawParams()` itself is buggy: the balance of evidence now suggests Vulkan/D3D11/D3D12
+    likely misconsume an already-correct upstream value (reading a separate, always-zero `ambientColor`
+    instead of the correct, pre-folded `emissiveColor`) rather than the upstream computation being wrong.
+35. 3rd confirmed instance (after D3D11, EasyGL) of the `SetDataOptions::NoOverwrite` no-destination-offset
+    architecture gap, found in `D3D9Buffers.cpp`'s own `Upload()` (`Lock(0, byteCount, ...)`, hardcoded offset).
+36. D3D9 has the most architecturally simple AND complete native Stencil/Scissor/DepthBias implementation of
+    any backend checked (direct D3D9 render states, no emulation needed) — and is structurally immune to both
+    D3D12's occlusion-query multi-draw bug and Vulkan's Scissor-when-RT-bound bug, by virtue of its immediate
+    (non-deferred) rendering model rather than any deliberate fix.
+37. D3D9's stock `SkinnedEffect` draw path is structurally IMMUNE (not just unaffected) to the ambient/emissive
+    skinned-effect bug family: it dispatches to Microsoft's own real, unmodified compiled bytecode, so there is
+    no CNA reimplementation for the bug to live in — the one backend where this is categorically impossible for
+    the stock effect (CNA-custom `SkinnedVertexColor3D.hlsl` still could have its own version, but is confirmed
+    correct per finding #34).
 
 ## Last completed file
 
-`backend-vulkan` shard — all 40 files (35 `.glsl` shaders individually read in full; the 1491+8954-line main
-backend header/cpp given a scoped-depth review — the `.cpp` is the single largest file in this entire audit;
-the vertex-format-helper header, compile script, and generated SPIR-V header) fully audited and written up,
-marked AUDITED. This closes out `backend-vulkan` entirely and expands the missing-Y-flip bug's confirmed scope
-from 1 to 4 effect families, plus discovers 1 new HIGH finding (Scissor non-functional when RT-bound). Only
-`backend-d3d9` remains to complete all 16 backend shards.
+`backend-d3d9` shard — all 50 files (4 CNA-original custom `.hlsl` shaders read in full, plus the 4 draw-dispatch
+`.cpp` files that consume them and the vendored stock effects; the ~1112-line `D3D9GraphicsBackend.cpp` given a
+scoped-depth review; state-mapping/format-mapping/vertex-declaration/constant-table/constant-upload/texture/
+buffer/occlusion-query/profile-capabilities/effect-backend/shader-cache/shader-dispatch/render-target files; the
+shader-compile tooling and generated headers) fully audited and written up, marked AUDITED. **This is the LAST
+backend shard — all 16 of 16 backend shards are now fully, directly audited.** Overall audit is at 806/2297
+(~35.1%).
 
 ## Next exact action
 
 1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_FINDINGS_INDEX.md`, `AUDIT_PROGRESS.md`, the
-   40 new `.audit.md` reports under `audit/include/.../Vulkan/` and `audit/src/.../Vulkan/`, and the updated
-   `backend-vulkan` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
-2. Move to `backend-d3d9` (50 files, note D-5 vendored-shader boundary — the 12 vendored `.fx`/`.fxh` files are
-   EXEMPT, only the C++ consumer code is in-scope; this is the LAST backend shard — completing it finishes all
-   16 backend shards and the full D3D family). Priority checks per the established pattern: does D3D9's own
-   custom (non-vendored) shader code share the fog-formula/skinned-normal-transform/emissive-remultiply bug
-   families already confirmed in every other checked backend; does it call `RegisterForWindow` and if so does
-   its constructor share either the EasyGL dangling-pointer bug or the SdlGpu resource-leak bug; does
-   `SpriteBatch.SetTransformMatrix()` work correctly (already the sole confirmed no-op is Vulkan, so this is a
-   check for a "does NOT share" positive, not a search for a new instance) — plus the already-recorded
-   "object-space-only fog" 2nd-fog-defect-class finding in `SkinnedVertexColor3D.hlsl`/`Pbr3D.hlsl`/
-   `PbrSkinned3D.hlsl` (found via the `examples-tests-d3d9` batch) should be confirmed/formalized directly here.
-3. After all 16 backend shards: Task #3 (CNA core), Task #4 (Microsoft.Xna areas — start with
+   50 new `.audit.md` reports under `audit/include/.../D3D9/` and `audit/src/.../D3D9/`, and the updated
+   `backend-d3d9` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
+2. **All 16 backend shards are complete.** Next: begin Pass 4 (populate `AUDIT_GRAPHICS_BACKEND_MATRIX.md` from
+   the now-complete cross-backend evidence base — every backend's fog-formula/skinned-normal-transform/
+   emissive-remultiply/SetTransformMatrix/Stencil-Scissor-DepthBias/window-registry status is now known) and/or
+   Task #3 (CNA core shards: `cna-internal-core` 113, `cna-devices` 39, `cna-input` 31, `cna-graphics` 7,
+   `cna-root-utilities` 15). Task #4 (Microsoft.Xna areas — start with
    `xna-framework-core` 78, then `xna-graphics` 191 the largest, prioritizing `SpriteFont.cpp`/`SpriteBatch.cpp`
    given the UB finding above, and `BlendState`/`SamplerState`/`RasterizerState`/`DepthStencilState`/
    `StencilState` given the newly-confirmed `IGraphicsBackend` interface gaps and the D3D12 Stencil/Scissor
@@ -376,7 +408,7 @@ from 1 to 4 effect families, plus discovers 1 new HIGH finding (Scissor non-func
 | Canvas | backend-canvas | **AUDITED** |
 | D3D11 | backend-d3d11 | **AUDITED** (20/20 own files + shared D3DCommon shaders it compiles, 46/46; no RegisterForWindow; confirmed correct SpriteBatch transform/render-target-relative behavior) |
 | D3D12 | backend-d3d12 | **AUDITED** (26/26 own files + shared D3DCommon shaders it compiles, 46/46; no RegisterForWindow; HIGH finding: Stencil/Scissor non-functional; correct SpriteBatch transform/render-target-relative behavior) |
-| D3D9 | backend-d3d9 | PENDING (examples audited; backend source not yet) |
+| D3D9 | backend-d3d9 | **AUDITED** (50/50; the LAST backend shard — object-space-only-fog mechanism precisely explained, 4th confirmation of the Ambient-pre-folded-into-Emissive convention, 3rd instance of the NoOverwrite offset gap, most complete native Stencil/Scissor/DepthBias of any backend, structurally immune to both D3D12's occlusion-query bug and Vulkan's RT-scissor bug) |
 | Dx3 | backend-dx3 | **AUDITED** (static-only, D-P4) |
 | EasyGL | backend-easygl | **AUDITED** |
 | Headless | backend-headless | **AUDITED** |
@@ -446,7 +478,8 @@ consolidating what's already known rather than re-deriving it.
 20. `audit: review Bgfx backend (34 files, resolves skinned-normal-transform bug across all 14 backends)`
 21. `audit: review Vulkan backend (40 files, largest single file in the audit; missing-Y-flip bug expanded to 4
     effect families; new HIGH scissor-when-RT-bound finding)`
-22. *(next commit: backend-d3d9 — the last backend shard)*
+22. `audit: review D3D9 backend (50 files, the LAST backend shard — completes all 16)`
+23. *(next commit: begin Pass 4 AUDIT_GRAPHICS_BACKEND_MATRIX.md and/or Task #3 CNA core shards)*
 
 ## Self-check log
 
