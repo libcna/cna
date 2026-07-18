@@ -617,6 +617,62 @@ namespace
         return path;
     }
 
+    constexpr const char* kZeroLengthWaveBankName = "ZeroLengthWaveBank";
+
+    // AUD-11-019: a non-compact .xwb entry with a genuinely zero-length wave payload (dwLength=0)
+    // -- a real, reachable case (e.g. an authored-but-never-recorded placeholder wave, or a
+    // corrupt/truncated bank), not just a synthetic edge case. Must not crash the decoder.
+    std::vector<uint8_t> BuildZeroLengthXwbFixtureBytes()
+    {
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 24;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, 0 };
+
+        std::vector<uint8_t> data;
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i) { AppendU32(data, segOffset[i]); AppendU32(data, segLength[i]); }
+
+        AppendU32(data, 0u);
+        AppendU32(data, entryCount);
+        AppendPadded(data, kZeroLengthWaveBankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, 4);
+        AppendU32(data, 0);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        const uint32_t fmt = (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, 0u);
+        AppendU32(data, fmt);
+        AppendU32(data, 0u); // playOffset
+        AppendU32(data, 0u); // playLength: zero -- no wave data at all
+        AppendU32(data, 0u);
+        AppendU32(data, 0u);
+
+        // No wave-data bytes follow -- the file ends right here.
+        return data;
+    }
+
+    const std::string& ZeroLengthXwbFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "zerolengthfixture.xwb", BuildZeroLengthXwbFixtureBytes());
+        return path;
+    }
+
     constexpr const char* kOversizedWaveBankName = "OversizedEntryWaveBank";
 
     // Non-compact .xwb with one entry whose dataLength (1,000,000 bytes) claims far more data
@@ -1402,4 +1458,25 @@ TEST(WaveBankTest, GetSoundEffectConcurrentWithDisposeNeverCrashes)
                             "could not exercise WaveBank playback";
         }
     }
+}
+
+// AUD-11-019: a genuinely zero-length wave entry (dwLength=0, a real reachable case -- an
+// authored-but-never-recorded placeholder, or a corrupt/truncated bank) must not crash the
+// decoder. GetSoundEffect() may reasonably either construct a zero-duration SoundEffect or
+// return nullptr -- what matters is that it does one of those cleanly, not that it picks a
+// specific one (neither is more "correct" than the other for genuinely empty audio).
+TEST(WaveBankTest, GetSoundEffectForZeroLengthEntryDoesNotCrash)
+{
+    AudioEngine& engine = SharedEngine();
+    WaveBank wb(&engine, ZeroLengthXwbFixturePath());
+    ASSERT_TRUE(wb.getIsPreparedProperty());
+
+    const SoundEffect* effect = WaveBankTestAccess::GetSoundEffect(wb, 0);
+    if (effect)
+    {
+        EXPECT_EQ(effect->getDurationProperty(), System::TimeSpan::Zero);
+    }
+    // A null result (decode declined a zero-byte buffer) is equally acceptable -- this test's
+    // real assertion is that reaching this line at all means no crash happened.
+    SUCCEED();
 }
