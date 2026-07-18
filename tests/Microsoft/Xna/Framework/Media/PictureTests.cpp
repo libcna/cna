@@ -106,7 +106,13 @@ TEST_F(MediaLibraryTestFixture, PictureDateIsARealNonDefaultTimestamp)
 }
 
 // plan_media.md MEDIA-104: GetThumbnail() -- only GetImage() was covered above.
-TEST_F(MediaLibraryTestFixture, PictureGetThumbnailRoundTripsByteForByte)
+// beach.jpg is 64x48 -- already within ThumbnailGenerator::MaxEdge (128), so no downscale is
+// needed and GetThumbnail() deliberately serves the ORIGINAL bytes rather than pointlessly
+// re-encoding an in-spec image (plan_media.md MEDIA-210). Oversized sources genuinely are
+// downscaled -- see AlbumTests' GetThumbnailReturnsAGenuinelySmallerImageThanGetAlbumArt, which
+// uses a 200x200 cover. This test therefore asserts the small-image contract, NOT that
+// GetThumbnail is a synonym for GetImage.
+TEST_F(MediaLibraryTestFixture, PictureGetThumbnailRoundTripsByteForByteForAnAlreadySmallImage)
 {
     Picture* beach = FindPicture(library->getPicturesProperty(), "beach");
     ASSERT_NE(beach, nullptr);

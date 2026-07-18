@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Picture.hpp"
 
+#include <vector>
+
+#include "CNA/Internal/Media/ThumbnailGenerator.hpp"
+#include "System/IO/MemoryStream.hpp"
+
 #include <functional>
 #include <utility>
 
@@ -60,7 +65,15 @@ namespace Microsoft::Xna::Framework::Media
 
     System::IO::Stream* Picture::GetThumbnail()
     {
-        return GetImage();
+        // Same fix as Album::GetThumbnail -- this was a synonym for GetImage() returning the
+        // full-size picture, sharing one downscaler rather than duplicating it (MEDIA-210).
+        std::vector<uint8_t> png;
+        if (CNA::Internal::Media::ThumbnailGenerator::CreatePngThumbnail(path_, png))
+        {
+            return new System::IO::MemoryStream(
+                png.data(), static_cast<SharpRuntime::intcs>(png.size()));
+        }
+        return new System::IO::FileStream(path_);
     }
 
     bool Picture::Equals(const Picture* other) const

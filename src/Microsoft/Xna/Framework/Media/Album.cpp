@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Album.hpp"
 
+#include <vector>
+
+#include "CNA/Internal/Media/ThumbnailGenerator.hpp"
+#include "System/IO/MemoryStream.hpp"
+
 #include <functional>
 #include <utility>
 
@@ -70,7 +75,24 @@ namespace Microsoft::Xna::Framework::Media
 
     System::IO::Stream* Album::GetThumbnail()
     {
-        return GetAlbumArt();
+        if (artPath_.empty())
+        {
+            throw System::InvalidOperationException("This album has no album art.");
+        }
+
+        // This used to just call GetAlbumArt(), making GetThumbnail a synonym that returned the
+        // full-size image -- not a thumbnail at all (plan_media.md MEDIA-209). Now genuinely
+        // downscaled and re-encoded as PNG in memory.
+        std::vector<uint8_t> png;
+        if (CNA::Internal::Media::ThumbnailGenerator::CreatePngThumbnail(artPath_, png))
+        {
+            return new System::IO::MemoryStream(
+                png.data(), static_cast<SharpRuntime::intcs>(png.size()));
+        }
+
+        // Unreadable or unsupported source image: fall back to the original file rather than
+        // failing outright, so a caller that only wants *some* image still gets one.
+        return new System::IO::FileStream(artPath_);
     }
 
     bool Album::Equals(const Album* other) const

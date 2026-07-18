@@ -2,6 +2,8 @@
 
 #include <filesystem>
 
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/Media/ThumbnailGenerator.hpp"
 #include "MediaLibraryTestFixture.hpp"
 #include "Microsoft/Xna/Framework/Media/Album.hpp"
 #include "Microsoft/Xna/Framework/Media/AlbumCollection.hpp"
@@ -228,4 +230,44 @@ TEST_F(MediaLibraryTestFixture, AlbumCollectionDisposeFlipsIsDisposed)
 TEST_F(MediaLibraryTestFixture, AlbumCollectionGetTypeNameIsFullyQualified)
 {
     EXPECT_EQ(library->getAlbumsProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.AlbumCollection");
+}
+
+// plan_media.md MEDIA-209: Album::GetThumbnail() used to be a synonym for GetAlbumArt(), returning
+// the FULL-SIZE image. The Album Alpha fixture's cover.jpg is 200x200 -- genuinely above
+// ThumbnailGenerator::MaxEdge (128) -- so a pass-through implementation cannot satisfy this.
+namespace
+{
+    std::vector<uint8_t> ReadAllAndDelete(System::IO::Stream* s)
+    {
+        std::vector<uint8_t> bytes;
+        if (s == nullptr) return bytes;
+        const SharpRuntime::intcs len = s->getLengthProperty();
+        if (len > 0)
+        {
+            bytes.resize(static_cast<std::size_t>(len));
+            s->Read(bytes.data(), 0, len);
+        }
+        delete s;
+        return bytes;
+    }
+}
+
+TEST_F(MediaLibraryTestFixture, GetThumbnailReturnsAGenuinelySmallerImageThanGetAlbumArt)
+{
+    Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
+    ASSERT_NE(alpha, nullptr);
+    ASSERT_TRUE(alpha->getHasArtProperty()) << "fixture album must have cover art for this test";
+
+    const std::vector<uint8_t> full  = ReadAllAndDelete(alpha->GetAlbumArt());
+    const std::vector<uint8_t> thumb = ReadAllAndDelete(alpha->GetThumbnail());
+    ASSERT_FALSE(full.empty());
+    ASSERT_FALSE(thumb.empty());
+
+    const auto fullImg  = CNA::Internal::Graphics::ImageLoader::LoadFromMemory(full.data(), full.size());
+    const auto thumbImg = CNA::Internal::Graphics::ImageLoader::LoadFromMemory(thumb.data(), thumb.size());
+
+    EXPECT_EQ(fullImg.width, 200) << "fixture cover.jpg should be 200x200";
+    EXPECT_LT(thumbImg.width, fullImg.width) << "thumbnail is not actually downscaled";
+    EXPECT_LE(std::max(thumbImg.width, thumbImg.height),
+              CNA::Internal::Media::ThumbnailGenerator::MaxEdge);
 }

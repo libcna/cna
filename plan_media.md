@@ -2179,7 +2179,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 #### Group G — Real thumbnails (owner decision 4)
 
-- [ ] **MEDIA-209 — Implement genuine downscaling for `Album::GetThumbnail()`.**
+- [x] **MEDIA-209 — Implement genuine downscaling for `Album::GetThumbnail()`.**
   `src/Microsoft/Xna/Framework/Media/Album.cpp:71` currently just calls `GetAlbumArt()` and returns
   the full-size image, so `GetThumbnail` is a synonym rather than a thumbnail. Implement real
   downscaling. Decide and document the target size (XNA does not specify one; recommended: fit
@@ -2188,13 +2188,15 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   graphics stack already exposes a resize helper before writing a new one.
   *Accept:* the returned stream decodes to an image genuinely smaller than the source, with aspect
   ratio preserved, asserted numerically against a fixture of known dimensions.
+  *Done + MUTATION-VERIFIED:* new `CNA::Internal::Media::ThumbnailGenerator` -- box-filter downscale to a documented 128px max edge (aspect preserved, never upscaled), re-encoded to PNG in memory via `IMG_SavePNG_IO` + `SDL_IOFromDynamicMem` (no temp files). `ImageLoader` had no resize helper, so one was written; SDL3_image was already linked, so no new dependency. Reverting `GetThumbnail()` to its old `return GetAlbumArt();` fails the new test.
 
-- [ ] **MEDIA-210 — Same for `Picture::GetThumbnail()`.** `src/Microsoft/Xna/Framework/Media/
+- [x] **MEDIA-210 — Same for `Picture::GetThumbnail()`.** `src/Microsoft/Xna/Framework/Media/
   Picture.cpp:61` has the identical issue. Share the downscaling helper with `MEDIA-209` rather than
   duplicating it.
   *Accept:* as above, for a picture fixture; one shared implementation, not two.
+  *Done:* `Picture::GetThumbnail()` shares the same generator -- one implementation, not two. **Design refinement found while testing:** an image already within 128px is served as its ORIGINAL bytes rather than pointlessly re-encoded (lossy work for no benefit), so `CreatePngThumbnail` returns false for both 'no thumbnail needed' and 'could not load', since the caller's response is identical. This also preserved the pre-existing byte-for-byte round-trip test, which was correct for small images but whose name implied `GetThumbnail` was simply a synonym -- renamed to `PictureGetThumbnailRoundTripsByteForByteForAnAlreadySmallImage` and documented so it now asserts the real small-image contract instead.
 
-- [ ] **MEDIA-211 — Thumbnail caching/lifetime review.** `GetThumbnail`/`GetAlbumArt` return
+- [x] **MEDIA-211 — Thumbnail caching/lifetime review.** `GetThumbnail`/`GetAlbumArt` return
   `System::IO::Stream*` — confirm who owns and frees the returned stream, and that generating a
   thumbnail on every call is not an unbounded allocation leak. This is an existing-ownership audit,
   not new functionality, but downscaling makes each call more expensive and the leak (if any) more
@@ -2203,6 +2205,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   over a loop).
 
 #### Group H — Closure
+  *Done (audit, no leak found):* both `GetAlbumArt()`/`GetThumbnail()` and `GetImage()`/`GetThumbnail()` return a heap `System::IO::Stream*` the CALLER owns and must delete -- unchanged by this work, and the existing tests already `delete` it. Thumbnail generation allocates only a `std::vector<uint8_t>` copied into a `MemoryStream` plus a transient `SDL_Surface`/`SDL_IOStream`, both released on every path including failure. Repeated calls allocate a fresh stream each time (no cache), which is the same contract as before -- deliberately not adding a cache, since correctness of ownership was the question and a cache would introduce invalidation concerns for no demonstrated need.
 
 - [ ] **MEDIA-212 — `MediaSource`: verify the `WindowsMediaConnect` gap is documentation-only.**
   `MediaSourceType` already declares both `LocalDevice = 0` and `WindowsMediaConnect = 4`, matching
