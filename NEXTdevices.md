@@ -532,6 +532,27 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     `devices-ubsan` after the change. **Left OPEN**: `MSVC` remains genuinely
     unavailable — this is a Linux container with no Windows/MSVC toolchain at all, a
     pre-existing environment-wide limitation, not a gap in effort.
+37. `PERF2-001` (`b853a6dc`) — no repeatable benchmark of any kind existed for
+    `Microsoft::Devices` before this task. New `tools/devices/devices_microbenchmark.cpp`
+    (standalone `cna_devices_microbenchmark` target): 10 benchmarks covering every one
+    of this task's own named categories — probe, single-instance dispatch, **event
+    fanout at N=1/5/10** (reusing `AccelerometerTests.cpp`'s own
+    `RegisterStartedInstanceForTesting()`/`DispatchToInstancesForTesting()` hooks),
+    the throttled-reject path (isolated from full dispatch), a real `Start()`/`Stop()`
+    throw/catch cycle, and `Compass`/`Motion`'s pure fusion math. `p50`/`p95`/`p99`
+    microsecond latencies, JSON Lines output. New
+    `tools/devices/compare_devices_microbenchmark.py` flags `p95` regressions against
+    a committed baseline (`docs/devices-benchmark-baseline.jsonl`, this host/container,
+    2026-07-18) — **added an absolute-microsecond floor after empirically catching the
+    tool's own first false positive**: two consecutive runs of the *same unmodified
+    binary* produced a spurious 53% relative delta on a ~0.4µs benchmark (pure noise)
+    before the floor was added — verified the fix with a clean re-run plus a
+    correctly-flagged artificial 3x-regression injection, not just asserted to work.
+    Full precise filter (364 tests) clean under `devices-ubsan`; both `StrictXnaApi*`
+    ctests (`TEST2-010`) still pass. **Left OPEN**: allocations/lock-time are not
+    separately instrumented (needs an allocator hook or modifying already-hardened
+    locking code, out of mandate); actual CI wiring to run this automatically and fail
+    on a regression is a separate, not-yet-done follow-up.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -897,13 +918,13 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 36 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 37 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
 BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011,
-PERF2-002, TEST2-002, COMP2-003, MOT2-001, TEST2-010 -- see Section 2 for commit hashes
+PERF2-002, TEST2-002, COMP2-003, MOT2-001, TEST2-010, PERF2-001 -- see Section 2 for commit hashes
 and a one-line summary of each, including PERF2-002's own new 100k-cycle
 lifecycle leak tests, TEST2-002's own consolidated clean-checkout sanitizer
 sweep, COMP2-003's citation-backed display-orientation finding plus
