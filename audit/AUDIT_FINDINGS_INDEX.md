@@ -23,6 +23,18 @@ _(none recorded yet)_
   `GetForWindow()`'s result unconditionally — a subsequent mouse/input event on that window would be a
   use-after-free. **The most severe confirmed finding in this audit so far.** See
   [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F1.
+- **`SpriteBatch::Begin()` sets `begun_=true` before backend calls that can throw (`SetCustomEffect`/
+  `SetTransformMatrix`/`SetSamplerFilter`/`Begin`); if one throws, the object is permanently stuck reporting
+  "Begin has been called before calling End" on every subsequent `Begin()`, with no documented recovery besides
+  an undocumented explicit `End()` call.** A general `SpriteBatch.cpp` defect, not backend-specific — discovered
+  while auditing `sdlrenderer_custom_effect_throws_test.cpp` (whose own custom-Effect-throws scenario deliberately
+  triggers it, though the test itself doesn't check the stuck-state consequence). See
+  [audit report](examples/sdlrenderer_custom_effect_throws_test.cpp.audit.md).
+- **`GraphicsDevice::SetRenderTargets` mutates `currentRenderTargets_`/`renderTargetBound_` to the requested
+  (rejected) MRT bindings *before* `backend_->SetRenderTargets` can throw** — a caller that doesn't manually
+  restore the render target after catching the MRT-unsupported exception is left with device-tracked state that
+  doesn't match reality. Same "mutate before the fallible call" shape as the SpriteBatch::Begin() finding above.
+  See [audit report](examples/sdlrenderer_rendertargets_mrt_throws_test.cpp.audit.md).
 - **EasyGL backend: `SkinnedEffect`'s shaders never apply the object's World transform to lighting normals at all
   — CONFIRMED via direct source reading** (production-code root-cause of the finding three independent test-file
   audits surfaced from the test side — see those reports below). `EnsureSkinnedProgram()`/
@@ -51,6 +63,21 @@ _(none recorded yet)_
   `DrawIndexedPrimitives`** despite its header comment claiming pixel-readback verification of dynamic index-buffer
   streaming — reduces to a static capacity assertion that would pass even if `SetData` were a no-op. See
   [easygl_dynamic_buffer_stress_test.cpp](examples/easygl_dynamic_buffer_stress_test.cpp.audit.md).
+
+### MEDIUM (continued)
+
+- **Two SDL_Renderer tests (`sdlrenderer_clearoptions_audit_test.cpp`, `sdlrenderer_rendertarget_depth_decision_test.cpp`)
+  have stale expected-throw assertions superseded by a real FNA-parity fix.** Commit `90f5db2c` made
+  `GraphicsDevice::Clear(ClearOptions,...)` mask `DepthBuffer`/`Stencil` out and degrade silently on backends with
+  no real depth/stencil buffer, instead of throwing — the *production* behavior now matches FNA
+  (`plan_graphics.md` Task 1113, still open, tracks this); the *tests* still assert the old throwing behavior and
+  would fail if run today. Production code is correct; tests need updating. See
+  [audit report](examples/sdlrenderer_clearoptions_audit_test.cpp.audit.md) and
+  [audit report](examples/sdlrenderer_rendertarget_depth_decision_test.cpp.audit.md).
+- **SpriteFont's `DrawString` flip-lookup tables are sized 3, not FNA's 4** — combined `SpriteEffects` flips are
+  unsupported, and a raw enum cast forcing an out-of-range combination would read past the end of a `constexpr`
+  array (undefined behavior). See
+  [audit report](examples/sdlrenderer_spritefont_effects_test.cpp.audit.md).
 
 ### MEDIUM
 

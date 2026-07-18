@@ -48,11 +48,18 @@ Next mechanical-batch candidates (same pattern, same prompt template): `examples
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **230** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2,
-  backend-dx3 ×2, backend-easygl ×2, examples-tests-easygl ×218)
-- PENDING: **2067** (+ 235 in flight via 3 parallel background workflows: bgfx 98, vulkan 70, sdlrenderer 67)
+- AUDITED so far: **297** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+  backend-dx3 ×2, backend-easygl ×2, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67)
+- PENDING: **2000** (+ 168 still in flight: bgfx 98, vulkan 70)
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
+
+`examples-tests-sdlrenderer` batch complete (67 files, 9 agents, 0 errors). Notable findings: `SpriteBatch::Begin()`
+exception-safety bug (general, not backend-specific — permanently wedges the object if a backend call throws
+mid-Begin); `GraphicsDevice::SetRenderTargets` mutates tracked state before the backend call that can reject MRT;
+two tests with stale expected-throw assertions superseded by FNA-parity fix commit `90f5db2c`; SpriteFont flip
+lookup tables sized 3 not 4 (potential OOB read). See `AUDIT_CROSS_CUTTING_FINDINGS.md` for the now-3-instance
+"mutate state before the fallible call" pattern this reinforces.
 
 ## Findings recorded so far (see AUDIT_FINDINGS_INDEX.md for full detail)
 
