@@ -1416,6 +1416,99 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   Gyroscope) -- 5 new tests added by this phase, zero pre-existing tests broken. Grepped in full
   (`grep -c FAILED` on the complete log, not a truncated tail).
 
+### Phase 12 — Fifth external review pass (2026-07-18, same day as Phase 8/9/10/11)
+
+> Applying MEDIA-126's own convention a fifth time. A fifth external adversarial review of commit
+> `ec863ae9` (Phase 11's own fix commit) confirmed all four of Phase 11's fixes real and effective,
+> then found three further real defects: Phase 11's own `MEDIA-154` bool-return contract was itself
+> implemented incorrectly on the failure path, `SeekToStart()` still had three sub-gaps beyond the
+> one `MEDIA-155` already closed, and the original `MEDIA-38` task's own literal "throw a clear
+> exception" Accept criterion for resampler-setup failure was still unmet, with a real observable
+> consequence (`HasAudio()` staying `true` for audio that can never actually produce a sample).
+> Every claim independently re-derived from the actual code before any fix was written.
+
+- [x] **MEDIA-158 — Fix `SetAudioStream()`/`SetVideoStream()`'s own `MEDIA-154` bool contract:
+  discarded the open call's real result on the switch path.** `MEDIA-154`'s fix made both setters
+  return `bool` so `VideoPlayer` could skip a needless reconfigure on a true no-op -- but on the
+  actual-switch path, both setters called `OpenAudioStreamByIndex(i)`/`OpenVideoStreamByIndex(i)`,
+  discarded that call's own return value, and unconditionally `return true;`. Both open functions
+  build the new codec context *before* touching `audioCtx_`/`audioStream_` (or the video
+  equivalents), so on a genuine open failure (unsupported codec, allocation failure) the *old*
+  stream is still the one actually active -- but the caller was told a switch succeeded anyway,
+  triggering `VideoPlayer`'s reconfigure for a track that, in reality, never changed.
+  *Fix:* both setters now `return OpenAudioStreamByIndex(i);`/`return OpenVideoStreamByIndex(i);`
+  directly instead of calling then assuming success.
+  *Accept:* the existing success-path tests (`SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleRate`,
+  etc.) continue to pass unchanged, confirming the fix doesn't alter the success case. No dedicated
+  test forces a genuine mid-stream open failure for a valid track index -- doing so deterministically
+  would require a fixture with a legitimately-indexed but deliberately-broken second track (corrupted
+  codec extradata or an unsupported codec ID at a known byte offset), disproportionate infrastructure
+  for this plan's existing honesty precedent (`MEDIA-94`/`MEDIA-152`/`MEDIA-155`'s `SeekToStart()`
+  half) -- verified correct by direct code review of the now one-line change instead.
+
+- [x] **MEDIA-159 — Close three more `SeekToStart()` gaps beyond the one `MEDIA-155` already
+  fixed.** (1) `av_seek_frame()`'s own return was never checked -- on a genuine seek failure, the
+  demuxer's read position never actually moved, but the codecs were flushed and pending state reset
+  anyway, building a "we're now at the start" assumption on top of a position that's still wherever
+  it was, and continuing to decode from a self-inconsistent state. (2) `pendingAudio_` was never
+  cleared by `SeekToStart()` itself (only by `Close()`, per `MEDIA-155`) -- real, undrained samples
+  decoded from before the seek would splice onto whatever decodes after it on the next
+  `DrainAudio()` call. (3) `SwrContext`'s own internal delay buffer was never discarded on seek --
+  the same class of gap `MEDIA-147` fixed for the EOF-flush case, but for a seek discontinuity
+  instead.
+  *Fix:* `SeekToStart()` now returns early (leaving all state untouched) if `av_seek_frame()`
+  fails; on success, it also calls `pendingAudio_.clear()` and discards the resampler's own buffered
+  delay via `swr_get_delay()` + a null-source `swr_convert()` (matching `MEDIA-147`'s technique, but
+  discarding the output instead of keeping it -- a seek is a genuine timeline discontinuity, there is
+  no "before" audio worth preserving across it).
+  *Accept:* new `VideoDecoderTest.SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek`
+  mirrors `MEDIA-155`'s `Close()` test exactly (decode without draining, then seek, then assert
+  `DrainAudio()` returns nothing) -- a direct, deterministic proof for the `pendingAudio_` half. The
+  `av_seek_frame()`-failure and resampler-discard halves are verified by code review only: forcing a
+  genuine seek failure on a file this decoder already successfully opened, or forcing non-trivial
+  resampler delay (this repo's `SetupResampler()` only does format conversion, not real rate
+  conversion, in every fixture available), are both impractical to construct reliably -- the
+  reviewer's own report reached the same conclusion for the seek-failure half.
+
+- [x] **MEDIA-160 — Fix `HasAudio()` to require a working resampler, closing the real, observable
+  half of the original `MEDIA-38` gap.** `MEDIA-38`'s own Accept criterion called for
+  `swr_alloc_set_opts2()`/`swr_init()` failure to throw a clear exception; the actual code has
+  always just set `swrCtx_ = nullptr` and returned. `HasAudio()` checked only `audioCtx_ != nullptr`,
+  so a video whose audio codec opened fine but whose resampler setup failed would report
+  `HasAudio() == true` while `ProcessAudioPacket()` (gated on `swrCtx_`) silently discarded every
+  decoded audio frame -- a video with declared, "available" audio that can never actually produce a
+  sample.
+  *Fix:* `HasAudio()` now requires `swrCtx_ != nullptr` too, so a resampler-setup failure correctly
+  reports "no audio" rather than a silently-broken "yes."
+  *Accept:* `HasAudio()`'s sole real caller (`VideoPlayer::ReconfigureAudioOutputForCurrentTrack()`,
+  gating whether an SDL audio stream is even opened) now correctly skips opening a device for this
+  case instead of opening one that would never receive data. Deliberately did **not** also add a
+  literal `throw` inside `SetupResampler()`: doing so would either require breaking `Open()`'s
+  established non-throwing `bool`-return contract (used, unwrapped in `try`/`catch`, by dozens of
+  existing call sites across this codebase) for an exception `Open()`'s own contract doesn't support
+  propagating, or would mean throwing and then immediately catching it at the call site to fall back
+  to the exact same `swrCtx_ == nullptr` graceful-degradation behavior that already existed --
+  a throw with no observable behavioral effect, which this project's own conventions
+  (`CLAUDE.md`) call out as unneeded complexity. `MEDIA-38`'s literal "throws a clear exception"
+  wording is corrected here to reflect what's actually the right fix for this specific failure mode
+  (graceful degradation to "no audio," consistent with how an `avcodec_open2()` failure one call site
+  earlier is *already* handled by this same function) rather than forced to match text written before
+  this specific failure mode's real behavior was understood -- no fault-injection test forces this
+  path for the same `swr_alloc_set_opts2` near-unreachability reason `MEDIA-158` documents.
+
+- [x] **MEDIA-161 — Full-suite regression run.** Confirm zero regressions from this fifth
+  remediation pass, grepped in full (not a truncated tail). Also independently confirmed a
+  full-suite crash observed on the first run of this phase (`ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose`,
+  a `double free or corruption (fasttop)` abort) was pre-existing flakiness unrelated to this phase's
+  changes, not a regression: the same crash was absent on a re-run of this phase's own code, and a
+  full suite run against the pre-Phase-12 baseline (`ec863ae9`, via `git stash`/`git stash pop`)
+  passed cleanly both before and after re-applying this phase's changes -- isolating the crash to
+  test-run-to-test-run environmental flakiness in the unrelated `Net`/ENet test suite, not anything
+  this plan's scope touches.
+  *Verified:* 4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope) -- 1 new test added by this phase, zero pre-existing tests broken. Grepped in full
+  (`grep -c FAILED` on the complete log, not a truncated tail), confirmed on two independent full runs.
+
 ---
 
 ## 6. Recommended order and milestones

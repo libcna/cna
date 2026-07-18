@@ -422,3 +422,31 @@ TEST(VideoDecoderTest, CloseClearsAnyUndrainedPendingAudioFromThePreviousFile)
     EXPECT_TRUE(samples.empty()) << "DrainAudio() returned " << samples.size()
                                   << " stale samples left over from the previous file";
 }
+
+// plan_media.md MEDIA-159 (found by external code review): SeekToStart() flushed both codec
+// contexts and reset the EAGAIN pending-packet state (MEDIA-155), but never cleared pendingAudio_
+// itself. A direct SeekToStart() call (not routed through VideoPlayer, whose own GetTexture() loop
+// happens to drain right before it calls SeekToStart() on loop -- masking this for that one caller)
+// with real, undrained samples already sitting in pendingAudio_ would splice those stale pre-seek
+// samples onto whatever decodes after the seek on the next DrainAudio() call.
+TEST(VideoDecoderTest, SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSeek)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kAudioTail));
+    ASSERT_TRUE(decoder.HasAudio());
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    for (int i = 0; i < 5; ++i)
+    {
+        if (!decoder.NextFrame(rgba, pts)) break;
+    }
+    // Deliberately do NOT drain here -- pendingAudio_ should now hold real, undrained samples.
+
+    decoder.SeekToStart();
+
+    std::vector<float> samples;
+    decoder.DrainAudio(samples);
+    EXPECT_TRUE(samples.empty()) << "DrainAudio() returned " << samples.size()
+                                  << " stale samples left over from before SeekToStart()";
+}

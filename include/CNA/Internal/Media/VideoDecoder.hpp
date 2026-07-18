@@ -42,7 +42,13 @@ namespace CNA::Internal::Media
         [[nodiscard]] int  GetHeight()       const { return height_; }
         [[nodiscard]] float GetFPS()         const { return fps_; }
         [[nodiscard]] double GetDuration()   const { return durationSec_; }
-        [[nodiscard]] bool HasAudio()        const { return audioCtx_ != nullptr; }
+        // Requires a working resampler too, not just an opened audio codec -- if
+        // swr_alloc_set_opts2()/swr_init() failed inside SetupResampler(), audioCtx_ stays
+        // non-null (the codec itself opened fine) but ProcessAudioPacket() silently discards every
+        // decoded audio frame (it early-returns without swrCtx_), so a caller checking only
+        // audioCtx_ would believe a video has playable audio that in fact never produces a single
+        // sample (found by external code review, plan_media.md MEDIA-160).
+        [[nodiscard]] bool HasAudio()        const { return audioCtx_ != nullptr && swrCtx_ != nullptr; }
         [[nodiscard]] int GetSampleRate()    const { return sampleRate_; }
         [[nodiscard]] int GetChannels()      const { return channels_; }
 

@@ -4,17 +4,17 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-156`, Phases 0-11); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-161`, Phases 0-12); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 156/156 tasks checked off across 11 phases
+## 1. Status (2026-07-18) — 161/161 tasks checked off across 12 phases
 
-**Deliberately not calling this "complete."** Four separate external adversarial reviews landed on
-this plan the same day (Phase 8, 9, 10, and 11 below), and every single one found real, specific,
+**Deliberately not calling this "complete."** Five separate external adversarial reviews landed on
+this plan the same day (Phase 8, 9, 10, 11, and 12 below), and every single one found real, specific,
 file-and-line-cited defects that a clean build and passing targeted tests did not surface —
 including in the fix commits written *in response to* the previous review. Read this status as "all
 currently-known findings are fixed, full regression is green" rather than "nothing is left to find."
-Any future review of this code should get the same independent, skeptical treatment the last four
-did — see §1d's closing lesson.
+Any future review of this code should get the same independent, skeptical treatment the last five
+did — see §1e's closing lesson.
 
 **Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
 this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
@@ -513,6 +513,61 @@ same-track-reselect case unfixed). Four rounds in, the pattern holds: verify eve
 skeptically as the code it was responding to, and check whether a fix's own stated scope ("switching
 tracks") was quietly narrower than the bug's real scope ("any call to this setter, including a
 no-op one").
+
+## 1e. Phase 12 — fifth external review pass (2026-07-18, same day as Phase 8/9/10/11)
+
+A *fifth* external review, this time of Phase 11's own fix commit (`ec863ae9`), confirmed all four
+of Phase 11's fixes real and effective, then found three more real defects — two in Phase 11's own
+work, one a genuinely older gap (`MEDIA-38`) surfaced by looking one call deeper:
+
+1. **`MEDIA-154`'s own bool-return contract was implemented wrong on the failure path**
+   (`MEDIA-158`) — `SetAudioStream()`/`SetVideoStream()` called `OpenAudioStreamByIndex(i)`/
+   `OpenVideoStreamByIndex(i)`, discarded the result, and unconditionally `return true`. Since both
+   open functions build the new codec context before touching the "active" state, a genuine open
+   failure left the *old* stream active while telling `VideoPlayer` a switch happened anyway —
+   triggering a needless (and, for audio, destructive) reconfigure for a track that never actually
+   changed. Fixed: both setters now `return OpenAudioStreamByIndex(i)`/`return
+   OpenVideoStreamByIndex(i)` directly.
+2. **`SeekToStart()` had three more gaps beyond the one `MEDIA-155` already fixed** (`MEDIA-159`) —
+   `av_seek_frame()`'s own return was never checked (a failed seek still triggered a full flush,
+   building an inconsistent "we're at the start" assumption on a position that never moved);
+   `pendingAudio_` was never cleared by `SeekToStart()` itself (only by `Close()`); and the
+   resampler's own internal delay buffer was never discarded on seek (the same class of gap
+   `MEDIA-147` fixed for EOF, but for a seek discontinuity). Fixed: `SeekToStart()` now returns
+   early on a failed seek, and on success also clears `pendingAudio_` and discards the resampler's
+   buffered delay.
+3. **The original `MEDIA-38` task's own Accept criterion was never actually met** (`MEDIA-160`) —
+   it called for `swr_alloc_set_opts2()`/`swr_init()` failure to throw a clear exception; the real
+   code has always just silently set `swrCtx_ = nullptr`. Worse, `HasAudio()` checked only
+   `audioCtx_`, so a video whose resampler failed to set up would report `HasAudio() == true` while
+   producing zero audio samples forever. Fixed the *observable* half: `HasAudio()` now also requires
+   `swrCtx_ != nullptr`. Deliberately did **not** add a literal `throw` inside `SetupResampler()` —
+   doing so would require either breaking `Open()`'s established non-throwing `bool` contract (relied
+   on, unwrapped, by dozens of existing call sites) or throwing and immediately catching it right
+   back into the same graceful-degradation behavior that already existed, a no-op complication this
+   project's own conventions discourage. `MEDIA-38`'s task text is corrected in `plan_media.md` to
+   describe what's actually the right fix for this failure mode, rather than forced to match wording
+   written before the failure mode's real behavior was understood.
+
+Full-suite regression after Phase 12: **4877 tests, 4875 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail, confirmed on two
+independent full runs. 1 new test added. A `double free or corruption` crash in an unrelated ENet
+test (`ENetBackendTest.HostFreesOwnedRemoteGamerOnDispose`) appeared on the very first full run of
+this phase; before assuming it was a regression, it was isolated via `git stash`/`git stash pop`: the
+same crash was absent both on a full run of the pre-Phase-12 baseline (`ec863ae9`) and on a
+subsequent full run of Phase 12's own code — confirming it as pre-existing test-run-to-test-run
+flakiness in `Net`/ENet, unrelated to anything this plan's scope touches, not something to chase down
+here.
+
+**Lesson reinforced a fifth time:** two of these three findings were, again, gaps in the *previous
+fix commit itself* — `MEDIA-154` added a bool contract but got the failure-path return value wrong,
+and `MEDIA-155` fixed one `SeekToStart()` gap while three siblings sat right next to it unaddressed.
+The third finding (`MEDIA-38`) shows a different, complementary failure mode: a task marked `[x]`
+years (well, phases) earlier whose Accept criterion was never actually verified against the shipped
+code, only assumed satisfied because the surrounding hardening work *felt* thorough. Five rounds in,
+both lessons hold simultaneously: verify every fix commit as skeptically as the code it responded to,
+*and* periodically re-read old `[x]` tasks' own Accept criteria against current code rather than
+trusting a checkbox that was never independently re-verified.
 
 ## 2. Correction to Phase 0's own build-verification record
 

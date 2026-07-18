@@ -153,9 +153,43 @@ namespace CNA::Internal::Media
     void VideoDecoder::SeekToStart()
     {
         if (!fmtCtx_) return;
-        av_seek_frame(fmtCtx_, -1, 0, AVSEEK_FLAG_BACKWARD);
+        // If the seek itself fails, the demuxer's read position never actually moved -- flushing
+        // the codecs and discarding pending/buffered state below would build a "we're now at the
+        // start" assumption on top of a position that's still wherever it was before this call,
+        // continuing to decode from an inconsistent state. Leave everything untouched and let the
+        // caller's next NextFrame() simply carry on from wherever the stream already was (found by
+        // external code review, plan_media.md MEDIA-159).
+        if (av_seek_frame(fmtCtx_, -1, 0, AVSEEK_FLAG_BACKWARD) < 0) return;
+
         if (videoCtx_) avcodec_flush_buffers(videoCtx_);
         if (audioCtx_) avcodec_flush_buffers(audioCtx_);
+
+        // pendingAudio_ can hold real, undrained samples decoded from BEFORE this seek -- left
+        // uncleared, the next DrainAudio() call would splice stale pre-seek audio onto whatever
+        // decodes after it (found by external code review, plan_media.md MEDIA-159; the same class
+        // of gap MEDIA-155 already fixed for Close(), now also closed here).
+        pendingAudio_.clear();
+
+        if (audioCtx_ && swrCtx_)
+        {
+            // SwrContext keeps its own internal delay buffer, separate from pendingAudio_ -- any
+            // samples still held there from before the seek would otherwise surface intermixed
+            // with the first freshly-decoded post-seek audio, an audible discontinuity artifact.
+            // Discarded (not kept, unlike MEDIA-147's EOF flush) because a seek is a genuine
+            // timeline discontinuity -- there is no "before" audio worth preserving across it.
+            // swr_convert()'s return isn't checked here the way other call sites in this file are:
+            // this is a best-effort discard of data that's being thrown away either way, not real
+            // audio the caller would otherwise receive, so a failure here has no data-loss
+            // consequence to surface.
+            int delaySamples = static_cast<int>(swr_get_delay(swrCtx_, audioCtx_->sample_rate));
+            if (delaySamples > 0)
+            {
+                std::vector<float> discard(static_cast<std::size_t>(delaySamples) * channels_);
+                uint8_t* outPtr = reinterpret_cast<uint8_t*>(discard.data());
+                swr_convert(swrCtx_, &outPtr, delaySamples, nullptr, 0);
+            }
+        }
+
         // A video packet retained by an in-progress EAGAIN retry (havePendingVideoPacket_) refers
         // to compressed data read from BEFORE this seek -- resending it to the codec context just
         // flushed above would hand a now-out-of-place packet to a decoder with no relevant prior
@@ -292,9 +326,14 @@ namespace CNA::Internal::Media
                     // a later external review, plan_media.md MEDIA-154) lets VideoPlayer skip its
                     // own downstream reconfiguration entirely when this was a true no-op, instead
                     // of tearing down and reopening the SDL stream for a switch that never happened.
+                    // Propagate OpenAudioStreamByIndex()'s own result rather than assuming success
+                    // (found by external code review, plan_media.md MEDIA-158) -- it builds the new
+                    // codec context before touching audioCtx_/audioStream_, so on failure (bad
+                    // codec, alloc failure) the old stream is genuinely still active, but the old
+                    // unconditional `return true` told VideoPlayer a switch happened anyway,
+                    // triggering a needless/destructive reconfigure for a track that never changed.
                     if (i == audioStream_) return false;
-                    OpenAudioStreamByIndex(i);
-                    return true;
+                    return OpenAudioStreamByIndex(i);
                 }
                 ++found;
             }
@@ -323,10 +362,11 @@ namespace CNA::Internal::Media
                     // valid keyframe" instead of silently producing a garbage frame. Found by
                     // external code review testing exactly this "re-select the same track"
                     // scenario, plan_media.md MEDIA-131. See SetAudioStream() above for why this
-                    // now returns bool (plan_media.md MEDIA-154).
+                    // now returns bool (plan_media.md MEDIA-154) and why that bool must be
+                    // OpenVideoStreamByIndex()'s own real result, not an assumed `true`
+                    // (plan_media.md MEDIA-158, found by external code review).
                     if (i == videoStream_) return false;
-                    OpenVideoStreamByIndex(i);
-                    return true;
+                    return OpenVideoStreamByIndex(i);
                 }
                 ++found;
             }
