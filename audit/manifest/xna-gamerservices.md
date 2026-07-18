@@ -1,0 +1,97 @@
+# Manifest shard: `xna-gamerservices`
+
+[<- Back to AUDIT_MANIFEST.md](../AUDIT_MANIFEST.md)
+
+Files in this shard: **89**
+
+| # | Path | Status | Audit Report |
+|---|------|--------|---------------|
+| 1 | `include/Microsoft/Xna/Framework/GamerServices/Achievement.hpp` | PENDING | [Achievement.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/Achievement.hpp.audit.md) |
+| 2 | `include/Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp` | PENDING | [AchievementCollection.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp.audit.md) |
+| 3 | `include/Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp` | PENDING | [AvatarAnimation.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarAnimation.hpp.audit.md) |
+| 4 | `include/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPreset.hpp` | PENDING | [AvatarAnimationPreset.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPreset.hpp.audit.md) |
+| 5 | `include/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.hpp` | PENDING | [AvatarAnimationPresetNamesEXT.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.hpp.audit.md) |
+| 6 | `include/Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp` | PENDING | [AvatarAppearanceEXT.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarAppearanceEXT.hpp.audit.md) |
+| 7 | `include/Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp` | PENDING | [AvatarBodyType.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp.audit.md) |
+| 8 | `include/Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp` | PENDING | [AvatarBodyTypeNamesEXT.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp.audit.md) |
+| 9 | `include/Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp` | PENDING | [AvatarBone.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarBone.hpp.audit.md) |
+| 10 | `include/Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp` | PENDING | [AvatarDescription.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarDescription.hpp.audit.md) |
+| 11 | `include/Microsoft/Xna/Framework/GamerServices/AvatarExpression.hpp` | PENDING | [AvatarExpression.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarExpression.hpp.audit.md) |
+| 12 | `include/Microsoft/Xna/Framework/GamerServices/AvatarEye.hpp` | PENDING | [AvatarEye.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarEye.hpp.audit.md) |
+| 13 | `include/Microsoft/Xna/Framework/GamerServices/AvatarEyebrow.hpp` | PENDING | [AvatarEyebrow.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarEyebrow.hpp.audit.md) |
+| 14 | `include/Microsoft/Xna/Framework/GamerServices/AvatarMouth.hpp` | PENDING | [AvatarMouth.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarMouth.hpp.audit.md) |
+| 15 | `include/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp` | PENDING | [AvatarRenderer.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp.audit.md) |
+| 16 | `include/Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp` | PENDING | [AvatarRendererState.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp.audit.md) |
+| 17 | `include/Microsoft/Xna/Framework/GamerServices/ControllerSensitivity.hpp` | PENDING | [ControllerSensitivity.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/ControllerSensitivity.hpp.audit.md) |
+| 18 | `include/Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp` | PENDING | [FriendCollection.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/FriendCollection.hpp.audit.md) |
+| 19 | `include/Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp` | PENDING | [FriendGamer.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp.audit.md) |
+| 20 | `include/Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp` | PENDING | [GameDefaults.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GameDefaults.hpp.audit.md) |
+| 21 | `include/Microsoft/Xna/Framework/GamerServices/GameDifficulty.hpp` | PENDING | [GameDifficulty.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GameDifficulty.hpp.audit.md) |
+| 22 | `include/Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp` | PENDING | [GameUpdateRequiredException.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp.audit.md) |
+| 23 | `include/Microsoft/Xna/Framework/GamerServices/Gamer.hpp` | PENDING | [Gamer.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/Gamer.hpp.audit.md) |
+| 24 | `include/Microsoft/Xna/Framework/GamerServices/GamerCollection.hpp` | PENDING | [GamerCollection.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerCollection.hpp.audit.md) |
+| 25 | `include/Microsoft/Xna/Framework/GamerServices/GamerPresence.hpp` | PENDING | [GamerPresence.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerPresence.hpp.audit.md) |
+| 26 | `include/Microsoft/Xna/Framework/GamerServices/GamerPresenceMode.hpp` | PENDING | [GamerPresenceMode.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerPresenceMode.hpp.audit.md) |
+| 27 | `include/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp` | PENDING | [GamerPrivilegeException.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp.audit.md) |
+| 28 | `include/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeSetting.hpp` | PENDING | [GamerPrivilegeSetting.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeSetting.hpp.audit.md) |
+| 29 | `include/Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp` | PENDING | [GamerPrivileges.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerPrivileges.hpp.audit.md) |
+| 30 | `include/Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp` | PENDING | [GamerProfile.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp.audit.md) |
+| 31 | `include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp` | PENDING | [GamerServicesComponent.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp.audit.md) |
+| 32 | `include/Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp` | PENDING | [GamerServicesDispatcher.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.hpp.audit.md) |
+| 33 | `include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp` | PENDING | [GamerServicesNotAvailableException.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp.audit.md) |
+| 34 | `include/Microsoft/Xna/Framework/GamerServices/GamerZone.hpp` | PENDING | [GamerZone.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GamerZone.hpp.audit.md) |
+| 35 | `include/Microsoft/Xna/Framework/GamerServices/Guide.hpp` | PENDING | [Guide.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/Guide.hpp.audit.md) |
+| 36 | `include/Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp` | PENDING | [GuideAlreadyVisibleException.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp.audit.md) |
+| 37 | `include/Microsoft/Xna/Framework/GamerServices/IAvatarAnimation.hpp` | PENDING | [IAvatarAnimation.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/IAvatarAnimation.hpp.audit.md) |
+| 38 | `include/Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp` | PENDING | [InviteAcceptedEventArgs.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.hpp.audit.md) |
+| 39 | `include/Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp` | PENDING | [LeaderboardEntry.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.hpp.audit.md) |
+| 40 | `include/Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp` | PENDING | [LeaderboardIdentity.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.hpp.audit.md) |
+| 41 | `include/Microsoft/Xna/Framework/GamerServices/LeaderboardKey.hpp` | PENDING | [LeaderboardKey.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/LeaderboardKey.hpp.audit.md) |
+| 42 | `include/Microsoft/Xna/Framework/GamerServices/LeaderboardOutcome.hpp` | PENDING | [LeaderboardOutcome.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/LeaderboardOutcome.hpp.audit.md) |
+| 43 | `include/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp` | PENDING | [LeaderboardReader.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp.audit.md) |
+| 44 | `include/Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp` | PENDING | [LeaderboardWriter.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp.audit.md) |
+| 45 | `include/Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp` | PENDING | [MessageBoxIcon.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp.audit.md) |
+| 46 | `include/Microsoft/Xna/Framework/GamerServices/NetworkException.hpp` | PENDING | [NetworkException.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/NetworkException.hpp.audit.md) |
+| 47 | `include/Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp` | PENDING | [NetworkNotAvailableException.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp.audit.md) |
+| 48 | `include/Microsoft/Xna/Framework/GamerServices/NotificationPosition.hpp` | PENDING | [NotificationPosition.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/NotificationPosition.hpp.audit.md) |
+| 49 | `include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp` | PENDING | [PropertyDictionary.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp.audit.md) |
+| 50 | `include/Microsoft/Xna/Framework/GamerServices/RacingCameraAngle.hpp` | PENDING | [RacingCameraAngle.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/RacingCameraAngle.hpp.audit.md) |
+| 51 | `include/Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.hpp` | PENDING | [SignedInEventArgs.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.hpp.audit.md) |
+| 52 | `include/Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp` | PENDING | [SignedInGamer.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp.audit.md) |
+| 53 | `include/Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp` | PENDING | [SignedInGamerCollection.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp.audit.md) |
+| 54 | `include/Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.hpp` | PENDING | [SignedOutEventArgs.hpp.audit.md](../include/Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.hpp.audit.md) |
+| 55 | `src/Microsoft/Xna/Framework/GamerServices/Achievement.cpp` | PENDING | [Achievement.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/Achievement.cpp.audit.md) |
+| 56 | `src/Microsoft/Xna/Framework/GamerServices/AchievementCollection.cpp` | PENDING | [AchievementCollection.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/AchievementCollection.cpp.audit.md) |
+| 57 | `src/Microsoft/Xna/Framework/GamerServices/AvatarAnimation.cpp` | PENDING | [AvatarAnimation.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/AvatarAnimation.cpp.audit.md) |
+| 58 | `src/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.cpp` | PENDING | [AvatarAnimationPresetNamesEXT.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.cpp.audit.md) |
+| 59 | `src/Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.cpp` | PENDING | [AvatarBodyTypeNamesEXT.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.cpp.audit.md) |
+| 60 | `src/Microsoft/Xna/Framework/GamerServices/AvatarDescription.cpp` | PENDING | [AvatarDescription.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/AvatarDescription.cpp.audit.md) |
+| 61 | `src/Microsoft/Xna/Framework/GamerServices/AvatarExpression.cpp` | PENDING | [AvatarExpression.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/AvatarExpression.cpp.audit.md) |
+| 62 | `src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp` | PENDING | [AvatarRenderer.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp.audit.md) |
+| 63 | `src/Microsoft/Xna/Framework/GamerServices/FriendCollection.cpp` | PENDING | [FriendCollection.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/FriendCollection.cpp.audit.md) |
+| 64 | `src/Microsoft/Xna/Framework/GamerServices/FriendGamer.cpp` | PENDING | [FriendGamer.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/FriendGamer.cpp.audit.md) |
+| 65 | `src/Microsoft/Xna/Framework/GamerServices/GameDefaults.cpp` | PENDING | [GameDefaults.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GameDefaults.cpp.audit.md) |
+| 66 | `src/Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.cpp` | PENDING | [GameUpdateRequiredException.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.cpp.audit.md) |
+| 67 | `src/Microsoft/Xna/Framework/GamerServices/Gamer.cpp` | PENDING | [Gamer.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/Gamer.cpp.audit.md) |
+| 68 | `src/Microsoft/Xna/Framework/GamerServices/GamerPresence.cpp` | PENDING | [GamerPresence.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerPresence.cpp.audit.md) |
+| 69 | `src/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.cpp` | PENDING | [GamerPrivilegeException.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.cpp.audit.md) |
+| 70 | `src/Microsoft/Xna/Framework/GamerServices/GamerPrivileges.cpp` | PENDING | [GamerPrivileges.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerPrivileges.cpp.audit.md) |
+| 71 | `src/Microsoft/Xna/Framework/GamerServices/GamerProfile.cpp` | PENDING | [GamerProfile.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerProfile.cpp.audit.md) |
+| 72 | `src/Microsoft/Xna/Framework/GamerServices/GamerServices.cpp` | PENDING | [GamerServices.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerServices.cpp.audit.md) |
+| 73 | `src/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.cpp` | PENDING | [GamerServicesComponent.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.cpp.audit.md) |
+| 74 | `src/Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.cpp` | PENDING | [GamerServicesDispatcher.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerServicesDispatcher.cpp.audit.md) |
+| 75 | `src/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.cpp` | PENDING | [GamerServicesNotAvailableException.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.cpp.audit.md) |
+| 76 | `src/Microsoft/Xna/Framework/GamerServices/Guide.cpp` | PENDING | [Guide.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/Guide.cpp.audit.md) |
+| 77 | `src/Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.cpp` | PENDING | [GuideAlreadyVisibleException.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.cpp.audit.md) |
+| 78 | `src/Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.cpp` | PENDING | [InviteAcceptedEventArgs.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/InviteAcceptedEventArgs.cpp.audit.md) |
+| 79 | `src/Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.cpp` | PENDING | [LeaderboardEntry.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/LeaderboardEntry.cpp.audit.md) |
+| 80 | `src/Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.cpp` | PENDING | [LeaderboardIdentity.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/LeaderboardIdentity.cpp.audit.md) |
+| 81 | `src/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.cpp` | PENDING | [LeaderboardReader.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.cpp.audit.md) |
+| 82 | `src/Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.cpp` | PENDING | [LeaderboardWriter.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.cpp.audit.md) |
+| 83 | `src/Microsoft/Xna/Framework/GamerServices/NetworkException.cpp` | PENDING | [NetworkException.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/NetworkException.cpp.audit.md) |
+| 84 | `src/Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.cpp` | PENDING | [NetworkNotAvailableException.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.cpp.audit.md) |
+| 85 | `src/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.cpp` | PENDING | [PropertyDictionary.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.cpp.audit.md) |
+| 86 | `src/Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.cpp` | PENDING | [SignedInEventArgs.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/SignedInEventArgs.cpp.audit.md) |
+| 87 | `src/Microsoft/Xna/Framework/GamerServices/SignedInGamer.cpp` | PENDING | [SignedInGamer.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/SignedInGamer.cpp.audit.md) |
+| 88 | `src/Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.cpp` | PENDING | [SignedInGamerCollection.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.cpp.audit.md) |
+| 89 | `src/Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.cpp` | PENDING | [SignedOutEventArgs.cpp.audit.md](../src/Microsoft/Xna/Framework/GamerServices/SignedOutEventArgs.cpp.audit.md) |
