@@ -161,6 +161,41 @@ framework/runtime, not a game.
   anything). Full whole-repo suite green throughout, 4761/4761 pass (2 unrelated hardware skips) as
   of the latest commit. See `plan_audio.md`'s `AUD-06-*` entries for full evidence/citations on
   each.
+  **Continuing the same pass (2026-07-18, 7 more commits, `fa255d08`..`5e7235d0`): all `AUD-11`
+  P0 items are now closed, and several P1 items too.** `AUD-11-005`: found the compact XWB
+  entry-metadata loop could underflow `entryMetaDataSize - 4` to a huge value passed to
+  `Ctx::skip()` -- real UB per the standard (confirmed via a standalone Clang ASan+UBSan repro
+  that it doesn't reliably trip on a typical 64-bit target, still hardened defensively to match
+  `seek()`'s own precedent) plus an explicit, more diagnostic validation. `AUD-11-006`/`007`:
+  golden-tested exact PCM8/PCM16 wave-bank entry frame counts. `AUD-11-014`: **confirmed and
+  fixed a real, user-visible defect** -- `WaveBank` entries' authored loop regions
+  (`loopStartSample`/`loopTotalSamples`) were parsed but never wired into playback at all, so
+  every WaveBank-sourced looping cue looped the *entire* track instead of the authored
+  intro-then-loop region (verified against real FAudio's `FACT.c`). `AUD-11-016`: `Cue::Play()`
+  silently swallowed wave-load failures with zero cue-level diagnostic; added one naming the cue,
+  bank, and wave index. `AUD-11-017`/`018`: **the most severe finding this pass** -- a real,
+  ASan-confirmed heap-buffer-overflow (`READ of size 9 ... 0 bytes after 64-byte region`) in
+  `XactParser.cpp`'s name-field parsing (`bankName`/`entryNames`/`wavebankNames` all called
+  `strnlen` with no check that enough real bytes remained for a truncated file); fixed at all 3
+  sites. `AUD-11-026`: found and fixed a real allocation-bomb gap (`entryCount`, unlike every
+  other count field in this parser, was a full unbounded `uint32_t`), then added a proper
+  deterministic fuzz harness (`XactParserFuzzTests.cpp`, 6000 mutations, clean under both a
+  normal and a fresh ASan+UBSan build); the full audio-scoped subset (649 tests) is also
+  ASan+UBSan clean. `AUD-11-023`/`024`: WaveBank's per-entry cache is bounded by construction;
+  fixed a real, previously-unsynchronized data race in its lookup-then-populate sequence with a
+  mutex, verified via a 16-thread concurrent-access test (20x repeated, zero flakes) -- a full
+  TSAN pass was attempted but blocked by an unrelated, transient build failure in the sibling
+  `meta-gl` repo (being actively edited by another process on this shared machine at the time,
+  confirmed via that repo's own `git status`), not a Audio-branch issue. `AUD-11-025`
+  (Dispose()-vs-concurrent-decode) investigated and honestly left open -- needs the same
+  generation-counter pattern `AUD-04-008/009` already established on this codebase, not a plain
+  mutex; documented as the next concrete task rather than rushed. **Incidental, out-of-scope
+  finding, not fixed:** a real use-after-free in `NetworkSession::Dispose()` (double-dispose),
+  found via a whole-repo (not audio-scoped) ASan run -- entirely within the Net module, flagged
+  for whoever owns it, see the project memory file for detail. Full whole-repo suite green
+  throughout (last confirmed 4771/4771 pass, 2 unrelated hardware skips) up until the external
+  `meta-gl` build interference started; the WaveBank mutex fix and its test were both verified
+  before that happened.
 - **Build (historical, Phase 9-14):** clean, rebuilt and reverified this pass (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/
   `P14-ORDER-001`/`P14-PARSER-001`, a second user-provided external audit's fixes, on top of
   `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001`, `P12-BANK-001`, `P11-PAN-002`,
@@ -1180,21 +1215,24 @@ Phase 9-14's closure was -- the user's own 2026-07-17 instruction authorized wor
 own recommended priority order (see `docs/cna_audio_deep_audit_2026-07-17.md`'s "Recommended
 implementation order" and `plan_audio.md`'s own priority rules):
 
-**Status as of the `AUD-06` section close (2026-07-18, commit `94c99a9b`): `AUD-06` is now fully
-closed (all 25 tasks `[x]`, 0 open) -- do not re-pick anything from it.** Also closed this same
-pass, as before: `AUD-02` structured diagnostics, `AUD-07-008`, `AUD-09`'s 5 golden Apply3D/Doppler
-cases, `AUD-10-005/006/013`, `AUD-11-001/002/008/009/010/011/012/013`, all of `AUD-04-001` through
-`AUD-04-009`/`014`-`016`, and `AUD-15-017`. The list below is refreshed accordingly.
+**Status as of commit `5e7235d0` (2026-07-18): `AUD-06` (25/25) and every `AUD-11` P0 item are
+fully closed; `AUD-11-005/006/007/014/016/017/018/023/024/026` (P1) are also closed -- do not
+re-pick any of those.** Also closed this same overall pass: `AUD-02` structured diagnostics,
+`AUD-07-008`, `AUD-09`'s 5 golden Apply3D/Doppler cases, `AUD-10-005/006/013`,
+`AUD-11-001/002/008/009/010/011/012/013`, all of `AUD-04-001` through `AUD-04-009`/`014`-`016`,
+and `AUD-15-017`. The list below is refreshed accordingly.
 
-1. **`AUD-11`'s remaining P0 items** (`AUD-11-005/006/007/014/015/016`) -- compact/noncompact
-   metadata-size + segment-overlap validation, golden PCM8/PCM16 wave-bank entry tests, loop
-   regions using sample frames with codec-aware mapping, streaming offset/alignment validation,
-   streaming file-I/O failure handling. Natural next candidates: this session's XACT/WaveBank work
-   (`AUD-11-008/012/013`) already established the fixture-building and formula-verification
-   patterns these need.
-2. **`AUD-11`'s remaining P1/P2 items** (12 open: `017`-`028`) -- name-lookup edge cases, padding,
-   old XWB versions, seek tables, wave caching + concurrency safety, fuzzing, WAV-wrapper field
-   validation, an XWB inspection tool (mirrors `AUD-06-025`'s just-closed pattern).
+1. **`AUD-11-025`** (P1) -- WaveBank `Dispose()` racing a concurrent `GetSoundEffect()` decode is
+   a confirmed real gap (investigated, documented, not yet fixed). Needs the same
+   generation-counter/liveness-check pattern `AUD-04-008/009` already established on this exact
+   codebase (`AudioMixer::GetMixerGeneration()` + `SoundEffectInstance::GetLiveTrackHandle()`), not
+   a plain mutex -- the most concrete, well-scoped next task.
+2. **`AUD-11`'s remaining P1/P2 items** (`019`-`022`, `027`-`028`, 6 open) -- zero-length/tiny
+   entries, padding, old XWB versions, seek tables, WAV-wrapper field validation, an XWB
+   inspection tool (mirrors `AUD-06-025`'s pattern). The new `XactParserFuzzTests.cpp` mutation
+   harness already incidentally exercises `019`/`020`'s edge cases across 6000 mutations with zero
+   findings; a few of these may turn out to already be adequately covered on inspection, matching
+   this pass's `AUD-11-015`/`023` pattern (investigate first, don't assume a gap).
 3. **`AUD-04`'s remaining items** (10 open) -- `AUD-04-002/003` (device-negotiation pitch
    preservation) need a real, non-dummy audio backend to test meaningfully -- may have to stay
    documented-as-untestable-headlessly. `AUD-04-010/011` (device change/loss handling) need a
@@ -1204,10 +1242,19 @@ cases, `AUD-10-005/006/013`, `AUD-11-001/002/008/009/010/011/012/013`, all of `A
 4. **`AUD-05`'s remaining 2 items** (`AUD-05-010/011`, endianness policy + a NOXNA buffer
    descriptor) are both deliberately-deferred design-decision items -- do not silently pick these,
    confirm scope with the user first (see §9).
-5. **`AUD-15`'s remaining thread-safety/lifetime items** (18 open) -- this session's `AUD-04-008/009`
-   work found two real memory-safety defects via exactly this kind of "what if X runs concurrently
-   with Y" testing; `AUD-15`'s own remaining items (concurrent submit/dispose races, Dispose-
-   during-callback, etc.) are a natural continuation of the same investigative approach.
+5. **`AUD-15`'s remaining thread-safety/lifetime items** (18 open) -- this session found and fixed
+   *four* real memory-safety/concurrency defects via exactly this kind of "what if X runs
+   concurrently with Y" or "what if this file is truncated/corrupt" testing (the mixer-generation
+   UAF pair, the XACT name-parsing heap-buffer-overflow, the WaveBank cache race); `AUD-15`'s own
+   remaining items (concurrent submit/dispose races, Dispose-during-callback, etc.) are a natural,
+   proven-fruitful continuation of the same investigative approach.
+
+**Environment note for the next session:** a full whole-repo (or TSAN) build may be transiently
+blocked if the sibling `meta-gl`/`easy-gl` repos (shared across this machine's `cna*` project
+family, referenced via CMake `add_subdirectory` from sibling directories) are mid-edit by another
+concurrent process -- check `git status`/`git diff --stat` in those sibling repos before assuming
+a build failure is caused by anything on this branch (it was not, the one time this happened
+2026-07-18 -- see §3's `AUD-11-024` entry).
 
 **Do not re-run a fresh full audit or restart from AUD-00** -- the audit and the 438-task plan
 already exist; work through the existing list. See §9 for what to still confirm with the user
