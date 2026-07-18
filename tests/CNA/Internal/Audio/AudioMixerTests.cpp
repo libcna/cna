@@ -189,6 +189,42 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_tuple(48000, 2),
         std::make_tuple(96000, 2)));
 
+// AUD-04-006: a spec SDL considers genuinely invalid at the application-stream level --
+// freq <= 0, or a channel count outside SDL_IsSupportedChannelCount's documented 1-8 range
+// (third_party/SDL/src/audio/SDL_audiocvt.c) -- must fail mixer creation outright rather than
+// silently substituting some other rate/channel count the caller never asked for and would have
+// no way to detect. This is a DIFFERENT code path from AUD-04-004's device-open floor-clamp
+// (OpenPhysicalAudioDevice, which only raises too-small-but-still-positive/nonzero values): the
+// app-side stream validation runs against the ORIGINAL unclamped request and rejects it before
+// the floor-clamped physical-device spec ever becomes observable, so these values throw --
+// they do not quietly become 44100 Hz stereo the way e.g. 22050 Hz mono does (AUD-04-004).
+class AudioMixerInvalidSpecThrowsTest : public ::testing::TestWithParam<std::tuple<int, int>> {};
+
+TEST_P(AudioMixerInvalidSpecThrowsTest, RejectedOutrightRatherThanSilentlySubstituting) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    const auto [freq, channels] = GetParam();
+
+    CNA::Internal::Audio::DestroyMixer();
+    MixerSpecOverrideGuard guard;
+
+    SDL_AudioSpec requested{};
+    requested.format = SDL_AUDIO_S16;
+    requested.channels = channels;
+    requested.freq = freq;
+    CNA::Internal::Audio::SetMixerSpecOverrideForTests(requested);
+
+    EXPECT_THROW({ CNA::Internal::Audio::GetMixer(); }, std::runtime_error);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AUD04006, AudioMixerInvalidSpecThrowsTest,
+    ::testing::Values(
+        std::make_tuple(0, 2),      // freq == 0
+        std::make_tuple(-1, 2),     // freq negative
+        std::make_tuple(44100, 0),  // channels == 0
+        std::make_tuple(44100, -1), // channels negative
+        std::make_tuple(44100, 9))); // channels above SDL's 8-channel support ceiling
+
 TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsInvalid) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
 
