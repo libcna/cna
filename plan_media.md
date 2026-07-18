@@ -2147,13 +2147,14 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 #### Group F — Real album art (owner decision 4)
   *Done + MUTATION-VERIFIED:* `LibraryIndexesFlacAndOpusFilesWithTheirRealTags` asserts both files are indexed AND routed into the full object graph (artist/album/genre back-references + track number). Removing the extension-filter entries fails it. **Fallout handled:** growing the shared fixture corpus broke 7 pre-existing tests that hardcoded exact counts (2 genres, 4 albums, 2 artists, 5 songs); counts updated, count-encoding test names renamed (`AlbumsContainsAllFourAlbums` -> `AlbumsContainsEveryFixtureAlbum`, etc.), and `GenreCollectionIndexerAndIterationWork` rewritten to derive its indices from the live count so future corpus growth cannot break it again.
 
-- [ ] **MEDIA-205 — Expand album-art filename conventions.** `MediaLibrary.cpp:29` tries only
+- [x] **MEDIA-205 — Expand album-art filename conventions.** `MediaLibrary.cpp:29` tries only
   `cover.jpg` and `folder.jpg`. Add at least `cover.png`, `folder.png`, `front.jpg`, `front.png`,
   `album.jpg`, `albumart.jpg`, and make matching case-insensitive (Linux filesystems are
   case-sensitive; real-world libraries are inconsistent). Define and document precedence order.
   *Accept:* each convention is found by a fixture; precedence is deterministic and documented.
+  *Done:* 13 conventions accepted (`cover`/`folder`/`front`/`album`/`albumart` × `.jpg`/`.jpeg`/`.png`) in a documented precedence order, matched **case-insensitively** by scanning the directory once rather than stat-ing every candidate in every casing (Linux filesystems are case-sensitive; taggers are not consistent).
 
-- [ ] **MEDIA-206 — Extract embedded ID3v2 `APIC` album art.** Parse the `APIC` frame: text encoding
+- [x] **MEDIA-206 — Extract embedded ID3v2 `APIC` album art.** Parse the `APIC` frame: text encoding
   byte, MIME type (null-terminated), picture type byte, description (null-terminated, encoding
   dependent), then the raw image bytes. Prefer picture type `0x03` (front cover) when several are
   present. This closes the long-standing `R2`/`MEDIA-123` follow-up. Feed the extracted bytes into
@@ -2161,14 +2162,16 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   sources converge on one code path.
   *Accept:* an MP3 fixture with embedded front-cover art returns real image data from
   `Album::GetAlbumArt()`, with correct dimensions per the manifest.
+  *Done + MUTATION-VERIFIED:* real ID3v2 `APIC` parsing -- encoding byte, null-terminated MIME, picture-type byte, then a description whose terminator width depends on the encoding (2 bytes for UTF-16, 1 for latin1/UTF-8; getting this wrong misaligns the payload). Front cover (type 3) preferred, first image otherwise. Closes the long-standing R2/`MEDIA-123` follow-up. The test asserts the payload starts with a real JPEG SOI **and decodes back to exactly 400x300**, so a boundary that is off by even a byte fails.
 
-- [ ] **MEDIA-207 — Extract embedded Vorbis/FLAC `METADATA_BLOCK_PICTURE` art.** The Ogg/FLAC
+- [x] **MEDIA-207 — Extract embedded Vorbis/FLAC `METADATA_BLOCK_PICTURE` art.** The Ogg/FLAC
   equivalent: a base64-encoded (in Vorbis comments) or raw (in FLAC metadata block type 6) structure
   carrying picture type, MIME, description, dimensions and image data. Same front-cover preference
   and same `ImageLoader` convergence as `MEDIA-206`.
   *Accept:* an Ogg fixture and a FLAC fixture with embedded art both return real image data.
+  *Done:* FLAC `METADATA_BLOCK_PICTURE` (block type 6). Note the trap this format sets: its length fields are **big-endian**, unlike the little-endian Vorbis comment list in the very same file -- implemented and commented accordingly. Same front-cover preference and same bounds-checking as the APIC path.
 
-- [ ] **MEDIA-208 — Define art-source precedence and `HasArt` semantics.** With file-based and two
+- [x] **MEDIA-208 — Define art-source precedence and `HasArt` semantics.** With file-based and two
   embedded sources, precedence must be explicit (recommended: embedded front cover, then filename
   conventions — embedded art is per-track and more reliably correct than a shared folder image;
   document whichever is chosen). `Album::getHasArtProperty()` must agree exactly with whether
@@ -2178,6 +2181,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   embedded only, both, neither), asserted as an explicit test matrix.
 
 #### Group G — Real thumbnails (owner decision 4)
+  *Done -- and the precedence decision was REVERSED from this task's own initial recommendation, deliberately.* The task suggested embedded-art-first; the implementation does **file-first**, because an `Album` aggregates many tracks (a folder image is album-scoped by nature, whereas embedded art is per-track and member tracks could disagree) and it avoids a tag parse on every call. The reversal and its reasoning are documented in the code, not silently applied. `HasArt` now covers both sources, and a dedicated test walks EVERY album asserting `HasArt == true` implies `GetAlbumArt()` succeeds with non-empty data and `HasArt == false` implies it throws -- with anti-vacuity guards requiring the corpus to exercise both branches.
 
 - [x] **MEDIA-209 — Implement genuine downscaling for `Album::GetThumbnail()`.**
   `src/Microsoft/Xna/Framework/Media/Album.cpp:71` currently just calls `GetAlbumArt()` and returns

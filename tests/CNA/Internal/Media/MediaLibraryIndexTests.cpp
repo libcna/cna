@@ -23,10 +23,26 @@ namespace
 
 TEST(MediaLibraryIndexTest, ScansEveryFixtureSong)
 {
+    // Counted from the filesystem rather than hardcoded, so adding a fixture for a new feature
+    // cannot break this test while still proving the scan finds EVERY supported file present
+    // (plan_media.md MEDIA-199/206 both grew the corpus and broke the old magic number).
+    std::size_t expected = 0;
+    for (const auto& e : std::filesystem::recursive_directory_iterator(kMusicRoot))
+    {
+        if (!e.is_regular_file()) continue;
+        std::string ext = e.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (ext == ".ogg" || ext == ".oga" || ext == ".mp3" || ext == ".wav" ||
+            ext == ".flac" || ext == ".opus")
+        {
+            ++expected;
+        }
+    }
+    ASSERT_GT(expected, 0u) << "fixture corpus is missing";
+
     MediaLibraryIndex index(kMusicRoot);
-    // 5 original (.ogg/.mp3/.wav) + the .flac and .opus fixtures added when the scan was extended
-    // to those formats (plan_media.md MEDIA-199/203).
-    EXPECT_EQ(index.GetSongs().size(), 7u);
+    EXPECT_EQ(index.GetSongs().size(), expected);
 }
 
 TEST(MediaLibraryIndexTest, EachSongHasCorrectTagsFromItsSource)

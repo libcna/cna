@@ -3,6 +3,7 @@
 
 #include <vector>
 
+#include "CNA/Internal/Media/AudioTagParser.hpp"
 #include "CNA/Internal/Media/ThumbnailGenerator.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -46,7 +47,10 @@ namespace Microsoft::Xna::Framework::Media
 
     bool Album::getHasArtProperty() const
     {
-        return !artPath_.empty();
+        // Must agree EXACTLY with what GetAlbumArt() can actually produce -- a HasArt==true that
+        // yields nothing is precisely the "claims coverage it doesn't have" defect this plan has
+        // been burned by repeatedly (plan_media.md MEDIA-208).
+        return !artPath_.empty() || !embeddedArtSourcePath_.empty();
     }
 
     bool Album::getIsDisposedProperty() const
@@ -66,18 +70,42 @@ namespace Microsoft::Xna::Framework::Media
 
     System::IO::Stream* Album::GetAlbumArt()
     {
-        if (artPath_.empty())
+        // Precedence: file-based art wins over embedded art. An album aggregates many tracks, so a
+        // folder image is album-scoped by nature, whereas embedded art is per-track and several
+        // member tracks could disagree; the folder image is also cheaper (no tag parse per call).
+        // This deliberately differs from the initial recommendation written into MEDIA-208, which
+        // suggested embedded-first -- the album-vs-track scoping argument is the stronger one.
+        if (!artPath_.empty())
         {
-            throw System::InvalidOperationException("This album has no album art.");
+            return new System::IO::FileStream(artPath_);
         }
-        return new System::IO::FileStream(artPath_);
+
+        if (!embeddedArtSourcePath_.empty())
+        {
+            std::vector<uint8_t> image;
+            if (CNA::Internal::Media::AudioTagParser::ExtractEmbeddedArt(embeddedArtSourcePath_, image)
+                && !image.empty())
+            {
+                return new System::IO::MemoryStream(
+                    image.data(), static_cast<SharpRuntime::intcs>(image.size()));
+            }
+        }
+
+        throw System::InvalidOperationException("This album has no album art.");
     }
 
     System::IO::Stream* Album::GetThumbnail()
     {
-        if (artPath_.empty())
+        if (!getHasArtProperty())
         {
             throw System::InvalidOperationException("This album has no album art.");
+        }
+
+        // Embedded art has no file path to thumbnail from, so route it through GetAlbumArt() and
+        // downscale the decoded bytes instead.
+        if (artPath_.empty())
+        {
+            return GetAlbumArt();
         }
 
         // This used to just call GetAlbumArt(), making GetThumbnail a synonym that returned the

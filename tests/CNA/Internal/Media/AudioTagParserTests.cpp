@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <fstream>
+
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include <gtest/gtest.h>
 #include "CNA/Internal/Media/AudioTagParser.hpp"
 
@@ -233,4 +235,34 @@ TEST(AudioTagParserTest, TruncatedFlacIsRejectedWithoutReadingPastTheBuffer)
         bool ok = CNA::Internal::Media::AudioTagParser::TryReadFlacComments(bytes, out);
         EXPECT_FALSE(ok);
     });
+}
+
+// plan_media.md MEDIA-206: embedded ID3v2 APIC cover art. This closes the long-standing R2/
+// MEDIA-123 follow-up. The fixture's album folder deliberately contains NO cover file, so the art
+// can only come from inside the MP3 itself.
+TEST(AudioTagParserTest, ExtractsEmbeddedApicArtFromMp3)
+{
+    std::vector<uint8_t> image;
+    ASSERT_TRUE(CNA::Internal::Media::AudioTagParser::ExtractEmbeddedArt(
+        "tests/assets/media/music/Artist Five/Album Embedded/01 - Embedded Art Song.mp3", image));
+    ASSERT_FALSE(image.empty());
+
+    // Must be a real JPEG (SOI marker), i.e. the raw image bytes -- not the surrounding frame.
+    ASSERT_GE(image.size(), 2u);
+    EXPECT_EQ(image[0], 0xFF);
+    EXPECT_EQ(image[1], 0xD8) << "APIC payload is not a JPEG SOI -- frame parsing is misaligned";
+
+    // And it must decode to the real picture, proving the payload boundaries are exactly right.
+    const auto decoded =
+        CNA::Internal::Graphics::ImageLoader::LoadFromMemory(image.data(), image.size());
+    EXPECT_EQ(decoded.width, 400);
+    EXPECT_EQ(decoded.height, 300);
+}
+
+TEST(AudioTagParserTest, ReturnsFalseForAFileWithNoEmbeddedArt)
+{
+    std::vector<uint8_t> image;
+    EXPECT_FALSE(CNA::Internal::Media::AudioTagParser::ExtractEmbeddedArt(
+        "tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", image));
+    EXPECT_TRUE(image.empty());
 }

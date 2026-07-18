@@ -517,3 +517,152 @@ namespace CNA::Internal::Media
         return out;
     }
 }
+
+namespace CNA::Internal::Media
+{
+    namespace
+    {
+        // ID3v2 APIC frame body: encoding byte, MIME (null-terminated latin1), picture-type byte,
+        // description (null-terminated in `encoding`), then the raw image bytes.
+        bool ParseApicBody(const uint8_t* body, uint32_t size,
+                            std::vector<uint8_t>& out, uint8_t& pictureType)
+        {
+            if (size < 4) return false;
+            const uint8_t encoding = body[0];
+            uint32_t p = 1;
+
+            while (p < size && body[p] != 0) ++p;   // MIME
+            if (p + 2 >= size) return false;
+            ++p;                                     // MIME terminator
+            pictureType = body[p];
+            ++p;
+
+            // Description terminator width depends on the encoding: UTF-16 variants (1, 2) use a
+            // two-byte null, latin1/UTF-8 (0, 3) a one-byte null.
+            if (encoding == 1 || encoding == 2)
+            {
+                while (p + 1 < size && !(body[p] == 0 && body[p + 1] == 0)) p += 2;
+                p += 2;
+            }
+            else
+            {
+                while (p < size && body[p] != 0) ++p;
+                p += 1;
+            }
+            if (p >= size) return false;
+
+            out.assign(body + p, body + size);
+            return !out.empty();
+        }
+    }
+
+    bool AudioTagParser::ExtractEmbeddedArt(const std::string& path, std::vector<uint8_t>& outImage)
+    {
+        const std::vector<uint8_t> bytes = ReadFileBytes(path);
+        if (bytes.size() < 16) return false;
+
+        std::vector<uint8_t> best;      // front cover, if we find one
+        std::vector<uint8_t> fallback;  // first image of any type
+
+        // --- ID3v2 (MP3) ---
+        if (std::memcmp(bytes.data(), "ID3", 3) == 0)
+        {
+            const uint8_t majorVersion = bytes[3];
+            const uint32_t tagSize = (static_cast<uint32_t>(bytes[6] & 0x7F) << 21) |
+                                      (static_cast<uint32_t>(bytes[7] & 0x7F) << 14) |
+                                      (static_cast<uint32_t>(bytes[8] & 0x7F) << 7) |
+                                       static_cast<uint32_t>(bytes[9] & 0x7F);
+            const std::size_t tagEnd = std::min(bytes.size(), static_cast<std::size_t>(10) + tagSize);
+
+            std::size_t pos = 10;
+            while (pos + 10 <= tagEnd)
+            {
+                if (bytes[pos] == 0) break; // padding
+                const std::string frameId(reinterpret_cast<const char*>(&bytes[pos]), 4);
+
+                uint32_t frameSize;
+                if (majorVersion >= 4)
+                {
+                    frameSize = (static_cast<uint32_t>(bytes[pos + 4] & 0x7F) << 21) |
+                                 (static_cast<uint32_t>(bytes[pos + 5] & 0x7F) << 14) |
+                                 (static_cast<uint32_t>(bytes[pos + 6] & 0x7F) << 7) |
+                                  static_cast<uint32_t>(bytes[pos + 7] & 0x7F);
+                }
+                else
+                {
+                    frameSize = (static_cast<uint32_t>(bytes[pos + 4]) << 24) |
+                                 (static_cast<uint32_t>(bytes[pos + 5]) << 16) |
+                                 (static_cast<uint32_t>(bytes[pos + 6]) << 8) |
+                                  static_cast<uint32_t>(bytes[pos + 7]);
+                }
+                pos += 10;
+                if (frameSize == 0 || pos + frameSize > tagEnd) break; // truncated/hostile
+
+                if (frameId == "APIC")
+                {
+                    std::vector<uint8_t> image;
+                    uint8_t pictureType = 0;
+                    if (ParseApicBody(&bytes[pos], frameSize, image, pictureType))
+                    {
+                        if (pictureType == 3 && best.empty()) best = image;
+                        else if (fallback.empty()) fallback = std::move(image);
+                    }
+                }
+                pos += frameSize;
+            }
+        }
+        // --- FLAC METADATA_BLOCK_PICTURE (block type 6) ---
+        else if (std::memcmp(bytes.data(), "fLaC", 4) == 0)
+        {
+            std::size_t pos = 4;
+            while (pos + 4 <= bytes.size())
+            {
+                const uint8_t header = bytes[pos];
+                const bool isLast = (header & 0x80) != 0;
+                const uint8_t blockType = header & 0x7F;
+                const uint32_t blockLen = (static_cast<uint32_t>(bytes[pos + 1]) << 16) |
+                                           (static_cast<uint32_t>(bytes[pos + 2]) << 8) |
+                                            static_cast<uint32_t>(bytes[pos + 3]);
+                pos += 4;
+                if (pos + blockLen > bytes.size()) break;
+
+                if (blockType == 6 && blockLen >= 32)
+                {
+                    // All fields are BIG-endian here (unlike Vorbis comments' little-endian).
+                    auto be32 = [&](std::size_t at) {
+                        return (static_cast<uint32_t>(bytes[at]) << 24) |
+                               (static_cast<uint32_t>(bytes[at + 1]) << 16) |
+                               (static_cast<uint32_t>(bytes[at + 2]) << 8) |
+                                static_cast<uint32_t>(bytes[at + 3]);
+                    };
+                    std::size_t p = pos;
+                    const uint32_t pictureType = be32(p); p += 4;
+                    const uint32_t mimeLen = be32(p);     p += 4;
+                    if (p + mimeLen + 4 > bytes.size()) break;
+                    p += mimeLen;
+                    const uint32_t descLen = be32(p);     p += 4;
+                    if (p + descLen + 20 > bytes.size()) break;
+                    p += descLen;
+                    p += 16; // width, height, depth, colour count
+                    if (p + 4 > bytes.size()) break;
+                    const uint32_t dataLen = be32(p);     p += 4;
+                    if (p + dataLen > bytes.size()) break;
+
+                    std::vector<uint8_t> image(bytes.begin() + static_cast<std::ptrdiff_t>(p),
+                                                bytes.begin() + static_cast<std::ptrdiff_t>(p + dataLen));
+                    if (!image.empty())
+                    {
+                        if (pictureType == 3 && best.empty()) best = std::move(image);
+                        else if (fallback.empty()) fallback = std::move(image);
+                    }
+                }
+                pos += blockLen;
+                if (isLast) break;
+            }
+        }
+
+        if (!best.empty())      { outImage = std::move(best);     return true; }
+        if (!fallback.empty())  { outImage = std::move(fallback); return true; }
+        return false;
+    }
+}

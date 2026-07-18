@@ -118,6 +118,10 @@ namespace Microsoft::Xna::Framework::Media
         /** @brief Returns the fully-qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
+        // MediaLibrary is the only component that knows which member song carries embedded art;
+        // this stays internal rather than widening the public XNA surface (plan_media.md MEDIA-208).
+        NOXNA friend class MediaLibrary;
+
         /** @brief Returns whether two albums are equal. */
         friend bool operator==(const Album& lhs, const Album& rhs);
 
@@ -133,7 +137,13 @@ namespace Microsoft::Xna::Framework::Media
         Artist* artist_; // non-owning -- owned by MediaLibrary
         Genre* genre_;   // non-owning
         System::TimeSpan duration_;
-        std::string artPath_; // empty if no cover art was found
+        std::string artPath_; // file-based cover art; empty if none was found
+
+        // Audio file carrying embedded cover art (ID3v2 APIC / FLAC PICTURE), used only when no
+        // file-based art exists. Stored as a path rather than the decoded bytes so a large library
+        // does not hold every album's artwork in memory; extraction happens on demand in
+        // GetAlbumArt() (plan_media.md MEDIA-206/207/208).
+        std::string embeddedArtSourcePath_;
         SongCollection* songs_; // non-owning
         bool isDisposed_ = false;
     };

@@ -41,6 +41,18 @@ namespace CNA::Internal::Media
         /// untouched) if no ID3v2 header is found or the data is malformed.
         static bool TryReadId3v2(const std::vector<uint8_t>& fileBytes, AudioTags& out);
 
+        /// Extracts embedded cover art from an audio file, if it has any.
+        ///
+        /// Supports ID3v2 APIC frames (MP3) and FLAC METADATA_BLOCK_PICTURE (block type 6).
+        /// Front cover (picture type 3) is preferred when several images are present; otherwise
+        /// the first image found is used (plan_media.md MEDIA-206/207).
+        ///
+        /// @param path     Audio file to read.
+        /// @param outImage Receives the raw encoded image bytes (JPEG/PNG as stored in the tag).
+        /// @return true if embedded art was found, leaving `outImage` untouched otherwise.
+        static bool ExtractEmbeddedArt(const std::string& path, std::vector<uint8_t>& outImage);
+
+
         /// Reads an Ogg-Opus "OpusTags" comment header (plan_media.md MEDIA-202).
         static bool TryReadOpusTags(const std::vector<uint8_t>& fileBytes, AudioTags& out);
 

@@ -8,6 +8,7 @@
 
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "CNA/Internal/Media/AudioDurationProbe.hpp"
+#include "CNA/Internal/Media/AudioTagParser.hpp"
 #include "CNA/Internal/Media/MediaLibraryIndex.hpp"
 #include "CNA/Internal/Media/MediaLibraryPaths.hpp"
 #include "CNA/Internal/Media/PictureLibraryIndex.hpp"
@@ -26,13 +27,43 @@ namespace Microsoft::Xna::Framework::Media
         std::string FindAlbumArtPath(const std::string& songPath)
         {
             std::filesystem::path dir = std::filesystem::path(songPath).parent_path();
-            for (const char* candidate : {"cover.jpg", "folder.jpg"})
+
+            // Precedence order, most-specific first. Real-world libraries are wildly inconsistent
+            // about this, so several conventions are accepted rather than just cover.jpg/folder.jpg
+            // (plan_media.md MEDIA-205).
+            static const char* kCandidates[] = {
+                "cover.jpg", "cover.jpeg", "cover.png",
+                "folder.jpg", "folder.jpeg", "folder.png",
+                "front.jpg", "front.jpeg", "front.png",
+                "album.jpg", "album.png",
+                "albumart.jpg", "albumart.png",
+            };
+
+            // Linux filesystems are case-sensitive but taggers are not consistent about case, so
+            // match case-insensitively by scanning the directory once rather than stat-ing every
+            // candidate in every casing.
+            std::error_code ec;
+            std::vector<std::string> namesInDir;
+            for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
             {
-                std::filesystem::path artPath = dir / candidate;
-                std::error_code ec;
-                if (std::filesystem::exists(artPath, ec) && !ec)
+                if (ec) break;
+                if (entry.is_regular_file(ec) && !ec)
                 {
-                    return artPath.string();
+                    namesInDir.push_back(entry.path().filename().string());
+                }
+            }
+
+            for (const char* candidate : kCandidates)
+            {
+                for (const std::string& name : namesInDir)
+                {
+                    std::string lower = name;
+                    std::transform(lower.begin(), lower.end(), lower.begin(),
+                                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    if (lower == candidate)
+                    {
+                        return (dir / name).string();
+                    }
                 }
             }
             return {};
@@ -192,6 +223,24 @@ namespace Microsoft::Xna::Framework::Media
             ownedGroupSongCollections_.push_back(std::move(albumSongs));
             allAlbums.push_back(album.get());
             albumByKey[key] = album.get();
+
+            // No folder image for this album -- fall back to embedded art from the first member
+            // song that actually has some. Only the PATH is stored; the image is extracted on
+            // demand so a big library doesn't hold every cover in memory (plan_media.md
+            // MEDIA-206/207/208).
+            if (albumArtPathByKey[key].empty())
+            {
+                for (Song* memberSong : songsByAlbumKey[key])
+                {
+                    std::vector<uint8_t> probe;
+                    if (CNA::Internal::Media::AudioTagParser::ExtractEmbeddedArt(
+                            memberSong->getHandle(), probe) && !probe.empty())
+                    {
+                        albumByKey[key]->embeddedArtSourcePath_ = memberSong->getHandle();
+                        break;
+                    }
+                }
+            }
             albumsByArtistName[artistName].push_back(album.get());
             if (!genreName.empty()) albumsByGenreName[genreName].push_back(album.get());
             ownedAlbums_.push_back(std::move(album));
