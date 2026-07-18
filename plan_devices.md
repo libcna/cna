@@ -8094,7 +8094,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Fixtures cover portrait/landscape/flipped and fallback attitude source.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### BASE2-001 — Verify and enforce exact TimeBetweenUpdates edge semantics — OPEN
+### BASE2-001 — Verify and enforce exact TimeBetweenUpdates edge semantics — OPEN (found and fixed a real signed-integer-overflow bug; cross-backend unification and oracle comparison blocked/deferred)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -8107,6 +8107,82 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Negative/zero/max/same-value cases exactly match the oracle or are explicitly documented deviations.
   - All four sensors produce consistent effective cadence semantics.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - **Found and fixed a real, previously undetected signed-integer-overflow bug** while
+    adding the coverage this task's "prevent... integer/duration overflow" bullet asks
+    for: `SensorBase<T>::ShouldAcceptUpdateAt()` (the SDL-backed
+    `Accelerometer`/`Gyroscope` software throttle) compared `(now -
+    lastAcceptedUpdateTime_) >= interval` directly, where `interval` is a
+    `std::chrono::duration<int64_t, ratio<1,10000000>>` (100ns ticks) built from
+    `timeBetweenUpdates_.getTicksProperty()`. A direct comparison between two
+    differently-scaled `std::chrono::duration`s implicitly promotes both to their
+    `common_type` — here, the *finer* period (`steady_clock`'s own, effectively
+    nanoseconds on this platform) — which converts `interval` by multiplying its count
+    by 100. For `TimeSpan::MaxValue` (tick count already near `INT64_MAX`), that
+    multiplication itself overflows signed 64-bit arithmetic — confirmed directly by
+    UBSan under `devices-ubsan` (`signed integer overflow: 9223372036854775807 * 100
+    cannot be represented in type 'long int'`) the moment a new test exercised
+    `ShouldAcceptUpdateAt()` with `TimeSpan::MaxValue` (previously only the plain setter
+    was tested with that value, never the actual throttle-decision comparison). Fixed by
+    explicitly `duration_cast`-ing the *elapsed* duration down to `interval`'s own
+    coarser (100ns-tick) period before comparing, instead of letting the comparison
+    operator promote in the unsafe direction — an int64 count of 100ns ticks can
+    represent roughly 29,000 years, so this direction of cast never approaches overflow
+    for any realistic elapsed wall-clock time. `TimeSpan::MinValue` was also added as a
+    regression test (confirms the existing "negative interval never throttles" behavior
+    holds at the most extreme negative value too) — no overflow there, but previously
+    also entirely untested at that extreme.
+  - The `Problem` statement's own claim ("Android silently clamps while SDL throttle
+    treats negative as always-ready") was investigated and **confirmed accurate**: only
+    `Accelerometer`/`Gyroscope` (`Compass.cpp`/`Motion.cpp` do not) call
+    `ShouldAcceptUpdateAt()` at all — Android-backed sensors rely *entirely* on
+    `ASensorEventQueue_setEventRate()` (native, clamped to a 1-microsecond floor per
+    `ANDR2-010`'s own fix) with **no software-throttle backstop**, while SDL-backed
+    sensors rely *entirely* on the software throttle (native SDL exposes no per-sensor
+    rate-request API this codebase uses). This is a real, confirmed architectural
+    divergence, not assumed.
+  - **Did not attempt** "apply one canonical stored value across all backends" /
+    "prevent backend-specific divergence" (i.e., adding `ShouldAcceptUpdateAt()`-style
+    software throttling to `Compass`/`Motion` too, or otherwise unifying the two
+    mechanisms) — investigated the idea (see below) and judged it too risky to implement
+    without the behavioral oracle this task's own first required-work bullet names:
+    - Real WP7 `Compass`/`Motion` software-throttle-equivalent behavior is genuinely
+      unknown without oracle data — this codebase has no local WP7 SDK/MonoGame
+      reference (`Microsoft.Devices.Sensors` is WP7-only, never part of desktop XNA/FNA,
+      so the project's own authoritative-reference rule — the local FNA tree — doesn't
+      cover it). Adding new throttling behavior based on guesswork risks introducing an
+      incorrect deviation from real WP7 behavior rather than fixing one.
+    - It would also very likely **break existing `CompassTests.cpp`/`MotionTests.cpp`
+      fake-backend tests** that fire multiple synthetic readings in immediate succession
+      via `fake->CapturedOnReading(...)` and expect each one reflected — a real elapsed
+      wall-clock time of microseconds between such calls would now be throttled by a
+      2ms-default `ShouldAcceptUpdateAt()` gate, a behavior change requiring a careful,
+      dedicated audit of every affected test, not a same-pass addition.
+    - This determination genuinely depends on `DEVPERF-002`/`003` (the not-yet-built
+      "independent Windows Phone API oracle"/"behavioral compatibility oracle" tasks) —
+      flagged as a real, blocking dependency, not silently worked around.
+- **Files changed:** `include/Microsoft/Devices/Sensors/SensorBase.hpp`,
+  `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`.
+- **Tests:** 2 new tests
+  (`ShouldAcceptUpdateAtWithMaxValueTimeBetweenUpdatesNeverAcceptsASecondUpdate`,
+  `ShouldAcceptUpdateAtWithMinValueTimeBetweenUpdatesNeverThrottles`), both exercising
+  `ShouldAcceptUpdateAt()` itself (not just the setter) at `TimeSpan::MaxValue`/`MinValue`
+  — closing the exact gap that let this overflow go undetected. Scoped filtered run: 325
+  tests, 321 passed, 4 pre-existing hardware-only skips, 0 failures — 2 new, both passing.
+- **Sanitizer/static-analysis result:** the overflow was found *by* `devices-ubsan` and
+  is now clean under it. Re-verified under `devices-tsan` (this is a shared,
+  concurrency-relevant method on the real `Accelerometer`/`Gyroscope` dispatch path): 3
+  consecutive clean runs, 0 `WARNING: ThreadSanitizer` occurrences, 104/104 tests passing
+  each run (`AccelerometerTests.*:GyroscopeTests.*:SensorBaseTests.*`).
+- **Remaining limitations (explicitly OPEN, not fabricated):** the overflow fix itself is
+  a genuine, verified bug fix, not hardware-dependent — but this task's own acceptance
+  criteria ("exactly match the oracle", "consistent effective cadence semantics" across
+  all four sensors) require either the not-yet-built behavioral oracle (`DEVPERF-002`/
+  `003`) or a real cross-backend behavior-unification change judged too risky to attempt
+  without one. Left **OPEN**, not CLOSED: unlike the overflow fix, the CORE ask of this
+  task remains genuinely blocked on other, unstarted work — a different reason than most
+  other `OPEN (implementation done)` entries this pass, worth distinguishing from
+  "needs hardware" (this needs an oracle/design decision, not a device).
 
 ### BASE2-002 — Verify CurrentValue/IsDataValid lifecycle semantics — OPEN
 

@@ -472,6 +472,45 @@ TEST(SensorBaseTests, ShouldAcceptUpdateAtWithNegativeTimeBetweenUpdatesNeverThr
     EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
 }
 
+// Task BASE2-001 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// TimeSpan::MaxValue/MinValue were previously only tested through the plain
+// setTimeBetweenUpdatesProperty() setter (SetTimeBetweenUpdatesPropertyAccepts
+// MaxValueWithoutThrowing, above) -- confirming the value round-trips, but not
+// that ShouldAcceptUpdateAt()'s own duration comparison (constructing a
+// std::chrono::duration from TimeSpan::MaxValue's/MinValue's tick count, then
+// comparing it against a std::chrono::steady_clock::duration of a different
+// period) is itself free of overflow/UB for these extreme inputs -- "prevent
+// ... integer/duration overflow" (this task's own required work). Run under
+// devices-ubsan specifically to let UBSan's own signed-integer-overflow
+// detector confirm this directly, not just "didn't crash".
+TEST(SensorBaseTests, ShouldAcceptUpdateAtWithMaxValueTimeBetweenUpdatesNeverAcceptsASecondUpdate)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::MaxValue);
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    // An interval this large can never have "fully elapsed" again within a
+    // test's own runtime -- confirms this degrades to "never throttle again
+    // after the first" (a sensible, non-crashing outcome for a
+    // maximum-possible interval), not a crash or a wraparound that
+    // incorrectly accepts.
+    EXPECT_FALSE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::hours(24)));
+}
+
+TEST(SensorBaseTests, ShouldAcceptUpdateAtWithMinValueTimeBetweenUpdatesNeverThrottles)
+{
+    TestSensorBase sensor;
+    sensor.SetTimeBetweenUpdatesForTesting(TimeSpan::MinValue);
+
+    const auto first = std::chrono::steady_clock::now();
+    ASSERT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    // Same "always accept" degradation as the plain-negative case above, just
+    // at the most extreme possible negative value.
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first));
+    EXPECT_TRUE(sensor.ShouldAcceptUpdateForTesting(first + std::chrono::milliseconds(1)));
+}
+
 TEST(SensorBaseTests, ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash)
 {
     TestSensorBase sensor;

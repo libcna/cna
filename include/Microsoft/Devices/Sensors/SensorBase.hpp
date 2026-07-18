@@ -454,10 +454,30 @@ namespace Microsoft::Devices::Sensors
         {
             std::lock_guard<std::mutex> lock(mutex_);
 
-            const std::chrono::duration<std::int64_t, std::ratio<1, 10000000>> interval(
-                timeBetweenUpdates_.getTicksProperty());
+            using Ticks = std::chrono::duration<std::int64_t, std::ratio<1, 10000000>>;
+            const Ticks interval(timeBetweenUpdates_.getTicksProperty());
 
-            if (!hasAcceptedUpdate_ || (now - lastAcceptedUpdateTime_) >= interval)
+            // Task BASE2-001 (2026-07-17, external audit
+            // `audit_devices_2026-07-17.md`): explicitly casts the *elapsed*
+            // duration down to `interval`'s own (coarser, 100ns-tick) period
+            // before comparing, rather than comparing the two durations
+            // directly. A direct `(now - lastAcceptedUpdateTime_) >= interval`
+            // comparison implicitly promotes both operands to their
+            // std::chrono::common_type -- here, the *finer* of the two
+            // periods (steady_clock's own, typically nanoseconds) -- which
+            // converts `interval` by multiplying its count by 100. For
+            // TimeSpan::MaxValue (its own tick count already near INT64_MAX),
+            // that multiplication itself overflows a signed 64-bit integer --
+            // confirmed by UBSan under devices-ubsan ("signed integer
+            // overflow: 9223372036854775807 * 100..."), a real, previously
+            // undetected bug, not a theoretical one. Casting the elapsed
+            // duration down to ticks instead is always safe: an int64 count
+            // of 100ns ticks can represent roughly 29,000 years, far beyond
+            // any realistic elapsed wall-clock time, so this direction of
+            // cast never approaches the same overflow.
+            const Ticks elapsedTicks = std::chrono::duration_cast<Ticks>(now - lastAcceptedUpdateTime_);
+
+            if (!hasAcceptedUpdate_ || elapsedTicks >= interval)
             {
                 hasAcceptedUpdate_ = true;
                 lastAcceptedUpdateTime_ = now;
