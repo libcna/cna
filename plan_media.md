@@ -2440,8 +2440,12 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   The previous round dismissed the reviewer's differing count as "test registration differing
   between build configurations" **without evidence** -- an unsupported claim of exactly the kind
   this plan keeps being caught by.
-  *Investigated -- but the investigation was itself wrong on the count; corrected by `MEDIA-230`.*
-  The difference is **Draco**. **Four** tests are gated behind `#ifdef CNA_DRACO_AVAILABLE`:
+  **This task's own conclusion was WRONG and is retracted -- see `MEDIA-232`.** It blamed the
+  4919-vs-4921 gap on Draco, but Draco gates **four** tests, and four cannot explain a difference of
+  two. The arithmetic never worked; the explanation only looked plausible because the count was also
+  wrong at the time (`MEDIA-230`). What is factually true is only the Draco inventory below -- not
+  that it explains that particular gap.
+  *Draco inventory (accurate):* **four** tests are gated behind `#ifdef CNA_DRACO_AVAILABLE`:
   `RuntimeGltfModelTest.LoadsDracoCompressedTriangleDirectlyFromGltf`,
   `GltfImportCoreTest.ExtractMeshDecodesDracoCompressedTriangle`,
   `GltfImportCoreTest.ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWithNoTangentAccessor`
@@ -2481,6 +2485,23 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   **Unchanged and still open:** no TSAN/threaded or end-to-end audio test for visualization; the
   no-mixer and failed-uninstall branches remain unreachable from this suite; Group D
   (`MEDIA-192`..`198`) remains deferred by the project owner.
+
+- [x] **MEDIA-232 — Retract `MEDIA-229`'s explanation instead of leaving a plausible-but-false one
+  in place.** A fifteenth review noted the residual inconsistency: `MEDIA-229` still asserted Draco
+  caused the 4919-vs-4921 gap, while `MEDIA-230` had corrected the Draco count to four. **Four
+  cannot produce a difference of two**, so the explanation was arithmetically impossible.
+  *What is actually known:* the Draco inventory (four gated tests, named in `MEDIA-229`) is correct
+  and independently verified. **The two-test gap itself was never explained**, and can no longer be
+  reconstructed -- both builds have since moved (`36ac9656` merged develop in, and the stale build
+  directory was reconfigured), so the two figures being compared no longer exist to compare.
+  *Fix:* `MEDIA-229`'s conclusion is retracted in place rather than quietly patched, since the
+  earlier wording would otherwise keep reading as a settled finding. **No replacement explanation is
+  offered, because none is known** -- inventing a second plausible-sounding cause would repeat the
+  exact mistake this whole thread of tasks exists to correct.
+  *Current baseline, unaffected:* HEAD `9033a2fd` measures **5312 tests, 5308 passed, 0 failed, 4
+  pre-existing hardware skips** (two Accelerometer, two Gyroscope), independently reproduced by the
+  reviewer under a real Wayland session with ENet loopback, with all four Draco tests registered and
+  completing.
 
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
