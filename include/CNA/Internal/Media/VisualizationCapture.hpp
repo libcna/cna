@@ -16,9 +16,17 @@ namespace CNA::Internal::Media
     /// ring buffer with one atomic write cursor satisfies that -- the audio thread only ever
     /// advances the cursor, and the game thread only ever reads behind it.
     ///
-    /// Deliberately tolerant of a torn read: if the audio thread overwrites samples while Read()
-    /// is copying them, the worst outcome is one visually imperfect frame of a visualizer, which
-    /// is not worth a lock on the audio path.
+    /// The sample storage is `std::atomic<float>` accessed with `memory_order_relaxed`. That is
+    /// NOT pedantry: a plain `float` written by the audio thread while the game thread reads it is
+    /// a data race and therefore undefined behaviour in C++, regardless of how benign the machine
+    /// code looks. Relaxed atomics make it well-defined at effectively zero cost -- on every
+    /// mainstream platform a relaxed load/store of a naturally-aligned float lowers to exactly the
+    /// same instruction a plain access would (found by external code review, plan_media.md
+    /// MEDIA-216).
+    ///
+    /// What remains deliberately tolerated is a *logically* torn read: the reader may observe a
+    /// window whose samples span two different callback batches. That is a visual artefact of one
+    /// visualizer frame, not UB, and is not worth a lock on the audio path.
     class VisualizationCapture
     {
     public:
@@ -50,7 +58,9 @@ namespace CNA::Internal::Media
         }
 
     private:
-        std::array<float, Capacity> buffer_{};
+        // Atomic elements: see the class comment -- concurrent plain-float access from the
+        // audio and game threads would be a data race (UB), not merely a torn value.
+        std::array<std::atomic<float>, Capacity> buffer_{};
         std::atomic<std::size_t> writeIndex_{0};
         std::atomic<std::size_t> written_{0};
     };

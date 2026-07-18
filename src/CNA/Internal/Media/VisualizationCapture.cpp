@@ -29,7 +29,7 @@ namespace CNA::Internal::Media
             {
                 sum += pcm[f * ch + c];
             }
-            buffer_[w] = sum / static_cast<float>(ch);
+            buffer_[w].store(sum / static_cast<float>(ch), std::memory_order_relaxed);
             w = (w + 1) % Capacity;
         }
 
@@ -61,13 +61,13 @@ namespace CNA::Internal::Media
         const std::size_t start = (w + Capacity - count) % Capacity;
         for (std::size_t i = 0; i < count; ++i)
         {
-            out[i] = buffer_[(start + i) % Capacity];
+            out[i] = buffer_[(start + i) % Capacity].load(std::memory_order_relaxed);
         }
     }
 
     void VisualizationCapture::Reset() noexcept
     {
-        buffer_.fill(0.0f);
+        for (auto& sample : buffer_) sample.store(0.0f, std::memory_order_relaxed);
         writeIndex_.store(0, std::memory_order_release);
         written_.store(0, std::memory_order_release);
     }

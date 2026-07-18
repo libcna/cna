@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <utility>
 
+#include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
@@ -132,9 +135,76 @@ namespace Microsoft::Xna::Framework::Media
         return handle_;
     }
 
+    namespace
+    {
+        // Percent-decodes a URI path component ("My%20Song.ogg" -> "My Song.ogg"). Invalid escapes
+        // are passed through literally rather than dropped, so a malformed URI degrades to a
+        // path-not-found error instead of silently resolving to a different file.
+        std::string PercentDecode(const std::string& in)
+        {
+            std::string out;
+            out.reserve(in.size());
+            for (std::size_t i = 0; i < in.size(); ++i)
+            {
+                if (in[i] == '%' && i + 2 < in.size() &&
+                    std::isxdigit(static_cast<unsigned char>(in[i + 1])) &&
+                    std::isxdigit(static_cast<unsigned char>(in[i + 2])))
+                {
+                    out.push_back(static_cast<char>(std::stoi(in.substr(i + 1, 2), nullptr, 16)));
+                    i += 2;
+                }
+                else
+                {
+                    out.push_back(in[i]);
+                }
+            }
+            return out;
+        }
+    }
+
     Song* Song::FromUri(const std::string& name, const std::string& uri)
     {
-        return new Song(uri, name);
+        // FNA resolves the URI via Uri.LocalPath and rejects anything that is not a local file
+        // ("Only local file URIs are supported for now" -- Song.cs). CNA takes a std::string
+        // rather than a System::Uri, so the equivalent parsing is done here: previously the raw
+        // string went straight to the Song constructor, which then asked std::filesystem::exists
+        // about a literal "file:///..." and always failed (plan_media.md MEDIA-217).
+        const std::size_t schemeEnd = uri.find("://");
+        if (schemeEnd == std::string::npos)
+        {
+            // No scheme at all: a plain relative or absolute path, used as-is. (FNA combines a
+            // relative URI with TitleLocation.Path; CNA has no such content-root concept for Song,
+            // and every existing caller already passes a usable path.)
+            return new Song(uri, name);
+        }
+
+        std::string scheme = uri.substr(0, schemeEnd);
+        std::transform(scheme.begin(), scheme.end(), scheme.begin(),
+                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (scheme != "file")
+        {
+            throw System::InvalidOperationException(
+                "Only local file URIs are supported for now.");
+        }
+
+        // Strip "file://", then the optional (empty or "localhost") authority, leaving the path.
+        std::string rest = uri.substr(schemeEnd + 3);
+        const std::size_t slash = rest.find('/');
+        if (slash == std::string::npos)
+        {
+            throw System::InvalidOperationException(
+                "Only local file URIs are supported for now.");
+        }
+        std::string path = PercentDecode(rest.substr(slash));
+
+        // "file:///C:/music/song.mp3" -> "C:/music/song.mp3" on Windows-style absolute paths.
+        if (path.size() >= 3 && path[0] == '/' &&
+            std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':')
+        {
+            path.erase(0, 1);
+        }
+
+        return new Song(path, name);
     }
 
     const std::string& Song::GetTypeName() const

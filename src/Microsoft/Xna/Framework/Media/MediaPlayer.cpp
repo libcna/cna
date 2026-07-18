@@ -187,10 +187,6 @@ namespace Microsoft::Xna::Framework::Media
         }
         g_visualizationEnabled = value;
 
-        // Capture starts clean so a freshly enabled visualizer never shows audio from before it
-        // was switched on.
-        g_visualizationCapture.Reset();
-
 #ifdef SOUND_ENABLED
         // Install/remove the tap itself, so a game that never enables visualization pays no
         // per-buffer cost at all on the audio thread (plan_media.md MEDIA-188).
@@ -203,13 +199,31 @@ namespace Microsoft::Xna::Framework::Media
         {
             if (MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer())
             {
-                MIX_SetPostMixCallback(mixer, value ? OnPostMix : nullptr, nullptr);
+                if (value)
+                {
+                    // Clear BEFORE installing the tap: once the callback is live the audio thread
+                    // owns the buffer, so resetting it afterwards would race with a write in
+                    // flight (plan_media.md MEDIA-216).
+                    g_visualizationCapture.Reset();
+                    MIX_SetPostMixCallback(mixer, OnPostMix, nullptr);
+                }
+                else
+                {
+                    // Remove the tap FIRST, then clear -- the reverse order let the audio thread
+                    // keep writing into a buffer the game thread was zeroing.
+                    MIX_SetPostMixCallback(mixer, nullptr, nullptr);
+                    g_visualizationCapture.Reset();
+                }
             }
         }
         catch (const std::exception&)
         {
-            // No audio device: leave the flag as the caller set it, but capture stays empty.
+            // No audio device: no callback was ever installed, so no thread can be writing and
+            // clearing here is safe.
+            g_visualizationCapture.Reset();
         }
+#else
+        g_visualizationCapture.Reset(); // no audio backend, so no concurrent writer
 #endif
     }
 

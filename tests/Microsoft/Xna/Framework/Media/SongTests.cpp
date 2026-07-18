@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <filesystem>
+
 #include <gtest/gtest.h>
+
+#include "System/InvalidOperationException.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
@@ -129,4 +133,61 @@ TEST(SongTest, GetTypeNameIsFullyQualified)
 {
     Song song(kRealFixture);
     EXPECT_EQ(song.GetTypeName(), "Microsoft.Xna.Framework.Media.Song");
+}
+
+// plan_media.md MEDIA-217 (found by external code review): FromUri's own header promised "File URI
+// or local path", but the raw string went straight to the Song constructor, which then asked
+// std::filesystem::exists about a literal "file:///..." -- so a real file:// URI ALWAYS failed.
+// FNA resolves this via Uri.LocalPath and rejects non-file schemes (Song.cs).
+TEST(SongTest, FromUriAcceptsARealFileUri)
+{
+    // A file URI names an ABSOLUTE path ("file://<authority>/<path>"), so build it from the
+    // fixture's real absolute location rather than a relative one.
+    const std::string abs = std::filesystem::absolute(kRealFixture).string();
+
+    Song* song = nullptr;
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", "file://" + abs));
+    ASSERT_NE(song, nullptr);
+    EXPECT_EQ(song->getNameProperty(), "Sunrise");
+    delete song;
+
+    // The empty-authority form ("file:///path") is the more common spelling and must work too.
+    Song* song2 = nullptr;
+    ASSERT_NO_THROW(song2 = Song::FromUri("Sunrise", "file://" + abs));
+    ASSERT_NE(song2, nullptr);
+    delete song2;
+}
+
+// Percent-escapes must be decoded, or any path containing a space fails.
+TEST(SongTest, FromUriPercentDecodesEscapedCharacters)
+{
+    // Percent-escape every space in the real absolute path; without decoding, the file is not found.
+    std::string abs = std::filesystem::absolute(kRealFixture).string();
+    std::string escaped;
+    for (char c : abs) { if (c == ' ') escaped += "%20"; else escaped += c; }
+    ASSERT_NE(escaped, abs) << "fixture path must contain a space for this test to mean anything";
+
+    Song* song = nullptr;
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", "file://" + escaped));
+    ASSERT_NE(song, nullptr);
+    delete song;
+}
+
+// FNA throws InvalidOperationException("Only local file URIs are supported for now") for any
+// non-file scheme; CNA matches that rather than silently treating it as a path.
+TEST(SongTest, FromUriRejectsNonFileSchemes)
+{
+    EXPECT_THROW((void)Song::FromUri("Remote", "http://example.com/song.mp3"),
+                 System::InvalidOperationException);
+    EXPECT_THROW((void)Song::FromUri("Remote", "https://example.com/song.mp3"),
+                 System::InvalidOperationException);
+}
+
+// A plain path with no scheme keeps working exactly as before -- every existing caller relies on it.
+TEST(SongTest, FromUriStillAcceptsAPlainPath)
+{
+    Song* song = nullptr;
+    ASSERT_NO_THROW(song = Song::FromUri("Sunrise", kRealFixture));
+    ASSERT_NE(song, nullptr);
+    delete song;
 }
