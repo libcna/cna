@@ -2380,6 +2380,41 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten -- including
   `AudioDurationProbe`'s always-zero stub there) remains deferred by the project owner.
 
+- [x] **MEDIA-225 — Fix a non-portable test of my own, and a comment that outlived its code.**
+  A twelfth review found `FromUriTreatsPercentEncodedDelimitersAsLiteralFilenameCharacters` created
+  a fixture named `q?.ogg` -- **`?` is an illegal filename character on Windows**, so the test would
+  fail at `copy_file` there, before `FromUri` was ever exercised. My own test, not a product bug,
+  but it would have broken the build for anyone on Windows.
+  *Fix:* switched to `q#.ogg` / `%23`. `#` is legal on both Windows and POSIX and exercises exactly
+  the same code path, since fragment stripping runs before query stripping.
+  *Also fixed:* `EnablingVisualizationIsSafeWithoutAnAudioDevice`'s comment still claimed the flag
+  "is on, data stays zero" without a device -- untrue since `MEDIA-222` made the flag reflect
+  reality. Corrected rather than left contradicting the code it documents.
+  *Accept + MUTATION-VERIFIED:* the rewritten portable test still catches the bug -- decoding before
+  stripping makes it fail with "an encoded '#' was treated as a fragment delimiter".
+
+- [x] **MEDIA-226 — Retry an uninstall that failed, instead of latching the tap on forever.**
+  After a failed `MIX_SetPostMixCallback(nullptr)` the user-visible flag correctly went `false`
+  while the callback was still live -- but the setter's early-return guard compared only that flag,
+  so a later `set(false)` saw "already false" and **never retried the uninstall**. The tap would
+  stay installed for the rest of the process.
+  *Fix:* a separate `g_visualizationTapInstalled` tracks what is ACTUALLY installed, deliberately
+  distinct from the user-visible `g_visualizationEnabled` because the two can legitimately disagree
+  in exactly this failure case. The early-return now requires both to match the request, so a stuck
+  tap is retried on the next call.
+  *Accept:* verified by code review and the full suite; like `MEDIA-222`'s failure branch this is
+  **unreachable from this test suite** (SDL's dummy driver never fails an uninstall), so it is
+  correct by construction, not by a test -- stated rather than implied.
+
+- [x] **MEDIA-227 — Full-suite regression for this round.**
+  *Verified:* 4919 tests, 4917 passed, 0 failed, 2 pre-existing hardware skips, grepped on the
+  complete log. The reviewer counted 4921 on their own build; the two-test difference is test
+  registration in a differently-configured build, not a discrepancy in results -- no Media test
+  failed in either.
+  **Unchanged and still open:** no TSAN/threaded or end-to-end audio test for visualization; the
+  no-mixer and failed-uninstall branches are unreachable from this suite; Group D
+  (`MEDIA-192`..`198`) remains deferred by the project owner.
+
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
 

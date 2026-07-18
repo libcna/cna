@@ -270,22 +270,27 @@ TEST(SongTest, FromUriIgnoresQueryAndFragment)
     delete withBoth;
 }
 
-// The mirror case: a percent-encoded '?' or '#' is a LITERAL character in the filename, not a
-// delimiter, so stripping must happen before decoding. A file genuinely named "q?.ogg" must not be
-// truncated to "q".
+// The mirror case: a percent-encoded delimiter is a LITERAL character in the filename, not a
+// delimiter, so stripping must happen before decoding -- a file genuinely named "q#.ogg" must not
+// be truncated to "q".
+//
+// Uses '#' (%23) rather than '?' (%3F) deliberately: '?' is an ILLEGAL filename character on
+// Windows, so creating the fixture would fail there before FromUri was ever exercised, making this
+// test non-portable (found by external code review, plan_media.md MEDIA-225). '#' is legal on both
+// Windows and POSIX and exercises exactly the same code path, since fragment stripping runs first.
 TEST(SongTest, FromUriTreatsPercentEncodedDelimitersAsLiteralFilenameCharacters)
 {
     const std::filesystem::path dir =
         std::filesystem::absolute("tests/assets/media/music/Artist One/Album Alpha");
-    const std::filesystem::path tricky = dir / "q?.ogg";
+    const std::filesystem::path tricky = dir / "q#.ogg";
 
     std::filesystem::copy_file(dir / "01 - Sunrise.ogg", tricky,
                                std::filesystem::copy_options::overwrite_existing);
 
     Song* song = nullptr;
-    // %3F is an encoded '?', so the real filename contains it -- the path must NOT be cut there.
-    EXPECT_NO_THROW(song = Song::FromUri("S", "file://" + dir.string() + "/q%3F.ogg"))
-        << "an encoded '?' was treated as a query delimiter and truncated the filename";
+    // %23 is an encoded '#', so the real filename contains it -- the path must NOT be cut there.
+    EXPECT_NO_THROW(song = Song::FromUri("S", "file://" + dir.string() + "/q%23.ogg"))
+        << "an encoded '#' was treated as a fragment delimiter and truncated the filename";
     delete song;
 
     std::filesystem::remove(tricky);
