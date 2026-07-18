@@ -6155,6 +6155,32 @@ test is not sufficient for an Android coordinate/fusion claim.
     follow-up rather than silently declared out of scope. A future session
     picking this up should treat each already-hardened call site as its own
     small, focused migration (one commit each), not one giant diff.
+  - **2026-07-18, first follow-up migration completed**: `SDLCORE-009`'s
+    `SdlSensorSubsystem<TSensor>::LogAndRecordDispatchException()` now also
+    routes through `NativeDiagnosticSink::Record()` (`Backend="SDL"`,
+    `Operation="SdlSensorSubsystem dispatch callback"`), **alongside, not
+    instead of**, the pre-existing per-subsystem
+    `dispatchExceptionCountForTesting_`/`lastDispatchExceptionMessageForTesting_`
+    fields — several already-passing tests assert on those directly with
+    exact relative-count and exact-message checks; the shared sink's counter
+    is process-wide (shared across every sensor type), so migrating onto it
+    *instead* would have silently changed what those tests were actually
+    proving. New `AccelerometerTests.
+    ThrowingHandlerDuringDispatchIsAlsoRecordedByTheSharedNativeDiagnosticSink`
+    proves the shared sink now also observes this call site, using a
+    relative-delta + last-record check (not an absolute count, since the
+    sink's state is process-wide and other tests can also feed it). All
+    pre-existing `SDLCORE-009` tests re-verified still passing unchanged.
+    `*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*SensorBase*`-class
+    filter plus `NativeDiagnosticSinkTest` (347 tests) passes clean under
+    `devices-ubsan` — 343 passed, 4 hardware skips, 0 failures. Re-verified
+    clean under `devices-tsan` (3 runs on the throwing-callback tests, plus
+    the full filter once, 0 `WARNING: ThreadSanitizer`). `Accelerometer.cpp`/
+    `Gyroscope.cpp` re-verified via NDK cross-compile (both compile clean —
+    confirms `SdlSensorSubsystem.hpp`'s new `NativeDiagnostic.hpp` include
+    doesn't break the Android build of these two SDL-backed sensor classes).
+    **Remaining migrations, still open**: `VIB2-003`/`004`, `SDLCORE-005`,
+    `ANDR2-006` — same one-call-site-at-a-time approach.
 
 ### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)
 

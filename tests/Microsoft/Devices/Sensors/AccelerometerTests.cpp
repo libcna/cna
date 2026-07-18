@@ -14,6 +14,7 @@
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReadingEventArgs.hpp"
+#include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
@@ -27,6 +28,7 @@ using Microsoft::Devices::Sensors::Accelerometer;
 using Microsoft::Devices::Sensors::AccelerometerFailedException;
 using Microsoft::Devices::Sensors::AccelerometerReading;
 using Microsoft::Devices::Sensors::AccelerometerReadingEventArgs;
+using Microsoft::Devices::Sensors::Detail::NativeDiagnosticSink;
 using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::SensorState;
@@ -1229,6 +1231,40 @@ TEST(AccelerometerTests, ThrowingNonStdExceptionDuringDispatchToInstancesForTest
 
     EXPECT_EQ(Accelerometer::GetDispatchExceptionCountForTesting(), countBefore + 1);
     EXPECT_EQ(Accelerometer::GetLastDispatchExceptionMessageForTesting(), "non-std::exception value");
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
+// Task DEVPERF-005 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// SdlSensorSubsystem<TSensor>::LogAndRecordDispatchException() was migrated to
+// also route through the shared Detail::NativeDiagnosticSink, alongside (not
+// instead of) the pre-existing per-subsystem counter/message pair the two
+// tests above already assert on. NativeDiagnosticSink's own state is
+// process-wide, so this checks a relative delta and the *last* record's
+// fields, not an absolute count -- any other test anywhere in this binary
+// that also triggers a throwing dispatch could otherwise make an absolute
+// count assertion flaky depending on run order.
+TEST(AccelerometerTests, ThrowingHandlerDuringDispatchIsAlsoRecordedByTheSharedNativeDiagnosticSink)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+
+    a->CurrentValueChanged += [](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        throw std::runtime_error("shared sink migration test");
+    };
+
+    const std::size_t countBefore = NativeDiagnosticSink::GetRecordCountForTesting();
+
+    const std::vector<Accelerometer*> batch{a.get()};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_EQ(NativeDiagnosticSink::GetRecordCountForTesting(), countBefore + 1);
+    const auto last = NativeDiagnosticSink::GetLastRecordForTesting();
+    EXPECT_EQ(last.Backend, "SDL");
+    EXPECT_EQ(last.Operation, "SdlSensorSubsystem dispatch callback");
+    EXPECT_EQ(last.NativeMessage, "shared sink migration test");
 
     EXPECT_NO_THROW(a->Dispose());
 }

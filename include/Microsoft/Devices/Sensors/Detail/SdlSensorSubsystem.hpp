@@ -18,6 +18,8 @@
 #include <SDL3/SDL_sensor.h>
 
 #include "Microsoft/Devices/Detail/SdlSubsystemMutex.hpp"
+#include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
+#include "System/DateTimeOffset.hpp"
 
 namespace Microsoft::Devices::Sensors::Detail
 {
@@ -793,7 +795,18 @@ namespace Microsoft::Devices::Sensors::Detail
          * only, matching this codebase's established convention elsewhere)
          * plus `lastDispatchExceptionMessageForTesting_`/
          * `dispatchExceptionCountForTesting_` for automated test
-         * observability — see those fields' own doc comments.
+         * observability — see those fields' own doc comments. Also routed
+         * through the shared `Detail::NativeDiagnosticSink` (Task
+         * `DEVPERF-005`, 2026-07-18) -- this was explicitly deferred at the
+         * time `SDLCORE-009` was written (see `DispatchToInstances()`'s own
+         * comment on its `catch (const std::exception&)` clause), now that
+         * the shared mechanism exists. Kept alongside, not instead of, the
+         * pre-existing per-subsystem fields below -- several already-passing
+         * tests assert on those directly (exact relative-count and
+         * exact-message checks); migrating them onto the shared sink's own
+         * process-wide counter (shared across every sensor type, not
+         * per-subsystem) would have changed their meaning, not just their
+         * storage.
          *
          * @param message Human-readable description of what was thrown.
          */
@@ -802,9 +815,19 @@ namespace Microsoft::Devices::Sensors::Detail
 #ifndef NDEBUG
             SDL_Log("SdlSensorSubsystem: sensor callback threw: %s", message.c_str());
 #endif
-            std::lock_guard<std::mutex> lock(mutex_);
-            lastDispatchExceptionMessageForTesting_ = message;
-            ++dispatchExceptionCountForTesting_;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                lastDispatchExceptionMessageForTesting_ = message;
+                ++dispatchExceptionCountForTesting_;
+            }
+
+            NativeDiagnosticRecord record;
+            record.Backend = "SDL";
+            record.Operation = "SdlSensorSubsystem dispatch callback";
+            record.NativeMessage = message;
+            record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+            record.Severity = NativeDiagnosticSeverity::Warning;
+            NativeDiagnosticSink::Record(record);
         }
 
         /**
