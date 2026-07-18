@@ -1002,6 +1002,67 @@ TEST(WaveBankTest, IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop)
     }
 }
 
+// AUD-11-006/007: golden-tests for the PCM8/PCM16 wave-bank entry paths, checking the exact
+// decoded frame count (not just "does it play") -- this is what would catch a wrong
+// dataOffset/dataLength/sampleRate extracted from the compact XWB entry format, the same class of
+// bug AUDIO-ADPCM-001/AUD-11-013 caught for the ADPCM path. Uses WaveBankTestAccess::GetSoundEffect
+// directly (no audio device/Play() needed), matching
+// GetSoundEffectForAdpcmEntryDecodesExactFrameCountFromSamplesPerBlockFormula's own established
+// pattern. The actual unsigned-8-bit-to-signed-16-bit PCM conversion itself is SDL3's own real WAV
+// decoder's responsibility (WaveBank::GetSoundEffect wraps the raw bytes in a real WAV and decodes
+// via SoundEffect::FromStream for 8-bit, exactly like the XNB SoundEffectReader's own WAV-wrapper
+// path -- already covered by AUD-06's Pcm8BitLoadsSuccessfully et al.), not something this test
+// re-verifies.
+TEST(WaveBankTest, GetSoundEffectForPcm16EntryHasExactFrameCount)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, XwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+
+        const SoundEffect* effect = WaveBankTestAccess::GetSoundEffect(wb, 0);
+        ASSERT_NE(effect, nullptr);
+
+        // BuildXwbFixtureBytes's default (eightBitPcm=false): 200 bytes, 16-bit mono ->
+        // 100 frames exactly.
+        constexpr double expectedSeconds = 100.0 / 44100.0;
+        EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), expectedSeconds, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not construct WaveBank/AudioEngine";
+    }
+}
+
+TEST(WaveBankTest, GetSoundEffectForPcm8EntryHasExactFrameCount)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, Xwb8BitFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+
+        const SoundEffect* effect = WaveBankTestAccess::GetSoundEffect(wb, 0);
+        ASSERT_NE(effect, nullptr);
+
+        // BuildXwbFixtureBytes(eightBitPcm=true): 200 bytes, 8-bit mono -> 200 frames exactly
+        // (1 byte/frame).
+        constexpr double expectedSeconds = 200.0 / 44100.0;
+        EXPECT_NEAR(effect->getDurationProperty().getTotalSecondsProperty(), expectedSeconds, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not construct WaveBank/AudioEngine";
+    }
+}
+
 // Regression coverage for XA-2: WaveBank::GetSoundEffect's 8-bit-PCM branch wraps the raw wave
 // data in a WAV and goes through SoundEffect::FromStream (unlike the 16-bit PCM path above, which
 // constructs a SoundEffect directly). FromStream used to leak the heap SoundEffect it returns.
