@@ -57,6 +57,7 @@ void main() {
                                           + bb.bones[aBoneIndices.w] * aBoneWeights.w;
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
+    gl_Position.y = -gl_Position.y; // Vulkan NDC Y is inverted vs OpenGL (matches textured3d.vert.glsl)
     vUV = aUV;
     vec3 worldPos = (fog.world * skinnedPos).xyz;
     vFogFactor = (fog.fogColorEnabled.w > 0.5)
