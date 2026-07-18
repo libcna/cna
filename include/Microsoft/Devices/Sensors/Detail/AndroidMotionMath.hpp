@@ -56,18 +56,64 @@ namespace Microsoft::Devices::Sensors::Detail
      *
      * Pure function, testable on any platform. This is a direct
      * component-for-component mapping (Android's `x,y,z,w` straight into
-     * `Quaternion(x,y,z,w)`) — deliberately the simplest possible choice,
-     * not a rigorously-derived change-of-basis between Android's world
-     * frame and XNA's. **Never checked against real hardware** (no Android
-     * device/emulator in this environment); whether this needs the same
-     * kind of axis remap `Detail::ConvertAndroidPortraitToXnaLandscape()`
-     * applies to `Accelerometer`/`Gyroscope`'s vector readings is an open
-     * question — see `docs/devices-hardware-checklist.md`'s Motion section.
+     * `Quaternion(x,y,z,w)`) — **now backed by an explicit change-of-basis
+     * derivation (Task `MOT2-001`, 2026-07-18), not merely "the simplest
+     * possible choice" as an earlier version of this comment described it**:
+     *
+     * - **Handedness/formula match, verified from source, not assumed**:
+     *   Android's `TYPE_ROTATION_VECTOR` quaternion uses the standard
+     *   Hamilton active-rotation convention in a right-handed device/world
+     *   (East/North/Up) frame. `Microsoft::Xna::Framework::Matrix`'s own
+     *   header documents itself as "a right-handed 4x4 matrix"
+     *   (`Matrix.hpp`), and `Quaternion::CreateFromAxisAngle()`'s actual
+     *   implementation (`Quaternion.cpp`: `result.{X,Y,Z} = axis*sin(angle/2),
+     *   result.W = cos(angle/2)`, no sign flip anywhere) is the identical,
+     *   unmodified Hamilton formula — confirmed by direct computation (not
+     *   just formula inspection) that a +90° `CreateFromAxisAngle(Z, ...)`
+     *   quaternion run through `Matrix::CreateFromQuaternion()` rotates
+     *   `+X` to `+Y` under XNA's own row-vector convention, matching the
+     *   standard right-handed, counterclockwise-from-the-positive-axis
+     *   sense. Android and XNA quaternions are therefore the *same*
+     *   mathematical object under the *same* multiplication convention —
+     *   there is no handedness correction to derive or apply.
+     * - **No display-orientation remap needed — confirmed, not assumed**:
+     *   the same archived MSDN Magazine article already cited for
+     *   `Detail::IsAndroidLandscapeRemapEnabled()`/`AndroidCompassMath.hpp`
+     *   ("Touch and Go — Getting Oriented with the Windows Phone Compass,"
+     *   Petzold, 2012) states real WP7 device-relative sensor readings "are
+     *   the same whether... running in portrait or landscape mode." A
+     *   direct, unremapped quaternion passthrough is therefore the
+     *   *WP7-faithful* choice for `Motion.Attitude`, not a gap — consistent
+     *   with `AndroidCompassMath.hpp`'s own identical conclusion for
+     *   `Compass` (Task `COMP2-003`).
+     * - **A real, separate finding surfaced while investigating this task,
+     *   deliberately not acted on here**: `Detail::ConvertAndroidPortraitToXnaLandscape()`
+     *   — the landscape remap `Accelerometer`/`Gyroscope`/`Motion`'s own
+     *   `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` fields already
+     *   apply (Task `MOTION-012`) — is, for both its `Rotation90`/`Rotation270`
+     *   cases, a **reflection** (`diag(1,-1,1)`/`diag(-1,1,1)`, determinant
+     *   `-1`), not a proper rotation (determinant `+1`), verified by direct
+     *   computation. This means (a) it cannot represent an actual 90°/270°
+     *   physical device rotation as a coordinate transform, and (b), more
+     *   directly relevant here, **no quaternion can represent a reflection at
+     *   all** — quaternions only encode proper (determinant `+1`) rotations —
+     *   so even a "for consistency with Motion's other three remapped
+     *   fields" argument for adding a matching remap to this `Quaternion`
+     *   could not actually be implemented as a quaternion multiply. Not
+     *   fixed here: `ConvertAndroidPortraitToXnaLandscape()` is
+     *   already-shipped, already-tested, deliberate `NOXNA` behavior with
+     *   its own maintainer-made decision (`ACCEL-008`, 2026-07-07) this task
+     *   has no mandate to unilaterally revisit — flagged as a genuinely new
+     *   finding for whoever next touches `ACCEL-004`/`ACCEL-008`/`MOTION-012`,
+     *   not silently absorbed into this function's own scope.
+     *
      * `RotationMatrix`/`Yaw`/`Pitch`/`Roll` are always derived FROM this
      * same `Quaternion` (never independently), so they stay internally
-     * consistent with each other regardless of whether the absolute
-     * mapping to real-world Android axes is eventually found to need
-     * correction.
+     * consistent with each other regardless of whether the axis
+     * *correspondence* itself (as opposed to the display-orientation and
+     * handedness questions above, both now closed) is eventually found on
+     * real hardware to need correction — still genuinely unverified, no
+     * Android device/emulator exists in this environment.
      *
      * Task MOT2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
      * now normalizes (via `NormalizeOrIdentity()`) rather than passing the

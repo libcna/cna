@@ -4,11 +4,15 @@
 #include <limits>
 
 #include "Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToXnaQuaternion;
 using Microsoft::Devices::Sensors::Detail::ExtractYawPitchRollFromQuaternion;
+using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
+using Microsoft::Xna::Framework::Vector3;
 
 namespace
 {
@@ -205,4 +209,34 @@ TEST(AndroidMotionMathTests, RoundTripsAtNinetyOneEightyTwoSeventyDegreesYaw)
         EXPECT_NEAR(pitch, 0.0f, Tolerance) << "degrees=" << degrees;
         EXPECT_NEAR(roll, 0.0f, Tolerance) << "degrees=" << degrees;
     }
+}
+
+// Task MOT2-001 (2026-07-18, external audit `audit_devices_2026-07-17.md`):
+// independently verifies the handedness/rotation-sense claim
+// ConvertRotationVectorToXnaQuaternion()'s own doc comment now makes --
+// deliberately does NOT go through Quaternion::CreateFromYawPitchRoll() (the
+// existing RoundTripsAtNinetyOneEightyTwoSeventyDegreesYaw tests above already
+// cover that path) -- instead builds a raw quaternion directly via the same
+// Hamilton half-angle formula Android's own TYPE_ROTATION_VECTOR sensor and
+// Quaternion::CreateFromAxisAngle() both use (x=0,y=0,z=sin(45deg),w=cos(45deg)
+// for a +90deg rotation about Z), the closest test-level equivalent to what a
+// real Android sample would actually deliver, then transforms a world unit
+// vector through Matrix::CreateFromQuaternion() using XNA's own row-vector
+// convention (Vector3::Transform(vector, matrix)). A +90deg right-handed
+// rotation about Z must send +X to +Y -- confirms Android and XNA quaternions
+// are the same mathematical object under the same convention, with no
+// handedness correction needed, as an executable check rather than only a
+// doc-comment claim.
+TEST(AndroidMotionMathTests, DirectQuaternionPlusNinetyDegreeYawRotatesUnitXToUnitYMatchingRightHandedConvention)
+{
+    constexpr float Pi = 3.14159265358979323846f;
+    const float half = Pi / 4.0f; // 90deg rotation -> half-angle 45deg, the Hamilton formula's own convention.
+
+    const Quaternion q = ConvertRotationVectorToXnaQuaternion(0.0f, 0.0f, std::sin(half), std::cos(half));
+    const Matrix m = Matrix::CreateFromQuaternion(q);
+    const Vector3 rotated = Vector3::Transform(Vector3::UnitX, m);
+
+    EXPECT_NEAR(rotated.X, Vector3::UnitY.X, Tolerance);
+    EXPECT_NEAR(rotated.Y, Vector3::UnitY.Y, Tolerance);
+    EXPECT_NEAR(rotated.Z, Vector3::UnitY.Z, Tolerance);
 }

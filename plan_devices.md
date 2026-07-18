@@ -2660,6 +2660,22 @@ not an alternate spelling to preserve.
     `AndroidSensorOrientationTests`/`AccelerometerTests`/`GyroscopeTests` (89 tests, 87
     pass + 2 expected skips) re-run clean (exit code 0, zero reports) under both
     `devices-asan` (`ASAN_OPTIONS=detect_leaks=1`) and `devices-ubsan`.
+  - **Post-closure cross-reference, added 2026-07-18 by `MOT2-001`'s own investigation
+    (Section 16) — a significant new finding about the remap this task decided to keep,
+    not previously caught here:** `Detail::ConvertAndroidPortraitToXnaLandscape()` is,
+    for both `Rotation90`/`Rotation270`, a **reflection** (determinant `-1`, verified by
+    direct computation), not a proper rotation (determinant `+1`) — it cannot represent
+    an actual 90°/270° physical device rotation as a coordinate transform (a genuine
+    rotation about Z must *exchange* the X/Y components, not merely negate one axis in
+    place, which is what the code currently does). This does not reopen or reverse this
+    task's own "keep the remap, NOXNA, opt-out" decision — that decision was about
+    *whether* a remap should exist at all, which remains a legitimate call regardless of
+    this new finding — but it does mean the remap's own internal math should be
+    re-examined by whoever next revisits `ACCEL-004` (axis correctness) or this task,
+    since "reflection instead of rotation" was not among the sign/axis concerns either
+    of those tasks previously flagged as open. See `MOT2-001`'s own resolution note
+    (Section 16) for the full computation and its `Motion.Attitude`-specific
+    consequence (no quaternion can represent a reflection at all).
 
 ---
 
@@ -8402,7 +8418,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   fix lives entirely in host-testable `Compass`/`Motion` code, not `AndroidCompassBackend`/
   `AndroidMotionBackend`'s own `#ifdef __ANDROID__` bodies).
 
-### MOT2-001 — Derive the Android rotation-vector to XNA/WP attitude transform — OPEN
+### MOT2-001 — Derive the Android rotation-vector to XNA/WP attitude transform — OPEN (handedness/display-orientation derivation done; a significant new cross-cutting finding surfaced, deliberately not fixed here)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -8415,6 +8431,93 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Cardinal yaw/pitch/roll physical poses match expected WP values on hardware.
   - Quaternion, matrix and Euler fields remain mutually consistent.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  investigated all three required-work bullets directly rather than assuming
+  the existing "direct component copy" is either correct or wrong.
+  - **Handedness/formula match — verified from source, not assumed**: Android's
+    `TYPE_ROTATION_VECTOR` uses the standard Hamilton active-rotation quaternion
+    convention in a right-handed device/world frame.
+    `Microsoft::Xna::Framework::Matrix`'s own header self-documents as
+    "a right-handed 4x4 matrix," and `Quaternion::CreateFromAxisAngle()`'s
+    actual implementation is the identical, unmodified Hamilton formula
+    (`result.{X,Y,Z} = axis*sin(angle/2)`, `result.W = cos(angle/2)`, no sign
+    flip). **Confirmed by direct computation, not just formula comparison**:
+    new `AndroidMotionMathTests.
+    DirectQuaternionPlusNinetyDegreeYawRotatesUnitXToUnitYMatchingRightHandedConvention`
+    builds a raw quaternion via the same half-angle formula a real Android
+    sample would deliver (not via `CreateFromYawPitchRoll()`, deliberately
+    independent of the existing round-trip tests), runs it through
+    `Matrix::CreateFromQuaternion()`, and confirms `+X` rotates to `+Y` under
+    XNA's own row-vector convention for a +90° yaw — the expected
+    right-handed, counterclockwise-from-the-positive-axis result. Android and
+    XNA quaternions are the same mathematical object under the same
+    convention — **there is no handedness correction to derive or apply**,
+    closing that half of "direct component copy is explicitly unverified."
+  - **Display orientation — confirmed no remap needed, reusing already-established
+    evidence, not re-deriving it**: the same archived MSDN Magazine article
+    already cited for `AndroidCompassMath.hpp` (`COMP2-003`, this pass) and
+    `Detail::IsAndroidLandscapeRemapEnabled()` (`ACCEL-008`, 2026-07-07) states
+    real WP7 device-relative sensor readings "are the same whether... running
+    in portrait or landscape mode." A direct, unremapped quaternion passthrough
+    is therefore the *WP7-faithful* choice for `Motion.Attitude` — not a gap,
+    consistent with `Compass`'s own identical conclusion.
+  - **A significant, previously-uncaught finding, surfaced while investigating
+    whether `Motion.Attitude` should get a landscape remap matching `MOTION-012`'s
+    own remap of `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` for "consistency"
+    — verified by direct computation before writing anything down as a claim**:
+    `Detail::ConvertAndroidPortraitToXnaLandscape()` (the shared remap function
+    all three of those fields, plus `Accelerometer`/`Gyroscope`, already use) is,
+    for **both** its `Rotation90`/`Rotation270` cases, a **reflection**
+    (`diag(1,-1,1)`/`diag(-1,1,1)`, determinant `-1` — confirmed with a direct
+    NumPy computation, not eyeballed), not a proper rotation (determinant `+1`).
+    Two real consequences:
+    1. It cannot represent an actual 90°/270° physical device rotation as a
+       coordinate transform — a genuine 90° rotation about the device's own Z
+       axis must *exchange* the X/Y components (with one sign flipped), not
+       merely negate one axis while leaving both in their original slots, which
+       is what the current code does.
+    2. **No quaternion can represent a reflection at all** (quaternions only
+       encode proper, determinant-`+1` rotations) — so even a "for consistency
+       with Motion's other three remapped fields" argument for adding a
+       matching transform to `Motion.Attitude` could not actually be
+       implemented as a quaternion multiply. This is *why* this task does not
+       attempt to add a landscape remap to the quaternion: not only is one not
+       needed for WP7 fidelity (see above), one could not be validly
+       constructed even if "matching the other three fields" were the goal.
+    - **Deliberately not fixed here — flagged, not silently absorbed**:
+      `ConvertAndroidPortraitToXnaLandscape()` is already-shipped,
+      already-tested, deliberate `NOXNA` behavior with its own explicit
+      maintainer-made decision (`ACCEL-008`, 2026-07-07, "keep the remap,
+      mark it NOXNA, add an opt-out") — `MOT2-001` has no mandate to
+      unilaterally revisit a different task's already-closed, human-decided
+      resolution, especially one already shipped and tested across
+      `Accelerometer`/`Gyroscope`/`Motion`'s three other fields (`MOTION-012`).
+      Recorded here, cross-referenced from `AndroidMotionMath.hpp`'s own doc
+      comment, as a genuinely new finding for whoever next revisits
+      `ACCEL-004`/`ACCEL-008`/`MOTION-012` — not something a future session
+      should assume was already checked just because those tasks are closed.
+  - **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp`
+    (`ConvertRotationVectorToXnaQuaternion()`'s doc comment rewritten with the
+    above findings, replacing the older, vaguer "not rigorously derived, open
+    question" framing); `tests/Microsoft/Devices/Sensors/Detail/AndroidMotionMathTests.cpp`
+    (1 new independent handedness-verification test). No production `.cpp`
+    changed.
+  - **Tests:** full precise filter plus new suites (364 tests) clean under
+    `devices-ubsan` — 360 passed, 4 hardware skips, 0 failures.
+    `AndroidMotionBackend.cpp` re-verified via NDK cross-compile (compiles
+    clean). No dedicated `devices-tsan` re-run: pure functions/comments/tests
+    only, no new locking or shared state, matching this pass's own established
+    policy for when a TSan re-run is skipped.
+  - **Remaining limitations (why this stays OPEN):** axis *correspondence*
+    itself (as opposed to handedness and display-orientation, both now closed)
+    remains genuinely unverified — no Android device/emulator exists in this
+    environment to confirm Android's device-frame X/Y/Z axes correspond
+    1:1 to WP7's own documented `Motion.Attitude` device-frame axes, only that
+    *if* they do correspond directly, the rotation sense/handedness is
+    provably consistent. This task's own acceptance criteria explicitly name a
+    hardware result ("match expected WP values on hardware") this environment
+    cannot produce — see `docs/devices-hardware-checklist.md`'s Motion section
+    for the still-open device test procedure.
 
 ### MOT2-002 — Harden attitude math against invalid/non-unit input — CLOSED (2026-07-17)
 
