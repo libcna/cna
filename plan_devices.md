@@ -7714,7 +7714,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Transition tests cover Low/Unreliable/High and unknown status.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### COMP2-008 — Resolve TrueHeading compatibility — OPEN
+### COMP2-008 — Resolve TrueHeading compatibility — OPEN (public API doc gap closed; declination provider blocked on out-of-scope location work)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7727,6 +7727,60 @@ test is not sufficient for an Android coordinate/fusion claim.
   - TrueHeading is never silently presented as geographic north without declination evidence.
   - Strict behavior is documented and tested.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - Confirmed the current production behavior (`AndroidCompassBackend.cpp`'s
+    `PublishReading()`) genuinely never fabricates a declination-corrected value —
+    `TrueHeading` is passed the exact same `magneticHeadingDegrees_` value as
+    `MagneticHeading` — already the correct, honest fallback absent real declination
+    data, matching this task's own required-work wording that when
+    location/time/model data are unavailable, the exact documented fallback behavior
+    should be used (magnetic heading, not a fabricated true-north claim).
+  - **Found and fixed a real public-API documentation gap**: `CompassReading::getTrueHeadingProperty()`'s
+    Doxygen comment was a bare, generic "Gets the heading, in degrees, measured relative
+    to true north" — it never disclosed that every backend in this codebase currently
+    reports the *same* value as `MagneticHeadingProperty`. A caller reading only this
+    public doc comment (not `AndroidCompassBackend.cpp`'s own internal implementation
+    comments) could reasonably expect a real, declination-corrected value — the exact
+    "silently presented... without declination evidence" risk this task's own acceptance
+    criterion names, just in the *documentation* rather than the *value* (the value
+    itself was already honest). Updated the doc comment to state this explicitly,
+    reference `docs/location-future-plan.md` for why (location data is a separate WP7
+    assembly, `System.Device.Location`, explicitly out of scope for
+    `Microsoft::Devices::Sensors`), and clarify this is a deliberate, not-yet-declination-corrected
+    fallback, not an omission.
+  - "Integrate a declination provider only when valid location/time/model data exist" —
+    **not attempted**, and deliberately not stubbed with a speculative extension
+    point/interface either: `docs/location-future-plan.md` (an existing, thorough prior
+    planning document, re-read and confirmed still accurate) already establishes that any
+    future location support belongs in a completely separate `System::Device::Location`
+    namespace, not bolted onto `Microsoft::Devices::Sensors` — adding a "declination
+    provider" seam here now, before that separate work is even scoped, would be exactly
+    the kind of premature, speculative abstraction this project's own guidelines
+    caution against.
+- **Files changed:** `include/Microsoft/Devices/Sensors/CompassReading.hpp`.
+- **Tests:** none added — the corrected documentation doesn't change any observable
+  behavior (no code path changed), and the actual production policy this documents
+  (`TrueHeading == MagneticHeading`) lives in Android-only, `#ifdef __ANDROID__`-gated
+  code with no host test seam of its own beyond what `CompassTests.cpp` already covers
+  indirectly. Confirmed via code reading (not assumed) that
+  `AndroidCompassBackend.cpp`'s `PublishReading()` still passes the identical
+  `magneticHeadingDegrees_` value for both fields. Scoped filtered run
+  (`CompassTests.*`, avoiding the pre-existing, unrelated `Vector3::GetHashCode()`
+  overflow that `CompassReadingTests.*`'s `GetHashCodeConsistency` case trips): 36/36
+  passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan` (no logic changed,
+  documentation-only edit, confirmed by full scoped rebuild).
+- **Remaining limitations (explicitly OPEN, not fabricated):** "Verify reference
+  behavior when location/declination is unavailable" against a real WP7 oracle was not
+  attempted — no local WP7 SDK/MonoGame reference exists (same `DEVPERF-002`/`003`
+  dependency `BASE2-001` names). The declination-provider integration itself remains
+  entirely unimplemented, correctly blocked on the separately-scoped, explicitly
+  out-of-scope `System.Device.Location` work described in
+  `docs/location-future-plan.md` — not a gap in this task, a genuine dependency on work
+  that has not been (and per that document's own framing, should not casually be)
+  started. Left **OPEN**: the documentation fix is real and complete, but the task's
+  core "integrate a declination provider" ask is unimplemented by design, not merely
+  unverified.
 
 ### COMP2-009 — Make Compass notification batches lifetime-safe — CLOSED (2026-07-17)
 
