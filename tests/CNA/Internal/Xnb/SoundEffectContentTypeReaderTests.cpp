@@ -896,3 +896,103 @@ TEST_F(SoundEffectContentTypeReaderTest, ExtendedFormatLengthWithRealCoefficient
     const double decodedFrames = effect.getDurationProperty().getTotalSecondsProperty() * 44100.0;
     EXPECT_NEAR(decodedFrames, kDecodedFrames, 1.0);
 }
+
+// ---------------------------------------------------------------------------
+// AUD-06-018: real XNA 4.0's own `AudioChannels` enum (Mono=1, Stereo=2 -- no other values exist
+// in the public API, see AudioChannels.hpp) makes mono/stereo the only channel layouts the wider
+// SoundEffect API can even express. The reader already has an explicit guard rejecting any other
+// declared `nChannels` before it would otherwise be silently `static_cast` into an invalid
+// `AudioChannels` value -- mono and stereo themselves are already golden-tested via real fixtures
+// (Pcm16BitMonoLoadsSuccessfully, Pcm16BitStereoLoadsSuccessfully, and the WAV-wrapped-format
+// LoadsSuccessfully tests above); this closes the gap by golden-testing the explicit-rejection
+// side of the policy with its own dedicated tests (previously only exercised as an incidental
+// side effect of AUD-06-015's now-reverted byte-swap probe, not a permanent regression test).
+// ---------------------------------------------------------------------------
+
+TEST_F(SoundEffectContentTypeReaderTest, MultichannelXnbIsExplicitlyRejectedWithClearDiagnostic)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);
+    w16(1);   // wFormatTag: PCM
+    w16(6);   // nChannels: 5.1 surround -- not a real XNA AudioChannels value
+    w32(44100);
+    w32(44100 * 12);
+    w16(12);
+    w16(16);
+    w32(12);
+    for (int i = 0; i < 12; ++i) bytes.push_back(static_cast<uint8_t>(i));
+    w32(0); w32(0); w32(0);
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+
+    try
+    {
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("'test'"), std::string::npos) << what;
+        EXPECT_NE(what.find("6"), std::string::npos) << what;
+        EXPECT_NE(what.find("mono and stereo"), std::string::npos) << what;
+    }
+}
+
+TEST_F(SoundEffectContentTypeReaderTest, ZeroChannelsXnbIsExplicitlyRejectedWithClearDiagnostic)
+{
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+    bytes.push_back(1);
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0);
+    bytes.push_back(0);
+    bytes.push_back(1);
+
+    w32(16);
+    w16(1);   // wFormatTag: PCM
+    w16(0);   // nChannels: zero -- another value no real AudioChannels enum member represents
+    w32(44100);
+    w32(0);
+    w16(0);
+    w16(16);
+    w32(0);
+    w32(0); w32(0); w32(0);
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+
+    try
+    {
+        reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>();
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& ex)
+    {
+        const std::string what = ex.what();
+        EXPECT_NE(what.find("'test'"), std::string::npos) << what;
+        EXPECT_NE(what.find("mono and stereo"), std::string::npos) << what;
+    }
+}
