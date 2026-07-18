@@ -6069,7 +6069,7 @@ test is not sufficient for an Android coordinate/fusion claim.
     of their own, since they share `CurrentValueChanged`'s already-proven
     `Raise()` mechanism with no event-specific dispatch logic.
 
-### DEVPERF-005 — Create a structured native error/diagnostic channel — OPEN
+### DEVPERF-005 — Create a structured native error/diagnostic channel — OPEN (core channel built and wired into one real gap; full native-call-site sweep not attempted)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6082,6 +6082,79 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Every ignored native return value is either intentionally ignored with a metric or converted to a state/error.
   - Tests can fault-inject and assert the exact diagnostic.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):** built the
+  shared structured diagnostic channel this task's own required work asks
+  for, then used it to close the one concrete, freshly-named gap `DEVPERF-004`
+  found while writing `docs/devices-event-contract.md`.
+  - **New `Detail::NativeDiagnosticRecord`/`Detail::NativeDiagnosticSink`**
+    (`include/Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp`,
+    `src/.../NativeDiagnostic.cpp`): the record has exactly the fields this
+    task's required work names — `Backend`, `Operation`, `NativeCode`,
+    `NativeMessage`, `DeviceId`, `Timestamp`, `Severity`
+    (`Info`/`Warning`/`Error`). `Record()` is `noexcept` and internally
+    `try`/`catch`-wraps its own logging/callback-invocation so it can never
+    itself become a new throw-across-a-C-callback hazard — safe to call from
+    the exact call sites (`SDL_EventFilter` callbacks, Android NDK sensor
+    callbacks, `std::thread` entry points) this whole mechanism exists to
+    protect. Exposed via debug-build `SDL_Log()` (confirmed available and
+    already linked on every CNA target including Android, where SDL_Log()
+    itself routes to logcat — verified by `AndroidMotionBackend.cpp` already
+    including `SDL3/SDL.h` and compiling under the NDK) plus
+    `GetRecordCountForTesting()`/`GetLastRecordForTesting()`/
+    `SetCallbackForTesting()`/`ResetForTesting()` test hooks — the "optional
+    NOXNA diagnostic callback/counter without throwing across C callbacks"
+    the required work asks for.
+  - **Wired into the real gap `DEVPERF-004` found**: `Detail::
+    AndroidSensorBridge::Run()`'s `callback_(sample)` call site previously
+    swallowed exceptions via a bare `catch (...) { }` with no logging or
+    counter at all. Now split into a typed `std::exception&` clause (extracts
+    `.what()`) plus a `catch (...)` fallback, mirroring `SDLCORE-009`'s
+    already-established split for the SDL path — both now routed through
+    `NativeDiagnosticSink::Record()` instead of two independent,
+    differently-shaped ad-hoc mechanisms. `Backend="Android"`,
+    `Operation="AndroidSensorBridge::Run callback"`, `DeviceId` set to
+    `sensorType_` (the only device identifier available at this call site).
+  - **Tests:** new `tests/.../Detail/NativeDiagnosticTests.cpp` (9 tests) —
+    counting, last-record-copy-is-exact, callback invocation/clearing, a
+    throwing test callback does not escape `Record()` (the one behavior most
+    critical to this task's whole purpose), `ResetForTesting()` clears all
+    three pieces of state, and a genuine 8-thread/200-record-each concurrent
+    stress test proving thread-safety empirically, not just by reasoning
+    about the mutex. All 9 host-testable (`NativeDiagnosticRecord`/
+    `NativeDiagnosticSink` themselves have no platform dependency). The
+    `AndroidSensorBridge.cpp` call-site wiring itself is Android-only,
+    verified via a real NDK cross-compile of both the changed translation
+    unit and `NativeDiagnostic.cpp` (`cmake-build-android`, both compile
+    clean) — cannot be exercised on this host, same limitation as every
+    other `AndroidSensorBridge.cpp`-internal fix this pass
+    (`ANDR2-002`/`006`/`009`/`010`).
+  - **Full `*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*SensorBase*`-class
+    precise filter plus `AndroidSensorBridgeTests`/`NativeDiagnosticSinkTest`
+    (346 tests)** passes clean under `devices-ubsan` — 342 passed, 4
+    pre-existing hardware-only skips, 0 failures. Re-verified clean under
+    `devices-tsan` (3 consecutive runs on the new/changed suites, 0
+    `WARNING: ThreadSanitizer` occurrences).
+  - **Remaining limitations (why this stays OPEN, not a partial-credit
+    CLOSED):** this task's acceptance criteria are sweeping ("**every**
+    ignored native return value is either intentionally ignored with a
+    metric or converted to a state/error") — this pass built the shared
+    mechanism and wired it into **one** real, concretely-identified gap, not
+    a full audit of every native call site across both backends. Explicitly
+    **not** retrofitted onto this task: `SDLCORE-009`'s own
+    `dispatchExceptionCountForTesting_`/`lastDispatchExceptionMessageForTesting_`
+    (SDL path, already structured, just not yet migrated onto the shared
+    type), `VIB2-003`/`004`'s haptic-device connection-loss diagnostics,
+    `SDLCORE-005`'s sensor-device connection-loss diagnostics, or the
+    `ASensorEventQueue_disableSensor()`/`ASensorManager_destroyEventQueue()`
+    failure logging `ANDR2-006` already added (`AndroidSensorBridge.cpp`,
+    still its own bare `__android_log_print()`, not yet routed through
+    `NativeDiagnosticSink`). Migrating all of those onto the new shared type
+    would touch many already-hardened, already-tested call sites at once —
+    judged too large and risky to bundle into this same pass without
+    dedicated re-verification of each; left as a real, named, tractable
+    follow-up rather than silently declared out of scope. A future session
+    picking this up should treat each already-hardened call site as its own
+    small, focused migration (one commit each), not one giant diff.
 
 ### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)
 

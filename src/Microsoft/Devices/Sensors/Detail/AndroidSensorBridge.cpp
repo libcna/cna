@@ -2,6 +2,8 @@
 
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp"
 
+#include "Microsoft/Devices/Sensors/Detail/NativeDiagnostic.hpp"
+
 #ifdef __ANDROID__
 #include <android/log.h>
 #include <android/looper.h>
@@ -10,7 +12,9 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <exception>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <utility>
 #endif
@@ -641,19 +645,51 @@ namespace Microsoft::Devices::Sensors::Detail
 
                     if (callback_)
                     {
-                        // Task: callback exception policy. An exception
-                        // escaping a std::thread's entry point calls
-                        // std::terminate() and crashes the whole process --
-                        // strictly worse than swallowing it. Mirrors
+                        // Callback exception policy: an exception escaping a
+                        // std::thread's entry point calls std::terminate()
+                        // and crashes the whole process -- strictly worse
+                        // than swallowing it. Mirrors
                         // Detail::SdlSensorSubsystem<TSensor>::
-                        // DispatchToInstances()'s identical policy (Task
-                        // P8-5) for the SDL-backed sensors.
+                        // DispatchToInstances()'s policy (Task P8-5) for the
+                        // SDL-backed sensors.
+                        //
+                        // Task DEVPERF-005 (2026-07-18, external audit
+                        // `audit_devices_2026-07-17.md`): previously a bare
+                        // `catch (...) { }` with no logging and no
+                        // test-visible counter at all -- confirmed by
+                        // DEVPERF-004's own investigation that this was no
+                        // longer actually "identical" to the SDL path once
+                        // SDLCORE-009 hardened that side with structured
+                        // diagnostics. Routed through the same
+                        // NativeDiagnosticSink both backends now share, so
+                        // this swallow is observable (debug-build log line)
+                        // and testable (record count/last record) instead of
+                        // silently disappearing.
                         try
                         {
                             callback_(sample);
                         }
+                        catch (const std::exception& ex)
+                        {
+                            NativeDiagnosticRecord record;
+                            record.Backend = "Android";
+                            record.Operation = "AndroidSensorBridge::Run callback";
+                            record.NativeMessage = ex.what();
+                            record.DeviceId = std::to_string(sensorType_);
+                            record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+                            record.Severity = NativeDiagnosticSeverity::Warning;
+                            NativeDiagnosticSink::Record(record);
+                        }
                         catch (...)
                         {
+                            NativeDiagnosticRecord record;
+                            record.Backend = "Android";
+                            record.Operation = "AndroidSensorBridge::Run callback";
+                            record.NativeMessage = "non-std::exception value";
+                            record.DeviceId = std::to_string(sensorType_);
+                            record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+                            record.Severity = NativeDiagnosticSeverity::Warning;
+                            NativeDiagnosticSink::Record(record);
                         }
                     }
                 }
