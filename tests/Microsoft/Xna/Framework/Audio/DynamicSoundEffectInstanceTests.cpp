@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <thread>
@@ -943,4 +944,94 @@ TEST(DynamicSoundEffectInstanceTest, MixerDestructionOrphansTrackWithoutUseAfter
     EXPECT_NO_THROW(d.Pause());
     EXPECT_NO_THROW(d.Stop());
     EXPECT_NO_THROW(d.Dispose());
+}
+
+// AUD-15-006: a "producer" thread continuously calling SubmitBuffer() -- the class's own
+// documented cross-thread boundary (queueMutex_ exists specifically to guard queuedBuffers_/
+// submittedChunkSizes_ against concurrent producer submission vs. Update()'s drain; see
+// AUD-07-020's "untrusted/buggy producers" wording and AUD-15-003's lock-ordering survey) --
+// racing a "game" thread that randomly drives Play/Pause/Resume/Stop/Update, then Disposes the
+// instance while the producer may still be mid-submit. Acceptance (from the plan): no deadlock,
+// no data silently lost outside a documented Stop (Stop()/ClearBuffers() legitimately discard
+// queued data -- that is not a bug), and getPendingBufferCountProperty() never reports a corrupt
+// (implausibly large or negative) count.
+TEST(DynamicSoundEffectInstanceTest, StressProducerConsumerWithRandomPauseStopDispose)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    auto d = std::make_unique<DynamicSoundEffectInstance>(44100, AudioChannels::Stereo);
+
+    std::atomic<long long> chunksSubmitted{0};
+    std::atomic<bool> producerDone{false};
+
+    std::thread producer([&]() {
+        const std::vector<unsigned char> pcm(4 * 64, 0); // 64 stereo S16 frames of silence
+        for (int i = 0; i < 20000; ++i)
+        {
+            try
+            {
+                d->SubmitBuffer(pcm);
+                chunksSubmitted.fetch_add(1, std::memory_order_relaxed);
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+                // Expected once the "game" thread below disposes the instance while this
+                // thread is still mid-loop -- submitting after Dispose() is documented to
+                // throw (P9-VALIDATION-011), not a supported call pattern, so seeing it here
+                // is the correct, intended outcome, not a bug.
+                break;
+            }
+        }
+        producerDone.store(true, std::memory_order_relaxed);
+    });
+
+    // Deterministic LCG (matches this project's other deterministic-fuzz harnesses, e.g.
+    // XactParserFuzzTests.cpp) rather than <random>, so a failure is exactly reproducible.
+    uint32_t seed = 0x9E3779B9u;
+    auto nextRandom = [&seed]() {
+        seed = seed * 1103515245u + 12345u;
+        return (seed >> 16) & 0x7fffu;
+    };
+
+    // "Game" thread (this thread): randomly drive the public state-machine API while the
+    // producer above concurrently submits buffers from another thread.
+    for (int i = 0; i < 5000; ++i)
+    {
+        switch (nextRandom() % 5)
+        {
+            case 0: try { d->Play(); } catch (...) {} break;
+            case 1: try { d->Pause(); } catch (...) {} break;
+            case 2: try { d->Resume(); } catch (...) {} break;
+            case 3: try { d->Stop(); } catch (...) {} break;
+            case 4: d->Update(); break;
+        }
+
+        // A real corruption bug (e.g. a field the queue mutex doesn't actually cover) would
+        // show up here as an implausibly large or negative pending count, not necessarily a
+        // clean crash.
+        const SharpRuntime::intcs pending = d->getPendingBufferCountProperty();
+        ASSERT_GE(pending, 0) << "corrupt pending buffer count at iteration " << i;
+        ASSERT_LT(pending, 1'000'000) << "pending buffer count grew implausibly large at iteration " << i;
+    }
+
+    d->Dispose();
+    producer.join();
+
+    EXPECT_TRUE(producerDone.load());
+    EXPECT_TRUE(d->getIsDisposedProperty());
+    EXPECT_GT(chunksSubmitted.load(), 0)
+        << "producer thread never got a chance to submit anything before the instance was disposed";
+
+    // Not asserted as exactly 0: SubmitBuffer()'s disposed-check and Dispose()'s
+    // Stop()->ClearBuffers() aren't atomic with respect to each other (isDisposed_ only flips
+    // true at the very end of Dispose(), after ClearBuffers() already ran) -- a producer chunk
+    // can legitimately land in queuedBuffers_ in the window between those two steps, and under a
+    // slow/instrumented build (observed under ASan: up to single digits, vs. usually 0-1 under a
+    // normal build) that window can admit a handful more before the producer thread observes
+    // isDisposed_. That is a harmless, inherent consequence of disposing an instance while a
+    // foreign thread is still mid-submit (not a supported call pattern to begin with -- the
+    // caller is expected to stop its own producer before disposing) -- not memory-unsafe, and
+    // not "corrupt" in the sense this task's acceptance criteria means (implausibly large or
+    // negative). Bounded generously here to still catch genuine unbounded growth.
+    EXPECT_LT(d->getPendingBufferCountProperty(), 1000);
 }

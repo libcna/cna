@@ -181,11 +181,19 @@ namespace Microsoft::Xna::Framework::Audio
                           << SDL_GetError() << "\n";
                 return;
             }
-            track_ = track;
-            // AUD-04-008/009: see SoundEffectInstance::Play()'s identical capture -- lets
-            // GetLiveTrackHandle() detect an AudioMixer::DestroyMixer() call that frees this
-            // track out from under this instance.
-            trackMixerGeneration_ = CNA::Internal::Audio::GetMixerGeneration();
+            // AUD-15-006: track_/trackMixerGeneration_ are also read (via getStateProperty())
+            // by SubmitBuffer()/SubmitFloatBufferEXT() from a producer thread while holding
+            // queueMutex_ -- write them under the same lock for symmetry with StopInternal()'s/
+            // DestroyStream()'s teardown, even though this specific creation path was not the
+            // site of the originally-reproduced crash (that was Stop()'s destroy racing a read).
+            {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                track_ = track;
+                // AUD-04-008/009: see SoundEffectInstance::Play()'s identical capture -- lets
+                // GetLiveTrackHandle() detect an AudioMixer::DestroyMixer() call that frees this
+                // track out from under this instance.
+                trackMixerGeneration_ = CNA::Internal::Audio::GetMixerGeneration();
+            }
         }
 
         if (!MIX_SetTrackAudioStream(track, AsStream(audioStream_)))
@@ -284,13 +292,23 @@ namespace Microsoft::Xna::Framework::Audio
         // MIX_DestroyTrack must never run against that freed pointer. track_ is explicitly
         // cleared again below regardless, matching this function's pre-existing "always end up
         // with no track" contract for both the live and already-stale cases.
-        MIX_Track* track = AsTrackD(GetLiveTrackHandle());
-        if (track)
+        //
+        // AUD-15-006: this whole block (destroying the track and clearing track_) must run
+        // under queueMutex_ -- a producer thread's SubmitBuffer() reads track_ (via
+        // getStateProperty(), under the same lock as of this task's fix) to decide whether to
+        // submit immediately; without this lock here, MIX_DestroyTrack() could free the track
+        // while that read was using it, a real ASan-reproduced use-after-free (SDL_LockAudioStream
+        // segfaulting on a track already freed by this function running concurrently).
         {
-            MIX_StopTrack(track, 0);
-            MIX_DestroyTrack(track);
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            MIX_Track* track = AsTrackD(GetLiveTrackHandle());
+            if (track)
+            {
+                MIX_StopTrack(track, 0);
+                MIX_DestroyTrack(track);
+            }
+            track_ = nullptr;
         }
-        track_ = nullptr;
 #endif
         State_   = SoundState::Stopped;
         playing_ = false;
@@ -368,9 +386,18 @@ namespace Microsoft::Xna::Framework::Audio
         // is about to rebuild the stream from scratch on the next Play() anyway -- let it commit
         // the mode back to int. A caller that never touches SubmitFloatBufferEXT (i.e. every real
         // XNA game) never has isFloat_ true and never observes any behavior change here.
-        if (isFloat_ && getStateProperty() != SoundState::Stopped)
+        // AUD-15-006: same track_/audioStream_ UAF risk as the state check further below --
+        // getStateProperty() must not run outside queueMutex_'s protection against a concurrent
+        // Stop() destroying the track mid-read. Lock only taken when isFloat_ is actually true
+        // (the rare NOXNA float-submission path), preserving the short-circuit for the common
+        // (always-int16) case.
+        if (isFloat_)
         {
-            throw System::InvalidOperationException("Submit an integer buffer before Playing!");
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            if (getStateProperty() != SoundState::Stopped)
+            {
+                throw System::InvalidOperationException("Submit an integer buffer before Playing!");
+            }
         }
         isFloat_ = false;
 
@@ -379,15 +406,20 @@ namespace Microsoft::Xna::Framework::Audio
             buffer.begin() + offset + count
         );
 
+        // AUD-15-006: the state check and (if Playing) immediate submission to the stream must
+        // happen under the SAME lock as the push, matching FNA's real SubmitBuffer (which checks
+        // State and submits to the native voice atomically inside its own `lock (queuedBuffers)`
+        // block). Doing this check *after* releasing the lock let a producer thread's
+        // getStateProperty()/SubmitQueuedToStream() call race a concurrent Stop() destroying
+        // track_/audioStream_ out from under it -- a real, ASan-reproduced use-after-free crash
+        // (SDL_LockAudioStream on a track MIX_DestroyTrack() had already freed).
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.push_back(std::move(chunk));
-        }
-
-        // If we are already playing, submit immediately to the stream.
-        if (getStateProperty() == SoundState::Playing)
-        {
-            SubmitQueuedToStream();
+            if (getStateProperty() == SoundState::Playing)
+            {
+                SubmitQueuedToStreamLocked();
+            }
         }
     }
 
@@ -422,9 +454,14 @@ namespace Microsoft::Xna::Framework::Audio
 
         // The format may only switch from int to float while stopped; otherwise the live
         // S16 stream would be fed F32 bytes. EnsureStream rebuilds the stream on the next Play.
-        if (!isFloat_ && getStateProperty() != SoundState::Stopped)
+        // AUD-15-006: see SubmitBuffer's identical lock rationale above.
+        if (!isFloat_)
         {
-            throw System::InvalidOperationException("Submit a float buffer before Playing!");
+            std::lock_guard<std::mutex> lock(queueMutex_);
+            if (getStateProperty() != SoundState::Stopped)
+            {
+                throw System::InvalidOperationException("Submit a float buffer before Playing!");
+            }
         }
 
         isFloat_ = true;
@@ -434,14 +471,15 @@ namespace Microsoft::Xna::Framework::Audio
 
         std::vector<SharpRuntime::bytecs> chunk(bytes, bytes + byteCount);
 
+        // AUD-15-006: see SubmitBuffer's identical rationale above -- state check and immediate
+        // submit must happen under the same lock as the push.
         {
             std::lock_guard<std::mutex> lock(queueMutex_);
             queuedBuffers_.push_back(std::move(chunk));
-        }
-
-        if (getStateProperty() == SoundState::Playing)
-        {
-            SubmitQueuedToStream();
+            if (getStateProperty() == SoundState::Playing)
+            {
+                SubmitQueuedToStreamLocked();
+            }
         }
     }
 
@@ -550,6 +588,10 @@ namespace Microsoft::Xna::Framework::Audio
     void DynamicSoundEffectInstance::DestroyStream()
     {
 #ifdef SOUND_ENABLED
+        // AUD-15-006: same rationale as StopInternal()'s lock around destroying track_ --
+        // SubmitQueuedToStreamLocked() (reachable from a producer thread via SubmitBuffer())
+        // reads audioStream_ under queueMutex_, so freeing it must happen under the same lock.
+        std::lock_guard<std::mutex> lock(queueMutex_);
         SDL_AudioStream* stream = AsStream(audioStream_);
         if (stream)
         {
@@ -562,14 +604,23 @@ namespace Microsoft::Xna::Framework::Audio
     void DynamicSoundEffectInstance::SubmitQueuedToStream()
     {
 #ifdef SOUND_ENABLED
+        std::lock_guard<std::mutex> lock(queueMutex_);
+        SubmitQueuedToStreamLocked();
+#endif
+    }
+
+    void DynamicSoundEffectInstance::SubmitQueuedToStreamLocked()
+    {
+#ifdef SOUND_ENABLED
+        // AUD-15-006: audioStream_ must be read under queueMutex_, same as track_ elsewhere in
+        // this file -- Dispose()'s DestroyStream() now takes this same lock around freeing it,
+        // so a caller (e.g. SubmitBuffer() from a producer thread) that reads it here while
+        // holding the lock can never observe a freed/mid-teardown stream.
         SDL_AudioStream* stream = AsStream(audioStream_);
         if (!stream) return;
 
         std::vector<std::vector<SharpRuntime::bytecs>> toSubmit;
-        {
-            std::lock_guard<std::mutex> lock(queueMutex_);
-            toSubmit.swap(queuedBuffers_);
-        }
+        toSubmit.swap(queuedBuffers_);
 
         for (const auto& chunk : toSubmit)
         {
@@ -588,7 +639,6 @@ namespace Microsoft::Xna::Framework::Audio
                 continue;
             }
 
-            std::lock_guard<std::mutex> lock(queueMutex_);
             submittedChunkSizes_.push_back(chunk.size());
         }
 #endif

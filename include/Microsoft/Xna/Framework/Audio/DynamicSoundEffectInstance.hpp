@@ -2,6 +2,7 @@
 #pragma once
 #include "CNA/CNAHelper.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -176,8 +177,15 @@ namespace Microsoft::Xna::Framework::Audio
     private:
         SharpRuntime::intcs sampleRate_;
         AudioChannels       channels_;
-        bool                isFloat_ = false;
-        bool                streamIsFloat_ = false; // format the live audioStream_ was created with
+
+        // AUD-15-006: written by SubmitBuffer()/SubmitFloatBufferEXT() (this class's own
+        // documented producer-thread-callable entry points) and read by EnsureStream() (called
+        // from Play(), the game thread) -- a real TSAN-confirmed data race as a plain bool, since
+        // neither side takes queueMutex_ for it (EnsureStream() runs before a track/stream
+        // exists to synchronize around, and this flag must be visible before that point).
+        std::atomic<bool>   isFloat_ = false;
+
+        bool                streamIsFloat_ = false; // format the live audioStream_ was created with; game-thread-only, no lock needed
 
         void* audioStream_    = nullptr; // SDL_AudioStream*
 
@@ -197,6 +205,14 @@ namespace Microsoft::Xna::Framework::Audio
         void EnsureStream();
         void DestroyStream();
         void SubmitQueuedToStream();
+
+        // AUD-15-006: the actual submit logic, extracted so SubmitBuffer()/SubmitFloatBufferEXT()
+        // can drive it from within their own already-held queueMutex_ lock (matching FNA's real
+        // SubmitBuffer, which checks State and submits to the native voice atomically under its
+        // own queuedBuffers lock) without double-locking the non-recursive queueMutex_. Caller
+        // must already hold queueMutex_.
+        void SubmitQueuedToStreamLocked();
+
         void StopInternal();
     };
 }
