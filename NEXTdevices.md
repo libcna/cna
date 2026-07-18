@@ -353,27 +353,37 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     paths") to actually close — this is exactly why `DEVPERF-004` stays **OPEN**
     (documentation/decision/tests done; one real cross-backend policy-implementation
     gap remains, correctly scoped to a different task rather than fixed here).
-29. `DEVPERF-005` (`c2c7956d`) — new `Detail::NativeDiagnosticRecord`/
-    `Detail::NativeDiagnosticSink` (`Backend`/`Operation`/`NativeCode`/`NativeMessage`/
-    `DeviceId`/`Timestamp`/`Severity` fields, exactly what this task's required work
-    names), `Record()` `noexcept` and internally `try`/`catch`-wrapped so it can never
-    itself become a new throw-across-a-C-callback hazard. Exposed via debug-build
-    `SDL_Log()` (confirmed linked and working on Android too — `AndroidMotionBackend.cpp`
-    already includes `SDL3/SDL.h` there) plus `GetRecordCountForTesting()`/
-    `GetLastRecordForTesting()`/`SetCallbackForTesting()`/`ResetForTesting()`. Wired into
-    the one concrete gap `DEVPERF-004` just found: `AndroidSensorBridge::Run()`'s bare
-    `catch (...) { }` now splits into a typed `std::exception&` clause plus a fallback,
-    both routed through `NativeDiagnosticSink::Record()`, mirroring `SDLCORE-009`'s
-    already-established SDL-side split. 9 new host-testable
-    `NativeDiagnosticTests.cpp` tests (including an 8-thread concurrent stress test);
-    the `AndroidSensorBridge.cpp` call-site wiring itself verified via NDK cross-compile
-    of both changed translation units. **Left OPEN**: this task's acceptance criteria
-    want *every* ignored native return value covered — this pass built the shared
-    mechanism and closed one concrete gap, deliberately did **not** retrofit
-    `SDLCORE-009`/`VIB2-003`/`004`/`SDLCORE-005`/`ANDR2-006`'s own existing,
-    already-hardened diagnostics onto the new shared type (too large/risky to bundle
-    into one pass without dedicated re-verification of each) — named as a real,
-    tractable, one-commit-per-call-site follow-up, not silently declared done.
+29. `DEVPERF-005` (`c2c7956d`..`c9be8084`, 7 commits) — **CLOSED**. New
+    `Detail::NativeDiagnosticRecord`/`Detail::NativeDiagnosticSink`
+    (`Backend`/`Operation`/`NativeCode`/`NativeMessage`/`DeviceId`/`Timestamp`/
+    `Severity` fields, exactly what this task's required work names), `Record()`
+    `noexcept` and internally `try`/`catch`-wrapped so it can never itself become a new
+    throw-across-a-C-callback hazard. Exposed via debug-build `SDL_Log()` (confirmed
+    linked and working on Android too) plus `GetRecordCountForTesting()`/
+    `GetLastRecordForTesting()`/`SetCallbackForTesting()`/`ResetForTesting()`. 9 new
+    host-testable `NativeDiagnosticTests.cpp` tests (including an 8-thread concurrent
+    stress test). Migrated all five diagnostic call sites named as follow-up work:
+    `DEVPERF-004`'s `AndroidSensorBridge::Run()` swallow (split typed/fallback catch,
+    mirroring `SDLCORE-009`), `SDLCORE-009`'s own `SdlSensorSubsystem` dispatch
+    exception (added alongside the pre-existing per-subsystem counter, not instead of
+    it — existing tests assert exact values there), `VIB2-003`'s 4 haptic `SDL_Log()`
+    diagnostics (replaced), `VIB2-004`'s stale-haptic-release (new Info-severity
+    record), `SDLCORE-005`'s stale-sensor-release (new Info-severity record),
+    `ANDR2-006`'s 2 Android cleanup-failure diagnostics (replaced, `NativeCode`
+    populated with the real negative return value). Then ran an independent fork
+    sweep of the entire `Microsoft::Devices` tree for any remaining silent swallows —
+    found and fixed 2 more (`SDL_InitHapticRumble`/`SDL_CreateHapticEffect`, the two
+    calls immediately adjacent to already-migrated ones the initial pass missed);
+    spot-checked (re-read source directly, not just trusted the sweep) every other
+    candidate and confirmed each already converts to a state/error via existing
+    mechanisms (`SignalStartOutcome`/`InvalidateProbeCache`/existing `bool` returns/
+    `lastSetEventRateSucceededForTesting_`) — satisfying the acceptance criterion's
+    explicit "or converted to a state/error" alternative. Every touched translation
+    unit re-verified via NDK cross-compile; full precise filter clean under both
+    `devices-ubsan` and `devices-tsan` after every commit. Real-hardware fault
+    injection for the haptic/Android-only sites remains `VIB2-003`/`004`/`SDLCORE-005`/
+    `ANDR2-006`'s **own** separately-tracked "needs real hardware" limitation, not
+    reopened or claimed resolved by closing `DEVPERF-005` itself.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -588,16 +598,18 @@ tractability):
   deadlock. `ANDR2-011` ("consolidate Android sensor bridges onto a shared looper") was
   scanned and judged comparably large (up to 6 worker threads per `Motion` instance →
   one shared looper/thread — a genuine architecture redesign, not a quick fix).
-- `DEVPERF-002`/`003` — `004`/`005` are both done this pass (see Section 2): `004`
+- `DEVPERF-002`/`003` — `004`/`005` are both now **CLOSED** (see Section 2): `004`
   produced the normative event contract doc, `005` built the shared
-  `NativeDiagnosticSink` and closed the one concrete gap `004` found. `005` stays OPEN
-  for a real, tractable follow-up: migrating `SDLCORE-009`/`VIB2-003`/`004`/
-  `SDLCORE-005`/`ANDR2-006`'s own existing, already-hardened diagnostics onto the new
-  shared `NativeDiagnosticRecord` type, one call site/one commit at a time — worth
-  picking up next since the mechanism now exists and each migration is small and
-  independently verifiable. `DEVPERF-002`/`003` (the API/behavioral oracle) remain a
-  confirmed blocker for `BASE2-001`'s remaining scope (see Section 5) — picking these up
-  unblocks more than just their own tasks.
+  `NativeDiagnosticSink`, closed the one concrete gap `004` found, migrated all five
+  named follow-up call sites (`SDLCORE-009`/`VIB2-003`/`004`/`SDLCORE-005`/`ANDR2-006`),
+  and closed 2 more an independent sweep found. `DEVPERF-002`/`003` (the
+  API/behavioral oracle) remain the only open `DEVPERF-*` items and a confirmed
+  blocker for `BASE2-001`'s remaining scope (see Section 5) — picking these up
+  unblocks more than just their own tasks, but they need an actual WP7 reference
+  (archived MSDN citations proved workable for narrow doc questions, e.g. `DEV-API-005`,
+  but this task wants a machine-readable manifest/full behavioral harness, a much
+  bigger ask — scope this carefully before starting, it may turn out to be
+  irreducibly hardware/SDK-blocked rather than just effort-blocked).
   `SDLCORE-007`/`011` — investigated briefly last pass, still open, see prior notes.
 - `ANDR2-007`/`012`/`014`/`015` — remaining Android-only items (`ANDR2-009`/`010` done
   this pass, `011` deliberately deferred per above; `007` is the same design-heavy
@@ -683,11 +695,12 @@ findings, commit `422ed4c4` -- see Section 2's own dated entry). All five
 `BASE2-*` P1 tasks are now done. `DEVPERF-004` found a real, concrete,
 previously-undetected gap (AndroidSensorBridge::Run()'s silent
 exception-swallow, no logging/counter, unlike SDLCORE-009's SDL-side fix);
-`DEVPERF-005` built the shared Detail::NativeDiagnosticSink this project needed
-and closed that one gap with it, but stays OPEN -- migrating SDLCORE-009's/
-VIB2-003/004's/SDLCORE-005's/ANDR2-006's own existing, already-hardened
-diagnostics onto the new shared type (one call site/one commit at a time) is a
-real, tractable, worth-picking-up-next follow-up. Read Section
+`DEVPERF-005` built the shared Detail::NativeDiagnosticSink, closed that gap,
+then migrated all five named follow-up call sites (SDLCORE-009, VIB2-003,
+VIB2-004, SDLCORE-005, ANDR2-006) plus 2 more a dedicated sweep found, and is
+now **CLOSED** -- do not reopen it without a new, concrete reason (real-hardware
+fault injection for the haptic/Android-only sites is VIB2-003/004/SDLCORE-005/
+ANDR2-006's own separately-tracked limitation, not DEVPERF-005's). Read Section
 1's "labeling convention" note carefully before closing anything -- it
 distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009,
 BASE2-005) from tasks whose acceptance criteria name an empirical/hardware
