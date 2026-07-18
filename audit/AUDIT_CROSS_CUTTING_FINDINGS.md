@@ -361,6 +361,17 @@ _(pending)_
   about the identical class of mistake in that backend — worth checking whether EasyGL's own non-stock shaders
   have the same issue, and treating "object-space-only fog in a CNA-original (non-vendored) shader" as its own
   distinct pattern to watch for, separate from the vendored/ported stock-effect fog-formula bug.
+- **UPDATE — root-cause locus confirmed while auditing `backend-vulkan` directly: `VulkanGraphicsBackend::
+  FillExtPushConst()` (the backend-side push-constant fill, shared by ext/lit-textured/skinned/pbr draws)
+  faithfully copies `p.ambientColor` from the already-populated `GpuDrawParams` into the push constant —
+  it does NOT itself drop the field.** This confirms the bug's root cause is entirely upstream, in
+  `SkinnedEffect::FillGpuDrawParams()` (the XNA-facing effect code that populates `GpuDrawParams` before it
+  ever reaches this backend file, not yet audited as of this shard — tracked under the `xna-graphics` shard,
+  Task #4) leaving `ambientColor` at its zero-initialized default for the skinned path specifically. The
+  `emissiveColor` half is structural, not just an unset value: every Vulkan skinned-shader UBO (`skinned3d`/
+  `skinned3d_color`/`skinned3d_vertexlit`/`skinned3d_vertexlit_color`'s `FogParams` block) has no
+  `emissiveColor` field declared at all — confirmed via full read of all 4 — so there is nowhere for the value
+  to go even if the effect side did compute it.
 - **NEW, Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned
   shaders never consume `emissiveColor`** — so `AmbientLightColor`/`EmissiveColor` are silently no-ops for skinned
   models on Vulkan specifically (EasyGL forwards them correctly). Confirmed across 4 test files
@@ -392,6 +403,21 @@ _(pending)_
   its "reuse one identical uniform layout for both Skinned and unskinned lit paths" architecture choice happens
   to structurally prevent the bug that affects D3D11/D3D12 (whose separate, incomplete
   `D3DSkinnedExtraConstants` struct is what actually drops the field) and Vulkan (which drops both fields).
+- **NEW, Vulkan-specific, confirmed via direct source read: `GraphicsDevice.ScissorRectangle` is completely
+  non-functional whenever a `RenderTarget2D`/`RenderTargetCube` is bound — it only works against the
+  backbuffer.** `VulkanGraphicsBackend::RecordCommandBuffer()`'s RT-pass loop (Phase 1, iterating every used
+  render target) hardcodes `VkRect2D rtSc{ {0, 0}, { rtW, rtH } }` unconditionally before every
+  `vkCmdSetScissor` call for an RT pass — `scissorEnabled_`/`scissorX_`/`scissorY_`/`scissorW_`/`scissorH_`
+  (correctly captured by `SetScissorRect()`/`ApplyRasterizerState()`) are never read anywhere in that loop. The
+  backbuffer pass (Phase 2), by contrast, correctly checks `scissorEnabled_` and applies the real rect. A game
+  that renders to an off-screen `RenderTarget2D` while relying on `ScissorRectangle`-based clipping (a common
+  pattern — UI clip regions, split-screen-to-texture, etc.) gets silently unclipped output on Vulkan specifically,
+  with no error or warning. Unlike the paired `Viewport`-when-RT-bound limitation (which IS explicitly disclosed
+  in `SetViewport()`'s own header comment: "RT passes stay hardcoded to each RT's own full size... cannot recover
+  what Viewport was active"), **the Scissor gap has no equivalent disclosure anywhere near the scissor code** —
+  a silent gap, not a documented scope cut. No test found anywhere in this audit exercising `ScissorRectangle`
+  together with a bound `RenderTarget2D` on any backend, so this specific combination may be broadly under-tested
+  project-wide, not just unfixed on Vulkan.
 - **NEW, Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip present in every other core Vulkan 3D vertex
   shader**, causing `EnvironmentMapEffect` scenes to render vertically mirrored on Vulkan. Confirmed across 4 test
   files (`vulkan_env_map_test.cpp`, `_amount_one_test.cpp`, `_amount_zero_test.cpp`, `_combined_test.cpp`,
@@ -401,6 +427,46 @@ _(pending)_
   `environmentmapeffect_alphascaledlerp_test.cpp` (a shared cross-backend test file, registered on Vulkan among
   others) exercises this exact shader and is masked for the identical reason (identity View, center-pixel-only
   sampling).
+  **MAJOR UPDATE — the missing-Y-flip bug is NOT limited to `EnvironmentMapEffect`: `pbr3d.vert.glsl`,
+  `pbr3d_skinned.vert.glsl`, and `instanced3d.vert.glsl` all independently confirmed to share it, and one of
+  them contains a demonstrably FALSE justifying comment.** Confirmed via full source read + exact grep sweep of
+  every Vulkan `.vert.glsl` file for the flip pattern: 14 shaders correctly flip
+  (`colored3d`, `colored3d_legacy`, `colored_textured3d`, `textured3d`, `dual_texture3d`,
+  `dual_texture_colored3d`, `alpha_test3d`, `alpha_test_colored3d`, `lit_textured3d`,
+  `lit_textured3d_vertexlit`, `skinned3d`, `skinned3d_color`, `skinned3d_vertexlit`,
+  `skinned3d_vertexlit_color`), while 4 do not: `env_map3d` (already recorded above), `pbr3d`, `pbr3d_skinned`,
+  and `instanced3d`. `sprite2d.vert.glsl` also lacks the flip but is a genuine, verified non-bug: it computes
+  NDC directly from pixel-space (`(inPos / viewportSize) * 2.0 - 1.0`) with its own explicit "Y-down to match
+  XNA" comment — a self-contained 2D mapping that needs no post-hoc flip, unlike every 3D shader which shares
+  one `wvp`/`vp` input built the identical way (`world * view * projection` or `view * projection`, confirmed at
+  the C++ call sites in `VulkanGraphicsBackend.cpp`: `DrawPrimitivesEx`'s `wvp` and `FillInstancedPushConst`'s
+  `vp`, neither of which bakes in any flip — the flip is a pure per-shader convention, not something the
+  C++ side or the caller-supplied `projection` matrix supplies).
+  **`pbr3d.vert.glsl`'s own comment claims the omission is deliberate**: "No Y-flip here (unlike
+  `lit_textured3d.vert.glsl` et al.) -- kept consistent with `pbr3d_skinned.vert.glsl`'s own convention... so
+  PbrEffect and SkinnedPbrEffect render an identical scene identically oriented." This reasoning only checks
+  *internal* consistency between the two PBR shaders — it ignores that every *other* 3D effect type
+  (BasicEffect/SkinnedEffect/DualTextureEffect/AlphaTestEffect/lit-textured) sharing the identical `mvp` input
+  (all filled via the same `FillExtPushConst()` C++ function) DOES flip, meaning PBR/SkinnedPbr scenes render
+  vertically mirrored relative to every other effect type in the same Vulkan-rendered frame — the exact same
+  bug class as `env_map3d`, just with a plausible-looking (but incomplete) justification attached.
+  **`pbr3d_skinned.vert.glsl`'s own comment is worse — it is factually FALSE, not just incomplete**: "Task
+  899-family precedent: `skinned3d.vert.glsl` never Y-flips (unlike `lit_textured3d.vert.glsl` et al.) -- this
+  shader is a direct extension of that exact skinning transform, so it mirrors that convention exactly." This is
+  directly contradicted by `skinned3d.vert.glsl` itself, which — verified by direct read — DOES flip, at line 59:
+  `gl_Position.y = -gl_Position.y; // Vulkan NDC Y is inverted vs OpenGL (matches textured3d.vert.glsl)`. Whoever
+  wrote `pbr3d_skinned.vert.glsl`'s comment either misremembered or never actually checked `skinned3d.vert.glsl`'s
+  content before citing it as precedent — the justification is not merely a design trade-off but a confidently
+  wrong claim about a sibling file, which makes this instance more dangerous than a silent omission: a future
+  maintainer reading the comment would conclude the current behavior is intentional and verified, when it is
+  neither. Net effect: **`PbrEffect`, `SkinnedPbrEffect`, and `InstancedEffect` all render vertically mirrored on
+  Vulkan**, in addition to the already-known `EnvironmentMapEffect` — 4 of Vulkan's effect-shader families
+  affected in total, one via a plausible-but-incomplete rationale, one via a demonstrably false one, and one
+  (`instanced3d`) with no comment or rationale at all (a likely simple oversight — `DrawInstancedPrimitivesEx`'s
+  `FillInstancedPushConst` was possibly added/ported at a different time than the Y-flip convention was
+  established for the rest of the file). No corresponding test file was found this checks a non-center,
+  asymmetric pixel for any of these three effect types on Vulkan — consistent with the same test-masking pattern
+  already recorded for `env_map3d`.
 - **CONFIRMED IN 5 BACKENDS (Bgfx, WebGPU, Vulkan, SdlGpu, D3D11+D3D12): `EnvironmentMapEffect`'s fragment shader
   re-multiplies `EmissiveColor` by `DiffuseColor`** instead of adding it unscaled (FNA's `Lighting.fxh` convention,
   explicitly confirmed by this project's own `EnvironmentMapEffect.cpp` comment stating the unscaled-add is
@@ -556,6 +622,20 @@ _(pending)_
   `bgfx_blendstate_separate_functions_test.cpp` (never reads the alpha channel, so `AlphaBlendFunction`'s
   independence is inferred, not observed). Worth watching for the same shape in every remaining backend's
   example-test shard.
+- **NEW, now a confirmed 2-backend pattern: a correct, well-mapped generic `VertexElementFormat` -> native-format
+  helper header that is entirely dead code in production.** After Bgfx's `BgfxVertexFormatHelper.hpp` (above),
+  Vulkan's own `VulkanVertexFormatHelper.hpp` (`VertexElementFormatToVk()`/`VertexElementFormatSize()`) is
+  confirmed, via exhaustive grep of the entire Vulkan backend directory, to have **zero call sites in
+  `VulkanGraphicsBackend.cpp`** — the real per-pipeline `VkVertexInputAttributeDescription` arrays are all
+  hardcoded per-stride/per-shader instead, exactly mirroring Bgfx's own `MakeBgfxLayout()` hardcoded-stride
+  dispatch. Unlike Bgfx's version, **Vulkan's own test (`vulkan_vertex_format_test.cpp`) is well-designed**: it
+  directly unit-tests the mapping functions themselves (asserting `VertexElementFormatToVk`/
+  `VertexElementFormatSize` against an explicit expected-value table for every enumerator), not just inferring
+  behavior indirectly via `SetDataRaw()` — so the mapping logic itself is genuinely, directly verified correct,
+  unlike Bgfx's equivalent test which silently exercises the same hardcoded layout regardless of declaration.
+  The shared defect across both backends is purely architectural (a parallel, unused implementation path was
+  built and correctly tested, but never wired into the real dispatch) — worth checking every remaining backend's
+  own vertex-format-helper-equivalent header (if any) for the same "correct but dead" shape.
 
 ## Build-system inconsistencies
 
