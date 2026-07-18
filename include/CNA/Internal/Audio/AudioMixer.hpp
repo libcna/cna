@@ -22,6 +22,19 @@ namespace CNA::Internal::Audio
     /// diagnostic gap when investigating a reported 44.1/48 kHz-family pitch/speed symptom.
     MIX_Mixer* GetMixer();
 
+    /// AUD-04-004: test-only override for the spec `GetMixer()` requests on its next
+    /// mixer-creating call. Has no effect on an already-created mixer -- callers must
+    /// `DestroyMixer()` first (or call before any `GetMixer()` in the process) for the
+    /// override to actually take effect, matching `GetMixer()`'s existing "recreates from
+    /// scratch" semantics. Exists so device-negotiation-adjacent tests can force 22.05/44.1/
+    /// 48/96 kHz and mono/stereo mixers without touching production code paths, which always
+    /// request the fixed S16 stereo 44100 Hz default.
+    void SetMixerSpecOverrideForTests(const SDL_AudioSpec& spec);
+
+    /// AUD-04-004: clears a previous `SetMixerSpecOverrideForTests()` call, restoring the
+    /// production default (S16 stereo 44100 Hz) for the next mixer-creating `GetMixer()` call.
+    void ClearMixerSpecOverrideForTests();
+
     /// Destroys the shared SDL3_mixer device.
     ///
     /// P9-AUDIT-003/AUDIO-002: still no caller anywhere in this codebase today -- the MIX_Init()/

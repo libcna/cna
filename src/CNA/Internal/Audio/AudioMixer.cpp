@@ -22,6 +22,24 @@ namespace CNA::Internal::Audio
         // second thread to slip into.
         std::mutex g_mixerMutex;
         MIX_Mixer* g_mixer = nullptr;
+
+        // AUD-04-004: test-only override for the spec requested below. Guarded by the same
+        // mutex as g_mixer since it is read/written from the same lazy-init sequence.
+        bool g_hasSpecOverride = false;
+        SDL_AudioSpec g_specOverride{};
+    }
+
+    void SetMixerSpecOverrideForTests(const SDL_AudioSpec& spec)
+    {
+        std::lock_guard<std::mutex> lock(g_mixerMutex);
+        g_hasSpecOverride = true;
+        g_specOverride = spec;
+    }
+
+    void ClearMixerSpecOverrideForTests()
+    {
+        std::lock_guard<std::mutex> lock(g_mixerMutex);
+        g_hasSpecOverride = false;
     }
 
     MIX_Mixer* GetMixer()
@@ -35,9 +53,16 @@ namespace CNA::Internal::Audio
             }
 
             SDL_AudioSpec spec{};
-            spec.format = SDL_AUDIO_S16;
-            spec.channels = 2;
-            spec.freq = 44100;
+            if (g_hasSpecOverride)
+            {
+                spec = g_specOverride;
+            }
+            else
+            {
+                spec.format = SDL_AUDIO_S16;
+                spec.channels = 2;
+                spec.freq = 44100;
+            }
 
             g_mixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec);
             if (!g_mixer)
@@ -58,7 +83,9 @@ namespace CNA::Internal::Audio
             SDL_AudioSpec actual{};
             if (MIX_GetMixerFormat(g_mixer, &actual))
             {
-                std::cerr << "[AudioMixer] Requested S16 stereo 44100 Hz; negotiated format=0x"
+                std::cerr << "[AudioMixer] Requested format=0x" << std::hex << spec.format << std::dec
+                          << " channels=" << spec.channels << " freq=" << spec.freq
+                          << "; negotiated format=0x"
                           << std::hex << actual.format << std::dec
                           << " channels=" << actual.channels << " freq=" << actual.freq << "\n";
             }

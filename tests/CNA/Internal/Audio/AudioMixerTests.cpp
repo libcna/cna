@@ -12,6 +12,7 @@
 // tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp for the same "needs a fresh process" problem.
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -119,6 +120,74 @@ TEST(AudioMixerTest, ActualMixerFormatIsQueryableAfterCreation) {
         GTEST_SKIP() << "no audio device (dummy driver unavailable)";
     }
 }
+
+namespace {
+    // AUD-04-004: restores the production-default mixer spec on scope exit, regardless of how
+    // the scope is left (assertion failure or normal return) -- necessary because g_mixer is a
+    // single process-wide singleton shared by every other test in this binary; leaving an
+    // override or a destroyed mixer behind would silently corrupt unrelated later tests.
+    struct MixerSpecOverrideGuard {
+        ~MixerSpecOverrideGuard() {
+            CNA::Internal::Audio::ClearMixerSpecOverrideForTests();
+            CNA::Internal::Audio::DestroyMixer();
+        }
+    };
+}
+
+// AUD-04-004: production code always requests the fixed S16 stereo 44100 Hz default; this
+// proves the same GetMixer() path is override-able to other rates/channel counts (foundational
+// for later device-negotiation-adjacent tests, e.g. AUD-04-002/003), and that the SDL dummy
+// driver used throughout this suite actually honors an arbitrary requested spec rather than
+// silently clamping every mixer to one fixed rate regardless of what's requested.
+class AudioMixerSpecOverrideTest : public ::testing::TestWithParam<std::tuple<int, int>> {};
+
+TEST_P(AudioMixerSpecOverrideTest, OverriddenSpecIsActuallyNegotiated) {
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    const auto [freq, channels] = GetParam();
+
+    CNA::Internal::Audio::DestroyMixer();
+    MixerSpecOverrideGuard guard;
+
+    SDL_AudioSpec requested{};
+    requested.format = SDL_AUDIO_S16;
+    requested.channels = channels;
+    requested.freq = freq;
+    CNA::Internal::Audio::SetMixerSpecOverrideForTests(requested);
+
+    try {
+        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
+        ASSERT_NE(mixer, nullptr);
+
+        SDL_AudioSpec actual{};
+        ASSERT_TRUE(MIX_GetMixerFormat(mixer, &actual)) << SDL_GetError();
+
+        // AUD-04-004 finding: SDL itself (OpenPhysicalAudioDevice, third_party/SDL/src/audio/
+        // SDL_audio.c) imposes a floor of S16 stereo 44100 Hz on every physical playback device
+        // it opens -- "We impose a simple minimum on device formats. This prevents something
+        // low quality ... from ruining a music thing playing at CD quality that tries to open
+        // later." (DEFAULT_AUDIO_PLAYBACK_CHANNELS=2, DEFAULT_AUDIO_PLAYBACK_FREQUENCY=44100,
+        // SDL_sysaudio.h). Requests at/above the floor pass through exactly; requests below it
+        // are raised to the floor. This is genuine, documented SDL3 device-open behavior, not a
+        // CNA bug or a resampling step -- CNA's own hard-coded production request (S16 stereo
+        // 44100 Hz) already sits exactly on this floor, so this confirms there is no
+        // *downward* device-negotiation risk in this SDL build; the only device-negotiation
+        // pitch risk direction is upward (e.g. an OS default device that only offers
+        // 48/96/192 kHz -- AUD-04-002/003 territory, still open).
+        EXPECT_EQ(actual.freq, std::max(freq, 44100));
+        EXPECT_EQ(actual.channels, std::max(channels, 2));
+    } catch (...) {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AUD04004, AudioMixerSpecOverrideTest,
+    ::testing::Values(
+        std::make_tuple(22050, 1),
+        std::make_tuple(22050, 2),
+        std::make_tuple(44100, 1),
+        std::make_tuple(48000, 2),
+        std::make_tuple(96000, 2)));
 
 TEST(AudioMixerTest, GetMixerThrowsNoAudioHardwareExceptionWhenSdlAudioDriverIsInvalid) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(kWatchdogSeconds);
