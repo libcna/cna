@@ -6,6 +6,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
+#include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -239,16 +242,27 @@ namespace Microsoft::Xna::Framework::GamerServices
         class GuideKeyboardInputAction : public GuideAction
         {
         public:
-            GuideKeyboardInputAction(std::any state, System::AsyncCallback callback, bool usePasswordMode)
+            GuideKeyboardInputAction(std::any state, System::AsyncCallback callback, std::string title,
+                                      std::string description, bool usePasswordMode)
                 : GuideAction(std::move(state), std::move(callback))
+                , Title(std::move(title))
+                , Description(std::move(description))
                 , UsePasswordMode(usePasswordMode)
             {
             }
 
+            const std::string Title;
+            const std::string Description;
             const bool UsePasswordMode;
             std::u16string Buffer;
+            bool Canceled = false;
             System::MulticastAction<Input::charcs>::Token SubscriptionToken =
                 System::MulticastAction<Input::charcs>::InvalidToken;
+
+            // Edge-detection state for RenderPendingKeyboardInputEXT's own real Escape-to-cancel
+            // handling - mirrors GuideMessageBoxAction::WasLeftMouseDown's same reasoning
+            // (cancel on the down-edge, not every frame Escape is held).
+            bool WasEscapeDown = false;
         };
 
         GuideKeyboardInputAction* pendingKeyboardInput_ = nullptr;
@@ -276,14 +290,21 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         // Same reentrancy-safe shape as CompletePendingMessageBox: captured and cleared *before*
         // invoking the callback, and unsubscribes from TextInputEXT::TextInput here (not in
-        // EndShowKeyboardInput) so real OS-level text capture stops the instant Enter is pressed,
-        // not whenever the game later gets around to calling End*.
-        void CompletePendingKeyboardInput()
+        // EndShowKeyboardInput) so real OS-level text capture stops the instant Enter is pressed
+        // or the operation is canceled, not whenever the game later gets around to calling End*.
+        // `canceled` clears the buffer (matching a real on-screen keyboard's own cancel-discards-
+        // the-edit semantics) and marks the action so WasKeyboardInputCanceledEXT can report it.
+        void CompletePendingKeyboardInput(bool canceled)
         {
             GuideKeyboardInputAction* action = pendingKeyboardInput_;
             Input::TextInputEXT::TextInput.Remove(action->SubscriptionToken);
             Microsoft::Xna::Framework::Input::TextInputEXT::StopTextInput();
             pendingKeyboardInput_ = nullptr;
+            if (canceled)
+            {
+                action->Canceled = true;
+                action->Buffer.clear();
+            }
             action->setIsCompletedProperty(true);
             if (action->Callback)
             {
@@ -312,7 +333,10 @@ namespace Microsoft::Xna::Framework::GamerServices
     bool Guide::getIsTrialModeProperty()          { return isTrialMode_; }
     void Guide::setIsTrialModeProperty(bool value) { isTrialMode_ = value; }
 
-    bool Guide::getIsVisibleProperty()             { return false; }
+    bool Guide::getIsVisibleProperty()
+    {
+        return pendingMessageBox_ != nullptr || pendingKeyboardInput_ != nullptr;
+    }
     void Guide::setIsVisibleProperty(bool /*value*/) { }
 
     NotificationPosition Guide::getNotificationPositionProperty() { return position_; }
@@ -341,8 +365,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     System::IAsyncResult* Guide::BeginShowKeyboardInput(
         Microsoft::Xna::Framework::PlayerIndex /*player*/,
-        const std::string& /*title*/,
-        const std::string& /*description*/,
+        const std::string& title,
+        const std::string& description,
         const std::string& defaultText,
         System::AsyncCallback callback,
         std::any state,
@@ -355,7 +379,8 @@ namespace Microsoft::Xna::Framework::GamerServices
 
         Microsoft::Xna::Framework::Input::TextInputEXT::StartTextInput();
 
-        auto* action = new GuideKeyboardInputAction(std::move(state), std::move(callback), usePasswordMode);
+        auto* action = new GuideKeyboardInputAction(std::move(state), std::move(callback), title,
+                                                      description, usePasswordMode);
         action->Buffer = DecodeUtf8ToUtf16(defaultText);
         pendingKeyboardInput_ = action;
 
@@ -371,7 +396,7 @@ namespace Microsoft::Xna::Framework::GamerServices
                 // faithful analog to a real Xbox 360 on-screen keyboard's "confirm" action.
                 if (c == u'\r' || c == u'\n')
                 {
-                    CompletePendingKeyboardInput();
+                    CompletePendingKeyboardInput(/*canceled=*/false);
                     return;
                 }
                 // Backspace - synthesized the same way (char code 8). Needed for genuinely usable
@@ -410,6 +435,144 @@ namespace Microsoft::Xna::Framework::GamerServices
             );
         }
         return EncodeUtf16ToUtf8(action->Buffer);
+    }
+
+    const std::string& Guide::GetPendingKeyboardInputTitleForTestingEXT()
+    {
+        if (pendingKeyboardInput_ == nullptr)
+        {
+            throw System::InvalidOperationException("No keyboard input is currently pending.");
+        }
+        return pendingKeyboardInput_->Title;
+    }
+
+    const std::string& Guide::GetPendingKeyboardInputDescriptionForTestingEXT()
+    {
+        if (pendingKeyboardInput_ == nullptr)
+        {
+            throw System::InvalidOperationException("No keyboard input is currently pending.");
+        }
+        return pendingKeyboardInput_->Description;
+    }
+
+    bool Guide::WasKeyboardInputCanceledEXT(System::IAsyncResult* result)
+    {
+        auto* action = dynamic_cast<GuideKeyboardInputAction*>(result);
+        if (action == nullptr)
+        {
+            throw System::ArgumentException("result was not returned by a call to BeginShowKeyboardInput.", "result");
+        }
+        return action->Canceled;
+    }
+
+    bool Guide::getHasPendingKeyboardInputEXTProperty()
+    {
+        return pendingKeyboardInput_ != nullptr;
+    }
+
+    void Guide::RenderPendingKeyboardInputEXT(
+        Graphics::GraphicsDevice& device,
+        Graphics::SpriteBatch& spriteBatch,
+        Graphics::SpriteFont& font,
+        Graphics::Texture2D& whitePixel
+    ) {
+        if (pendingKeyboardInput_ == nullptr)
+        {
+            return;
+        }
+
+        // Visual language matches the message box overlay (decision 5d): translucent white
+        // rectangle, black text.
+        const Color boxColor(255, 255, 255, 220);
+        const Color textColor(0, 0, 0, 255);
+        const Color hintColor(90, 90, 90, 255);
+
+        const auto& viewport = device.getViewportProperty();
+        const float viewportWidth = static_cast<float>(viewport.getWidthProperty());
+        const float viewportHeight = static_cast<float>(viewport.getHeightProperty());
+
+        const float padding = 16.0f;
+        const float spacing = 8.0f;
+
+        // usePasswordMode masks the on-screen display only - one '*' per typed UTF-16 code unit
+        // (a coarse but standard on-screen-keyboard convention; doesn't attempt to collapse a
+        // surrogate pair into a single mask character). EndShowKeyboardInput's own returned text
+        // is always the real typed characters, matching real XNA - only the on-screen rendering
+        // differs between the two overloads.
+        std::string displayText;
+        if (pendingKeyboardInput_->UsePasswordMode)
+        {
+            displayText.assign(pendingKeyboardInput_->Buffer.size(), '*');
+        }
+        else
+        {
+            displayText = EncodeUtf16ToUtf8(pendingKeyboardInput_->Buffer);
+        }
+        if (displayText.empty())
+        {
+            displayText = " ";
+        }
+
+        const std::string title = pendingKeyboardInput_->Title.empty() ? std::string(" ") : pendingKeyboardInput_->Title;
+        const std::string description =
+            pendingKeyboardInput_->Description.empty() ? std::string(" ") : pendingKeyboardInput_->Description;
+        constexpr const char* hint = "Enter: confirm    Esc: cancel";
+
+        const Vector2 titleSize = font.MeasureString(title);
+        const Vector2 descriptionSize = font.MeasureString(description);
+        const Vector2 textSize = font.MeasureString(displayText);
+        const Vector2 hintSize = font.MeasureString(hint);
+
+        // Not implemented: real word-wrap for long title/description/typed text - same minimal,
+        // single-line-per-field scope as RenderPendingMessageBoxEXT.
+        const float contentWidth = std::max(std::max(titleSize.X, descriptionSize.X), std::max(textSize.X, hintSize.X));
+        const float boxWidth = std::min(viewportWidth - 2.0f * padding, std::max(360.0f, contentWidth + 2.0f * padding));
+        const float boxHeight = padding * 2.0f + titleSize.Y + spacing + descriptionSize.Y + spacing
+                                 + textSize.Y + spacing + hintSize.Y;
+
+        const float boxX = (viewportWidth - boxWidth) * 0.5f;
+        const float boxY = (viewportHeight - boxHeight) * 0.5f;
+
+        spriteBatch.Draw(whitePixel,
+                          Rectangle(static_cast<int>(boxX), static_cast<int>(boxY),
+                                    static_cast<int>(boxWidth), static_cast<int>(boxHeight)),
+                          std::nullopt, boxColor);
+
+        float y = boxY + padding;
+        spriteBatch.DrawString(font, title, Vector2(boxX + padding, y), textColor);
+        y += titleSize.Y + spacing;
+        spriteBatch.DrawString(font, description, Vector2(boxX + padding, y), textColor);
+        y += descriptionSize.Y + spacing;
+        spriteBatch.DrawString(font, displayText, Vector2(boxX + padding, y), textColor);
+        y += textSize.Y + spacing;
+        spriteBatch.DrawString(font, hint, Vector2(boxX + padding, y), hintColor);
+
+        // Real Escape-key handling: cancel on the down-edge (not held/every frame), matching
+        // RenderPendingMessageBoxEXT's own real-mouse-click edge detection (Input::Mouse there,
+        // Input::Keyboard here). Escape is not part of TextInputEXT's own FNA-faithful control-
+        // character synthesis table (Home/End/Backspace/Tab/Enter/Delete/Ctrl+V only, a byte-exact
+        // port of FNA's own FNAPlatform.cs list) - adding it there would be a shared, FNA-fidelity
+        // -sensitive change affecting every TextInputEXT consumer project-wide, not just this
+        // Guide-local cancel feature, so this polls real keyboard state directly instead, exactly
+        // like the message box already does for its own click detection.
+        const Input::KeyboardState kb = Input::Keyboard::GetState();
+        const bool escapeDown = kb.IsKeyDown(Input::Keys::Escape);
+        const bool escapeEdge = escapeDown && !pendingKeyboardInput_->WasEscapeDown;
+        pendingKeyboardInput_->WasEscapeDown = escapeDown;
+
+        if (escapeEdge)
+        {
+            CompletePendingKeyboardInput(/*canceled=*/true);
+        }
+    }
+
+    void Guide::SimulateKeyboardInputCancelEXT()
+    {
+        if (pendingKeyboardInput_ == nullptr)
+        {
+            throw System::InvalidOperationException("No keyboard input is currently pending.");
+        }
+        CompletePendingKeyboardInput(/*canceled=*/true);
     }
 
     void Guide::ResetPendingKeyboardInputForTestingEXT()

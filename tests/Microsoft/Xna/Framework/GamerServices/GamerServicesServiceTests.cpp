@@ -104,7 +104,11 @@ TEST(GuideTest, SimulateTrialModeGetSet) {
     EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
 }
 
-TEST(GuideTest, IsVisibleAlwaysFalseAndSetterIsNoOp) {
+// Post-plan_net.md remediation (2026-07-18): IsVisible now reflects real pending
+// message-box/keyboard-input state (decision 1a - real observable behavior over a PC no-op stub,
+// now that both overlays are genuinely real). With nothing pending, it still reads false, and the
+// setter is still a no-op - only the "always" part of the old test name/assumption was wrong.
+TEST(GuideTest, IsVisibleFalseWithNothingPendingAndSetterIsNoOp) {
     EXPECT_FALSE(Guide::getIsVisibleProperty());
     Guide::setIsVisibleProperty(true);
     EXPECT_FALSE(Guide::getIsVisibleProperty());
@@ -155,6 +159,41 @@ namespace {
     void PressEnter() {
         Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(
             static_cast<SharpRuntime::charcs>(u'\r'));
+    }
+
+    // Moved up from the message-box test block below (also used by the keyboard-input
+    // remediation tests' own RenderPendingKeyboardInputEXT coverage - must be declared before
+    // first use in a single-pass translation unit).
+    Microsoft::Xna::Framework::Graphics::Texture2D MakeWhitePixelTexture(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device
+    ) {
+        const std::vector<uint8_t> px = {255, 255, 255, 255};
+        return Microsoft::Xna::Framework::Graphics::Texture2D::CreateFromPixels(device, 1, 1, px);
+    }
+
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteFont> MakeSimpleTestFont(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device
+    ) {
+        using namespace Microsoft::Xna::Framework;
+        using namespace Microsoft::Xna::Framework::Graphics;
+
+        const std::vector<uint8_t> px = {255, 255, 255, 255};
+        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
+
+        std::vector<SharpRuntime::charcs> chars;
+        std::vector<Rectangle> bounds;
+        std::vector<Rectangle> cropping;
+        std::vector<Vector3> kerning;
+        for (char c = 32; c < 127; ++c)
+        {
+            chars.push_back(static_cast<SharpRuntime::charcs>(c));
+            bounds.push_back(Rectangle(0, 0, 1, 1));
+            cropping.push_back(Rectangle(0, 0, 8, 14));
+            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
+        }
+
+        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
+                                             static_cast<SharpRuntime::charcs>(' '));
     }
 }
 
@@ -324,6 +363,146 @@ TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorre
     delete result;
 }
 
+// --- Guide keyboard input remediation (post-plan_net.md independent audit, 2026-07-18) ---
+//
+// An independent post-completion audit found BeginShowKeyboardInput's title/description
+// parameters were silently discarded, UsePasswordMode was stored but never used, IsVisible never
+// reflected a real pending request, and there was no cancel path at all. The tests below cover
+// each of those four gaps directly.
+
+TEST(GuideTest, TitleAndDescriptionAreStoredForRendering) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "Enter your name", "Used for the leaderboard", "", System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_EQ(Guide::GetPendingKeyboardInputTitleForTestingEXT(), "Enter your name");
+    EXPECT_EQ(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), "Used for the leaderboard");
+    PressEnter();
+    delete result;
+}
+
+TEST(GuideTest, GetPendingKeyboardInputTitleThrowsWhenNothingPending) {
+    EXPECT_THROW(Guide::GetPendingKeyboardInputTitleForTestingEXT(), System::InvalidOperationException);
+    EXPECT_THROW(Guide::GetPendingKeyboardInputDescriptionForTestingEXT(), System::InvalidOperationException);
+}
+
+TEST(GuideTest, HasPendingKeyboardInputEXTReflectsRealState) {
+    KeyboardInputGuard guard;
+    EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_TRUE(Guide::getHasPendingKeyboardInputEXTProperty());
+    PressEnter();
+    EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+    delete result;
+}
+
+TEST(GuideTest, IsVisibleReflectsPendingKeyboardInput) {
+    KeyboardInputGuard guard;
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_TRUE(Guide::getIsVisibleProperty());
+    PressEnter();
+    EXPECT_FALSE(Guide::getIsVisibleProperty());
+    delete result;
+}
+
+TEST(GuideTest, WasKeyboardInputCanceledEXTFalseAfterNormalConfirm) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    TypeUtf16(u"Hello");
+    PressEnter();
+    EXPECT_FALSE(Guide::WasKeyboardInputCanceledEXT(result));
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "Hello");
+    delete result;
+}
+
+TEST(GuideTest, SimulateKeyboardInputCancelEXTCancelsAndClearsBuffer) {
+    KeyboardInputGuard guard;
+    int callCount = 0;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "",
+        [&callCount](System::IAsyncResult&) { ++callCount; }, std::any{}
+    );
+    TypeUtf16(u"partial text");
+    EXPECT_FALSE(result->getIsCompletedProperty());
+
+    Guide::SimulateKeyboardInputCancelEXT();
+
+    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(callCount, 1);
+    EXPECT_TRUE(Guide::WasKeyboardInputCanceledEXT(result));
+    // A canceled edit discards the typed text (matching a real on-screen keyboard's own
+    // cancel-discards-the-edit semantics), same "nothing to show" convention FNA's own stub
+    // already uses for its always-empty EndShowKeyboardInput.
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "");
+    EXPECT_FALSE(Guide::getHasPendingKeyboardInputEXTProperty());
+    delete result;
+}
+
+TEST(GuideTest, SimulateKeyboardInputCancelEXTThrowsWhenNothingPending) {
+    EXPECT_THROW(Guide::SimulateKeyboardInputCancelEXT(), System::InvalidOperationException);
+}
+
+TEST(GuideTest, WasKeyboardInputCanceledEXTThrowsForMismatchedResult) {
+    EXPECT_THROW(Guide::WasKeyboardInputCanceledEXT(nullptr), System::ArgumentException);
+}
+
+// The synthetic "render frame (Escape not pressed) -> type -> Enter -> End" cycle: a real
+// RenderPendingKeyboardInputEXT call (smoke-tested, mirrors RenderPendingMessageBoxEXT's own
+// established pattern) must never resolve the pending request by itself - only a real Escape
+// press or SimulateKeyboardInputCancelEXT/Enter can.
+TEST(GuideTest, RenderPendingKeyboardInputDoesNotAutoCompleteAndSupportsPasswordMasking) {
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    KeyboardInputGuard guard;
+    GraphicsDevice device;
+    SpriteBatch spriteBatch(device);
+    auto font = MakeSimpleTestFont(device);
+    Texture2D whitePixel = MakeWhitePixelTexture(device);
+
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "Enter password", "6+ characters", "", System::AsyncCallback{}, std::any{}, true
+    );
+    TypeUtf16(u"secret");
+
+    spriteBatch.Begin();
+    EXPECT_NO_THROW(Guide::RenderPendingKeyboardInputEXT(device, spriteBatch, *font, whitePixel));
+    spriteBatch.End();
+    // No real Escape press occurred - rendering alone must never cancel/resolve the pending
+    // request, matching RenderPendingMessageBoxEXT's own equivalent guarantee for mouse clicks.
+    EXPECT_FALSE(result->getIsCompletedProperty());
+
+    PressEnter();
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    // usePasswordMode only masks the on-screen render - the real typed text still round-trips
+    // through EndShowKeyboardInput exactly, matching real XNA (both overloads complete
+    // identically; only on-screen display differs).
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "secret");
+    delete result;
+}
+
+TEST(GuideTest, RenderPendingKeyboardInputIsNoOpWhenNothingPending) {
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    KeyboardInputGuard guard;
+    GraphicsDevice device;
+    SpriteBatch spriteBatch(device);
+    auto font = MakeSimpleTestFont(device);
+    Texture2D whitePixel = MakeWhitePixelTexture(device);
+
+    spriteBatch.Begin();
+    EXPECT_NO_THROW(Guide::RenderPendingKeyboardInputEXT(device, spriteBatch, *font, whitePixel));
+    spriteBatch.End();
+}
+
 // --- Guide message box overlay (Task 3.1) ---
 //
 // Unlike BeginShowKeyboardInput, this does not complete synchronously - it needs a real button
@@ -337,38 +516,6 @@ namespace {
     struct MessageBoxGuard {
         ~MessageBoxGuard() { Guide::ResetPendingMessageBoxForTestingEXT(); }
     };
-
-    Microsoft::Xna::Framework::Graphics::Texture2D MakeWhitePixelTexture(
-        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device
-    ) {
-        const std::vector<uint8_t> px = {255, 255, 255, 255};
-        return Microsoft::Xna::Framework::Graphics::Texture2D::CreateFromPixels(device, 1, 1, px);
-    }
-
-    std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteFont> MakeSimpleTestFont(
-        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device
-    ) {
-        using namespace Microsoft::Xna::Framework;
-        using namespace Microsoft::Xna::Framework::Graphics;
-
-        const std::vector<uint8_t> px = {255, 255, 255, 255};
-        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
-
-        std::vector<SharpRuntime::charcs> chars;
-        std::vector<Rectangle> bounds;
-        std::vector<Rectangle> cropping;
-        std::vector<Vector3> kerning;
-        for (char c = 32; c < 127; ++c)
-        {
-            chars.push_back(static_cast<SharpRuntime::charcs>(c));
-            bounds.push_back(Rectangle(0, 0, 1, 1));
-            cropping.push_back(Rectangle(0, 0, 8, 14));
-            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
-        }
-
-        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
-                                             static_cast<SharpRuntime::charcs>(' '));
-    }
 }
 
 TEST(GuideTest, HasPendingMessageBoxDefaultsFalse) {

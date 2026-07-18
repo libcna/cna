@@ -64,12 +64,20 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets whether the Guide overlay is currently visible.
          *
-         * @return Always false in this platform's implementation.
+         * Unlike real XNA off-Xbox (and FNA, which always returns false - there is no system
+         * guide overlay to track), this reflects CNA's own real message-box/keyboard-input
+         * overlays: true whenever BeginShowMessageBox or BeginShowKeyboardInput has an operation
+         * pending. Matches this project's decision 1a reasoning (real observable behavior over a
+         * PC no-op stub) now that those two overlays are genuinely real, not stubs.
+         *
+         * @return true if a message box or keyboard input overlay is currently pending.
          */
         [[nodiscard]] static bool getIsVisibleProperty();
 
         /**
-         * @brief No-op in this platform's implementation.
+         * @brief No-op, matching real XNA: there is no way to programmatically force the Guide
+         * overlay to show/hide independently of an actual pending BeginShowMessageBox/
+         * BeginShowKeyboardInput operation.
          *
          * @param value Ignored.
          */
@@ -110,6 +118,9 @@ namespace Microsoft::Xna::Framework::GamerServices
          * Microsoft::Xna::Framework::Input::TextInputEXT::TextInput fires (surrogate-pair safe)
          * into defaultText, and completes on Enter, matching real XNA/Xbox 360 on-screen keyboard
          * semantics. Does **not** complete synchronously, unlike this class's other Begin* methods.
+         * title/description are stored and rendered by RenderPendingKeyboardInputEXT() below - a
+         * game's own Draw() must call it once per frame (after drawing its own scene) for the
+         * player to see the prompt/typed text at all; nothing renders automatically.
          *
          * @param player      The player requesting input.
          * @param title       The input dialog title.
@@ -118,8 +129,9 @@ namespace Microsoft::Xna::Framework::GamerServices
          *        immediately returns this text unchanged.
          * @param callback    Invoked when the operation completes.
          * @param state       User-defined state passed through to the callback.
-         * @return An IAsyncResult that completes on Enter; caller owns it and must delete it
-         *         after EndShowKeyboardInput.
+         * @return An IAsyncResult that completes on Enter (or is canceled via Escape/
+         *         SimulateKeyboardInputCancelEXT - check WasKeyboardInputCanceledEXT); caller
+         *         owns it and must delete it after EndShowKeyboardInput.
          * @throws System::InvalidOperationException if a keyboard input request is already
          *         pending.
          */
@@ -135,9 +147,10 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing the on-screen keyboard for text input.
          *
-         * See the non-password overload above. usePasswordMode only affects on-screen masking
-         * (out of scope - no on-screen keyboard widget is rendered by this platform), not
-         * completion timing, matching real XNA: both overloads complete on Enter identically.
+         * See the non-password overload above. usePasswordMode masks each typed character as '*'
+         * in RenderPendingKeyboardInputEXT()'s own rendering (not the returned text itself, which
+         * is always the real typed characters) - matching real XNA: both overloads complete on
+         * Enter identically, only the on-screen display differs.
          *
          * @param player          The player requesting input.
          * @param title           The input dialog title.
@@ -145,9 +158,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @param defaultText     The initial text value; pre-seeds the buffer.
          * @param callback        Invoked when the operation completes.
          * @param state           User-defined state passed through to the callback.
-         * @param usePasswordMode Whether entered characters would be masked on-screen.
-         * @return An IAsyncResult that completes on Enter; caller owns it and must delete it
-         *         after EndShowKeyboardInput.
+         * @param usePasswordMode Whether entered characters are masked on-screen.
+         * @return An IAsyncResult that completes on Enter (or is canceled via Escape/
+         *         SimulateKeyboardInputCancelEXT - check WasKeyboardInputCanceledEXT); caller
+         *         owns it and must delete it after EndShowKeyboardInput.
          * @throws System::InvalidOperationException if a keyboard input request is already
          *         pending.
          */
@@ -166,12 +180,92 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param result The result returned by BeginShowKeyboardInput.
          * @return The text the user actually typed (or defaultText, if Enter was pressed
-         *         immediately with no further input).
+         *         immediately with no further input). Empty if the operation was canceled -
+         *         check WasKeyboardInputCanceledEXT() to distinguish "canceled" from "confirmed
+         *         with nothing typed," since both otherwise return the same empty string (real
+         *         XNA's own documented behavior returns null on cancel, which this C++ port's
+         *         non-nullable std::string return type cannot represent directly).
          * @throws System::ArgumentException if result was not returned by BeginShowKeyboardInput.
          * @throws System::InvalidOperationException if the operation has not completed yet (the
-         *         user has not pressed Enter).
+         *         user has not pressed Enter or canceled).
          */
         [[nodiscard]] static std::string EndShowKeyboardInput(System::IAsyncResult* result);
+
+        /**
+         * @brief NOXNA/test-only: gets the title the currently pending keyboard input request was
+         * created with, without needing pixel readback of RenderPendingKeyboardInputEXT's own
+         * rendering to confirm it round-tripped correctly (mirrors
+         * GetPendingMessageBoxFocusButtonForTestingEXT's own established pattern).
+         *
+         * @return The pending request's title.
+         * @throws System::InvalidOperationException if no keyboard input is currently pending.
+         */
+        NOXNA [[nodiscard]] static const std::string& GetPendingKeyboardInputTitleForTestingEXT();
+
+        /**
+         * @brief NOXNA/test-only: gets the description the currently pending keyboard input
+         * request was created with. See GetPendingKeyboardInputTitleForTestingEXT above.
+         *
+         * @return The pending request's description.
+         * @throws System::InvalidOperationException if no keyboard input is currently pending.
+         */
+        NOXNA [[nodiscard]] static const std::string& GetPendingKeyboardInputDescriptionForTestingEXT();
+
+        /**
+         * @brief NOXNA/EXT: gets whether the given completed BeginShowKeyboardInput operation was
+         * canceled (Escape, or SimulateKeyboardInputCancelEXT) rather than confirmed with Enter.
+         * Not part of the real XNA 4.0 Guide API - real XNA distinguishes this case via a null
+         * EndShowKeyboardInput return, which this port's non-nullable std::string return type
+         * cannot represent directly.
+         *
+         * @param result The result returned by BeginShowKeyboardInput.
+         * @return true if the operation was canceled rather than confirmed.
+         * @throws System::ArgumentException if result was not returned by BeginShowKeyboardInput.
+         */
+        NOXNA [[nodiscard]] static bool WasKeyboardInputCanceledEXT(System::IAsyncResult* result);
+
+        /**
+         * @brief NOXNA/EXT: gets whether a keyboard input request is currently pending (shown via
+         * BeginShowKeyboardInput and not yet completed). Not part of the real XNA 4.0 Guide API.
+         *
+         * @return true if a keyboard input request is currently awaiting Enter/cancel.
+         */
+        NOXNA [[nodiscard]] static bool getHasPendingKeyboardInputEXTProperty();
+
+        /**
+         * @brief NOXNA/EXT: renders the currently pending keyboard input overlay (if any) -
+         * title, description, and the text typed so far (masked as '*' per character if
+         * usePasswordMode was set) - and checks real keyboard input for an Escape press,
+         * canceling the pending operation when detected. A game's own Draw() calls this once per
+         * frame, after drawing its own scene, so the overlay renders on top (same convention as
+         * RenderPendingMessageBoxEXT). No-op if no keyboard input is pending.
+         *
+         * Not part of the real XNA 4.0 Guide API - Guide has no access to a game's own
+         * GraphicsDevice/SpriteBatch on any real platform, so this needs an explicit pump/render
+         * entry point instead of an automatic hook (same reasoning as RenderPendingMessageBoxEXT).
+         *
+         * @param device      The graphics device backing spriteBatch, used to size/center the box.
+         * @param spriteBatch An open-and-ready-to-draw-into SpriteBatch (between Begin()/End()).
+         * @param font        The font used to render the title/description/typed-text.
+         * @param whitePixel  A caller-owned opaque white 1x1 (or larger) Texture2D used to draw
+         *        the box background rectangle.
+         */
+        NOXNA static void RenderPendingKeyboardInputEXT(
+            Graphics::GraphicsDevice& device,
+            Graphics::SpriteBatch& spriteBatch,
+            Graphics::SpriteFont& font,
+            Graphics::Texture2D& whitePixel
+        );
+
+        /**
+         * @brief NOXNA/EXT: cancels the currently pending keyboard input as if the user pressed
+         * Escape, without requiring real keyboard input. Intended for headless demos/tests that
+         * cannot drive a real window's keyboard input - mirrors SimulateMessageBoxClickEXT's own
+         * established pattern for the message box overlay.
+         *
+         * @throws System::InvalidOperationException if no keyboard input is currently pending.
+         */
+        NOXNA static void SimulateKeyboardInputCancelEXT();
 
         /**
          * @brief NOXNA/test-only: clears any currently-pending keyboard input request without

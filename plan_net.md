@@ -307,16 +307,34 @@ verified via revert-verify-restore.
 
 ## Phase 3 — Guide: real message-box overlay + real keyboard capture
 
-**Correction (2026-07-18, independent post-completion audit):** this phase's own task write-ups
-below understate what's still missing. Confirmed by direct code read of the current
-`Guide.cpp`: `BeginShowKeyboardInput`'s `title`/`description` parameters are unused (literally
-commented out in the parameter list, e.g. `const std::string& /*title*/`); `getIsVisibleProperty()`
-is hardcoded `return false;` with a no-op setter, so there is no observable overlay-visible state
-at all; `UsePasswordMode` is stored on the pending-input action object but never read anywhere
-else in the file (no masking behavior for password-style input); there is no cancel path (only
-Enter/Return completes a pending keyboard input - no Escape/cancel handling). None of these four
-gaps were disclosed in this phase's own "✅ complete" task write-ups. Tracked as active remediation
-- see `NEXTnet.md` section 3/6.
+**Correction (2026-07-18, independent post-completion audit; fix landed same day):** this phase's
+own task write-ups below understated what was still missing at the time they were written.
+Confirmed by direct code read of the then-current `Guide.cpp`: `BeginShowKeyboardInput`'s
+`title`/`description` parameters were unused (literally commented out in the parameter list, e.g.
+`const std::string& /*title*/`); `getIsVisibleProperty()` was hardcoded `return false;` with a
+no-op setter, so there was no observable overlay-visible state at all; `UsePasswordMode` was
+stored on the pending-input action object but never read anywhere else in the file (no masking
+behavior for password-style input); there was no cancel path (only Enter/Return completed a
+pending keyboard input - no Escape/cancel handling). None of these four gaps were disclosed in
+this phase's own "✅ complete" task write-ups.
+
+**Now fixed** (2026-07-18, same day): added `Guide::RenderPendingKeyboardInputEXT(device,
+spriteBatch, font, whitePixel)` - a new real overlay mirroring `RenderPendingMessageBoxEXT`'s own
+established pattern - that renders the stored `Title`/`Description` and the text typed so far
+(masked as `*` per character when `UsePasswordMode` is set; `EndShowKeyboardInput`'s own returned
+text is unaffected, matching real XNA), and polls real keyboard state for an edge-triggered
+Escape press to cancel. Added `Guide::SimulateKeyboardInputCancelEXT()` (headless cancel, mirrors
+`SimulateMessageBoxClickEXT`) and `Guide::WasKeyboardInputCanceledEXT(result)` (distinguishes
+"canceled" from "confirmed with nothing typed," since real XNA's own documented null-on-cancel
+return can't be represented by this port's non-nullable `std::string` return type - both cases
+otherwise collapse to the same empty string). `getIsVisibleProperty()` now reflects whether a
+message box or keyboard input is genuinely pending (decision 1a: real observable behavior over a
+PC no-op stub, now that both overlays are real). 10 new tests added to
+`GamerServicesServiceTests.cpp` (title/description storage, password masking via a real
+render-and-confirm cycle, cancel path, `IsVisible`/`getHasPendingKeyboardInputEXTProperty`
+reflecting real state); all 32 pre-existing `GuideTest` cases still pass unmodified. Full suite
+re-run after the fix: same 36 pre-existing, already-documented XNB/Content-fixture failures, zero
+Guide/Net regressions. See `NEXTnet.md` section 3 for the full write-up.
 
 ### Task 3.1 — Guide.BeginShowMessageBox: real CNA overlay ✅ complete
 

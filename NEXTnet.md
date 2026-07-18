@@ -111,12 +111,30 @@ Task 11.3's write-up in `plan_net.md`).
   help text (and `demo_avatar_multi_attach_stress`'s own `Parts.size()` counter) is now genuinely,
   fully readable English, not just correctly-spaced blocks. Text drawn at 1.5x scale (legible,
   while still keeping the longest help line within an 800px-wide window).
-- **`Guide.cpp`'s Phase 3 work is genuinely incomplete**, confirmed by direct code read:
-  `BeginShowKeyboardInput`'s `title`/`description` parameters are unused (commented out in the
-  signature itself); `getIsVisibleProperty()` is hardcoded `return false;` and the setter is a
-  no-op; `UsePasswordMode` is stored on the action object but never read anywhere in the file (no
-  masking behavior); there is no cancel path (only Enter completes the pending input). Phase 3's
-  own `plan_net.md` write-up did not disclose these as remaining gaps.
+- **`Guide.cpp`'s Phase 3 work was genuinely incomplete — ✅ FIXED (2026-07-18).** Confirmed gaps,
+  each fixed:
+  - `BeginShowKeyboardInput`'s `title`/`description` were unused — now stored on the pending
+    action and rendered by a new `RenderPendingKeyboardInputEXT()` (mirrors
+    `RenderPendingMessageBoxEXT`'s own established real-overlay pattern: title, description, and
+    the text typed so far, drawn as a translucent panel).
+  - `UsePasswordMode` was stored but never read — `RenderPendingKeyboardInputEXT()` now masks the
+    on-screen display as `*` per typed character when set (the real returned text via
+    `EndShowKeyboardInput` is unaffected, matching real XNA - only the on-screen render differs).
+  - No cancel path existed — `RenderPendingKeyboardInputEXT()` polls real keyboard state for an
+    edge-triggered Escape press (same pattern as the message box's own real mouse-click polling);
+    a new `SimulateKeyboardInputCancelEXT()` gives headless demos/tests the same capability
+    without real input, mirroring `SimulateMessageBoxClickEXT`. A canceled edit discards the typed
+    text (matching a real on-screen keyboard's own cancel semantics); a new
+    `WasKeyboardInputCanceledEXT(result)` lets a caller distinguish "canceled" from "confirmed
+    with nothing typed" (both otherwise collapse to the same empty-string return, since real
+    XNA's own documented null-on-cancel return can't be represented by this port's non-nullable
+    `std::string` return type).
+  - `getIsVisibleProperty()` was hardcoded `false` — now reflects whether a message box or
+    keyboard input is actually pending (decision 1a: real observable behavior over a PC no-op
+    stub, now that both overlays are genuinely real).
+  - 10 new tests added (`GamerServicesServiceTests.cpp`), all passing; all 32 pre-existing
+    `GuideTest` cases still pass unmodified. Full suite re-run after the fix: same 36 pre-existing,
+    already-documented XNB/Content-fixture failures, zero Guide/Net regressions.
 - **Avatar visual quality has more real artifacts than Phase 7 disclosed.** Fresh screenshots
   (male, female, and mid-`Wave`) confirm the core proportions are genuinely fixed (no more
   stick-thin limbs / too-small head), but there are visible dark shading/seam artifacts at the
@@ -229,9 +247,10 @@ No `.clang-format` or other lint/format config was found in the repo — none is
 1. ~~**F1 overlay real readable font**~~ — ✅ **DONE.** New shared
    `examples/common/SimpleFontEXT.hpp`, rolled out to all 8 avatar demos, verified with fresh
    screenshots of every one. See section 3's own entry for detail.
-2. **Guide.cpp Phase 3 completion** — wire up `title`/`description` in the keyboard-input overlay,
-   make `UsePasswordMode` actually mask displayed input, add a real cancel path, make
-   `IsVisible`/its setter reflect actual overlay state.
+2. ~~**Guide.cpp Phase 3 completion**~~ — ✅ **DONE.** New `RenderPendingKeyboardInputEXT()`
+   renders title/description/typed-text (masked when `UsePasswordMode`), real Escape-to-cancel
+   plus `SimulateKeyboardInputCancelEXT()`/`WasKeyboardInputCanceledEXT()`, `IsVisible` now
+   reflects real pending state. 10 new tests, all passing. See section 3's own entry for detail.
 3. **Avatar visual seam/shading artifacts** — diagnose and fix the neck/shoulder/groin/chest dark
    shading found by fresh screenshot inspection (section 3), likely a CSG-merge flat-normals issue.
 
