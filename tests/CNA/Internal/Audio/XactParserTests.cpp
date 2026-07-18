@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "CNA/Internal/Audio/XactTypes.hpp"
 
+#include <chrono>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -1963,6 +1964,75 @@ TEST(XactParserTest, ParseXwbTruncatedExactlyAtBankNameFieldThrowsNotOob)
     // File ends here -- exactly 0 bytes remain for the 64-byte bankName field that would follow.
 
     EXPECT_THROW(ParseXwb(data), std::runtime_error);
+}
+
+// AUD-11-026 (found via fuzzing prep): entryCount is a full uint32_t (unlike every other count
+// field this parser reads, all naturally bounded by an 8/16-bit field width) fed straight into
+// `result.entries.resize(entryCount)` with no validation -- an implausibly large value (here,
+// near UINT32_MAX against a file that's really only ~72 bytes) must be rejected with a clean,
+// specific diagnostic instead of attempting a multi-hundred-gigabyte allocation. A plain
+// EXPECT_THROW wouldn't distinguish "rejected cleanly and fast" from "eventually got an unrelated
+// std::bad_alloc/std::length_error after actually starting a huge allocation" (both throw *some*
+// std::runtime_error-derived-or-not exception), which is exactly the class of gap
+// XnbContainerFuzzTests.cpp treats as a real failure, not an acceptable outcome -- so this checks
+// both the specific exception type and that it returns fast, not after a slow/huge allocation
+// attempt.
+TEST(XactParserTest, ParseXwbRejectsImplausiblyLargeEntryCountWithoutAllocationAttempt)
+{
+    // A COMPLETE, well-formed BANKDATA segment (144 real bytes total) is required so the parse
+    // genuinely reaches `result.entries.resize(entryCount)` -- a truncated file would already be
+    // rejected earlier (by AUD-11-018's bankName-field truncation check) for an unrelated reason,
+    // which would not actually exercise this guard at all.
+    constexpr uint32_t headerSize   = 48;
+    constexpr uint32_t bankDataSize = 96;
+    std::vector<uint8_t> data;
+    auto w32 = [&data](uint32_t v) {
+        data.push_back(static_cast<uint8_t>(v)); data.push_back(static_cast<uint8_t>(v >> 8));
+        data.push_back(static_cast<uint8_t>(v >> 16)); data.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    const char magic[4] = { 'W', 'B', 'N', 'D' };
+    data.insert(data.end(), magic, magic + 4);
+    w32(1); // version
+    const uint32_t segOffset1 = headerSize + bankDataSize; // 144: right after BANKDATA
+    for (int i = 0; i < 5; ++i)
+    {
+        w32(i == 0 ? headerSize : segOffset1);
+        w32(0);
+    }
+
+    w32(0u);           // wbFlags: not compact, no names
+    // 5,000,000 entries against a real file that's really only 144 bytes total -- clearly
+    // implausible (each entry needs at least 1 real byte to exist), but a moderate enough
+    // magnitude (~a few hundred MB, not hundreds of GB) that even an *unguarded* resize would
+    // complete quickly and safely if this test ever needs to run against pre-fix code, rather
+    // than risking a genuinely dangerous multi-GB allocation attempt on a shared machine.
+    constexpr uint32_t kImplausibleEntryCount = 5000000u;
+    w32(kImplausibleEntryCount);
+    for (int i = 0; i < 64; ++i) data.push_back(0); // bankName
+    w32(24u); // entryMetaDataSize
+    w32(0u);  // entryNameElementSize
+    w32(4u);  // alignment
+    w32(0u);  // compactFormat
+    for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+    // File ends here -- segOffset[1] (144) is exactly at the file's real end, a valid seek
+    // target, but there is no real per-entry data behind it at all.
+
+    ASSERT_EQ(data.size(), headerSize + bankDataSize);
+
+    const auto start = std::chrono::steady_clock::now();
+    try
+    {
+        ParseXwb(data);
+        FAIL() << "expected std::runtime_error";
+    }
+    catch (const std::runtime_error& ex)
+    {
+        EXPECT_NE(std::string(ex.what()).find("entryCount"), std::string::npos) << ex.what();
+    }
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(), 500)
+        << "rejection must be fast -- a slow return here would mean an allocation was actually attempted";
 }
 
 TEST(XactParserTest, ParseXsbTruncatedFileThrows)

@@ -544,6 +544,24 @@ namespace CNA::Internal::Audio
         ctx.seek(segOffset[0]);
         uint32_t wbFlags             = ctx.u32();
         uint32_t entryCount          = ctx.u32();
+        // AUD-11-026 (found via fuzzing prep): every other count field this parser reads
+        // (categoryCount/variableCount/rpcCount/pointCount/wavebankCount/soundCount/totalCues)
+        // is naturally bounded by its own 8/16-bit field width, but entryCount is a full
+        // uint32_t (up to ~4.29 billion) fed straight into `result.entries.resize(entryCount)`
+        // below with no validation at all -- unlike a quick, clean std::bad_alloc, a resize this
+        // large can succeed via Linux's virtual-memory overcommit (reserving address space
+        // without committing physical pages) and then hang for a long time -- or trigger the OOM
+        // killer -- while default-constructing billions of entries, a real DoS-class defect, not
+        // just a theoretical one. A legitimate entryCount can never exceed the number of bytes
+        // actually left in the file (each entry needs at least 1 real byte to exist) -- this
+        // bound is deliberately generous (the real per-entry minimum is at least 4 bytes even for
+        // the most compact format) but cheap, exact, and sufficient to keep the allocation on the
+        // same order of magnitude as the file itself. Matches this plan's established D7 policy
+        // (throw rather than silently attempt a huge allocation) and XnbContainerFuzzTests.cpp's
+        // own explicit standard that an uncaught std::bad_alloc is "an allocation-bomb guard gap,
+        // not an acceptable outcome."
+        if (static_cast<uint64_t>(entryCount) > static_cast<uint64_t>(ctx.end - ctx.start))
+            throw std::runtime_error("XWB: corrupt wave bank (entryCount implausibly large for the file size)");
         {
             // AUD-11-017/018 (found via ASan): Bank name (64 bytes, null-terminated). The old
             // `strnlen(p, 64)` scanned up to 64 bytes from `p` regardless of how many real bytes
