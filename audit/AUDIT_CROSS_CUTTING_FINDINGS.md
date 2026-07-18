@@ -63,6 +63,85 @@ Organize by category as entries accumulate.
   discover the operation was invalid via a later exception) rather than three independent coincidences — worth
   actively watching for in every subsequent state-mutating method audited, not just these three.
 
+- **Architecture-level, ALL backends: `IGraphicsBackend::ApplySamplerState()`'s signature never carries an
+  `AddressW` parameter at all** (`include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp:656-658`:
+  `virtual void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) {}`) —
+  found while auditing `D3D11SamplerCache.cpp`, whose own comment honestly discloses "IGraphicsBackend::
+  ApplySamplerState has no addressW parameter (a pre-existing interface limitation, not introduced here)" and
+  works around it by reusing `addressV` for the W axis. Since this is the shared interface every backend
+  implements, **`Microsoft::Xna::Framework::Graphics::SamplerState::AddressW`** (a real, documented XNA property —
+  confirmed present in `SamplerState.hpp` — used for `Texture3D`/volume-texture wrapping behavior along the third
+  axis) is silently unenforceable by *any* backend built on this interface, not just D3D11. No test found anywhere
+  in this codebase exercising a scenario where `AddressW` differs from `AddressV` in a way that would surface this
+  gap (a `grep` across `tests/`/`examples/` for Texture3D-sampler-address content found nothing). This is an
+  interface-level defect no individual backend can fix on its own — worth flagging for `IGraphicsBackend.hpp`'s own
+  audit and for whichever backend's Texture3D support gets audited first.
+  **UPDATE: this is one instance of a broader recurring shape — `IGraphicsBackend`'s `Apply*State()` methods
+  consistently omit several fields the real D3D11/XNA state descriptions support**, found while auditing
+  `D3D11StateObjectCache.cpp`: `ApplyBlendState()` carries no per-render-target color write mask (every D3D11
+  blend state is created with `D3D11_COLOR_WRITE_ENABLE_ALL` regardless of XNA's real, settable
+  `BlendState.ColorWriteChannels`), and `ApplyRasterizerState()` carries no `MultiSampleAntiAlias` flag (every
+  D3D11 rasterizer state hardcodes `MultisampleEnable = FALSE`, though this is lower-impact since it only affects
+  line/point AA algorithm selection, not MSAA render-target sampling itself, which is controlled independently via
+  `DXGI_SAMPLE_DESC`). All three gaps (`AddressW`, color-write-mask, `MultiSampleAntiAlias`) are honestly
+  self-disclosed in the D3D11 backend's own source comments as **pre-existing `IGraphicsBackend` interface
+  limitations, not something this backend introduced or can fix unilaterally** — but since every backend
+  implements the same shared interface, `BlendState.ColorWriteChannels`/`SamplerState.AddressW` (both real,
+  documented, settable XNA properties) are likely silently unenforceable across *all* backends, not just D3D11.
+  Priority check when `IGraphicsBackend.hpp` and `xna-graphics`'s `BlendState`/`SamplerState`/`RasterizerState`
+  are directly audited: confirm whether any backend actually threads these fields through some other path this
+  audit hasn't yet found, or whether they are genuinely dead XNA-facing properties across the whole project.
+
+- **Architecture-level, likely multi-backend: `IVertexBufferBackend`/`IIndexBufferBackend::SetDataWithOptions()`
+  has no destination-offset parameter, so every backend's `SetDataOptions::NoOverwrite` path always overwrites
+  the exact same `[0, byteCount)` region a prior `Discard`/`None` write already used** — found while auditing
+  `D3D11Buffers.cpp`, then independently confirmed the identical shape in `EasyGLGraphicsBackend.cpp`'s own
+  `uploadWithOptions()` (`NoOverwrite` also calls `set_sub_data(..., data, byte_count, 0)`, offset 0, same as
+  every other path). Real streaming (writing new data into an as-yet-unused portion of a larger buffer while the
+  GPU still consumes an earlier portion, the scenario `NoOverwrite` exists for) is architecturally impossible at
+  this interface level — every call replaces the same bytes. This makes D3D11's specific implementation a
+  **plausible (not confirmed-reproduced) synchronization risk**: `D3D11_MAP_WRITE_NO_OVERWRITE` is a hard promise
+  to the driver that the mapped range isn't being read by any pending GPU work; if a caller issues
+  `SetDataWithOptions(..., NoOverwrite)` and a prior draw using the same buffer's identical byte range hasn't yet
+  completed on the GPU, the CPU write could race a still-in-flight read, since D3D11 (unlike `Discard`) will not
+  rename the backing resource to avoid this. Not independently reproduced or traced to a concrete call site in
+  this pass — flagged as a priority check for whichever consumer(s) actually call `SetDataWithOptions` with
+  `NoOverwrite` in a same-frame multi-draw streaming pattern (e.g. `SpriteBatch`'s dynamic vertex buffer, if it
+  uses this path) when `xna-graphics`/`tests-xna-graphics` are audited.
+
+- **Recurring shape across 2 backends, 2 resource types: mip regeneration for a cube resource always touches
+  ALL 6 faces, even when only one face's content actually changed.** First found in SdlGpu's own
+  `TextureCube::SetData()` path (`sdlgpu_texturecube_test.cpp`'s audit: "any full-level-0 `SetData()` on one face
+  ... regenerates mip chains for all 6 faces"). **Now confirmed in a second backend and a second resource type**:
+  `D3D11RenderTargetCubeBackend::UnbindAsRenderTarget()` unconditionally calls `GenerateMips(srv_.Get())` on the
+  whole cube SRV whenever `mipMap_` is true, after rendering to only the single face `BindAsRenderTargetFace()`
+  most recently bound — regenerating mip chains for the other 5 faces from whatever content they currently hold
+  (potentially still-uninitialized data, if not every face has been rendered to yet in a typical
+  render-one-face-at-a-time cube-map-generation workflow). Not a hard crash/correctness bug in the single-face
+  case this project's own tests exercise (each test only ever fully populates one face before checking it), but a
+  real risk for any genuine multi-face cube-map-generation workflow, and a needless performance cost (5/6 of the
+  `GenerateMips()` work is wasted) even when correctness isn't at stake. Worth checking every other backend's
+  `RenderTargetCube`/`TextureCube` mip-regeneration trigger for the same "whole-resource, not per-face" shape.
+
+- **Vulkan-specific: `VulkanSpriteBatchBackend` never overrides `SetTransformMatrix()` at all** (confirmed by an
+  exhaustive `grep` across every `.hpp`/`.cpp` file in `src/CNA/Internal/Backends/Vulkan/` and
+  `include/CNA/Internal/Backends/Vulkan/` — zero matches), so it falls through to
+  `IGraphicsBackend::SetTransformMatrix()`'s shared no-op default. Found while auditing D3D11's own
+  `D3D11SpriteBatchBackend`, whose header comment explicitly claims this as "one real, deliberate improvement"
+  over "VulkanSpriteBatchBackend... leaves it a silent no-op" — independently verified true. **Practical impact:
+  any game calling `SpriteBatch.Begin(transformMatrix: someMatrix)` (the standard XNA idiom for camera-relative 2D
+  rendering, e.g. scrolling a 2D world) has that transform silently discarded on Vulkan specifically** — sprites
+  render as if `transformMatrix` were always Identity. **Every other backend checked correctly applies it**, via
+  one of two different (both valid) mechanisms: a stateful `SetTransformMatrix()` override consumed at flush time
+  (EasyGL, Bgfx, D3D9, D3D11, Canvas, Dx3, Software, Headless), or the transform threaded directly as a `Draw()`/
+  `QueueSprite()` parameter instead of a separate stateful call (WebGPU, SdlGpu, and SdlRenderer — the last of
+  which explicitly documents, in its own Task 675 comment, that this exact gap was found and fixed on that
+  backend previously). Ascii delegates its entire `SpriteBatch` to a wrapped `SdlRenderer::SdlGraphicsBackend`
+  instance, correctly inheriting that backend's already-fixed behavior. **D3D12 not yet checked** (likely mirrors
+  D3D11's correct design, given the pattern established elsewhere in this shard, but not confirmed).
+  No test found anywhere in this codebase exercising a non-Identity `SpriteBatch.Begin(transformMatrix)` on
+  Vulkan specifically that would have caught this.
+
 ## Duplicated backend logic
 
 _(pending — revisit once more backends are audited)_

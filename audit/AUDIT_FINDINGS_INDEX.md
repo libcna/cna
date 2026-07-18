@@ -14,6 +14,13 @@ _(none recorded yet)_
 
 ### HIGH
 
+- **Vulkan-specific: `SpriteBatch.Begin(transformMatrix)`'s transform is silently dropped —
+  `VulkanSpriteBatchBackend` never overrides `SetTransformMatrix()`, confirmed by an exhaustive grep across the
+  entire Vulkan backend directory (zero matches).** Every other checked backend (EasyGL, Bgfx, D3D9, D3D11,
+  WebGPU, SdlGpu, SdlRenderer, Canvas, Dx3, Software, Headless, and Ascii via delegation) correctly applies it via
+  one of two valid mechanisms. Found incidentally while auditing `D3D11SpriteBatch.cpp`, whose own header comment
+  claims this as a "deliberate improvement" over Vulkan — independently verified true. No test anywhere exercises
+  a non-Identity transform matrix on Vulkan. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **`EasyGL_AvatarRenderer_TintRouting` is a currently-failing CTest, registered with no `WILL_FAIL` annotation —
   independently re-confirmed by direct build+execution during synthesis (not just relayed from the audit
   subagent).** `ctest -R EasyGL_AvatarRenderer_TintRouting`: **Failed**, `left=(81,51,31) right=(41,181,255);
