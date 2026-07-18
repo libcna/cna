@@ -335,6 +335,25 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     `devices-tsan` (312-test `*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*SensorBase*`
     filter, 308 passed, 4 hardware skips, 0 failures, no sanitizer report).
 
+28. `DEVPERF-004` (`4cd9de18`) — new `docs/devices-event-contract.md`, the single
+    normative statement of dispatch thread identity, ordering, handler-list mutation,
+    reentrancy, destruction-during-dispatch, and exception semantics for all five
+    Sensors events, explicitly separating WP7-inherited .NET multicast-delegate
+    baseline from CNA-only policy decisions (required work's own second bullet).
+    Extended `BASE2-005`'s Accelerometer-only handler-removal/reentrancy tests to
+    `Gyroscope`/`Compass`/`Motion` (6 new tests total, no production source changes —
+    every guarantee documented was already correctly implemented). **Found a real,
+    concrete gap while tracing the actual call chain, not assumed**: `Compass`/`Motion`'s
+    exception path (`AndroidSensorBridge::Run()`'s `callback_(sample)` `catch (...) { }`)
+    is silent — no crash, but no logging or counter, unlike `Accelerometer`/`Gyroscope`'s
+    `SDLCORE-009`-hardened path; the source comment claiming these paths are "identical"
+    is now stale (accurate when written, superseded by `SDLCORE-009` afterward without
+    being revisited). **Deliberately left unfixed**, named for `DEVPERF-005`
+    ("structured native error/diagnostic channel... cover SDL and Android failure
+    paths") to actually close — this is exactly why `DEVPERF-004` stays **OPEN**
+    (documentation/decision/tests done; one real cross-backend policy-implementation
+    gap remains, correctly scoped to a different task rather than fixed here).
+
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
 concrete, oracle-*independent* bug or gap hiding in its own problem statement, found
@@ -548,12 +567,14 @@ tractability):
   deadlock. `ANDR2-011` ("consolidate Android sensor bridges onto a shared looper") was
   scanned and judged comparably large (up to 6 worker threads per `Motion` instance →
   one shared looper/thread — a genuine architecture redesign, not a quick fix).
-- `DEVPERF-002`–`005` — API/behavioral oracle generation, callback/threading contract
-  documentation, structured diagnostic channel. `DEVPERF-005` (diagnostic channel) is
-  referenced as "future scope" by several already-closed tasks (including this pass's
-  `SDLCORE-009`) — worth considering next since multiple other tasks implicitly wait on
-  it. `DEVPERF-002`/`003` (the behavioral oracle) are now **also** a confirmed blocker
-  for `BASE2-001`'s remaining scope (see Section 5) — picking these up unblocks more
+- `DEVPERF-002`/`003`/`005` — `004` (callback/threading contract documentation) is done
+  this pass (see Section 2), and its own investigation raised `DEVPERF-005`'s priority
+  further: it now has a second, freshly-named concrete gap to close (the
+  `AndroidSensorBridge::Run()` silent-exception-swallow asymmetry vs. `SDLCORE-009`'s
+  SDL-side fix) on top of being "future scope" for several already-closed tasks
+  (including `SDLCORE-009` itself) — worth picking up next. `DEVPERF-002`/`003` (the
+  API/behavioral oracle) remain a confirmed blocker for `BASE2-001`'s remaining scope
+  (see Section 5) — picking these up unblocks more
   than just their own tasks.
   `SDLCORE-007`/`011` — investigated briefly last pass, still open, see prior notes.
 - `ANDR2-007`/`012`/`014`/`015` — remaining Android-only items (`ANDR2-009`/`010` done
@@ -628,15 +649,20 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 27 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 28 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
-BASE2-004, BASE2-005 -- see Section 2 for commit hashes and a one-line summary
-of each), plus a separate, unrelated re-verification round of the *older*
-`audit_devices.md` (6 `DEV-AUD-*` findings, commit `422ed4c4` -- see Section
-2's own dated entry). All five `BASE2-*` P1 tasks are now done. Read Section
+BASE2-004, BASE2-005, DEVPERF-004 -- see Section 2 for commit hashes and a
+one-line summary of each), plus a separate, unrelated re-verification round
+of the *older* `audit_devices.md` (6 `DEV-AUD-*` findings, commit `422ed4c4`
+-- see Section 2's own dated entry). All five `BASE2-*` P1 tasks are now
+done. `DEVPERF-004` raised `DEVPERF-005`'s priority further: writing
+DEVPERF-004's contract doc found a real, concrete, previously-undetected gap
+(AndroidSensorBridge::Run()'s silent exception-swallow, no logging/counter,
+unlike SDLCORE-009's SDL-side fix) that only DEVPERF-005 ("structured native
+error/diagnostic channel") can actually close -- consider it next. Read Section
 1's "labeling convention" note carefully before closing anything -- it
 distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009,
 BASE2-005) from tasks whose acceptance criteria name an empirical/hardware
