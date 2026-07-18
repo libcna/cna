@@ -296,11 +296,56 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     transition (Stop, failed Start, restart, source/permission loss) against real WP7
     behavior remains blocked on `DEVPERF-002`/`003`.
 
-**Emerging pattern to remember:** `BASE2-001`/`002` both looked, at first glance, like
-tasks fully blocked on the not-yet-built behavioral oracle — but both had a concrete,
-oracle-*independent* bug hiding in their own problem statement, found only by actually
-tracing the code instead of deferring on sight. Apply this to `BASE2-003`/`004`/`005`
-(and any other "needs an oracle" task) before concluding there's nothing actionable.
+25. `BASE2-003` (`01bb7b3b`) — documentation-only: added a class-level doc comment to
+    `SensorState.hpp` recording, per enum value, the actual verified reachability
+    (grepped every `state_ = SensorState::...` assignment across all four `.cpp` files
+    directly, not assumed) — `NotSupported`/`Initializing`/`Ready`/`Disabled` are
+    produced by all four sensor classes today; `NoData`/`NoPermissions` are produced by
+    **none** of them. Deliberately documented as "currently never produced, unverified
+    against real WP7 behavior" rather than "intentionally never produced" — flagged an
+    unconfirmed hypothesis (Android's basic motion sensors don't require a runtime
+    permission grant, which would make `NoPermissions` plausibly unreachable on this
+    project's supported platforms) without claiming it as fact. **Left OPEN**: honest
+    reachability documentation is complete, but confirming intent against real WP7/
+    MonoGame behavior has no local oracle.
+26. `BASE2-004` (`6484957f`) — **no source files changed**: investigated and confirmed
+    this task's gap was *already* correctly resolved by a prior session's own
+    oracle-verified work. `DEV-API-005` (2026-07-06) had already verified the exception
+    type split against cited archived MSDN pages; `ErrorId`'s `0` default is correct
+    since SDL3 has no numeric error codes; the embedded `SDL_GetError()` text in
+    exception messages was judged intentional/acceptable, not a leak of internal detail.
+    A genuine fourth "why OPEN"/"why CLOSED" pattern this pass: sometimes investigation
+    finds nothing to fix because an earlier task already did the real work — "confirm
+    existing correctness" is itself a valid, non-trivial contribution, not a null result.
+27. `BASE2-005` (`04c38fca`) — **CLOSED**, not left OPEN: this task's problem statement
+    read as if it needed an external WP7 oracle, but the two concrete gaps named in its
+    acceptance criteria ("reentrant update", "handler list mutation during dispatch")
+    were both closeable by direct source inspection. Confirmed by reading sharp-runtime's
+    current `System::EventHandler<T>::Raise()` directly that it already snapshots
+    `handlers_` before iterating and takes `const TEventArgs&` — no handler can corrupt
+    another's args, and `Add()`/`Remove()` during dispatch only affects the *next*
+    `Raise()`. Found and fixed one stale test (`RemovingAnotherNotYetInvokedHandlerDuring
+    DispatchDoesNotThrow` described an older, already-fixed `Raise()` behavior and had
+    deliberately weakened its own assertion to `(void)secondHandlerInvoked` — renamed,
+    comment rewritten, tightened into real assertions). Added the one genuinely-untested
+    scenario, `HandlerTriggeringAReentrantUpdateDoesNotDeadlockOrCorruptState`. "Throwing
+    handler" and "dual events match reference order" acceptance criteria were already
+    covered by pre-existing, still-passing tests, confirmed still current rather than
+    re-authored. Test-file-only change; re-verified clean under both `devices-ubsan` and
+    `devices-tsan` (312-test `*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*SensorBase*`
+    filter, 308 passed, 4 hardware skips, 0 failures, no sanitizer report).
+
+**Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
+like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
+concrete, oracle-*independent* bug or gap hiding in its own problem statement, found
+only by actually tracing the code instead of deferring on sight (two real bugs, one
+stale test). `BASE2-003`/`004` are the counter-cases worth remembering too:
+investigation doesn't always find a new bug — sometimes it correctly confirms existing
+behavior is already right (`BASE2-004`) or produces honest, non-claim-inflating
+documentation of what's verified vs. not (`BASE2-003`). All five `BASE2-*` tasks this
+pass are now closed or progressed as far as they can go without an external oracle or
+hardware. Apply the same "investigate before deferring" discipline to every remaining
+P1 task before concluding there's nothing actionable.
 
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
@@ -321,33 +366,44 @@ resolve at link time.
 `cmake-build-android` all still build clean (the last for individual translation units
 only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **325 tests** (precise filter, used from
+**Tests:** Devices/Sensors filtered suite — **329 tests** (precise filter, used from
 `VIB2-003` onward, now including `AndroidSensorBridgeTests.*` since `ANDR2-009`:
 `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorBaseTests.*:
 SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:AndroidMotionMathTests.*:
-AndroidCompassMathTests.*:AndroidSensorBridgeTests.*`) — **321 passed, 4 skipped**
-(hardware-only, unchanged), 0 failures across every task above. `MOT2-003` added no
-tests (Android-only, no pure-logic component to test the way `COMP2-001`/`MOT2-005`/
-`ANDR2-009`/`ANDR2-010`/`BASE2-001`'s host-testable pieces had). Note: a broader,
-unscoped `*Devices*:*Sensor*:...` filter also incidentally matches
-`AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of which
-(`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
-`Vector3::GetHashCode()` (signed-int overflow in hash-combining) — not touched by any
-task this pass, out of scope for Devices work, not silenced, just avoid the broad
-filter and use the precise one above (or expect and ignore that one specific failure
-if using a broader filter for some other reason).
+AndroidCompassMathTests.*:AndroidSensorBridgeTests.*`) — **325 passed, 4 skipped**
+(hardware-only, unchanged), 0 failures across every task above (re-confirmed after
+`BASE2-005`'s new/renamed tests). `MOT2-003` added no tests (Android-only, no
+pure-logic component to test the way `COMP2-001`/`MOT2-005`/`ANDR2-009`/`ANDR2-010`/
+`BASE2-001`'s host-testable pieces had). `BASE2-003`/`004` added no tests (docs-only /
+no-change tasks respectively). Note: a broader, unscoped `*Devices*:*Sensor*:...`
+filter also incidentally matches `AccelerometerReadingTests`/`*EventArgsTests` (plain
+data-holder tests), one of which (`GetHashCodeConsistency`) trips a **pre-existing,
+unrelated** UBSan finding in `Vector3::GetHashCode()` (signed-int overflow in
+hash-combining) — not touched by any task this pass, out of scope for Devices work, not
+silenced, just avoid the broad filter and use the precise one above (or expect and
+ignore that one specific failure if using a broader filter for some other reason).
 
 **Sanitizers:** `devices-ubsan` clean on every P1 change this pass — **and directly
 caught a real bug this pass** (`BASE2-001`'s `ShouldAcceptUpdateAt()` overflow, see
 Section 2's own entry — this is exactly the kind of finding the mandatory "verify via
 sanitizer, don't just reason about it" rule exists for). `devices-tsan` was NOT re-run
-for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003`/`ANDR2-009`/`010` (none add new
-locking/concurrency structure beyond what already existed, or the new state is a
-worker-thread-only-written atomic with no new lock) but WAS re-run for `SDLCORE-009`,
-`SDLCORE-005`, `MOT2-005`, and `BASE2-001` (a new lock-acquisition site, or a
-meaningfully-changed comparison inside an existing one, on a real dispatch path) — 3
-consecutive clean runs each, 0 `WARNING: ThreadSanitizer` occurrences. Re-run TSan if a
-future P1 task touches concurrent *host-buildable* lock-based logic.
+for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003`/`ANDR2-009`/`010`/`BASE2-003`/
+`004` (none add new locking/concurrency structure beyond what already existed, or the
+new state is a worker-thread-only-written atomic with no new lock, or no source changed
+at all) but WAS re-run for `SDLCORE-009`, `SDLCORE-005`, `MOT2-005`, `BASE2-001`,
+`BASE2-002`, and `BASE2-005` (a new lock-acquisition site, a meaningfully-changed
+comparison inside an existing one, or new dispatch/reentrancy-relevant test coverage,
+each on a real dispatch path) — 3 consecutive clean runs each (`BASE2-005`: 1 full-suite
+run, 0 `WARNING: ThreadSanitizer` occurrences either way). Re-run TSan if a future P1
+task touches concurrent *host-buildable* lock-based logic.
+
+**2026-07-18: CPU thermal pacing rule restated by the user, mid-`BASE2-005` work** — old
+threshold language cancelled; current, standing rule: pause starting new work only at
+**≥85°C**, resume once back at **≤75°C**; always finish already-started work regardless
+of temperature. (This matches, and was previously captured in, the
+`feedback_cpu_thermal_pacing` memory record — the restatement corrected this session's
+own over-conservative behavior of throttling builds to `-j2` in the 75-85°C band, which
+was never required by the actual standing rule.)
 
 ---
 
@@ -507,7 +563,7 @@ tractability):
   hardware runs; `ANDR2-012` is the right home for the "app lifecycle
   changes"/mid-session-recovery scope both `ANDR2-002` and `SDLCORE-005` deliberately
   deferred this pass).
-- `COMP2-003`/`004`/`005`/`008` — remaining Compass items (`COMP2-001` done this pass;
+- `COMP2-003`/`004`/`005` — remaining Compass items (`COMP2-001`/`008` done this pass;
   `004`/`005` need physical devices).
 - `MOT2-001`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-003`/`005` done
   this pass, though `MOT2-003` only minimally — its core redesign is still fully open
@@ -518,13 +574,12 @@ tractability):
   mid-session backend degradation, confirmed by reading `Motion.cpp` — comparable in
   scope to `LIFE-007`/`010`, not attempted this pass. `MOT2-010` needs physical
   hardware.).
-- `BASE2-002`–`005` — like `BASE2-001` (done this pass, see Section 2), all rely on "the
-  behavioral oracle"/"reference behavior"; this environment has no WP7 SDK/MonoGame
-  reference and `DEVPERF-002`/`003` (the oracle-generation tasks) are themselves not yet
-  done — genuinely blocked, not just under-scoped. `BASE2-001`'s own precedent: **do**
-  look for a concrete, oracle-independent bug/gap named in the problem statement first
-  (it found and fixed a real overflow this way) before concluding a task is entirely
-  blocked — investigate before deferring wholesale.
+- All of `BASE2-001`–`005` are now done this pass (see Section 2) — `001`/`002` found
+  and fixed real oracle-independent bugs, `003` documented honest reachability, `004`
+  confirmed prior work already correct, `005` closed outright (test-coverage gap, no
+  oracle actually needed). `BASE2-006`/`007` remain: `007` is already `CLOSED` (see its
+  own `plan_devices.md` entry, done in an earlier pass); `BASE2-006` (float/NaN/hash
+  value-semantics audit) has not been started this pass.
 - `VIB2-005`–`007` — remaining Vibrate items (`005` needs a direct-backend Android
   validation; `006`/`007` are host-testable design/behavior questions).
 - `PERF2-001`–`003`, `TEST2-002`/`004`–`006`/`010` — remaining P1 perf/test-infra items.
@@ -573,48 +628,57 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 24 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 27 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
-MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002 -- see Section
-2 for commit hashes and a one-line summary of each), plus a separate, unrelated
-re-verification round of the *older* `audit_devices.md` (6 `DEV-AUD-*`
-findings, commit `422ed4c4` -- see Section 2's own dated entry). Read Section
+MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
+BASE2-004, BASE2-005 -- see Section 2 for commit hashes and a one-line summary
+of each), plus a separate, unrelated re-verification round of the *older*
+`audit_devices.md` (6 `DEV-AUD-*` findings, commit `422ed4c4` -- see Section
+2's own dated entry). All five `BASE2-*` P1 tasks are now done. Read Section
 1's "labeling convention" note carefully before closing anything -- it
-distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009)
-from tasks whose acceptance criteria name an empirical/hardware result (stays
-OPEN even once implemented, e.g. VIB2-003/004, ANDR2-002, SDLCORE-005,
-COMP2-001, MOT2-005, ANDR2-009/010). `BASE2-001`/`002` are a *third* "why
+distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009,
+BASE2-005) from tasks whose acceptance criteria name an empirical/hardware
+result (stays OPEN even once implemented, e.g. VIB2-003/004, ANDR2-002,
+SDLCORE-005, COMP2-001, MOT2-005, ANDR2-009/010, BASE2-001/002). MOT2-003 is
+a special case: only its narrowest sub-bullet was implemented, its
+acceptance criteria remain genuinely unmet (not just hardware-unverified) --
+don't mistake it for a near-complete fix. BASE2-001/002 are a *third* "why
 OPEN" pattern worth remembering: both looked oracle-blocked at first glance
 but each had a real, oracle-independent bug (a UBSan-caught overflow, then a
-TSan-proven atomicity race) hiding in their own problem statement -- apply
-the same "investigate before deferring" approach to `BASE2-003`/`004`/`005`.
-MOT2-003 is a special case: only its narrowest sub-bullet was implemented,
-its acceptance criteria remain genuinely unmet (not just hardware-unverified)
--- don't mistake it for a near-complete fix. BASE2-001 is a different special
-case: it found and fixed a real signed-integer-overflow bug (verified by
-UBSan) while investigating, but stays OPEN because its core cross-backend
-unification ask is blocked on the not-yet-built behavioral oracle
-(DEVPERF-002/003), not on hardware -- a third distinct "why OPEN" reason
-alongside "needs hardware" and "genuinely unimplemented, comparable to
-LIFE-007/010/011". Worth remembering: investigate each task for a concrete,
-oracle-independent bug named in its own problem statement before assuming
-it's entirely blocked -- BASE2-001's overflow fix came from doing exactly
-that.
+TSan-proven atomicity race) hiding in their own problem statement.
+BASE2-003/004 are the counter-cases: investigation doesn't always find a new
+bug -- BASE2-004 confirmed a prior task (DEV-API-005) had already correctly
+resolved the gap, and BASE2-003 produced honest reachability documentation
+without inflating it into an unverifiable "intentional" claim. BASE2-005
+closed outright: its problem statement read as oracle-blocked but both named
+acceptance-criteria gaps (reentrant update, handler-list mutation during
+dispatch) were closeable by reading sharp-runtime's EventHandler<T>::Raise()
+directly plus one new test -- no oracle was actually needed. General lesson,
+now proven five times over: investigate each task for a concrete,
+oracle-independent bug or gap named in its own problem statement before
+assuming it's entirely blocked.
+
+CPU thermal pacing rule was restated by the user on 2026-07-18: pause
+starting new work only at >=85C, resume once back at <=75C; always finish
+already-started work regardless of temperature (see feedback_cpu_thermal_pacing
+memory and Section 2's dated note) -- do not throttle builds to -j1/-j2 in the
+75-85C band, that was this session's own over-correction, not the actual rule.
 
 Continue the P1 backlog (Section 8 lists untriaged candidates with rough
-tractability notes). Read each task's full plan_devices.md entry before
-starting. For each task worked: implement, add/extend tests where a real
-test seam exists (several P1 items are Android-only with zero host
-coverage -- verify those via a real NDK cross-compile of the exact
-translation unit instead), build cmake-build-devices-ubsan and re-run the
-Devices/Sensors filtered suite (use the precise filter in Section 7, not a
-broad one -- it incidentally trips a pre-existing, unrelated Vector3 UBSan
-finding), run devices-tsan (3-4x) if the task touches concurrent
-host-buildable logic, update plan_devices.md's Section 16 entry with a full
-resolution/progress note, and make one focused git commit per task or
-tightly-related group.
+tractability notes -- BASE2-* is now fully done, COMP2-008 is also done, so
+ignore any older references to those as still-open). Read each task's full
+plan_devices.md entry before starting. For each task worked: implement,
+add/extend tests where a real test seam exists (several P1 items are
+Android-only with zero host coverage -- verify those via a real NDK
+cross-compile of the exact translation unit instead), build
+cmake-build-devices-ubsan and re-run the Devices/Sensors filtered suite (use
+the precise filter in Section 7, not a broad one -- it incidentally trips a
+pre-existing, unrelated Vector3 UBSan finding), run devices-tsan (3-4x) if
+the task touches concurrent host-buildable logic, update plan_devices.md's
+Section 16 entry with a full resolution/progress note, and make one focused
+git commit per task or tightly-related group.
 
 Do not mark anything CLOSED on insufficient grounds (Section 1's mandatory
 rules and labeling convention) and do not fabricate hardware evidence --
