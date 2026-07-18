@@ -134,12 +134,15 @@ void AvatarDemo::LoadContent()
     // value-type defaults) — a real caller must configure these before
     // DrawRealEXT does anything visible, same as
     // examples/avatar_real_render_integration_test.cpp.
-    // audit_net.md remediation (2026-07-18, third round): raised from 0.35 - confirmed via
-    // scripts/avatar_visual_regression_check.py that 0.5 measurably reduces the near-black-pixel
-    // fraction further (a real, if modest, improvement) without visibly blowing out lit areas -
-    // pushing past ~0.5 trades further darkness reduction for a fast-growing saturated-pixel
-    // fraction (15.9% -> 23.8% of non-background pixels hit a maxed channel at 0.5 already).
-    renderer_->setAmbientLightColorProperty(Vector3(0.5f, 0.5f, 0.5f));
+    // audit_net.md remediation (2026-07-18, fourth round): back at its original 0.35. The third
+    // round had raised this to 0.5 to fight the avatar's near-black regions, but that was
+    // compensating for a real shader bug, not a lighting-setup problem: EasyGL's skinned shaders
+    // multiplied EmissiveColor (which carries the pre-folded ambient term) by DiffuseColor a
+    // second time, so ambient landed as ambient*diffuse^2 and dark materials were crushed. With
+    // that fixed (see EnsureSkinnedProgram's own comment), 0.35 measures strictly better than 0.5
+    // on every region this project's own scripts/avatar_visual_regression_check.py tracks - so the
+    // compensation hack is removed rather than left to double up with the real fix.
+    renderer_->setAmbientLightColorProperty(Vector3(0.35f, 0.35f, 0.35f));
     renderer_->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
     renderer_->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
 
