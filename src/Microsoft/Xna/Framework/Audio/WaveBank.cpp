@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <vector>
@@ -27,6 +28,17 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Per-entry SoundEffect cache (optional: created on first request)
         std::vector<std::optional<SoundEffect>> cache;
+
+        // AUD-11-024: guards the whole cache lookup-then-populate sequence in GetSoundEffect()
+        // below. Without this, two threads racing to first-use the same entry could both observe
+        // an empty `cached` slot and both proceed to decode+`emplace()` into the same
+        // std::optional<SoundEffect> concurrently -- a genuine data race (UB), not just a
+        // performance concern. Real XNA/FNA document no thread-safety guarantee for WaveBank
+        // either, but this plan's acceptance criterion ("simultaneous first use decodes once or
+        // safely duplicates") asks for it explicitly, and a single mutex over the whole function
+        // is the simplest, safe interpretation: every decode is fully serialized, so it always
+        // "decodes once," never duplicates or races.
+        std::mutex cacheMutex;
 
         explicit XactWaveBankImpl(CNA::Internal::Audio::XwbData d)
             : data(std::move(d))
@@ -214,6 +226,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         if (!xactImpl_ || waveIndex >= xactImpl_->data.entries.size())
             return nullptr;
+
+        // AUD-11-024: serializes the whole lookup-then-populate sequence below so two threads
+        // racing to first-use the same entry can never both observe an empty cache slot and both
+        // try to decode+populate it concurrently -- see XactWaveBankImpl::cacheMutex's own comment.
+        std::lock_guard<std::mutex> lock(xactImpl_->cacheMutex);
 
         auto& cached = xactImpl_->cache[waveIndex];
         if (cached.has_value())

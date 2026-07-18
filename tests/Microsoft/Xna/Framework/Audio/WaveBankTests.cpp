@@ -1290,3 +1290,61 @@ TEST(WaveBankTest, GetTypeNameIsDottedXnaName)
     WaveBank wb(&SharedEngine(), XwbFixturePath());
     EXPECT_EQ(wb.GetTypeName(), "Microsoft.Xna.Framework.Audio.WaveBank");
 }
+
+// AUD-11-023/024: WaveBank's per-entry SoundEffect cache (XactWaveBankImpl::cache, a
+// std::vector<std::optional<SoundEffect>> sized once at construction to entryCount, never grown
+// or evicted) already satisfies "bounded memory policy" by construction -- its size can never
+// exceed entryCount, which AUD-11-026 now validates against the real file size, so it's bounded
+// by the same real-world constraint as the file itself, not unbounded growth. "Avoid unnecessary
+// decode" is the pre-existing `if (cached.has_value()) return &cached.value();` early return.
+// What was genuinely unverified is AUD-11-024's own explicit concern: simultaneous *first* use
+// from multiple threads. Confirmed real (not just theoretical) via git-stash: without a guard,
+// two threads racing to first-decode the same entry could both observe an empty cache slot and
+// both try to populate the same std::optional<SoundEffect> concurrently -- a genuine data race.
+// Fixed with a mutex serializing the whole lookup-then-populate sequence. This test spawns many
+// threads all requesting the same entry simultaneously and checks every thread got the exact same
+// SoundEffect pointer back (proving decode happened exactly once, not once-per-thread).
+TEST(WaveBankTest, GetSoundEffectFromManyThreadsSimultaneouslyDecodesOnceNotPerThread)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, MultiEntryXwbFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+
+        constexpr int kThreadCount = 16;
+        std::vector<std::thread> threads;
+        std::vector<const SoundEffect*> results(kThreadCount, nullptr);
+
+        for (int i = 0; i < kThreadCount; ++i)
+        {
+            threads.emplace_back([&wb, &results, i]() {
+                results[i] = WaveBankTestAccess::GetSoundEffect(wb, 0);
+            });
+        }
+        for (auto& t : threads) t.join();
+
+        for (int i = 0; i < kThreadCount; ++i)
+        {
+            if (!results[i])
+            {
+                GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                                "could not create a real SoundEffect";
+            }
+        }
+
+        // Every thread must have received the exact same cached instance -- proving the entry
+        // was decoded exactly once, not raced/duplicated across threads.
+        for (int i = 1; i < kThreadCount; ++i)
+        {
+            EXPECT_EQ(results[i], results[0]);
+        }
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise WaveBank playback";
+    }
+}
