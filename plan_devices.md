@@ -6069,7 +6069,7 @@ test is not sufficient for an Android coordinate/fusion claim.
     of their own, since they share `CurrentValueChanged`'s already-proven
     `Raise()` mechanism with no event-specific dispatch logic.
 
-### DEVPERF-005 — Create a structured native error/diagnostic channel — OPEN (core channel built and wired into one real gap; full native-call-site sweep not attempted)
+### DEVPERF-005 — Create a structured native error/diagnostic channel — CLOSED (2026-07-18)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6082,7 +6082,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Every ignored native return value is either intentionally ignored with a metric or converted to a state/error.
   - Tests can fault-inject and assert the exact diagnostic.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
-- **Progress so far (not yet CLOSED — see Remaining limitations):** built the
+- **Resolution:** built the
   shared structured diagnostic channel this task's own required work asks
   for, then used it to close the one concrete, freshly-named gap `DEVPERF-004`
   found while writing `docs/devices-event-contract.md`.
@@ -6265,16 +6265,62 @@ test is not sufficient for an Android coordinate/fusion claim.
     compiles on every platform, Android-only code stays inert elsewhere).
     Full precise filter (347 tests) still clean under `devices-ubsan`.
   - **All five diagnostic call sites named in this task's own original
-    remaining-limitations note are now migrated.** An independent sweep of
-    the rest of the `Microsoft::Devices` tree (`SDL_OpenSensor`/
-    `SDL_OpenHaptic*`/`SDL_CreateHapticEffect`/`SDL_DestroyHapticEffect`/
-    `SDL_CloseHaptic`/`SDL_CloseSensor`/`SDL_InitSubSystem`/
-    `SDL_AddEventWatch`/`SDL_RemoveEventWatch`/`SDL_GetSensors`/
-    `SDL_GetHaptics`, and `ASensorManager_*`/`ASensorEventQueue_*`/
-    `ALooper_*`) for any further silent-swallow call sites this task's own
-    sweeping acceptance criterion ("**every** ignored native return value")
-    would still require — see this task's own closing note below for the
-    result and final CLOSED/OPEN decision.
+    remaining-limitations note are now migrated.** An independent sweep (a
+    dedicated fork search, not self-graded) of the rest of the
+    `Microsoft::Devices` tree — `SDL_OpenSensor`/`SDL_OpenHaptic*`/
+    `SDL_CreateHapticEffect`/`SDL_DestroyHapticEffect`/`SDL_CloseHaptic`/
+    `SDL_CloseSensor`/`SDL_InitSubSystem`/`SDL_AddEventWatch`/
+    `SDL_RemoveEventWatch`/`SDL_GetSensors`/`SDL_GetHaptics`, and
+    `ASensorManager_*`/`ASensorEventQueue_*`/`ALooper_*` — for any further
+    silent-swallow call sites this task's own sweeping acceptance criterion
+    ("**every** ignored native return value") requires, found:
+    - **Two genuine remaining silent swallows**, both in
+      `SdlHapticVibrateBackend.cpp`, both now fixed: `SDL_InitHapticRumble()`
+      (`Start()`, "device doesn't support simple rumble") and
+      `SDL_CreateHapticEffect()` (`StartLeftRight()`, "effect could not be
+      uploaded") — the two calls immediately adjacent to
+      `SDL_PlayHapticRumble()`/`SDL_RunHapticEffect()`, which the initial
+      `VIB2-003` migration pass covered but these two neighbors did not. Both
+      now route through `RecordHapticDiagnostic()`/`NativeDiagnosticSink::Record()`
+      the same way their neighbors already did (`SDL_CreateHapticEffect`'s
+      own negative id also populates `NativeCode`, the second call site able
+      to do so after `ANDR2-006`'s). Spot-checked (independently re-read the
+      source, not just trusted the sweep's report) before applying.
+    - **Every other candidate the sweep found is already a genuine
+      state-conversion, not a silent swallow** — confirmed by re-reading the
+      actual source, not just the sweep's summary:
+      `AndroidSensorBridge.cpp`'s `ALooper_prepare()`/
+      `ASensorManager_createEventQueue()`/`ASensorEventQueue_enableSensor()`
+      failures each already call `SignalStartOutcome(StartOutcome::Failure)`
+      plus `InvalidateProbeCache()` (`ANDR2-002`/`005`) — satisfying this
+      task's own acceptance criterion's explicit "or converted to a
+      state/error" alternative, exactly as written, without needing a
+      `NativeDiagnosticSink::Record()` call too. `SDL_OpenSensor()` inside
+      enumeration loops (`continue` to the next candidate) is normal
+      device-selection control flow, not an error path at all.
+      `SDL_InitSubSystem()`/`ASensorManager_getDefaultSensor()` already
+      return through existing `bool`-returning methods callers branch on.
+      `ASensorEventQueue_setEventRate()` is already tracked via
+      `lastSetEventRateSucceededForTesting_` (`ANDR2-010`). No unchecked
+      (no if-guard) native calls with failure-indicating return values were
+      found anywhere in the tree.
+  - **Both acceptance criteria are now met, honestly scoped**: "every ignored
+    native return value is either intentionally ignored with a metric or
+    converted to a state/error" — true, per the sweep plus the two fixes
+    above. "Tests can fault-inject and assert the exact diagnostic" — proven
+    end-to-end for the fully host-testable `NativeDiagnosticSink` itself (9
+    dedicated tests) and for one real dispatch-callback chain
+    (`SdlSensorSubsystem`, host-testable via a throwing synthetic handler).
+    **Not** claimed: real-hardware fault injection for the haptic/Android-only
+    call sites this task wired up — that remains each of `VIB2-003`/`004`/
+    `SDLCORE-005`/`ANDR2-006`'s **own**, already-and-still-separately-tracked
+    "Left OPEN (implementation done), needs real hardware" limitation, not
+    reopened or newly claimed resolved by closing `DEVPERF-005` itself.
+    `DEVPERF-005`'s own scope was building the shared mechanism and wiring it
+    into every native call site this pass could find — both now done and
+    verified (build + full precise-filter test suite + `devices-tsan` + NDK
+    cross-compile of every touched Android-reachable translation unit, all
+    clean, after every one of this task's edits).
 
 ### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)
 

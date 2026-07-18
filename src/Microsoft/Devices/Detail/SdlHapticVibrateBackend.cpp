@@ -369,7 +369,15 @@ namespace Microsoft::Devices::Detail
 
         if (!SDL_InitHapticRumble(haptic_))
         {
-            return; // Silent no-op: device doesn't support simple rumble.
+            // Task DEVPERF-005 (2026-07-18, external audit
+            // `audit_devices_2026-07-17.md`): previously a completely silent
+            // no-op, the one call in this method the initial VIB2-003/005
+            // migration pass missed (found by a dedicated sweep for
+            // remaining unmigrated native call sites). Still a no-op --
+            // Start(TimeSpan, float)'s contract is unchanged -- just now
+            // observable.
+            RecordHapticDiagnostic(haptic_, "SDL_InitHapticRumble");
+            return;
         }
 
         // Mutually exclusive with StartLeftRight(): the two use independent
@@ -551,6 +559,25 @@ namespace Microsoft::Devices::Detail
         leftRightEffectId_ = SDL_CreateHapticEffect(haptic_, &effect);
         if (leftRightEffectId_ < 0)
         {
+            // Task DEVPERF-005 (2026-07-18, external audit
+            // `audit_devices_2026-07-17.md`): previously a completely silent
+            // no-op, the second call this file's initial VIB2-003/005
+            // migration pass missed (found by the same dedicated sweep as
+            // SDL_InitHapticRumble above). Still a no-op --
+            // StartLeftRight(...)'s contract is unchanged -- just now
+            // observable. NativeCode carries the actual negative id SDL
+            // returned, unlike RecordHapticDiagnostic()'s other call sites
+            // (whose underlying SDL calls return bool, with no numeric code
+            // of their own).
+            Microsoft::Devices::Sensors::Detail::NativeDiagnosticRecord record;
+            record.Backend = "SDL";
+            record.Operation = "SDL_CreateHapticEffect";
+            record.NativeCode = leftRightEffectId_;
+            record.NativeMessage = SDL_GetError();
+            record.DeviceId = std::to_string(static_cast<long long>(SDL_GetHapticID(haptic_)));
+            record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+            record.Severity = Microsoft::Devices::Sensors::Detail::NativeDiagnosticSeverity::Warning;
+            Microsoft::Devices::Sensors::Detail::NativeDiagnosticSink::Record(record);
             return; // Silent no-op: effect could not be uploaded.
         }
 
