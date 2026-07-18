@@ -241,6 +241,50 @@ reaches both shader families; a `VertexColorEnabled` check (pure black per-verte
 path; and a `PreferPerPixelLighting` check (Gouraud-averaged vs fresh-per-fragment specular at a
 triangle seam) proves the vertex-lit/pixel-lit dispatch selects two genuinely different shaders.
 
+## RenderTarget2D (single-target, 2026-07-18)
+
+`WebGPURenderTargetBackend` (`WEBGPU-53`/`54`) is this backend's first real off-screen render
+target: its own colour texture, always created in the swapchain's own chosen format
+(`surfaceFormat_`) rather than `Texture2D`'s `RGBA8Unorm` so every existing
+`GetOrCreatePipeline*3D()` (each hardcodes `target.format = surfaceFormat_` at pipeline-creation
+time) renders into it unchanged, with zero new pipeline-cache dimensions; and its own combined
+depth+stencil texture, always `Depth24PlusStencil8` regardless of the requested `DepthFormat`
+(mirroring `VulkanGraphicsBackend`'s own "always allocates a combined depth+stencil buffer using
+its device-wide format regardless of the exact value requested" simplification), because every
+pipeline here unconditionally declares a depth-stencil state.
+
+The trickier part was this backend's existing single-deferred-render-pass-per-frame architecture:
+every queued `Clear()`/3D-draw/`SpriteBatch` command normally collapses into one render pass
+against the swapchain, lazily, the first time something actually needs the frame to be real
+(`EnsureFrameRendered()`). `SetRenderTarget2D()` now eagerly flushes whatever was queued for the
+OUTGOING target the instant the target actually changes (closing out that render pass immediately
+via the new `RenderPendingDrawsToRenderTarget()`, and starting fresh accumulation for the new
+target) rather than tagging every one of this backend's ~10 `Queue*Draw()` families with a target
+and replaying them grouped-by-target at final-flush time, closer to `VulkanGraphicsBackend`'s own
+deferred-recording model — the smaller change for a backend with no pre-existing per-draw
+deferred/replay infrastructure to extend.
+
+A `RenderTarget2D` sampled back as an ordinary texture (`SpriteBatch`/`BasicEffect.Texture`) needed
+one more fix: every `Queue*Draw()` previously resolved its bound texture with an *unchecked*
+`static_cast<const WebGPUTextureBackend*>`, safe only because `WebGPUTextureBackend` used to be the
+only `ITextureBackend`-implementing class this backend had. `WebGPURenderTargetBackend` is a
+second, unrelated one, so this became a real hazard the first time a `GpuDrawParams::textureN`
+actually pointed at one — fixed by introducing `IWebGPUSamplable` (mirroring
+`VulkanGraphicsBackend`'s own `IVulkanSamplable`) and a `dynamic_cast`-based `ResolveSamplable()`
+helper everywhere a texture pointer is stored, so an incompatible type now safely resolves to
+"unbound" instead of undefined behaviour.
+
+MSAA (`WEBGPU-58`) and mip-chain regeneration are deliberately deferred, not silently
+under-delivered: `CreateRenderTarget2D()` throws a clear error for `mipMap=true`, and
+`GetMultiSampleCount()` honestly reports 0 regardless of the requested `multiSampleCount` (the
+`IRenderTargetBackend` default). `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
+trip and a real `BasicEffect` draw round trip via `GetData()`, a depth+stencil-tested target (a
+farther red quad loses to a nearer green one, with a genuine `ClearOptions::Stencil` clear — this
+also closed `WEBGPU-8`/`9`'s previously-unexercised stencil-attachment gap), sampling all 3 targets
+back through `SpriteBatch`, and — the architecture's critical proof — that a render-target-targeted
+`Clear()` sandwiched between two backbuffer `Clear()`/readback calls does not leak into the
+backbuffer's own render pass.
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:
@@ -268,7 +312,10 @@ open in `plan_webgpu.md`:
 - `EnvironmentMapEffect` (`env_map3d.wgsl`, cube-map sampling) and instancing (`BasicEffect`,
   `AlphaTestEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedEffect` and `SkinnedPbrEffect` real
   dispatch are all now implemented, see above);
-- render targets, cube/3D textures, compressed formats, MSAA and multiple render targets;
+- single-target `RenderTarget2D` (colour + depth/stencil round trip, real 3D-draw dispatch,
+  sampling back through `SpriteBatch`) is now implemented, see below; `RenderTargetCube`, 3D
+  textures, compressed formats, MSAA (backbuffer or render target) and multiple simultaneous
+  render targets (MRT) remain open;
 - `Texture2D.GetData()` (arbitrary-texture readback — distinct from the now-implemented backbuffer
   readback, `WEBGPU-51`);
 - full BlendState, RasterizerState (cull mode/wireframe), viewport, scissor and stencil-operation

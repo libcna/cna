@@ -21,8 +21,31 @@
 namespace CNA::Internal::Backends::WebGPU
 {
     class WebGPUGraphicsBackend;
+    class WebGPURenderTargetBackend;
 
-    class WebGPUTextureBackend final : public ITextureBackend
+    /// Small backend-local interface (mirrors VulkanGraphicsBackend's IVulkanSamplable) shared by
+    /// WebGPUTextureBackend and WebGPURenderTargetBackend so every Queue*Draw()'s stored "sampled
+    /// texture" pointer can resolve either concrete backend's WGPUTextureView safely.
+    /// WebGPURenderTargetBackend cannot simply derive from WebGPUTextureBackend to reuse its
+    /// View() -- both already derive from ITextureBackend (IRenderTargetBackend : ITextureBackend
+    /// too), which would create an ambiguous diamond -- so this is the same "shared capability via
+    /// a small interface, not shared implementation" pattern Vulkan already established. Before
+    /// RenderTarget2D support existed, every GpuDrawParams::textureN this backend ever saw was
+    /// guaranteed to be a WebGPUTextureBackend (the only ITextureBackend-implementing class this
+    /// backend had), so every Queue*Draw() used an unchecked `static_cast<const
+    /// WebGPUTextureBackend*>` to store it -- safe only by that former guarantee. Introducing
+    /// WebGPURenderTargetBackend (a second, unrelated concrete class implementing ITextureBackend)
+    /// makes that cast a real hazard: this interface plus ResolveSamplable() (see the .cpp) turns
+    /// it into a safe dynamic_cast that degrades to "treat as unbound" for any incompatible type,
+    /// which is never worse than before and is now also correct for a RenderTarget2D.
+    class IWebGPUSamplable
+    {
+    public:
+        virtual ~IWebGPUSamplable() = default;
+        [[nodiscard]] virtual WGPUTextureView View() const = 0;
+    };
+
+    class WebGPUTextureBackend final : public ITextureBackend, public IWebGPUSamplable
     {
     public:
         WebGPUTextureBackend(WebGPUGraphicsBackend& owner, const ImageData& data);
@@ -38,7 +61,7 @@ namespace CNA::Internal::Backends::WebGPU
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         [[nodiscard]] WGPUTexture Texture() const { return texture_; }
-        [[nodiscard]] WGPUTextureView View() const { return view_; }
+        [[nodiscard]] WGPUTextureView View() const override { return view_; }
 
     private:
         WebGPUGraphicsBackend* owner_ = nullptr;
@@ -47,6 +70,52 @@ namespace CNA::Internal::Backends::WebGPU
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+    };
+
+    /// WEBGPU-53/54: off-screen render target backing a RenderTarget2D. Owns its own colour
+    /// texture (always created in this backend's chosen swapchain format, surfaceFormat_ -- see
+    /// this class's .cpp constructor comment for why) and its own depth+stencil texture (always
+    /// Depth24PlusStencil8, regardless of the requested DepthFormat, mirroring
+    /// VulkanGraphicsBackend's own "always allocate a combined depth+stencil buffer using the
+    /// device-wide format regardless of the exact value requested" documented simplification --
+    /// see IGraphicsBackend::CreateRenderTarget2D's own doc comment). MSAA (WEBGPU-58) and mip
+    /// regeneration are deliberately NOT implemented yet: GetMultiSampleCount() always returns 0
+    /// (the IRenderTargetBackend default, honestly reporting "not supported by this backend" per
+    /// its own doc comment) and CreateRenderTarget2D() throws for mipMap=true rather than silently
+    /// under-delivering a requested mip chain.
+    class WebGPURenderTargetBackend final : public IRenderTargetBackend, public IWebGPUSamplable
+    {
+    public:
+        WebGPURenderTargetBackend(WebGPUGraphicsBackend& owner, int width, int height,
+                                  int depthFormat, bool preserveContents);
+        ~WebGPURenderTargetBackend() override;
+
+        WebGPURenderTargetBackend(const WebGPURenderTargetBackend&) = delete;
+        WebGPURenderTargetBackend& operator=(const WebGPURenderTargetBackend&) = delete;
+
+        [[nodiscard]] int GetWidth() const override { return width_; }
+        [[nodiscard]] int GetHeight() const override { return height_; }
+        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        void GetData(int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
+
+        void BindAsRenderTarget() override;
+        void UnbindAsRenderTarget() override;
+
+        [[nodiscard]] WGPUTextureView View() const override { return colorView_; }
+        [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
+        [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
+
+    private:
+        WebGPUGraphicsBackend* owner_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        bool preserveContents_ = false;
+        WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
+        WGPUTexture colorTexture_ = nullptr;
+        WGPUTextureView colorView_ = nullptr;
+        WGPUTexture depthTexture_ = nullptr;
+        WGPUTextureView depthView_ = nullptr;
     };
 
     class WebGPUVertexBufferBackend final : public IVertexBufferBackend
@@ -155,7 +224,7 @@ namespace CNA::Internal::Backends::WebGPU
 
         struct SpriteCommand
         {
-            const WebGPUTextureBackend* texture = nullptr;
+            const IWebGPUSamplable* texture = nullptr;
             std::array<SpriteVertex, 6> vertices{};
             int textureFilter = 0;
             int addressU = 1;
@@ -280,7 +349,8 @@ namespace CNA::Internal::Backends::WebGPU
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
-        void QueueSprite(const WebGPUTextureBackend& texture,
+        void QueueSprite(const ITextureBackend& texture,
+                         const IWebGPUSamplable& samplable,
                          const Rectangle& destinationRectangle,
                          const Rectangle& sourceRectangle,
                          const Color& color,
@@ -295,8 +365,19 @@ namespace CNA::Internal::Backends::WebGPU
 
         [[nodiscard]] WGPUDevice Device() const { return device_; }
         [[nodiscard]] WGPUQueue Queue() const { return queue_; }
+        [[nodiscard]] WGPUInstance Instance() const { return instance_; }
+
+        // WEBGPU-53/54: RenderTarget2D support (single-target only; MRT is WEBGPU-85/86/87, a
+        // separate, larger follow-up -- SetRenderTargets(...)'s IGraphicsBackend default already
+        // forwards a single-element call here unchanged, so no override is needed for that).
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
     private:
+        friend class WebGPURenderTargetBackend;
         struct LogicalViewport
         {
             float x = 0.0f;
@@ -337,6 +418,14 @@ namespace CNA::Internal::Backends::WebGPU
         // matching the Vulkan/Bgfx backends' own on-demand-submit readback semantics. Returns
         // false if the surface isn't presentable right now (minimized, lost, etc).
         bool EnsureFrameRendered();
+        // WEBGPU-53/54: renders every currently queued Clear()/3D-draw/SpriteBatch command into a
+        // single render pass targeting the given RenderTarget2D's own colour+depth attachments,
+        // then submits and clears every per-frame draw-command queue -- the RT-targeting sibling
+        // of EnsureFrameRendered()'s swapchain-targeting pass. See SetRenderTarget2D()'s own
+        // comment for why this "flush eagerly on every target switch" design (rather than tagging
+        // every draw command with a target and replaying grouped-by-target at final-flush time,
+        // closer to VulkanGraphicsBackend's own deferred-recording model) was chosen.
+        void RenderPendingDrawsToRenderTarget(WebGPURenderTargetBackend* target);
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
         [[nodiscard]] WGPUSampler GetOrCreateSampler(int textureFilter, int addressU, int addressV);
         // WEBGPU-82: full per-slot SamplerState cache (filter + address mode + anisotropy), used
@@ -460,6 +549,16 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUTexture acquiredTexture_ = nullptr;
         bool framePending_ = true;
 
+        // WEBGPU-53/54: the currently bound RenderTarget2D backend, or nullptr for the swapchain
+        // backbuffer. Present()/ReadBackbuffer() always target the backbuffer specifically
+        // (EnsureFrameRendered() does not consult this) -- matching their pre-existing hardcoded
+        // swapchain-only behaviour -- so a render target left bound across a Present() call has
+        // its own pending draws deferred until the next SetRenderTarget2D() switch rather than
+        // appearing on screen; this is a narrow, documented edge case (a game is expected to
+        // restore the backbuffer via SetRenderTarget(nullptr) before Present(), same convention
+        // every other CNA backend already assumes).
+        WebGPURenderTargetBackend* currentRenderTarget_ = nullptr;
+
         // Phase 57/63 vertical slice: DrawColoredPrimitives()/DrawIndexedColoredPrimitives() only
         // (VertexPositionColor, stride 16 -- see plan_webgpu.md's Phase 57 entry-point note). The
         // 128-float uniform layout matches VulkanGraphicsBackend::FillExtPushConst() byte-for-byte
@@ -527,7 +626,7 @@ namespace CNA::Internal::Backends::WebGPU
             // is owned by long-lived game/content state (unlike DrawUserPrimitives' transient
             // vertex buffers), so it is guaranteed to still be alive when this command actually
             // renders later in the same frame.
-            const WebGPUTextureBackend* texture = nullptr;
+            const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -605,7 +704,7 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
-            const WebGPUTextureBackend* texture = nullptr;
+            const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -686,7 +785,7 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
-            const WebGPUTextureBackend* texture = nullptr;
+            const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -746,8 +845,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
-            const WebGPUTextureBackend* texture0 = nullptr;
-            const WebGPUTextureBackend* texture1 = nullptr;
+            const IWebGPUSamplable* texture0 = nullptr;
+            const IWebGPUSamplable* texture1 = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -819,11 +918,11 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
-            const WebGPUTextureBackend* baseColorTexture = nullptr;
-            const WebGPUTextureBackend* normalMap = nullptr;
-            const WebGPUTextureBackend* metallicRoughnessMap = nullptr;
-            const WebGPUTextureBackend* emissiveMap = nullptr;
-            const WebGPUTextureBackend* occlusionMap = nullptr;
+            const IWebGPUSamplable* baseColorTexture = nullptr;
+            const IWebGPUSamplable* normalMap = nullptr;
+            const IWebGPUSamplable* metallicRoughnessMap = nullptr;
+            const IWebGPUSamplable* emissiveMap = nullptr;
+            const IWebGPUSamplable* occlusionMap = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -905,7 +1004,7 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
-            const WebGPUTextureBackend* texture = nullptr;
+            const IWebGPUSamplable* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
@@ -972,11 +1071,11 @@ namespace CNA::Internal::Backends::WebGPU
             bool wireframe = false;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
-            const WebGPUTextureBackend* baseColorTexture = nullptr;
-            const WebGPUTextureBackend* normalMap = nullptr;
-            const WebGPUTextureBackend* metallicRoughnessMap = nullptr;
-            const WebGPUTextureBackend* emissiveMap = nullptr;
-            const WebGPUTextureBackend* occlusionMap = nullptr;
+            const IWebGPUSamplable* baseColorTexture = nullptr;
+            const IWebGPUSamplable* normalMap = nullptr;
+            const IWebGPUSamplable* metallicRoughnessMap = nullptr;
+            const IWebGPUSamplable* emissiveMap = nullptr;
+            const IWebGPUSamplable* occlusionMap = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;

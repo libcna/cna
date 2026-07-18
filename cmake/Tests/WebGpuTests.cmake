@@ -108,4 +108,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_graphicsstate examples/webgpu_graphicsstate_test.cpp)
     cna_register_backend_test(NAME WebGPU_GraphicsState COMMAND cna_test_webgpu_graphicsstate
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-53/54: WebGPURenderTargetBackend / CreateRenderTarget2D() / SetRenderTarget2D() --
+    # this backend's first real RenderTarget2D support (Clear-only, real BasicEffect 3D draw, and
+    # depth+stencil-tested round trips via GetData(), sampling a RenderTarget2D back through
+    # SpriteBatch, and the critical "an intervening RT-targeted Clear() must not leak into the
+    # backbuffer's own render pass" architecture check).
+    cna_webgpu_test(cna_test_webgpu_rendertarget2d examples/webgpu_rendertarget2d_test.cpp)
+    cna_register_backend_test(NAME WebGPU_RenderTarget2D COMMAND cna_test_webgpu_rendertarget2d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
