@@ -338,6 +338,25 @@ still fully recoverable via git history, see Task 11.3's write-up in `plan_net.m
   pixels **0.0%** everywhere. The rendered male/female/Wave screenshots no longer show the jagged
   black teeth, holes or blotches the audit reported.
 
+  **Update (2026-07-18, sixth remediation pass).** Two things landed and one was disproven:
+  - **Discriminating shader tests added** (`EasyGL_EmissiveAmbientComposition`), covering all three
+    paths that had the emissive double-multiply: SkinnedEffect per-pixel, SkinnedEffect vertex-lit,
+    and EnvironmentMapEffect at `EnvironmentMapAmount=0`. They pin `DiffuseColor` to
+    (0.25, 0.5, 0.75) — strictly between 0 and 1, where `x*x` differs sharply from `x` — and zero
+    all three directional lights so the ambient-folded emissive term is the sole contributor.
+    Correct gives (64,128,191); the old formula gives (16,64,143). **Why no prior test caught the
+    bug:** `easygl_skinned_effect_bones_test.cpp` used `DiffuseColor` (1,0,0), and for components
+    that are exactly 0 or 1 the double multiply is invisible (its own comment even states the wrong
+    formula); `easygl_environmentmapeffect_amount_zero_test.cpp` explicitly pinned `DiffuseColor`
+    to (1,1,1) *to avoid* "whether uDiffuseColor.rgb double-multiplies into the already-diffuse-
+    scaled ambient contribution baked into uEmissiveColor" — it named the exact bug and stepped
+    around it. Adversarially verified: reinstating the old formula on exactly those three shaders
+    fails all three checks with precisely the predicted (16,64,143).
+  - **The flat-capped `cylinder` garment redesign this file previously recommended was implemented
+    in full — and measured WORSE, so it was reverted.** See section 6 item 16 for the numbers and
+    what that rules out. The remaining Wave fragments are therefore still open, and the previously
+    "proposed fix" is now a disproven dead end rather than a pending task.
+
   **Honestly still open (why this stays PARTIALLY FIXED):** garment shells and the body do still
   interpenetrate — the pair-wise measurement remains non-zero (Shirt-vs-Body crossings, plus
   Shirt/Pants/Shoes crossing each other), and the Wave pose still shows a small ragged blue patch
@@ -544,29 +563,36 @@ honestly open:**
     3) — needs its own design decision, not just a mechanical fix.
 15. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
     7.8/7.10).
-16. **Next logical step — the one remaining avatar defect class (still open after round 5).**
-    Garment shells still interpenetrate the body because each garment capsule's *hemispherical
-    end cap* burrows into whichever adjacent body segment that garment does not itself cover.
-    Note round 5 already tried and REVERTED the cheap version of this (trimming boundary caps by
-    one radius: it made Pants burial worse, 21 -> 39 vertices), so go straight to the real
-    redesign. The concrete proposed fix, in priority order:
-    - Change `generate_clothes_meshcraft._garment_to_mc3_xml` to author garment shells as
-      flat-capped `<cylinder>` primitives instead of `<capsule>` (mesh-craft supports cylinder -
-      confirmed in `mc3/src/Mc3XmlParser.cpp`; it takes the same radius/height/segments shape, so
-      it is close to a drop-in). A flat cap ends the garment in a clean hem ring instead of a
-      sphere that bulges into the neighbouring limb.
-    - Watch out for the converse failure this introduces: at *terminal* extremities (toe, hand,
-      head) the body's own capsule cap extends past the bone tail, so a flat-capped garment there
-      would let the body poke out. Those ends need the cylinder lengthened by roughly the body
-      radius, or to keep a capsule cap.
-    - Re-examine Task 7.3's "capsules, not cylinder+sphere" decision first rather than silently
-      overriding it: its stated evidence (self-intersecting hip/crotch geometry) predates the real
-      CSG `<union>` and was about `bpy.ops.object.join()` failing to weld, so it may no longer
-      apply - but it is a documented decision and deserves an explicit re-derivation.
-    - Re-verify with the committed tooling, not by eye: `tools/avatar_builder/diagnose_avatar_mesh.py`
-      (`crossings` to prove enclosure, `weights` to catch spurious bone influences, `normals` for
-      CSG singularities), then `scripts/avatar_visual_regression_check.py` for the per-region
-      speckle metric, then fresh male/female/`Wave` screenshots at the exact repro commands.
+16. **The one remaining avatar defect class — still open, and the two obvious fixes are now
+    DISPROVEN.** Garment shells still interpenetrate the body because each garment capsule's
+    *hemispherical end cap* burrows into whichever adjacent body segment that garment does not
+    itself cover, which is what leaves the ragged blue fragments at the Wave-pose shoulder/chest.
+    **Do not simply retry either approach below — both were fully implemented, measured, and
+    reverted:**
+    - *Round 5 — trim boundary caps by one radius* (pull each boundary end in so the cap apex
+      lands on the bone end). Measured: made Pants burial **worse**, 21 → 39 vertices inside the
+      body. Reverted.
+    - *Round 6 — the flat-capped `cylinder` redesign this file previously recommended.*
+      Implemented in full: `<cylinder>` shells spanning exactly each bone, plus explicit
+      `<sphere>`s at interior joints and skeleton terminals, with ends classified by position
+      (necessary because `UpperLeg.L/R` attach at `Hips`' *head*, not its tail). Measured
+      **worse on every metric that matters**: Wave torso speckle 120 → **200**, male groin 0 →
+      28, global brightness 357 → 326. Visibly worse too — the interior joint spheres bulge
+      proudly out of the thinner neighbouring shells (a `Spine1` shell sphere is radius 0.176
+      against a `Shoulder` shell's 0.106), adding *more* intersection curves rather than fewer,
+      and the flat cylinder caps introduce hard rims. Reverted. **This means Task 7.3's original
+      "capsules, not cylinder+sphere" conclusion still holds for garments, on fresh evidence, even
+      though its own stated reasoning (pre-CSG `bpy.ops.object.join()` not welding) no longer
+      applies.**
+    So the remaining fix is NOT a primitive-shape change. What the evidence actually points to:
+    the shells are sized per-bone (`BONE_RADII[bone] + padding`), so a *thin* bone's shell
+    (`Shoulder` 0.106) is narrower than the *fat* body segment it abuts (`Spine1` body capsule
+    0.14) and is simply swallowed by it. A promising next direction is therefore to size each
+    garment shell against the maximum body radius it actually has to clear along its span — not
+    against its own bone alone — or to author the torso garment as a single shell over the whole
+    torso rather than per-bone pieces. Verify any attempt with the committed tooling, not by eye:
+    `tools/avatar_builder/diagnose_avatar_mesh.py` (`crossings`, `weights`, `normals`), then
+    `scripts/avatar_visual_regression_check.py`, then fresh male/female/`Wave` screenshots.
 
 ## 7. Do not do yet
 
