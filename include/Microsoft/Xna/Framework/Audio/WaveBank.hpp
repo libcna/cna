@@ -106,6 +106,16 @@ namespace Microsoft::Xna::Framework::Audio
         // Dispose() take this same mutex before touching xactImpl_, making XactWaveBankImpl's own
         // cacheMutex now redundant (removed) since this outer lock already serializes the entire
         // GetSoundEffect() body.
+        //
+        // AUD-15-003 (lock ordering): GetSoundEffect() holds this lock across constructing a
+        // SoundEffect, which transitively acquires-and-releases AudioMixer.cpp's g_mixerMutex
+        // (via GetMixer()/GetMixerOrThrowXna()) -- the one real nested-lock pattern anywhere in
+        // this codebase's audio locks (DynamicSoundEffectInstance::queueMutex_ and SoundEffect.cpp's
+        // PendingPanStateCleanup::mutex never nest with anything). The established, and only
+        // permitted, order is xactImplMutex_ (outer) -> g_mixerMutex (inner) -- never the reverse.
+        // This is safe today because AudioMixer.cpp has no dependency on WaveBank at all, so
+        // nothing can ever try to acquire xactImplMutex_ while already holding g_mixerMutex; any
+        // future code that would do so must be restructured to preserve this order instead.
         std::mutex xactImplMutex_;
 
         void Init(const std::string& filename);
