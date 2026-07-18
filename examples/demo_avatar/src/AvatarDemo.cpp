@@ -134,7 +134,12 @@ void AvatarDemo::LoadContent()
     // value-type defaults) — a real caller must configure these before
     // DrawRealEXT does anything visible, same as
     // examples/avatar_real_render_integration_test.cpp.
-    renderer_->setAmbientLightColorProperty(Vector3(0.35f, 0.35f, 0.35f));
+    // audit_net.md remediation (2026-07-18, third round): raised from 0.35 - confirmed via
+    // scripts/avatar_visual_regression_check.py that 0.5 measurably reduces the near-black-pixel
+    // fraction further (a real, if modest, improvement) without visibly blowing out lit areas -
+    // pushing past ~0.5 trades further darkness reduction for a fast-growing saturated-pixel
+    // fraction (15.9% -> 23.8% of non-background pixels hit a maxed channel at 0.5 already).
+    renderer_->setAmbientLightColorProperty(Vector3(0.5f, 0.5f, 0.5f));
     renderer_->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
     renderer_->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
 

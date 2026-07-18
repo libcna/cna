@@ -11,21 +11,28 @@ fidelity to FNA (`/rv/data/library/github.com/FNA-XNA/FNA` for most namespaces,
 unit tests.
 
 **Current phase:** `plan_net.md` ("2026-07-07 Re-Audit and Hardening") is fully checked off
-(104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **Two independent
-post-completion audits (2026-07-18) each found that "done" claims in this file and `plan_net.md`
-overstated what was actually delivered.** The first audit's 4 findings (F1 font readability,
-Guide.cpp's keyboard-input overlay, avatar visual artifacts, this file's own broken example
-command) were addressed same-day; a **second** independent audit then re-verified that pass
-against fresh runtime evidence and found the avatar claim ("seams completely gone") itself did not
-hold up under wider-angle/`Wave`-pose screenshots the first pass hadn't checked, plus two more
-real gaps (pre-handshake `SendAppData` still silently dropped despite being "observable" now, and
-the Guide password-masking test never actually checked the masked text). All four of the second
-audit's findings are addressed below (section 3) with a genuinely more skeptical bar this time:
-the avatar section explicitly separates *measured, verified* improvement from what is *still
-honestly open*, rather than repeating a "completely gone"-style claim. Treat `plan_net.md`'s
-checkmarks as "this task's described work was completed at the time," not as "the underlying
-feature was fully correct" on first landing — and treat any single independent-verification pass
-as capable of missing things too, not as a final word. The prior first-implementation pass
+(104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **Three
+independent post-completion audits (all 2026-07-18) each found that "done" claims in this file
+and `plan_net.md` overstated what was actually delivered.** The first audit's 4 findings (F1 font
+readability, Guide.cpp's keyboard-input overlay, avatar visual artifacts, this file's own broken
+example command) were addressed same-day; a **second** independent audit then re-verified that
+pass against fresh runtime evidence and found the avatar claim ("seams completely gone") itself
+did not hold up under wider-angle/`Wave`-pose screenshots the first pass hadn't checked, plus two
+more real gaps (pre-handshake `SendAppData` still silently dropped despite being "observable" now,
+and the Guide password-masking test never actually checked the masked text) — those four were
+addressed too, again with the avatar section explicitly separating *measured, verified*
+improvement from what remained *honestly open*, rather than repeating a "completely gone"-style
+claim. A **third** independent audit then found the avatar *still* looked visibly wrong (correct —
+the second round never claimed otherwise), plus a real, still-incomplete lifecycle gap in the
+second round's own new `SendAppData` pre-handshake queue (`HandleGamerLeaveBroadcast` never purged
+it, the drop counter's own documented contract didn't match its actual behavior, and no tests
+proved cleanup on leave/disconnect/migration/Dispose) — see section 3/6 for the third round's own
+fixes, sharper avatar diagnosis, and the new reproducible visual regression script. **Do not
+assume a fourth pass wouldn't find more** — three consecutive independent audits each catching
+real gaps in the prior "done" claims is itself the strongest signal in this file: verify with
+fresh evidence, every time, regardless of how many prior passes already happened. Treat
+`plan_net.md`'s checkmarks as "this task's described work was completed at the time," not as "the
+underlying feature was fully correct" on first landing. The prior first-implementation pass
 (132/132 tasks) is complete; its own archive file (`plan_net_20260707.md`) no longer exists in the
 working tree (deleted by a later, separate, deliberate repo-wide cleanup commit, `e86b7cba` —
 still fully recoverable via git history, see Task 11.3's write-up in `plan_net.md`).
@@ -188,6 +195,45 @@ still fully recoverable via git history, see Task 11.3's write-up in `plan_net.m
   fidelity. Not yet resolved; a good next step for a future session, verified the same way this
   session verified everything else — fresh runtime screenshots at the exact repro commands, not
   tests or non-manifold analysis alone.
+  **Update (2026-07-18, third remediation pass):** a *third* independent audit re-checked this
+  section's own claims against fresh screenshots again and correctly found the avatar still looks
+  visibly wrong at head/neck, shoulders, groin, legs, and shoes — "brighter" was never a claim that
+  it looks *right*, and this update does not repeat that mistake either. Two more real, concrete
+  findings from close pixel-level inspection this pass, plus one genuine additional fix:
+  - **The blue collar/harness/waistband shapes at the neck and torso are legitimate design, not a
+    bug.** Under 4x zoom their edges are hard and geometric, matching `Shirt`'s own trim color
+    (`0.20, 0.35, 0.60`) — not the organic, irregular shape a shading defect produces. They read as
+    "black" mainly because they're dark navy under still-moderate lighting, not because anything is
+    broken. Reclassifying this specific complaint doesn't reduce the avatar's other real problems.
+  - **The groin still shows a small, genuine defect** distinct from the collar/trim shapes above:
+    a normal-direction singularity where several CSG capsule surfaces meet at a shared symmetric
+    point (confirmed earlier via direct per-vertex normal-angle analysis — up to 165° between
+    normals at coincident positions on the centerline). Not yet fixed — needs either a capsule
+    geometry change at the Hips/UpperLeg union or an explicit normal-averaging pass at that specific
+    singular point.
+  - **The Shoes/Foot boundary shows a distinctly *jagged, irregular* dark pattern** under close
+    zoom — visually unlike either the clean-edged trim shapes or a simple "dark shoe color" -
+    consistent with the Shoes garment shell's rigid capsule not fully/consistently enclosing the
+    body's own foot mesh silhouette at their shared boundary (a coverage/Z-fight-style mismatch,
+    not yet root-caused to a specific geometry parameter). Not yet fixed.
+  - **Genuine additional fix landed this pass:** `AvatarRenderer`'s ambient light raised from `0.35`
+    to `0.5` (in `demo_avatar` **and** the 6 other avatar demos that had independently copy-pasted
+    the same `0.35` value — the exact class of copy-paste drift this project already learned from
+    once with `MakeSimpleFont`, so all 7 were updated together, not just the one under active
+    investigation). Confirmed via `scripts/avatar_visual_regression_check.py` (see below) to
+    measurably reduce the very-dark-pixel fraction further without visibly blowing out lit areas;
+    pushing ambient past ~0.5 was tested and rejected — the saturated-pixel fraction grew from
+    15.9% to 23.8% for a much smaller further darkness reduction, a bad trade.
+  - **Reproducible visual regression check added**, per this audit's own explicit request:
+    `scripts/avatar_visual_regression_check.py` renders male/female T-pose and male `Wave` through
+    the real pipeline (no synthetic fixture), computes average non-background brightness and the
+    very-dark-pixel fraction, and fails (exit 1) if either regresses below this session's own
+    measured floor (avg brightness 300, very-dark fraction 8%; current measured values are
+    332-337 / 4.1-6.0%). Adversarially verified: temporarily reverted the ambient fix, confirmed
+    the script correctly failed on all 3 shots with the exact expected metric drop, restored the
+    fix, confirmed a clean pass again. This catches a *regression* below the current, still
+    imperfect state — it cannot and does not claim the avatar looks fully correct, which remains
+    for a human (or a much more sophisticated check) to judge.
 - **`NEXTnet.md`'s own example command was broken** when followed from the repo root (see the
   working-directory note in section 5) — fixed in this same pass that added this subsection.
 
@@ -334,21 +380,52 @@ honestly open:**
    confirmed the test failed with the exact expected mismatch, restored it, confirmed all 43
    `GuideTest` cases pass again.
 
+**Third-round remediation (independent audit, 2026-07-18) — 3b still open, everything else done:**
+
+3c. **Avatar visual artifacts — still ⚠️ PARTIALLY FIXED, not closed.** A third audit correctly
+    found the avatar still looks visibly wrong; see section 3's own "Update (third remediation
+    pass)" paragraph for the sharper diagnosis (collar/harness reclassified as legitimate design,
+    not a bug; groin singularity and Shoes/Foot boundary jaggedness identified as the two
+    remaining real, distinct, unfixed defects), the further ambient increase (0.35→0.5, applied
+    consistently across all 7 avatar demos that set it, not just the one under investigation), and
+    the new `scripts/avatar_visual_regression_check.py` reproducible regression check.
+12. ~~**Complete `PendingPreHandshakeSends` lifecycle**~~ — ✅ **DONE.**
+    `HandleGamerLeaveBroadcast` (a client learning a *third* peer left) was missing the same
+    `PurgePendingPreHandshakeSendsFor` call `HandleDisconnect` already had — fixed.
+    `GetDroppedAppDataCount()`'s own doc comment claimed every undeliverable send is counted, but
+    the purge/full-clear paths didn't actually increment it — fixed, now counts every genuinely
+    undeliverable discard, not just queue-overflow evictions. The "preserving order" doc claim was
+    narrowed to what's actually guaranteed (FIFO per same sender/target pair, not a blanket
+    cross-pair guarantee). Added 6 new tests covering purge-on-leave, purge-on-disconnect,
+    full-clear-on-migration, full-clear-on-session-end, Dispose-with-pending-queue safety, and
+    same-pair order preservation. Found and fixed a real double-free bug of its own along the way
+    (a test-helper pattern that restored a global registry pointer already deleted by its own
+    setup call) — see `src/CNA/Internal/Net/ENetBackend.cpp`/`ENetBackendTests.cpp`'s own commit
+    for the full writeup.
+
 **Not yet started, not this session's active scope:**
 
-8. **Optional follow-up:** fix the same `MakeSimpleFont` glyph-bounds bug (section 3) in the 10
-   other pre-existing demos it also affects (unrelated plans/subsystems, large blast radius —
-   check in before starting, per section 7).
-9. **Optional follow-up:** real friend-list population for `SignedInGamer::GetFriends()` (section
-   3) — needs its own design decision, not just a mechanical fix.
-10. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
+13. **Optional follow-up:** fix the same `MakeSimpleFont` glyph-bounds bug (section 3) in the 10
+    other pre-existing demos it also affects (unrelated plans/subsystems, large blast radius —
+    check in before starting, per section 7).
+14. **Optional follow-up:** real friend-list population for `SignedInGamer::GetFriends()` (section
+    3) — needs its own design decision, not just a mechanical fix.
+15. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
     7.8/7.10).
-11. **Next logical step for item 3b above:** the `Wave`-pose torso darkness. Confirmed not caused
-    by degenerate-normal NaN propagation (defensive guard added, zero measured effect) or purely
-    by `blend_radius` width (narrowing tested and reverted, no clear improvement) - most likely
-    needs targeted weight-painting changes specifically at the `Shoulder`/`UpperArm` blend region,
-    verified the same way this session verified everything else (fresh runtime screenshots at the
-    exact `--yaw 25 --clip Wave` repro command, not tests or non-manifold analysis alone).
+16. **Next logical steps for item 3b/3c above**, in rough priority order:
+    - The groin normal singularity: try either a capsule-geometry/padding change at the
+      Hips/UpperLeg CSG union to avoid the exact symmetric meeting point, or an explicit
+      normal-averaging pass targeted at that specific vertex position.
+    - The Shoes/Foot boundary jaggedness: check whether the Shoes garment capsule's radius/padding
+      genuinely encloses the body's own foot mesh silhouette at every point along their shared
+      boundary, across the actual bind pose (not just nominal bone radii).
+    - The `Wave`-pose torso darkness: confirmed not caused by degenerate-normal NaN propagation
+      (defensive guard added, zero measured effect) or purely by `blend_radius` width (narrowing
+      tested and reverted, no clear improvement) - most likely needs targeted weight-painting
+      changes specifically at the `Shoulder`/`UpperArm` blend region.
+    - Verify every one of the above the same way this session verified everything else (fresh
+      runtime screenshots at the exact repro commands, cross-checked with
+      `scripts/avatar_visual_regression_check.py`, not tests or non-manifold analysis alone).
 
 ## 7. Do not do yet
 

@@ -189,7 +189,9 @@ void SyncGame::LoadAvatarView(AvatarView& view, AvatarBodyType gender)
     }
     view.renderer->SetAppearanceEXT(appearance);
 
-    view.renderer->setAmbientLightColorProperty(Vector3(0.35f, 0.35f, 0.35f));
+    // audit_net.md remediation (2026-07-18, third round): raised from 0.35 to match
+    // demo_avatar's own fix - see AvatarDemo.cpp's identical comment for the measurement.
+    view.renderer->setAmbientLightColorProperty(Vector3(0.5f, 0.5f, 0.5f));
     view.renderer->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
     view.renderer->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
 

@@ -1062,6 +1062,16 @@ linear-blend approach exactly, so this needs further content-side weight-paintin
 shader change). Not yet resolved. See `NEXTnet.md` section 3 for the full writeup with exact
 measurements, and section 6 for current task status.
 
+**Update (2026-07-18, third independent audit, same day):** re-checked again and, correctly,
+still found real problems - the collar/harness dark-blue shapes turned out to be legitimate
+design (confirmed via 4x zoom: hard geometric edges matching `Shirt`'s own trim color, not a
+shading defect), but the groin normal-singularity and a distinct, jagged Shoes/Foot boundary
+artifact are genuine, still-unfixed defects. Ambient raised further (`0.35`→`0.5`, across all 7
+avatar demos that set it, not just one) with measured improvement; a reproducible visual
+regression check (`scripts/avatar_visual_regression_check.py`) was added per this audit's own
+explicit request. See `NEXTnet.md` section 3's own "Update (third remediation pass)" paragraph
+for full detail - not repeated here to avoid this note drifting out of sync with that one.
+
 Goal (per decisions 4/4a/4b/4c): toy-like Xbox-Avatar-inspired look, fully original CNA assets,
 generated via `../mesh-craft` for body/head (and other feasible) geometry, feeding into the
 existing `tools/avatar_builder/` Blender pipeline for skeleton/skinning/animation (mesh-craft has
