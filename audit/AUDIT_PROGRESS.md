@@ -45,7 +45,20 @@ rendering model)**.
 `backend-canvas`, `backend-d3dcommon`, `backend-d3d11`, `backend-d3d12`, `backend-sdlgpu`, `backend-bgfx`,
 `backend-vulkan`, `backend-d3d9`) — Task #2's direct-audit backend work is DONE. Remaining under Task #2 (per
 the manifest): populating `AUDIT_GRAPHICS_BACKEND_MATRIX.md` (Pass 4) from the now-complete cross-backend
-evidence base, and the mechanical `examples-tests-*`/`examples-demo_*` batches (tracked separately, Task #8).
+evidence base (cross-cutting defect matrix section now populated, see that file — full ~30-feature grid still
+pending `xna-graphics`/`tests-*` evidence), and the mechanical `examples-tests-*`/`examples-demo_*` batches
+(tracked separately, Task #8).
+
+### Task #3 (CNA core shards) — STARTED
+
+`cna-graphics` (7/7, **AUDITED**) — the smallest of the 5 Task #3 shards. This is CNA's own NOXNA extended
+render-pipeline settings scaffold (`PbrMaterial`/`RenderPipelineSettings`/`RenderQuality`/`ShadowQuality`/
+`TonemappingMode`), entirely gated behind the `CNA_NOXNA` CMake option (default OFF). Found a 9th
+documentation-rot instance (`RenderPipelineSettings.hpp` references a nonexistent
+`GraphicsDevice::GetRenderPipelineSettings()`) and confirmed zero production consumers of any setting in this
+shard (honestly disclosed as forward-looking scaffolding in the shard's own comments) and zero GTest coverage
+(only a manual-assert compile example). Remaining Task #3 shards: `cna-internal-core` (113), `cna-devices`
+(39), `cna-input` (31), `cna-root-utilities` (15).
 
 **Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
 `EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
@@ -102,16 +115,17 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **806** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **813** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
   backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, backend-bgfx ×34, backend-vulkan ×40, backend-d3d9 ×50,
-  examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70,
-  examples-tests-webgpu ×22, examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22, examples-tests-generic ×24)
-- PENDING: **1491**
+  cna-graphics ×7, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98,
+  examples-tests-vulkan ×70, examples-tests-webgpu ×22, examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22,
+  examples-tests-generic ×24)
+- PENDING: **1484**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~35.1% AUDITED so far** (806/2297). **All 16 backend shards now fully audited.**
+**~35.4% AUDITED so far** (813/2297). **All 16 backend shards now fully audited; Task #3 (CNA core) started.**
 
 `backend-bgfx` (34 files) is now fully audited — all 28 `.sc` shaders individually read, plus a scoped-depth
 review of the 695+3443-line main backend header/cpp, the vertex-format-helper header, the renderer-selection
@@ -372,24 +386,21 @@ audits) to confirm whether they share the same pattern.
 
 ## Last completed file
 
-`backend-d3d9` shard — all 50 files (4 CNA-original custom `.hlsl` shaders read in full, plus the 4 draw-dispatch
-`.cpp` files that consume them and the vendored stock effects; the ~1112-line `D3D9GraphicsBackend.cpp` given a
-scoped-depth review; state-mapping/format-mapping/vertex-declaration/constant-table/constant-upload/texture/
-buffer/occlusion-query/profile-capabilities/effect-backend/shader-cache/shader-dispatch/render-target files; the
-shader-compile tooling and generated headers) fully audited and written up, marked AUDITED. **This is the LAST
-backend shard — all 16 of 16 backend shards are now fully, directly audited.** Overall audit is at 806/2297
-(~35.1%).
+`cna-graphics` shard — all 7 files (the smallest Task #3 shard: `PbrMaterial`, `RenderPipelineSettings`,
+`RenderQuality`, `ShadowQuality`, `TonemappingMode` — CNA's own NOXNA extended render-pipeline settings
+scaffold, gated behind `CNA_NOXNA`, default OFF) fully audited and written up, marked AUDITED. Found a 9th
+documentation-rot instance (`RenderPipelineSettings.hpp` references a nonexistent
+`GraphicsDevice::GetRenderPipelineSettings()`). This follows immediately after completing all 16 backend shards
+(`backend-d3d9`, the last one, closed out in the prior commit) and the Pass 4 cross-cutting-defect-matrix
+population. Overall audit is at 813/2297 (~35.4%).
 
 ## Next exact action
 
-1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_FINDINGS_INDEX.md`, `AUDIT_PROGRESS.md`, the
-   50 new `.audit.md` reports under `audit/include/.../D3D9/` and `audit/src/.../D3D9/`, and the updated
-   `backend-d3d9` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
-2. **All 16 backend shards are complete.** Next: begin Pass 4 (populate `AUDIT_GRAPHICS_BACKEND_MATRIX.md` from
-   the now-complete cross-backend evidence base — every backend's fog-formula/skinned-normal-transform/
-   emissive-remultiply/SetTransformMatrix/Stencil-Scissor-DepthBias/window-registry status is now known) and/or
-   Task #3 (CNA core shards: `cna-internal-core` 113, `cna-devices` 39, `cna-input` 31, `cna-graphics` 7,
-   `cna-root-utilities` 15). Task #4 (Microsoft.Xna areas — start with
+1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_PROGRESS.md`, the 7 new `.audit.md` reports
+   under `audit/include/.../CNA/Graphics/` and `audit/src/.../CNA/Graphics/`, and the updated `cna-graphics`
+   manifest shard file) as one logical batch, verifying staged paths are `audit/`-only first.
+2. Continue Task #3 (CNA core shards): `cna-root-utilities` (15, next-smallest), then `cna-input` (31),
+   `cna-devices` (39), `cna-internal-core` (113, largest of the 5). Task #4 (Microsoft.Xna areas — start with
    `xna-framework-core` 78, then `xna-graphics` 191 the largest, prioritizing `SpriteFont.cpp`/`SpriteBatch.cpp`
    given the UB finding above, and `BlendState`/`SamplerState`/`RasterizerState`/`DepthStencilState`/
    `StencilState` given the newly-confirmed `IGraphicsBackend` interface gaps and the D3D12 Stencil/Scissor
@@ -479,7 +490,9 @@ consolidating what's already known rather than re-deriving it.
 21. `audit: review Vulkan backend (40 files, largest single file in the audit; missing-Y-flip bug expanded to 4
     effect families; new HIGH scissor-when-RT-bound finding)`
 22. `audit: review D3D9 backend (50 files, the LAST backend shard — completes all 16)`
-23. *(next commit: begin Pass 4 AUDIT_GRAPHICS_BACKEND_MATRIX.md and/or Task #3 CNA core shards)*
+23. `audit: populate Pass 4 cross-cutting defect matrix in AUDIT_GRAPHICS_BACKEND_MATRIX.md`
+24. `audit: review cna-graphics shard (7 files, Task #3 started)`
+25. *(next commit: cna-root-utilities shard)*
 
 ## Self-check log
 

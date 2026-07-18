@@ -654,6 +654,13 @@ _(pending)_
   in this pass"** (referencing DX-109) — **stale**: `D3D12TextureCube.hpp`/`.cpp` (66/260 lines) and
   `D3D12Texture3D.hpp`/`.cpp` (56/290 lines) both exist as real, substantial implementations in the same shard,
   added by later tasks without this comment being revisited. An 8th documentation-rot instance.
+- **`RenderPipelineSettings.hpp`'s own class doc comment (NOXNA `cna-graphics` shard) claims "Construct via
+  `GraphicsDevice::GetRenderPipelineSettings()` or standalone"** — **`GraphicsDevice::GetRenderPipelineSettings()`
+  does not exist anywhere in the codebase**, confirmed via exhaustive grep (zero matches outside this one
+  doc-comment reference). A 9th documentation-rot instance — either planned and never implemented, or removed
+  without updating this comment. Lower real-world impact than the other 8 instances since this entire shard is
+  gated behind the `CNA_NOXNA` CMake option (default OFF) and has zero production consumers of any kind yet
+  (every setting in this shard is an honestly-disclosed forward-looking scaffold, per the shard's own comments).
 - **Tests asserting metadata/capacity instead of actual data content or actual code-path execution**: a recurring
   shape across the EasyGL example-test shard — `easygl_vertexbuffer_setdata_test.cpp` (capacity getters only, never
   checks uploaded bytes), `easygl_dynamic_buffer_stress_test.cpp` (index-buffer half never actually draws
