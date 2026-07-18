@@ -191,41 +191,76 @@ resolution notes as the template.
     circumstance, plus the required work's WP7-documentation-comparison and
     drift-measurement bullets, remain unverified/unattempted. Re-verified clean under
     `devices-tsan` (new host-buildable lock/interface change).
+20. `ANDR2-009` (`d8b47682`) — `Run()`'s inner drain loop could, under continuous
+    high-rate input, run indefinitely without returning to the outer loop, where
+    `rateChangeRequested_` is checked. **Corrected the task's own "starve Stop" framing**
+    while investigating: `stopRequested_` was already re-checked every inner iteration
+    before this task — only rate-change responsiveness was actually unbounded. Added a
+    64-event-per-batch cap (`MaxEventsPerDrainBatch`) plus
+    `drainBatchLimitHitCountForTesting_`/`GetDrainBatchLimitHitCountForTesting()`, named
+    deliberately — no sample is dropped or coalesced, only how many process before
+    yielding is bounded. Deliberately did **not** implement "optionally coalesce to
+    newest sample" (the required work's own explicitly-optional bullet — a real
+    observable-behavior change judged out of scope). **Left OPEN** (implementation done)
+    — confirming the cap fires under real sustained load needs real hardware or
+    `TEST2-005`.
+21. `ANDR2-010` (`fdcc37e8`) — both `ASensorEventQueue_setEventRate()` call sites in
+    `Run()` (startup + live `SetSampleInterval()` updates) discarded their return value
+    entirely — a rejected rate change was silently absorbed. Both now record the result
+    into `lastSetEventRateSucceededForTesting_` (reset by every `Start()`, matching
+    `ANDR2-001`'s own reset discipline — "version by run generation" without a separate
+    counter), exposed via `GetLastSetEventRateSucceededForTesting()`. Also added
+    `GetMinDelayMicrosecondsForTesting()` (`ASensor_getMinDelay()`, confirmed via the
+    real NDK header to need no API-level guard for this project's minimum). "Continue
+    delivery on nonfatal rejection" needed no change (already correct, confirmed by
+    re-reading, not assumed). "Keep software throttling if required" **not attempted** —
+    genuinely needs real hardware measurement to know if it's even necessary. **Left
+    OPEN** (implementation done) — "effective cadence is measured on hardware" is, by
+    its own wording, unsatisfiable without real hardware.
 
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
 NDK cross-compile of the exact translation unit each time (`cmake-build-android`,
-`arm64-v8a`, API 24). The **full** `CNA` library Android cross-compile remains blocked
-by a pre-existing, unrelated `sharp-runtime` failure (`RandomNumberGenerator.cpp`'s
-`::getrandom()` call missing for this NDK/API combination) — only single-translation-unit
-compiles work. `ANDR2-006`'s `liblog.so` link dependency has still **not** been
-confirmed to actually resolve at link time.
+`arm64-v8a`, API 24). `ANDR2-009`/`010` are a partial exception: `AndroidSensorBridge.cpp`
+is *not* itself `#ifdef __ANDROID__`-gated at the file level (each method has its own
+inline `#ifdef __ANDROID__ ... #else ... #endif`, "inert everywhere" by design), so their
+new getters' plumbing and non-Android defaults (`0`/`true`) are host-tested in
+`AndroidSensorBridgeTests.cpp` — but the actual `Run()`-internal logic those getters
+report on is still Android-only and NDK-cross-compile-verified only, same as the others.
+The **full** `CNA` library Android cross-compile remains blocked by a pre-existing,
+unrelated `sharp-runtime` failure (`RandomNumberGenerator.cpp`'s `::getrandom()` call
+missing for this NDK/API combination) — only single-translation-unit compiles work.
+`ANDR2-006`'s `liblog.so` link dependency has still **not** been confirmed to actually
+resolve at link time.
 
 **Build:** `cmake-build-devices-ubsan`, `cmake-build-devices-tsan`, and
 `cmake-build-android` all still build clean (the last for individual translation units
 only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **300 tests** (precise filter, used from
-`VIB2-003` onward: `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:
-SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:
-AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **296 passed, 4 skipped**
+**Tests:** Devices/Sensors filtered suite — **323 tests** (precise filter, used from
+`VIB2-003` onward, now including `AndroidSensorBridgeTests.*` since `ANDR2-009`:
+`AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorBaseTests.*:
+SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:AndroidMotionMathTests.*:
+AndroidCompassMathTests.*:AndroidSensorBridgeTests.*`) — **319 passed, 4 skipped**
 (hardware-only, unchanged), 0 failures across every task above. `MOT2-003` added no
-tests (Android-only, no pure-logic component to test the way `COMP2-001`/`MOT2-005`
-had). Note: a broader, unscoped `*Devices*:*Sensor*:...` filter also incidentally
-matches `AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of
-which (`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
+tests (Android-only, no pure-logic component to test the way `COMP2-001`/`MOT2-005`/
+`ANDR2-009`/`ANDR2-010`'s getter plumbing had). Note: a broader, unscoped
+`*Devices*:*Sensor*:...` filter also incidentally matches
+`AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of which
+(`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
 `Vector3::GetHashCode()` (signed-int overflow in hash-combining) — not touched by any
 task this pass, out of scope for Devices work, not silenced, just avoid the broad
 filter and use the precise one above (or expect and ignore that one specific failure
 if using a broader filter for some other reason).
 
 **Sanitizers:** `devices-ubsan` clean on every P1 change this pass. `devices-tsan` was
-NOT re-run for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003` (none add new
-locking/concurrency structure beyond what already existed, or the new lock is
-Android-only and can't run under host TSan at all) but WAS re-run for `SDLCORE-009`,
-`SDLCORE-005`, and `MOT2-005` (each adds a new, host-buildable lock-acquisition site) —
-3 consecutive clean runs each, 0 `WARNING: ThreadSanitizer` occurrences. Re-run TSan if
-a future P1 task touches concurrent *host-buildable* logic.
+NOT re-run for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003`/`ANDR2-009`/`010`
+(none add new locking/concurrency structure beyond what already existed, or the new
+state is a worker-thread-only-written atomic with no new lock) but WAS re-run for
+`SDLCORE-009`, `SDLCORE-005`, and `MOT2-005` (each adds a new, host-buildable
+lock-acquisition site) — 3 consecutive clean runs each, 0 `WARNING: ThreadSanitizer`
+occurrences. Re-run TSan if a future P1 task touches concurrent *host-buildable*
+lock-based logic.
 
 ---
 
@@ -271,7 +306,11 @@ checkpoints (unchanged):
   interpolation, a hardware-measured tight skew) is genuinely unimplemented, comparable
   in scope to `LIFE-007`/`010`/`011`, not merely untested. Its acceptance criteria are
   **unmet**, not just hardware-unverified — do not mistake this for a near-complete fix.
-- 31+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
+- `ANDR2-009`'s investigation found the task's own "starve Stop" framing was only
+  partially accurate — `stopRequested_` was already checked every inner-loop iteration;
+  only rate-change responsiveness was actually unbounded. Worth re-checking the code
+  directly (not just this note) before assuming either framing without verification.
+- 29+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
   actual source of truth — this file only tracks what's been *closed or progressed*).
 
 ---
@@ -287,6 +326,11 @@ changes only:
 - `AndroidSensorBridge.cpp`: `IsAvailable()`'s `Probe()` call now locked under
   `stateMutex_` (matching `Start()`'s pre-existing discipline); new
   `Impl::InvalidateProbeCache()`, called from `Run()`'s three native-failure sites.
+  `Run()`'s inner drain loop now caps at `MaxEventsPerDrainBatch` (64) events per outer
+  pass; new `drainBatchLimitHitCountForTesting_`/`lastSetEventRateSucceededForTesting_`
+  (both reset by `Start()`); new public `GetDrainBatchLimitHitCountForTesting()`/
+  `GetLastSetEventRateSucceededForTesting()`/`GetMinDelayMicrosecondsForTesting()`
+  (the last wraps the NDK's own `ASensor_getMinDelay()`).
 - `SdlSensorSubsystem.hpp`: `DispatchToInstances()`'s single silent `catch (...)` split
   into a `std::exception&`-typed clause + fallback, both routed through new
   `LogAndRecordDispatchException()`; new `dispatchExceptionCountForTesting_`/
@@ -301,7 +345,10 @@ changes only:
   `PublishReading()` before fusing.
 - `AndroidMotionBackend.hpp`/`.cpp`: new `droppedFusionFrameCountForTesting_`/
   `GetDroppedFusionFrameCountForTesting()`, incremented in the pre-existing
-  `MOTION-007` drop branch.
+  `MOTION-007` drop branch; new `IMotionBackend::IsUsingNorthReferencedAttitudeSource()`
+  (also implemented by `AndroidMotionBackend`) plus `Motion::getIsAttitudeNorthReferencedProperty()`
+  (`NOXNA`); `usingGameRotationVector_` moved under `stateMutex_` (was an unguarded
+  write, harmless until this task added a reader).
 
 ---
 
@@ -311,7 +358,7 @@ changes only:
 # Build + test (precise filter — avoids the pre-existing Vector3 UBSan finding, see
 # Section 2/4):
 cmake --build cmake-build-devices-ubsan --target CnaTests -j4
-UBSAN_OPTIONS=halt_on_error=1 ./cmake-build-devices-ubsan/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:AndroidMotionMathTests.*:AndroidCompassMathTests.*"
+UBSAN_OPTIONS=halt_on_error=1 ./cmake-build-devices-ubsan/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:AndroidMotionMathTests.*:AndroidCompassMathTests.*:AndroidSensorBridgeTests.*"
 
 # TSan (re-run if a P1 task touches concurrent *host-buildable* logic; repeat 3-4x):
 cmake --build cmake-build-devices-tsan --target CnaTests -j3
@@ -348,10 +395,12 @@ tractability):
   `SDLCORE-009`) — worth considering next since multiple other tasks implicitly wait on
   it.
   `SDLCORE-007`/`011` — investigated briefly last pass, still open, see prior notes.
-- `ANDR2-007`/`009`–`012`/`014`/`015` — remaining Android-only items (`014`/`015`
-  explicitly want fuzzing/instrumented hardware runs; `ANDR2-012` is the right home for
-  the "app lifecycle changes"/mid-session-recovery scope both `ANDR2-002` and
-  `SDLCORE-005` deliberately deferred this pass).
+- `ANDR2-007`/`011`/`012`/`014`/`015` — remaining Android-only items (`ANDR2-009`/`010`
+  done this pass; `007` is the same design-heavy "calibrated boot/monotonic-to-UTC
+  offset" concern as `SDLCORE-007` below, for the Android-native path specifically;
+  `014`/`015` explicitly want fuzzing/instrumented hardware runs; `ANDR2-012` is the
+  right home for the "app lifecycle changes"/mid-session-recovery scope both `ANDR2-002`
+  and `SDLCORE-005` deliberately deferred this pass).
 - `COMP2-003`/`004`/`005`/`008` — remaining Compass items (`COMP2-001` done this pass;
   `004`/`005` need physical devices).
 - `MOT2-001`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-003`/`005` done
@@ -414,19 +463,19 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 19 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 21 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
-MOT2-005 -- see Section 2 for commit hashes and a one-line summary of each).
-Read Section 1's "labeling convention" note carefully before closing anything
--- it distinguishes tasks provable by code inspection (CLOSED, e.g.
-SDLCORE-009) from tasks whose acceptance criteria name an empirical/hardware
-result (stays OPEN even once implemented, e.g. VIB2-003/004, ANDR2-002,
-SDLCORE-005, COMP2-001, MOT2-005). MOT2-003 is a special case: only its
-narrowest sub-bullet was implemented, its acceptance criteria remain
-genuinely unmet (not just hardware-unverified) -- don't mistake it for a
-near-complete fix.
+MOT2-005, ANDR2-009, ANDR2-010 -- see Section 2 for commit hashes and a
+one-line summary of each). Read Section 1's "labeling convention" note
+carefully before closing anything -- it distinguishes tasks provable by code
+inspection (CLOSED, e.g. SDLCORE-009) from tasks whose acceptance criteria
+name an empirical/hardware result (stays OPEN even once implemented, e.g.
+VIB2-003/004, ANDR2-002, SDLCORE-005, COMP2-001, MOT2-005, ANDR2-009/010).
+MOT2-003 is a special case: only its narrowest sub-bullet was implemented,
+its acceptance criteria remain genuinely unmet (not just hardware-unverified)
+-- don't mistake it for a near-complete fix.
 
 Continue the P1 backlog (Section 8 lists untriaged candidates with rough
 tractability notes). Read each task's full plan_devices.md entry before
