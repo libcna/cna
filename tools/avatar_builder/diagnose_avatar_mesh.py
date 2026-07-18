@@ -59,12 +59,58 @@ def _load(glb_path):
     return meshes, armature
 
 
-def _bvh(obj):
-    verts = [obj.matrix_world @ v.co for v in obj.data.vertices]
-    polys = [list(p.vertices) for p in obj.data.polygons]
-    m3 = obj.matrix_world.to_3x3()
-    normals = [(m3 @ p.normal).normalized() for p in obj.data.polygons]
-    return BVHTree.FromPolygons(verts, polys), normals
+class PosedGeometry:
+    """A mesh's world-space geometry, either at bind pose or evaluated under an animation pose.
+
+    audit_net.md remediation (2026-07-18, seventh round): the crossings check originally read
+    obj.data directly, which is always the BIND POSE. That is a blind spot for any pose-dependent
+    defect - and the avatar's remaining artifact is exactly that: the Wave-pose shoulder/chest
+    fragments are invisible in the T-pose measurements. Evaluating the depsgraph applies the
+    armature modifier, so the same crossing analysis can run on genuinely deformed geometry."""
+
+    def __init__(self, obj, depsgraph=None):
+        self.name = obj.name
+        if depsgraph is None:
+            self.verts = [obj.matrix_world @ v.co for v in obj.data.vertices]
+            self.polys = [list(p.vertices) for p in obj.data.polygons]
+            m3 = obj.matrix_world.to_3x3()
+            self.normals = [(m3 @ p.normal).normalized() for p in obj.data.polygons]
+            self._tmp = None
+        else:
+            ev = obj.evaluated_get(depsgraph)
+            mesh = ev.to_mesh()
+            mw = ev.matrix_world
+            m3 = mw.to_3x3()
+            self.verts = [mw @ v.co for v in mesh.vertices]
+            self.polys = [list(p.vertices) for p in mesh.polygons]
+            self.normals = [(m3 @ p.normal).normalized() for p in mesh.polygons]
+            ev.to_mesh_clear()
+
+
+def _apply_pose(armature, clip_name):
+    """Assigns the named imported action to the armature and parks the playhead in the middle of
+    its range (where a clip like Wave is at full extension, not back at rest). Returns the frame
+    used, or None if no matching action exists."""
+    # Blender's glTF importer names actions "<ClipName>_<ArmatureName>", so an exact match alone
+    # never hits - accept the clip-name prefix too.
+    action = None
+    for a in bpy.data.actions:
+        if a.name == clip_name or a.name.startswith(clip_name + "_"):
+            action = a
+            break
+    if action is None:
+        return None
+    if armature.animation_data is None:
+        armature.animation_data_create()
+    armature.animation_data.action = action
+    start, end = action.frame_range
+    frame = int((start + end) / 2)
+    bpy.context.scene.frame_set(frame)
+    return frame
+
+
+def _bvh(geo):
+    return BVHTree.FromPolygons(geo.verts, geo.polys), geo.normals
 
 
 def check_crossings(meshes, armature):
@@ -75,7 +121,7 @@ def check_crossings(meshes, armature):
     if armature is not None:
         heads = {b.name: (armature.matrix_world @ b.head_local) for b in armature.data.bones}
 
-    trees = {n: _bvh(o) for n, o in meshes.items()}
+    trees = {n: _bvh(g) for n, g in meshes.items()}
     for a in sorted(meshes):
         for b in sorted(meshes):
             if a == b:
@@ -83,8 +129,7 @@ def check_crossings(meshes, armature):
             bvh, bnormals = trees[b]
             inside = []
             total = 0
-            for v in meshes[a].data.vertices:
-                p = meshes[a].matrix_world @ v.co
+            for p in meshes[a].verts:
                 loc, _n, idx, dist = bvh.find_nearest(p)
                 if loc is None:
                     continue
@@ -174,17 +219,36 @@ def check_weights(meshes, armature):
 def main():
     args = _argv_after_ddash()
     if not args:
-        sys.exit("usage: ... -- <avatar.glb> [crossings] [normals] [weights]")
+        sys.exit("usage: ... -- <avatar.glb> [pose=<Clip>] [crossings] [normals] [weights]")
     glb = args[0]
-    checks = args[1:] or ["crossings", "normals", "weights"]
-    meshes, armature = _load(glb)
+    rest = args[1:]
+    pose_clip = None
+    for a in list(rest):
+        if a.startswith("pose="):
+            pose_clip = a.split("=", 1)[1]
+            rest.remove(a)
+    checks = rest or ["crossings", "normals", "weights"]
+
+    objs, armature = _load(glb)
+    depsgraph = None
+    if pose_clip:
+        if armature is None:
+            sys.exit("pose= requested but the file has no armature")
+        frame = _apply_pose(armature, pose_clip)
+        if frame is None:
+            sys.exit(f"no imported action matching '{pose_clip}' "
+                     f"(available: {sorted(a.name for a in bpy.data.actions)})")
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        print(f"Posed with action '{pose_clip}' at frame {frame} (deformed geometry)")
+
+    meshes = {n: PosedGeometry(o, depsgraph) for n, o in objs.items()}
     print(f"Loaded {glb}: {len(meshes)} meshes, armature={'yes' if armature else 'no'}")
     if "crossings" in checks:
         check_crossings(meshes, armature)
     if "normals" in checks:
-        check_normals(meshes)
+        check_normals(objs)
     if "weights" in checks:
-        check_weights(meshes, armature)
+        check_weights(objs, armature)
 
 
 if __name__ == "__main__":
