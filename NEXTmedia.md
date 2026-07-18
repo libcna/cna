@@ -4,56 +4,66 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-215`, Phases 0-16); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-232`, Phases 0-16); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — 173 done (Phases 0-15); Phase 16: **52 of 59 done, 7 open (all Group D, deferred by the owner)**
+## 1. Status (2026-07-18) — Phases 0-16; **merged into `develop`**
 
-> **Phase 16 is open work, not a review of a fix commit.** A full **XNA 4.0 API-parity audit**
-> (against the original Microsoft reference assemblies, *not* FNA) found that while all 24 public
-> type names are present, there are real member/behavior/platform gaps: `Song` is missing
-> `Album`/`Artist`/`Genre`/`ToString()` entirely, visualization is a pure stub, `TrackNumber` is
-> parsed then dropped, and `Video`/`VideoPlayer` are a **link error** (not a clean failure) on
-> Windows/Android/Emscripten. 42 tasks (`MEDIA-174`–`MEDIA-215`) are written up in `plan_media.md`
-> Phase 16, grouped A-H. **Groups A, B, C, E, F, G, H are done and pushed** — every implementable
-> group is complete. `Song` now has its missing XNA members and real tag-derived
-> TrackNumber/IsRated/Rating; visualization genuinely works (post-mix tap + from-scratch FFT);
-> FLAC/Opus are indexed and tag-parsed; embedded APIC/FLAC cover art is extracted; thumbnails are
-> really downscaled. `MEDIA-213`'s systematic audit bounded the phase: **`Song` was the only type
-> with genuinely missing members**; the other 23 are member-complete.
->
-> **Still open: Group D only (`MEDIA-192`..`198`) — FFmpeg on Windows/Android/Emscripten.** These
-> cannot be closed from this Linux-only sandbox: verifying them needs the real toolchains. Marking
-> them done on the basis of "the CMake looks right" is exactly the unevidenced claim this plan has
-> been repeatedly caught by, so they stay open. `MEDIA-198` defines the honest platform-support
-> matrix that must record what was actually built and run versus merely written.
->
-> **Group I (`MEDIA-216`..`218`)** closed a ninth review's findings: a formal data race in the
-> visualization ring buffer (plain floats shared across the audio/game threads -- now
-> `std::atomic<float>` with relaxed ordering, plus corrected Reset/callback ordering) and a
-> `Song::FromUri` that never actually accepted the file URIs its own docs promised. **Known
-> open gap: visualization has no TSAN or threaded end-to-end test** -- the race is fixed by
-> construction, not by a test that would have caught it.
->
-> **Group I extended (`MEDIA-219`..`MEDIA-221`)** after a tenth review: file-URI semantics
-> completed (`file:/path`; a non-empty authority now becomes a UNC path instead of being silently
-> dropped, which had resolved a REMOTE URI to a local file; a Windows drive letter is no longer
-> mistaken for a scheme), and `MIX_SetPostMixCallback`'s return value is now acted on, so the
-> enabled flag can never claim a tap that failed to install and `Reset()` never races a callback
-> that failed to uninstall. **Notable:** the first version of the UNC test PASSED against
-> deliberately broken code (both behaviours threw `FileNotFoundException`), and only mutation
-> testing exposed it -- it was rewritten so correct and buggy behaviour give opposite results.
->
-> **Root cause worth remembering: this plan named FNA as the
-> authoritative reference, but FNA's own `Song.cs` omits those XNA members** — so auditing against
-> FNA structurally could not find them. See `MEDIA-180`/`MEDIA-213`.
+**Where the work lives:** `feature/media` @ `22df8325`, merged into `develop` as `cb053b71`
+(two merges: `a3f88c94`/`36ac9656` for Phases 8-16 Groups A-I, `cb053b71` for `MEDIA-228`..`232`).
+Full task detail: `plan_media.md` (`MEDIA-1`–`MEDIA-232`; **231 real tasks — `MEDIA-157`
+was never assigned**, so the highest ID is not the count).
 
-**Deliberately not calling this "complete."** Eight separate external adversarial reviews landed on
-this plan the same day (Phase 8 through 15 below), and every single one found real, specific,
-file-and-line-cited defects that a clean build and passing targeted tests did not surface — including
-in the fix commits written *in response to* the previous review. Read this status as "all
-currently-known findings are fixed, full regression is green" rather than "nothing is left to find."
-Any future review of this code should get the same independent, skeptical treatment the last eight
-did — see §1h's closing lesson.
+**Current baseline, measured on the merged tree — quote this number, not the historical ones:**
+**5471 tests, 5467 passed, 0 failed, 4 pre-existing hardware skips** (two Accelerometer, two
+Gyroscope; both need real hardware). Per-phase figures recorded earlier in this file are
+*branch-only and pre-merge* — see `MEDIA-231`.
+
+### Open work (7 tasks, all Group D)
+
+`MEDIA-192`..`198` — **FFmpeg on Windows, Android and Emscripten.** `Video`, `VideoPlayer` and
+`VideoDecoder` are excluded from the build there (`cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE`
+gate) while their public headers remain, so using them is a **link error**, not a clean runtime
+failure; `AudioDurationProbe` also returns 0 unconditionally on those platforms. **Deferred by the
+project owner.** The owner explicitly rejected `NotSupportedException` stubs — the target is real
+FFmpeg. `MEDIA-198` defines the honest platform-support matrix any attempt must fill in: what was
+actually built and run, versus merely written. **This cannot be closed from a Linux-only sandbox.**
+
+### Known gaps that are NOT tracked as open tasks
+
+These are deliberate, documented limitations rather than unfinished work — but do not let a future
+summary quietly upgrade them to "done":
+
+- **Visualization has no TSAN, threaded, or end-to-end audio test.** The data race (`MEDIA-216`) is
+  fixed *by construction* — `std::atomic<float>` samples plus install/reset ordering — **not by a
+  test that would catch a regression of it.** The most valuable next piece of work in this
+  namespace is a threaded `Push()`/`Read()` test under ThreadSanitizer.
+- **Two error branches are unreachable from the test suite:** `GetMixer()` failing (the suite runs
+  a dummy SDL audio driver that always succeeds, and the mixer is cached) and
+  `MIX_SetPostMixCallback` failing to uninstall. Both are correct by construction (`MEDIA-222`,
+  `MEDIA-226`), neither is covered.
+- **`.m4a`/`.aac`/WMA are deliberately not indexed.** SDL3_mixer ships no AAC decoder at all, so
+  indexing them would advertise songs `MediaPlayer::Play()` could never play (`MEDIA-199`/`201`).
+
+### The one lesson to carry into any future namespace port
+
+**FNA is authoritative for BEHAVIOR; the XNA 4.0 reference assemblies are authoritative for API
+SURFACE.** FNA omits real XNA members — its own `Song.cs` has no `Album`/`Artist`/`Genre`/
+`ToString()` — so **eight consecutive adversarial reviews auditing against FNA structurally could
+not find that gap.** It took a ninth review diffing against
+`/rv/data/library/github.com/borgesdan/xn65/references/Windows/Microsoft.Xna.Framework.xml` to
+surface it. The rule and the mechanical `grep` recipe now live in `CHECKLIST.md`'s "API surface"
+section; `MEDIA-213` applied it to all 24 Media types and found `Song` was the *only* type with
+missing members.
+
+### How to read the rest of this file
+
+**Do not treat any "N/N done" line below as settled.** Fifteen external review rounds landed on
+this plan, and *every one* found real, file-and-line-cited defects — repeatedly inside the fix
+commits written in response to the previous round, and in several cases inside our own claims of
+evidence (a test whose fixture had no audio; a test that passed against deliberately broken code; a
+count whose method was never verified; an explanation that was arithmetically impossible). Sections
+§1a-§1i below are the chronological record of those rounds, kept as written at the time rather than
+retro-edited.
 
 **Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
 this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
