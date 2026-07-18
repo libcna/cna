@@ -487,6 +487,32 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     passed, 4 hardware skips, 0 failures); `AndroidCompassBackend.cpp` re-verified
     via NDK cross-compile. **Left OPEN**: this task's own problem statement names
     "hardware-unverified" as the starting state, which remains true.
+35. `MOT2-001` (`8d949de3`) — confirmed Android's rotation-vector quaternion and XNA's
+    `Quaternion`/`Matrix` use the **identical** right-handed Hamilton formula
+    (`Matrix.hpp` self-documents as right-handed; `Quaternion::CreateFromAxisAngle()`'s
+    actual implementation has no sign flip) — **verified by direct computation**, new
+    `AndroidMotionMathTests.DirectQuaternionPlusNinetyDegreeYawRotatesUnitXToUnitYMatchingRightHandedConvention`
+    builds a raw quaternion the same way a real Android sample would (independent of
+    the existing round-trip tests) and confirms `+X`→`+Y` for a +90° yaw — **no
+    handedness correction needed**. Confirmed no display-orientation remap needed for
+    `Motion.Attitude` either, reusing `COMP2-003`/`ACCEL-008`'s same citation.
+    **Found and verified (direct NumPy computation) a significant, previously-uncaught
+    finding** while checking whether Attitude should get a landscape remap matching
+    `MOTION-012`'s remap of `Gravity`/`DeviceAcceleration`/`DeviceRotationRate`:
+    `ConvertAndroidPortraitToXnaLandscape()` is a **reflection** (determinant `-1`) for
+    both rotation states, not a proper rotation (determinant `+1`) — it cannot
+    represent an actual 90°/270° physical device rotation, and **no quaternion can
+    represent a reflection at all**, so a "consistency" remap couldn't even be validly
+    constructed. **Deliberately not fixed**: `ConvertAndroidPortraitToXnaLandscape()`
+    is already-shipped, already-tested, `ACCEL-008`'s own maintainer-made decision
+    (2026-07-07) — `MOT2-001` has no mandate to unilaterally revisit it. Cross-referenced
+    from both `MOT2-001`'s own resolution and a new post-closure note added to
+    `ACCEL-008`'s entry, discoverable from either direction — **flag this for whoever
+    next touches `ACCEL-004`/`ACCEL-008`/`MOTION-012`, do not assume it was already
+    checked just because those tasks are closed.** No production `.cpp` changed. Full
+    precise filter (364 tests) clean under `devices-ubsan` (360 passed, 4 hardware
+    skips, 0 failures); `AndroidMotionBackend.cpp` re-verified via NDK cross-compile.
+    **Left OPEN**: axis correspondence itself remains hardware-unverified.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -821,6 +847,23 @@ whether a finished implementation should be marked CLOSED or left OPEN.
   full investigation and decision). Settled, not open for autonomous
   re-litigation — would need a new, concrete reason (e.g. a real reported
   timestamp-accuracy problem) to revisit.
+- **`Detail::ConvertAndroidPortraitToXnaLandscape()` is a reflection (determinant
+  `-1`), not a proper rotation, for both `Rotation90`/`Rotation270`** (found and
+  verified by direct NumPy computation while working `MOT2-001`, 2026-07-18 — see
+  that task's own resolution note and the post-closure cross-reference added to
+  `ACCEL-008`'s entry). Do **not** unilaterally "fix" this by changing
+  `ConvertAndroidPortraitToXnaLandscape()`'s own formula — it is already-shipped,
+  already-tested, `NOXNA` behavior across `Accelerometer`/`Gyroscope`/`Motion` (5
+  fields total) with its own maintainer-made decision (`ACCEL-008`) to keep it;
+  changing its actual output values would be exactly the kind of large,
+  unverifiable-without-hardware behavior change the standing rules say to flag,
+  not silently make. Do **not** assume this was already checked just because
+  `ACCEL-004`/`ACCEL-008`/`MOTION-012` show as `CLOSED` — it was not, until this
+  finding. If picked up, treat as its own properly-scoped task (derive what the
+  *correct* proper-rotation transform should be, decide whether to fix the
+  existing three vector fields' remap or replace it with something else,
+  re-verify every existing `AndroidSensorOrientationTests.cpp` test's expected
+  values against the corrected formula) — not a quick patch.
 - Do not mark a task fully `CLOSED` just because `ANDR2-004`/`005`/`006` were, if its
   own acceptance criteria name an empirical/dynamic result those three didn't — see
   Section 1's labeling convention. Check the literal wording every time.
@@ -835,17 +878,20 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 34 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 35 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
 BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011,
-PERF2-002, TEST2-002, COMP2-003 -- see Section 2 for commit hashes and a
-one-line summary of each, including PERF2-002's own new 100k-cycle lifecycle
-leak tests, TEST2-002's own consolidated clean-checkout sanitizer sweep, and
-COMP2-003's citation-backed display-orientation finding plus independent
-reference cross-check tests), plus a
+PERF2-002, TEST2-002, COMP2-003, MOT2-001 -- see Section 2 for commit hashes
+and a one-line summary of each, including PERF2-002's own new 100k-cycle
+lifecycle leak tests, TEST2-002's own consolidated clean-checkout sanitizer
+sweep, COMP2-003's citation-backed display-orientation finding plus
+independent reference cross-check tests, and **`MOT2-001`'s significant new
+finding that `ConvertAndroidPortraitToXnaLandscape()` is a reflection, not a
+rotation -- read Section 9's own flagged note on this before touching that
+function or `ACCEL-004`/`ACCEL-008`/`MOTION-012`**), plus a
 separate, unrelated re-verification round of the *older* `audit_devices.md`
 (6 `DEV-AUD-*` findings, commit `422ed4c4` -- see Section 2's own dated
 entry). All five `BASE2-*` P1 tasks are now done. `DEVPERF-004` found a real,
