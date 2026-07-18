@@ -1035,3 +1035,106 @@ TEST(DynamicSoundEffectInstanceTest, StressProducerConsumerWithRandomPauseStopDi
     // negative). Bounded generously here to still catch genuine unbounded growth.
     EXPECT_LT(d->getPendingBufferCountProperty(), 1000);
 }
+
+// AUD-07-003: T-2C's SubmitFloatAfterPlayingThrowsInvalidOperation above already locks down the
+// single-threaded case; this task's own acceptance explicitly calls for the guard (float
+// submission rejected while a live int stream is Playing/Paused) to be verified "under races and
+// repeated play cycles" too -- a producer thread hammers SubmitFloatBufferEXT() while a "game"
+// thread repeatedly cycles Play()->Stop(true)->Play()->Stop(true)..., the same field-level race
+// this session's AUD-15-006 fix closed for SubmitBuffer() (state-check-and-submit now atomic
+// under queueMutex_, isFloat_ now atomic<bool>) but verified there only via int submission --
+// this test independently exercises the SubmitFloatBufferEXT() side of that same fix. The
+// producer deliberately ALTERNATES SubmitBuffer()/SubmitFloatBufferEXT() calls rather than only
+// ever submitting float: isFloat_ latches true after the first successful float submission and
+// stays true forever unless something calls SubmitBuffer() to reset it back to false (see
+// SubmitBuffer()'s own `isFloat_ = false;` at the end) -- a float-only producer would only ever
+// exercise the `if (!isFloat_)` racy guard once, at the very start, then never again for the rest
+// of the run (confirmed empirically: an all-float version of this test did not catch a
+// deliberately-reintroduced pre-AUD-15-006 unlocked-guard regression under 5 ASan runs). Alternating
+// keeps isFloat_ toggling and the guard genuinely live throughout. Acceptance: every call either
+// succeeds cleanly or throws exactly InvalidOperationException/ObjectDisposedException -- never
+// any other exception, and never a crash -- across many interleavings with repeated real Play/Stop
+// cycles, not just one static state snapshot.
+TEST(DynamicSoundEffectInstanceTest, StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    auto d = std::make_unique<DynamicSoundEffectInstance>(44100, AudioChannels::Stereo);
+    // Seed with an initial int16 buffer so the very first Play() has a real stream to attach to.
+    d->SubmitBuffer(std::vector<unsigned char>(4 * 64, 0));
+    try
+    {
+        d->Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d->getStateProperty() == SoundState::Stopped)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    d->Stop(true);
+
+    std::atomic<long long> callsAttempted{0};
+    std::atomic<long long> callsThrown{0};
+    std::atomic<bool> producerDone{false};
+
+    std::thread producer([&]() {
+        const std::vector<float> floatBuf(4 * 32, 0.0f); // 32 stereo float frames of silence
+        const std::vector<unsigned char> intBuf(4 * 64, 0); // 64 stereo S16 frames of silence
+        // Deliberately smaller than the other producer/consumer stress test above: each
+        // alternating call here can trigger a real EnsureStream() rebuild (SDL_CreateAudioStream/
+        // SDL_DestroyAudioStream), unlike that test's single fixed-format producer -- 3000 of
+        // these is already enough to reliably exercise the race (confirmed via the probe
+        // described above) without the run time exploding under a sanitizer build.
+        for (int i = 0; i < 3000; ++i)
+        {
+            callsAttempted.fetch_add(1, std::memory_order_relaxed);
+            try
+            {
+                if (i % 2 == 0) d->SubmitFloatBufferEXT(floatBuf);
+                else d->SubmitBuffer(intBuf);
+            }
+            catch (const System::ObjectDisposedException&)
+            {
+                // Expected once the instance is disposed below while this thread is still mid-loop.
+                break;
+            }
+            catch (const System::InvalidOperationException&)
+            {
+                // Expected: rejected because the live stream is currently in the OTHER format
+                // while Playing/Paused -- exactly the guard this test exists to verify, not a
+                // bug. ObjectDisposedException derives from InvalidOperationException, so it must
+                // be caught first, above.
+                callsThrown.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        producerDone.store(true, std::memory_order_relaxed);
+    });
+
+    // "Game" thread (this thread): repeated real Play()/Stop(true) cycles, the exact scenario
+    // named in this task's acceptance criteria, while the producer above concurrently hammers
+    // both submission entry points.
+    for (int i = 0; i < 3000; ++i)
+    {
+        try { d->Play(); } catch (...) {}
+        try { d->Stop(true); } catch (...) {}
+    }
+
+    d->Dispose();
+    producer.join();
+
+    EXPECT_TRUE(producerDone.load());
+    EXPECT_TRUE(d->getIsDisposedProperty());
+    EXPECT_GT(callsAttempted.load(), 0);
+    EXPECT_GT(callsThrown.load(), 0)
+        << "expected at least some submissions to genuinely race a live Play()'d stream in the "
+           "other format and be rejected -- zero here would mean this test never actually "
+           "exercised the guard it exists to verify";
+    // Not asserted that every call throws or that none do -- both are legitimate outcomes
+    // depending on exactly how Play()/Stop() and Submit*() happened to interleave; what matters
+    // is that calls were attempted, some were genuinely rejected by the guard, and none produced
+    // anything other than the two expected exception types above (any other exception, or a
+    // crash, would have already failed this test).
+}
