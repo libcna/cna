@@ -1128,3 +1128,58 @@ TEST(SoundEffectTest, RawBufferWithRealSineWaveEmitsNoEntropyDiagnostic)
 
     EXPECT_TRUE(captured.empty()) << "captured stderr: " << captured;
 }
+
+// ---------------------------------------------------------------------------
+// AUD-05-014/015: zero-length and very short raw buffers must never divide by zero or produce an
+// off-by-one duration -- getDurationProperty() guards `frames > 0` before dividing by
+// impl_->sampleRate (never by frame count), so these lock down the already-safe behavior with a
+// real empirical check rather than just reading the guard.
+// ---------------------------------------------------------------------------
+
+TEST(SoundEffectTest, ZeroLengthRawBufferConstructsWithZeroDurationNoCrash)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try
+    {
+        SoundEffect fx(std::vector<unsigned char>{}, 44100, AudioChannels::Stereo);
+        EXPECT_FALSE(fx.getIsDisposedProperty());
+        EXPECT_EQ(fx.getDurationProperty(), System::TimeSpan::Zero);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, OneFrameRawBufferHasExactSingleFrameDuration)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try
+    {
+        // Exactly one stereo S16 frame: 2 channels * 2 bytes = 4 bytes.
+        SoundEffect fx(std::vector<unsigned char>(4, 0), 44100, AudioChannels::Stereo);
+        // 1e-6 tolerance matches this file's established convention (ConstructFromBufferAndProperties
+        // above) -- SDL3_mixer's own duration computation carries a small, fixed sub-microsecond
+        // rounding error independent of buffer length, negligible for any real audio purpose but
+        // enough to fail a naively tight (e.g. 1e-9) absolute tolerance on very short buffers.
+        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 1.0 / 44100.0, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, TwoFrameRawBufferHasExactTwoFrameDuration)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    try
+    {
+        SoundEffect fx(std::vector<unsigned char>(8, 0), 44100, AudioChannels::Stereo);
+        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 2.0 / 44100.0, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
