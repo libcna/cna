@@ -1,5 +1,16 @@
 # CNA Input Deep Audit, Stabilization, and Repair Plan — 2026-07-07
 
+> **STATUS (2026-07-18): CLOSED AND MERGED.** This plan finished at task **P12-015** on
+> 2026-07-17 — 505 real tasks (the phase-overview table's printed total of 506 is a pre-existing
+> 1-task arithmetic artifact, see P12-015's Result), **490 `[x]` complete, 15 `[!]` blocked by
+> design** (Phase 11's manual-hardware checks — no code gap), **0 left `[ ]`/`[~]`/`[?]`**. Phase
+> 13 (`audit_input.md`'s 2026-07-16 remediation, including `P13-006`'s documentation reconciliation)
+> is also fully closed. `feature/input` was subsequently merged into `develop` (merge commit
+> `aaa956df`); `feature/input`, `develop`, and `origin/develop` all point at that same commit as of
+> this note. No further Input-track work has landed since P12-015 closed it. See `NEXTinput.md` for
+> the full closing handoff, remaining known gaps (Phase 11 hardware validation, the out-of-scope
+> `P9-031` crash finding), and what — if anything — a future session should do here.
+
 ## About this plan
 
 This is a **fresh plan**, generated from scratch on 2026-07-07. It supersedes and replaces the
