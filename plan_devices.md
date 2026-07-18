@@ -8417,7 +8417,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   documentation is accurate and new, but the task's core oracle-comparison ask remains
   blocked on other unstarted work.
 
-### BASE2-004 — Verify exception types, ErrorId and messages — OPEN
+### BASE2-004 — Verify exception types, ErrorId and messages — OPEN (exception-type split already independently oracle-verified; ErrorId/message classification investigated; full matrix remains blocked)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -8430,6 +8430,63 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Exact exception type/ErrorId behavior is covered.
   - Message differences are classified as strict or non-strict.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - Investigated this task's own "Problem" framing directly, initially suspecting an
+    inconsistency (only `Accelerometer` has a dedicated `AccelerometerFailedException`;
+    `Gyroscope`/`Compass`/`Motion` all throw the generic `SensorFailedException`
+    directly, confirmed by grepping every `throw` site in all four `.cpp` files) — **but
+    this exact split was already independently verified against real, cited archived
+    MSDN pages by a prior session (`DEV-API-005`, 2026-07-06,
+    `docs/devices-api-coverage.md`)**: `Gyroscope`/`Compass`/`Motion`'s own class pages
+    (`hh239201`/`hh220912`/`hh239189`, all `v=vs.105`/`.110`) document `Start`/`Stop` as
+    inherited from `SensorBase<T>`, never overridden, and that base `Start()` page
+    (`hh220889(v=vs.105)`) documents `SensorFailedException` as its own real type;
+    `Accelerometer.Stop()`'s dedicated page (`ff707301(v=vs.105)`, confirming it *is*
+    overridden) documents `AccelerometerFailedException` specifically. **This means "the
+    exception-type split is correct" is not oracle-blocked at all — it is already a
+    real, cited, verified fact** — re-confirmed here, not re-litigated from scratch.
+  - "ErrorId" investigated: `SensorFailedException::getErrorIdProperty()` already
+    honestly documents "0 if none was specified" as its default, and every current throw
+    site uses the message-only constructor (never populating a non-zero `errorId`).
+    Checked whether there is anything meaningful to populate it *with* for this
+    codebase's actual native failure source: SDL3 has no numeric error-code concept at
+    all (`SDL_GetError()` returns a string, there is no `SDL_GetErrorCode()` or
+    equivalent) — confirmed by reading SDL3's own public header, not assumed — so `0`
+    for SDL-originated failures is the honest, correct choice, not a gap to fill with a
+    fabricated code.
+  - "Map native errors without leaking unstable SDL/NDK strings into strict messages
+    unless intended": `Accelerometer`/`Gyroscope`'s SDL event-watch-registration failure
+    messages do embed the raw `SDL_GetError()` string directly
+    (`"...Failed to register the sensor event watch: " + subsystem.lastEventWatchError_`).
+    Exception *message* text (as opposed to the exception *type*, which is what real
+    WP7's own `catch` semantics actually key on) is not part of any documented strict
+    WP7 API contract for this exception family — this codebase's own established
+    convention throughout (e.g. `BASE2-001`/`002`'s own resolution notes) already treats
+    message text as informational/non-strict unless a task specifically says otherwise.
+    Judged intentional and acceptable, not a leak to close: a developer debugging "why
+    did sensor registration fail" benefits from the real platform diagnostic text; no
+    XNA-facing code can reasonably depend on an exact message string.
+- **Files changed:** none — this pass's investigation confirmed existing behavior is
+  already correct/intentional rather than finding a new bug to fix, unlike `BASE2-001`/
+  `002`.
+- **Tests:** none added — "constructor cap, repeated Start, unsupported, permissions,
+  disposed access and repeated Dispose" are already covered by existing tests across
+  `AccelerometerFailedExceptionTests.cpp`/`SensorFailedExceptionTests.cpp` and each
+  class's own test file (`EleventhSimultaneousInstanceThrows`,
+  `StartTwiceThrowsWithoutCallingBackendAgain`-style, `StartOnUnsupportedPlatformThrows`,
+  `...ThrowsAfterDispose`-style, double-`Dispose()` tests) — "permissions" is the one
+  named scenario with no coverage, because (per `BASE2-003`'s own finding, same pass) no
+  sensor class ever produces a permissions-denied failure at all today, on any platform
+  this project builds for.
+- **Sanitizer/static-analysis result:** not applicable — no code changed.
+- **Remaining limitations (explicitly OPEN, not fabricated):** "Generate an exception
+  matrix from reference behavior" (mapping every real WP7 failure scenario to its exact
+  type/message/`ErrorId`) remains genuinely blocked on the not-yet-built behavioral
+  oracle (`DEVPERF-002`/`003`) — this pass closed the *type-split* question (already
+  verified, cited, correct) and the *message-strictness*/*ErrorId-default* questions
+  (investigated and judged already correct/intentional), but a full scenario-by-scenario
+  matrix needs real reference data this session does not have. Left **OPEN**, consistent
+  with `BASE2-001`/`002`/`003`.
 
 ### BASE2-005 — Make event ordering and mutation semantics explicit — OPEN
 
