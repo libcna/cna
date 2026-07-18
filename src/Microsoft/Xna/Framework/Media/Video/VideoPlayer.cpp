@@ -92,21 +92,41 @@ namespace Microsoft::Xna::Framework::Media
         {
             SDL_DestroyAudioStream(audioStream_);
             audioStream_ = nullptr;
+            // Paired with the SDL_InitSubSystem(SDL_INIT_AUDIO) call below -- SDL reference-counts
+            // subsystem init/quit process-wide, so this only actually tears anything down once
+            // every other caller's (e.g. MediaPlayer/AudioEngine) own init calls are also balanced.
+            SDL_QuitSubSystem(SDL_INIT_AUDIO);
         }
         if (decoder_->HasAudio())
         {
-            SDL_AudioSpec spec{};
-            spec.format   = SDL_AUDIO_F32;
-            spec.channels = decoder_->GetChannels();
-            spec.freq     = decoder_->GetSampleRate();
-            audioStream_  = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
-                                                      &spec, nullptr, nullptr);
-            if (audioStream_)
+            // VideoPlayer has no other path that ever initializes SDL's audio subsystem --
+            // GraphicsDevice only calls SDL_InitSubSystem(SDL_INIT_VIDEO). Without this, a game
+            // that plays video without ever touching MediaPlayer/AudioEngine first would have
+            // SDL_OpenAudioDeviceStream() silently fail (return null) because the audio subsystem
+            // was simply never started, and every such video would play with no audio at all
+            // (found by external code review, plan_media.md MEDIA-131/MEDIA-133).
+            if (SDL_InitSubSystem(SDL_INIT_AUDIO))
             {
-                SDL_SetAudioStreamGain(audioStream_, isMuted_ ? 0.0f : volume_);
-                if (state_ == MediaState::Playing)
+                SDL_AudioSpec spec{};
+                spec.format   = SDL_AUDIO_F32;
+                spec.channels = decoder_->GetChannels();
+                spec.freq     = decoder_->GetSampleRate();
+                audioStream_  = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                                          &spec, nullptr, nullptr);
+                if (audioStream_)
                 {
-                    SDL_ResumeAudioStreamDevice(audioStream_);
+                    SDL_SetAudioStreamGain(audioStream_, isMuted_ ? 0.0f : volume_);
+                    if (state_ == MediaState::Playing)
+                    {
+                        SDL_ResumeAudioStreamDevice(audioStream_);
+                    }
+                }
+                else
+                {
+                    // No real playback device available (e.g. a headless sandbox with no audio
+                    // hardware at all) -- video-only playback still works, matching this
+                    // function's own existing graceful-degradation pattern for HasAudio()==false.
+                    SDL_QuitSubSystem(SDL_INIT_AUDIO);
                 }
             }
         }
@@ -158,23 +178,46 @@ namespace Microsoft::Xna::Framework::Media
         if (videoTrack_ >= 0) decoder_->SetVideoStream(videoTrack_);
         video->parent_ = this;
 
+        // Set state_ to Playing BEFORE ReconfigureAudioAndVideoOutputForCurrentTracks() runs --
+        // that helper only calls SDL_ResumeAudioStreamDevice() when state_ == Playing (so a
+        // mid-playback track switch while genuinely Paused doesn't wrongly resume audio), but
+        // state_ is still Stopped here (CloseDecoder() just reset it) since Play() itself doesn't
+        // set it to Playing until after this whole function returns. Left as Stopped, this
+        // resulted in a real regression: SDL_OpenAudioDeviceStream() opens every new stream
+        // paused by default, and nothing ever resumed it for a fresh Play() call, so every video
+        // with audio played completely silently (found by external code review).
+        state_ = MediaState::Playing;
+
         ReconfigureAudioAndVideoOutputForCurrentTracks();
 
-        // Decode and display first frame immediately
-        double pts = 0.0;
-        if (decoder_->NextFrame(rgbaBuffer_, pts) && frameTexture_)
+        // Decode and display first frame immediately. NextFrame() can now throw
+        // std::runtime_error for a genuine decode error (plan_media.md MEDIA-39/128) -- state_ was
+        // set to Playing above (needed for the resume call in
+        // ReconfigureAudioAndVideoOutputForCurrentTracks() just above), so if this throws, revert
+        // it back to Stopped before propagating, matching this function's own pre-existing
+        // contract that a failed Play() leaves the player in the Stopped state.
+        try
         {
-            frameTexture_->SetDataRGBA(rgbaBuffer_.data(),
-                                       static_cast<int>(rgbaBuffer_.size() / 4));
-            lastFramePts_ = pts;
+            double pts = 0.0;
+            if (decoder_->NextFrame(rgbaBuffer_, pts) && frameTexture_)
+            {
+                frameTexture_->SetDataRGBA(rgbaBuffer_.data(),
+                                           static_cast<int>(rgbaBuffer_.size() / 4));
+                lastFramePts_ = pts;
+            }
+            decoder_->DrainAudio(audioBuffer_);
+            if (audioStream_ && !audioBuffer_.empty())
+            {
+                SDL_PutAudioStreamData(audioStream_,
+                                       audioBuffer_.data(),
+                                       static_cast<int>(audioBuffer_.size() * sizeof(float)));
+                audioBuffer_.clear();
+            }
         }
-        decoder_->DrainAudio(audioBuffer_);
-        if (audioStream_ && !audioBuffer_.empty())
+        catch (...)
         {
-            SDL_PutAudioStreamData(audioStream_,
-                                   audioBuffer_.data(),
-                                   static_cast<int>(audioBuffer_.size() * sizeof(float)));
-            audioBuffer_.clear();
+            state_ = MediaState::Stopped;
+            throw;
         }
     }
 
@@ -184,6 +227,7 @@ namespace Microsoft::Xna::Framework::Media
         {
             SDL_DestroyAudioStream(audioStream_);
             audioStream_ = nullptr;
+            SDL_QuitSubSystem(SDL_INIT_AUDIO); // paired with the SDL_InitSubSystem() call that opened it
         }
         if (video_) video_->parent_ = nullptr;
         frameTexture_.reset();

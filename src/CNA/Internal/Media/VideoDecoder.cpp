@@ -261,7 +261,19 @@ namespace CNA::Internal::Media
         {
             if (fmtCtx_->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
             {
-                if (found == trackIndex) { OpenAudioStreamByIndex(i); return; }
+                if (found == trackIndex)
+                {
+                    // Re-selecting the already-active track used to unconditionally discard and
+                    // recreate the codec context anyway, throwing away all decode state for no
+                    // reason -- harmless for audio (no keyframe concept), but pointless work.
+                    // Kept as a no-op for consistency with SetVideoStream()'s own fix below (found
+                    // by external code review, plan_media.md MEDIA-131).
+                    if (i != audioStream_)
+                    {
+                        OpenAudioStreamByIndex(i);
+                    }
+                    return;
+                }
                 ++found;
             }
         }
@@ -275,7 +287,25 @@ namespace CNA::Internal::Media
         {
             if (fmtCtx_->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
             {
-                if (found == trackIndex) { OpenVideoStreamByIndex(i); return; }
+                if (found == trackIndex)
+                {
+                    // Re-selecting the already-active track used to unconditionally discard and
+                    // recreate the codec context, throwing away all decode state -- a real,
+                    // observable bug for video specifically (unlike audio): the demuxer's read
+                    // position has already moved past the stream's first keyframe by the time any
+                    // later SetVideoTrackEXT() call happens, so the freshly-reset codec context
+                    // has no reference frame to decode the very next (non-keyframe) packet
+                    // against, and (correctly, now that avcodec_send_packet()'s return is checked
+                    // -- plan_media.md MEDIA-39/128) throws "Cannot decode non-keyframe without
+                    // valid keyframe" instead of silently producing a garbage frame. Found by
+                    // external code review testing exactly this "re-select the same track"
+                    // scenario, plan_media.md MEDIA-131.
+                    if (i != videoStream_)
+                    {
+                        OpenVideoStreamByIndex(i);
+                    }
+                    return;
+                }
                 ++found;
             }
         }
@@ -475,6 +505,14 @@ namespace CNA::Internal::Media
     {
         if (!fmtCtx_ || !videoCtx_) return false;
 
+        // If a previous call left a video packet that avcodec_send_packet() rejected with
+        // EAGAIN (its internal buffer was full -- FFmpeg's documented contract is "drain via
+        // receive_frame, then resend this exact packet"), it must be retried before reading any
+        // new packet from the demuxer -- av_read_frame() would otherwise overwrite pkt_ and lose
+        // it, silently dropping that video frame (found by external code review, plan_media.md
+        // MEDIA-128).
+        bool havePendingVideoPacket = false;
+
         while (true)
         {
             // Try to receive a decoded frame from codec
@@ -501,6 +539,29 @@ namespace CNA::Internal::Media
                     std::string("VideoDecoder: video decode error: ") + errBuf);
             }
 
+            if (havePendingVideoPacket)
+            {
+                // receive_frame (just above) has now had a chance to drain the codec's internal
+                // buffer -- retry sending the packet that got EAGAIN before reading anything new.
+                int sendRet = avcodec_send_packet(videoCtx_, pkt_);
+                if (sendRet == 0)
+                {
+                    av_packet_unref(pkt_);
+                    havePendingVideoPacket = false;
+                }
+                else if (sendRet != AVERROR(EAGAIN))
+                {
+                    av_packet_unref(pkt_);
+                    havePendingVideoPacket = false;
+                    char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                    av_strerror(sendRet, errBuf, sizeof(errBuf));
+                    throw std::runtime_error(
+                        std::string("VideoDecoder: failed to send packet to decoder: ") + errBuf);
+                }
+                // else: still EAGAIN -- loop back to receive_frame again without reading a new packet.
+                continue;
+            }
+
             // Read packets until we find a video packet to send
             while (true)
             {
@@ -517,8 +578,31 @@ namespace CNA::Internal::Media
                         throw std::runtime_error(
                             std::string("VideoDecoder: I/O error while reading frame: ") + errBuf);
                     }
-                    // Clean EOF — flush codec
-                    avcodec_send_packet(videoCtx_, nullptr);
+                    // Clean EOF — flush both codecs. A flush's own return is checked too (found
+                    // by external code review, plan_media.md MEDIA-128/MEDIA-39's "at each site"):
+                    // in practice this can only fail if the codec is already closed/flushed, but
+                    // silently ignoring that would let a later avcodec_receive_frame() call
+                    // proceed against a codec state this code didn't actually confirm was ready.
+                    int flushRet = avcodec_send_packet(videoCtx_, nullptr);
+                    if (flushRet < 0 && flushRet != AVERROR_EOF)
+                    {
+                        char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                        av_strerror(flushRet, errBuf, sizeof(errBuf));
+                        throw std::runtime_error(
+                            std::string("VideoDecoder: failed to flush decoder at EOF: ") + errBuf);
+                    }
+                    // The audio codec was never sent a flush packet at all -- any audio samples
+                    // still buffered inside its own internal decode state (not yet emitted via
+                    // avcodec_receive_frame) were silently lost at EOF (found by external code
+                    // review, plan_media.md MEDIA-130). ProcessAudioPacket(nullptr) is FFmpeg's
+                    // own documented flush contract (avcodec_send_packet accepts a null packet to
+                    // mean "no more input, drain what you have") -- reuses the exact same,
+                    // already-hardened decode/resample/error-propagation logic as every other
+                    // audio packet.
+                    if (audioCtx_)
+                    {
+                        ProcessAudioPacket(nullptr);
+                    }
                     break;
                 }
                 if (pkt_->stream_index == audioStream_ && audioCtx_)
@@ -530,9 +614,20 @@ namespace CNA::Internal::Media
                 if (pkt_->stream_index == videoStream_)
                 {
                     int sendRet = avcodec_send_packet(videoCtx_, pkt_);
-                    av_packet_unref(pkt_);
-                    if (sendRet < 0 && sendRet != AVERROR(EAGAIN))
+                    if (sendRet == 0)
                     {
+                        av_packet_unref(pkt_);
+                    }
+                    else if (sendRet == AVERROR(EAGAIN))
+                    {
+                        // Keep pkt_ alive (do NOT unref) -- retried at the top of the outer loop,
+                        // right after the receive_frame call that should relieve the backpressure
+                        // this EAGAIN is reporting, instead of silently dropping this video frame.
+                        havePendingVideoPacket = true;
+                    }
+                    else
+                    {
+                        av_packet_unref(pkt_);
                         // A malformed/corrupt packet the codec outright rejects -- surface it
                         // distinctly rather than silently discarding it and looping as if nothing
                         // happened (plan_media.md MEDIA-39/40).
@@ -552,11 +647,43 @@ namespace CNA::Internal::Media
     {
         if (!audioCtx_ || !swrCtx_) return;
 
-        if (avcodec_send_packet(audioCtx_, pkt) < 0) return;
+        // plan_media.md MEDIA-39/128 (found incomplete by external code review): every FFmpeg
+        // call in this function is now checked and a genuine error propagated as a thrown
+        // exception, matching the same "surface it, don't silently produce garbage/skip" standard
+        // NextFrame()'s own video-decode path already applies -- a corrupted *audio* packet is no
+        // less a real decode failure than a corrupted video one, and MEDIA-39's own task text
+        // explicitly calls out this function's swr_convert/avcodec_send_packet sites by name.
+        int sendRet = avcodec_send_packet(audioCtx_, pkt);
+        if (sendRet < 0 && sendRet != AVERROR(EAGAIN))
+        {
+            char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+            av_strerror(sendRet, errBuf, sizeof(errBuf));
+            throw std::runtime_error(
+                std::string("VideoDecoder: failed to send audio packet to decoder: ") + errBuf);
+        }
 
         AVFrame* aFrame = av_frame_alloc();
-        while (avcodec_receive_frame(audioCtx_, aFrame) == 0)
+        if (!aFrame)
         {
+            throw std::runtime_error("VideoDecoder: av_frame_alloc() failed for audio frame.");
+        }
+
+        while (true)
+        {
+            int recvRet = avcodec_receive_frame(audioCtx_, aFrame);
+            if (recvRet != 0)
+            {
+                if (recvRet != AVERROR(EAGAIN) && recvRet != AVERROR_EOF)
+                {
+                    char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                    av_strerror(recvRet, errBuf, sizeof(errBuf));
+                    av_frame_free(&aFrame);
+                    throw std::runtime_error(
+                        std::string("VideoDecoder: audio decode error: ") + errBuf);
+                }
+                break; // EAGAIN (no more frames from this packet yet) or EOF -- both expected, not errors
+            }
+
             int numSamples = aFrame->nb_samples;
             // Convert to float
             std::vector<float> buf(static_cast<std::size_t>(numSamples) * channels_);
@@ -564,10 +691,17 @@ namespace CNA::Internal::Media
             int converted = swr_convert(swrCtx_, &outPtr, numSamples,
                         const_cast<const uint8_t**>(aFrame->data), numSamples);
             // plan_media.md MEDIA-39: swr_convert's return is the ACTUAL number of samples
-            // produced, which can be less than numSamples (or negative on error) -- previously
-            // discarded, so a partial/failed conversion still appended the full, partly-stale
-            // buf (including uninitialized trailing samples) to pendingAudio_. Trim to what was
-            // actually produced; skip entirely on error.
+            // produced, which can be less than numSamples (trim to what was actually produced) or
+            // negative on a genuine resample error, which -- like every other site in this
+            // function -- is now surfaced rather than silently swallowed.
+            if (converted < 0)
+            {
+                char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                av_strerror(converted, errBuf, sizeof(errBuf));
+                av_frame_free(&aFrame);
+                throw std::runtime_error(
+                    std::string("VideoDecoder: audio resample error: ") + errBuf);
+            }
             if (converted > 0)
             {
                 buf.resize(static_cast<std::size_t>(converted) * channels_);

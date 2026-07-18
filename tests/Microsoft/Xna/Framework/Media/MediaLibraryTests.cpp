@@ -270,6 +270,68 @@ TEST_F(MediaLibrarySavePictureTest, SavePictureCreatesARealSavedPicturesAlbumNod
     EXPECT_TRUE(foundInAlbum);
 }
 
+namespace
+{
+    // plan_media.md MEDIA-132 (found incomplete by external code review): a dedicated scratch
+    // fixture whose Pictures root directory is deliberately never created before MediaLibrary's
+    // own construction (unlike MediaLibrarySavePictureTest's own SetUp(), which always
+    // pre-creates an empty scratchPictureRoot directory) -- this specifically exercises the case
+    // where PictureLibraryIndex finds no root at all, so rootPictureAlbum_ starts null, not just
+    // "root exists but has no Saved Pictures child yet."
+    class MediaLibrarySavePictureNoPreexistingRootTest : public ::testing::Test
+    {
+    protected:
+        std::string scratchMusicRoot = "tests/assets/media/.save_picture_no_root_test_music";
+        std::string scratchPictureRoot = "tests/assets/media/.save_picture_no_root_test_pictures";
+
+        void SetUp() override
+        {
+            std::error_code ec;
+            std::filesystem::remove_all(scratchMusicRoot, ec);
+            std::filesystem::remove_all(scratchPictureRoot, ec);
+            std::filesystem::create_directories(scratchMusicRoot, ec);
+            // Deliberately do NOT create scratchPictureRoot -- it must not exist yet.
+
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride(scratchMusicRoot);
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride(scratchPictureRoot);
+        }
+
+        void TearDown() override
+        {
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("");
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("");
+            std::error_code ec;
+            std::filesystem::remove_all(scratchMusicRoot, ec);
+            std::filesystem::remove_all(scratchPictureRoot, ec);
+        }
+    };
+}
+
+TEST_F(MediaLibrarySavePictureNoPreexistingRootTest, SavePictureBootstrapsARootAlbumWhenPicturesRootDidNotExistAtConstruction)
+{
+    MediaLibrary library;
+    ASSERT_EQ(library.getRootPictureAlbumProperty(), nullptr); // confirms the scenario: no root yet
+
+    std::ifstream src("tests/assets/media/pictures/Family/portrait.png", std::ios::binary);
+    ASSERT_TRUE(src.is_open());
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+    Picture* saved = library.SavePicture("bootstrap_test_picture", bytes);
+    ASSERT_NE(saved, nullptr);
+
+    PictureAlbum* root = library.getRootPictureAlbumProperty();
+    ASSERT_NE(root, nullptr);
+    EXPECT_EQ(root->getParentProperty(), nullptr);
+
+    PictureAlbum* savedPicturesAlbum = nullptr;
+    for (PictureAlbum* a : *root->getAlbumsProperty())
+    {
+        if (a->getNameProperty() == "Saved Pictures") savedPicturesAlbum = a;
+    }
+    ASSERT_NE(savedPicturesAlbum, nullptr);
+    EXPECT_EQ(savedPicturesAlbum->getParentProperty(), root);
+    EXPECT_EQ(saved->getAlbumProperty(), savedPicturesAlbum);
+}
+
 TEST_F(MediaLibrarySavePictureTest, SavePictureFromStreamProducesTheSameResultAsFromBuffer)
 {
     auto* stream = new System::IO::FileStream("tests/assets/media/pictures/Vacation/beach.jpg");

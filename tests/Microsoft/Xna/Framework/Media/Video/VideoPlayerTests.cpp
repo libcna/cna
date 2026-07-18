@@ -23,6 +23,7 @@ namespace
 {
     constexpr const char* kFixture = "tests/assets/media/video/chroma_420.mkv";
     constexpr const char* kMultiTrackFixture = "tests/assets/media/video/multi_track_audio.mkv";
+    constexpr const char* kAudioTailFixture = "tests/assets/media/video/audio_tail.mkv";
 }
 
 // plan_media.md MEDIA-1: seeds tests/Microsoft/Xna/Framework/Media/Video/ so the existing
@@ -133,6 +134,40 @@ TEST(VideoPlayerTest, PlayRealFixtureProducesATextureOfCorrectSize)
     EXPECT_EQ(texture->getHeightProperty(), 90);
 }
 
+// plan_media.md MEDIA-131 regression (found by external code review): Play() left the newly
+// opened SDL audio stream paused forever -- SDL_OpenAudioDeviceStream() opens every stream paused
+// by default, and ReconfigureAudioAndVideoOutputForCurrentTracks() only resumes it when
+// state_ == Playing, but OpenDecoder() (which calls that helper) used to run entirely before
+// Play() itself ever set state_ to Playing. Every video with audio played completely silently.
+// This uses multi_track_audio.mkv (has a real audio track) since chroma_420.mkv has none.
+TEST(VideoPlayerTest, PlayGenuinelyResumesTheAudioStreamNotJustOpensIt)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    ASSERT_TRUE(VideoPlayerTestAccess::HasAudioStream(player));
+    EXPECT_FALSE(VideoPlayerTestAccess::IsAudioStreamDevicePaused(player));
+}
+
+// plan_media.md MEDIA-131 regression: Pause() must still actually pause the audio device (the
+// fix above must not have removed Pause()'s own real behavior while fixing the resume-on-Play bug).
+TEST(VideoPlayerTest, PauseStillActuallyPausesTheAudioStream)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+    ASSERT_FALSE(VideoPlayerTestAccess::IsAudioStreamDevicePaused(player));
+
+    player.Pause();
+    EXPECT_TRUE(VideoPlayerTestAccess::IsAudioStreamDevicePaused(player));
+
+    player.Resume();
+    EXPECT_FALSE(VideoPlayerTestAccess::IsAudioStreamDevicePaused(player));
+}
+
 // plan_media.md MEDIA-41: a non-looped 2-second video eventually reaches Stopped once played past
 // its own duration (whether or not a real audio device is available in this environment -- if one
 // is, this also exercises the "wait for queued audio to drain" branch; if not, audioStream_ stays
@@ -156,6 +191,43 @@ TEST(VideoPlayerTest, NonLoopedVideoEventuallyStopsAfterItsDuration)
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+    EXPECT_TRUE(reachedStopped);
+}
+
+// plan_media.md MEDIA-130/MEDIA-41: audio_tail.mkv's video track is 2.0s but its audio track is
+// deliberately 3.0s (see its own manifest.json) -- confirms VideoPlayer genuinely stays Playing
+// past the video's own duration until the queued audio has actually drained, not just until video
+// EOF, matching FNA's VideoPlayerTheora "wait for PendingBufferCount==0" behavior. Previously
+// documented as a real gap (the underlying bug was fixed and covered only indirectly at the
+// VideoDecoder level) -- closed for real now with a genuine VideoPlayer-level test.
+TEST(VideoPlayerTest, NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDuration)
+{
+    GraphicsDevice gd;
+    Video video(kAudioTailFixture, &gd);
+    VideoPlayer player;
+    player.setIsLoopedProperty(false);
+    player.Play(&video);
+
+    bool stillPlayingPastVideoDuration = false;
+    bool reachedStopped = false;
+    for (int i = 0; i < 60; ++i) // up to ~6s of real wall-clock time for a ~3s audio tail
+    {
+        player.GetTexture();
+        const double elapsedSeconds = i * 0.1;
+        if (elapsedSeconds > 2.2 && player.getStateProperty() == MediaState::Playing)
+        {
+            // Past the video's own 2.0s duration, but still Playing -- proves it's genuinely
+            // waiting on the longer audio tail, not just video EOF.
+            stillPlayingPastVideoDuration = true;
+        }
+        if (player.getStateProperty() == MediaState::Stopped)
+        {
+            reachedStopped = true;
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    EXPECT_TRUE(stillPlayingPastVideoDuration);
     EXPECT_TRUE(reachedStopped);
 }
 

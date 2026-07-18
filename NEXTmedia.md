@@ -4,9 +4,20 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
-> (`MEDIA-1`–`MEDIA-138`, Phases 0-8); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-145`, Phases 0-9); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — `plan_media.md` COMPLETE (138/138 tasks, all 8 phases)
+## 1. Status (2026-07-18) — `plan_media.md` COMPLETE (145/145 tasks, all 9 phases)
+
+**Phase 9 correction (2026-07-18, same day as Phase 8):** a *second* external adversarial review —
+this time of Phase 8's own fix commit `52eec0a5` — found the fixes were real but incomplete on
+several points, **plus one genuine new regression Phase 8 itself introduced** while fixing the
+track-switching bug (`MEDIA-131`): a fresh `Play()` call left the SDL audio stream paused forever,
+so every video with audio played completely silently. Root cause went deeper than the review
+itself suspected — `VideoPlayer` never initialized SDL's audio subsystem at all, a separate,
+pre-existing gap the investigation surfaced. All Phase 9 findings fixed for real (`plan_media.md`
+`MEDIA-139`..`MEDIA-145`); see §1a below. **Two adversarial review passes in one day, two real
+rounds of findings — this is exactly the "even a careful, well-documented fix needs its own
+verification" lesson, twice in a row.**
 
 **Phase 8 correction (2026-07-18):** an external adversarial code review of the Phase 7 "126/126
 complete" claim found it was **not fully accurate** — 11 real, confirmed defects, several from
@@ -339,6 +350,69 @@ research pass) caught 29 gaps and was itself a good process — but it audited *
 against the plan's task list, not *code correctness* against each task's actual runtime behavior.
 Both kinds of adversarial pass are needed before trusting a "complete" claim; this phase is the
 second kind.
+
+## 1b. Phase 9 — second external review pass (2026-07-18, same day as Phase 8)
+
+A second external review, this time of Phase 8's own fix commit (`52eec0a5`), found the Phase 8
+fixes were real but incomplete on several points, plus one genuine new regression:
+
+1. **New regression: `Play()` left the SDL audio stream paused forever** (`MEDIA-139`) — every
+   video with an audio track played completely silently after Phase 8's own track-switching fix.
+   `ReconfigureAudioAndVideoOutputForCurrentTracks()` only calls `SDL_ResumeAudioStreamDevice()`
+   when `state_ == Playing`, but during a fresh `Play()`'s own `OpenDecoder()` call, `state_` was
+   still `Stopped` (only set to `Playing` *after* `OpenDecoder()` returned) — and
+   `SDL_OpenAudioDeviceStream()` opens every stream paused by default. Fixed by moving the
+   `state_ = Playing` assignment to before the reconfigure call (with exception-safety: reverted to
+   `Stopped` if the first-frame decode then throws). **A deeper root cause found in the same
+   investigation:** `VideoPlayer.cpp` never initializes SDL's audio subsystem at all —
+   `GraphicsDevice` only calls `SDL_InitSubSystem(SDL_INIT_VIDEO)`. Fixed with a properly paired
+   `SDL_InitSubSystem(SDL_INIT_AUDIO)`/`SDL_QuitSubSystem(SDL_INIT_AUDIO)` around every stream
+   open/destroy.
+2. **`VideoDecoder`'s FFmpeg error handling was still incomplete** (`MEDIA-140`) — the EOF flush's
+   return was unchecked, `ProcessAudioPacket`'s own `avcodec_send_packet` failure was silently
+   swallowed, `av_frame_alloc()` for the audio frame was never null-checked, `avcodec_receive_frame`/
+   `swr_convert` errors inside it weren't propagated, and a video packet that got `EAGAIN` from
+   `avcodec_send_packet` was discarded instead of retried (silently dropping that frame). All fixed
+   — the `EAGAIN` case now genuinely retains and retries the packet via a new
+   `havePendingVideoPacket` flag.
+3. **The audio-tail gap wasn't fully closed** (`MEDIA-141`) — the audio *codec* itself was never
+   flushed at EOF (only video was), and the `VideoPlayer`-level `audio_tail.mkv` test stayed
+   explicitly deferred while the task stayed checked off. Both fixed for real: `ProcessAudioPacket(nullptr)`
+   now flushes audio at EOF too, and a genuine `NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDuration`
+   test proves the real 2.0s-video/3.0s-audio behavior.
+4. **"Duration probe always returns zero"** (`MEDIA-142`) — verified, not fixed: the cited line is
+   inside the deliberate `#else` (no-FFmpeg) fallback branch, not the branch this sandbox actually
+   compiles (`ninja -t commands` confirms `CNA_FFMPEG_AVAILABLE` is genuinely defined here), and
+   the already-passing real-duration tests independently confirm the real branch works.
+5. **`SavePicture()`'s edge case wasn't fully closed** (`MEDIA-143`) — if the Pictures root
+   directory didn't exist at all when `MediaLibrary` was constructed, `EnsureSavedPicturesAlbum()`
+   still bailed out with `nullptr` (no root to attach to), leaving the saved picture permanently
+   unparented even though the file itself was written to disk. Fixed: the function now also lazily
+   bootstraps a real root `PictureAlbum` node first when needed.
+6. **A real bug found while verifying #1** (`MEDIA-144`, not part of either review's own list —
+   found during this session's own verification work): `SetAudioStream()`/`SetVideoStream()`
+   unconditionally discarded and recreated the codec context even when re-selecting the
+   *already-active* track. Harmless for audio, but a real, user-visible bug for video: Phase 8's own
+   error-propagation fix newly surfaced it as a thrown `"Cannot decode non-keyframe without valid
+   keyframe"` exception (previously silently tolerated). Fixed with a same-index no-op check in
+   both setters.
+
+Full-suite regression after Phase 9: **4867 tests, 4865 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full, not a truncated tail. Three of the new/fixed
+tests (`PlayGenuinelyResumesTheAudioStreamNotJustOpensIt`, `PauseStillActuallyPausesTheAudioStream`,
+`SetAudioTrackEXTAndSetVideoTrackEXTDoNotBreakPlaybackAfterPlay`) were also verified passing in
+isolation (`--gtest_filter` on just that one test), not only as part of the full suite, since one of
+them turned out to be timing-sensitive enough that cross-test ordering could otherwise mask it.
+
+**Lesson reinforced:** this is the *second* real round of findings from an adversarial review in
+the same day, on the same plan. The Phase 8 fix commit itself introduced a brand-new severe
+regression (silent audio) while fixing something else, and that regression's own root cause
+(missing `SDL_INIT_AUDIO`) was *deeper* than what the review report itself identified — a symptom
+one review round correctly spotted led to a cause a second, deeper investigation found. Do not
+assume a fix commit is regression-free just because it was itself written carefully and its own
+targeted tests passed; a fix for one bug can introduce another, especially in shared helper
+functions (`ReconfigureAudioAndVideoOutputForCurrentTracks()` here) called from multiple call sites
+with different preconditions.
 
 ## 2. Correction to Phase 0's own build-verification record
 

@@ -1103,6 +1103,124 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Verified:* 4863 tests, 4861 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
   Gyroscope). Grepped in full, not a truncated tail.
 
+### Phase 9 — Second external review pass (2026-07-18, same day as Phase 8)
+
+> Applying MEDIA-126's own convention again. A second external adversarial review of commit
+> `52eec0a5` (Phase 8's own fix commit) found the fix was real but incomplete on several points, plus
+> **one genuine new regression Phase 8 itself introduced** while fixing MEDIA-131's track-switching
+> bug. All are fixed for real below; nothing in this phase was left as "documented but not attempted"
+> except where a prior phase had already made that judgment call (no-`SOUND_ENABLED` build variant,
+> cross-platform link-error gap — both unchanged from Phase 8's own assessment).
+
+- [x] **MEDIA-139 — Fix a genuine new regression: `Play()` left the SDL audio stream paused
+  forever.** `ReconfigureAudioAndVideoOutputForCurrentTracks()` (added in Phase 8 to fix
+  `MEDIA-131`) only calls `SDL_ResumeAudioStreamDevice()` when `state_ == MediaState::Playing` --
+  but during the initial `OpenDecoder()` call (from a fresh `Play()`), `state_` was still `Stopped`
+  (`CloseDecoder()` had just reset it) since `Play()` itself didn't set `state_ = Playing` until
+  *after* `OpenDecoder()` returned. `SDL_OpenAudioDeviceStream()` opens every stream paused by
+  default (SDL's own documented contract) -- so every video played via a fresh `Play()` call had
+  its audio silently never start.
+  *Fix:* `state_ = MediaState::Playing` now happens inside `OpenDecoder()`, immediately before
+  `ReconfigureAudioAndVideoOutputForCurrentTracks()` runs (with a `try`/`catch` reverting it back to
+  `Stopped` if the subsequent first-frame decode throws, preserving this function's existing
+  contract that a failed `Play()` leaves the player `Stopped`).
+  *A deeper root cause found in the same investigation:* `VideoPlayer.cpp` never initializes SDL's
+  audio subsystem at all -- `GraphicsDevice` only calls `SDL_InitSubSystem(SDL_INIT_VIDEO)`. In an
+  isolated test/app that never touches `MediaPlayer`/`AudioEngine` first, `SDL_OpenAudioDeviceStream()`
+  silently fails (returns null) because the audio subsystem was never started, regardless of the
+  resume-timing fix above. Fixed with a properly paired `SDL_InitSubSystem(SDL_INIT_AUDIO)`/
+  `SDL_QuitSubSystem(SDL_INIT_AUDIO)` around every stream open/destroy (SDL reference-counts
+  subsystem init process-wide, so this is safe alongside `MediaPlayer`/`AudioEngine`'s own calls).
+  *Accept:* new `VideoPlayerTestAccess::IsAudioStreamDevicePaused()`/`HasAudioStream()` (via
+  SDL3's `SDL_AudioStreamDevicePaused()`) give real, direct proof. `PlayGenuinelyResumesTheAudioStreamNotJustOpensIt`
+  and `PauseStillActuallyPausesTheAudioStream` both pass, including run in isolation (not just as
+  part of the full suite, ruling out cross-test resource-exhaustion as a confound).
+
+- [x] **MEDIA-140 — Finish `VideoDecoder`'s FFmpeg error handling for real this time.** Phase 8's
+  own `MEDIA-128` fix was itself incomplete: the EOF flush (`avcodec_send_packet(videoCtx_,
+  nullptr)`) return was still unchecked; `ProcessAudioPacket`'s `avcodec_send_packet` failure was
+  silently swallowed (not propagated); `av_frame_alloc()` for the audio frame was never
+  null-checked; `avcodec_receive_frame`/`swr_convert` errors inside `ProcessAudioPacket` were not
+  propagated; and `avcodec_send_packet` returning `EAGAIN` for a *video* packet caused that packet
+  to be discarded (`av_packet_unref`'d) instead of retried, silently dropping a video frame.
+  *Fix:* the flush return is now checked; `ProcessAudioPacket` checks and propagates every FFmpeg
+  call exactly like `NextFrame()`'s own video path already did (matching MEDIA-39's own explicit
+  "at each site" language, which names `swr_convert`/`avcodec_send_packet` specifically); a video
+  packet that gets `EAGAIN` is now retained (not unref'd) and genuinely retried after the next
+  `avcodec_receive_frame()` call drains backpressure, via a new `havePendingVideoPacket` flag,
+  instead of being silently lost.
+  *Accept:* code review confirms every FFmpeg call in both functions now checks its return code;
+  the existing corrupted-file/decoder-error tests continue to pass with the more thorough checking
+  in place.
+
+- [x] **MEDIA-141 — Fully close the audio-tail gap (`MEDIA-130`'s own documented follow-up).**
+  Phase 8 fixed the real `DrainAudio()`-not-called-on-EOF bug but left two things open: the audio
+  *codec* itself was never sent a flush packet at EOF (only the video codec was), so any audio
+  samples still buffered inside the codec's own internal state were silently lost; and the
+  `VideoPlayer`-level `audio_tail.mkv` test was explicitly deferred as "a reasonable follow-up"
+  while the task stayed checked off -- the same overclaiming pattern Phase 8 exists to fix.
+  *Fix:* the EOF branch in `NextFrame()` now also calls `ProcessAudioPacket(nullptr)` (FFmpeg's own
+  documented flush contract -- `avcodec_send_packet` accepts a null packet to mean "drain what you
+  have"), reusing the exact same, already-hardened decode/resample/error-propagation logic.
+  *Accept:* new `NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDuration` genuinely proves
+  `VideoPlayer` stays `Playing` past `audio_tail.mkv`'s 2.0s video duration until its real 3.0s
+  audio tail has drained, then reaches `Stopped` -- not just tested indirectly at the `VideoDecoder`
+  level as Phase 8 left it.
+
+- [x] **MEDIA-142 — Verify (not fix) the "duration probe always returns zero" claim.** The review
+  cited `AudioDurationProbe.cpp:33` -- that line is inside the `#else` (`CNA_FFMPEG_AVAILABLE` not
+  defined) branch, the deliberate, documented no-FFmpeg fallback, not the branch this Linux sandbox
+  actually compiles or runs.
+  *Verified:* `ninja -t commands` on the real build directory confirms `CNA_FFMPEG_AVAILABLE` is
+  genuinely defined for this target; `AlbumDurationIsARealNonZeroSumOfMemberSongDurations`/
+  `PlaylistDurationIsARealNonZeroSumOfMemberSongDurations` (already passing since `MEDIA-127`)
+  independently confirm real, non-zero probed durations. No code change -- the claim doesn't hold
+  for the branch that's actually active here, though it's accurate about what the stub itself
+  returns by design.
+
+- [x] **MEDIA-143 — Fix the `SavePicture()` edge case: Pictures root missing entirely at
+  construction.** `EnsureSavedPicturesAlbum()` (added in Phase 8 for `MEDIA-132`) still bailed out
+  with `nullptr` if `rootPictureAlbum_` itself was null -- reachable whenever the Pictures root
+  directory didn't exist at all when `MediaLibrary` was constructed (`PictureLibraryIndex` never
+  finds a root to build a tree from in that case). `SavedPictureStore::SavePicture()` still writes
+  the real file to disk regardless, so the picture was saved but permanently unparented in any
+  `PictureAlbum` tree.
+  *Fix:* `EnsureSavedPicturesAlbum()` now also lazily bootstraps a real root `PictureAlbum` node
+  (name derived from the Pictures root directory's own leaf filename, matching
+  `PictureLibraryIndex`'s own naming convention) before creating "Saved Pictures" as its child, the
+  same lazy-creation pattern already used for the child node itself.
+  *Accept:* new `MediaLibrarySavePictureNoPreexistingRootTest` (a dedicated scratch fixture whose
+  Pictures root directory is deliberately never pre-created, unlike the existing
+  `MediaLibrarySavePictureTest` fixture) confirms `getRootPictureAlbumProperty()` is genuinely
+  `nullptr` before the first `SavePicture()` call and a real, correctly-parented tree exists after.
+
+- [x] **MEDIA-144 — Fix a real bug found while verifying MEDIA-139: re-selecting an already-active
+  track needlessly discarded decode state.** `VideoDecoder::SetAudioStream()`/`SetVideoStream()`
+  unconditionally called `OpenAudioStreamByIndex()`/`OpenVideoStreamByIndex()` even when the
+  requested index was already the active one, discarding the codec context and all decode state for
+  no reason. For audio this was harmless (no keyframe concept) but pointless; for *video* it was a
+  real, user-visible bug that Phase 8's own error-propagation fix (`MEDIA-140`/`MEDIA-128`) newly
+  surfaced: by the time any `SetVideoTrackEXT()` call happens after `Play()`, the demuxer's read
+  position has already moved past the stream's first keyframe, so the freshly-reset codec context
+  has no reference frame for the very next (non-keyframe) packet, and `avcodec_send_packet` now
+  correctly throws `"Cannot decode non-keyframe without valid keyframe"` instead of silently
+  producing a garbage frame. Confirmed via isolated single-test runs that this is a genuine,
+  deterministic bug (once triggered by enough wall-clock time elapsing between `Play()` and the
+  next `GetTexture()` call to reach a second `NextFrame()`), not test flakiness.
+  *Fix:* both setters now no-op if the requested index already matches the currently active stream.
+  *Accept:* `SetAudioTrackEXTAndSetVideoTrackEXTDoNotBreakPlaybackAfterPlay` (which calls
+  `SetVideoTrackEXT(0)` while video track 0 is already active) passes reliably across repeated runs;
+  confirmed the fix doesn't affect genuine cross-track switching (`SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleRate`
+  still passes, still proves a real 48000→44100 Hz change).
+
+- [x] **MEDIA-145 — Full-suite regression run.** Confirm zero regressions from this whole second
+  remediation pass, grepped in full (not a truncated tail).
+  *Verified:* 4867 tests, 4865 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope). Grepped in full, not a truncated tail. Also verified `PlayGenuinelyResumesTheAudioStreamNotJustOpensIt`/
+  `PauseStillActuallyPausesTheAudioStream`/`SetAudioTrackEXTAndSetVideoTrackEXTDoNotBreakPlaybackAfterPlay`
+  run reliably in isolation (`--gtest_filter` on just that one test), not only as part of the full
+  suite, ruling out cross-test ordering/resource effects as a confound for these specific fixes.
+
 ---
 
 ## 6. Recommended order and milestones

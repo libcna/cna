@@ -396,10 +396,38 @@ namespace Microsoft::Xna::Framework::Media
         }
         if (rootPictureAlbum_ == nullptr)
         {
-            // No Pictures root/tree exists at all (e.g. an empty/inaccessible Pictures folder) --
-            // nowhere to attach a new node. SavePicture() itself still succeeds (the file is
-            // written for real); it just isn't represented in any PictureAlbum tree.
-            return nullptr;
+            // The Pictures root itself didn't exist (or was inaccessible) at MediaLibrary
+            // construction time, so PictureLibraryIndex never found a root to build a tree from
+            // -- but SavedPictureStore::SavePicture() (called by our own caller, SavePicture(),
+            // just before this) always creates the real directory on disk regardless. Bootstrap a
+            // real root node now too, the same lazy-creation pattern this whole function already
+            // uses for "Saved Pictures" below, instead of leaving the saved Picture unparented in
+            // any tree at all (found by external code review, plan_media.md MEDIA-132).
+            if (pictureRoot_.empty())
+            {
+                return nullptr; // no pictures root configured at all -- genuinely nowhere to attach
+            }
+            std::error_code rootEc;
+            std::filesystem::path rootPath = std::filesystem::path(pictureRoot_);
+            std::string canonicalRootPath = std::filesystem::weakly_canonical(rootPath, rootEc).string();
+            if (rootEc || canonicalRootPath.empty())
+            {
+                canonicalRootPath = rootPath.string(); // best-effort fallback if canonicalization fails
+            }
+
+            std::unique_ptr<PictureAlbum> rootAlbum(
+                new PictureAlbum(rootPath.filename().string(), nullptr, canonicalRootPath));
+            PictureAlbum* rawRoot = rootAlbum.get();
+            ownedPictureAlbums_.push_back(std::move(rootAlbum));
+
+            std::unique_ptr<PictureAlbumCollection> rootChildAlbums(new PictureAlbumCollection({}));
+            std::unique_ptr<PictureCollection> rootPictures(new PictureCollection({}));
+            rawRoot->SetChildAlbumsAndPictures(rootChildAlbums.get(), rootPictures.get());
+            ownedPictureAlbumChildCollections_.push_back(std::move(rootChildAlbums));
+            ownedPictureAlbumPictureCollections_.push_back(std::move(rootPictures));
+
+            rootPictureAlbum_ = rawRoot;
+            pictureAlbumByPath_[canonicalRootPath] = rawRoot;
         }
 
         std::error_code ec;
