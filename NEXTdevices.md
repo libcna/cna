@@ -553,6 +553,25 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     separately instrumented (needs an allocator hook or modifying already-hardened
     locking code, out of mandate); actual CI wiring to run this automatically and fail
     on a regression is a separate, not-yet-done follow-up.
+38. `VIB2-006` (`2165903d`, P2 — first P2 item picked up this pass, remaining P1
+    backlog is now hardware-gated or large-architecture-only) — "intensity zero" was
+    already decided by an earlier task (`DEVICES-0030`), but the only existing test
+    only checked "doesn't throw," not what actually happens. New
+    `StartWithIntensityZeroForwardsAsAnActiveZeroStrengthStartNotAnImplicitStop` uses
+    `FakeVibrateBackend` to confirm it genuinely forwards as an active `Start()` call,
+    not an implicit `Stop()` — strengthened the doc comment with a real SDL citation
+    (`SDL_PlayHapticRumble()`'s own contract: "a 0-1 float value," `0` explicitly
+    valid, confirmed against `SDL_haptic.c`'s actual clamp-and-run implementation).
+    New `StartWhileAlreadyActiveForwardsAsANewIndependentStartCall` (confirmed against
+    SDL's own implementation: an already-playing effect gets updated and restarted,
+    never rejected) and `StopWhenIdleForwardsToBackendWithoutThrowing` — neither
+    scenario had any coverage before. Confirmed by reading `SdlHapticVibrateBackend.cpp`
+    directly that simple/left-right mutual exclusion is **already implemented**, not
+    missing — existing tests exercise it against the real backend but, like every
+    other real-backend test in this file, can only prove "does not throw" without real
+    hardware. No production `.cpp` changed. Full precise filter (367 tests) clean
+    under `devices-ubsan`. **Left OPEN**: real SDL-level mode-switch correctness and
+    leak-freedom remain hardware-unverified.
 
 **Emerging pattern to remember:** `BASE2-001`/`002`/`005` all looked, at first glance,
 like tasks fully blocked on the not-yet-built behavioral oracle — but each had a
@@ -919,12 +938,13 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
 file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 37 P1
-tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
+tasks plus 1 P2 task are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
 VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
 MOT2-005, ANDR2-009, ANDR2-010, BASE2-001, COMP2-008, BASE2-002, BASE2-003,
 BASE2-004, BASE2-005, DEVPERF-004, DEVPERF-005, SDLCORE-007, SDLCORE-011,
-PERF2-002, TEST2-002, COMP2-003, MOT2-001, TEST2-010, PERF2-001 -- see Section 2 for commit hashes
+PERF2-002, TEST2-002, COMP2-003, MOT2-001, TEST2-010, PERF2-001, VIB2-006 (P2) --
+see Section 2 for commit hashes
 and a one-line summary of each, including PERF2-002's own new 100k-cycle
 lifecycle leak tests, TEST2-002's own consolidated clean-checkout sanitizer
 sweep, COMP2-003's citation-backed display-orientation finding plus
@@ -981,10 +1001,19 @@ already-started work regardless of temperature (see feedback_cpu_thermal_pacing
 memory and Section 2's dated note) -- do not throttle builds to -j1/-j2 in the
 75-85C band, that was this session's own over-correction, not the actual rule.
 
-Continue the P1 backlog (Section 8 lists untriaged candidates with rough
+Continue the backlog (Section 8 lists untriaged candidates with rough
 tractability notes -- BASE2-* is now fully done, COMP2-008 is also done, so
-ignore any older references to those as still-open). Read each task's full
-plan_devices.md entry before starting. For each task worked: implement,
+ignore any older references to those as still-open). **The tractable P1
+backlog is now largely exhausted**: every remaining OPEN P1 item is either
+genuinely hardware-gated (needs a real Android/haptic device this container
+doesn't have) or a large architecture task deliberately set aside
+(TEST2-004, TEST2-005, LIFE-007/010/011, ANDR2-011/014, MOT2-006 -- see
+Section 9's "Do not do yet" for why each was set aside, not picked up as a
+quick continuation). `VIB2-006` (P2) was the first P2 item picked up this
+pass for exactly this reason -- if the P1 backlog stays exhausted, continue
+into P2 (`VIB2-007`, `TEST2-003`, `TEST2-006`'s host-testable pieces if any,
+etc.) rather than forcing an unready P1 architecture task. Read each task's
+full plan_devices.md entry before starting. For each task worked: implement,
 add/extend tests where a real test seam exists (several P1 items are
 Android-only with zero host coverage -- verify those via a real NDK
 cross-compile of the exact translation unit instead), build
