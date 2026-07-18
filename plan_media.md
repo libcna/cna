@@ -2415,6 +2415,43 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   no-mixer and failed-uninstall branches are unreachable from this suite; Group D
   (`MEDIA-192`..`198`) remains deferred by the project owner.
 
+- [x] **MEDIA-228 — Actually make the file-URI tests portable; `MEDIA-225` only fixed half of it.**
+  `MEDIA-225` correctly replaced the illegal `q?.ogg` fixture name, but a thirteenth review noticed
+  the tests still **built the URI itself non-portably**: `"file://" + path.string()`. On Windows
+  that yields `file://C:\project\...` -- backslashes are not valid in a URI at all, and even
+  after converting them, `file://C:/...` parses **`C:` as the AUTHORITY**, i.e. a remote host. The
+  correct Windows spelling needs a third slash: `file:///C:/...`. So the "portable test" claim from
+  `MEDIA-225` was still wrong, just for a different reason -- the *filename* was fixed while the
+  *URI construction* was not.
+  *Fix:* a single `MakeFileUri()` helper now builds every URI in these tests: it resolves to
+  absolute, uses `generic_string()` (normalising separators to `/` on all platforms), and prefixes
+  `/` when the path does not already start with one, turning `C:/x` into `/C:/x`. Every hand-built
+  `"file://" + ...` in the file was routed through it, including the localhost, no-authority and
+  UNC spellings, which had the same latent problem.
+  *Accept:* the helper's output was **verified experimentally, not asserted**: compiling the same
+  logic standalone and feeding it Windows-shaped inputs produces `file:///C:/proj/s.ogg` for both
+  `C:\proj\s.ogg` and `C:/proj/s.ogg`, and `file:///home/u/s.ogg` on POSIX. All 23 `SongTest`
+  cases pass.
+  *A mistake made and caught during this fix:* the first version of the helper did not resolve to
+  absolute, so a relative fixture path became `/tests/assets/...` -- an absolute path that does not
+  exist -- and three tests failed. Fixed by absolutising inside the helper.
+
+- [x] **MEDIA-229 — Explain the 4919-vs-4921 test-count difference instead of hand-waving it.**
+  The previous round dismissed the reviewer's differing count as "test registration differing
+  between build configurations" **without evidence** -- an unsupported claim of exactly the kind
+  this plan keeps being caught by.
+  *Investigated properly:* the difference is **Draco**. Three tests are gated behind
+  `#ifdef CNA_DRACO_AVAILABLE` (`RuntimeGltfModelTest.LoadsDracoCompressedTriangleDirectlyFromGltf`,
+  `GltfImportCoreTest.ExtractMeshDecodesDracoCompressedTriangle`,
+  `GltfImportCoreTest.ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWithNoTangentAccessor`).
+  Draco 1.5.6 **is** installed on this machine, but the `cmake-build-tests` directory predated the
+  Draco integration, so its cached configuration had it off. Re-running CMake detects it
+  (`CNA: Draco found (1.5.6)`) and the counts line up.
+  *Note:* this is also why the earlier "4919 tests" figures in this plan are lower than a
+  freshly-configured build reports -- they were measured in that stale build directory. The results
+  themselves were unaffected (zero Media failures either way), but the counts should be read with
+  that caveat rather than treated as canonical.
+
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
 
