@@ -54,13 +54,19 @@ BRIGHT_SUM = 420
 
 # label -> (cli args, screenshot filename, {region_name: (x0, y0, x1, y1)})
 SHOTS = [
+    # audit_net.md remediation (fifth round): the two Shoes/Foot boundaries are tracked
+    # SEPARATELY (left and right), per the audit's explicit "obe Shoes/Foot hranice" request - a
+    # single combined box could hide a defect that affects only one foot, since the avatar is
+    # mirror-symmetric and a one-sided regression would be averaged away.
     ("male T-pose", ["--gender", "male", "--yaw", "0"], "regression-male.png", {
         "groin": (370, 218, 430, 258),
-        "feet": (352, 378, 448, 458),
+        "foot_left": (352, 378, 400, 458),
+        "foot_right": (400, 378, 448, 458),
     }),
     ("female T-pose", ["--gender", "female", "--yaw", "0"], "regression-female.png", {
         "groin": (370, 218, 430, 258),
-        "feet": (352, 378, 448, 458),
+        "foot_left": (352, 378, 400, 458),
+        "foot_right": (400, 378, 448, 458),
     }),
     ("male Wave", ["--gender", "male", "--clip", "Wave", "--yaw", "25"], "regression-wave.png", {
         "torso_shoulder": (350, 100, 450, 260),
@@ -70,18 +76,20 @@ SHOTS = [
 # Recorded ceilings. Global: min average brightness / max very-dark fraction. Per region:
 # max speckle count and max very-dark fraction. Regenerate with --report after an intentional,
 # reviewed improvement, and record WHY in the commit message.
-# Recorded 2026-07-18 (fourth round), measured values in parentheses. very-dark is 0.0% in every
+# Recorded 2026-07-18 (fifth round), measured values in comments. very-dark is 0.0% in every
 # region since the EasyGL emissive double-multiply fix, so its ceilings are deliberately tight -
 # any reappearance of near-black pixels is a real regression, not noise.
-GLOBAL_MIN_AVG_BRIGHTNESS = 330.0  # measured 351-359
+GLOBAL_MIN_AVG_BRIGHTNESS = 330.0  # measured 348-364
 GLOBAL_MAX_VERY_DARK_PCT = 0.5     # measured 0.0
 REGION_LIMITS = {
     # (max_speckle, max_very_dark_pct)
-    ("male T-pose", "groin"): (45, 1.0),            # measured speckle 25
-    ("male T-pose", "feet"): (160, 1.0),            # measured speckle 119
-    ("female T-pose", "groin"): (45, 1.0),          # measured speckle 5
-    ("female T-pose", "feet"): (160, 1.0),          # measured speckle 119
-    ("male Wave", "torso_shoulder"): (170, 1.0),    # measured speckle 125
+    ("male T-pose", "groin"): (20, 1.0),            # measured 0
+    ("male T-pose", "foot_left"): (75, 1.0),        # measured 49
+    ("male T-pose", "foot_right"): (75, 1.0),       # measured 55
+    ("female T-pose", "groin"): (20, 1.0),          # measured 2
+    ("female T-pose", "foot_left"): (75, 1.0),      # measured 50
+    ("female T-pose", "foot_right"): (75, 1.0),     # measured 46
+    ("male Wave", "torso_shoulder"): (150, 1.0),    # measured 120
 }
 
 

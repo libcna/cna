@@ -175,8 +175,22 @@ def fix_automatic_weights(obj, bones, joint_pairs=None, blend_radius=0.08):
         joint_pos, child_tail = bone_segments[child_name]
         axis = (child_tail - joint_pos).normalized()
         for v in mesh.vertices:
-            signed_dist = (obj.matrix_world @ v.co - joint_pos).dot(axis)
+            offset = obj.matrix_world @ v.co - joint_pos
+            signed_dist = offset.dot(axis)
             if abs(signed_dist) > blend_radius:
+                continue
+            # audit_net.md remediation (2026-07-18, fifth round): the axial test alone selects an
+            # INFINITE SLAB perpendicular to the bone axis, so it forced parent/child weights onto
+            # vertices arbitrarily far from the joint sideways. For a laterally-pointing arm bone
+            # that slab sweeps straight down through the torso, hips and legs - which is how
+            # CNAAvatarPants ended up weighted to Shoulder.L/Shoulder.R (measured: 108 and 107
+            # vertices, via tools/avatar_builder/diagnose_avatar_mesh.py's `weights` check). Those
+            # spurious weights make hips/leg geometry follow the shoulders during arm animations
+            # like `Wave`, deforming garments away from the body they cover. Gate on perpendicular
+            # distance too, turning the region into a bounded cylinder around the joint axis
+            # instead of a slab.
+            perpendicular = (offset - axis * signed_dist).length
+            if perpendicular > blend_radius:
                 continue
             t = max(0.0, min(1.0, (signed_dist / blend_radius + 1.0) * 0.5))
             t = t * t * (3.0 - 2.0 * t)  # smoothstep
