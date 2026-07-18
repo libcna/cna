@@ -58,25 +58,28 @@ _(none recorded yet)_
   [audit report](examples/sdlgpu_envmap_test.cpp.audit.md), [audit report](examples/sdlgpu_smoke_test.cpp.audit.md),
   and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **The skinned-normal-transform bug (missing world-space normal-matrix contribution) is now confirmed at the
-  shader-source level in 5 of 14 backends: EasyGL, WebGPU, Vulkan, SdlGpu, and D3D11+D3D12 (shared `D3DCommon`
-  source) — and within D3DCommon specifically, confirmed in ALL 5 of its skinned vertex shaders (`skinned3d`,
-  `skinned3d_vertexlit`, `skinned_colored3d`, `skinned_colored3d_vertexlit`, `pbr_skinned3d`), with zero
-  exceptions.** The shared `D3DCommon/shaders/skinned3d.vert.hlsl` (compiled into both D3D11 and D3D12) carries an
-  explicit header comment stating it was **"Ported line-by-line from
-  `src/CNA/Internal/Backends/Vulkan/shaders/skinned3d.vert.glsl,"`** the clearest direct evidence yet of the
-  cross-backend porting chain that propagated this bug (alongside the already-confirmed EasyGL→WebGPU chain).
-  SdlGpu's own shader comment "explicitly acknowledges the omission was ported from Vulkan" too (per
-  `sdlgpu_smoke_test.cpp`'s audit). The related but distinct "raw World instead of inverse-transpose" variant
-  (rather than a complete omission) is separately confirmed in `pbr_skinned3d.vert.hlsl` (D3DCommon, shared
-  D3D11/D3D12), `pbr_skinned3d.vert.glsl` (SdlGpu), `EnsurePbrSkinnedProgram` (EasyGL), and D3D9's own
-  `PbrSkinned3D.hlsl`. **D3DCommon's own 3 unskinned lit vertex shaders (`lit_textured3d`, `pbr3d`,
-  `lit_textured3d_vertexlit`) correctly use the inverse-transpose convention** — clean proof this is a
-  skinning-specific oversight, not general unfamiliarity with the correct math. Also confirmed while reading this
-  directory: **D3D11/D3D12 do NOT share Vulkan's `EnvironmentMapEffect` Y-flip bug** — a genuine, deliberate,
-  well-documented backend difference (D3D's clip-space convention already matches XNA's, unlike Vulkan's), not an
-  oversight. Only Bgfx's *own* skinned shader source remains unconfirmed at the direct-source-read level
-  (only inferred so far from masked test behavior). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity
-  gaps) for full detail and every originating test/source reference.
+  shader-source level in ALL 6 backend-groups with a `SkinnedEffect` implementation — EasyGL, WebGPU, Vulkan,
+  SdlGpu, D3D11+D3D12 (shared `D3DCommon` source), and Bgfx — a complete, no-exceptions sweep across every one
+  of the 14 backends in this audit.** Bgfx's `vs_skinned3d.sc` was the last to be directly confirmed:
+  `v_normal = normalize(skinMat[0].xyz*a_normal.x + skinMat[1].xyz*a_normal.y + skinMat[2].xyz*a_normal.z)` — the
+  BGFX-shading-language spelling of `mat3(skinMat)*a_normal`, with no `u_world` contribution anywhere. Within
+  D3DCommon specifically, confirmed in ALL 5 of its skinned vertex shaders (`skinned3d`, `skinned3d_vertexlit`,
+  `skinned_colored3d`, `skinned_colored3d_vertexlit`, `pbr_skinned3d`), with zero exceptions. The shared
+  `D3DCommon/shaders/skinned3d.vert.hlsl` (compiled into both D3D11 and D3D12) carries an explicit header comment
+  stating it was **"Ported line-by-line from `src/CNA/Internal/Backends/Vulkan/shaders/skinned3d.vert.glsl,"`**
+  one of three explicit, self-documented instances of the cross-backend porting chain that propagated this bug
+  (alongside the already-confirmed EasyGL→WebGPU chain, SdlGpu's own "mirrors VulkanGraphicsBackend's own
+  skinned3d.vert.glsl exactly" comment, and Bgfx's own `vs_pbr_skinned3d.sc` comment explicitly contrasting its
+  "extra World-space...transform" against `vs_skinned3d.sc`'s "plain `mat3(skinMat)` multiply"). The related but
+  distinct "raw World instead of inverse-transpose" variant (rather than a complete omission) is separately
+  confirmed in `pbr_skinned3d.vert.hlsl` (D3DCommon), `pbr_skinned3d.vert.glsl` (SdlGpu), `vs_pbr_skinned3d.sc`
+  (Bgfx), `EnsurePbrSkinnedProgram` (EasyGL), and D3D9's own `PbrSkinned3D.hlsl` — 6 confirmed instances.
+  **D3DCommon's own 3 unskinned lit vertex shaders (`lit_textured3d`, `pbr3d`, `lit_textured3d_vertexlit`)
+  correctly use the inverse-transpose convention** — clean proof this is a skinning-specific oversight, not
+  general unfamiliarity with the correct math. Also confirmed while reading this directory: **D3D11/D3D12 do NOT
+  share Vulkan's `EnvironmentMapEffect` Y-flip bug** — a genuine, deliberate, well-documented backend difference.
+  See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity gaps) for full detail and every originating
+  test/source reference.
 - **EasyGL backend: a constructor failure after `RegisterForWindow()` but before construction completes leaves a
   dangling entry in `IGraphicsBackend`'s static window registry.** Independently discovered via direct production
   code reading (not from the test batch). `EasyGLGraphicsBackend`'s constructor calls `RegisterForWindow(window,

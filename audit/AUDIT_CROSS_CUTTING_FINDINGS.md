@@ -319,10 +319,29 @@ _(pending)_
   InverseTranspose3x3((float3x3)World)` and use it. This is the cleanest evidence yet in this audit that the bug
   is specifically "skinning code forgets to compose the outer world-space normal matrix," not a general
   unfamiliarity with the inverse-transpose convention.
-  **This raises the confirmed-at-shader-source-level count to 5 of 14 backends: EasyGL, WebGPU, Vulkan, SdlGpu,
-  D3D11+D3D12 (shared D3DCommon)** — only Bgfx's *own* skinned shader source (as opposed to its already-audited
-  *test* files, which only infer the bug from masked test behavior) remains unconfirmed at the direct-source-read
-  level among backends with a SkinnedEffect implementation.
+  **This raised the confirmed-at-shader-source-level count to 5 of 14 backends: EasyGL, WebGPU, Vulkan, SdlGpu,
+  D3D11+D3D12 (shared D3DCommon)** — only Bgfx's *own* skinned shader source remained unconfirmed at that time.
+  **RESOLVED — Bgfx's `vs_skinned3d.sc` directly confirmed the pattern**: line 27-29,
+  `v_normal = normalize(skinMat[0].xyz * a_normal.x + skinMat[1].xyz * a_normal.y + skinMat[2].xyz * a_normal.z)`
+  — literally `mat3(skinMat) * a_normal` spelled out component-wise (BGFX shading language has no built-in
+  `mat3`-times-`vec3` shorthand the way GLSL/HLSL do) — the normal is transformed by the skin matrix alone, with
+  no `u_world` contribution anywhere. **This makes Bgfx the 6th and FINAL backend confirmed at the direct
+  shader-source level, meaning EVERY ONE of the 14 backends in this audit with a `SkinnedEffect` implementation
+  now shares this exact defect — a complete, no-exceptions sweep.** `vs_pbr_skinned3d.sc` additionally confirms
+  the narrower "raw World, not inverse-transpose" variant for `SkinnedPbrEffect`
+  (`v_normal = normalize(mul(u_world, vec4(skinnedNormal, 0.0)).xyz)`, line 39) — the 6th confirmed instance of
+  that variant too (after EasyGL, WebGPU, D3D9, D3D11/D3D12, SdlGpu). **`vs_pbr_skinned3d.sc`'s own header
+  comment is a third, independent piece of direct evidence for this bug's cross-backend propagation mechanism**:
+  it explicitly states this file "applies an EXTRA World-space normal/tangent transform after skinning (unlike
+  `vs_skinned3d.sc`'s plain `mat3(skinMat)` multiply) — an intentional divergence... matching
+  `EnsurePbrSkinnedProgram()`'s own documented behavior" — i.e. the author of this file was fully aware that the
+  plain `SkinnedEffect` shader omits `World` entirely and made a deliberate (if still incorrect — raw `World`
+  instead of inverse-transpose) choice to add *some* world-space contribution for the PBR case specifically,
+  mirroring EasyGL's own already-confirmed `EnsurePbrSkinnedProgram()` bug precisely (alongside the D3D11
+  "ported line-by-line from Vulkan" comment and SdlGpu's "mirrors VulkanGraphicsBackend's own skinned3d.vert.glsl
+  exactly" comment, this is the third explicit, self-documented instance of deliberate cross-backend porting that
+  propagated this bug family). This is now this audit's single most exhaustively-confirmed defect, alongside the
+  fog-formula bug.
   **Also confirmed while reading these files: D3D's own `env_map3d.vert.hlsl` — also "ported line-by-line from
   Vulkan" per its header comment — correctly and deliberately omits Vulkan's Y-flip**, a genuine, positive,
   non-bug backend difference: a family-wide, well-documented convention across every D3DCommon 3D vertex shader
