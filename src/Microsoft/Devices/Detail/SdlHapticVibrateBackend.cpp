@@ -317,6 +317,24 @@ namespace Microsoft::Devices::Detail
     {
         if (haptic_ != nullptr && !IsHapticDeviceStillConnected(haptic_))
         {
+            // Task DEVPERF-005 (2026-07-18, external audit
+            // `audit_devices_2026-07-17.md`): VIB2-004's own original entry
+            // had no diagnostic at all for this path -- a stale device being
+            // released was entirely silent, unlike VIB2-003's now-migrated
+            // failed-SDL-call diagnostics above. Info severity, not
+            // Warning/Error: this is expected, correctly-handled behavior
+            // (the whole point of ReleaseHapticDeviceIfStale() existing), not
+            // an ignored failure -- included so a caller/telemetry consumer
+            // can still observe "a haptic device was lost" as an event, not
+            // just infer it indirectly from IsSupported() changing.
+            Microsoft::Devices::Sensors::Detail::NativeDiagnosticRecord record;
+            record.Backend = "SDL";
+            record.Operation = "SdlHapticVibrateBackend device released (disconnected)";
+            record.DeviceId = std::to_string(static_cast<long long>(SDL_GetHapticID(haptic_)));
+            record.Timestamp = System::DateTimeOffset::getUtcNowProperty();
+            record.Severity = Microsoft::Devices::Sensors::Detail::NativeDiagnosticSeverity::Info;
+            Microsoft::Devices::Sensors::Detail::NativeDiagnosticSink::Record(record);
+
             SDL_CloseHaptic(haptic_);
             haptic_ = nullptr;
             leftRightEffectId_ = -1;

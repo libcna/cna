@@ -6212,8 +6212,24 @@ test is not sufficient for an Android coordinate/fusion claim.
     Full precise filter (347 tests) clean under `devices-ubsan` (343 passed,
     4 hardware skips, 0 failures) and `devices-tsan` (3 runs, 0 `WARNING:
     ThreadSanitizer`).
-    **Remaining migrations, still open**: `VIB2-004`, `SDLCORE-005`,
-    `ANDR2-006` — same one-call-site-at-a-time approach.
+  - **2026-07-18, third follow-up migration completed**: `VIB2-004`'s own
+    original entry had **no diagnostic at all** for its stale-device-release
+    path — `ReleaseHapticDeviceIfStale()` silently closed and discarded a
+    disconnected `haptic_` handle, entirely untraceable even in a debug
+    build. Added one `NativeDiagnosticSink::Record()` call there,
+    `Severity=Info` (not `Warning`/`Error` — this is expected, correctly-handled
+    behavior, not an ignored failure), `Operation="SdlHapticVibrateBackend
+    device released (disconnected)"`, `DeviceId` = the about-to-be-closed
+    handle's own `SDL_GetHapticID()` (read *before* `SDL_CloseHaptic()`).
+    Same "not independently host-tested" limitation as the `VIB2-003`
+    migration above (`VibrateControllerTests` exercises only
+    `FakeVibrateBackend`) — not newly introduced, not newly resolved.
+    `SdlHapticVibrateBackend.cpp` re-verified via NDK cross-compile. Full
+    precise filter (347 tests) clean under `devices-ubsan` (343 passed, 4
+    hardware skips, 0 failures) and `devices-tsan` (3 runs, 0 `WARNING:
+    ThreadSanitizer`).
+    **Remaining migrations, still open**: `SDLCORE-005`, `ANDR2-006` — same
+    one-call-site-at-a-time approach.
 
 ### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)
 
