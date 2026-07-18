@@ -444,7 +444,10 @@ namespace Microsoft::Xna::Framework::Graphics
         EffectParameterType paramType_;
 
         // Storage: raw float buffer for numeric types, string for string, pointer for textures.
-        // Texture2D/3D/TextureCube do NOT inherit from Texture in CNA, so each has its own slot.
+        // Texture2D/Texture3D/TextureCube each get their own slot even though all three now
+        // inherit Texture (matching FNA) -- collapsing these into one Texture* slot is a
+        // separate, larger EffectParameter API-shape change, out of scope here (plan_graphics.md
+        // Task 863).
         std::vector<float> floatData_;
         std::vector<int>   intData_;
         std::string        stringData_;

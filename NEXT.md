@@ -1,3 +1,74 @@
+# NEXT.md — `feature/graphics` remaining `plan_graphics.md` backlog (2026-07-18)
+
+> **This section is current for `feature/graphics` (this checkout).** Everything below the
+> `---` divider that follows is stale, D3D9-branch-scoped content (`feature/dx9`) that ended up
+> merged into this file's history via `develop` — it is NOT about this branch and should not be
+> read as current status here. Left in place rather than deleted since it may still be a useful
+> historical record for the D3D9 work itself; just don't confuse it with the list below.
+>
+> **Remaining open items in `plan_graphics.md`** (37 `⬜` + 1 `🟨`, as of 2026-07-18 — re-grep
+> `plan_graphics.md` for `⬜|🟨` to confirm this hasn't drifted before trusting it blindly):
+>
+> **Needs a project-owner decision before any code, not a normal task:**
+> - **Task 863** — `Texture3D` sampling in shaders is structurally impossible today: CNA's
+>   `Texture3D : GraphicsResource` (not `Texture`) can't go into `TextureCollection`, and
+>   `ShaderEffect`/`IEffectBackend` has no texture-binding API for any texture type. Needs a real
+>   architecture choice between (a) make `Texture3D`/`TextureCube` inherit `Texture` to match FNA
+>   (touches `EffectParameter`, `TextureCollection`, every backend's texture-bind code), or (b) a
+>   parallel `Texture3D`-specific GPU-binding path outside `TextureCollection`. **Under discussion
+>   with the project owner as of 2026-07-18 — see the live conversation, not this file, for the
+>   resolution once decided; update this row once it lands.**
+>
+> **Real bugs on specific backends (each independently scoped, no architecture decision needed):**
+> - **869** — `GraphicsDevice` state properties (`BlendState`/`DepthStencilState`/`RasterizerState`)
+>   use value semantics instead of FNA's reference semantics.
+> - **872** — `GraphicsDevice.ReferenceStencil` isn't a real, independent, backend-connected
+>   override (Task 319 finding).
+> - **890** — `EnvironmentMapEffect` doesn't forward `DirectionalLight1`/`DirectionalLight2` on any
+>   of the 3 backends.
+> - **893** — `SkinnedEffect` doesn't forward `DirectionalLight1`/`DirectionalLight2` either.
+> - **894** — `SkinnedEffect` has no real specular highlights.
+> - **895** — `SkinnedEffect.WeightsPerVertex` is a complete GPU no-op on all 3 backends.
+> - **933** — EasyGL: a full-backbuffer `SpriteBatch` draw before any 3D draw in the same frame
+>   breaks that frame's 3D rendering entirely (see `DEFERRED.md`).
+> - **952** — Bgfx: `RenderTargetCube`'s depth buffer doesn't gate face draws (surfaced fixing
+>   Task 951's `Bgfx_RenderTargetCube_DepthFormat` crash).
+> - **917** — Bgfx occlusion queries can't measure true scene-depth visibility (shares a view/depth
+>   buffer with other submitted geometry).
+> - **1113** — `GraphicsDevice::Clear(ClearOptions, ...)` masks `DepthBuffer`/`Stencil` out of the
+>   request incorrectly depending on the active target's depth-stencil support.
+> - **1114** — Bgfx: `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` unconditionally
+>   throw via `ThrowNo3DState()` in cases where they shouldn't.
+>
+> **Large, standalone sub-project (10 tasks, not a quick pick-up):**
+> - **10200–10209** — MojoShader: vendor `third_party/mojoshader`, a C++ wrapper around
+>   `mojoshader_effects.c`'s parser (compiled `.fxb` → technique/pass/parameter reflection), then
+>   wire it through EasyGL (GLSL)/Vulkan (needs a vendored GLSL→SPIR-V compiler, `10203`
+>   feasibility not yet decided)/Bgfx (needs its own `shaderc` investigation, `10205`), plus
+>   `Effect::Clone()` (folds in Task 883's `EffectPass::owner_` re-binding hazard), real compiled
+>   test fixtures, and docs. This is a full compiled-XNA-effect-bytecode feature, comparable in
+>   scope to a phase of its own.
+>
+> **Verification/content tasks (need real test assets, not just code):**
+> - **938/943/944** — skinned-model verification via `Content.Load<Model>` (SplitScreen,
+>   SkinningSample) and a real FBX/X skeletal-animation → CNA-schema conversion tool.
+> - **474/475/477/478** — DEFERRED, generate reference values for `BasicEffect` defaults/lighting
+>   constants and `SpriteFont.MeasureString`, plus reference screenshots for SpriteBatch/BasicEffect
+>   — all share the same documented prerequisite blocker (see each row for detail).
+>
+> **Infrastructure / lower-priority:**
+> - **919** — wire the `GraphicsSmoke` CTest label into real CI (e.g. a
+>   `.github/workflows/graphics-smoke-ci.yml`).
+> - **920** — 2 Android-NDK build regressions in the sibling `sharp-runtime` repo blocking the
+>   entire CNA/Android cross-compile.
+> - **1108** — Software backend: real per-vertex-lit CPU rasterizer path.
+> - **1109** (🟨) — regenerate/update every existing lit-scene pixel-test baseline across all
+>   touched backends once their own dispatch honors the real default.
+> - **1110** — decide scope: which `SurfaceFormat` values justify oracle coverage, and whether
+>   `Texture2D` needs new construction/`SetData` paths for them.
+>
+> ---
+
 # NEXT.md — CNA Project Handoff (`feature/dx9` branch — Direct3D 9 backend only)
 
 > **This `NEXT.md` is scoped to the D3D9 backend only, per explicit project-owner instruction

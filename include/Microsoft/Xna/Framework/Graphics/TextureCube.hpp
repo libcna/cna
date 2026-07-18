@@ -6,7 +6,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
-#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 namespace CNA::Internal::Backends
@@ -19,10 +19,10 @@ namespace System::IO { class Stream; }
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Represents a cube map texture (six faces of equal size). */
-    class TextureCube : public GraphicsResource
+    class TextureCube : public Texture
     {
     public:
-        using GraphicsResource::Dispose;
+        using Texture::Dispose;
 
         /**
          * @brief Creates a cube map texture with the given face size and format.
@@ -51,10 +51,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Returns the width and height of a cube map face in texels. */
         [[nodiscard]] int getSizeProperty() const;
-        /** @brief Returns the surface format of the texture data. */
-        [[nodiscard]] SurfaceFormat getFormatProperty() const;
-        /** @brief Returns the number of mipmap levels in this texture. */
-        [[nodiscard]] int getLevelCountProperty() const;
+
+        // getFormatProperty() and getLevelCountProperty() are inherited from Texture.
 
         /**
          * @brief Uploads data to the entire specified cube face.
@@ -158,8 +156,6 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         int size_;
-        SurfaceFormat format_;
-        int levelCount_;
         std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> backend_;
     };
 }

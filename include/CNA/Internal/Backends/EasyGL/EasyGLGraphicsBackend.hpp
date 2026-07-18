@@ -135,6 +135,9 @@ namespace CNA::Internal::Backends::EasyGL
                      int w, int h, int depth,
                      void* data, int dataLength) const override;
 
+        /// Binds this volume texture to the currently active GL texture unit.
+        void BindGL() const override;
+
     private:
         ::easygl::Texture tex_;
         int width_  = 0;
@@ -185,6 +188,7 @@ namespace CNA::Internal::Backends::EasyGL
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
         void BindTexture(int unit, ITextureBackend* texture) override;
         void BindTextureCube(int unit, ITextureCubeBackend* texture) override;
+        void BindTexture3D(int unit, ITexture3DBackend* texture) override;
 
         /// Returns the underlying compiled program, so a backend (e.g. SpriteBatch) can bind
         /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.

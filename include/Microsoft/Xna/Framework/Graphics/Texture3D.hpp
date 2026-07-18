@@ -4,7 +4,7 @@
 #include <memory>
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
-#include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 namespace CNA::Internal::Backends
@@ -15,10 +15,10 @@ namespace CNA::Internal::Backends
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief Represents a 3D (volume) texture. */
-    class Texture3D : public GraphicsResource
+    class Texture3D : public Texture
     {
     public:
-        using GraphicsResource::Dispose;
+        using Texture::Dispose;
 
         /**
          * @brief Creates a 3D texture with the given dimensions and format.
@@ -70,10 +70,8 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] int getHeightProperty() const;
         /** @brief Returns the texture depth (number of slices) in texels. */
         [[nodiscard]] int getDepthProperty() const;
-        /** @brief Returns the surface format of the texture data. */
-        [[nodiscard]] SurfaceFormat getFormatProperty() const;
-        /** @brief Returns the number of mipmap levels in this texture. */
-        [[nodiscard]] int getLevelCountProperty() const;
+
+        // getFormatProperty() and getLevelCountProperty() are inherited from Texture.
 
         /**
          * @brief Uploads data to the entire texture.
@@ -159,6 +157,13 @@ namespace Microsoft::Xna::Framework::Graphics
         void GetData(int level, int left, int top, int right, int bottom, int front, int back,
                      Color* data, int startIndex, int elementCount) const;
 
+        /**
+         * @brief Returns a reference to the backend implementation object.
+         *
+         * @return Reference to the backend ITexture3DBackend.
+         */
+        NOXNA [[nodiscard]] CNA::Internal::Backends::ITexture3DBackend& GetBackend() const { return *backend_; }
+
     protected:
         /** @brief Releases the backend 3D texture handle when the resource is disposed. */
         void Dispose(bool disposing) override;
@@ -167,8 +172,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int width_;
         int height_;
         int depth_;
-        SurfaceFormat format_;
-        int levelCount_;
         std::unique_ptr<CNA::Internal::Backends::ITexture3DBackend> backend_;
     };
 }

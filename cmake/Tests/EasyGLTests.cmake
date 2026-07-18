@@ -495,6 +495,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_ShaderEffect_TextureCube COMMAND cna_test_easygl_shadereffect_texturecube
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), and
+        # ShaderEffect::SetTexture(int, Texture3D&)/IEffectBackend::BindTexture3D() let a custom
+        # shader sample a real sampler3D uniform -- same shape as Task 1081's TextureCube proof
+        # above, adapted to a volume texture.
+        cna_easygl_test(cna_test_easygl_shadereffect_texture3d
+                        examples/easygl_shadereffect_texture3d_test.cpp)
+        cna_register_backend_test(NAME EasyGL_ShaderEffect_Texture3D COMMAND cna_test_easygl_shadereffect_texture3d
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 947: ShipGame's own NormalMapping.fx (3 techniques: PlainMapping/NormalMapping/
         # ViewMapping) -- 3 of ShipGame's 4 distinct custom shaders now ported. Uses Task 1081's
         # TextureCube capability.

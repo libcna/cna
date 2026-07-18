@@ -23,6 +23,7 @@
 
 #include <gtest/gtest.h>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -30,7 +31,9 @@
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/FormatException.hpp"
 #include "System/IO/MemoryStream.hpp"
@@ -41,7 +44,9 @@ using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
+using Microsoft::Xna::Framework::Graphics::TextureCollection;
 
 // -----------------------------------------------------------------------
 // Constructor / properties
@@ -369,6 +374,61 @@ TEST_F(TextureCubeTest, DoubleDisposeDoesNotThrow)
     TextureCube tex(gd, 2, false, SurfaceFormat::Color);
     tex.Dispose();
     EXPECT_NO_THROW(tex.Dispose());
+}
+
+// -----------------------------------------------------------------------
+// TextureCollection assignment / Texture base class (plan_graphics.md Task 863)
+//
+// Before Task 863, TextureCube inherited GraphicsResource directly (not Texture), so it could
+// never be stored in a TextureCollection (std::vector<Texture*>) at all -- a TextureCube* could
+// not be assigned into GraphicsDevice.Textures[slot], a real, previously-impossible operation
+// that is the clearest possible proof this fix succeeded. Now TextureCube : Texture, matching FNA.
+// -----------------------------------------------------------------------
+
+TEST_F(TextureCubeTest, CanBeAssignedIntoTextureCollection)
+{
+    TextureCube tex(gd, 4, false, SurfaceFormat::Color);
+    TextureCollection col;
+    // Previously a compile error: TextureCube was not convertible to Texture*.
+    EXPECT_NO_THROW(col(0, &tex));
+    EXPECT_EQ(col[0], static_cast<Texture*>(&tex));
+}
+
+TEST_F(TextureCubeTest, CanBeAssignedIntoRealGraphicsDeviceTexturesSlot)
+{
+    TextureCube tex(gd, 4, false, SurfaceFormat::Color);
+    // Real GraphicsDevice.Textures[slot] = textureCube, matching FNA's own TextureCube : Texture
+    // capability -- structurally impossible before Task 863.
+    EXPECT_NO_THROW(gd.getTexturesProperty()(0, &tex));
+    EXPECT_EQ(gd.getTexturesProperty()[0], static_cast<Texture*>(&tex));
+}
+
+// Texture::Dispose(bool) removes the texture from GraphicsDevice.Textures/VertexTextures on
+// disposal (matches FNA's Texture.Dispose unbind behaviour). TextureCube::Dispose(bool)
+// previously only released its own backend handle without ever calling into
+// Texture::Dispose(bool), so this unbind never applied to TextureCube. Now it does, since
+// TextureCube::Dispose(bool) calls Texture::Dispose(disposing) after releasing its own backend
+// handle (same order as Texture2D::Dispose(bool)).
+TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceTextures)
+{
+    auto tex = std::make_unique<TextureCube>(gd, 4, false, SurfaceFormat::Color);
+    gd.getTexturesProperty()(0, tex.get());
+    ASSERT_EQ(gd.getTexturesProperty()[0], static_cast<Texture*>(tex.get()));
+
+    tex->Dispose();
+
+    EXPECT_EQ(gd.getTexturesProperty()[0], nullptr);
+}
+
+TEST_F(TextureCubeTest, DisposeUnbindsFromGraphicsDeviceVertexTextures)
+{
+    auto tex = std::make_unique<TextureCube>(gd, 4, false, SurfaceFormat::Color);
+    gd.getVertexTexturesProperty()(0, tex.get());
+    ASSERT_EQ(gd.getVertexTexturesProperty()[0], static_cast<Texture*>(tex.get()));
+
+    tex->Dispose();
+
+    EXPECT_EQ(gd.getVertexTexturesProperty()[0], nullptr);
 }
 
 // -----------------------------------------------------------------------
