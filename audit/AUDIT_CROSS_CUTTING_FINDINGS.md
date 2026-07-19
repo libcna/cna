@@ -861,6 +861,17 @@ _(pending)_
   refactoring omission, not an intentional scope difference — comparing the three sibling readers side by
   side makes the gap obvious. See `src/CNA/Internal/Xnb/TextureCubeContentTypeReader.cpp.audit.md`.
 
+- **MEDIUM: `Color::PackFromVector4()` (`xna-framework-core` shard) uses an unclamped
+  `static_cast<bytecs>(float)` conversion -- undefined behavior in C++ for out-of-range/NaN input** --
+  found while auditing `xna-framework-core`. Every other float-to-component conversion path in the same
+  file (the `Vector4`/`Vector3`/float constructors) correctly clamps via `MathHelper::Clamp` first via a
+  shared `ToByteFromUnitClamped()` helper; the `IPackedVector::PackFromVector4` override skips this clamp
+  entirely. A `Vector4` component outside roughly [0,1] (plausible from unclamped procedural/HDR-ish color
+  math, or a stray `NaN`/`Infinity`) triggers real UB, not just an XNA-style "unspecified" result. See
+  `src/Microsoft/Xna/Framework/Color.cpp.audit.md`. Worth checking whether other `IPackedVector`
+  implementations share this pattern when that area (`Microsoft::Xna::Framework::Graphics::PackedVector`)
+  is audited.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
