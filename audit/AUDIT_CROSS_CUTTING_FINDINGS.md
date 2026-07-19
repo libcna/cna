@@ -1095,6 +1095,25 @@ _(pending)_
   (`StorageDeviceNotConnectedException`). See
   `include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp.audit.md`.
 
+- **`xna-audio` shard note: this is the most thoroughly self-audited subsystem encountered so far.**
+  All 31 files were reviewed (headers in full; the largest .cpp files -- `Cue.cpp` 1398 lines,
+  `SoundEffectInstance.cpp` 1233 lines, `SoundEffect.cpp` 774 lines, `DynamicSoundEffectInstance.cpp`
+  648 lines, `WaveBank.cpp` 417 lines -- at a thorough-but-not-exhaustive depth, explicitly noted in
+  each report). Only one new finding surfaced: `SoundBank::GetCue()` returns a raw owning `Cue*`
+  instead of `std::unique_ptr<Cue>`, inconsistent with this codebase's own established
+  `std::unique_ptr`-based ownership-transfer convention used elsewhere for the identical pattern
+  (`StorageDevice::EndOpenContainer()`/`EndShowSelector()`) -- LOW severity, functionally fine since
+  the header explicitly documents the ownership contract. Everything else reviewed was already
+  correct, and the shard's own comments cite a remarkable number of real, previously-fixed defects
+  from prior review cycles -- several explicitly ASan/TSAN-confirmed (a real use-after-free in
+  `DynamicSoundEffectInstance::SubmitBuffer`, `AUD-15-006`; a real data race on `isFloat_`,
+  fixed via `std::atomic<bool>`) and several mathematically corrected against FAudio's real
+  behavior after a prior "verified as a faithful port" conclusion turned out to be incomplete (the
+  `Apply3D` distance-attenuation formula, `P9-3D-003`; the weighted-lottery variation-selection
+  boundary check, `P11-XACT-002`/`P11-XACT-004`). See `include/Microsoft/Xna/Framework/Audio/SoundBank.hpp.audit.md`
+  for the one new finding, and the shard's other `.audit.md` reports for the full list of confirmed
+  prior fixes cited by file.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,

@@ -49,7 +49,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`xna-audio`](manifest/xna-audio.md) | 31 | PENDING: 31 / AUDITED: 0 |
+| [`xna-audio`](manifest/xna-audio.md) | 31 | AUDITED: 31 / PENDING: 0 (complete) |
 | [`xna-content`](manifest/xna-content.md) | 15 | AUDITED: 15 / PENDING: 0 (complete) |
 | [`xna-framework-core`](manifest/xna-framework-core.md) | 78 | AUDITED: 78 / PENDING: 0 (complete) |
 | [`xna-gamerservices`](manifest/xna-gamerservices.md) | 89 | PENDING: 89 / AUDITED: 0 |
