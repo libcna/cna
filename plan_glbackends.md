@@ -364,25 +364,20 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   temporary redirect) and delete/archive `easy-glrvc` per the project owner's normal sibling-repo
   cleanup convention. **Not done — needs a merge decision, not made here.**
 
-## 4. Open questions for the project owner (do not guess — ask before these tasks)
+## 4. Open questions for the project owner — resolved 2026-07-19
 
-- `GLB-14`: rename `examples/easygl_*.cpp` → `examples/opengles_*.cpp` (and similar) or keep the
-  `easygl_` prefix as an internal-implementation-name convention? ~50 files affected either way.
+- `GLB-14` (rename `examples/easygl_*.cpp` → `opengles_*.cpp`?): **Decided: keep `easygl_` —
+  do not rename.** The name correctly refers to the internal implementation regardless of public
+  profile; not worth ~50 files of diff noise.
+- `GLB-36` (WEBGL1 shader body — real architecture work, dropping `layout(location=N)` and
+  rebinding vertex-attribute locations from C++ across ~26 programs, unverifiable without a real
+  browser/headless-GL): **Decided: start on this next session.** The `emcc` compile step alone
+  (even without a way to fully runtime-verify a WebGL1 context) is real signal worth having.
+- `GLB-38` (push/merge `easy-glrvc`'s commits into `easy-gl`'s real default branch so `cnagl` can
+  drop the temporary `../easy-glrvc` dependency): **Decided: leave to the project owner — do not
+  attempt to merge/push between repos autonomously.**
 - Whether `OPENGLES` should default to GLES 3.0 (today's behavior, kept in this plan) or whether a
   true "OpenGL ES" public name should support ES 2.0 as well — this plan assumes ES 3.0-only
   scope for `OPENGLES` (matching current behavior) and treats ES2-class support as exclusively the
-  `WEBGL1` profile's problem, since no current CNA use case needs desktop/mobile ES2.
-- `GLB-36` (WEBGL1 shader body — GLSL ES 1.00 `attribute`/`varying`/`texture2D()`): implementing
-  this for real also requires dropping every shader's `layout(location=N) in ...` explicit
-  attribute-location qualifiers (not valid in GLSL ES 1.00) and rebinding those same locations from
-  the C++ side instead (`glBindAttribLocation` before linking, or `glGetAttribLocation` after and
-  adapting every `VertexArray`/VAO attribute-binding call site to match) — a real architecture
-  change across every one of the ~26 shader programs, not a text-only shader edit. It is also
-  currently unverifiable in this sandbox either way (no Emscripten SDK, and this sandbox's desktop
-  Mesa/SDL3 GL context creation was not confirmed capable of a real GLES2/WebGL1-equivalent
-  profile for local testing). Given the size and unverifiability, this was deliberately not
-  attempted blind this session — needs a go-ahead and, ideally, access to a real
-  Emscripten-capable environment before starting.
-- `GLB-38` (switch `cnagl` off `../easy-glrvc` back to `../easy-gl`): needs `easy-glrvc`'s commits
-  (`14109db` and its follow-ups) actually pushed/merged into `easy-gl`'s real default branch first
-  — a merge/push decision on a different repo, out of scope to make unilaterally.
+  `WEBGL1` profile's problem, since no current CNA use case needs desktop/mobile ES2. **Not asked
+  this round — still open if it turns out to matter.**
