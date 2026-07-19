@@ -1,5 +1,6 @@
 #pragma once
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/OpenGL1/OpenGL1Capabilities.hpp"
 #include <SDL3/SDL.h>
 #include <cstddef>
 #include <cstdint>
@@ -58,7 +59,8 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  void DrawIndexedPrimitivesEx(const IVertexBufferBackend&,const IIndexBufferBackend&,const Matrix&,const Matrix&,const Matrix&,PrimitiveType,int,const GpuDrawParams&)override;
  bool SupportsCapability(CNA::GraphicsCapability capability)const override;
  int VirtualWidth()const{return virtualWidth_;}int VirtualHeight()const{return virtualHeight_;}
+ const OpenGL1Capabilities& Capabilities()const{return caps_;}
 private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawInternal(const OpenGL1VertexBufferBackend&,const OpenGL1IndexBufferBackend*,PrimitiveType,int,const GpuDrawParams*);
- SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;
+ SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;
 };
 }

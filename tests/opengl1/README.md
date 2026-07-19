@@ -16,6 +16,9 @@ Priority runtime smoke coverage, each wired to a real CTest registration:
 
 Scenarios 1-6 and 8 reuse already-verified, backend-agnostic example sources (real public `Game`/`GraphicsDevice`/`BasicEffect`/`SpriteBatch` API only) from `examples/`, confirmed by inspection to contain no EasyGL-specific code before reuse.
 
+Additional coverage beyond the 8 priority scenarios:
+- `OpenGL1_Anisotropic_GlState` (`examples/opengl1_anisotropic_gl_state_test.cpp`) — plan_opengl1.md phase 1's real consumer: verifies `GL_EXT_texture_filter_anisotropic` detection (`OpenGL1Capabilities`) actually reaches the driver through `SamplerState`/`ApplySamplerState()` — sub-cap request round-trips, an over-cap request gets clamped to the driver's real max, and switching back to a non-anisotropic filter resets `GL_TEXTURE_MAX_ANISOTROPY_EXT` to 1.0 rather than leaking stale state. Skips cleanly (exit 0) if the extension genuinely isn't present.
+
 ## Bugs found and fixed while wiring this suite up
 
 - `OpenGL1GraphicsBackend::glContext_` was `void*` instead of `SDL_GLContext` — didn't compile against SDL3's typed `SDL_GL_MakeCurrent`/`SDL_GL_DestroyContext`.

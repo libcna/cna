@@ -88,4 +88,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_DepthStencilState_StencilOps COMMAND cna_test_opengl1_depthstencilstate_stencil_ops
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 1: runtime GL version/extension discovery -- verifies the real
+    # GL_EXT_texture_filter_anisotropic wiring in ApplySamplerState() reaches the driver.
+    cna_opengl1_test(cna_test_opengl1_anisotropic_gl_state
+                      examples/opengl1_anisotropic_gl_state_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_Anisotropic_GlState COMMAND cna_test_opengl1_anisotropic_gl_state
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
