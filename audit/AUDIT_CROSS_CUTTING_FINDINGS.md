@@ -1035,6 +1035,38 @@ _(pending)_
   already-available, already-used `System::*Exception` counterpart) rather than treating each as an
   isolated one-off finding.
 
+- **`StorageDevice::DeleteContainer()` performs a real, unchecked recursive filesystem delete
+  (`fs::remove_all`) driven directly by a caller-supplied `titleName` string, with zero
+  path-containment validation -- and, unlike every other "missing containment check" finding this
+  session, this is NOT a faithful reproduction of any FNA behavior.** FNA's own `DeleteContainer`
+  (`src/Storage/StorageDevice.cs` lines 349-352) is an unimplemented stub: `throw new
+  NotImplementedException();`. CNA chose to actually implement the method -- a reasonable
+  enhancement over FNA's stub in principle -- but `fs::path(root) / titleName` has the same
+  absolute-path-escapes/`..`-traversal behavior already confirmed elsewhere (`StorageContainer`,
+  `TitleContainer::OpenStream()`), and here the consequence is a recursive **delete** rather than a
+  create/open/read. `DeleteContainer("../../../SomeOtherAppData")` or an absolute path resolves
+  outside the storage root and is deleted with no re-validation. This is a genuine, CNA-introduced
+  path-traversal-enabled data-loss vulnerability, reachable from a public XNA-surface method, and
+  arguably the most severe finding of this audit session so far. See
+  `include/Microsoft/Xna/Framework/Storage/StorageDevice.hpp.audit.md` and
+  `src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp.audit.md`.
+
+- **`StorageContainer`'s directory/file/OpenFile methods have no path-containment check on their
+  relative-path arguments, but this is confirmed FNA-faithful** (FNA's own `StorageContainer.cs`
+  uses unchecked `Path.Combine` for every one of the same methods) -- correct per this project's
+  FNA-fidelity policy, joining the `TitleContainer::OpenStream()`/`BoundingSphere`/
+  `BoundingFrustum`/`Curve` pattern of "looks like a bug but is a verified-faithful FNA
+  reproduction," undisclosed as intentional in the CNA source. See
+  `include/Microsoft/Xna/Framework/Storage/StorageContainer.hpp.audit.md`.
+
+- **All three file pairs in the `xna-storage` shard show an intra-pair SPDX license mismatch**:
+  each `.hpp` uses `// SPDX-License-Identifier: MS-PL` while its paired `.cpp` uses `// SPDX-License-Identifier:
+  MIT` plus an explicit `// Copyright (c) Robert Vokac and contributors` line. This is a stronger
+  version of the licensing inconsistency already noted for the `CNA::Internal::Net` subsystem
+  (there it was a whole-subsystem MIT-vs-MS-PL split; here the mismatch is *within* each file pair
+  itself). Now confirmed in two independent subsystems -- worth a project-wide grep for `.hpp`/`.cpp`
+  pairs with disagreeing SPDX headers as part of Pass 5.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
