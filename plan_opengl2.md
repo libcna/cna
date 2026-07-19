@@ -584,11 +584,23 @@ possibilities of OpenGL 2"):
   checking how `EasyGLTests.cmake` itself registers the same golden-image pattern, since ctest's
   default working directory is the build tree, not the source tree the relative golden-PNG path
   assumes.
-  Scoped deliberately to this one scene, not attempted more broadly -- see the follow-up note
-  below for why a wider sweep is real, separate effort, not a small addition.
+  Scoped deliberately to this one scene at first -- then, since the pattern proved out cleanly,
+  extended to three more of this project's existing `*_golden_test.cpp`/PNG pairs, reused
+  verbatim the same way: `opengl2_basiceffect_golden_test.cpp` (`TextureEnabled`+
+  `VertexColorEnabled`, `DiffuseColor`+`EmissiveColor`, constant-UV top-left-texel sample,
+  tolerance=8), `opengl2_alphatesteffect_golden_test.cpp` (`CompareFunction::Greater` above
+  reference -> drawn not discarded, tolerance=20), and `opengl2_skinnedeffect_golden_test.cpp`
+  (bone-palette identity-transform quad + `EnableDefaultLighting()`'s real Phong rig,
+  tolerance=40). All three PASS -- both their own independently-derived/observed `ExpectPixel`
+  cross-check AND the actual golden-PNG region comparison, on the first real run. A genuinely
+  broader sweep across this project's dozens of other `*_golden_test.cpp` pairs (BasicEffect
+  lighting variants, fog, DualTextureEffect, PbrEffect's 4 golden images, ...) remains real,
+  further, separate effort -- not attempted beyond these four representative scenes (one per
+  major already-implemented effect family: reflection mapping, unlit texture/vertex-color
+  compositing, alpha discard, and skinning+lighting).
 
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers twenty CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers twenty-three CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -622,8 +634,9 @@ possibilities of OpenGL 2"):
     per mode (bars / full-coverage-cropped / non-uniform-stretch). 2/2 PASS each.
   - `OpenGL2_PbrEffect` -- metallic-roughness BRDF, tangent-space normal mapping,
     emissive/occlusion maps, SkinnedPbrEffect bone-palette skinning. 7/7 PASS.
-  - `OpenGL2_EnvironmentMapEffect_Golden` -- genuine cross-backend pixel comparison against
-    EasyGL's own checked-in golden PNG for the identical scene. PASS.
+  - `OpenGL2_EnvironmentMapEffect_Golden`/`_BasicEffect_Golden`/`_AlphaTestEffect_Golden`/
+    `_SkinnedEffect_Golden` -- genuine cross-backend pixel comparisons against EasyGL's own
+    checked-in golden PNGs for each identical scene. PASS x4.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -709,10 +722,11 @@ possibilities of OpenGL 2"):
   still NOT tested on an actual Windows runtime -- `wglGetProcAddress`'s real behavior, actual GL
   driver entry-point availability, and end-to-end rendering on Windows remain to be checked on a
   real machine.
-- Visual parity tests against other backends (golden-image comparison) beyond the one scene now
-  covered (`OpenGL2_EnvironmentMapEffect_Golden`, see the status entry above) -- this project has
-  dozens of `*_golden_test.cpp`/checked-in PNG pairs across its other backends (BasicEffect
-  lighting, fog, DualTextureEffect, SkinnedEffect, PbrEffect, ...); only the one
-  EnvironmentMapEffect scene was ported to OpenGL2 so far. Each additional scene is mechanically
-  similar (reuse the existing golden PNG + its exact scene setup, tolerance=20) but real,
-  incremental effort per scene, not a single remaining task.
+- Visual parity tests against other backends (golden-image comparison) beyond the four scenes now
+  covered (`OpenGL2_EnvironmentMapEffect_Golden`/`_BasicEffect_Golden`/`_AlphaTestEffect_Golden`/
+  `_SkinnedEffect_Golden`, see the status entry above) -- this project has dozens of
+  `*_golden_test.cpp`/checked-in PNG pairs across its other backends (more `BasicEffect` lighting
+  variants, fog, DualTextureEffect, `BlendState`/`RasterizerState`/`DepthStencilState` scenes,
+  PbrEffect's 4 golden images, texture-filter/sampler-state scenes, ...). Each additional scene is
+  mechanically similar to the four already ported (reuse the existing golden PNG + its exact scene
+  setup verbatim) but real, incremental effort per scene, not a single remaining task.

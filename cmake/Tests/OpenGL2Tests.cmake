@@ -127,4 +127,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_register_backend_test(NAME OpenGL2_EnvironmentMapEffect_Golden COMMAND cna_test_opengl2_environmentmapeffect_golden
         TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_basiceffect_golden examples/opengl2_basiceffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_BasicEffect_Golden COMMAND cna_test_opengl2_basiceffect_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_alphatesteffect_golden examples/opengl2_alphatesteffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_AlphaTestEffect_Golden COMMAND cna_test_opengl2_alphatesteffect_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_skinnedeffect_golden examples/opengl2_skinnedeffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SkinnedEffect_Golden COMMAND cna_test_opengl2_skinnedeffect_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
