@@ -106,7 +106,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE;
 
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_OPENGL1)
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_OPENGL1) || defined(CNA_BACKEND_OPENGL2)
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
@@ -2353,6 +2353,23 @@ namespace Microsoft::Xna::Framework::Graphics
             if (!SDL_SetWindowSize(window_, width, height))
             {
                 throw makeSdlError("SDL_SetWindowSize");
+            }
+
+            // SDL_SetWindowSize() is documented as asynchronous on some windowing systems (e.g.
+            // X11 without a window manager to negotiate geometry immediately, as under a bare
+            // Xvfb) -- SDL_GetWindowSize()/SDL_GetWindowSizeInPixels() can keep reporting the OLD
+            // size for a short window afterward. UpdateViewportFromWindow() (called right after
+            // this by every Reset()/ApplyChanges() path) needs the NEW size immediately: it feeds
+            // backend_->SetViewport(), and nothing re-issues that call later purely because the
+            // physical size changed (INTERNAL_OnClientSizeChanged's own re-trigger is keyed off
+            // the LOGICAL/virtual viewport size, which does not change across this resize) -- so a
+            // stale read here would bake a wrong glViewport-equivalent in for the rest of the
+            // session. SDL_SyncWindow() blocks (with an internal timeout) until the resize is
+            // actually applied; non-fatal on failure/lack of support (matches the fullscreen
+            // handling just above), since some platforms/drivers never need or support it.
+            if (!SDL_SyncWindow(window_))
+            {
+                SDL_ClearError();
             }
 #endif
         }

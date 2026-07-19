@@ -1,0 +1,92 @@
+#pragma once
+
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/ImageData.hpp"
+
+#include <SDL3/SDL.h>
+
+#include <memory>
+
+namespace CNA::Internal::Backends::OpenGL2
+{
+    // Native desktop OpenGL 2.1 (compatibility profile) backend. See plan_opengl2.md for scope
+    // and known follow-up work. Deliberately independent of EasyGL/easy-gl.
+    class OpenGL2GraphicsBackend final : public IGraphicsBackend
+    {
+    public:
+        OpenGL2GraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                               CnaPresentationMode presentationMode, int swapInterval);
+        ~OpenGL2GraphicsBackend() override;
+
+        void Clear(float r, float g, float b, float a) override;
+        void Present() override;
+        void GetViewportSize(int& width, int& height) override;
+        void SetVirtualResolution(int width, int height) override;
+        void SetPresentationMode(int mode) override;
+        void SetSwapInterval(int interval) override;
+        SDL_Window* GetWindowInternal() const override { return window_; }
+        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
+
+        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+
+        void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
+        void ClearDepth(float depth) override;
+        void ClearStencil(int stencil) override;
+        void ClearDepthAndStencil(float depth, int stencil) override;
+        void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
+        void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
+
+        void SetDepthTestEnabled(bool enabled) override;
+        void SetBlendEnabled(bool enabled) override;
+        void SetDepthWriteEnabled(bool enabled) override;
+
+        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
+
+        void DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view,
+                                   const Matrix& projection, PrimitiveType primitive, int primitiveCount) override;
+        void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                                          PrimitiveType primitive, int primitiveCount) override;
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view,
+                              const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params) override;
+
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+
+        void SetScissorRect(int x, int y, int w, int h) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
+        bool TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const override;
+        bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;
+
+    private:
+        SDL_Window* window_{};
+        SDL_GLContext context_{};
+        int virtualWidth_{};
+        int virtualHeight_{};
+        CnaPresentationMode presentationMode_{};
+        unsigned colorProgram_{};
+        unsigned texturedProgram_{};
+
+        void ensurePrograms();
+        void drawInternal(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                          PrimitiveType primitive, int primitiveCount, const GpuDrawParams* params);
+    };
+}
