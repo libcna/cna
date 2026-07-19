@@ -6,6 +6,6 @@ Files in this shard: **3**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_gamerservices_signin_presence/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_gamerservices_signin_presence/src/Main.cpp.audit.md) |
-| 2 | `examples/demo_gamerservices_signin_presence/src/PresenceGame.cpp` | PENDING | [PresenceGame.cpp.audit.md](../examples/demo_gamerservices_signin_presence/src/PresenceGame.cpp.audit.md) |
-| 3 | `examples/demo_gamerservices_signin_presence/src/PresenceGame.hpp` | PENDING | [PresenceGame.hpp.audit.md](../examples/demo_gamerservices_signin_presence/src/PresenceGame.hpp.audit.md) |
+| 1 | `examples/demo_gamerservices_signin_presence/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_gamerservices_signin_presence/src/Main.cpp.audit.md) |
+| 2 | `examples/demo_gamerservices_signin_presence/src/PresenceGame.cpp` | AUDITED | [PresenceGame.cpp.audit.md](../examples/demo_gamerservices_signin_presence/src/PresenceGame.cpp.audit.md) |
+| 3 | `examples/demo_gamerservices_signin_presence/src/PresenceGame.hpp` | AUDITED | [PresenceGame.hpp.audit.md](../examples/demo_gamerservices_signin_presence/src/PresenceGame.hpp.audit.md) |
