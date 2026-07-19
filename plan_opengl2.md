@@ -402,11 +402,42 @@ possibilities of OpenGL 2"):
   `SetUniformVec4()` actually reaching the shader (a tint uniform provably halves the output);
   and `SetTexture()`/`BindTexture()` actually reaching the shader (a custom shader samples a
   solid-color texture and reads back that exact color). 6/6 PASS.
-  `SpriteBatch::SetCustomEffect()` (the 2D sprite-batch custom-shader path) remains unimplemented
-  in this backend -- out of scope here, tracked as a follow-up below.
+  `SpriteBatch::SetCustomEffect()` (the 2D sprite-batch custom-shader path) was left unimplemented
+  at the end of this task -- see the SpriteBatch::SetCustomEffect status entry below (implemented
+  the same session, once the architectural mismatch it required working around was understood).
+
+## Status: SpriteBatch::SetCustomEffect (2026-07-19/20, session 7)
+
+- **`SpriteBatch::Begin(..., Effect*)` implemented**, resolving the deferral noted at the end of
+  the previous session: `Sprite::Draw()`'s built-in path pre-transforms every vertex to clip
+  space on the CPU (`gl_Position=vec4(aPosition,1.0)`, no projection uniform at all), which
+  cannot be reused as-is for a custom effect that expects a `MatrixTransform` uniform (real XNA's
+  `SpriteEffect.fx` convention -- any custom SpriteBatch effect ported from real XNA already
+  declares a `float4x4 MatrixTransform` parameter; XNA throws if it's missing). Rather than
+  restructuring the built-in path (risking the 13/13-passing `OpenGL2_2D` suite), added a
+  SEPARATE `DrawWithCustomEffect()` path used only when `SetCustomEffect()` has set a non-null
+  effect: vertex positions upload RAW (screen pixels, not pre-transformed), and `transform_`
+  (`SpriteBatch.Begin`'s own transform matrix) is folded into the SAME `MatrixTransform` uniform
+  as the screen->clip orthographic projection, matching real XNA's `SpriteBatch.SetupMatrix()`
+  exactly -- **not** `EasyGLSpriteBatchBackend`'s own lowercase `"projection"` uniform name, which
+  is a real deviation from XNA in that backend (flagged, not fixed, out of scope for this branch).
+  The shared UV/rotation/flip math (previously inline in `Draw()`) was extracted into
+  `ComputeSpriteScreenCorners()` so both paths stay consistent by construction.
+  The texture is always bound to unit 0 with no explicit sampler-uniform requirement -- GLSL
+  default-initializes an unset sampler uniform to 0, matching HLSL's implicit register-0 default
+  that real XNA's `DECLARE_TEXTURE(Texture, 0)` relies on.
+  When the custom effect fails to compile, the draw is skipped entirely -- deliberately NOT
+  falling back to the built-in shader the way `EasyGLSpriteBatchBackend::FlushBatch()` does,
+  since the two vertex conventions here are incompatible (falling back would feed raw
+  screen-space positions to a shader that expects already-transformed clip-space ones, producing
+  garbage rather than a plausible degraded result).
+  `OpenGL2_SpriteBatchCustomEffect` verifies: `MatrixTransform` wiring + vertex-color
+  pass-through + texture sampling all reach a custom shader correctly; a subsequent
+  `Begin()` without an effect genuinely restores the built-in shader (not sticky). 3/3 PASS on
+  the first real run.
 
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers fourteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers fifteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -434,6 +465,8 @@ possibilities of OpenGL 2"):
     device-dependent queries don't throw). 8/8 PASS.
   - `OpenGL2_ShaderEffect` -- custom runtime-compiled GLSL: valid/invalid compilation,
     World/View/Projection wiring, uniform-by-name binding, texture-unit binding. 6/6 PASS.
+  - `OpenGL2_SpriteBatchCustomEffect` -- custom sprite shader via `MatrixTransform`, texture-unit-0
+    binding, built-in shader restored after a plain `Begin()`. 3/3 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -483,8 +516,9 @@ possibilities of OpenGL 2"):
   `OpenGL2_SkinnedEffect` above).
 - Real `SupportsCapability` values for `WireFrame`/`MultiSampleAntiAliasing`/
   `AnisotropicFiltering` (see `OpenGL2_GraphicsCapability` above).
-- Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL, direct 3D draws only;
-  see `OpenGL2_ShaderEffect` above).
+- Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) for both the direct 3D
+  draw path (see `OpenGL2_ShaderEffect` above) and `SpriteBatch::Begin(..., Effect*)` (see
+  `OpenGL2_SpriteBatchCustomEffect` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -494,24 +528,38 @@ possibilities of OpenGL 2"):
   those three modes' real semantics yet.
 - Full vertex declaration support rather than stride inference (blocks any vertex format beyond
   the 5 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
-  attribute order/extra streams).
+  attribute order/extra streams). Investigated: `IVertexBufferBackend::SetData()` only ever
+  receives a raw `stride_in_bytes`, never a `VertexDeclaration`/`VertexElement` list -- adding
+  real declaration support means widening `IGraphicsBackend`'s shared interface, which every
+  other backend (EasyGL, Vulkan, Bgfx, SdlGpu, WebGPU, D3D9/11/12, DX3, Software, ...) would also
+  need to handle. `EasyGLGraphicsBackend`'s own code already flags this exact tradeoff (its
+  stride-52 comment: "every backend's API boundary currently only receives a raw stride, not a
+  VertexDeclaration ... deferred as a larger cross-backend refactor, not attempted here") --
+  deliberately not attempted here either, for the same reason: out of proportion for an
+  OpenGL2-scoped task, and risks every other backend for a feature only this backend would gain.
 - PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
   effort (its own shader family + texture set), likely lower priority than the items above for a
   "no EasyGL dependency" OpenGL 2.1 backend.
-- `SpriteBatch::SetCustomEffect()` (2D sprite-batch custom-shader path) -- `Sprite` still ignores
-  it entirely (default no-op); only the direct 3D draw path
-  (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`) consumes `GpuDrawParams::customEffectBackend` so
-  far (see `OpenGL2_ShaderEffect` above). Investigated during this session and deliberately NOT
-  attempted: this backend's `Sprite::Draw()` pre-transforms every vertex to clip space ON THE CPU
-  (screen coords -> NDC via `viewportWidth`/`viewportHeight` division, with `transform_` applied
-  before that) and its built-in shader is just `gl_Position=vec4(aPosition,1.0)` -- no projection
-  matrix uniform at all. `EasyGLSpriteBatchBackend::SetCustomEffect`'s established contract (see
-  its `FlushBatch()`) instead uploads a real orthographic `projection` uniform and expects the
-  vertex shader to apply it, which requires uploading RAW screen-space positions, not
-  pre-transformed clip-space ones. Supporting `SetCustomEffect()` here properly (matching that
-  same contract, so a custom sprite shader ported from EasyGL "just works") means restructuring
-  `Sprite::Draw()`'s vertex generation away from CPU-side clip-space pre-transform -- a real
-  refactor of the currently 13/13-passing `OpenGL2_2D` code path, not a small addition; deferred
-  rather than risking that already-verified subsystem for a lower-priority feature.
-- Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended for Linux desktop builds.
+- Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended
+  for Linux desktop builds. This is a REAL, not theoretical, gap: `opengl32.dll` on Windows only
+  exports the ~350 GL 1.1 entry points -- everything this backend actually calls beyond GL 1.1
+  (buffer objects, shaders, framebuffers, multitexture, occlusion queries, and even
+  `glTexImage3D`/`glTexSubImage3D` despite being spec-core since GL 1.2) must be resolved at
+  runtime via `wglGetProcAddress` (`SDL_GL_GetProcAddress` wraps this portably) on that platform,
+  or the Windows link step fails outright with unresolved externals. `GL_GLEXT_PROTOTYPES`'s
+  plain `extern` declarations only link because Linux/Mesa/GLX exports these symbols directly for
+  static linking -- that is a Linux/GLX-specific convenience, not something Windows' GL ICD model
+  provides. Not fixed here: this sandbox has no Windows toolchain to compile/link-verify against,
+  and a hand-written, unverified ~50-function loader is a real risk of shipping subtly wrong
+  platform code with no way to catch it before a real Windows build attempt.
+- Visual parity tests against other backends (golden-image comparison) beyond the one
+  cross-backend numeric check already reused from EasyGL's own golden scene (see
+  `OpenGL2_EnvironmentMapEffect` above) -- a real pixel-level golden-image PNG comparison
+  (`PixelTestGame::CompareGoldenImage`, already used by
+  `examples/easygl_environmentmapeffect_golden_test.cpp`) was not attempted for OpenGL2 broadly:
+  this software rasterizer (llvmpipe) and EasyGL's own GLES3 path can legitimately differ in
+  exact AA/rounding at the pixel level even when both are "correct", so a byte-for-byte PNG
+  comparison would need its own tolerance-tuning effort per scene to avoid false failures --
+  larger in scope than the targeted numeric `ExpectPixel` checks this branch's own test suite
+  already relies on throughout.
 - Visual parity tests against other backends (golden-image comparison).

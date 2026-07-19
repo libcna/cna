@@ -92,4 +92,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_shadereffect examples/opengl2_shadereffect_test.cpp)
     cna_register_backend_test(NAME OpenGL2_ShaderEffect COMMAND cna_test_opengl2_shadereffect
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: SpriteBatch::Begin(..., Effect*) proof -- custom sprite shader via
+    # MatrixTransform (real XNA SpriteEffect.fx convention), texture-unit-0 binding, and
+    # restoring the built-in shader on a subsequent Begin() without an effect.
+    cna_opengl2_test(cna_test_opengl2_spritebatch_customeffect examples/opengl2_spritebatch_customeffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SpriteBatchCustomEffect COMMAND cna_test_opengl2_spritebatch_customeffect
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL3/SDL_opengl.h>
@@ -945,6 +946,42 @@ namespace CNA::Internal::Backends::OpenGL2
             bool IsThirtyTwoBit() const override { return thirtyTwoBit; }
         };
 
+        // Shared by Sprite::Draw()'s built-in path and DrawWithCustomEffect(): the sprite quad's
+        // 4 corners in SCREEN space (destination rect rotated around origin) plus their UVs
+        // (source rect, with SpriteEffects flips already applied). Deliberately stops here --
+        // the two callers differ in what happens next (clip-space pre-transform on the CPU vs.
+        // raw upload + a shader-side MatrixTransform uniform), so that part is NOT shared.
+        struct SpriteScreenCorner { float x, y, u, v; };
+
+        void ComputeSpriteScreenCorners(const Rectangle& destination, const Rectangle& source,
+                                        int texW, int texH, float rotation, const Vector2& origin,
+                                        SpriteEffects effects, SpriteScreenCorner out[4])
+        {
+            float u0 = static_cast<float>(source.X) / texW;
+            float v0 = static_cast<float>(source.Y) / texH;
+            float u1 = static_cast<float>(source.X + source.Width) / texW;
+            float v1 = static_cast<float>(source.Y + source.Height) / texH;
+            if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) std::swap(u0, u1);
+            if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) std::swap(v0, v1);
+
+            const float localCorners[4][2] = {
+                {-origin.X, -origin.Y},
+                {destination.Width - origin.X, -origin.Y},
+                {destination.Width - origin.X, destination.Height - origin.Y},
+                {-origin.X, destination.Height - origin.Y},
+            };
+            const float uv[4][2] = {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
+            const float cosR = std::cos(rotation);
+            const float sinR = std::sin(rotation);
+            for (int i = 0; i < 4; ++i)
+            {
+                out[i].x = localCorners[i][0] * cosR - localCorners[i][1] * sinR + destination.X + origin.X;
+                out[i].y = localCorners[i][0] * sinR + localCorners[i][1] * cosR + destination.Y + origin.Y;
+                out[i].u = uv[i][0];
+                out[i].v = uv[i][1];
+            }
+        }
+
         // Owns its own tiny shader program + streaming VBO (mirrors EasyGLSpriteBatchBackend's
         // per-instance GL resources) rather than a function-local static -- a static handle would
         // go stale across DebugSimulateContextLoss()/multiple GraphicsDevice instances in one
@@ -969,6 +1006,10 @@ namespace CNA::Internal::Backends::OpenGL2
                 addressU_ = addressU;
                 addressV_ = addressV;
             }
+            // NOXNA follow-up (plan_opengl2.md): only Draw()'s direct 3D counterpart
+            // (customEffectBackend in drawInternal()) was implemented first; this wires the same
+            // EffectBackend infrastructure into the 2D SpriteBatch path too.
+            void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
 
             void Draw(const ITextureBackend& texture, float x, float y) override
             {
@@ -991,6 +1032,12 @@ namespace CNA::Internal::Backends::OpenGL2
 
                 EnsureResources();
 
+                if (customEffect_)
+                {
+                    DrawWithCustomEffect(texture, destination, source, color, rotation, origin, effects, layerDepth);
+                    return;
+                }
+
                 // Task-1078-equivalent fix (see EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize's
                 // own history): a draw into a bound RenderTarget2D must size its screen->clip
                 // mapping to the RT, not the window/virtual resolution -- those only coincide when
@@ -1004,38 +1051,23 @@ namespace CNA::Internal::Backends::OpenGL2
                 const float b = color.getBProperty() / 255.0f;
                 const float a = color.getAProperty() / 255.0f;
 
-                float u0 = static_cast<float>(source.X) / texture.GetWidth();
-                float v0 = static_cast<float>(source.Y) / texture.GetHeight();
-                float u1 = static_cast<float>(source.X + source.Width) / texture.GetWidth();
-                float v1 = static_cast<float>(source.Y + source.Height) / texture.GetHeight();
-                if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) std::swap(u0, u1);
-                if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) std::swap(v0, v1);
-
-                const float localCorners[4][2] = {
-                    {-origin.X, -origin.Y},
-                    {destination.Width - origin.X, -origin.Y},
-                    {destination.Width - origin.X, destination.Height - origin.Y},
-                    {-origin.X, destination.Height - origin.Y},
-                };
-                const float uv[4][2] = {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
-                const float cosR = std::cos(rotation);
-                const float sinR = std::sin(rotation);
+                SpriteScreenCorner sc[4];
+                ComputeSpriteScreenCorners(destination, source, texture.GetWidth(), texture.GetHeight(),
+                                          rotation, origin, effects, sc);
 
                 struct SpriteVertex { float x, y, z; float r, g, b, a; float u, v; };
                 SpriteVertex corners[4];
                 for (int i = 0; i < 4; ++i)
                 {
-                    const float px = localCorners[i][0] * cosR - localCorners[i][1] * sinR + destination.X + origin.X;
-                    const float py = localCorners[i][0] * sinR + localCorners[i][1] * cosR + destination.Y + origin.Y;
                     // SpriteBatch.Begin(transformMatrix, ...)'s camera/scroll transform is applied
                     // in screen space, BEFORE the screen->clip ortho mapping below -- row-vector
                     // convention (v * transform_), matching EasyGLSpriteBatchBackend's own
                     // `transform_ * orthoM` combined-matrix order (only the XY affine part matters;
                     // SpriteBatch's transform is always 2D).
-                    const float tx = px * transform_.M11 + py * transform_.M21 + transform_.M41;
-                    const float ty = px * transform_.M12 + py * transform_.M22 + transform_.M42;
+                    const float tx = sc[i].x * transform_.M11 + sc[i].y * transform_.M21 + transform_.M41;
+                    const float ty = sc[i].x * transform_.M12 + sc[i].y * transform_.M22 + transform_.M42;
                     corners[i] = {(tx / viewportWidth) * 2.0f - 1.0f, 1.0f - (ty / viewportHeight) * 2.0f, layerDepth,
-                                  r, g, b, a, uv[i][0], uv[i][1]};
+                                  r, g, b, a, sc[i].u, sc[i].v};
                 }
                 const SpriteVertex quad[6] = {corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]};
 
@@ -1087,6 +1119,84 @@ namespace CNA::Internal::Backends::OpenGL2
                 glGenBuffers(1, &vbo_);
             }
 
+            // SpriteBatch.Begin(..., Effect effect) path (Task follow-up, plan_opengl2.md): unlike
+            // the built-in shader above (which pre-transforms every vertex to clip space on the
+            // CPU, `gl_Position=vec4(aPosition,1.0)` with no projection uniform at all), a custom
+            // effect's vertex shader is expected to apply a `MatrixTransform` uniform itself --
+            // matches real XNA's own SpriteEffect.fx / SpriteBatch convention exactly (any custom
+            // SpriteBatch effect ported from real XNA already has a `float4x4 MatrixTransform`
+            // parameter; XNA throws if it's missing). Vertex positions are therefore uploaded RAW
+            // (screen pixels), not pre-transformed, and `transform_` is folded into the SAME
+            // uniform as the screen->clip ortho projection instead of being applied per-vertex.
+            void DrawWithCustomEffect(const ITextureBackend& texture, const Rectangle& destination,
+                                      const Rectangle& source, const Color& color, float rotation,
+                                      const Vector2& origin, SpriteEffects effects, float layerDepth)
+            {
+                IEffectBackend* effectBackend = customEffect_->GetEffectBackendPtr();
+                // Unlike EasyGLSpriteBatchBackend::FlushBatch() (which silently falls back to ITS
+                // OWN built-in program when the custom effect fails to compile), this backend's
+                // built-in shader expects a fundamentally different vertex convention (see above)
+                // -- falling back would draw garbage, not a plausible approximation. Skip instead.
+                if (!effectBackend || !effectBackend->IsValid())
+                    return;
+
+                customEffect_->Apply();
+
+                int viewportWidth = 0, viewportHeight = 0;
+                if (!backend_->GetCurrentRenderTarget2DSize(viewportWidth, viewportHeight))
+                    backend_->GetViewportSize(viewportWidth, viewportHeight);
+                if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+                const float r = color.getRProperty() / 255.0f;
+                const float g = color.getGProperty() / 255.0f;
+                const float b = color.getBProperty() / 255.0f;
+                const float a = color.getAProperty() / 255.0f;
+
+                SpriteScreenCorner sc[4];
+                ComputeSpriteScreenCorners(destination, source, texture.GetWidth(), texture.GetHeight(),
+                                          rotation, origin, effects, sc);
+
+                struct SpriteVertex { float x, y, z; float r, g, b, a; float u, v; };
+                const SpriteVertex corners[4] = {
+                    {sc[0].x, sc[0].y, layerDepth, r, g, b, a, sc[0].u, sc[0].v},
+                    {sc[1].x, sc[1].y, layerDepth, r, g, b, a, sc[1].u, sc[1].v},
+                    {sc[2].x, sc[2].y, layerDepth, r, g, b, a, sc[2].u, sc[2].v},
+                    {sc[3].x, sc[3].y, layerDepth, r, g, b, a, sc[3].u, sc[3].v},
+                };
+                const SpriteVertex quad[6] = {corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]};
+
+                const Matrix ortho = Matrix::CreateOrthographicOffCenter(
+                    0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight), 0.0f, -1.0f, 1.0f);
+                const Matrix combined = transform_ * ortho;
+                float matColMajor[16];
+                combined.ToColumnMajor(matColMajor);
+                effectBackend->SetUniformMat4("MatrixTransform", matColMajor);
+
+                glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STREAM_DRAW);
+                glEnableVertexAttribArray(0);
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), reinterpret_cast<void*>(offsetof(SpriteVertex, x)));
+                glEnableVertexAttribArray(1);
+                glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), reinterpret_cast<void*>(offsetof(SpriteVertex, r)));
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), reinterpret_cast<void*>(offsetof(SpriteVertex, u)));
+
+                // Real XNA SpriteBatch always binds the drawn texture to sampler register/unit 0;
+                // GLSL default-initializes an unset sampler uniform to 0 too (matching HLSL's
+                // implicit register-0 default), so a custom shader doesn't need to explicitly set
+                // its own sampler uniform for the common single-texture case.
+                glActiveTexture(GL_TEXTURE0);
+                texture.BindGL();
+                const GLint glFilter = ToGLFilter(filter_);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, glFilter);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, glFilter);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(addressU_));
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(addressV_));
+
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+
             OpenGL2GraphicsBackend* backend_;
             bool begun_ = false;
             GLuint program_ = 0;
@@ -1095,6 +1205,7 @@ namespace CNA::Internal::Backends::OpenGL2
             int filter_ = 0;   // TextureFilter::Linear
             int addressU_ = 1; // TextureAddressMode::Clamp (matches SamplerState::LinearClamp,
             int addressV_ = 1; // the default SpriteBatch.Begin() falls back to)
+            Effect* customEffect_ = nullptr;
         };
     }
 
