@@ -269,8 +269,38 @@ possibilities of OpenGL 2"):
   `OpenGL2_RenderTargetCube` verifies all 6 faces hold their own distinct color, real depth-test
   occlusion inside a face, and mipmap generation. 5/5 PASS.
 
+## Status: EnvironmentMapEffect (2026-07-19, session 6 cont'd)
+
+- **`EnvironmentMapEffect` implemented**: a dedicated `envMapProgram_` GLSL 1.20 program
+  (reflection-mapped shading), matching `EasyGLGraphicsBackend::EnsureEnvMapped3DProgram`'s
+  formula exactly -- same per-vertex Fresnel evaluation (`ComputeFresnelFactor`, evaluated at each
+  vertex from its own un-interpolated normal/eye vector, then Gouraud-interpolated -- NOT
+  recomputed per-fragment, matching real FNA), same `litRGB = lightSum*diffuse+emissive`
+  composition, same `mix(baseColor, envSample.rgb*combinedAlpha, blendFactor) +
+  envMapSpecular*envSample.a*combinedAlpha` blend. `drawInternal()` now selects this program via a
+  new `envMapped` flag (checked before `lit`, since `EnvironmentMapEffect::FillGpuDrawParams()`
+  also sets `lightingEnabled=true`), reusing the same `VertexPositionNormalTexture` (stride>=32)
+  vertex layout as `litProgram_`.
+  Added `ensureDefaultEnvMapTextures()`: a lazily-created 1x1 white `GL_TEXTURE_2D` and 1x1 white
+  `GL_TEXTURE_CUBE_MAP` fallback, bound when `Texture`/`EnvironmentMap` are null respectively --
+  unlike BasicEffect/AlphaTestEffect/DualTextureEffect (which only select a texturing program when
+  `texture0` is actually non-null), `EnvironmentMapEffect::FillGpuDrawParams()` always sets
+  `textureEnabled=true` and the fragment shader always samples both `uTex` and `uEnvMap`
+  unconditionally, so a real XNA `EnvironmentMapEffect` with either property left unset (a common
+  case -- `EnvironmentMap` in particular is easy to forget) must still render sane output rather
+  than sampling an unbound texture unit (implementation-defined, typically black/garbage).
+  `OpenGL2_EnvironmentMapEffect` verifies: the reflection fully replaces the base and samples the
+  geometrically-correct cube face when Fresnel is disabled; the per-vertex (not per-fragment)
+  Fresnel evaluation produces the mathematically-derived blend at a symmetric quad's centre, not a
+  naive "0 at head-on view" guess; cross-backend consistency against
+  `examples/easygl_environmentmapeffect_golden_test.cpp`'s own independently FNA-derived expected
+  pixel (151,101,76) reused verbatim; and the null-Texture/null-EnvironmentMap fallback actually
+  takes effect (reads back pure white, not black). 5/5 PASS.
+  This closes the "one remaining piece for cube-map support" note left in the RenderTargetCube
+  status entry above -- `TextureCube`/`RenderTargetCube` now have a real stock-effect consumer.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers ten CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers eleven CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -289,6 +319,9 @@ possibilities of OpenGL 2"):
   - `OpenGL2_TextureCube` -- SetData/GetData round-trip for all 6 faces + mipmap construction. 3/3 PASS.
   - `OpenGL2_Texture3D` -- SetData/GetData round-trip across depth slices + sub-volume offset. 3/3 PASS.
   - `OpenGL2_RenderTargetCube` -- per-face FBO, depth occlusion, mipmap generation. 5/5 PASS.
+  - `OpenGL2_EnvironmentMapEffect` -- reflection blend, per-vertex Fresnel suppression, correct
+    cube face sampled, cross-backend consistency vs the EasyGL golden scene, default-white
+    sampler fallback. 5/5 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -313,13 +346,17 @@ possibilities of OpenGL 2"):
   `SetSamplerAddressMode` -- both wired to real `glTexParameteri` calls.
 - `ReadBackbuffer` (pixel readback, enables automated pixel-exact testing).
 - Occlusion queries (real `GL_SAMPLES_PASSED` pixel counts).
-- `TextureCube` (`GL_TEXTURE_CUBE_MAP`, see `OpenGL2_TextureCube` above); not yet sampled by any
-  stock effect (`EnvironmentMapEffect` remains a follow-up item).
+- `TextureCube` (`GL_TEXTURE_CUBE_MAP`, see `OpenGL2_TextureCube` above), now sampled by
+  `EnvironmentMapEffect` (see below).
 - `Texture3D` (`GL_TEXTURE_3D`, see `OpenGL2_Texture3D` above); level 0 only, no mip chain yet.
-- `RenderTargetCube` (see `OpenGL2_RenderTargetCube` above); single-sample only, no MSAA.
+- `RenderTargetCube` (see `OpenGL2_RenderTargetCube` above); single-sample only, no MSAA. Usable
+  as an `EnvironmentMapEffect` source too (`IRenderTargetCubeBackend` extends
+  `ITextureCubeBackend`, so a dynamically-rendered reflection is a real, tested code path).
 - RenderTarget2D/FBO, including MSAA (resolve-on-unbind) and mipmap generation.
 - AlphaTestEffect, DualTextureEffect, and BasicEffect lighting (3 directional lights, ambient,
   specular, emissive) + fog (see `OpenGL2_Effects` above).
+- EnvironmentMapEffect (reflection mapping, per-vertex Fresnel, specular tint; see
+  `OpenGL2_EnvironmentMapEffect` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -335,9 +372,6 @@ possibilities of OpenGL 2"):
 - PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
   effort (its own shader family + texture set), likely lower priority than the items above for a
   "no EasyGL dependency" OpenGL 2.1 backend.
-- EnvironmentMapEffect subset (now that both plain `TextureCube` and `RenderTargetCube` exist,
-  this is the one remaining piece for cube-map support -- a reflection-mapping shader sampling
-  `samplerCube`).
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
   `nullptr` (default). Would let games write their own OpenGL2 shaders through CNA's `Effect`
   API, mirroring `EasyGLEffectBackend`.

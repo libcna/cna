@@ -913,6 +913,9 @@ namespace CNA::Internal::Backends::OpenGL2
         if (texturedProgram_) glDeleteProgram(texturedProgram_);
         if (dualTextureProgram_) glDeleteProgram(dualTextureProgram_);
         if (litProgram_) glDeleteProgram(litProgram_);
+        if (envMapProgram_) glDeleteProgram(envMapProgram_);
+        if (defaultWhiteTexture2D_) glDeleteTextures(1, &defaultWhiteTexture2D_);
+        if (defaultWhiteTextureCube_) glDeleteTextures(1, &defaultWhiteTextureCube_);
         if (context_) SDL_GL_DestroyContext(context_);
     }
 
@@ -1017,10 +1020,85 @@ namespace CNA::Internal::Backends::OpenGL2
             "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
             "}";
 
+        // EnvironmentMapEffect: reflection-mapped shading (matches
+        // EasyGLGraphicsBackend::EnsureEnvMapped3DProgram's formula exactly -- same per-vertex
+        // Fresnel evaluation, same litRGB = lightSum*diffuse+emissive composition, same
+        // mix(baseColor,envSample*alpha,blendFactor)+specular*envSample.a*alpha blend). Uses the
+        // same VertexPositionNormalTexture (stride>=32) layout as litProgram_.
+        const char* envMapVertexSrc =
+            "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;"
+            "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;uniform vec3 uEyePosition;"
+            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "uniform float uEnvMapAmount;uniform float uFresnelEnabled;uniform float uFresnelFactor;"
+            "varying vec3 vWorldNormal;varying vec3 vEyeDir;varying vec2 vTex;"
+            "varying float vFogFactor;varying float vFresnel;"
+            "void main(){"
+            "gl_Position=uWVP*vec4(aPosition,1.0);"
+            "vec3 worldPos=(uWorld*vec4(aPosition,1.0)).xyz;"
+            "vec3 worldNormal=normalize(uNormalMatrix*aNormal);"
+            "vec3 eyeVector=normalize(uEyePosition-worldPos);"
+            "vWorldNormal=worldNormal;"
+            "vEyeDir=eyeVector;"
+            "vTex=aTexCoord;"
+            "float viewAngle=dot(eyeVector,worldNormal);"
+            "vFresnel=(uFresnelEnabled>0.5)?pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount:uEnvMapAmount;"
+            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
+            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "}";
+        const char* envMapFragmentSrc =
+            "varying vec3 vWorldNormal;varying vec3 vEyeDir;varying vec2 vTex;"
+            "varying float vFogFactor;varying float vFresnel;"
+            "uniform sampler2D uTex;uniform samplerCube uEnvMap;"
+            "uniform vec4 uDiffuse;uniform vec3 uEmissiveColor;"
+            "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;"
+            "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;"
+            "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;"
+            "uniform vec3 uEnvMapSpecular;"
+            "uniform vec4 uAlphaTest;uniform vec3 uFogColor;"
+            "void main(){"
+            "vec3 N=normalize(vWorldNormal);vec3 E=normalize(vEyeDir);"
+            "float NdotL0=max(dot(N,-uLight0Dir),0.0);"
+            "float NdotL1=max(dot(N,-uLight1Dir),0.0);"
+            "float NdotL2=max(dot(N,-uLight2Dir),0.0);"
+            "vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;"
+            "vec3 litRGB=lightSum*uDiffuse.rgb+uEmissiveColor;"
+            "vec4 texColor=texture2D(uTex,vTex);"
+            "vec3 reflDir=reflect(-E,N);"
+            "vec4 envSample=textureCube(uEnvMap,reflDir);"
+            "vec3 baseColor=litRGB*texColor.rgb;"
+            "float combinedAlpha=uDiffuse.a*texColor.a;"
+            "vec3 rgb=mix(baseColor,envSample.rgb*combinedAlpha,vFresnel)+uEnvMapSpecular*envSample.a*combinedAlpha;"
+            "gl_FragColor=vec4(rgb,combinedAlpha);"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "}";
+
         colorProgram_ = LinkProgram(colorVertexSrc.c_str(), colorFragmentSrc.c_str());
         texturedProgram_ = LinkProgram(texturedVertexSrc.c_str(), texturedFragmentSrc.c_str());
         dualTextureProgram_ = LinkProgram(texturedVertexSrc.c_str(), dualTextureFragmentSrc.c_str());
         litProgram_ = LinkProgram(litVertexSrc, litFragmentSrc);
+        envMapProgram_ = LinkProgram(envMapVertexSrc, envMapFragmentSrc);
+    }
+
+    void OpenGL2GraphicsBackend::ensureDefaultEnvMapTextures()
+    {
+        if (defaultWhiteTexture2D_) return;
+
+        const uint8_t white[4] = {255, 255, 255, 255};
+
+        glGenTextures(1, &defaultWhiteTexture2D_);
+        glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glGenTextures(1, &defaultWhiteTextureCube_);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, defaultWhiteTextureCube_);
+        for (int face = 0; face < 6; ++face)
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
     void OpenGL2GraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1262,11 +1340,12 @@ namespace CNA::Internal::Backends::OpenGL2
             throw std::runtime_error("OPENGL2: incompatible vertex buffer");
         const auto* ib = dynamic_cast<const IB*>(ibi);
 
-        const bool lit = params && params->lightingEnabled && vb->stride >= 32;
+        const bool envMapped = params && params->envMapping && vb->stride >= 32;
+        const bool lit = params && params->lightingEnabled && !envMapped && vb->stride >= 32;
         const bool dual = params && params->dualTexture && params->texture1 && vb->stride >= 20;
         const bool textured = params && params->texture0 && vb->stride >= 20;
 
-        const GLuint program = lit ? litProgram_ : dual ? dualTextureProgram_ : textured ? texturedProgram_ : colorProgram_;
+        const GLuint program = envMapped ? envMapProgram_ : lit ? litProgram_ : dual ? dualTextureProgram_ : textured ? texturedProgram_ : colorProgram_;
         glUseProgram(program);
 
         float wvp[16];
@@ -1289,7 +1368,7 @@ namespace CNA::Internal::Backends::OpenGL2
             glUniform1f(glGetUniformLocation(program, "uFogEnd"), params->fogEnd);
         }
 
-        if (lit)
+        if (lit || envMapped)
         {
             float worldColMajor[16];
             for (int r = 0; r < 4; ++r)
@@ -1306,6 +1385,10 @@ namespace CNA::Internal::Backends::OpenGL2
             ComputeNormalMatrix3x3(world, normalMat);
             glUniformMatrix3fv(glGetUniformLocation(program, "uNormalMatrix"), 1, GL_FALSE, normalMat);
 
+            // Locations that one of the two programs doesn't declare resolve to -1 and glUniform*
+            // silently no-ops per the GL spec (same established convention as the alphaTest/fog
+            // uniforms above, uploaded unconditionally for colorProgram_ too) -- so it's simplest
+            // to upload the full lit ∪ env-map uniform set here rather than branching further.
             glUniform1i(glGetUniformLocation(program, "uTextureEnabled"), params->textureEnabled ? 1 : 0);
             glUniform3fv(glGetUniformLocation(program, "uAmbientColor"), 1, params->ambientColor);
             glUniform3fv(glGetUniformLocation(program, "uLight0Dir"), 1, params->light0Dir);
@@ -1321,6 +1404,12 @@ namespace CNA::Internal::Backends::OpenGL2
             glUniform1f(glGetUniformLocation(program, "uSpecularPower"), params->specularPower);
             glUniform3fv(glGetUniformLocation(program, "uEyePosition"), 1, params->eyePositionWorld);
             glUniform3fv(glGetUniformLocation(program, "uEmissiveColor"), 1, params->emissiveColor);
+
+            // EnvironmentMapEffect-only uniforms (silently ignored by litProgram_).
+            glUniform1f(glGetUniformLocation(program, "uEnvMapAmount"), params->envMapAmount);
+            glUniform1f(glGetUniformLocation(program, "uFresnelEnabled"), params->fresnelEnabled ? 1.0f : 0.0f);
+            glUniform1f(glGetUniformLocation(program, "uFresnelFactor"), params->fresnelFactor);
+            glUniform3fv(glGetUniformLocation(program, "uEnvMapSpecular"), 1, params->envMapSpecular);
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, vb->id);
@@ -1389,6 +1478,27 @@ namespace CNA::Internal::Backends::OpenGL2
             params->texture0->BindGL();
             applySampler(0);
             glUniform1i(glGetUniformLocation(program, "uTex"), 0);
+        }
+        // EnvironmentMapEffect::FillGpuDrawParams() always sets textureEnabled=true and always
+        // samples uTex/uEnvMap in the fragment shader (unlike lit's conditional uTextureEnabled
+        // branch above) -- a real XNA EnvironmentMapEffect with Texture==null or
+        // EnvironmentMap==null still renders (flat white base / no reflection tint), so both
+        // samplers need something bound even when the corresponding CNA texture is absent.
+        if (envMapped)
+        {
+            ensureDefaultEnvMapTextures();
+
+            glActiveTexture(GL_TEXTURE0);
+            if (params->texture0) params->texture0->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(0);
+            glUniform1i(glGetUniformLocation(program, "uTex"), 0);
+
+            glActiveTexture(GL_TEXTURE1);
+            if (params->envMap) params->envMap->BindGL();
+            else glBindTexture(GL_TEXTURE_CUBE_MAP, defaultWhiteTextureCube_);
+            glUniform1i(glGetUniformLocation(program, "uEnvMap"), 1);
+            glActiveTexture(GL_TEXTURE0);
         }
         if (dual)
         {

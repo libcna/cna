@@ -67,4 +67,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_rendertargetcube examples/opengl2_rendertargetcube_test.cpp)
     cna_register_backend_test(NAME OpenGL2_RenderTargetCube COMMAND cna_test_opengl2_rendertargetcube
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: EnvironmentMapEffect proof -- reflection blend, Fresnel suppression,
+    # correct cube face sampled, cross-backend consistency vs the EasyGL golden scene, and
+    # default-white sampler fallback when Texture/EnvironmentMap are unset.
+    cna_opengl2_test(cna_test_opengl2_environmentmapeffect examples/opengl2_environmentmapeffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_EnvironmentMapEffect COMMAND cna_test_opengl2_environmentmapeffect
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
