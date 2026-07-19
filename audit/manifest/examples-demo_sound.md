@@ -6,6 +6,6 @@ Files in this shard: **3**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_sound/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_sound/src/Main.cpp.audit.md) |
-| 2 | `examples/demo_sound/src/SoundDemo.cpp` | PENDING | [SoundDemo.cpp.audit.md](../examples/demo_sound/src/SoundDemo.cpp.audit.md) |
-| 3 | `examples/demo_sound/src/SoundDemo.hpp` | PENDING | [SoundDemo.hpp.audit.md](../examples/demo_sound/src/SoundDemo.hpp.audit.md) |
+| 1 | `examples/demo_sound/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_sound/src/Main.cpp.audit.md) |
+| 2 | `examples/demo_sound/src/SoundDemo.cpp` | AUDITED | [SoundDemo.cpp.audit.md](../examples/demo_sound/src/SoundDemo.cpp.audit.md) |
+| 3 | `examples/demo_sound/src/SoundDemo.hpp` | AUDITED | [SoundDemo.hpp.audit.md](../examples/demo_sound/src/SoundDemo.hpp.audit.md) |

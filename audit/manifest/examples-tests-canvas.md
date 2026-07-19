@@ -6,5 +6,5 @@ Files in this shard: **2**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/canvas_graphics_capability_test.cpp` | PENDING | [canvas_graphics_capability_test.cpp.audit.md](../examples/canvas_graphics_capability_test.cpp.audit.md) |
-| 2 | `examples/canvas_smoke_test.cpp` | PENDING | [canvas_smoke_test.cpp.audit.md](../examples/canvas_smoke_test.cpp.audit.md) |
+| 1 | `examples/canvas_graphics_capability_test.cpp` | AUDITED | [canvas_graphics_capability_test.cpp.audit.md](../examples/canvas_graphics_capability_test.cpp.audit.md) |
+| 2 | `examples/canvas_smoke_test.cpp` | AUDITED | [canvas_smoke_test.cpp.audit.md](../examples/canvas_smoke_test.cpp.audit.md) |
