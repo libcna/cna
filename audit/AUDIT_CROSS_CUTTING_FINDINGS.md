@@ -872,6 +872,26 @@ _(pending)_
   implementations share this pattern when that area (`Microsoft::Xna::Framework::Graphics::PackedVector`)
   is audited.
 
+- **MEDIUM, CONFIRMED WIDESPREAD: a signed-integer-overflow-UB fix applied to `Vector2::GetHashCode()` was
+  never propagated to at least 4 structurally-identical sibling files in the same `xna-framework-core`
+  shard** -- found while auditing `Vector3.cpp`, then confirmed via direct grep across the shard's other
+  math types. `Vector2::GetHashCode()` sums two `FloatHash()`-derived `int` values via an explicit
+  unsigned-wraparound cast, with a comment citing a specific prior fix (INPUT-BUILD-006) for exactly this
+  signed-overflow-UB class. **None of the following files received the same fix**, despite sharing the
+  identical `FloatHash()`-sum pattern: `Vector3::GetHashCode()` (3 terms, confirmed via full audit --
+  MEDIUM finding recorded in that file's own report), `Vector4::GetHashCode()` (4 terms, `FloatHash(W) +
+  FloatHash(X) + FloatHash(Y) + FloatHash(Z)`), `Quaternion::GetHashCode()` (4 terms), and
+  `Matrix::GetHashCode()` (**16 terms** -- summing all 16 matrix elements' `FloatHash()` values with plain
+  signed `+`, the highest-risk instance of this pattern given how many arbitrary-range terms are summed).
+  `Point::GetHashCode()` (`X ^ Y`) and `Rectangle::GetHashCode()` (`X ^ Y ^ Width ^ Height`) use XOR
+  combining instead and are **not** affected; `Plane::GetHashCode()` (`Normal.GetHashCode() ^
+  std::hash<float>{}(D)`) also XOR-combines at its own level but transitively inherits `Vector3`'s bug via
+  the `Normal.GetHashCode()` call. Each affected file needs the identical fix
+  `Vector2::GetHashCode()` already has (sum via `static_cast<unsigned>` then cast back to `int`) --
+  Vector4/Quaternion/Matrix's own instances are noted here in advance of those files' own full audit passes
+  landing (only `Vector2`/`Vector3` have been fully audited as of this note); update each file's own report
+  and mark this resolved as each is confirmed fixed or accepted.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
