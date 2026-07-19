@@ -282,6 +282,31 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     surface (`ReadBackbuffer`'s own contract is specifically about the backbuffer; a render target's
     own readback is the still-open `GetData()`, `METAL-131`).
 
+12. **Phase 8 — NOXNA PBR** (`METAL-81`/`83`–`87`/`88` partial): a real, unskinned metallic-roughness
+    `PbrEffect` path (stride 48: position+normal+tangent(float4)+uv), ported line-for-line from
+    `EasyGLGraphicsBackend::EnsurePbrProgram()`'s GLSL — the glTF 2.0 spec's own reference BRDF
+    (GGX/Trowbridge-Reitz normal distribution, Smith-Schlick-GGX geometry term with the standard
+    direct-lighting `k=(roughness+1)²/8`, Schlick Fresnel). Tangent-space normal mapping via a real
+    TBN basis built from the vertex tangent (`float4`, `.w` = bitangent sign) and the interpolated
+    normal — not a placeholder. All 4 optional PBR maps (normal/metallic-roughness/emissive/
+    occlusion) sample correctly and fall back to shared 1×1 default-white or default-flat-normal
+    textures (created once in the constructor, released in the destructor) when unbound, so a
+    partially-authored PBR material never silently reads garbage or a stale texture-unit binding —
+    a stricter guarantee than this file's own established texture0/texture1/envMap "leave whatever
+    was bound before" gap, deliberately, since the constant cost of one extra 1×1-texture bind per
+    unbound map is cheap and there is no equivalent safe "leave it" default for a `sampler`-driven
+    PBR term. `selectPipelineKind()` now branches on `params->pbr` before `params->skinned`, matching
+    `EasyGLGraphicsBackend::SelectProgram()`'s own precedence — `pbr && skinned` throws a clear
+    "SkinnedPbrEffect not yet implemented" (`METAL-82`) rather than silently rendering with the wrong
+    shader. Self-reviewed line-by-line before commit (uniform struct field order cross-checked
+    between the MSL struct, the C++ mirror struct, and `fillPbrUniforms()`; texture-unit indices
+    cross-checked between the MSL fragment-shader parameter list and the dispatch-site
+    `setFragmentTexture:atIndex:` calls; the stride-48 vertex descriptor cross-checked against
+    `VPbrIn`'s attribute layout) — no bugs found this time, unlike the RenderTarget2D phase. Not
+    done: `SkinnedPbrEffect` (`METAL-82`, stride 68 — throws instead of rendering), `CTest` probe-
+    pixel coverage (`METAL-89`, no compiler available here), and the `METAL-90` doc-ownership
+    decision (deferred, not urgent).
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -290,8 +315,10 @@ Vulkan front/back stencil swap this project already had to empirically discover 
 real risk area, not a formality); `METAL-14`–`20` (VertexElementFormat/SurfaceFormat/DepthFormat
 tables, BC-compression query); the fully generic `VertexElement`-driven descriptor builder
 (`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
-lit variant (`METAL-39`/`76`); Phase 8 (PBR/SkinnedPbr — `params->pbr` throws a clear "not
-implemented" error rather than silently misrendering); the rest of Phase 10 (`RenderTargetCube`,
+lit variant (`METAL-39`/`76`); Phase 8's `SkinnedPbrEffect` (`METAL-82`, stride 68 — `params->pbr &&
+params->skinned` throws a clear "not implemented" error rather than silently misrendering; unskinned
+`PbrEffect` itself landed this session) and its `CTest` coverage/doc-ownership tasks (`METAL-89`/`90`);
+the rest of Phase 10 (`RenderTargetCube`,
 MRT, MSAA, mip, `GetData()`, `METAL-102`–`105`/`108`–`119`); Phase 14 (custom `ShaderEffect`, which
 Phase 9 Instancing is itself blocked on); Phase 9 itself (blocked on Phase 14); Phases 16–18 (resize/
 Retina, frame pacing, the resource-lifetime/command-buffer-sync audit — genuinely relevant now that
@@ -330,6 +357,9 @@ cross-backend pixel parity, iOS/tvOS). Nothing in this list has been touched.
   bugs found and fixed by self-review before commit (a pipeline/attachment pixel-format mismatch,
   a compile error, an incomplete-type compile error, and a silent-wrong-transform bug) (🟨 landed
   2026-07-19 — `METAL-98`–`101`/`106`/`107`; `RenderTargetCube`/MRT/MSAA/mip still open).
+- Real, unskinned `PbrEffect` (glTF 2.0 metallic-roughness Cook-Torrance BRDF, tangent-space normal
+  mapping, all 4 optional PBR maps with safe default-texture fallbacks) (🟨 landed 2026-07-19 —
+  `METAL-81`/`83`–`87`; `SkinnedPbrEffect` `METAL-82` still open, throws instead of misrendering).
 - Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
   real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
 - Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
@@ -534,14 +564,14 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-81 | `pbr3d.metal` (stride 48, unskinned) — metallic-roughness Cook-Torrance BRDF, ported from `EasyGLGraphicsBackend::EnsurePbrProgram()`/Vulkan's shipped GLSL (`plan_cnj.md` CNB-58, Phase 13A) | ⬜ |
+| METAL-81 | `pbr3d.metal` (stride 48, unskinned) — metallic-roughness Cook-Torrance BRDF, ported from `EasyGLGraphicsBackend::EnsurePbrProgram()`/Vulkan's shipped GLSL (`plan_cnj.md` CNB-58, Phase 13A) | 🟨 |
 | METAL-82 | `pbr_skinned3d.metal` (stride 68) — same BRDF, combined with Phase 7's skinned vertex path | ⬜ |
-| METAL-83 | `pbrNormalMap` tangent-space perturbation — requires adding a tangent attribute not present in any current Metal vertex layout | ⬜ |
-| METAL-84 | `pbrMetallicRoughnessMap` (glTF packing: G=roughness, B=metallic) + `pbrMetallicFactor`/`pbrRoughnessFactor` fallback/multiply | ⬜ |
-| METAL-85 | `pbrEmissiveMap` sampling + constant `EmissiveFactor` fallback | ⬜ |
-| METAL-86 | `pbrOcclusionMap` sampling (R channel) darkening term | ⬜ |
-| METAL-87 | Default-white / default-flat-normal fallback textures for unbound PBR maps, mirroring `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()` exactly | ⬜ |
-| METAL-88 | Dispatch: `params.pbr && params.skinned` → PBR-skinned, `params.pbr` alone → PBR-unskinned, both checked before the plain `skinned` branch, matching EasyGL's top-of-function precedence | ⬜ |
+| METAL-83 | `pbrNormalMap` tangent-space perturbation — requires adding a tangent attribute not present in any current Metal vertex layout | 🟨 |
+| METAL-84 | `pbrMetallicRoughnessMap` (glTF packing: G=roughness, B=metallic) + `pbrMetallicFactor`/`pbrRoughnessFactor` fallback/multiply | 🟨 |
+| METAL-85 | `pbrEmissiveMap` sampling + constant `EmissiveFactor` fallback | 🟨 |
+| METAL-86 | `pbrOcclusionMap` sampling (R channel) darkening term | 🟨 |
+| METAL-87 | Default-white / default-flat-normal fallback textures for unbound PBR maps, mirroring `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()` exactly | 🟨 |
+| METAL-88 | Dispatch: `params.pbr && params.skinned` → PBR-skinned, `params.pbr` alone → PBR-unskinned, both checked before the plain `skinned` branch, matching EasyGL's top-of-function precedence | 🟨 (precedence only — `pbr&&skinned` throws a clear "not yet implemented" instead of rendering, since METAL-82 is still open) |
 | METAL-89 | `CTest`: `Metal_Pbr`/`Metal_PbrSkinned` — known-material probe-pixel checks (fully metallic vs. dielectric, rough vs. smooth), same fixture as Vulkan/EasyGL's own PBR tests | ⬜ |
 | METAL-90 | Confirm whether a project-wide PBR support doc should exist (out of Metal's own scope) or `plan_cnj.md` remains the single source of truth — note the decision | ⬜ |
 
@@ -637,6 +667,23 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-141 | Add a `Metal` column to `docs/occlusionquery-support.md`, noting the real-pixel-count advantage | ⬜ |
 
 ## Phase 14 — Custom ShaderEffect / MSL contract (METAL-142 – METAL-152)
+
+> **Third real dependency found 2026-07-19** (after the Phase 6→3 and Phase 9→14 blockers already
+> documented above): a custom `ShaderEffect` is, by definition, free to use an arbitrary vertex
+> layout the author chooses — it is not restricted to the fixed handful of concrete strides
+> (16/20/24/32/48/52/56) this session's `PipelineKind` enum + `vertexDescriptorForStride()` switch
+> statement hardcodes (see Phase 2's own still-open `METAL-26`/`METAL-27`, "the fully generic
+> `VertexElement`-driven descriptor builder"). `METAL-144`'s `newLibraryWithSource:` compile step and
+> `METAL-146`'s uniform-buffer contract can be built and even unit-tested for compilation success
+> independent of this, but `METAL-145`/`METAL-148` (actually binding and drawing with a custom
+> pipeline) cannot honestly support an arbitrary custom vertex layout until Phase 2's generic
+> descriptor builder exists — attempting it against only the current fixed-stride switch would mean
+> either silently rejecting any custom vertex format that doesn't happen to match one of the 7
+> built-in strides, or crashing on a `MTLVertexDescriptor` built from the wrong attribute offsets for
+> that particular custom shader. Phase 14 is therefore genuinely blocked on Phase 2's
+> `METAL-26`/`METAL-27`, not independently landable in full — `METAL-142`–`144`/`146`/`147`
+> (2D-texture case)/`150`–`152` can still land standalone; `METAL-145`/`148`/`149`/`147`'s cube/3D
+> cases should wait.
 
 | ID | Task | Status |
 |---|---|---|

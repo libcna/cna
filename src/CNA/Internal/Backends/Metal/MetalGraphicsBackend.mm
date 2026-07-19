@@ -311,6 +311,97 @@ fragment float4 cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> te
     return c;
 }
 
+// NOXNA PBR (plan_metal.md METAL-81/83-86, plan_cnj.md CNB-58), ported line-for-line from
+// EasyGLGraphicsBackend::EnsurePbrProgram()'s real GLSL -- the glTF 2.0 spec's own reference
+// metallic-roughness BRDF (Appendix B.3.2-B.3.4: GGX/Trowbridge-Reitz D, Smith-Schlick-GGX
+// visibility with direct-lighting k=(roughness+1)^2/8, Schlick Fresnel). Tangent transforms as a
+// plain direction under mat3(World) (not the inverse-transpose normal matrix the surface normal
+// itself uses) -- a documented simplification for non-uniform-scale World transforms shared with
+// most real-time engines lacking a full per-tangent inverse-transpose, ported as-is not "improved."
+struct PbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; };
+struct PbrUniforms {
+    float4 diffuseColor;
+    float4 ambientColor;
+    float4 emissiveColor;
+    float4 light0Dir; float4 light0Diffuse;
+    float4 light1Dir; float4 light1Diffuse;
+    float4 light2Dir; float4 light2Diffuse;
+    float4 eyePosition;
+    float4 pbrFactors;      // x=MetallicFactor, y=RoughnessFactor
+    float4 alphaTest;
+    float4 fogColorEnabled;
+    float4 fogStartEnd;
+};
+struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; };
+struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; };
+vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]]) {
+    VPbrOut o;
+    o.position = t.wvp * float4(in.position, 1.0);
+    float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
+    o.normal = normalMat * in.normal;
+    float3x3 world3 = float3x3(t.world[0].xyz, t.world[1].xyz, t.world[2].xyz);
+    o.tangent = world3 * in.tangent.xyz;
+    o.bitangentSign = in.tangent.w;
+    o.uv = in.uv;
+    o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
+    float fogStart = pu.fogStartEnd.x, fogEnd = pu.fogStartEnd.y;
+    o.fogFactor = (pu.fogColorEnabled.w > 0.5)
+        ? ((abs(fogEnd - fogStart) < 1e-6) ? 0.0 : clamp((in.position.z + fogEnd) / (fogEnd - fogStart), 0.0, 1.0))
+        : 1.0;
+    return o;
+}
+inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float roughness, float metallic) {
+    float3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 1e-4);
+    float NdotH = max(dot(N, H), 0.0);
+    float VdotH = max(dot(V, H), 0.0);
+    float a2 = pow(roughness, 4.0);
+    float dTerm = (NdotH*NdotH*(a2-1.0)+1.0);
+    float D = a2 / (3.14159265*dTerm*dTerm + 1e-7);
+    float k = (roughness+1.0); k = k*k/8.0;
+    float G = (NdotV/(NdotV*(1.0-k)+k)) * (NdotL/(NdotL*(1.0-k)+k));
+    float3 F = F0 + (float3(1.0)-F0) * pow(clamp(1.0-VdotH, 0.0, 1.0), 5.0);
+    float3 specular = (D*G*F) / max(4.0*NdotV*NdotL, 1e-4);
+    float3 diffuseColor = albedo * (1.0-metallic);
+    float3 kd = float3(1.0) - F;
+    return (kd*diffuseColor/3.14159265 + specular) * lightColor * NdotL;
+}
+fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]],
+    texture2d<float> normalMap [[texture(1)]], sampler normalSmp [[sampler(1)]],
+    texture2d<float> mrMap [[texture(2)]], sampler mrSmp [[sampler(2)]],
+    texture2d<float> emissiveMap [[texture(3)]], sampler emissiveSmp [[sampler(3)]],
+    texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]],
+    constant PbrUniforms& pu [[buffer(2)]])
+{
+    float4 baseColorTex = tex.sample(smp, in.uv);
+    float3 albedo = baseColorTex.rgb * pu.diffuseColor.rgb;
+    float alpha = baseColorTex.a * pu.diffuseColor.a;
+    float3 N = normalize(in.normal);
+    float3 T = normalize(in.tangent - N*dot(N, in.tangent));
+    float3 B = cross(N, T) * in.bitangentSign;
+    float3x3 TBN = float3x3(T, B, N);
+    float3 sampledNormal = normalMap.sample(normalSmp, in.uv).rgb*2.0 - 1.0;
+    float3 finalNormal = normalize(TBN * sampledNormal);
+    float4 mr = mrMap.sample(mrSmp, in.uv);
+    float roughness = clamp(mr.g * pu.pbrFactors.y, 0.045, 1.0);
+    float metallic = clamp(mr.b * pu.pbrFactors.x, 0.0, 1.0);
+    float3 V = normalize(pu.eyePosition.xyz - in.worldPos);
+    float3 F0 = mix(float3(0.04), albedo, metallic);
+    float3 Lo = float3(0.0);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, roughness, metallic);
+    float occlusion = occlusionMap.sample(occlusionSmp, in.uv).r;
+    float3 ambient = pu.ambientColor.xyz * albedo * occlusion;
+    float3 emissive = pu.emissiveColor.xyz * emissiveMap.sample(emissiveSmp, in.uv).rgb;
+    float4 c = float4(ambient + Lo + emissive, alpha);
+    if (cna_alpha_test_fails(c.a, pu.alphaTest)) discard_fragment();
+    c.rgb = mix(pu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    return c;
+}
+
 struct V2In { float2 position; float2 uv; float4 color; };
 // plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
 // bypassing virtual-resolution/letterbox scaling -- a real, currently-shipping bug. `scale`/
@@ -481,7 +572,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     enum class PipelineKind : uint8_t
     {
         Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, EnvMap32,
-        Skinned52, Skinned56, Sprite2D
+        Skinned52, Skinned56, Pbr48, Sprite2D
     };
 
     // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
@@ -551,6 +642,15 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
                 vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
                 vd.layouts[0].stride=32;
+                return vd;
+            // plan_metal.md METAL-81: PbrEffect layout -- position(12)+normal(12)+tangent(16, real
+            // float4: xyz direction + w bitangent-handedness sign, NOT packed/normalized)+uv(8) = 48.
+            case 48:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.attributes[2].format=MTLVertexFormatFloat4; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
+                vd.attributes[3].format=MTLVertexFormatFloat2; vd.attributes[3].offset=40; vd.attributes[3].bufferIndex=0;
+                vd.layouts[0].stride=48;
                 return vd;
             // plan_metal.md METAL-72: SkinnedEffect layout -- position(12)+normal(12)+uv(8)+
             // boneWeights(16, real float4)+boneIndices(4, packed UChar4, UNNORMALIZED -- read as
@@ -693,6 +793,21 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         float alphaTest[4];
         float fogColorEnabled[4], fogStartEnd[4];
         float vertexColorEnabled[4];
+    };
+
+    // Plain C++ mirrors of kMetalShaderSource's `PbrTransform`/`PbrUniforms`.
+    struct PbrTransform { float wvp[16]; float world[16]; float normalCol0[4]; float normalCol1[4]; float normalCol2[4]; };
+    struct PbrUniforms {
+        float diffuseColor[4];
+        float ambientColor[4];
+        float emissiveColor[4];
+        float light0Dir[4], light0Diffuse[4];
+        float light1Dir[4], light1Diffuse[4];
+        float light2Dir[4], light2Diffuse[4];
+        float eyePosition[4];
+        float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor
+        float alphaTest[4];
+        float fogColorEnabled[4], fogStartEnd[4];
     };
 
     class MetalTexture final : public ITextureBackend
@@ -895,6 +1010,17 @@ struct MetalGraphicsBackend::Impl
     // is destroyed while still bound, so it never dangles.
     MetalRenderTargetBackend* currentRenderTarget=nullptr;
 
+    // plan_metal.md METAL-87: fallback textures for PbrEffect's 4 optional maps (normalMap/
+    // metallicRoughnessMap/emissiveMap/occlusionMap) when left unbound, mirroring
+    // EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture() exactly
+    // -- a null map must not sample garbage or crash. White (255,255,255,255) is the correct
+    // neutral default for metallicRoughness (mr.g=1,mr.b=1 -> full requested roughness/metallic
+    // via the *Factor multiply)/emissive(*1)/occlusion(*1, no darkening); flat normal
+    // (128,128,255,255 -> decodes to (0,0,1) in tangent space, i.e. "no perturbation") for the
+    // normal map specifically.
+    id<MTLTexture> defaultWhiteTexture=nil;
+    id<MTLTexture> defaultFlatNormalTexture=nil;
+
     // Re-applies every piece of encoder-scoped dynamic state this backend tracks. Metal has no
     // persistent-across-encoders state at all (unlike, say, retained GL context state) -- a fresh
     // MTLRenderCommandEncoder starts with undefined cull/fill/bias/stencil-ref/blend-color, so
@@ -1053,6 +1179,7 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::EnvMap32:         vs=@"cna_v3d_envmap";   fs=@"cna_f3d_envmap";  stride=32; break;
             case PipelineKind::Skinned52:        vs=@"cna_v3d_skinned";       fs=@"cna_f3d_skinned"; stride=52; break;
             case PipelineKind::Skinned56:        vs=@"cna_v3d_skinned_color"; fs=@"cna_f3d_skinned"; stride=56; break;
+            case PipelineKind::Pbr48:            vs=@"cna_v3d_pbr";           fs=@"cna_f3d_pbr";     stride=48; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
         }
         id<MTLVertexDescriptor> vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
@@ -1396,9 +1523,21 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     // every render pass from here on (must exist at render-pass-creation time, see its own field
     // comment on Impl).
     p.visibilityBuffer=[p.device newBufferWithLength:(NSUInteger)(MetalGraphicsBackend::Impl::kMaxOcclusionQuerySlots*8) options:MTLResourceStorageModeShared];
+    // plan_metal.md METAL-87: PbrEffect's 4 optional-map fallback textures (see Impl's own field
+    // comment for why these exact 2 colors).
+    {
+        MTLTextureDescriptor* td=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:1 height:1 mipmapped:NO];
+        td.usage=MTLTextureUsageShaderRead;
+        p.defaultWhiteTexture=[p.device newTextureWithDescriptor:td];
+        const uint8_t white[4]={255,255,255,255};
+        [p.defaultWhiteTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:white bytesPerRow:4];
+        p.defaultFlatNormalTexture=[p.device newTextureWithDescriptor:td];
+        const uint8_t flatNormal[4]={128,128,255,255};
+        [p.defaultFlatNormalTexture replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:flatNormal bytesPerRow:4];
+    }
     p.rebuildDepthState();
 }
-MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.visibilityBuffer release];[p.depthTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
+MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.defaultFlatNormalTexture release];[p.defaultWhiteTexture release];[p.visibilityBuffer release];[p.depthTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
 MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl(){return *impl_;} const MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl()const{return *impl_;}
 void MetalGraphicsBackend::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalGraphicsBackend::Present(){impl_->endFrame();}
 void MetalGraphicsBackend::GetViewportSize(int&w,int&h){
@@ -1536,10 +1675,10 @@ std::unique_ptr<IVertexBufferBackend> MetalGraphicsBackend::CreateVertexBuffer(i
 
 // plan_metal.md METAL-29/55/61/69/78: dispatch precedence deliberately mirrors
 // EasyGLGraphicsBackend::SelectProgram()'s own top-of-function order (pbr+skinned -> pbr ->
-// skinned -> envMapping -> dualTexture -> plain stride switch). `pbr` throws a clear, honest
-// "not implemented" error rather than silently falling through to a non-PBR shader -- Phase 8
-// hasn't landed, and rendering the wrong (unlit-relative-to-PBR) result silently would be worse
-// than an exception.
+// skinned -> envMapping -> dualTexture -> plain stride switch). `pbr && skinned` (SkinnedPbrEffect)
+// throws a clear, honest "not implemented" error rather than silently falling through to a
+// non-skinned PBR shader -- that combination hasn't landed, and rendering the wrong (unskinned)
+// result silently would be worse than an exception.
 static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* params)
 {
     const bool textured = params && params->texture0;
@@ -1547,7 +1686,11 @@ static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* 
     const bool skinned = params && params->skinned;
     const bool envMapping = params && params->envMapping;
     const bool dual = params && params->dualTexture;
-    if (pbr) throw std::runtime_error("Metal: PbrEffect/SkinnedPbrEffect not yet implemented (plan_metal.md Phase 8)");
+    if (pbr) {
+        if (skinned) throw std::runtime_error("Metal: SkinnedPbrEffect not yet implemented (plan_metal.md Phase 8, METAL-82)");
+        if (stride != 48) throw std::runtime_error("Metal: PbrEffect requires stride 48 (position+normal+tangent+uv)");
+        return PipelineKind::Pbr48;
+    }
     if (skinned) {
         if (stride == 56) return PipelineKind::Skinned56;
         if (stride == 52) return PipelineKind::Skinned52;
@@ -1660,6 +1803,30 @@ static void fillSkinnedUniforms(SkinnedTransform& t, SkinnedUniforms& su, const 
     su.vertexColorEnabled[0]=params.vertexColorEnabled?1.0f:0.0f; su.vertexColorEnabled[1]=su.vertexColorEnabled[2]=su.vertexColorEnabled[3]=0;
 }
 
+// plan_metal.md METAL-81/83-86: fills PbrTransform/PbrUniforms from GpuDrawParams, field-for-field
+// matching EasyGLGraphicsBackend::BindDrawParams()'s real PBR-specific mapping (ground truth).
+static void fillPbrUniforms(PbrTransform& t, PbrUniforms& pu, const Mat4& wvp, const GpuDrawParams& params)
+{
+    std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
+    std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
+    computeNormalMatrixCols(params.worldColMajor, t.normalCol0, t.normalCol1, t.normalCol2);
+
+    std::memcpy(pu.diffuseColor, params.diffuseColor, sizeof(pu.diffuseColor));
+    pu.ambientColor[0]=params.ambientColor[0]; pu.ambientColor[1]=params.ambientColor[1]; pu.ambientColor[2]=params.ambientColor[2]; pu.ambientColor[3]=0;
+    pu.emissiveColor[0]=params.emissiveColor[0]; pu.emissiveColor[1]=params.emissiveColor[1]; pu.emissiveColor[2]=params.emissiveColor[2]; pu.emissiveColor[3]=0;
+    pu.light0Dir[0]=params.light0Dir[0]; pu.light0Dir[1]=params.light0Dir[1]; pu.light0Dir[2]=params.light0Dir[2]; pu.light0Dir[3]=0;
+    pu.light0Diffuse[0]=params.light0Diffuse[0]; pu.light0Diffuse[1]=params.light0Diffuse[1]; pu.light0Diffuse[2]=params.light0Diffuse[2]; pu.light0Diffuse[3]=0;
+    pu.light1Dir[0]=params.light1Dir[0]; pu.light1Dir[1]=params.light1Dir[1]; pu.light1Dir[2]=params.light1Dir[2]; pu.light1Dir[3]=0;
+    pu.light1Diffuse[0]=params.light1Diffuse[0]; pu.light1Diffuse[1]=params.light1Diffuse[1]; pu.light1Diffuse[2]=params.light1Diffuse[2]; pu.light1Diffuse[3]=0;
+    pu.light2Dir[0]=params.light2Dir[0]; pu.light2Dir[1]=params.light2Dir[1]; pu.light2Dir[2]=params.light2Dir[2]; pu.light2Dir[3]=0;
+    pu.light2Diffuse[0]=params.light2Diffuse[0]; pu.light2Diffuse[1]=params.light2Diffuse[1]; pu.light2Diffuse[2]=params.light2Diffuse[2]; pu.light2Diffuse[3]=0;
+    pu.eyePosition[0]=params.eyePositionWorld[0]; pu.eyePosition[1]=params.eyePositionWorld[1]; pu.eyePosition[2]=params.eyePositionWorld[2]; pu.eyePosition[3]=0;
+    pu.pbrFactors[0]=params.pbrMetallicFactor; pu.pbrFactors[1]=params.pbrRoughnessFactor; pu.pbrFactors[2]=0; pu.pbrFactors[3]=0;
+    std::memcpy(pu.alphaTest, params.alphaTest, sizeof(pu.alphaTest));
+    pu.fogColorEnabled[0]=params.fogColor[0]; pu.fogColorEnabled[1]=params.fogColor[1]; pu.fogColorEnabled[2]=params.fogColor[2]; pu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
+    pu.fogStartEnd[0]=params.fogStart; pu.fogStartEnd[1]=params.fogEnd; pu.fogStartEnd[2]=0; pu.fogStartEnd[3]=0;
+}
+
 static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
     p.ensureFrame(); Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
@@ -1717,6 +1884,35 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         id<MTLTexture> tex0=nativeTextureFor(params->texture0);
         if(tex0)[p.encoder setFragmentTexture:tex0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
+    } else if (kind == PipelineKind::Pbr48) {
+        // plan_metal.md METAL-81/83-86: real metallic-roughness PBR path.
+        PbrTransform t{}; PbrUniforms pu{};
+        fillPbrUniforms(t, pu, wvp, *params);
+        [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
+        [p.encoder setVertexBytes:&pu length:sizeof(pu) atIndex:2];
+        [p.encoder setFragmentBytes:&pu length:sizeof(pu) atIndex:2];
+        // plan_metal.md METAL-87: a null map falls back to the shared default white / flat-normal
+        // 1x1 textures (mirrors EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture()
+        // exactly) -- unlike texture0/texture1's own established "leave whatever was bound before"
+        // gap elsewhere in this file, PBR's 4 optional maps are given real, always-correct
+        // fallbacks, since the constant-cost 1x1-texture-per-unbound-map approach is cheap and
+        // there is no equivalent "correct default" for the 2D case's leave-it-alone convention.
+        id<MTLTexture> tex0=nativeTextureFor(params->texture0);
+        id<MTLTexture> normalMap=nativeTextureFor(params->pbrNormalMap);
+        id<MTLTexture> mrMap=nativeTextureFor(params->pbrMetallicRoughnessMap);
+        id<MTLTexture> emissiveMap=nativeTextureFor(params->pbrEmissiveMap);
+        id<MTLTexture> occlusionMap=nativeTextureFor(params->pbrOcclusionMap);
+        id<MTLSamplerState> smp=(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler);
+        [p.encoder setFragmentTexture:(tex0?tex0:p.defaultWhiteTexture) atIndex:0];
+        [p.encoder setFragmentSamplerState:smp atIndex:0];
+        [p.encoder setFragmentTexture:(normalMap?normalMap:p.defaultFlatNormalTexture) atIndex:1];
+        [p.encoder setFragmentSamplerState:smp atIndex:1];
+        [p.encoder setFragmentTexture:(mrMap?mrMap:p.defaultWhiteTexture) atIndex:2];
+        [p.encoder setFragmentSamplerState:smp atIndex:2];
+        [p.encoder setFragmentTexture:(emissiveMap?emissiveMap:p.defaultWhiteTexture) atIndex:3];
+        [p.encoder setFragmentSamplerState:smp atIndex:3];
+        [p.encoder setFragmentTexture:(occlusionMap?occlusionMap:p.defaultWhiteTexture) atIndex:4];
+        [p.encoder setFragmentSamplerState:smp atIndex:4];
     } else {
         // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
         // actually reach the shader (previously silently ignored for every draw). Defaults below
