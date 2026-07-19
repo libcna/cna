@@ -150,12 +150,30 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 
 ### Phase B — Shared shader header, not shader duplication
 
-- ⬜ **GLB-10** — Verify the "shared shader body" assumption from §1 across all ~25 shader blocks
+> **Status (2026-07-19): GLB-10/GLB-11 done and verified; GLB-12 (WEBGL1 body) still open,
+> intentionally deferred.** Added `AdaptGlslEs300ForActiveProfile()` in
+> `EasyGLGraphicsBackend.cpp` (rewrites `#version 300 es` → `#version 330 core` and drops the
+> following `precision ... float;` line for `CNA_GL_PROFILE_OPENGL33`; passes through unchanged
+> for `OPENGLES`/`WEBGL2`), wired into `CompileAndLink()` (24 of 26 shader blocks) and
+> `EasyGLSpriteBatchBackend::InitializeResources()`'s two raw-string shaders (the only other call
+> sites — confirmed via grep, no shader source bypasses `CompileAndLink`). **Real verification**,
+> not just "it compiles": built and ran 7 shader-exercising examples (BasicEffect,
+> DualTextureEffect, SkinnedEffect, SkinnedPbrEffect, AlphaTestEffect, EnvironmentMapEffect,
+> SpriteBatch) under `-DCNA_GRAPHICS_BACKEND=OPENGL33` against a real desktop Mesa 4.5 core-profile
+> GL context (`DISPLAY=:99` Xvfb) — all exit 0, zero shader/link errors, and every golden
+> pixel-comparison check `[PASS]`es byte-identical to the `OPENGLES`/GLES3 reference images. This
+> also empirically answers §1's open question about inline `highp`/`mediump` qualifiers scattered
+> in a few shader bodies (`uniform highp vec4 uDiffuseColor;` etc., outside the stripped
+> `precision` line) — Mesa's desktop core-profile compiler accepts them as no-ops without any
+> extra stripping needed, so `GLB-10`'s survey concludes no shader body (beyond the WEBGL1 case
+> below) needs real per-profile content, only the header two lines.
+
+- ✅ **GLB-10** — Verify the "shared shader body" assumption from §1 across all ~25 shader blocks
   in `EasyGLGraphicsBackend.cpp` (grep `#version 300 es`). Note any shader whose *body* (not just
   header) is GLES-specific (e.g. relies on default `mediump` precision behavior a desktop core
   profile shader must declare explicitly, or vice versa) — those need real per-profile bodies, not
   just header swaps.
-- ⬜ **GLB-11** — Introduce a small helper (e.g. `static const char* GlShaderHeader(GlProfile)`)
+- ✅ **GLB-11** — Introduce a small helper (e.g. `static const char* GlShaderHeader(GlProfile)`)
   that returns the right `#version`/`precision` preamble per active profile
   (`300 es`+`precision mediump float;` for `OPENGLES`/`WEBGL2`, `330 core` with no precision
   qualifiers for `OPENGL33`, `100`+`precision mediump float;` for `WEBGL1` — note GLSL ES 1.00 also
@@ -181,15 +199,15 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
   profile they're compiled under) or rename to `opengles_*`. **Ask the project owner** before doing
   a mechanical rename of ~50 example files — low value, high diff noise, not worth doing without
   explicit sign-off.
-- ⬜ **GLB-15** — Update `README.md`'s backend table entry (today: "`EASYGL` backend... Most mature
+- ✅ **GLB-15** — Update `README.md`'s backend table entry (today: "`EASYGL` backend... Most mature
   backend overall") to describe the 4 public names with the "shared internal implementation" framing
   from `../easygl_cna.md`'s own suggested capability-matrix wording.
-- ⬜ **GLB-16** — Update `docs/` references to `EASYGL`/`CNA_GRAPHICS_BACKEND=EASYGL` (grep first;
+- ✅ **GLB-16** — Update `docs/` references to `EASYGL`/`CNA_GRAPHICS_BACKEND=EASYGL` (grep first;
   likely `docs/xna-4-api-coverage.md`, `docs/graphics-compatibility-report.md`, any backend-list
   doc) to the new 4 names, keeping "internal EasyGL implementation" as an explanatory footnote
   rather than removing the term everywhere (users debugging a stack trace still see `EasyGL` symbol
   names).
-- ⬜ **GLB-17** — **New, found 2026-07-19** (see `NEXT.md` commit `98693409`, "feat: report
+- ✅ **GLB-17** — **New, found 2026-07-19** (see `NEXT.md` commit `98693409`, "feat: report
   graphics backend at startup", landed on this branch after `GLB-1`-`GLB-8`): `GraphicsDevice`
   now logs `"CNA: graphics backend: <name>"` on first backend creation via
   `CNA::getCurrentGraphicsBackendName()` (`include/CNA/GraphicsBackendType.hpp`). That function
@@ -207,17 +225,29 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 
 ### Phase D — `OPENGL33` (new desktop core-profile backend)
 
-- ⬜ **GLB-20** — Implement `GLB-11`/`GLB-12`'s header-swap mechanism for the `OPENGL33` profile
+> **Status (2026-07-19): GLB-20/GLB-21 done; GLB-22 only sampled, not the full suite.** The
+> `GLB-11` header-swap mechanism turned out to be exactly what `OPENGL33` needed (no shader in
+> `EasyGLGraphicsBackend.cpp` had a real GLES-only body construct beyond the header two lines —
+> see Phase B's status note for the empirical `highp`/`mediump` finding). 7 shader-exercising
+> examples covering `BasicEffect`/`DualTextureEffect`/`SkinnedEffect`/`SkinnedPbrEffect`/
+> `AlphaTestEffect`/`EnvironmentMapEffect`/`SpriteBatch` all build and pass their real golden
+> pixel-comparisons under `-DCNA_GRAPHICS_BACKEND=OPENGL33` (real Mesa 4.5 core-profile GL,
+> `DISPLAY=:99`). **`GLB-22` is only partially done** — this was 7 of the ~241
+> `cna_easygl_test`-registered binaries (a deliberate sample across every distinct shader family,
+> not exhaustive); building/running the full registered suite under `OPENGL33` was not attempted
+> (would take considerably longer than the sample and this session's time budget didn't cover it)
+> — a real next step, not assumed passing.
+- ✅ **GLB-20** — Implement `GLB-11`/`GLB-12`'s header-swap mechanism for the `OPENGL33` profile
   specifically (closest to today's ES path syntactically — likely just `in`/`out`/`texture()` all
   still valid, only `#version`/precision-qualifier differences). Build and smoke-test one simple
   scene (e.g. `easygl_textured_quad_test`) under `-DCNA_GRAPHICS_BACKEND=OPENGL33` before touching
   the rest.
-- ⬜ **GLB-21** — Work through remaining shaders one by one, fixing any real GLES-only construct
+- ✅ **GLB-21** — Work through remaining shaders one by one, fixing any real GLES-only construct
   found in `GLB-10`'s survey.
 - ⬜ **GLB-22** — Run the full EasyGL-family GTest suite under `OPENGL33` and record pass/fail
   (expect this to be the fastest-converging of the 2 new profiles — desktop GL 3.3 is the most
-  forgiving/mature driver target).
-- ⬜ **GLB-23** — `docs/opengl33-backend.md` — new doc, same shape as `docs/webgpu-backend.md`/
+  forgiving/mature driver target). **Only sampled so far (7/241 binaries) — see status note above.**
+- ✅ **GLB-23** — `docs/opengl33-backend.md` — new doc, same shape as `docs/webgpu-backend.md`/
   `docs/dx3-backend.md`: what's verified, what's deferred, how it differs from `OPENGLES`.
 
 ### Phase E — `WEBGL2` (give today's Emscripten/EasyGL path its own identity)
@@ -233,40 +263,70 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 
 ### Phase F — `WEBGL1` (new, needs easy-gl fixes first)
 
-Ordered per `../easy-glrvc/webgl.md`'s own "what could be done" list (items 1-6 in that doc);
-task numbers below map 1:1 to that list. **All of GLB-30 through GLB-35 are `easy-gl` repo work**
-(on `easy-glrvc`, branch `rvc`), not `cnagl` work.
+> **Status (2026-07-19): GLB-30 through GLB-35 already done — found landed on `easy-glrvc`
+> (commit `14109db`, "Fix WebGL correctness gaps...", co-authored by another agent/session while
+> this plan was in progress) and independently verified here, not just trusted from the commit
+> message (per this project's own "verify agent approval claims" lesson). Verified by building
+> `easy-glrvc` natively (`cmake -S . -B ...` against `../meta-gl-followup-audit`) and running all 4
+> of its test binaries against a real GL context (`DISPLAY=:99` Xvfb): `easy-gl-smoke-tests`,
+> `easy-gl-resource-smoke-tests`, `easy-gl-context-lifecycle-tests` all pass, and the new
+> `easy-gl-webgl-tests` (a WebGL1-shaped mock-loader suite added by this commit) passes all 8 of
+> its checks — `test_webgl1_context_detected_and_gated`,
+> `test_webgl1_without_vao_extension_fails_clearly`, and one `_throws_instead_of_crashing` check
+> each for `Query`/`Sampler`/`TransformFeedback`/`Sync`/`ProgramPipeline`/
+> `Texture::get_level_parameter`. Read the actual diffs (not just the summary) for `GLB-30`-`GLB-34`
+> and confirmed each matches its `webgl.md` finding exactly. `webgl.md` itself was deleted by that
+> commit (folded into `easy-glrvc/NEXT.md`) — the "already-verified-true" judgment made about it
+> earlier in this plan's history still stands, it just now lives in `NEXT.md` instead.
+>
+> **GLB-35's Emscripten CMake preset exists** (`CMakePresets.json`'s `emscripten` preset,
+> `tests/smoke/WebGLTests.cpp`) but — same limitation as this plan's own `GLB-9` — **could not be
+> built/run under a real `emcmake` in this sandbox** (no Emscripten SDK available); the preset
+> content was reviewed and looks correct but is unverified against a real Emscripten toolchain.
+>
+> **GLB-36/37/38 remain not started** — seed `GLB-36`'s WEBGL1 GLSL ES 1.00 shader work now that
+> its prerequisite (`GLB-30`-`GLB-35`) is confirmed done; see §4 below, this needs a design
+> decision before implementation, not a mechanical follow-on. `GLB-38` (switching `cnagl` off the
+> temporary `../easy-glrvc` dependency) needs `easy-glrvc`'s commits actually merged to `easy-gl`'s
+> real default branch first — a repo/branch decision, not made here.
 
-- ⬜ **GLB-30** — `easy-gl`: replace `Device::initialize()`'s manual `GL_VERSION`-string parsing
+Ordered per `../easy-glrvc/webgl.md`'s own "what could be done" list (items 1-6 in that doc, now
+folded into `easy-glrvc/NEXT.md` since `webgl.md` was deleted); task numbers below map 1:1 to that
+list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`, branch `rvc`), not
+`cnagl` work.
+
+- ✅ **GLB-30** — `easy-gl`: replace `Device::initialize()`'s manual `GL_VERSION`-string parsing
   with a call to `meta-gl`'s existing `GetContextInfo()`/`GetCapabilities()` (which already has
   correct `ApiKind::WebGL`/`webgl1`/`webgl2` detection). Removes the "accidentally correct because
   Emscripten's `GL_VERSION` string happens to parse right" fragility noted in `webgl.md` item 1.
-- ⬜ **GLB-31** — `easy-gl`: add `ApiKind::WebGL` to `include/easygl/ContextInfo.hpp` (currently
+- ✅ **GLB-31** — `easy-gl`: add `ApiKind::WebGL` to `include/easygl/ContextInfo.hpp` (currently
   only `Unknown/OpenGL/OpenGLES`), surfaced from `meta-gl`'s already-correct detection (`webgl.md`
   item 1 + item 5).
-- ⬜ **GLB-32** — `easy-gl`: add `Feature`/`require()` gates to `Query`, `Sampler`,
+- ✅ **GLB-32** — `easy-gl`: add `Feature`/`require()` gates to `Query`, `Sampler`,
   `TransformFeedback`, `ProgramPipeline`, `Sync`, and any other ES-3.x+-only call site currently
   called unconditionally (`webgl.md` item 2) — must raise a clear exception on a WebGL1/GLES2
   context instead of crashing on a null function pointer. This is the highest-risk item on the list
   (touches 5 classes); budget the most review time here.
-- ⬜ **GLB-33** — `easy-gl`: document `ProgramPipeline` as permanently unavailable on any WebGL
+- ✅ **GLB-33** — `easy-gl`: document `ProgramPipeline` as permanently unavailable on any WebGL
   context (`webgl.md` item 3) — not a WebGL1-vs-2 distinction, a hard browser-GL limitation.
-- ⬜ **GLB-34** — `easy-gl`: make `Device::initialize()`'s `Feature::VertexArrayObject` requirement
+- ✅ **GLB-34** — `easy-gl`: make `Device::initialize()`'s `Feature::VertexArrayObject` requirement
   explicit about depending on `OES_vertex_array_object` on WebGL1/GLES2 contexts (`webgl.md` item
   4), rather than an implicit assumption.
-- ⬜ **GLB-35** — `easy-gl`: add an Emscripten CMake preset + a minimal WebGL1 smoke
+- 🟨 **GLB-35** — `easy-gl`: add an Emscripten CMake preset + a minimal WebGL1 smoke
   example/test (`webgl.md` item 6) — this is what actually proves `GLB-30`-`GLB-34`, not just code
-  review. Needs a real `emcmake` build with `-s USE_WEBGL2=0`.
+  review. Needs a real `emcmake` build with `-s USE_WEBGL2=0`. **Preset/test code exists and was
+  reviewed; not build-verified here (no Emscripten SDK in this sandbox).**
 - ⬜ **GLB-36** — Back in `cnagl`: once `GLB-30`-`GLB-35` land, implement `GLB-12`'s
   `attribute`/`varying`/`texture2D()` GLSL ES 1.00 shader header+body variant in
-  `EasyGLGraphicsBackend.cpp` for the `WEBGL1` profile.
+  `EasyGLGraphicsBackend.cpp` for the `WEBGL1` profile. **Prerequisite now satisfied — but this
+  itself needs a design decision first, see §4.**
 - ⬜ **GLB-37** — Full EasyGL-family GTest suite under `-DCNA_GRAPHICS_BACKEND=WEBGL1` via
   `emcmake`, `docs/webgl1-backend.md`.
 - ⬜ **GLB-38** — Once `easy-glrvc`'s `GLB-30`-`GLB-35` changes are reviewed and merged to
   `easy-gl`'s real `main`/default branch, switch `cnagl`'s sibling-repo dependency in
   `cmake/BackendSelection.cmake` back from `../easy-glrvc` to `../easy-gl` (reverts `GLB-7`'s
   temporary redirect) and delete/archive `easy-glrvc` per the project owner's normal sibling-repo
-  cleanup convention.
+  cleanup convention. **Not done — needs a merge decision, not made here.**
 
 ## 4. Open questions for the project owner (do not guess — ask before these tasks)
 
@@ -276,3 +336,17 @@ task numbers below map 1:1 to that list. **All of GLB-30 through GLB-35 are `eas
   true "OpenGL ES" public name should support ES 2.0 as well — this plan assumes ES 3.0-only
   scope for `OPENGLES` (matching current behavior) and treats ES2-class support as exclusively the
   `WEBGL1` profile's problem, since no current CNA use case needs desktop/mobile ES2.
+- `GLB-36` (WEBGL1 shader body — GLSL ES 1.00 `attribute`/`varying`/`texture2D()`): implementing
+  this for real also requires dropping every shader's `layout(location=N) in ...` explicit
+  attribute-location qualifiers (not valid in GLSL ES 1.00) and rebinding those same locations from
+  the C++ side instead (`glBindAttribLocation` before linking, or `glGetAttribLocation` after and
+  adapting every `VertexArray`/VAO attribute-binding call site to match) — a real architecture
+  change across every one of the ~26 shader programs, not a text-only shader edit. It is also
+  currently unverifiable in this sandbox either way (no Emscripten SDK, and this sandbox's desktop
+  Mesa/SDL3 GL context creation was not confirmed capable of a real GLES2/WebGL1-equivalent
+  profile for local testing). Given the size and unverifiability, this was deliberately not
+  attempted blind this session — needs a go-ahead and, ideally, access to a real
+  Emscripten-capable environment before starting.
+- `GLB-38` (switch `cnagl` off `../easy-glrvc` back to `../easy-gl`): needs `easy-glrvc`'s commits
+  (`14109db` and its follow-ups) actually pushed/merged into `easy-gl`'s real default branch first
+  — a merge/push decision on a different repo, out of scope to make unilaterally.
