@@ -202,6 +202,10 @@ namespace Microsoft::Xna::Framework::Graphics
             }();
 #endif
 
+#ifdef CNA_BACKEND_METAL
+            windowFlags |= SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#endif
+
 #ifdef CNA_BACKEND_BGFX
             const auto rendererType = CNA::Internal::Backends::Bgfx::Detail::ResolveRendererType(
                 SDL_getenv("CNA_BGFX_RENDERER"));

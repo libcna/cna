@@ -1,0 +1,38 @@
+name: Native Metal backend (macOS)
+
+on:
+  push:
+    paths:
+      - 'src/CNA/Internal/Backends/Metal/**'
+      - 'include/CNA/Internal/Backends/Metal/**'
+      - 'include/CNA/GraphicsBackendType.hpp'
+      - 'cmake/BackendSelection.cmake'
+      - 'cmake/BackendLibraries.cmake'
+      - 'cmake/Tests/MetalTests.cmake'
+      - 'examples/metal_smoke_test.cpp'
+      - 'CMakeLists.txt'
+      - '.github/workflows/metal-macos-ci.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  metal-build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cna
+      - name: Checkout sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+      - name: Configure native Metal backend
+        working-directory: cna
+        run: cmake -S . -B build-metal -DCNA_GRAPHICS_BACKEND=METAL -DCNA_BUILD_TESTS=ON
+      - name: Build native Metal backend
+        working-directory: cna
+        run: cmake --build build-metal --parallel 3
+      - name: Run Metal smoke test
+        working-directory: cna/build-metal
+        run: ctest -R Metal_Smoke --output-on-failure
