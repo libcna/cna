@@ -155,6 +155,73 @@ fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[text
     return c;
 }
 
+// EnvironmentMapEffect (plan_metal.md METAL-64/66-68), ported line-for-line from
+// EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()'s real GLSL. Real XNA `EnvironmentMapEffect`
+// has no separate AmbientLightColor uniform in its own shader at all -- `GpuDrawParams::
+// emissiveColor`'s own doc comment already documents this: for EnvironmentMapEffect it carries
+// "emissive+ambient combined," pre-baked by the C++ effect layer before reaching any backend, so
+// (unlike BasicEffect's lit path) there is deliberately no separate ambientColor field/uniform
+// here -- confirmed by reading EnsureEnvMapped3DProgram()'s fsrc, which declares no uAmbientColor
+// uniform either. Fresnel is computed per-VERTEX from each vertex's own un-interpolated normal/eye
+// vector then Gouraud-interpolated (real XNA EnvironmentMapEffect.fx behavior, not a per-fragment
+// recompute from an interpolated normal -- Task 1112, not equivalent once vertices carry different
+// normals) -- ported that way here too, not "corrected" to per-fragment.
+struct EnvTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; };
+struct EnvUniforms {
+    float4 diffuseColor;
+    float4 emissiveColor;      // pre-combined ambient+emissive, xyz+pad
+    float4 light0Dir; float4 light0Diffuse;
+    float4 light1Dir; float4 light1Diffuse;
+    float4 light2Dir; float4 light2Diffuse;
+    float4 envMapSpecular;     // xyz+pad
+    float4 eyePosition;        // xyz+pad
+    float4 envParams;          // x=EnvMapAmount, y=FresnelEnabled(0/1), z=FresnelFactor
+    float4 alphaTest;
+    float4 fogColorEnabled;
+    float4 fogStartEnd;
+};
+struct VEnvOut { float4 position [[position]]; float3 worldNormal; float3 eyeDir; float2 uv; float fresnel; float fogFactor; };
+vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransform& t [[buffer(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
+    VEnvOut o;
+    o.position = t.wvp * float4(in.position, 1.0);
+    float3 worldPos = (t.world * float4(in.position, 1.0)).xyz;
+    float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
+    float3 worldNormal = normalize(normalMat * in.normal);
+    float3 eyeVector = normalize(eu.eyePosition.xyz - worldPos);
+    o.worldNormal = worldNormal;
+    o.eyeDir = eyeVector;
+    o.uv = in.uv;
+    float viewAngle = dot(eyeVector, worldNormal);
+    o.fresnel = (eu.envParams.y > 0.5)
+        ? pow(max(1.0 - abs(viewAngle), 0.0), eu.envParams.z) * eu.envParams.x
+        : eu.envParams.x;
+    float fogStart = eu.fogStartEnd.x, fogEnd = eu.fogStartEnd.y;
+    o.fogFactor = (eu.fogColorEnabled.w > 0.5)
+        ? ((abs(fogEnd - fogStart) < 1e-6) ? 0.0 : clamp((in.position.z + fogEnd) / (fogEnd - fogStart), 0.0, 1.0))
+        : 1.0;
+    return o;
+}
+fragment float4 cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], texturecube<float> envMap [[texture(1)]], sampler envSmp [[sampler(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
+    float3 N = normalize(in.worldNormal);
+    float3 E = normalize(in.eyeDir);
+    float NdotL0 = max(dot(N, -eu.light0Dir.xyz), 0.0);
+    float NdotL1 = max(dot(N, -eu.light1Dir.xyz), 0.0);
+    float NdotL2 = max(dot(N, -eu.light2Dir.xyz), 0.0);
+    float3 lightSum = eu.light0Diffuse.xyz*NdotL0 + eu.light1Diffuse.xyz*NdotL1 + eu.light2Diffuse.xyz*NdotL2;
+    float3 litRGB = lightSum * eu.diffuseColor.xyz + eu.emissiveColor.xyz;
+    float4 texColor = tex.sample(smp, in.uv);
+    float3 reflDir = reflect(-E, N);
+    float4 envSample = envMap.sample(envSmp, reflDir);
+    float3 baseColor = litRGB * texColor.rgb;
+    float combinedAlpha = eu.diffuseColor.w * texColor.a;
+    float blendFactor = in.fresnel;
+    float3 rgb = mix(baseColor, envSample.rgb*combinedAlpha, blendFactor) + eu.envMapSpecular.xyz*envSample.a*combinedAlpha;
+    float4 c = float4(rgb, combinedAlpha);
+    if (cna_alpha_test_fails(c.a, eu.alphaTest)) discard_fragment();
+    c.rgb = mix(eu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    return c;
+}
+
 struct V2In { float2 position; float2 uv; float4 color; };
 // plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
 // bypassing virtual-resolution/letterbox scaling -- a real, currently-shipping bug. `scale`/
@@ -324,7 +391,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // verified by reading that exact branch, not assumed).
     enum class PipelineKind : uint8_t
     {
-        Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, Sprite2D
+        Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, EnvMap32, Sprite2D
     };
 
     // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
@@ -489,6 +556,18 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         col1[0]=-(d*i-f*g)*invDet; col1[1]=(a*i-c*g)*invDet; col1[2]=-(a*f-c*d)*invDet; col1[3]=0;
         col2[0]=(d*h-e*g)*invDet; col2[1]=-(a*h-b*g)*invDet; col2[2]=(a*e-b*d)*invDet; col2[3]=0;
     }
+
+    // Plain C++ mirrors of kMetalShaderSource's `EnvTransform`/`EnvUniforms` -- see that struct's
+    // own comment for the real-XNA-EnvironmentMapEffect-has-no-separate-ambient-uniform finding.
+    struct EnvTransform { float wvp[16]; float world[16]; float normalCol0[4]; float normalCol1[4]; float normalCol2[4]; };
+    struct EnvUniforms {
+        float diffuseColor[4], emissiveColor[4];
+        float light0Dir[4], light0Diffuse[4];
+        float light1Dir[4], light1Diffuse[4];
+        float light2Dir[4], light2Diffuse[4];
+        float envMapSpecular[4], eyePosition[4], envParams[4], alphaTest[4];
+        float fogColorEnabled[4], fogStartEnd[4];
+    };
 
     class MetalTexture final : public ITextureBackend
     {
@@ -776,6 +855,7 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::LitTex32:         vs=@"cna_v3d_lit";      fs=@"cna_f3d_lit";     stride=32; break;
             case PipelineKind::DualTex20:        vs=@"cna_v3d_tex";      fs=@"cna_f3d_dualtex"; stride=20; break;
             case PipelineKind::DualTex24Colored: vs=@"cna_v3d_colortex"; fs=@"cna_f3d_dualtex"; stride=24; break;
+            case PipelineKind::EnvMap32:         vs=@"cna_v3d_envmap";   fs=@"cna_f3d_envmap";  stride=32; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
         }
         id<MTLVertexDescriptor> vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
@@ -1014,15 +1094,20 @@ void MetalGraphicsBackend::SetScissorRect(int x,int y,int w,int h){impl_->scisso
 void MetalGraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){impl_->viewport={(double)x,(double)y,(double)w,(double)h,mn,mx};if(impl_->encoder)[impl_->encoder setViewport:impl_->viewport];}
 std::unique_ptr<IVertexBufferBackend> MetalGraphicsBackend::CreateVertexBuffer(int c){return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
 
-// plan_metal.md METAL-29/55/61: dispatch precedence deliberately mirrors
-// EasyGLGraphicsBackend::SelectProgram()'s own top-of-function order (dualTexture checked before
-// the plain stride switch) -- envMapping/skinned/pbr are still ahead of this in EasyGL's real
-// precedence and are simply not reachable yet on Metal (their GpuDrawParams flags fall through to
-// this function unconsumed until Phases 6-8 land), not a knowingly-wrong ordering.
+// plan_metal.md METAL-29/55/61/69: dispatch precedence deliberately mirrors
+// EasyGLGraphicsBackend::SelectProgram()'s own top-of-function order (envMapping checked before
+// dualTexture, both before the plain stride switch) -- skinned/pbr are still ahead of this in
+// EasyGL's real precedence and are simply not reachable yet on Metal (their GpuDrawParams flags
+// fall through to this function unconsumed until Phases 7-8 land), not a knowingly-wrong ordering.
 static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* params)
 {
     const bool textured = params && params->texture0;
+    const bool envMapping = params && params->envMapping;
     const bool dual = params && params->dualTexture;
+    if (envMapping) {
+        if (stride != 32) throw std::runtime_error("Metal: EnvironmentMapEffect requires VertexPositionNormalTexture (stride 32)");
+        return PipelineKind::EnvMap32;
+    }
     if (dual) {
         if (!textured) throw std::runtime_error("Metal: DualTextureEffect requires Texture to be set");
         if (stride == 24) return PipelineKind::DualTex24Colored;
@@ -1070,6 +1155,32 @@ static void fillLitUniforms(LitTransform& t, LitUniforms& lu, const Mat4& wvp, c
     lu.fogStartEnd[0]=params.fogStart; lu.fogStartEnd[1]=params.fogEnd; lu.fogStartEnd[2]=0; lu.fogStartEnd[3]=0;
 }
 
+// plan_metal.md METAL-66-68: fills EnvTransform/EnvUniforms, field-for-field matching
+// EasyGLGraphicsBackend::BindDrawParams()'s real EnvironmentMapEffect-specific mapping (the
+// `p.loc_ambient < 0` gated block -- ground truth, ported not redesigned). `params` is never null
+// here for the same reason `fillLitUniforms` documents.
+static void fillEnvUniforms(EnvTransform& t, EnvUniforms& eu, const Mat4& wvp, const GpuDrawParams& params)
+{
+    std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
+    std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
+    computeNormalMatrixCols(params.worldColMajor, t.normalCol0, t.normalCol1, t.normalCol2);
+
+    std::memcpy(eu.diffuseColor, params.diffuseColor, sizeof(eu.diffuseColor));
+    eu.emissiveColor[0]=params.emissiveColor[0]; eu.emissiveColor[1]=params.emissiveColor[1]; eu.emissiveColor[2]=params.emissiveColor[2]; eu.emissiveColor[3]=0;
+    eu.light0Dir[0]=params.light0Dir[0]; eu.light0Dir[1]=params.light0Dir[1]; eu.light0Dir[2]=params.light0Dir[2]; eu.light0Dir[3]=0;
+    eu.light0Diffuse[0]=params.light0Diffuse[0]; eu.light0Diffuse[1]=params.light0Diffuse[1]; eu.light0Diffuse[2]=params.light0Diffuse[2]; eu.light0Diffuse[3]=0;
+    eu.light1Dir[0]=params.light1Dir[0]; eu.light1Dir[1]=params.light1Dir[1]; eu.light1Dir[2]=params.light1Dir[2]; eu.light1Dir[3]=0;
+    eu.light1Diffuse[0]=params.light1Diffuse[0]; eu.light1Diffuse[1]=params.light1Diffuse[1]; eu.light1Diffuse[2]=params.light1Diffuse[2]; eu.light1Diffuse[3]=0;
+    eu.light2Dir[0]=params.light2Dir[0]; eu.light2Dir[1]=params.light2Dir[1]; eu.light2Dir[2]=params.light2Dir[2]; eu.light2Dir[3]=0;
+    eu.light2Diffuse[0]=params.light2Diffuse[0]; eu.light2Diffuse[1]=params.light2Diffuse[1]; eu.light2Diffuse[2]=params.light2Diffuse[2]; eu.light2Diffuse[3]=0;
+    eu.envMapSpecular[0]=params.envMapSpecular[0]; eu.envMapSpecular[1]=params.envMapSpecular[1]; eu.envMapSpecular[2]=params.envMapSpecular[2]; eu.envMapSpecular[3]=0;
+    eu.eyePosition[0]=params.eyePositionWorld[0]; eu.eyePosition[1]=params.eyePositionWorld[1]; eu.eyePosition[2]=params.eyePositionWorld[2]; eu.eyePosition[3]=0;
+    eu.envParams[0]=params.envMapAmount; eu.envParams[1]=params.fresnelEnabled?1.0f:0.0f; eu.envParams[2]=params.fresnelFactor; eu.envParams[3]=0;
+    std::memcpy(eu.alphaTest, params.alphaTest, sizeof(eu.alphaTest));
+    eu.fogColorEnabled[0]=params.fogColor[0]; eu.fogColorEnabled[1]=params.fogColor[1]; eu.fogColorEnabled[2]=params.fogColor[2]; eu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
+    eu.fogStartEnd[0]=params.fogStart; eu.fogStartEnd[1]=params.fogEnd; eu.fogStartEnd[2]=0; eu.fogStartEnd[3]=0;
+}
+
 static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
     p.ensureFrame(); Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
@@ -1090,6 +1201,22 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);
         if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
+    } else if (kind == PipelineKind::EnvMap32) {
+        // plan_metal.md METAL-64/66-68: real cube-map reflection/Fresnel path.
+        EnvTransform t{}; EnvUniforms eu{};
+        fillEnvUniforms(t, eu, wvp, *params);
+        [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
+        [p.encoder setVertexBytes:&eu length:sizeof(eu) atIndex:2];
+        [p.encoder setFragmentBytes:&eu length:sizeof(eu) atIndex:2];
+        auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);
+        if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
+        // plan_metal.md: same established null-envMap fallback gap as texture0/texture1 (leaves
+        // whatever a prior draw last bound at unit 1) -- not a new class of gap, matches the
+        // existing DualTexture-null-Texture2 precedent exactly.
+        auto* mc=dynamic_cast<const MetalTextureCube*>(params->envMap);
+        if(mc)[p.encoder setFragmentTexture:mc->native() atIndex:1];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
     } else {
         // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
         // actually reach the shader (previously silently ignored for every draw). Defaults below

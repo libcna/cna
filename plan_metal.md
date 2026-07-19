@@ -170,13 +170,25 @@ before any status here can honestly change.
   `preferPerPixelLighting`, the same already-documented, already-accepted divergence every backend
   except D3D9 has.
 
-**Two real, previously-unknown blocking dependencies were found and documented in-place** (not
-worked around, not silently skipped) while investigating Phase 9 and Phase 6 — see those phases'
-own header notes in the table below for the full detail: Phase 9 (Instancing) needs Phase 14
-(custom `ShaderEffect`) to be meaningful at all; Phase 6 (`EnvironmentMapEffect`) needs Phase 3's
-lighting work (now landed) — its `METAL-65` blocker is closed, but confirm `METAL-64`/`66`–`68`
-against a freshly-re-read `EnsureEnvMapped3DProgram()` before attempting them, since that function
-also has its own env-map-specific specular/Fresnel math not yet ported.
+**A real, previously-unknown blocking dependency was found and documented in-place** (not worked
+around, not silently skipped) while investigating Phase 9 — see that phase's own header note in
+the table below for the full detail: real, useful instancing in this codebase always goes through
+a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately un-attempted.
+
+- **`EnvironmentMapEffect`** (`METAL-64`/`66`–`69`, same session as the `TextureCube`/lighting work
+  above that unblocked it): ported `EnsureEnvMapped3DProgram()`'s real GLSL line-for-line —
+  world-space reflection vector (`reflect(-E,N)`) sampled against the cube map, flat and
+  Fresnel-weighted blend (computed per-VERTEX from each vertex's own un-interpolated normal/eye
+  vector then Gouraud-interpolated, matching real XNA `EnvironmentMapEffect.fx` exactly — not a
+  per-fragment recompute from an interpolated normal, a real, already-documented distinction, Task
+  1112). Confirmed a real, non-obvious finding while reading the reference shader: real XNA
+  `EnvironmentMapEffect` has **no separate ambient uniform at all** — `GpuDrawParams::
+  emissiveColor`'s own doc comment already said as much ("emissive+ambient combined") but this
+  pass verified it against the actual GLSL (no `uAmbientColor` declared), so the Metal port
+  correctly omits a separate ambient term rather than guessing one belongs. `specularEnabled`
+  (D9-81 finding #4) stays in the same accepted "not fixed outside D3D9" bucket as AlphaTestEffect's
+  `isEqNe` — `envMapSpecular`'s tint itself is real and wired, just not the discrete
+  shader-variant-selection flag.
 
 **Explicitly still open / not attempted this pass** (do not assume these are done): `METAL-5`
 (cull-mode/winding correctness — deliberately left untouched, see its own note about a Vulkan
@@ -184,7 +196,7 @@ front/back stencil swap this project already had to empirically discover the har
 a real risk area, not a formality); `METAL-14`–`METAL-20` (VertexElementFormat/SurfaceFormat/
 DepthFormat tables, BC-compression query); the fully generic `VertexElement`-driven descriptor
 builder (`METAL-26`/`METAL-27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/
-`METAL-32`); the per-vertex lit variant (`METAL-39`); Phases 6–10 and 12–14 and 16–30 in full
+`METAL-32`); the per-vertex lit variant (`METAL-39`); Phases 7–10 and 12–14 and 16–30 in full
 (instancing, render targets, cube/3D textures, readback, occlusion queries, custom effects,
 skinning, PBR, resize/Retina, frame pacing, resource-lifetime audit, everything NOXNA, testing/CI/
 docs, iOS/tvOS) — none of it was touched this pass.
@@ -205,7 +217,9 @@ docs, iOS/tvOS) — none of it was touched this pass.
   lighting/fog/specular/emissive**, dualtex-20, dualtex-colored-24, sprite-2d) instead of 5
   eagerly-built fixed fields (🟨 landed 2026-07-19 — `METAL-22`/`METAL-23`/`METAL-25`/`METAL-38`/
   `40`/`42`–`44`/`46`/`47`).
-- `TextureCube`/`Texture3D` backends (🟨 landed 2026-07-19 — `METAL-120`/`121`/`123`/`124`).
+- `TextureCube`/`Texture3D` backends, and a real `EnvironmentMapEffect` (world-space cube-map
+  reflection, flat + Fresnel-weighted blend, lit+fogged) built on top of them (🟨 landed
+  2026-07-19 — `METAL-64`/`66`–`69`/`120`/`121`/`123`/`124`).
 - Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
   real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
 - Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
@@ -383,12 +397,12 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-64 | `env_mapped3d.metal` (stride 32) — reflection vector from `eyePositionWorld`/normal/world position, sampling `envMap` as a `texturecube<float>` | ⬜ |
+| METAL-64 | `env_mapped3d.metal` (stride 32) — reflection vector from `eyePositionWorld`/normal/world position, sampling `envMap` as a `texturecube<float>` | 🟨 |
 | METAL-65 | Bind `ITextureCubeBackend`'s underlying cube `id<MTLTexture>` to the shader's `texturecube<float>` argument — **unblocked 2026-07-19**: `MetalTextureCube::native()` exists (`METAL-120`/`METAL-121`) | 🟨 |
-| METAL-66 | Flat env-map blend (`envMapAmount`, constant factor) | ⬜ |
-| METAL-67 | Fresnel-weighted env-map blend (`fresnelEnabled`/`fresnelFactor`), ported from the already-shipped WebGPU/Vulkan formula | ⬜ |
-| METAL-68 | `envMapSpecular` tint and `specularEnabled` real-shader-variant flag (D9-81 finding #4) — same "known, not fixed outside D3D9" bucket as `METAL-54` | ⬜ |
-| METAL-69 | Dispatch: `params.envMapping` checked before `dualTexture`, matching EasyGL's exact precedence | ⬜ |
+| METAL-66 | Flat env-map blend (`envMapAmount`, constant factor) | 🟨 |
+| METAL-67 | Fresnel-weighted env-map blend (`fresnelEnabled`/`fresnelFactor`), ported from the already-shipped WebGPU/Vulkan formula | 🟨 |
+| METAL-68 | `envMapSpecular` tint and `specularEnabled` real-shader-variant flag (D9-81 finding #4) — same "known, not fixed outside D3D9" bucket as `METAL-54` | 🟨 |
+| METAL-69 | Dispatch: `params.envMapping` checked before `dualTexture`, matching EasyGL's exact precedence | 🟨 |
 | METAL-70 | `CTest`: `Metal_EnvironmentMap` — flat and Fresnel-weighted variants, reflection-angle-dependent probe pixel | ⬜ |
 | METAL-71 | Add a `Metal` column to `docs/environmentmapeffect-support.md` | ⬜ |
 
