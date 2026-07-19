@@ -46,6 +46,13 @@ a `BasicEffect` subset (no lighting/fog), nearest-neighbor texturing, and a simp
 established backends yet. Worth revisiting as `plan_software.md`'s scope grows. See
 `docs/software-backend.md` for its current capability boundary.
 
+The **Stub** backend (`CNA_GRAPHICS_BACKEND=STUB`, tracked in `../plan_stub.md`) is, like Headless,
+**not** a column in this matrix and for the same reason: it never renders a single pixel. Unlike
+Headless, it also keeps no bookkeeping at all (no counters, no validation modes, no trace log) — it
+exists purely as the smallest possible complete `IGraphicsBackend` implementation, a minimal
+reference and a dependency-free placeholder, not a pixel-parity or diagnostic tool. See
+`docs/stub-backend.md` for its current capability boundary.
+
 **Supersedes `docs/coverage.md`**, which is dated 2026-06-21
 and predates almost this entire session's work
 (dozens of real bugs fixed across all 4 backends, an entire SDL_Renderer 2D-only audit phase,
