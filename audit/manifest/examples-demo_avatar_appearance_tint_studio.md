@@ -6,6 +6,6 @@ Files in this shard: **3**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_avatar_appearance_tint_studio/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_avatar_appearance_tint_studio/src/Main.cpp.audit.md) |
-| 2 | `examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.cpp` | PENDING | [TintStudioDemo.cpp.audit.md](../examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.cpp.audit.md) |
-| 3 | `examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.hpp` | PENDING | [TintStudioDemo.hpp.audit.md](../examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.hpp.audit.md) |
+| 1 | `examples/demo_avatar_appearance_tint_studio/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_avatar_appearance_tint_studio/src/Main.cpp.audit.md) |
+| 2 | `examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.cpp` | AUDITED | [TintStudioDemo.cpp.audit.md](../examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.cpp.audit.md) |
+| 3 | `examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.hpp` | AUDITED | [TintStudioDemo.hpp.audit.md](../examples/demo_avatar_appearance_tint_studio/src/TintStudioDemo.hpp.audit.md) |
