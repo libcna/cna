@@ -1644,3 +1644,34 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   memory/resource risk patterns" above) -- neither file exercises `SetBackendForTesting()` racing a
   live call the way the confirmed bug requires, consistent with that bug being found via direct code
   reading in this audit rather than by the project's own existing test suite.
+- **CONFIRMED, two of the `xna-graphics` shard's HIGH findings are not merely untested by
+  `tests-xna-graphics` but actively BAKED IN as the asserted-correct expected behavior:**
+  - **`EffectParameterTests.cpp`'s `SetValueTransposeRawLayoutDiffersFromSetValue`** asserts the
+    exact inverse of real FNA's `SetValue`/`SetValueTranspose` storage convention as correct --
+    independently re-verified against FNA's actual `EffectParameter.cs` source. The sibling
+    `EffectAnnotationTests.cpp`'s `GetValueMatrixRoundTrip` gets the identical convention right,
+    confirming (as the production-code audit already concluded) that the right convention was known
+    and correctly applied elsewhere in this same codebase -- this looks like a transcription slip
+    that then got its own matching (wrong) test written against it, not a deliberate design choice.
+  - **`GraphicsExceptionTests.cpp`** has 6 tests explicitly asserting `DeviceLostException`/
+    `DeviceNotResetException`/`NoSuitableGraphicsDeviceException` inherit/catch as
+    `std::runtime_error`, contradicting the already-confirmed finding that these three should derive
+    from `System::Exception` instead. Fixing either production bug now requires updating the
+    corresponding tests in the same change, not just the implementation.
+  - Both are now added to this audit's "test suite bakes in the bug" pattern, alongside the earlier
+    `GamerServicesDataTests.cpp` (`PropertyDictionary` raw-`std::`-exception assertions, `tests-xna-
+    gamerservices`/`tests-xna-net` shard) instance -- a recurring shape worth watching for
+    specifically whenever a production exception-type or math-convention finding is cross-checked
+    against its own test file.
+- **Confirmed clean, by exhaustive design intent**: 8 of the 10 `xna-graphics` production findings
+  are simply *missed* by `tests-xna-graphics` (no test constructs the triggering scenario at all)
+  rather than actively baked in -- including the `SpriteFont`/`SpriteBatch` default-character UB, the
+  `SpriteEffects` combined-flags OOB read (confirmed the shared `RecordingSpriteBatchBackend.hpp`
+  test double would faithfully capture such a call if one existed -- a missing test case, not a
+  tooling gap), `EffectParameter.Elements`/`StructureMembers`, `BasicEffect.Parameters`,
+  `VertexBuffer`/`IndexBuffer`'s missing destination offset, `PackedVector` truncate-vs-round (only
+  exact-integer/zero test inputs used for `Byte4`/`Short2`/`Short4`), `VertexPositionColor`'s missing
+  `IVertexType`, and `RenderTargetCube`'s missing `Dispose(bool)` fix. `Texture2DTests.cpp` (1085
+  lines, the shard's largest/most rigorous file) also has zero test for `GetTypeName()`, confirming
+  by total absence the already-flagged production defect there, while sibling `Texture3DTests.cpp`/
+  `TextureCubeTests.cpp` both correctly test it.
