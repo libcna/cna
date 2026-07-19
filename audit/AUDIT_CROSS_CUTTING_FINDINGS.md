@@ -1630,3 +1630,17 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   dependency-injected fake backends (`SetSystemDeviceBackendForTests`/`SetSystemPowerBackendForTests`/
   `SetSystemSensorBackendForTests`) to get deterministic coverage of OS-facing NOXNA singletons without
   relying on CI having predictable real hardware.
+
+## Test-coverage gaps for already-confirmed production defects
+
+- **`ContentReaderExternalReferenceTests.cpp` has no test for the confirmed HIGH
+  `ContentReader::ReadExternalReference<T>()` absolute-path-escape gap** (`ContentReader.hpp`/`.cpp`,
+  `xna-content` shard) -- every existing test constructs a relative (`..`-style) escape attempt, none
+  an absolute-path one, so the test suite would not have caught this finding on its own. A sibling
+  resolver, `CnjSourceFileSafetyTests.cpp`, already has a working, tested containment pattern that
+  could inform a fix.
+- **`tests/CNA/Devices/FileDialogTests.cpp` and `MessageBoxTests.cpp` both lack a concurrent-
+  backend-swap test for the confirmed use-after-free** (`FileDialog.cpp`/`MessageBox.cpp`, "Recurring
+  memory/resource risk patterns" above) -- neither file exercises `SetBackendForTesting()` racing a
+  live call the way the confirmed bug requires, consistent with that bug being found via direct code
+  reading in this audit rather than by the project's own existing test suite.
