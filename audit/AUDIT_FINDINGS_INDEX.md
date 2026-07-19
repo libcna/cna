@@ -1,13 +1,16 @@
 # AUDIT_FINDINGS_INDEX.md
 
-**Status: POPULATED (Pass 5, rebuilt 2026-07-19; extended with Pass 3/6 findings same day).** This index
-consolidates every `MEDIUM`+ finding (and recurring `LOW`s) from the entire repository-wide audit — all 2297
-files across 105 shards, plus Pass 3's API-surface-completeness sweep (Graphics/Net/GamerServices/Xact-Audio
-namespaces vs. the real xn65 XML reference) and Pass 6's opportunistic EasyGL build/CTest sweep. It supersedes an
-earlier partial draft that only covered the first few graphics-backend batches; the fuller narrative for every
-entry below, including every incremental "confirmed in N more backends" update as the investigation progressed,
-lives in `AUDIT_CROSS_CUTTING_FINDINGS.md` (~2170 lines) and each finding's own `audit/<path>.audit.md` report.
-Entries below are deduplicated to their final, fully-confirmed state — e.g. the fog-formula bug went through
+**Status: POPULATED AND COMPLETE (rebuilt 2026-07-19; Pass 3 and Pass 6 both fully closed out same
+day).** This index consolidates every `MEDIUM`+ finding (and recurring `LOW`s) from the entire
+repository-wide audit — all 2297 files across 105 shards, Pass 3's complete API-surface-completeness
+sweep (every real `Microsoft.Xna.Framework.*` namespace vs. the real xn65 XML reference, ~2700+
+members checked), and Pass 6's complete build/runtime-test sweep of all 14 real graphics backends
+(EasyGL, Canvas, D3D9, D3D11, D3D12, Dx3, WebGPU, Vulkan, SdlGpu, Bgfx, SdlRenderer, Software, Ascii,
+Headless). It supersedes an earlier partial draft that only covered the first few graphics-backend
+batches; the fuller narrative for every entry below, including every incremental "confirmed in N
+more backends" update as the investigation progressed, lives in `AUDIT_CROSS_CUTTING_FINDINGS.md`
+(~2500 lines) and each finding's own `audit/<path>.audit.md` report. Entries below are deduplicated
+to their final, fully-confirmed state — e.g. the fog-formula bug went through
 ~4 "UPDATE" rounds as more backends were checked; there is one entry for it here, not four.
 
 No `CRITICAL` findings were confirmed anywhere in this audit.
@@ -18,11 +21,27 @@ of this audit** (see `CLAUDE.md`/audit prompt "No-development rule").
 ## By severity
 
 ### CRITICAL
-_(none recorded yet)_
+
+- **Malformed/mutated `.xnb` `Texture2D` content crashes the process on BOTH Vulkan and WebGPU**
+  (`XnbContainerFuzzTest.MutatedRealTexture2DFixtureNeverCrashesAndOnlyFailsCleanly`) — likely the
+  single most severe finding of this entire audit. Confirmed clean on EasyGL. Two independent,
+  structurally different root causes converging on the same shape: XNB-decoded
+  `width`/`height`/`mipLevels` are trusted and passed directly into a native GPU API with no
+  CNA-side sanity check. **Vulkan**: real `*** stack smashing detected ***` — `VulkanTextureBackend`'s
+  constructor drives `vkCreateImage` from unvalidated dimensions; the driver accepts
+  grossly-out-of-spec values the validation layer only warns about, corrupting the stack downstream.
+  **WebGPU**: a fatal, non-catchable Rust panic across the wgpu-native FFI boundary —
+  `GenerateMipsForLayer()` checks `wgpuTextureCreateView()`'s synchronous return for `nullptr`, but
+  wgpu-native validates the view's `baseMipLevel` *lazily* at `wgpuQueueSubmit()` time, past the
+  existing check entirely. Real crash-DoS security exposure via any corrupted, truncated, or
+  maliciously-crafted `Texture2D` asset loaded from disk, mods, or network transfer — on either
+  backend. Suggested fix: validate decoded dimensions/mip-count against real device limits
+  immediately after XNB decode, in shared `Texture2D`/`Texture2DContentTypeReader` code, not
+  per-backend. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6 continued).
 
 ### HIGH
 
-**Testing infrastructure / CI (Pass 6, new this pass):**
+**Testing infrastructure / CI (Pass 6):**
 
 - **`gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` has no `WORKING_DIRECTORY` override,
   breaking ~220 fixture-file-loading tests invisibly to every existing CI workflow.** Confirmed via
@@ -35,11 +54,55 @@ _(none recorded yet)_
   that never runs the general/default test set this bug affects — meaning these ~220 tests have
   likely never once passed in any CI run this project has had, not because they're known-broken and
   excluded, but as a side effect of CI's narrow labeled-subset structure combined with this
-  registration gap. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+  registration gap. Independently confirmed twice (two separately-dispatched investigations found
+  the identical root cause), and reconciled against this project's own existing, narrower-scoped
+  awareness that `ctest` is unreliable for the general suite (a `/tmp`-scratch-path race under
+  parallelism, `plan_audio.md` P9-BUILD-007) — this is a third, previously-undocumented, more
+  fundamental, and more impactful reason, not a duplicate of the known one. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+- **`cna_demo_xact`'s Content-copy build step fails on every backend, confirmed universal across 6
+  independently-built backends this session.** `cmake/Examples.cmake` registers an unconditional
+  `POST_BUILD` step copying `examples/demo_xact/Content`, which does not exist anywhere in the
+  repository — aborts the whole top-level `cmake --build` invocation regardless of backend. Silently
+  also broke this session's own earlier EasyGL build, unnoticed because a `| tail` pipe masked the
+  real exit code. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6, Bgfx section).
+- **`MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` SEGFAULTs, now confirmed universal
+  across 6+ backends** (EasyGL, SdlRenderer, Software, Ascii, Headless, and structurally implicated
+  elsewhere) — a real, backend-independent robustness bug in shared CPU-side object-graph-walking
+  code, not an EasyGL-specific artifact. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
 - **EasyGL: `SetRenderTargets` with 2 attachments only draws to the first one** — confirmed
   reproducible in complete isolation (`EasyGL_MRT_TwoAttachments`): left attachment correctly green,
   right attachment stays black instead of the expected blue. A real, previously-undisclosed defect
   in a documented XNA 4.0 feature (multiple render targets), not an untested edge case. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+- **D3D11: 2 new runtime-confirmed defects** — (a) Blinn-Phong specular fails for non-skinned
+  `lit_textured3d` at a `dot(H,N)=1` geometry while the structurally identical `skinned3d` specular
+  check at the same geometry passes (a genuine asymmetry, not yet root-caused to a specific shader
+  line); (b) `skinned3dvertexlitcolored` produces green instead of the expected black for an
+  explicitly black-colored vertex, meaning vertex color is not correctly applied for the
+  skinned+vertex-lit+vertex-color effect combination. Both confirmed genuine via real DXVK-backed
+  execution (not a WineD3D fallback). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+- **D3D12: a real testing-coverage gap** — only ONE CTest exists for this entire backend
+  (`D3D12_Smoke`), so this audit's two most significant D3D12 static-review findings (Stencil/
+  Scissor/DepthBias inertness; `OcclusionQuery` multi-draw overwrite) have no dedicated test to
+  confirm or refute at runtime — a gap distinct from the bugs themselves. `D3D12_Smoke` itself is
+  exceptionally rigorous (220/220 checks pass under real vkd3d-proton) but doesn't reach either bug's
+  actual trigger condition. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+- **SdlGpu: custom `ShaderEffect`/CNJ GLSL content that works on EasyGL is rejected outright** by
+  SdlGpu's stricter SPIR-V-based shader pipeline (missing `#version 310 es`+, missing explicit
+  `location` qualifiers, non-block uniforms) — a real cross-backend compatibility gap for
+  user-authored effect content, not merely a test-fixture issue. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+- **Bgfx: XNA's real default cull mode (`CullCounterClockwiseFace`) fails to cull anything** —
+  confirmed via 2 independent test files, ruling out coincidence. Concrete root-cause hypothesis: the
+  same `glFrontFace`-relativity issue already discovered and fixed for stencil (Task 763) may also
+  apply to culling, just not yet fixed there. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+- **Task 868 (Vulkan `BlendState` hardcoding) is CONFIRMED FIXED, correcting this audit's own
+  earlier static-review finding** — all 6 blend-state test executables now pass cleanly, including
+  every case the documented per-check failure predictions said should fail. `ApplyBlendState`'s own
+  source comment confirms the fix landed since this audit's static review.
+  `AUDIT_GRAPHICS_BACKEND_MATRIX.md`'s Stencil+Scissor+DepthBias row and `cmake/Tests/
+  VulkanTests.cmake`'s own per-check predictions need updating. See
   `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
 
 **Graphics backends and shared XNA-facing graphics code:**
@@ -399,17 +462,58 @@ _(none recorded yet)_
   uses MIT + an explicit copyright line, diverging from every other CNA-original NOXNA file's plain MS-PL; all
   three `xna-storage` file pairs have an *intra-pair* mismatch (`.hpp` MS-PL, `.cpp` MIT+copyright).
 
+**Pass 6 continued — new MEDIUM findings (build/test verification, all 14 backends):**
+
+- **Vulkan: `SkinnedEffect`+Fog renders completely black, including the fog-disabled control case**
+  — not the already-documented mirrored-fog-formula bug (which produces a wrong-but-non-black
+  color); an apparent silent pipeline-creation or descriptor-binding failure in the skinned3d+fog
+  pipeline specifically. Not root-caused further.
+- **Texture3D content-reader round-trip returns all-zero/garbage data instead of real pixel
+  values**, reproduced identically on Software AND Headless (possibly SdlRenderer too) — likely
+  shared CPU-side code (the XNB/CNJ Texture3D reader, or `Texture3D`'s own generic
+  `GetData`/`SetData` path), not a per-backend GPU-texture defect. Not yet checked on
+  EasyGL/Vulkan/other backends.
+- **`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` fails identically on 5 backends now**
+  (Vulkan, SdlGpu, Bgfx, Software, Headless) — for Vulkan/SdlGpu/Bgfx this is a confirmed
+  test-authoring bug (the test wrongly hardcodes an EasyGL/GLES3-specific limitation as universal;
+  these 3 backends genuinely support wireframe). For Headless specifically (which does zero real
+  GPU work yet reports `true`), the direction is less clear — may indicate a shared
+  `IGraphicsBackend` default capability flag rather than 5 independent per-backend mistakes.
+- **`SDL_Renderer_FullscreenToggle` crashes with an uncaught `std::runtime_error`**
+  ("`ReadBackbuffer`: physical/logical size mismatch") during a fullscreen toggle, terminating the
+  whole test process instead of failing as a clean, catchable assertion.
+- **`docs/webgpu-backend.md`'s `WebGPU_Msaa` "intentionally left failing" characterization is
+  stale** — directly confirmed passing 100%; the underlying test-authoring bug (missing
+  `RasterizerState::CullNone`) was already fixed 2026-07-18 (`WEBGPU-58`). Separately,
+  `CLAUDE.md`'s own WebGPU capability summary now *understates* the backend relative to
+  `docs/webgpu-backend.md` and the confirmed-working 23/23 test suite (real PbrEffect/
+  SkinnedEffect/EnvironmentMapEffect/instancing/RenderTarget all working, not just the documented
+  "Texture2D/SpriteBatch baseline") — understating, not overclaiming, but still worth syncing.
+- **All 16 concrete `PackedVector` types entirely lack `Equals()`/`GetHashCode()`/`ToString()`**
+  (Pass 3) — confirmed present and non-trivial in FNA, and confirmed present on sibling value types
+  elsewhere in CNA (`GamePadState`/`MouseState`/`KeyboardState`/`Vector2`/`Color`), making this an
+  isolated CNA gap in one type family, not a project-wide convention or an FNA-inherited omission.
+  `operator==`/`!=` cover direct comparisons, so nothing is silently wrong — but code using a
+  `Byte4`/`Short2`/etc. in a hash-based container, or debug-printing one, simply won't compile.
+
 **Resolved standing investigations:**
 
-- **`Dx3_SpriteBatch`'s 2/10-failing-checks (persistent project memory) resolved as two different natures.**
-  Check D (zero-alpha blend): confirmed test-authoring bug — the fixture uses a non-premultiplied
-  `Color(255,0,0,0)` under `BlendState::AlphaBlend` (a premultiplied-convention preset); one fork hand-derived
-  the real result as `(255,6,7)`, not the asserted "destination untouched." Check G (180° rotation): test math
-  independently re-derived and confirmed sound — a failure here means a genuine DX3 rotation-handling defect.
-  See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`Dx3_SpriteBatch`'s 2/10-failing-checks (persistent project memory) — EMPIRICALLY CONFIRMED in
+  Pass 6, not just statically predicted.** Both hypotheses now directly verified by running the
+  actual binary: Check D (zero-alpha blend) fails, confirming the test-authoring-bug hypothesis (the
+  fixture uses a non-premultiplied `Color(255,0,0,0)` under `BlendState::AlphaBlend`, a
+  premultiplied-convention preset — hand-derived real result `(255,6,7)`, not the asserted
+  "destination untouched"). Check G (180° rotation) fails, confirming the real-backend-defect
+  hypothesis (test math independently re-derived and confirmed sound). New lead: the rotation
+  formula is a byte-for-byte verbatim port of `SoftwareGraphicsBackend.cpp`'s identical code —
+  possibly a shared, inherited defect rather than Dx3-specific. See `AUDIT_CROSS_CUTTING_FINDINGS.md`
+  (Pass 6).
 - **D3D11/D3D12's fog tests use `World=View=Projection=Identity`, so they cannot distinguish correct
   view-space fog from the already-confirmed EasyGL-class "object-space-only" bug** — a test blind spot, not a
-  confirmation either way for these two backends.
+  confirmation either way for these two backends. Empirically re-confirmed in Pass 6: D3D11's
+  fog-at-boundary checks pass, as expected, since both the correct and mirrored formulas saturate
+  identically at the exact `Z=FogEnd` boundary sampled — this does not contradict the mirrored-formula
+  finding.
 
 ### LOW
 
