@@ -170,9 +170,9 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 |---|---|---|
 | [`build-ci`](manifest/build-ci.md) | 3 | PENDING: 0 / AUDITED: 3 (complete) |
 | [`build-cmake`](manifest/build-cmake.md) | 13 | PENDING: 0 / AUDITED: 13 (complete) |
-| [`build-cmake-tests`](manifest/build-cmake-tests.md) | 14 | PENDING: 14 / AUDITED: 0 |
+| [`build-cmake-tests`](manifest/build-cmake-tests.md) | 14 | PENDING: 0 / AUDITED: 14 (complete) |
 | [`build-root`](manifest/build-root.md) | 5 | PENDING: 0 / AUDITED: 5 (complete) |
-| [`scripts`](manifest/scripts.md) | 12 | PENDING: 11 / AUDITED: 1 |
+| [`scripts`](manifest/scripts.md) | 12 | PENDING: 0 / AUDITED: 12 (complete) |
 
 ## EXEMPT files (by reason)
 
