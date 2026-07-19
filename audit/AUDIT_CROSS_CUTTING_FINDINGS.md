@@ -1132,6 +1132,34 @@ _(pending)_
   pattern. See `include/Microsoft/Xna/Framework/Input/GamePadState.hpp.audit.md` and
   `include/Microsoft/Xna/Framework/Input/MouseState.hpp.audit.md`.
 
+- **`xna-media` shard note: FNA is a complete (or near-complete) stub for a large fraction of this
+  namespace -- confirmed by direct source inspection, not assumption.** `MediaLibrary`, `Album`,
+  `Artist`, `Genre`, `AlbumCollection`, `ArtistCollection`, `GenreCollection`, `Picture`,
+  `PictureAlbum`, `PictureCollection`, `PictureAlbumCollection`, `Playlist`, `PlaylistCollection`,
+  and `MediaSource` all have every (or nearly every) member throw `NotImplementedException` in
+  real FNA source (verified via `grep -c NotImplementedException` against each file). This means
+  FNA cannot serve as a behavioral reference for this whole family -- CNA provides a genuine,
+  from-scratch, real implementation of documented XNA 4.0 API surface FNA itself never implements
+  on desktop. This is consistent with, and now considerably extends, this project's own established
+  feedback that "FNA is NOT authoritative for API surface" (previously established for
+  `Song.Album`/`Artist`/`Genre`/`ToString`, confirmed again directly in this pass: FNA's real
+  `Song.cs` genuinely has none of those four members). By contrast, `Song`, `SongCollection`,
+  `MediaPlayer`, `MediaQueue`, `Video`, `VideoPlayer`, and `VisualizationData` ARE genuinely
+  implemented in FNA and were directly, successfully diffed against it in this pass (`MediaPlayer::NextSong()`'s
+  repeat/shuffle/clamp logic verified line-for-line identical). Future audit/maintenance work on
+  this namespace should consult real XNA 4.0 documentation (or the xn65 reference), not FNA source,
+  for the stub-only types' correct behavior.
+
+- **`MediaLibrary::SavePicture(name, Stream* source)` assumes a single `Read()` call fills the
+  whole buffer, violating this project's own `System::IO::Stream::Read()` interface, which
+  explicitly documents a single call may return fewer bytes than requested.** The return value is
+  discarded entirely; for any `Stream` subclass that legitimately returns a partial read (a real,
+  interface-permitted case), the trailing portion of the buffer stays zeroed and is silently saved
+  as if it were the complete image -- a genuine, confirmed defect, not an FNA-parity gap (FNA has no
+  equivalent method to compare against, since `MediaLibrary` is a stub there). See
+  `include/Microsoft/Xna/Framework/Media/MediaLibrary.hpp.audit.md` and
+  `src/Microsoft/Xna/Framework/Media/MediaLibrary.cpp.audit.md`.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
