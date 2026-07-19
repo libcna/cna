@@ -52,7 +52,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`xna-audio`](manifest/xna-audio.md) | 31 | AUDITED: 31 / PENDING: 0 (complete) |
 | [`xna-content`](manifest/xna-content.md) | 15 | AUDITED: 15 / PENDING: 0 (complete) |
 | [`xna-framework-core`](manifest/xna-framework-core.md) | 78 | AUDITED: 78 / PENDING: 0 (complete) |
-| [`xna-gamerservices`](manifest/xna-gamerservices.md) | 89 | PENDING: 89 / AUDITED: 0 |
+| [`xna-gamerservices`](manifest/xna-gamerservices.md) | 89 | AUDITED: 89 / PENDING: 0 (complete) |
 | [`xna-graphics`](manifest/xna-graphics.md) | 191 | PENDING: 191 / AUDITED: 0 |
 | [`xna-input`](manifest/xna-input.md) | 44 | AUDITED: 44 / PENDING: 0 (complete) |
 | [`xna-media`](manifest/xna-media.md) | 45 | AUDITED: 45 / PENDING: 0 (complete) |

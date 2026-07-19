@@ -1214,3 +1214,74 @@ _(pending)_
   and/or a sibling-repo `DEFERRED.md` item number for every claimed FNA-stub-versus-restored-behavior
   distinction, rather than an unverifiable bare assertion -- the strongest practical substitute available
   given the total absence of an FNA reference for this namespace.
+
+## Per-shard notes: `xna-gamerservices`
+
+- **`xna-gamerservices` shard note: FNA has zero reference material here too**, the identical situation to
+  `xna-net` (confirmed via `find` -- no `Achievement`/`Leaderboard`/`Avatar`/`Guide`/`GamerServices` files
+  anywhere in the local FNA tree). All 89 files (`Achievement`/`Leaderboard` family, `Avatar` family, `Gamer`/
+  `GamerCollection`/`GamerPresence`/`GamerPrivilege*`/`GamerProfile` core, `SignedInGamer`/`FriendGamer`
+  family, `GamerServicesComponent`/`GamerServicesDispatcher` infrastructure, exception types, and `Guide` +
+  misc enums) were audited across six parallel passes. Four MEDIUM findings surfaced; no HIGH/CRITICAL.
+- **MEDIUM: `GamerPresence.cpp`'s `presenceModeStrings_` display-string table is sorted alphabetically, not
+  indexed to `GamerPresenceMode`'s declared enum ordinals -- `setPresenceModeProperty()` indexes it by raw
+  enum value, so 59 of the 60 modes resolve to the wrong display string** (e.g. `None` -> "Arcade Mode",
+  `CornflowerBlue` -> "Won the Game" -- verified programmatically, not just by inspection). Currently
+  dormant/no observable effect (no public getter exposes the resolved string, and its only consumer,
+  `SetPresenceModeStringEXT`, is a permanent no-op) but would become a live, silent, wrong-everywhere bug
+  the instant either half gets a real implementation. See
+  `src/Microsoft/Xna/Framework/GamerServices/GamerPresence.cpp.audit.md`.
+- **MEDIUM: `GamerServicesComponent` (a concrete `System::Object`/`GameComponent`-derived class) does not
+  override `GetTypeName()`** -- confirmed it silently reports `GameComponent`'s own literal
+  `"Microsoft.Xna.Framework.GameComponent"` instead of
+  `"Microsoft.Xna.Framework.GamerServices.GamerServicesComponent"`. Confirmed not a project-wide gap: the
+  sibling `DrawableGameComponent` correctly overrides it, making this a specific, isolated miss on this one
+  type. See `include/Microsoft/Xna/Framework/GamerServices/GamerServicesComponent.hpp.audit.md`.
+- **MEDIUM: `GuideAlreadyVisibleException` is fully implemented and unit-tested but is dead code in
+  production** -- the real "a Guide UI is already pending" guards inside `Guide::BeginShowMessageBox`/
+  `BeginShowKeyboardInput` throw a generic `System::InvalidOperationException` instead of this dedicated,
+  purpose-built exception type (confirmed via grep: never constructed/thrown anywhere outside its own
+  declaration and its own test file). See `include/Microsoft/Xna/Framework/GamerServices/Guide.hpp.audit.md`.
+- **MEDIUM: `PropertyDictionary`'s entire read-accessor surface (both `operator[]` overloads plus all eight
+  `GetValueXxx` methods -- nine methods total) throws raw `std::out_of_range`/`std::bad_any_cast` instead of
+  this project's own `System::Collections::Generic::KeyNotFoundException`/`System::InvalidCastException`.**
+  The single largest-blast-radius instance yet of this audit's recurring "raw `std::` exception instead of
+  the project's own sharp-runtime exception type" cross-cutting pattern (see the Systematic FNA parity
+  gaps / general findings above) -- one file, nine methods, all sharing the identical gap. See
+  `include/Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp.audit.md`.
+- **Positive, independently significant: `GamerCollection<T>` (the shared collection template underlying
+  `NetworkSession`'s/`NetworkMachine`'s gamer lists, already consumed by the `xna-net` shard) does NOT share
+  the sibling `xna-net` shard's `NetworkSessionProperties::Insert`/`RemoveAt` unchecked-iterator-arithmetic
+  bug.** Specifically checked given that prior finding: `operator[]` uses
+  `ArgumentOutOfRangeException::ThrowIfNegative`/`ThrowIfGreaterThanOrEqual`, its enumerator's `getCurrent()`/
+  `MoveNext()` both guard against null/out-of-range/post-`Dispose()` access, and `CopyTo` is likewise
+  checked -- every index-taking member is safe. `AchievementCollection`'s own `Insert`/`RemoveAt`/`operator[]`/
+  `CopyTo` are similarly fully and correctly bounds-checked with proper sharp-runtime exception types. Both
+  are recorded as positive counter-examples showing the `NetworkSessionProperties` bug is an isolated lapse,
+  not a systemic collection-type pattern in this codebase.
+- **Positive: `GamerServicesDispatcher::UpdateAsync()`'s "permanent no-op once initialized" claim -- the
+  load-bearing assumption behind the `xna-net` shard's `NetworkSessionAction` synchronous-completion fix --
+  is independently CONFIRMED true by direct source reading**, not merely plausible: `Update()`'s body is
+  genuinely empty, and `UpdateAsync()` is `if (isInitialized_) Update(); return isInitialized_;` with no
+  reset path once `GamerServicesComponent::Initialize()` sets `isInitialized_ = true` (FNA's own
+  `ProcessExit` reset hook is explicitly noted as intentionally omitted). This validates that the `xna-net`
+  shard's `NetworkSession::Create`/`Find`/`Join` polling-loop fix was solving a real, otherwise-infinite hang,
+  not a hypothetical one.
+- One LOW finding worth surfacing: `SignedInGamerCollection::operator[](PlayerIndex)` checks only the upper
+  bound (`id >= collection_.size() -> nullptr`), not the lower bound, before indexing -- reachable only via a
+  deliberately-misused explicit negative `static_cast` to `PlayerIndex` (the enum itself has no negative
+  named values), which is why this is LOW rather than MEDIUM despite superficially resembling the
+  `NetworkSessionProperties` shape.
+- Two more confirmed instances of the "async `Begin*` stores a callback but never invokes it" bug class
+  already fixed for `NetworkSession` in the `xna-net` shard (Task 12) were found already independently fixed
+  here too: `SignedInGamer::BeginAwardAchievement`/`BeginGetAchievements`. `Guide`'s own
+  `BeginShowMessageBox`/`BeginShowKeyboardInput` completion paths were also directly verified to NOT share
+  that bug, explicitly citing the `xna-net` fix as their own precedent for a capture-then-clear,
+  reentrancy-safe invocation order.
+- `AvatarRenderer`'s resource ownership was directly verified clean (non-owning `GraphicsDevice*`, a
+  `shared_ptr<SkinnedModelEXT>` for the shared mesh asset, and a `unique_ptr<SkinnedEffect>` released in
+  `Dispose()`), with three previously-tracked defect fixes (Task 1.5, 1.6, 11.6) confirmed present. Note for
+  a future pass: the actual joint-weight/bone-skinning math this project's memory records a multi-round
+  remediation history for (the "infinite slab" weight-blend bug, the reverted flat-cap garment redesign)
+  lives in `Graphics::SkinnedModelEXT::ComputeBoneTransformsEXT()` -- a different file, under the
+  `xna-graphics` shard (not yet started), not this shard's thin XNA-facing `AvatarRenderer` wrapper.
