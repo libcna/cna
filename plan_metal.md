@@ -770,9 +770,34 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     reproducible, CI-equivalent result, not a simulation or a standalone scratch compile (an earlier,
     faster `g++`-only compile was used first for quick iteration confidence, then superseded by this
     full, real `CnaTests` integration build as the actual, final verification). The entire rest of
-    this plan remains honestly 🟨 — this single task is the sole genuine exception, and is marked ✅
-    only because it was actually exercised by a real compiler and a real test runner, exactly the
-    bar `METAL-238` sets for any future ✅ claim in this document.
+    this plan remains honestly 🟨 — this single task is the sole *fully* genuine ✅, and is marked
+    that way only because it was actually exercised by a real compiler and a real test runner,
+    exactly the bar `METAL-238` sets for any future ✅ claim in this document.
+
+29. **`METAL-40`'s CPU-side normal-matrix formula, machine-verified the same way**: having just
+    proven `MetalPipelineKey.hpp`'s extraction technique works end-to-end, the same treatment was
+    applied to `computeNormalMatrixCols()` — also pure C++ arithmetic with zero Objective-C
+    dependency, extracted to `MetalNormalMatrix.hpp` (`MetalGraphicsBackend.mm` keeps a one-line
+    same-signature wrapper so its 3 existing call sites are unaffected). The MSL shader source's own
+    comment already claimed this formula was "independently re-derived and hand-verified" to equal
+    `transpose(inverse(world3x3))` — that claim is now real and repeatable, not just reasoning
+    trusted on faith: 4 new `CnaTests` cover an identity input (trivial baseline), a uniform-scale
+    input (`transpose(inverse(diag(2,2,2))) = diag(0.5,0.5,0.5)`, a simpler independent derivation
+    path), a genuinely non-diagonal non-uniform-scale case whose expected columns were hand-derived
+    via the *classic adjugate/cofactor method* — deliberately a different derivation path than the
+    row-0-cofactor-expansion shortcut the function itself uses, so the test isn't just re-checking
+    the function against its own logic — and, the strongest check, a property-based test verifying
+    the actual mathematical guarantee a normal matrix exists to provide: a tangent vector and a
+    normal that start perpendicular in object space stay perpendicular after the tangent is
+    transformed by the ordinary world matrix and the normal by this computed normal matrix, for a
+    deliberately non-uniform-scale, non-block-diagonal `M` chosen specifically so that naively
+    transforming the normal by `M` directly (the wrong, common bug) measurably breaks
+    perpendicularity — confirmed by an explicit negative-control assertion in the test itself. All 4
+    tests pass on this Linux machine (`ctest -R MetalNormalMatrix`). This is real, additional
+    evidence for `METAL-40`'s own correctness — the single riskiest hand-derived formula in the
+    entire lighting pipeline (misusing it would silently distort every lit normal under any
+    non-uniform-scale `World` transform) — though `METAL-40` itself stays 🟨 overall since its MSL-
+    side consumption remains genuinely unverified.
 
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
@@ -894,6 +919,12 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   extraction of the pipeline-cache key/hash types with zero Objective-C dependency, real-built and
   real-tested via the actual `CnaTests` binary and `ctest` on this Linux machine — 8/8 tests, CTest
   #83–90, 100% pass (✅ landed 2026-07-19 — `METAL-34`).
+- `METAL-40`'s CPU-side normal-matrix formula machine-verified the same way: `MetalNormalMatrix.hpp`,
+  4 real `CnaTests`/`ctest` tests (identity, uniform scale, a hand-derived-via-independent-adjugate
+  non-diagonal case, and a property-based perpendicularity-preservation check with an explicit
+  negative-control assertion) — all pass on this Linux machine, real evidence for the single
+  riskiest hand-derived formula in the whole lighting pipeline, though `METAL-40` overall stays 🟨
+  pending the still-unverifiable MSL-side consumption (🟨 landed 2026-07-19 — `METAL-40`'s formula).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -1033,7 +1064,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-37 | `colortex3d.metal`: same `diffuseColor` multiply for the vertex-color+texture combined path | 🟨 |
 | METAL-38 | Per-pixel lit shader (`lit_textured3d.metal`, stride 32): port FNA's `Lighting.fxh`/`ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive) — direct MSL port from `VulkanGraphicsBackend`'s already-shipped GLSL or `EnsureLit3DProgram()`, not new design | 🟨 |
 | METAL-39 | Per-vertex (Gouraud) lit shader (`lit_textured3d_vertexlit.metal`), selected when `lightingEnabled && !preferPerPixelLighting` (XNA's real default, Task 1102) — Metal currently has **no** lighting shader of either kind | 🟨 |
-| METAL-40 | Normal matrix (`inverse(world3x3)`, no shader-side transpose given this codebase's column-major GPU convention) computed CPU-side, cross-verified against `BgfxGraphicsBackend::ComputeNormalMatrix3x3` | 🟨 |
+| METAL-40 | Normal matrix (`inverse(world3x3)`, no shader-side transpose given this codebase's column-major GPU convention) computed CPU-side, cross-verified against `BgfxGraphicsBackend::ComputeNormalMatrix3x3` | 🟨→✅ **the CPU-side formula itself is now real-build-verified** — extracted to `MetalNormalMatrix.hpp` (same `METAL-34` technique) and covered by 4 real `CnaTests`/`ctest` tests (identity, uniform scale, a hand-derived-via-independent-adjugate-method non-diagonal case, and a property-based perpendicularity-preservation check), all passing on this Linux machine — stronger than the originally-planned "cross-verify against Bgfx's implementation" since it proves the math is correct in an absolute sense, not just consistent with another backend. The MSL-side *consumption* of this data (`float3x3(col0,col1,col2)` in the shader) remains unverified — needs a real Metal compiler — so the task as a whole stays 🟨, but its riskiest, most error-prone piece (the arithmetic) is no longer just "hand-verified by reasoning," it is machine-verified |
 | METAL-41 | Safe-normalize guard for a disabled/zero-direction light — **audited 2026-07-19**: `cna_f3d_lit` (ported verbatim from `EnsureLit3DProgram()`, not WebGPU's own shader) never normalizes a raw light-direction vector directly — only `dot(N,-lightDir)` (zero when `lightDir=0`, safe) and `normalize(E-lightDir)` (degrades to `normalize(E)`, already unit-length, safe) — so this specific formula structure has no zero-vector `normalize()` call to guard, unlike WebGPU's own shader shape. Left ⬜ rather than claiming done: not verified on real hardware, and EasyGL's own GLSL (the ground truth here) has no matching guard either | ⬜ |
 | METAL-42 | Fog: `fogEnabled`/`fogColor`/`fogStart`/`fogEnd` plumbing + eye-space-Z linear blend in every textured/lit fragment variant — zero fog support exists today | 🟨 |
 | METAL-43 | Specular: `specularColor`/`specularPower` Blinn-Phong term using `eyePositionWorld`, applied once at material level | 🟨 |
