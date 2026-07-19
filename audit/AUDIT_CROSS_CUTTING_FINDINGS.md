@@ -1496,21 +1496,30 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   FNA's own doc comments for those two values are internally swapped/contradictory — this port correctly did
   not copy that FNA documentation bug verbatim.
 
-## Recurring pattern: `NetworkSession*` `Dispose()`d but never `delete`d in example demos
+## Recurring pattern: `NetworkSession*` `Dispose()`d but never `delete`d
 
-- **CONFIRMED, 5 instances: `demo_qos_probe`, `demo_session_lifecycle_events`, `demo_gamer_roster_hud`,
-  `demo_session_browser`, `demo_simulated_network_conditions` all call `session_->Dispose()` in their
-  destructor/`main()` but never `delete session_`.** `NetworkSession`'s own class-level doc comment (`xna-net`
-  shard, audited this session) explicitly documents that the caller must `delete` the pointer separately once
-  done with it, since `Dispose()` deliberately does not `delete this`. Practically harmless in every instance
-  found (each process exits immediately afterward, so the OS reclaims the leaked allocation), but a
-  consistently-repeated gap across every Net-owning demo audited this session — worth fixing if any of these
-  demos is ever used as a copy-paste template for a longer-running application. **Positive counter-example
-  found in the same session**: `demo_gamer_profile_privileges`'s `ProfileGame` correctly `Dispose()`s **and**
-  `delete`s its owned `GamerProfile*` in both its destructor and its gamer-switching logic, proving the
-  correct pattern is well understood and achievable in this codebase's own demo suite — the `NetworkSession`
-  gap looks like a copy-pasted omission across the Net demo family specifically, not a project-wide habit.
-  See each demo's own `.audit.md` report (`examples/demo_*/src/*.audit.md`) for the individual instances.
+- **CONFIRMED, 10 files across two categories: 8 example demos (`demo_qos_probe`,
+  `demo_session_lifecycle_events`, `demo_gamer_roster_hud`, `demo_session_browser`,
+  `demo_simulated_network_conditions`, `demo_net_client_server_arena`,
+  `demo_gamerservices_dispatcher_watchdog`, `demo_net_avatar_sync`) AND 2 test/tool regression
+  harnesses (`tools/net/gamerservices_dispatcher_harness.cpp`, `tools/net/net_two_process_harness.cpp`
+  — the latter alone has roughly a dozen separate call sites) all call `session->Dispose()` but
+  never `delete session`.** This is now confirmed as a genuinely systemic, project-wide gap around
+  this one class's ownership contract specifically — not confined to throwaway example code, since
+  it also appears in the actual regression-test infrastructure spawned by real GTest suites
+  (`TwoProcessLoopbackTest.cpp`, `GamerServicesDispatcherHangRegressionTest.cpp`).
+  `NetworkSession`'s own class-level doc comment (`xna-net` shard, audited this session) explicitly
+  documents that the caller must `delete` the pointer separately once done with it, since
+  `Dispose()` deliberately does not `delete this`. Practically harmless in every instance found
+  (each process exits immediately afterward, so the OS reclaims the leaked allocation), but a
+  consistently-repeated gap worth fixing if any of these files is ever used as a copy-paste
+  template for a longer-running application. **Positive counter-example found in the same
+  session**: `demo_gamer_profile_privileges`'s `ProfileGame` correctly `Dispose()`s **and**
+  `delete`s its owned `GamerProfile*` in both its destructor and its gamer-switching logic, proving
+  the correct pattern is well understood and achievable in this codebase — the `NetworkSession` gap
+  looks like a specific, repeated omission around that one class, not a project-wide habit that
+  extends to every disposable type. See each file's own `.audit.md` report
+  (`examples/demo_*/src/*.audit.md`, `audit/tools/net/*.audit.md`) for the individual instances.
 
 ## Per-shard notes: `microsoft-devices`
 

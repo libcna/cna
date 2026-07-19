@@ -101,7 +101,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`tools-fna-reference`](manifest/tools-fna-reference.md) | 7 | PENDING: 7 / AUDITED: 0 |
 | [`tools-gltf-to-cnj`](manifest/tools-gltf-to-cnj.md) | 1 | PENDING: 1 / AUDITED: 0 |
 | [`tools-input-parity`](manifest/tools-input-parity.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`tools-net`](manifest/tools-net.md) | 2 | PENDING: 2 / AUDITED: 0 |
+| [`tools-net`](manifest/tools-net.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
 | [`tools-xna-oracle`](manifest/tools-xna-oracle.md) | 42 | PENDING: 42 / AUDITED: 0 |
 
 ## Examples — backend-named integration test executables (570 files)
