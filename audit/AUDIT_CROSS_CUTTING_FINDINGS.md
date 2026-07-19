@@ -1981,3 +1981,191 @@ the `xn65` reference tree has separate XML files for each
 scope to process. Extending this exact method to those namespaces is the natural continuation of
 Pass 3 and would very likely be similarly high-signal, given how clean this result was for the
 Graphics namespace specifically (2 genuine gaps out of 635 members checked).
+
+## Pass 3 continued: Systematic API-surface completeness sweep (Net / GamerServices / Xact-Audio)
+
+Same method as above (real xn65 Windows XNA 4.0 XML reference vs. CNA's actual declared headers),
+extended to three more namespaces.
+
+**`Microsoft.Xna.Framework.Net`** (180 raw XML entries -> 23 real types, ~120 members checked):
+**23/23 types present, all checked members present**, including every `NetworkSession` async
+Begin/End overload, `NetworkSessionProperties`' full `IList<int?>` explicit-interface surface,
+`AvailableNetworkSessionCollection`'s indexing/enumeration correctly inherited from its
+`ReadOnlyCollection<T>` base (not missing), and all 5 enum types' values matching exactly
+(`NetworkSessionEndReason`, `NetworkSessionJoinError`, `NetworkSessionState`, `NetworkSessionType`,
+`SendDataOptions`). One LOW convention finding: `NetworkSession::MaxSupportedGamers` (=31) and
+`MaxPreviousGamers` (=100) are both real XNA 4.0 fields (confirmed in the XML:
+`F:...NetworkSession.MaxSupportedGamers`/`.MaxPreviousGamers`) but are tagged `NOXNA` in CNA's
+header -- per this project's own `CLAUDE.md` convention, `NOXNA` should wrap only functionality
+that is NOT part of the real XNA 4.0 API, so tagging genuine XNA members this way is a
+mistagging, not a functional bug (the values themselves could not be cross-checked against FNA,
+which has no `Net` implementation at all -- consistent with this project's own standing note that
+FNA omits this entire namespace).
+
+**`Microsoft.Xna.Framework.GamerServices`** (272 raw XML entries -> 37 real types, ~200 members
+checked): **37/37 types present, zero gaps found at any level checked** -- the cleanest result of
+any namespace swept so far in Pass 3. Every `Gamer`/`GamerProfile`/`GamerPrivileges`/`Guide`/
+`SignedInGamer`/`LeaderboardReader`/`LeaderboardWriter`/`Achievement`/`AchievementCollection`/
+`PropertyDictionary`/`GamerServicesDispatcher`/`FriendGamer`/`FriendCollection`/`GameDefaults`/
+`LeaderboardIdentity`/`GamerPresence`/`GamerCollection<T>` member checked was present and
+correctly idiom-translated, including `AchievementCollection`'s dual `operator[](int)`/
+`operator[](const std::string&)` indexer overloads (real XNA's `Item(int)`/`Item(string)`),
+`SignedInGamerCollection::operator[](PlayerIndex)`, `SignedInGamer`'s `SignedIn`/`SignedOut`
+static events, and `GamerServicesDispatcher::InstallingTitleUpdate`. All 8 enum types checked
+(`GamerZone`, `MessageBoxIcon`, `NotificationPosition`, `RacingCameraAngle`, `GameDifficulty`,
+`ControllerSensitivity`, `GamerPrivilegeSetting`, plus a partial spot-check of the much larger
+`GamerPresenceMode`) have matching value sets.
+
+**`Microsoft.Xna.Framework.Audio`** (the XACT-specific subset only -- `Microsoft.Xna.Framework.
+Xact.xml` covers `AudioCategory`/`AudioEngine`/`AudioStopOptions`/`Cue`/`RendererDetail`/
+`SoundBank`/`WaveBank`, 75 raw entries -> 7 types, ~60 members checked; the much larger
+`SoundEffect`/`SoundEffectInstance`/`Microphone`/`DynamicSoundEffectInstance`/etc. surface lives
+in the main `Microsoft.Xna.Framework.xml` file, NOT swept in this pass -- a real scope gap, noted
+below): **7/7 types present.** `AudioEngine.ContentVersion` (=46), `Disposing` events on all 4
+disposable classes, and `Cue.Apply3D` all confirmed present and correct. **One genuine gap found,
+of a new kind not yet seen in this sweep**: `AudioCategory.ToString()` is a real XNA 4.0 member
+(confirmed in the XML) **missing from both CNA and FNA** -- unlike the earlier `DisplayMode.
+ToString()`/`TitleSafeArea` finding (present in FNA, simply never ported to CNA), this is a
+genuinely FNA-inherited gap: FNA's own `AudioCategory.cs` has no `ToString()` override either
+(only `Equals`/`GetHashCode`), so CNA correctly mirrors FNA's own incompleteness here rather than
+diverging from it. LOW severity -- `ToString()` omissions are rarely load-bearing, but worth
+recording as a distinct sub-pattern: "real XNA member, absent from FNA too" vs. "real XNA member,
+present in FNA, absent from CNA" are different root causes needing different fixes (the former
+needs new code written from the XNA spec directly, since there's no FNA implementation to port).
+
+**Confidence and remaining scope**: Net and GamerServices sweeps are as thorough as the original
+Graphics sweep (every member individually checked, not sampled). The Audio sweep only covers the
+XACT-specific subset (7 of the namespace's real types) -- `SoundEffect`, `SoundEffectInstance`,
+`DynamicSoundEffectInstance`, `Microphone`, `AudioListener`, `AudioEmitter`, and the top-level
+`Microsoft.Xna.Framework` namespace itself (`Game`, `GraphicsDeviceManager`-adjacent types, math
+types, etc.) all remain unswept by this method, along with `Content`, `Input` (Touch-specific XML
+exists separately from the already-audited `Input`), `Media`/`.Video.xml`, `Storage`, and
+`.Avatar.xml` (CNA's Avatar-related headers live under the `GamerServices` directory by
+organizational choice, but the real XNA Avatar API is documented in a separate assembly/XML --
+not cross-checked against that separate reference in this pass). Given how consistently clean
+these three sweeps have been (3 genuine gaps across ~965 combined members checked), extending
+further is very likely still worthwhile but has clearly diminishing urgency compared to the
+per-file behavioral findings already documented elsewhere in this file.
+
+## Pass 6: Build/test sanitizer evidence sweep (opportunistic)
+
+Built `CnaTests` for the EasyGL backend (`cmake --build cmake-build-debug -j4`, this project's own
+Linux default backend) and ran the full CTest suite twice: once at `-j8` (229+ tests reported
+failed/not-run, including an aborted-subprocess partway through -- clearly parallelism-contention
+noise, confirmed by re-running individual "failing" tests like `SongTest.ConstructorDoesNotThrowFor
+ExistingFile` and the entire `MediaPlayerTest`/`SongTest`/`VideoPlayerTest`/`VideoTest` group (84
+tests) in a single filtered process, where they all passed cleanly), then at `-j2` for 375.8s
+(**5754 total tests, 96% passed, 229 failed**) to get a reliable baseline. Only 3 backends were
+attempted (EasyGL was built and fully tested; Bgfx/Vulkan/SdlGpu/D3D9/D3D11/D3D12/Dx3 were not
+attempted in this pass due to time -- a natural continuation for a future opportunistic pass, not
+skipped for any environmental reason).
+
+### ROOT CAUSE, HIGH severity: `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` has no `WORKING_DIRECTORY` override -- breaks every fixture-file-loading test, invisibly to CI
+
+`cmake/UnitTests.cmake` (line 215) calls `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)`
+with no `WORKING_DIRECTORY` argument. CMake's own default for this is the target's own runtime
+output directory -- confirmed directly in the generated
+`cmake-build-debug/CnaTests[1]_tests.cmake`: **every one of the 5507 individually-discovered
+`CnaTests` cases** has `WORKING_DIRECTORY /rv/.../cnaaudit/cmake-build-debug` baked in, not the
+repo root where `tests/assets/**` actually lives (confirmed: `cmake-build-debug/tests/assets/media/
+music/` does not exist). Any test that loads a fixture file by a repo-root-relative path (e.g.
+`tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg`) throws a real
+`FileNotFoundException` when run via `ctest`, even though the exact same test passes cleanly when
+manually invoked with the repo root as its working directory (confirmed side-by-side for
+`SongTest.ConstructorDoesNotThrowForExistingFile`). This single registration gap fully explains
+essentially all 229 `-j2` failures: `AudioTagParserTest`, `MediaLibraryIndexTest`,
+`PictureLibraryIndexTest`, `PlaylistParserTest`, `SavedPictureStoreTest`, `ThumbnailGeneratorTest`,
+`VideoDecoderTest` (real video/audio fixture files), `ENetBackendTest`/`ENetDiscoveryServiceTest`
+(network-fixture-dependent subset), `LzxDecoderTest`/`LzxDecoderDifferentialTest`/
+`LzxDecoderFuzzTest`, every `*ContentTypeReaderTest`/`XnbBuiltInReaderRegistrationTest`/
+`XnbContainerFuzzTest` that loads a real `.xnb`/MonoGame fixture, `ContentManager*XnbTest`,
+`ContentReaderExternalReferenceTest`/`ContentReaderTest`, `DynamicSoundEffectInstanceTest`, and the
+entire `MediaLibraryTestFixture`/`SongCollectionTest`/`SongTest`/`VideoPlayerTest`/`VideoTest`
+group -- every one of these references a real fixture file under `tests/assets/**` by
+repo-root-relative path.
+
+**This is invisible to every existing CI workflow, not just unflagged.** All 3 GitHub Actions
+workflows in this repo (`build-ci` shard, already audited: `d3d-windows-ci.yml`,
+`devices-tests.yml`, `input-ci.yml`) invoke `ctest --test-dir build -L <label>` with a `-L`
+label filter (`D3D9`/`D3D11`/`D3D12`, devices-specific, or `input`) -- **none of the three ever
+runs the general/default `CnaTests` set this bug affects.** `--test-dir build` only changes where
+`ctest` looks for its own `CTestTestfile.cmake`; it does not override each individual test's own
+baked-in `WORKING_DIRECTORY` property, so even a hypothetical future unlabeled CI run would still
+hit this bug. Net effect: ~220 real unit tests covering Media/Audio-tag-parsing/Xnb-content-pipeline/
+ENet-networking/Lzx-decompression have likely **never once passed in any CI run this project has
+ever had**, not because they're known-broken and excluded, but because no CI workflow's label
+filter happens to include them and the underlying registration bug makes a full unfiltered run
+fail loudly enough that it may never have been attempted. Distinct from (though same family as) the
+already-documented "3+ confirmed currently-failing CTests with no `WILL_FAIL` annotation"
+CI-masking-risk pattern -- this is a structural gap in test *discovery*, not a single mis-registered
+test.
+
+**Suggested fix (report-only, no source changed per this audit's scope)**: add
+`WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"` to the `gtest_discover_tests(CnaTests ...)` call in
+`cmake/UnitTests.cmake`, matching the pattern already correctly applied to individual
+`add_test()`-registered golden-image tests in `cmake/Tests/EasyGLTests.cmake`/`VulkanTests.cmake`
+(already audited, confirmed correct) for the identical reason.
+
+### Derived finding, MEDIUM severity: `MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` SEGFAULTs rather than failing cleanly
+
+A genuinely separate robustness gap, currently only reachable because of the `WORKING_DIRECTORY`
+bug above: when the picture-library scan silently finds nothing (its expected root directory not
+resolving to a real path), `MediaLibraryTestFixture.RootHasTwoChildAlbums` fails cleanly
+(`root != nullptr` assertion, `root` is `NULL`) -- but the sibling test
+`ObjectGraphIsInternallyConsistent` **crashes with a real SIGSEGV** in the same fixture, confirmed
+reproducible via CTest's own `Exception: SegFault` classification. This means some code path
+downstream of the same null/empty scan result dereferences it without a null check, rather than
+failing as cleanly as its sibling test does. Worth a defensive-`nullptr`-check pass in whichever
+`MediaLibraryTestFixture`-adjacent helper walks the object graph, independent of fixing the
+root-cause `WORKING_DIRECTORY` bug (a genuinely malformed/incomplete real media library on a user's
+machine should also not crash the process).
+
+### NEW, HIGH severity: EasyGL `SetRenderTargets` with 2 attachments only draws to the first one
+
+`EasyGL_MRT_TwoAttachments` (Task 145: `SetRenderTargets({rt0,rt1})`, draw green to attachment0,
+verify left=green/right=blue) **fails reproducibly in complete isolation** (re-run alone via
+`ctest -R "^EasyGL_MRT_TwoAttachments$"`, not a parallelism artifact): `left=(0,255,0)` [correct,
+green] but `right=(0,0,0)` [expected blue, got black] -- the second render-target attachment never
+receives its draw output at all. This is a real, previously-undisclosed defect in EasyGL's
+multiple-render-target support (`GraphicsDevice.SetRenderTargets` with more than one binding), not
+merely an untested edge case -- MRT is a real, documented XNA 4.0 feature and this test was already
+registered and presumably passing at some point per its Task 145 comment, so this may be a
+regression rather than a day-one gap (not determined which, given this audit is static/point-in-time
+only, but `git log` on this file/the underlying `EasyGLGraphicsBackend.cpp` MRT code would settle
+it easily for whoever picks this up).
+
+### Confirmed, extends the existing CI-masking-risk list: `EasyGL_GraphicsDevice_ReferenceStencil`
+
+Already-known per its own in-source comment (Task 319/872: "confirmed a universal, not-Vulkan-
+specific gap; registered as a documented known failure") -- confirmed here to still genuinely fail
+(reproducible), and confirmed to have **no `WILL_FAIL` CTest property**, exactly the same
+undisclosed-to-CTest-despite-disclosed-in-comment pattern already documented for
+`EasyGL_AvatarRenderer_TintRouting`/`Bgfx_RenderTargetCube_DepthFormat`/
+`Bgfx_SkinnedEffect_WeightsPerVertex`. This raises the confirmed count of that specific pattern to
+4.
+
+### Out of scope, noted for context only (D-6): `easy-gl-resource-smoke-tests` subprocess abort
+
+A real assertion failure (`g_state.last_active_texture == 0x84C0`) in
+`/rv/data/development/github.com/openeggbert/easy-gl/tests/smoke/SmokeResourceTests.cpp` -- this is
+the sibling `easy-gl` repository's own test suite, explicitly out of scope per D-6 (external
+sibling-repo dependency, reference-only). Noted here only because it caused CTest to report a
+"Subprocess aborted" for this one entry; not a CNA finding.
+
+### Benign, expected: 4 hardware-gated sensor tests skipped
+
+`AccelerometerTests.FailedEventWatchRegistrationRollsBackAndReportsFailure`/
+`GetCurrentValuePropertyDoesNotThrowWhenSupported` and the equivalent 2 `GyroscopeTests` are
+reported "Skipped," consistent with this project's own established pattern of gracefully skipping
+hardware-dependent sensor tests when no real accelerometer/gyroscope device is present in the test
+environment (already confirmed elsewhere in this audit, `tests-cna-input`/`microsoft-devices`
+shards) -- not a finding.
+
+### What this pass did NOT do
+
+Did not build/test Bgfx, Vulkan, SdlGpu, D3D9, D3D11, D3D12, Dx3, WebGPU, SdlRenderer, Software,
+Ascii, or Canvas in this sitting -- EasyGL only. Did not run any sanitizer (ASan/UBSan/TSan) build
+at all -- every test run here was a plain, non-instrumented Debug build. Did not attempt to
+determine whether the `EasyGL_MRT_TwoAttachments` failure is a recent regression or a long-standing
+gap (no `git bisect`/blame performed, out of scope for a single opportunistic pass). Both are
+natural continuations of Pass 6 for a future session.
