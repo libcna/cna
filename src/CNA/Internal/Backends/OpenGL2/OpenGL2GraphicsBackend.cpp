@@ -465,6 +465,64 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         };
 
+        // GL_TEXTURE_CUBE_MAP (ARB_texture_cube_map, core since GL 1.3). CubeMapFace's own
+        // ordinals (PositiveX=0, NegativeX=1, PositiveY=2, NegativeY=3, PositiveZ=4,
+        // NegativeZ=5) already match GL_TEXTURE_CUBE_MAP_POSITIVE_X..NEGATIVE_Z's own
+        // consecutive enum values in the same order, so `GL_TEXTURE_CUBE_MAP_POSITIVE_X + face`
+        // needs no separate mapping table.
+        class TextureCubeBackend final : public ITextureCubeBackend
+        {
+        public:
+            GLuint id{};
+            int size{};
+            int levelCount{1};
+
+            TextureCubeBackend(int cubeSize, bool mipMap)
+                : size(cubeSize), levelCount(mipMap ? CalculateRenderTargetMipLevels(cubeSize, cubeSize) : 1)
+            {
+                glGenTextures(1, &id);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+                for (int face = 0; face < 6; ++face)
+                {
+                    int levelSize = size;
+                    for (int level = 0; level < levelCount; ++level)
+                    {
+                        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, GL_RGBA,
+                                    levelSize, levelSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                        levelSize = std::max(1, levelSize / 2);
+                    }
+                }
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, levelCount - 1);
+            }
+
+            ~TextureCubeBackend() override { if (id) glDeleteTextures(1, &id); }
+
+            void BindGL() const override { glBindTexture(GL_TEXTURE_CUBE_MAP, id); }
+
+            void SetData(int face, int level, int x, int y, int w, int h, const void* data, int /*dataLength*/) override
+            {
+                glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+                glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+            }
+
+            void GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+            {
+                int levelSize = size;
+                for (int i = 0; i < level; ++i) levelSize = std::max(1, levelSize / 2);
+                std::vector<uint8_t> full(static_cast<std::size_t>(levelSize) * levelSize * 4);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, id);
+                glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
+                auto* dst = static_cast<uint8_t*>(data);
+                for (int row = 0; row < h; ++row)
+                    std::memcpy(dst + static_cast<std::size_t>(row) * w * 4,
+                               full.data() + (static_cast<std::size_t>(y + row) * levelSize + x) * 4, w * 4);
+            }
+        };
+
         class VB final : public IVertexBufferBackend
         {
         public:
@@ -857,6 +915,11 @@ namespace CNA::Internal::Backends::OpenGL2
     std::unique_ptr<ITextureBackend> OpenGL2GraphicsBackend::CreateTexture(const ImageData& data) { return std::make_unique<Tex>(data); }
     std::unique_ptr<ISpriteBatchBackend> OpenGL2GraphicsBackend::CreateSpriteBatch() { return std::make_unique<Sprite>(this); }
     std::unique_ptr<IOcclusionQueryBackend> OpenGL2GraphicsBackend::CreateOcclusionQuery() { return std::make_unique<OcclusionQuery>(); }
+
+    std::unique_ptr<ITextureCubeBackend> OpenGL2GraphicsBackend::CreateTextureCube(int size, bool mipMap, int /*surfaceFormat*/)
+    {
+        return std::make_unique<TextureCubeBackend>(size, mipMap);
+    }
 
     std::unique_ptr<IRenderTargetBackend> OpenGL2GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)

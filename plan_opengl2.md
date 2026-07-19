@@ -228,8 +228,22 @@ possibilities of OpenGL 2"):
   backbuffer pixel count (`76800` for 320x240); a quad drawn entirely behind a nearer opaque one
   (real depth-test occlusion) reports exactly `0`. 4/4 PASS.
 
+## Status: TextureCube (2026-07-19, session 6 cont'd)
+
+- **Plain `TextureCube` implemented**: `GL_TEXTURE_CUBE_MAP` (`ARB_texture_cube_map`, core since
+  GL 1.3). `CubeMapFace`'s own ordinals (`PositiveX=0`..`NegativeZ=5`) already match
+  `GL_TEXTURE_CUBE_MAP_POSITIVE_X`..`NEGATIVE_Z`'s consecutive enum values in the same order, so
+  `GL_TEXTURE_CUBE_MAP_POSITIVE_X + face` needs no separate mapping table. Supports mipmaps (full
+  chain pre-allocated per face at construction, matching `RenderTarget`'s own approach).
+  No stock effect samples a cube map yet on this backend (`EnvironmentMapEffect` is still a
+  follow-up item), so `OpenGL2_TextureCube` verifies the storage/upload/readback round-trip
+  directly through `SetData()`/`GetData()` rather than a rendered pixel: all 6 faces hold their
+  own distinct color after a round-trip (proving the face-ordinal mapping is really per-face, not
+  all 6 landing on the same target), and a `mipMap=true` cube's level-0 round-trip still works.
+  3/3 PASS.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers seven CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers eight CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -245,6 +259,7 @@ possibilities of OpenGL 2"):
     pixel-verified. 8/8 PASS.
   - `OpenGL2_Presentation` -- FixedHeightDynamicWidth adapts to a real window resize. 4/4 PASS.
   - `OpenGL2_OcclusionQuery` -- exact GL_SAMPLES_PASSED pixel counts, visible and fully occluded. 4/4 PASS.
+  - `OpenGL2_TextureCube` -- SetData/GetData round-trip for all 6 faces + mipmap construction. 3/3 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -269,6 +284,8 @@ possibilities of OpenGL 2"):
   `SetSamplerAddressMode` -- both wired to real `glTexParameteri` calls.
 - `ReadBackbuffer` (pixel readback, enables automated pixel-exact testing).
 - Occlusion queries (real `GL_SAMPLES_PASSED` pixel counts).
+- `TextureCube` (`GL_TEXTURE_CUBE_MAP`, see `OpenGL2_TextureCube` above); not yet sampled by any
+  stock effect (`EnvironmentMapEffect` remains a follow-up item).
 - RenderTarget2D/FBO, including MSAA (resolve-on-unbind) and mipmap generation.
 - AlphaTestEffect, DualTextureEffect, and BasicEffect lighting (3 directional lights, ambient,
   specular, emissive) + fog (see `OpenGL2_Effects` above).
@@ -289,9 +306,9 @@ possibilities of OpenGL 2"):
   "no EasyGL dependency" OpenGL 2.1 backend.
 - `RenderTargetCube` -- only `RenderTarget2D` is implemented; `CreateRenderTargetCube` still
   returns `nullptr` (default).
-- Cube maps (plain `TextureCube`, not just render-target cube faces) and an EnvironmentMapEffect
-  subset where supported by OpenGL 2.1/extensions (`ARB_texture_cube_map` is core since GL 1.3,
-  so this is realistic on this backend, unlike PBR).
+- EnvironmentMapEffect subset (now that plain `TextureCube` exists, this is the remaining piece --
+  a reflection-mapping shader sampling `samplerCube`, plus `RenderTargetCube` above for
+  render-to-cube-map scenarios).
 - `Texture3D` -- `CreateTexture3D` still returns `nullptr` (default). `GL_EXT_texture3D` is
   widely available on GL 2.1 hardware; feasible.
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
