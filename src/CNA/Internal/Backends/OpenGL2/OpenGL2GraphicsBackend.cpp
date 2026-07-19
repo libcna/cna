@@ -1,8 +1,27 @@
 #include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
+// Windows' opengl32.dll only ever exports the ~350 GL 1.1 entry points (Microsoft never updated
+// its own ICD dispatch table beyond that) -- everything this backend calls beyond GL 1.1 (buffer
+// objects/GL 1.5, shaders/GL 2.0, multitexture/GL 1.3, framebuffer objects/ARB_framebuffer_object,
+// even glTexImage3D/glTexSubImage3D despite being spec-core since GL 1.2) must be resolved at
+// runtime via wglGetProcAddress there, or the link step fails outright with unresolved externals.
+// GL_GLEXT_PROTOTYPES's plain `extern`/GLAPI declarations (used on every other platform below)
+// only link because Linux/Mesa/GLX -- and macOS/other desktop GL ICDs -- export these symbols
+// directly for static linking; that is a convenience specific to those platforms' GL loader
+// model, not something Windows' opengl32.dll provides. SDL_GL_GetProcAddress() wraps
+// wglGetProcAddress portably; see LoadWin32GLExtensions() below, called once after context
+// creation. Deliberately NOT build/link-verified against a real Windows toolchain -- none is
+// available in this project's own dev/CI sandbox -- but every function pointer below uses the
+// STANDARD Khronos PFNGLxxxPROC typedef from glext.h (bundled as SDL3/SDL_opengl_glext.h,
+// included transitively by SDL_opengl.h below), not a hand-rolled signature, specifically to
+// minimize the chance of a silent type mismatch that only a real compile could otherwise catch.
+#if defined(_WIN32)
+#include <SDL3/SDL_opengl.h>
+#else
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL3/SDL_opengl.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -15,6 +34,142 @@ namespace CNA::Internal::Backends::OpenGL2
 {
     namespace
     {
+#if defined(_WIN32)
+        // One function pointer per GL entry point beyond GL 1.1 that this file calls -- see the
+        // file-header comment above for why this exists only on _WIN32. Grouped in the same order
+        // as LoadWin32GLExtensions() below assigns them, not alphabetically, so the two stay easy
+        // to diff against each other if a new GL call is ever added to this file.
+        PFNGLACTIVETEXTUREPROC glActiveTexture = nullptr;
+        PFNGLBLENDFUNCSEPARATEPROC glBlendFuncSeparate = nullptr;
+        PFNGLBLENDEQUATIONSEPARATEPROC glBlendEquationSeparate = nullptr;
+        PFNGLSTENCILFUNCSEPARATEPROC glStencilFuncSeparate = nullptr;
+        PFNGLSTENCILOPSEPARATEPROC glStencilOpSeparate = nullptr;
+        PFNGLSTENCILMASKSEPARATEPROC glStencilMaskSeparate = nullptr;
+        PFNGLTEXIMAGE3DPROC glTexImage3D = nullptr;
+        PFNGLTEXSUBIMAGE3DPROC glTexSubImage3D = nullptr;
+        PFNGLGENBUFFERSPROC glGenBuffers = nullptr;
+        PFNGLDELETEBUFFERSPROC glDeleteBuffers = nullptr;
+        PFNGLBINDBUFFERPROC glBindBuffer = nullptr;
+        PFNGLBUFFERDATAPROC glBufferData = nullptr;
+        PFNGLGENQUERIESPROC glGenQueries = nullptr;
+        PFNGLDELETEQUERIESPROC glDeleteQueries = nullptr;
+        PFNGLBEGINQUERYPROC glBeginQuery = nullptr;
+        PFNGLENDQUERYPROC glEndQuery = nullptr;
+        PFNGLGETQUERYOBJECTIVPROC glGetQueryObjectiv = nullptr;
+        PFNGLGETQUERYOBJECTUIVPROC glGetQueryObjectuiv = nullptr;
+        PFNGLCREATESHADERPROC glCreateShader = nullptr;
+        PFNGLDELETESHADERPROC glDeleteShader = nullptr;
+        PFNGLSHADERSOURCEPROC glShaderSource = nullptr;
+        PFNGLCOMPILESHADERPROC glCompileShader = nullptr;
+        PFNGLGETSHADERIVPROC glGetShaderiv = nullptr;
+        PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog = nullptr;
+        PFNGLCREATEPROGRAMPROC glCreateProgram = nullptr;
+        PFNGLDELETEPROGRAMPROC glDeleteProgram = nullptr;
+        PFNGLATTACHSHADERPROC glAttachShader = nullptr;
+        PFNGLBINDATTRIBLOCATIONPROC glBindAttribLocation = nullptr;
+        PFNGLLINKPROGRAMPROC glLinkProgram = nullptr;
+        PFNGLGETPROGRAMIVPROC glGetProgramiv = nullptr;
+        PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog = nullptr;
+        PFNGLUSEPROGRAMPROC glUseProgram = nullptr;
+        PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation = nullptr;
+        PFNGLUNIFORM1FPROC glUniform1f = nullptr;
+        PFNGLUNIFORM1FVPROC glUniform1fv = nullptr;
+        PFNGLUNIFORM1IPROC glUniform1i = nullptr;
+        PFNGLUNIFORM2FPROC glUniform2f = nullptr;
+        PFNGLUNIFORM2FVPROC glUniform2fv = nullptr;
+        PFNGLUNIFORM3FPROC glUniform3f = nullptr;
+        PFNGLUNIFORM3FVPROC glUniform3fv = nullptr;
+        PFNGLUNIFORM4FPROC glUniform4f = nullptr;
+        PFNGLUNIFORM4FVPROC glUniform4fv = nullptr;
+        PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv = nullptr;
+        PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv = nullptr;
+        PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray = nullptr;
+        PFNGLDISABLEVERTEXATTRIBARRAYPROC glDisableVertexAttribArray = nullptr;
+        PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer = nullptr;
+        PFNGLVERTEXATTRIB4FPROC glVertexAttrib4f = nullptr;
+        PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers = nullptr;
+        PFNGLDELETEFRAMEBUFFERSPROC glDeleteFramebuffers = nullptr;
+        PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer = nullptr;
+        PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D = nullptr;
+        PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer = nullptr;
+        PFNGLGENRENDERBUFFERSPROC glGenRenderbuffers = nullptr;
+        PFNGLDELETERENDERBUFFERSPROC glDeleteRenderbuffers = nullptr;
+        PFNGLBINDRENDERBUFFERPROC glBindRenderbuffer = nullptr;
+        PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage = nullptr;
+        PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glRenderbufferStorageMultisample = nullptr;
+        PFNGLGENERATEMIPMAPPROC glGenerateMipmap = nullptr;
+        PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer = nullptr;
+
+        // Called once, right after SDL_GL_MakeCurrent() in the constructor -- every function
+        // pointer above must be resolved before ensurePrograms() (or any other GL call in this
+        // file beyond GL 1.1) runs.
+        void LoadWin32GLExtensions()
+        {
+#define CNA_LOAD_GL(name) name = reinterpret_cast<decltype(name)>(SDL_GL_GetProcAddress(#name))
+            CNA_LOAD_GL(glActiveTexture);
+            CNA_LOAD_GL(glBlendFuncSeparate);
+            CNA_LOAD_GL(glBlendEquationSeparate);
+            CNA_LOAD_GL(glStencilFuncSeparate);
+            CNA_LOAD_GL(glStencilOpSeparate);
+            CNA_LOAD_GL(glStencilMaskSeparate);
+            CNA_LOAD_GL(glTexImage3D);
+            CNA_LOAD_GL(glTexSubImage3D);
+            CNA_LOAD_GL(glGenBuffers);
+            CNA_LOAD_GL(glDeleteBuffers);
+            CNA_LOAD_GL(glBindBuffer);
+            CNA_LOAD_GL(glBufferData);
+            CNA_LOAD_GL(glGenQueries);
+            CNA_LOAD_GL(glDeleteQueries);
+            CNA_LOAD_GL(glBeginQuery);
+            CNA_LOAD_GL(glEndQuery);
+            CNA_LOAD_GL(glGetQueryObjectiv);
+            CNA_LOAD_GL(glGetQueryObjectuiv);
+            CNA_LOAD_GL(glCreateShader);
+            CNA_LOAD_GL(glDeleteShader);
+            CNA_LOAD_GL(glShaderSource);
+            CNA_LOAD_GL(glCompileShader);
+            CNA_LOAD_GL(glGetShaderiv);
+            CNA_LOAD_GL(glGetShaderInfoLog);
+            CNA_LOAD_GL(glCreateProgram);
+            CNA_LOAD_GL(glDeleteProgram);
+            CNA_LOAD_GL(glAttachShader);
+            CNA_LOAD_GL(glBindAttribLocation);
+            CNA_LOAD_GL(glLinkProgram);
+            CNA_LOAD_GL(glGetProgramiv);
+            CNA_LOAD_GL(glGetProgramInfoLog);
+            CNA_LOAD_GL(glUseProgram);
+            CNA_LOAD_GL(glGetUniformLocation);
+            CNA_LOAD_GL(glUniform1f);
+            CNA_LOAD_GL(glUniform1fv);
+            CNA_LOAD_GL(glUniform1i);
+            CNA_LOAD_GL(glUniform2f);
+            CNA_LOAD_GL(glUniform2fv);
+            CNA_LOAD_GL(glUniform3f);
+            CNA_LOAD_GL(glUniform3fv);
+            CNA_LOAD_GL(glUniform4f);
+            CNA_LOAD_GL(glUniform4fv);
+            CNA_LOAD_GL(glUniformMatrix3fv);
+            CNA_LOAD_GL(glUniformMatrix4fv);
+            CNA_LOAD_GL(glEnableVertexAttribArray);
+            CNA_LOAD_GL(glDisableVertexAttribArray);
+            CNA_LOAD_GL(glVertexAttribPointer);
+            CNA_LOAD_GL(glVertexAttrib4f);
+            CNA_LOAD_GL(glGenFramebuffers);
+            CNA_LOAD_GL(glDeleteFramebuffers);
+            CNA_LOAD_GL(glBindFramebuffer);
+            CNA_LOAD_GL(glFramebufferTexture2D);
+            CNA_LOAD_GL(glFramebufferRenderbuffer);
+            CNA_LOAD_GL(glGenRenderbuffers);
+            CNA_LOAD_GL(glDeleteRenderbuffers);
+            CNA_LOAD_GL(glBindRenderbuffer);
+            CNA_LOAD_GL(glRenderbufferStorage);
+            CNA_LOAD_GL(glRenderbufferStorageMultisample);
+            CNA_LOAD_GL(glGenerateMipmap);
+            CNA_LOAD_GL(glBlitFramebuffer);
+#undef CNA_LOAD_GL
+        }
+#endif
+
         GLuint CompileShader(GLenum type, const char* src)
         {
             GLuint shader = glCreateShader(type);
@@ -1275,6 +1430,9 @@ namespace CNA::Internal::Backends::OpenGL2
             throw std::runtime_error(std::string("OPENGL2 SDL_GL_CreateContext failed: ") + SDL_GetError());
 
         SDL_GL_MakeCurrent(window_, context_);
+#if defined(_WIN32)
+        LoadWin32GLExtensions();
+#endif
         SetSwapInterval(swapInterval);
         ensurePrograms();
 

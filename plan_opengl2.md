@@ -526,6 +526,44 @@ possibilities of OpenGL 2"):
   darkens the ambient term; all five maps' null fallbacks work without crashing; and
   `SkinnedPbrEffect`'s bone-palette position skinning combined with the PBR shader. 7/7 PASS.
 
+## Status: Windows GL 2.x entry-point loader (2026-07-19/20, session 7 cont'd)
+
+- **Windows GL entry-point loading implemented and cross-compile verified.** The real, non-theoretical
+  problem: `opengl32.dll` on Windows only ever exports the ~350 GL 1.1 entry points (Microsoft
+  never updated its own ICD dispatch table past that) -- everything this file calls beyond GL 1.1
+  (buffer objects/GL 1.5, shaders/GL 2.0, multitexture/GL 1.3, framebuffer objects/
+  `ARB_framebuffer_object`, even `glTexImage3D`/`glTexSubImage3D` despite being spec-core since
+  GL 1.2) must be resolved at runtime via `wglGetProcAddress` there, or the Windows link step
+  fails outright with unresolved externals -- `GL_GLEXT_PROTOTYPES`'s plain `extern`/`GLAPI`
+  declarations (used unchanged on every other platform) only link because Linux/Mesa/GLX (and
+  other desktop GL ICDs) export these symbols directly for static linking, a convenience specific
+  to those platforms' loader model, not something Windows' `opengl32.dll` provides.
+  Fixed with a `#if defined(_WIN32)` branch: ~54 file-local `PFNGLxxxPROC` function-pointer
+  variables (the STANDARD Khronos typedefs from `glext.h`/`SDL3/SDL_opengl_glext.h`, not
+  hand-rolled signatures) plus `LoadWin32GLExtensions()`, called once via
+  `SDL_GL_GetProcAddress()` right after `SDL_GL_MakeCurrent()` in the constructor, before
+  `ensurePrograms()`. The ~30 GL 1.1-safe functions this file also uses (`glClear`, `glViewport`,
+  `glDrawArrays`, `glTexImage2D`, etc.) are left untouched, linking directly against
+  `opengl32.lib` as before -- only genuinely-beyond-1.1 entry points are routed through the
+  loader. Every other platform's build is byte-for-byte unaffected (the `#else` branch is the
+  exact pre-existing `GL_GLEXT_PROTOTYPES`+direct-link code).
+  **This sandbox has no Windows toolchain, but MinGW-w64 (`x86_64-w64-mingw32-g++`/
+  `i686-w64-mingw32-g++`) turned out to be installed** -- used it to cross-compile
+  `OpenGL2GraphicsBackend.cpp` standalone (real Windows headers via mingw's bundled Win32 SDK,
+  real SDL3 headers, real x86_64/i686 COFF object-file output) for BOTH 32- and 64-bit Windows
+  targets: zero errors on either. Inspected the resulting object files' symbol tables directly
+  (`x86_64-w64-mingw32-nm`) to confirm the fix is structurally real, not just "compiles": GL 1.1
+  functions (`glClear`, `glDrawArrays`, `glViewport`, ...) show up as `__imp_glClear`-style DLL
+  import references (the standard Windows convention for symbols `opengl32.lib` resolves at link
+  time); every extension function (`glGenBuffers`, `glCreateShader`, `glActiveTexture`, ...) shows
+  up as a local BSS data symbol in this file's own anonymous namespace instead -- exactly the
+  split the fix is supposed to produce, confirmed by direct inspection rather than assumed.
+  This is a real, meaningful upgrade over "written carefully, hoped for the best" -- compile- and
+  link-boundary-level correctness is now genuinely verified -- but it is still NOT a substitute
+  for an actual Windows runtime test: `wglGetProcAddress`'s real behavior, actual GL driver
+  entry-point availability, and end-to-end rendering on Windows remain unverified and should be
+  the first thing checked on a real Windows machine before relying on this backend there.
+
 ### Verified working
 - `cmake/Tests/OpenGL2Tests.cmake` registers nineteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
@@ -624,6 +662,9 @@ possibilities of OpenGL 2"):
   typed overloads for `VertexPositionNormalTangentTexture(Skinned)` (a real, shared gap this
   surfaced -- see that status entry above), so this is usable through the standard `VertexBuffer`
   API like every other vertex type, not just via the raw/untyped path.
+- Windows GL entry-point loading (`wglGetProcAddress` via `SDL_GL_GetProcAddress`, ~54 functions
+  beyond GL 1.1); MinGW-w64 cross-compile-verified, not yet Windows-runtime-tested (see the status
+  entry above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -638,18 +679,11 @@ possibilities of OpenGL 2"):
   VertexDeclaration ... deferred as a larger cross-backend refactor, not attempted here") --
   deliberately not attempted here either, for the same reason: out of proportion for an
   OpenGL2-scoped task, and risks every other backend for a feature only this backend would gain.
-- Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended
-  for Linux desktop builds. This is a REAL, not theoretical, gap: `opengl32.dll` on Windows only
-  exports the ~350 GL 1.1 entry points -- everything this backend actually calls beyond GL 1.1
-  (buffer objects, shaders, framebuffers, multitexture, occlusion queries, and even
-  `glTexImage3D`/`glTexSubImage3D` despite being spec-core since GL 1.2) must be resolved at
-  runtime via `wglGetProcAddress` (`SDL_GL_GetProcAddress` wraps this portably) on that platform,
-  or the Windows link step fails outright with unresolved externals. `GL_GLEXT_PROTOTYPES`'s
-  plain `extern` declarations only link because Linux/Mesa/GLX exports these symbols directly for
-  static linking -- that is a Linux/GLX-specific convenience, not something Windows' GL ICD model
-  provides. Not fixed here: this sandbox has no Windows toolchain to compile/link-verify against,
-  and a hand-written, unverified ~50-function loader is a real risk of shipping subtly wrong
-  platform code with no way to catch it before a real Windows build attempt.
+- Windows GL 2.x entry-point loader (see the status entry above) is implemented and
+  MinGW-w64 cross-compile-verified (both 32- and 64-bit targets, symbol-table-inspected), but
+  still NOT tested on an actual Windows runtime -- `wglGetProcAddress`'s real behavior, actual GL
+  driver entry-point availability, and end-to-end rendering on Windows remain to be checked on a
+  real machine.
 - Visual parity tests against other backends (golden-image comparison) beyond the one
   cross-backend numeric check already reused from EasyGL's own golden scene (see
   `OpenGL2_EnvironmentMapEffect` above) -- a real pixel-level golden-image PNG comparison
