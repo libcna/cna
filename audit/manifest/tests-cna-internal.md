@@ -6,17 +6,17 @@ Files in this shard: **65**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `tests/CNA/Internal/Audio/AudioMixerTests.cpp` | PENDING | [AudioMixerTests.cpp.audit.md](../tests/CNA/Internal/Audio/AudioMixerTests.cpp.audit.md) |
-| 2 | `tests/CNA/Internal/Audio/WavWrapperTests.cpp` | PENDING | [WavWrapperTests.cpp.audit.md](../tests/CNA/Internal/Audio/WavWrapperTests.cpp.audit.md) |
-| 3 | `tests/CNA/Internal/Audio/XactParserFuzzTests.cpp` | PENDING | [XactParserFuzzTests.cpp.audit.md](../tests/CNA/Internal/Audio/XactParserFuzzTests.cpp.audit.md) |
-| 4 | `tests/CNA/Internal/Audio/XactParserTests.cpp` | PENDING | [XactParserTests.cpp.audit.md](../tests/CNA/Internal/Audio/XactParserTests.cpp.audit.md) |
-| 5 | `tests/CNA/Internal/Backends/Canvas/CanvasGraphicsBackendTests.cpp` | PENDING | [CanvasGraphicsBackendTests.cpp.audit.md](../tests/CNA/Internal/Backends/Canvas/CanvasGraphicsBackendTests.cpp.audit.md) |
-| 6 | `tests/CNA/Internal/CnjEnvelopeTests.cpp` | PENDING | [CnjEnvelopeTests.cpp.audit.md](../tests/CNA/Internal/CnjEnvelopeTests.cpp.audit.md) |
-| 7 | `tests/CNA/Internal/GltfImport/GltfImportCoreTests.cpp` | PENDING | [GltfImportCoreTests.cpp.audit.md](../tests/CNA/Internal/GltfImport/GltfImportCoreTests.cpp.audit.md) |
-| 8 | `tests/CNA/Internal/Graphics/DxtUtilTests.cpp` | PENDING | [DxtUtilTests.cpp.audit.md](../tests/CNA/Internal/Graphics/DxtUtilTests.cpp.audit.md) |
-| 9 | `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp` | PENDING | [FakeSdlGamepadBackend.hpp.audit.md](../tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp.audit.md) |
-| 10 | `tests/CNA/Internal/Input/FakeSdlHapticBackend.hpp` | PENDING | [FakeSdlHapticBackend.hpp.audit.md](../tests/CNA/Internal/Input/FakeSdlHapticBackend.hpp.audit.md) |
-| 11 | `tests/CNA/Internal/Input/FakeSdlJoystickBackend.hpp` | PENDING | [FakeSdlJoystickBackend.hpp.audit.md](../tests/CNA/Internal/Input/FakeSdlJoystickBackend.hpp.audit.md) |
+| 1 | `tests/CNA/Internal/Audio/AudioMixerTests.cpp` | AUDITED | [AudioMixerTests.cpp.audit.md](../tests/CNA/Internal/Audio/AudioMixerTests.cpp.audit.md) |
+| 2 | `tests/CNA/Internal/Audio/WavWrapperTests.cpp` | AUDITED | [WavWrapperTests.cpp.audit.md](../tests/CNA/Internal/Audio/WavWrapperTests.cpp.audit.md) |
+| 3 | `tests/CNA/Internal/Audio/XactParserFuzzTests.cpp` | AUDITED | [XactParserFuzzTests.cpp.audit.md](../tests/CNA/Internal/Audio/XactParserFuzzTests.cpp.audit.md) |
+| 4 | `tests/CNA/Internal/Audio/XactParserTests.cpp` | AUDITED | [XactParserTests.cpp.audit.md](../tests/CNA/Internal/Audio/XactParserTests.cpp.audit.md) |
+| 5 | `tests/CNA/Internal/Backends/Canvas/CanvasGraphicsBackendTests.cpp` | AUDITED | [CanvasGraphicsBackendTests.cpp.audit.md](../tests/CNA/Internal/Backends/Canvas/CanvasGraphicsBackendTests.cpp.audit.md) |
+| 6 | `tests/CNA/Internal/CnjEnvelopeTests.cpp` | AUDITED | [CnjEnvelopeTests.cpp.audit.md](../tests/CNA/Internal/CnjEnvelopeTests.cpp.audit.md) |
+| 7 | `tests/CNA/Internal/GltfImport/GltfImportCoreTests.cpp` | AUDITED | [GltfImportCoreTests.cpp.audit.md](../tests/CNA/Internal/GltfImport/GltfImportCoreTests.cpp.audit.md) |
+| 8 | `tests/CNA/Internal/Graphics/DxtUtilTests.cpp` | AUDITED | [DxtUtilTests.cpp.audit.md](../tests/CNA/Internal/Graphics/DxtUtilTests.cpp.audit.md) |
+| 9 | `tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp` | AUDITED | [FakeSdlGamepadBackend.hpp.audit.md](../tests/CNA/Internal/Input/FakeSdlGamepadBackend.hpp.audit.md) |
+| 10 | `tests/CNA/Internal/Input/FakeSdlHapticBackend.hpp` | AUDITED | [FakeSdlHapticBackend.hpp.audit.md](../tests/CNA/Internal/Input/FakeSdlHapticBackend.hpp.audit.md) |
+| 11 | `tests/CNA/Internal/Input/FakeSdlJoystickBackend.hpp` | AUDITED | [FakeSdlJoystickBackend.hpp.audit.md](../tests/CNA/Internal/Input/FakeSdlJoystickBackend.hpp.audit.md) |
 | 12 | `tests/CNA/Internal/Input/GestureDetectorTests.cpp` | PENDING | [GestureDetectorTests.cpp.audit.md](../tests/CNA/Internal/Input/GestureDetectorTests.cpp.audit.md) |
 | 13 | `tests/CNA/Internal/Input/InputResetTests.cpp` | PENDING | [InputResetTests.cpp.audit.md](../tests/CNA/Internal/Input/InputResetTests.cpp.audit.md) |
 | 14 | `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp` | PENDING | [SdlGamepadBackendTests.cpp.audit.md](../tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp.audit.md) |
