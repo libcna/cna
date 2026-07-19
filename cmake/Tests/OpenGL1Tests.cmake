@@ -208,4 +208,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_ContextLoss COMMAND cna_test_opengl1_context_loss
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 6: automatic mipmap generation (glGenerateMipmap/GL_GENERATE_MIPMAP/
+    # CPU box-filter fallback) plus the full 9-value TextureFilter -> GL min/mag mapping needed to
+    # actually sample the generated levels.
+    cna_opengl1_test(cna_test_opengl1_mipmap_generation
+                      examples/opengl1_mipmap_generation_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_MipmapGeneration COMMAND cna_test_opengl1_mipmap_generation
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

@@ -32,15 +32,24 @@ private:bool i32_=false;int count_=0;std::vector<std::uint8_t> data_;
 // Texture2D itself keeps (no duplicate copy; Texture2D's own SetData mutations are visible
 // through it automatically), which RecreateGLResource() re-uploads from after the context is
 // recreated.
+// plan_opengl1.md phase 6: mipMap_ tracks whether the ImageData that created/last-recreated this
+// texture requested a mip chain (ImageData::mipLevels>1); hasMips_ tracks whether generation
+// actually succeeded (false only if mipMap_ is true but the driver has neither glGenerateMipmap
+// nor the older GL_GENERATE_MIPMAP/SGIS_generate_mipmap mechanism AND no CPU pixel data was
+// available yet to fall back on) -- consulted by ApplySamplerState so a mip-aware TextureFilter
+// is only ever requested against a texture that genuinely has more than one level.
 class OpenGL1TextureBackend final : public ITextureBackend, public IOpenGL1Recoverable {
-public: OpenGL1TextureBackend(const ImageData&,OpenGL1ResourceRegistry*); ~OpenGL1TextureBackend() override;
+public: OpenGL1TextureBackend(const ImageData&,OpenGL1ResourceRegistry*,bool generateMipmapCap); ~OpenGL1TextureBackend() override;
  int GetWidth()const override{return width_;} int GetHeight()const override{return height_;} SDL_Texture* GetNativeTexture()const override{return nullptr;}
  void UpdatePixels(const uint8_t*,int) override; void UpdatePixelsLevel(int,const uint8_t*,int,int) override; void BindGL()const override;
  void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override{cpuPixels_=std::move(pixels);}
  void ReleaseGLHandleOnly() override{id_=0;}
  void RecreateGLResource() override;
  unsigned int Id()const{return id_;}
-private:unsigned int id_=0;int width_=0,height_=0;OpenGL1ResourceRegistry* registry_=nullptr;std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
+ bool HasMips()const{return hasMips_;}
+private:void RegenerateMips(const uint8_t*level0);
+ unsigned int id_=0;int width_=0,height_=0;OpenGL1ResourceRegistry* registry_=nullptr;std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
+ bool mipMap_=false;bool hasMips_=false;bool generateMipmapCap_=false;
 };
 class OpenGL1TextureCubeBackend final : public ITextureCubeBackend {
 public: OpenGL1TextureCubeBackend(int size,bool mipMap,int surfaceFormat); ~OpenGL1TextureCubeBackend() override;
