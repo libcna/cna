@@ -4,6 +4,8 @@ Configure CNA with `-DCNA_GRAPHICS_BACKEND=OPENGL1` on Linux or Windows. The bac
 
 Run the suite with `ctest -R "OpenGL1_"` from the build directory (needs `-DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=ON`, real `DISPLAY`/Xvfb; see `cmake/Tests/OpenGL1Tests.cmake`).
 
+The shared, backend-agnostic `CnaTests` gtest binary also builds and mostly passes under `CNA_GRAPHICS_BACKEND=OPENGL1` (plan_opengl1.md phase 12's Reach-profile audit ran it in full for the first time). Two shared test files had EasyGL-only/D3D9-only-shaped assumptions that didn't anticipate OPENGL1 as a second, legitimately-different 3D-capable backend -- both fixed with `#ifdef CNA_BACKEND_OPENGL1` branches, see plan_opengl1.md phase 12 for the detail. The other ~126 `CnaTests` failures on this sandbox are pre-existing and environment-specific (Media/Video/Sound/Xnb content fixtures needing files/codecs this sandbox doesn't have), unrelated to OPENGL1.
+
 Priority runtime smoke coverage, each wired to a real CTest registration:
 1. clear + present — `OpenGL1_PixelTestGame_Smoke`;
 2. SpriteBatch textured quad — `OpenGL1_TexturedQuad_Readback`;

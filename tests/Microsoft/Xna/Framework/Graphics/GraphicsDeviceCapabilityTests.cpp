@@ -46,12 +46,29 @@ using CNA::GraphicsCapability;
 // This test target only ever builds against a fully 3D-capable backend (EasyGL by default on
 // Linux) -- SDL_Renderer/DX3/Canvas each have their own dedicated
 // *_graphics_capability_test.cpp example asserting the opposite (nothing supported).
+//
+// plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable backend this file's
+// original "only ever builds against EasyGL" assumption did not anticipate -- and its real,
+// honest capability profile (examples/opengl1_graphics_capability_test.cpp, plan_opengl1.md
+// phase 11) legitimately differs from EasyGL's on 4 of these checks: OPENGL1 has no
+// ARB_multitexture-based MRT, GL_ARB_occlusion_query implementation, or custom-shader Effect
+// pipeline (this backend's own design rule: "No GLSL/custom ShaderEffect pipeline in the strict
+// OPENGL1 backend"), but DOES support wireframe via real glPolygonMode(GL_LINE) -- the opposite
+// of GLES3's own total lack of a wireframe fill mode. Neither backend is "wrong"; both are
+// honestly reporting a real, different fixed-function feature set.
 
 // OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query mechanism
 // anywhere in the CM registry, and no shader compiler at all. Its `false` for these three is the
 // truthful answer, and is asserted here rather than left as a standing red -- the point of the
 // capability query is that a caller can trust it.
 #if defined(CNA_BACKEND_OPENGLES1)
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_BACKEND_OPENGL1)
+// plan_opengl1.md phase 12: OPENGL1 is a second, legitimately-different, equally-honest
+// 3D-capable backend -- no MRT, no occlusion queries, no custom-shader support in its
+// fixed-function pipeline, reported truthfully rather than inherited.
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
