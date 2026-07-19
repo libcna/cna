@@ -29,6 +29,7 @@ namespace CNA::Internal::Backends::OpenGL2
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,

@@ -213,8 +213,23 @@ possibilities of OpenGL 2"):
   `(128,0,128)` for a red/blue split, vs. a flat, unblended color on the equivalent single-sample
   target). 9/9 PASS.
 
+## Status: normal-matrix fix + occlusion queries (2026-07-19, session 6)
+
+- **Real inverse-transpose normal matrix**: `uNormalMatrix` previously used the raw World
+  upper-3x3, correct only under translation/rotation/uniform scale. Switched to
+  `Matrix::Transpose(Matrix::Invert(world))` (both already public XNA API, no new 3x3-inverse
+  routine needed). Verified with a differential CTest: `World=Scale(3,1,1)` + a 45-degree-tilted
+  normal reads back `(242,242,242)` (matching the precomputed correct N.(-L)~=0.9487) instead of
+  the old, wrong `~(81,81,81)` (N.(-L)~=0.3162).
+- **Occlusion queries implemented**: real `GL_SAMPLES_PASSED` (`ARB_occlusion_query`, core since
+  GL 1.5) -- an exact pixel count, actually more precise than
+  `EasyGLGraphicsBackend`'s own GLES3 `GL_ANY_SAMPLES_PASSED` (which can only report 0 or 1).
+  New `OpenGL2_OcclusionQuery` CTest: a fully visible full-screen quad reports the exact
+  backbuffer pixel count (`76800` for 320x240); a quad drawn entirely behind a nearer opaque one
+  (real depth-test occlusion) reports exactly `0`. 4/4 PASS.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers six CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers seven CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -229,6 +244,7 @@ possibilities of OpenGL 2"):
   - `OpenGL2_Effects` -- AlphaTestEffect, DualTextureEffect, BasicEffect lighting and fog, all
     pixel-verified. 8/8 PASS.
   - `OpenGL2_Presentation` -- FixedHeightDynamicWidth adapts to a real window resize. 4/4 PASS.
+  - `OpenGL2_OcclusionQuery` -- exact GL_SAMPLES_PASSED pixel counts, visible and fully occluded. 4/4 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -252,6 +268,7 @@ possibilities of OpenGL 2"):
 - `ApplySamplerState` (direct 3D draws) and `SpriteBatch`'s own `SetSamplerFilter`/
   `SetSamplerAddressMode` -- both wired to real `glTexParameteri` calls.
 - `ReadBackbuffer` (pixel readback, enables automated pixel-exact testing).
+- Occlusion queries (real `GL_SAMPLES_PASSED` pixel counts).
 - RenderTarget2D/FBO, including MSAA (resolve-on-unbind) and mipmap generation.
 - AlphaTestEffect, DualTextureEffect, and BasicEffect lighting (3 directional lights, ambient,
   specular, emissive) + fog (see `OpenGL2_Effects` above).
@@ -265,9 +282,6 @@ possibilities of OpenGL 2"):
 - Full vertex declaration support rather than stride inference (blocks any vertex format beyond
   the 4 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
   attribute order/extra streams).
-- `uNormalMatrix` in the lit shader uses the raw World upper-3x3 rather than a real
-  inverse-transpose -- wrong normals under non-uniform-scale World matrices specifically
-  (uniform scale, rotation, and translation are all unaffected).
 - SkinnedEffect (bone palette skinning) -- EasyGL has this; would need a new vertex format
   (blend indices/weights) and a skinned variant of the lit shader.
 - PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
@@ -280,8 +294,6 @@ possibilities of OpenGL 2"):
   so this is realistic on this backend, unlike PBR).
 - `Texture3D` -- `CreateTexture3D` still returns `nullptr` (default). `GL_EXT_texture3D` is
   widely available on GL 2.1 hardware; feasible.
-- Occlusion queries -- `CreateOcclusionQuery` still returns `nullptr` (default).
-  `ARB_occlusion_query` is core since GL 1.5, feasible.
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
   `nullptr` (default). Would let games write their own OpenGL2 shaders through CNA's `Effect`
   API, mirroring `EasyGLEffectBackend`.

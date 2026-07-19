@@ -434,6 +434,37 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         };
 
+        // Desktop GL 2.1 has the real ARB_occlusion_query GL_SAMPLES_PASSED target (core since
+        // GL 1.5), giving an exact pixel count -- unlike EasyGLGraphicsBackend's GLES3
+        // GL_ANY_SAMPLES_PASSED, which can only report 0 or 1.
+        class OcclusionQuery final : public IOcclusionQueryBackend
+        {
+        public:
+            GLuint id{};
+
+            OcclusionQuery() { glGenQueries(1, &id); }
+            ~OcclusionQuery() override { if (id) glDeleteQueries(1, &id); }
+
+            void Begin() override { glBeginQuery(GL_SAMPLES_PASSED, id); }
+            void End() override { glEndQuery(GL_SAMPLES_PASSED); }
+
+            bool IsComplete() const override
+            {
+                GLint available = 0;
+                glGetQueryObjectiv(id, GL_QUERY_RESULT_AVAILABLE, &available);
+                return available != 0;
+            }
+
+            int PixelCount() const override
+            {
+                // Matches FNA/D3D9's OcclusionQuery.PixelCount contract: blocks until the result
+                // is available rather than returning a stale/zero value for an incomplete query.
+                GLuint result = 0;
+                glGetQueryObjectuiv(id, GL_QUERY_RESULT, &result);
+                return static_cast<int>(result);
+            }
+        };
+
         class VB final : public IVertexBufferBackend
         {
         public:
@@ -825,6 +856,7 @@ namespace CNA::Internal::Backends::OpenGL2
 
     std::unique_ptr<ITextureBackend> OpenGL2GraphicsBackend::CreateTexture(const ImageData& data) { return std::make_unique<Tex>(data); }
     std::unique_ptr<ISpriteBatchBackend> OpenGL2GraphicsBackend::CreateSpriteBatch() { return std::make_unique<Sprite>(this); }
+    std::unique_ptr<IOcclusionQueryBackend> OpenGL2GraphicsBackend::CreateOcclusionQuery() { return std::make_unique<OcclusionQuery>(); }
 
     std::unique_ptr<IRenderTargetBackend> OpenGL2GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
