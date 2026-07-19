@@ -330,13 +330,26 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPH
         # wasm-ld resolves circular static-lib references without linker groups.
         target_link_libraries(cna_house3d_demo PRIVATE
             CNA ${BACKEND_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        # plan_glbackends.md GLB-9 (revisited): MIN_WEBGL_VERSION/MAX_WEBGL_VERSION must match
+        # whichever GL profile this target is actually compiled for -- pre-GLB-9 this was
+        # hardcoded to WebGL 2 unconditionally, which would have forced a WebGL 2 context even
+        # under -DCNA_GRAPHICS_BACKEND=WEBGL1 (contradicting EasyGLGraphicsBackend's own
+        # SDL_GL_CONTEXT_MAJOR_VERSION=2 request for that profile, GLB-8) -- found while verifying
+        # GLB-36's real emcc WEBGL1 build.
+        if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGL1")
+            set(_cna_house3d_min_webgl_version 1)
+            set(_cna_house3d_max_webgl_version 1)
+        else()
+            set(_cna_house3d_min_webgl_version 2)
+            set(_cna_house3d_max_webgl_version 2)
+        endif()
         target_link_options(cna_house3d_demo PRIVATE
             -sALLOW_MEMORY_GROWTH=1
             -sSTACK_SIZE=1048576
             -sINITIAL_MEMORY=67108864       # 64 MB — enough for a procedural scene
             -sFORCE_FILESYSTEM=1
-            "-sMIN_WEBGL_VERSION=2"         # WebGL 2 = OpenGL ES 3.0
-            "-sMAX_WEBGL_VERSION=2"
+            "-sMIN_WEBGL_VERSION=${_cna_house3d_min_webgl_version}"
+            "-sMAX_WEBGL_VERSION=${_cna_house3d_max_webgl_version}"
         )
     else()
         # ---- Native desktop --------------------------------------------------
