@@ -436,8 +436,58 @@ possibilities of OpenGL 2"):
   `Begin()` without an effect genuinely restores the built-in shader (not sticky). 3/3 PASS on
   the first real run.
 
+## Status: real Letterbox/Overscan/Stretch presentation modes (2026-07-19/20, session 7 cont'd)
+
+- **Real `CnaPresentationMode::Letterbox`/`Overscan`/`Stretch` implemented** for OpenGL2 --
+  previously all three fell back to the virtual size verbatim (matching EasyGL's own documented
+  gap, not an OpenGL2-specific regression). Algorithm mirrors `SdlGpuGraphicsBackend::
+  ComputeLogicalViewport` exactly (the established "this backend actually does it right"
+  reference elsewhere in this codebase; EasyGL's own equivalent is a documented no-op fallback,
+  not a model to follow): `Letterbox` scales uniformly by `min(physW/virtW, physH/virtH)`
+  (shrink-to-fit, centred, bars); `Overscan` scales by `max(...)` (grow-to-cover, centred,
+  cropped); `Stretch` fills the window exactly with a non-uniform scale. Added
+  `ComputeLogicalViewport()` (new `LogicalViewport{x,y,width,height,logicalWidth,logicalHeight}`
+  struct) and rewired `GetViewportSize()`/`TransformWindowToLogical()`/`TransformLogicalToWindow()`
+  to use it.
+  **Root-caused a real, pre-existing gap in the SHARED (not backend-specific) `GraphicsDevice::
+  UpdateViewportFromWindow()`**: it always called `backend_->SetViewport(0, 0, logicalWidth,
+  logicalHeight, ...)` -- i.e. the actual GL/GPU viewport was hardcoded to the window ORIGIN using
+  the LOGICAL size, with no way for a backend to say "the physical viewport rectangle is
+  different" (offset and/or a different size). This meant even a mathematically-correct
+  `ComputeLogicalViewport()` had no path to actually reach the real GL viewport -- confirmed by an
+  initial implementation attempt that (correctly) computed the letterbox sub-rectangle but (still)
+  failed every pixel check, because the ACTUAL `glViewport` call elsewhere in the shared code was
+  never told about it. Fixed with a minimal, backward-compatible interface addition:
+  `IGraphicsBackend::GetDefaultViewportRect(x,y,width,height)`, defaulting to `(0, 0,
+  GetViewportSize())` -- byte-identical to every backend's behavior before this task, so EasyGL/
+  Vulkan/Bgfx/SdlGpu/WebGPU/D3D9/11/12/DX3/Software etc. are all completely unaffected unless they
+  choose to override it. `UpdateViewportFromWindow()` now calls this to get the PHYSICAL rectangle
+  pushed to `SetViewport()`, while the LOGICAL `width`/`height` (exposed via `GraphicsDevice.
+  Viewport.Width/Height`) stay untouched -- matches real XNA, where `Viewport.Width` after a
+  letterboxed `Reset()` is the game's own virtual resolution, not the physical monitor's pixels.
+  Also fixed a second latent bug this surfaced: `UpdateViewportFromWindow()`'s own
+  "did anything change" guard only ever compared the LOGICAL size, so a window resize under
+  Letterbox/Overscan (whose logical size stays FIXED at the virtual resolution, by design) would
+  silently skip re-applying the changed PHYSICAL rectangle -- added `lastKnownViewportPhysX/Y/
+  Width/Height_` tracking alongside the pre-existing logical-size tracking.
+  Once the real `glViewport` rectangle was correct, `Sprite::Draw()`/`DrawWithCustomEffect()`'s
+  CPU-side NDC math (which an earlier attempt within this same task had made letterbox-aware) was
+  reverted back to its ORIGINAL simple logical-only form -- GL's own viewport transform now
+  performs the logical->physical mapping automatically, for BOTH 2D SpriteBatch content and any
+  DIRECT 3D draw (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s standard WVP-transform vertex
+  path), a broader/more correct fix achieved with LESS backend-specific code than the reverted
+  sprite-only attempt.
+  Three new CTests (one process per mode -- `GraphicsDevice::SetPresentationMode` is private,
+  reachable only via `GraphicsDeviceManager::ApplyChanges()`, which also re-asserts window size
+  from `PresentationParameters`, so mode and an independently-resized window can't both be
+  exercised through a single `ApplyChanges()` call within one process; each file's own header
+  comment explains this): `OpenGL2_PresentationMode_Letterbox` (centred content, real black bars
+  at the physical window edges), `OpenGL2_PresentationMode_Overscan` (content fully covers the
+  window, no bars, top/bottom cropped), `OpenGL2_PresentationMode_Stretch` (fills exactly via
+  non-uniform scale, no bars, no cropping). 2/2 PASS each.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers fifteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers eighteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -467,6 +517,8 @@ possibilities of OpenGL 2"):
     World/View/Projection wiring, uniform-by-name binding, texture-unit binding. 6/6 PASS.
   - `OpenGL2_SpriteBatchCustomEffect` -- custom sprite shader via `MatrixTransform`, texture-unit-0
     binding, built-in shader restored after a plain `Begin()`. 3/3 PASS.
+  - `OpenGL2_PresentationMode_Letterbox`/`_Overscan`/`_Stretch` -- real physical-viewport scaling
+    per mode (bars / full-coverage-cropped / non-uniform-stretch). 2/2 PASS each.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -519,13 +571,15 @@ possibilities of OpenGL 2"):
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) for both the direct 3D
   draw path (see `OpenGL2_ShaderEffect` above) and `SpriteBatch::Begin(..., Effect*)` (see
   `OpenGL2_SpriteBatchCustomEffect` above).
+- Real `CnaPresentationMode::Letterbox`/`Overscan`/`Stretch` (physical viewport scaling/bars/crop,
+  not just a virtual-size fallback; see `OpenGL2_PresentationMode_*` above). This surfaced and
+  fixed a real gap in the SHARED `GraphicsDevice::UpdateViewportFromWindow()` too (see that status
+  entry above) via the new `IGraphicsBackend::GetDefaultViewportRect()` method -- every other
+  backend is unaffected (its default reproduces their exact prior behavior) unless it chooses to
+  override it for its own real letterboxing.
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
-- `CnaPresentationMode::Letterbox`/`Overscan`/`Stretch` still fall back to the virtual size
-  verbatim rather than real letterbox-bar/crop/non-uniform-stretch scaling -- matches EasyGL's
-  own current behavior (not a new OpenGL2-specific gap), but neither backend actually implements
-  those three modes' real semantics yet.
 - Full vertex declaration support rather than stride inference (blocks any vertex format beyond
   the 5 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
   attribute order/extra streams). Investigated: `IVertexBufferBackend::SetData()` only ever

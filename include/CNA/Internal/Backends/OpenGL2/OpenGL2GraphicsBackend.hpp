@@ -21,6 +21,7 @@ namespace CNA::Internal::Backends::OpenGL2
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
@@ -97,6 +98,25 @@ namespace CNA::Internal::Backends::OpenGL2
         bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
+        // NOXNA: mirrors SdlGpuGraphicsBackend::LogicalViewport/ComputeLogicalViewport exactly
+        // (see that backend's own implementation -- the established reference for real
+        // Letterbox/Overscan/Stretch semantics in this codebase; EasyGL's own equivalent is a
+        // documented no-op fallback, not a model to follow here). `x`/`y`/`width`/`height` are
+        // the PHYSICAL window sub-rectangle the logical content maps into (identical to the full
+        // window for FixedHeightDynamicWidth/NativeBackBuffer/Stretch -- only Letterbox/Overscan
+        // actually offset/shrink it); `logicalWidth`/`logicalHeight` are what
+        // GetViewportSize()/SpriteBatch coordinate math treat as the game's own resolution.
+        struct LogicalViewport
+        {
+            float x = 0.0f;
+            float y = 0.0f;
+            float width = 0.0f;
+            float height = 0.0f;
+            float logicalWidth = 0.0f;
+            float logicalHeight = 0.0f;
+        };
+        [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
 
     private:
         SDL_Window* window_{};

@@ -2246,20 +2246,38 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
+        // The PHYSICAL rectangle actually pushed to the backend's GL/GPU viewport -- distinct
+        // from `width`/`height` above (the LOGICAL size GraphicsDevice.Viewport.Width/Height
+        // exposes to game code). Equal to (0, 0, width, height) for every backend that doesn't
+        // override GetDefaultViewportRect() (i.e. every backend before this method existed, and
+        // every backend except OpenGL2 today) -- only a backend implementing real
+        // Letterbox/Overscan/Stretch returns something else.
+        int physX = 0, physY = 0, physWidth = width, physHeight = height;
+        if (backend_)
+            backend_->GetDefaultViewportRect(physX, physY, physWidth, physHeight);
+
         // Compared against the last size *this method itself* produced, not against
         // viewport_'s current width/height: viewport_ may hold a game-set custom
         // sub-region Viewport (e.g. split-screen) whose dimensions legitimately differ
         // from the backbuffer, and FNA's Present() never touches Viewport at all. Using
         // viewport_ as the "did anything change" signal would silently stomp such a
         // Viewport back to full-window size on the very next Present() call even though
-        // no resize occurred.
-        if (width == lastKnownViewportWidth_ && height == lastKnownViewportHeight_)
+        // no resize occurred. Also compares the PHYSICAL rectangle, not just the logical
+        // size: under Letterbox/Overscan the logical size can stay fixed across a window
+        // resize while the physical rectangle still needs to be re-applied.
+        if (width == lastKnownViewportWidth_ && height == lastKnownViewportHeight_ &&
+            physX == lastKnownViewportPhysX_ && physY == lastKnownViewportPhysY_ &&
+            physWidth == lastKnownViewportPhysWidth_ && physHeight == lastKnownViewportPhysHeight_)
         {
             return;
         }
 
         lastKnownViewportWidth_ = width;
         lastKnownViewportHeight_ = height;
+        lastKnownViewportPhysX_ = physX;
+        lastKnownViewportPhysY_ = physY;
+        lastKnownViewportPhysWidth_ = physWidth;
+        lastKnownViewportPhysHeight_ = physHeight;
 
         viewport_.setXProperty(0);
         viewport_.setYProperty(0);
@@ -2271,9 +2289,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // Mutates viewport_'s fields directly (not via setViewportProperty(), to preserve the
         // "compared against lastKnownViewportWidth/Height_, not viewport_" semantics above) --
         // push the reset value to the backend explicitly (Task 880) so a window resize actually
-        // updates the GPU-side viewport too, not just the C++-side Viewport property.
+        // updates the GPU-side viewport too, not just the C++-side Viewport property. Pushes the
+        // PHYSICAL rectangle (physX/Y/Width/Height), not the logical width/height -- see
+        // GetDefaultViewportRect()'s own doc comment for why those can legitimately differ.
         if (backend_)
-            backend_->SetViewport(0, 0, width, height, 0.0f, 1.0f);
+            backend_->SetViewport(physX, physY, physWidth, physHeight, 0.0f, 1.0f);
 
         // A real backbuffer-size change resets both rectangles to the complete new target. Keep
         // the no-size-change early return above so a normal Present() and a same-dimension reset

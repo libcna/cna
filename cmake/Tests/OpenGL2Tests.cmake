@@ -99,4 +99,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_spritebatch_customeffect examples/opengl2_spritebatch_customeffect_test.cpp)
     cna_register_backend_test(NAME OpenGL2_SpriteBatchCustomEffect COMMAND cna_test_opengl2_spritebatch_customeffect
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: real CnaPresentationMode::Letterbox/Overscan/Stretch proof (one process per
+    # mode -- GraphicsDevice::SetPresentationMode is only reachable via
+    # GraphicsDeviceManager::ApplyChanges(), which also re-asserts window size from
+    # PresentationParameters, so mode and an independently-resized window can't both be exercised
+    # through a single running process/ApplyChanges() call -- see each file's own header comment).
+    cna_opengl2_test(cna_test_opengl2_presentationmode_letterbox examples/opengl2_presentationmode_letterbox_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_PresentationMode_Letterbox COMMAND cna_test_opengl2_presentationmode_letterbox
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_opengl2_test(cna_test_opengl2_presentationmode_overscan examples/opengl2_presentationmode_overscan_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_PresentationMode_Overscan COMMAND cna_test_opengl2_presentationmode_overscan
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_opengl2_test(cna_test_opengl2_presentationmode_stretch examples/opengl2_presentationmode_stretch_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_PresentationMode_Stretch COMMAND cna_test_opengl2_presentationmode_stretch
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

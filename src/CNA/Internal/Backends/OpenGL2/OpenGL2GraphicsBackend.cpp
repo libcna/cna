@@ -1041,10 +1041,17 @@ namespace CNA::Internal::Backends::OpenGL2
                 // Task-1078-equivalent fix (see EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize's
                 // own history): a draw into a bound RenderTarget2D must size its screen->clip
                 // mapping to the RT, not the window/virtual resolution -- those only coincide when
-                // the RT happens to match the window size.
+                // the RT happens to match the window size. Deliberately LOGICAL-only (not
+                // physical-window-aware): the actual GL viewport rectangle GraphicsDevice::
+                // UpdateViewportFromWindow() applies (backend_->GetDefaultViewportRect()) already
+                // maps NDC [-1,1] to the correct Letterbox/Overscan/Stretch physical sub-rectangle
+                // by itself -- GL's own viewport transform does the logical->physical mapping, so
+                // this CPU-side math only ever needs to reach clip space in LOGICAL units.
                 int viewportWidth = 0, viewportHeight = 0;
                 if (!backend_->GetCurrentRenderTarget2DSize(viewportWidth, viewportHeight))
                     backend_->GetViewportSize(viewportWidth, viewportHeight);
+                if (viewportWidth <= 0 || viewportHeight <= 0)
+                    return;
 
                 const float r = color.getRProperty() / 255.0f;
                 const float g = color.getGProperty() / 255.0f;
@@ -1142,6 +1149,11 @@ namespace CNA::Internal::Backends::OpenGL2
 
                 customEffect_->Apply();
 
+                // Deliberately LOGICAL-only, same reasoning as the built-in path above: the
+                // actual GL viewport rectangle (backend_->GetDefaultViewportRect(), applied by
+                // GraphicsDevice::UpdateViewportFromWindow()) already maps NDC to the correct
+                // Letterbox/Overscan/Stretch physical sub-rectangle, so MatrixTransform only ever
+                // needs to reach clip space in LOGICAL units.
                 int viewportWidth = 0, viewportHeight = 0;
                 if (!backend_->GetCurrentRenderTarget2DSize(viewportWidth, viewportHeight))
                     backend_->GetViewportSize(viewportWidth, viewportHeight);
@@ -1506,26 +1518,75 @@ namespace CNA::Internal::Backends::OpenGL2
 
     void OpenGL2GraphicsBackend::Present() { SDL_GL_SwapWindow(window_); }
 
-    void OpenGL2GraphicsBackend::GetViewportSize(int& width, int& height)
+    // Mirrors SdlGpuGraphicsBackend::ComputeLogicalViewport's algorithm exactly -- see this
+    // backend's own LogicalViewport doc comment for field meanings and the "why this backend,
+    // not EasyGL" rationale. NativeBackBuffer/no-virtual-resolution/zero-size-window all
+    // degenerate to the full physical window with no scaling, matching every mode's own prior
+    // (pre-this-task) behavior when the game never actually engaged Letterbox/Overscan/Stretch.
+    OpenGL2GraphicsBackend::LogicalViewport OpenGL2GraphicsBackend::ComputeLogicalViewport() const
     {
-        // Matches EasyGLGraphicsBackend::getLogicalSize exactly: with the default
-        // FixedHeightDynamicWidth presentation mode, the virtual HEIGHT stays fixed but the
-        // logical WIDTH is derived from the window's actual aspect ratio, so a resized-wider
-        // window reveals more horizontal content instead of stretching/letterboxing. Every other
-        // mode (Letterbox/Overscan/Stretch/NativeBackBuffer) falls back to the virtual size
-        // verbatim -- EasyGL itself does not differentiate those either.
-        if (virtualHeight_ <= 0)
-        {
-            SDL_GetWindowSize(window_, &width, &height);
-            return;
-        }
         int physW = 0, physH = 0;
         SDL_GetWindowSize(window_, &physW, &physH);
-        height = virtualHeight_;
-        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
-            width = static_cast<int>(static_cast<double>(physW) * virtualHeight_ / physH + 0.5);
-        else
-            width = virtualWidth_ > 0 ? virtualWidth_ : physW;
+
+        LogicalViewport viewport{};
+        viewport.width = static_cast<float>(std::max(0, physW));
+        viewport.height = static_cast<float>(std::max(0, physH));
+        viewport.logicalWidth = viewport.width;
+        viewport.logicalHeight = viewport.height;
+        if (physW <= 0 || physH <= 0)
+            return viewport;
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer || virtualWidth_ <= 0 || virtualHeight_ <= 0)
+            return viewport;
+
+        float logicalWidth = static_cast<float>(virtualWidth_);
+        float logicalHeight = static_cast<float>(virtualHeight_);
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth)
+        {
+            logicalHeight = static_cast<float>(virtualHeight_);
+            logicalWidth = logicalHeight * static_cast<float>(physW) / static_cast<float>(physH);
+            viewport.logicalWidth = logicalWidth;
+            viewport.logicalHeight = logicalHeight;
+            return viewport;
+        }
+
+        viewport.logicalWidth = logicalWidth;
+        viewport.logicalHeight = logicalHeight;
+        if (presentationMode_ == CnaPresentationMode::Stretch)
+            return viewport;
+
+        // Letterbox/Overscan: scale uniformly (min for Letterbox -- shrink to fit inside the
+        // window, adding bars; max for Overscan -- grow to cover the window, cropping the
+        // excess) and centre the result.
+        const float sx = static_cast<float>(physW) / logicalWidth;
+        const float sy = static_cast<float>(physH) / logicalHeight;
+        const float scale = presentationMode_ == CnaPresentationMode::Overscan ? std::max(sx, sy) : std::min(sx, sy);
+        viewport.width = logicalWidth * scale;
+        viewport.height = logicalHeight * scale;
+        viewport.x = (static_cast<float>(physW) - viewport.width) * 0.5f;
+        viewport.y = (static_cast<float>(physH) - viewport.height) * 0.5f;
+        return viewport;
+    }
+
+    void OpenGL2GraphicsBackend::GetViewportSize(int& width, int& height)
+    {
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        width = static_cast<int>(std::lround(viewport.logicalWidth));
+        height = static_cast<int>(std::lround(viewport.logicalHeight));
+    }
+
+    // The reference "real Letterbox/Overscan/Stretch" GetDefaultViewportRect() override in this
+    // codebase (see the base interface's own doc comment) -- GraphicsDevice::
+    // UpdateViewportFromWindow() applies this PHYSICAL rectangle as the actual glViewport,
+    // separately from GetViewportSize()'s LOGICAL result above. Every other CnaPresentationMode
+    // (FixedHeightDynamicWidth/NativeBackBuffer/Stretch) returns (0, 0, physical window size),
+    // identical to the base class default -- only Letterbox/Overscan actually offset/shrink it.
+    void OpenGL2GraphicsBackend::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        x = static_cast<int>(std::lround(viewport.x));
+        y = static_cast<int>(std::lround(viewport.y));
+        width = static_cast<int>(std::lround(viewport.width));
+        height = static_cast<int>(std::lround(viewport.height));
     }
 
     void OpenGL2GraphicsBackend::SetVirtualResolution(int width, int height)
@@ -2095,29 +2156,26 @@ namespace CNA::Internal::Backends::OpenGL2
 
     bool OpenGL2GraphicsBackend::TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const
     {
-        // A pure uniform scale (height-derived, no offset) is exact for the default
-        // FixedHeightDynamicWidth presentation mode: the logical viewport fills the whole
-        // window with no letterbox bars (matches EasyGLGraphicsBackend::TransformWindowToLogical's
-        // identical formula/reasoning -- see its own comment for why a separate X scale from a
-        // fixed virtualWidth_ would be wrong once the logical width adapts to the window's aspect).
-        int windowWidth = 0, windowHeight = 0;
-        SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
-        if (virtualHeight_ <= 0 || windowHeight <= 0) return false;
-        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(windowHeight);
-        logX = windowX * scale;
-        logY = windowY * scale;
-        return true;
+        // Mirrors SdlGpuGraphicsBackend::TransformWindowToLogical exactly: for
+        // FixedHeightDynamicWidth/NativeBackBuffer/Stretch (viewport.x=viewport.y=0, width/height
+        // equal the physical window) this degenerates to the same pure height-derived uniform
+        // scale as before; Letterbox/Overscan additionally subtract the centred sub-rectangle's
+        // offset and return false outside its bounds (a window click on a letterbox bar has no
+        // corresponding logical position).
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        if (viewport.width == 0.0f || viewport.height == 0.0f) return false;
+        logX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
+        logY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
+        return windowX >= viewport.x && windowX < viewport.x + viewport.width &&
+               windowY >= viewport.y && windowY < viewport.y + viewport.height;
     }
 
     bool OpenGL2GraphicsBackend::TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const
     {
-        int windowWidth = 0, windowHeight = 0;
-        SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
-        (void)windowWidth;
-        if (virtualHeight_ <= 0 || windowHeight <= 0) return false;
-        const float invScale = static_cast<float>(windowHeight) / static_cast<float>(virtualHeight_);
-        windowX = logX * invScale;
-        windowY = logY * invScale;
+        const LogicalViewport viewport = ComputeLogicalViewport();
+        if (viewport.logicalWidth == 0.0f || viewport.logicalHeight == 0.0f) return false;
+        windowX = viewport.x + logX * viewport.width / viewport.logicalWidth;
+        windowY = viewport.y + logY * viewport.height / viewport.logicalHeight;
         return true;
     }
 
