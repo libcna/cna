@@ -1285,3 +1285,229 @@ _(pending)_
   remediation history for (the "infinite slab" weight-blend bug, the reverted flat-cap garment redesign)
   lives in `Graphics::SkinnedModelEXT::ComputeBoneTransformsEXT()` -- a different file, under the
   `xna-graphics` shard (not yet started), not this shard's thin XNA-facing `AvatarRenderer` wrapper.
+
+## Per-shard notes: `xna-graphics`
+
+- **`xna-graphics` shard note: unlike `xna-net`/`xna-gamerservices`, this namespace HAS real, extensive FNA
+  reference material** (`src/Graphics/**/*.cs`), so every finding below is a genuine, directly-verified
+  divergence from real FNA behavior, not an unverifiable claim. All 191 files audited across 9 parallel
+  passes (8 forks by theme + this shard's `SpriteBatch`/`SpriteFont`/`SpriteSortMode`/`SpriteEffects` quartet
+  audited directly, given a prior-session flag on `SpriteFont.cpp`/`SpriteBatch.cpp` for a known
+  `unordered_map::end()` UB risk). This is the largest, most consequential shard audited so far in this
+  project — the findings below span real memory-safety bugs in the most heavily-used rendering API
+  (`SpriteBatch`), a resolved long-standing cross-cutting hypothesis, and the widest single-file instance of
+  this audit's recurring exception-type pattern yet found.
+
+### HIGH findings
+
+- **`SpriteFont::MeasureString()` and `SpriteBatch::DrawString()` can both dereference an invalid
+  `std::unordered_map::end()` iterator — real undefined behavior, not a graceful failure.** Both functions'
+  identical "character not found, fall back to `defaultCharacter_`" logic does a second
+  `characterIndexMap_.find()` with no check that it also succeeded before dereferencing `it->second`. FNA's
+  real equivalent (`characterIndexMap[DefaultCharacter.Value]`, a C# `Dictionary` indexer) throws a clean,
+  catchable `KeyNotFoundException` in the same edge case — so this is a genuine, confirmed defect relative to
+  FNA's own safe behavior, not a preserved-as-is quirk. Reachable whenever a `SpriteFont` is constructed with
+  a `defaultCharacter` not itself present in `characters` (nothing validates this invariant anywhere) and an
+  unresolvable character is then measured/drawn. See
+  `src/Microsoft/Xna/Framework/Graphics/SpriteFont.cpp.audit.md` and
+  `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp.audit.md`.
+- **`SpriteBatch::DrawString()`'s axis-direction lookup tables are sized for only 3 entries, but real XNA's
+  `SpriteEffects` is a composable `[Flags]` enum with a valid 4th (combined `FlipHorizontally|FlipVertically`)
+  value — an out-of-bounds stack read.** FNA's own `SpriteBatch.cs` declares the equivalent tables with 4
+  entries specifically to handle this combination. CNA's `SpriteEffects` enum is missing the `operator|`
+  overload the codebase's own convention provides for other flag enums (e.g. `GestureType`), but this doesn't
+  prevent the combined value from being constructed — this exact codebase already does so elsewhere via a
+  manual `static_cast` workaround (`examples/sdlgpu_2d_test.cpp:126`). If that combined value ever reaches
+  `DrawString`, `effIdx=3` reads past the end of all four 3-element tables. See
+  `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp.audit.md` and
+  `include/Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp.audit.md` (missing operator, MEDIUM).
+- **`EffectParameter`'s Matrix Get/Set/Transpose semantics are inverted relative to FNA across all 8
+  Matrix-related methods.** FNA's real `GetValueMatrix()`/`SetValue(Matrix)` apply a column-major transpose
+  (HLSL's default non-`row_major` layout); this port's plain (non-`Transpose`) variants do the untransposed
+  read/write instead — exactly what FNA's own `*Transpose` variants do, and vice versa, for
+  `GetValueMatrix`/`GetValueMatrixArray`/`GetValueMatrixTranspose`/`GetValueMatrixTransposeArray`/
+  `SetValue(Matrix)`/`SetValue(vector<Matrix>)`/`SetValueTranspose(Matrix)`/`SetValueTranspose(vector<Matrix>)`.
+  Cross-validated with high confidence: the sibling `EffectAnnotation::GetValueMatrix()` (audited in the same
+  pass) implements the identical FNA formula **correctly**, proving the right convention was known and
+  applied elsewhere in this same codebase — this looks like a specific transcription slip in
+  `EffectParameter.cpp`, not a deliberate design choice. Real-world rendering impact depends on whether
+  `Effect.cpp`/each stock effect's own draw path happens to compensate downstream via `FillGpuDrawParams()`
+  (which was separately confirmed, in the sibling stock-effects pass, NOT to route through
+  `EffectParameter`'s generic accessors at all for the built-in stock effects) — the practical exposure is
+  therefore custom/user-authored `Effect`s that use `EffectParameter`'s generic Matrix accessors directly, a
+  real and supported XNA usage pattern. See `src/Microsoft/Xna/Framework/Graphics/EffectParameter.cpp.audit.md`.
+- **`EffectParameter::Elements`/`StructureMembers` are permanently empty** — confirmed via repo-wide grep that
+  nothing anywhere populates `elements_`/`members_` after construction. Any array- or struct-typed custom
+  effect parameter silently reports zero sub-elements regardless of the shader's actual declaration. See
+  `include/Microsoft/Xna/Framework/Graphics/EffectParameter.hpp.audit.md`.
+- **`BasicEffect` never populates its own `Effect::Parameters` collection at all** — unlike every sibling
+  stock effect (`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `PbrEffect`,
+  `SkinnedPbrEffect`), it has no `EffectParameter*` members, no `CacheEffectParameters()`, and `OnApply()` is a
+  literal no-op. Rendering itself is unaffected (the real draw path uses `FillGpuDrawParams()` directly), but
+  the standard, XNA-documented `effect.Parameters["DiffuseColor"]`-style generic access — which works
+  correctly on all 6 sibling effects — silently returns nothing for `BasicEffect`, the single most commonly
+  used stock effect in the entire API. See `src/Microsoft/Xna/Framework/Graphics/BasicEffect.cpp.audit.md`.
+- **`GraphicsDevice.cpp` has ~27 raw `std::runtime_error`/`std::invalid_argument` throws** (mostly "no vertex
+  buffer bound"/"no effect applied" guards across every `Draw*` overload, plus `GetBackBufferData`/
+  `SetRenderTargets` validation), inconsistent with the same file's own correct use of
+  `System::InvalidOperationException`/`ArgumentOutOfRangeException`/`ObjectDisposedException`/
+  `NotSupportedException` at 13 other sites. The largest single-file instance of this audit's recurring
+  exception-type pattern found so far, in the framework's single most central class. See
+  `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp.audit.md`.
+- **`VertexBuffer`/`IndexBuffer` have no destination-byte-offset concept anywhere in their public
+  `SetData`/`SetDataWithOptions` API — confirmed as the root cause of the already-documented
+  `IVertexBufferBackend`/`IIndexBufferBackend::SetDataWithOptions()` backend-interface gap** (see the
+  "Architecture" section above). The gap does not originate at the backend-interface layer at all — it
+  originates here: real FNA's `VertexBuffer.cs`/`IndexBuffer.cs` both expose a genuine `offsetInBytes`
+  destination parameter as their most-general `SetData` overload, and this port dropped that overload
+  entirely. A real XNA streaming pattern (ring-buffer dynamic vertex data across multiple draws per frame
+  using `NoOverwrite`) is architecturally impossible to express in this port, not merely suboptimal. See
+  `include/Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp.audit.md` and
+  `include/Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp.audit.md`.
+
+### Resolved: the `SkinnedEffect` `ambientColor`/`emissiveColor` open hypothesis (see "Systematic FNA parity
+gaps" above)
+
+**CONFIRMED, direct evidence found**: `SkinnedEffect::FillGpuDrawParams()` computes
+`emissiveColor[i] = (emissiveColor_.i + ambientLightColor_.i * diffuseColor_.i) * alpha_` — byte-for-byte
+FNA's real `EffectHelpers.SetMaterialColor()` lighting-enabled formula — and never writes `p.ambientColor`
+anywhere; `EnvironmentMapEffect.cpp` does the identical thing. This resolves the standing open question: the
+upstream C++ value is correct and deliberately routed through `emissiveColor`; any backend whose skinned
+shader reads `ambientColor` instead (Vulkan) or lacks an `emissiveColor` slot for skinned draws (D3D11/D3D12)
+is the one misconsuming an already-correct value, not the C++ layer. `SkinnedPbrEffect`, by contrast,
+correctly populates both fields *separately* by design (the real glTF PBR BRDF needs both terms
+independently). See `src/Microsoft/Xna/Framework/Graphics/SkinnedEffect.cpp.audit.md`.
+
+### Resolved: the `GraphicsDeviceManager`/`GraphicsDevice` device-events open question (see "Architecture"
+section above, `xna-framework-core` shard)
+
+**Resolved in `GraphicsDevice`'s favor**: `GraphicsDevice` itself correctly raises
+`DeviceResetting`/`DeviceReset`/`DeviceLost`/`Disposing` at the right points (confirmed in `Reset()`,
+`Dispose()`, and the backend `deviceEventCallback`). The previously-documented HIGH finding
+("`GraphicsDeviceManager` never subscribes to these") is confirmed to be purely a subscriber-side gap —
+`GraphicsDevice` has no gap in when/whether it raises them. See
+`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp.audit.md`.
+
+### Resolved: `SamplerState.AddressW`/`BlendState.ColorWriteChannels`/`RasterizerState` state-object questions
+(see "Architecture" section above)
+
+**All confirmed correctly implemented at the XNA-facing-class level**, with zero gap in `SamplerState`,
+`BlendState`, `RasterizerState`, or `DepthStencilState` themselves: `SamplerState.AddressW` is fully real and
+independently settable (default `Wrap`, matches FNA); `BlendState.ColorWriteChannels` (all 4 MRT targets) is
+fully real; `RasterizerState.MultiSampleAntiAlias`/`ScissorTestEnable`/`DepthBias`/`SlopeScaleDepthBias` and
+`DepthStencilState`'s full 16-property field set are all fully real and correct. Every already-documented gap
+in this area (`IGraphicsBackend::ApplySamplerState()` missing a parameter, D3D12's non-functional
+stencil/scissor) is 100% confined to the backend layer, confirmed by tracing the call sites in
+`GraphicsDevice.cpp`. See `include/Microsoft/Xna/Framework/Graphics/SamplerState.hpp.audit.md` and siblings.
+
+### Resolved: cube-face mip-regeneration question (see "Architecture" section above)
+
+**Resolved: not this shard's fault.** `TextureCube`'s own XNA-facing `SetData`/`GetData` API is correctly,
+unambiguously per-face throughout (matches FNA exactly) — the previously-found "regenerates mips for all 6
+faces" defect (SdlGpu, D3D11) is purely a backend-level issue, not caused by this XNA-facing class or its
+documentation. See `include/Microsoft/Xna/Framework/Graphics/TextureCube.hpp.audit.md`.
+
+### Resolved: `SkinnedModelEXT` bone-weight-blend "infinite slab" question (persistent project memory)
+
+**The defect cannot originate in `SkinnedModelEXT.cpp`.** `ComputeBoneTransformsEXT()` computes exactly one
+world-space matrix *per bone* via single-parent-chain composition — structurally identical to
+`AnimationPlayer::RecomputeTransforms` — and performs **no per-vertex multi-bone weight blending at all** (no
+`BlendWeight`/`BlendIndices` consumption anywhere in this file). The previously-recorded "infinite slab"
+joint-weight-blend defect must therefore live in per-backend skinned-vertex-shader code (where this project's
+own cross-cutting findings already document a related, separate skinned-normal-transform bug across all 14
+backends) or in the content-import weight-population pipeline — neither of which is in this file. Six
+previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confirmed present and correct. See
+`src/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.cpp.audit.md`.
+
+### MEDIUM findings
+
+- **`Texture2D::GetTypeName()` returns bare `"Texture2D"` instead of the fully-qualified `.NET` name** every
+  sibling (`Texture3D`, `TextureCube`, `RenderTarget2D`, `RenderTargetCube`) correctly returns — an isolated
+  regression on the single most commonly-used XNA type in the whole API. See
+  `src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp.audit.md`.
+- **`RenderTargetCube` lacks `RenderTarget2D`'s own Task 717 fix**: no `Dispose(bool)` override at all, so it
+  has neither the "still bound to device" guard nor the dangling-pointer clear `RenderTarget2D` already had to
+  add — a real use-after-free risk in the structurally identical pointer pattern. See
+  `include/Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp.audit.md`.
+- **`RenderTargetBinding`'s two-argument constructors have zero validation** (FNA's real constructors throw
+  `ArgumentNullException` for a null texture and `ArgumentOutOfRangeException` for an invalid `CubeMapFace`),
+  and it carries an undisclosed, non-`NOXNA`-tagged `arraySlice` extension with no FNA equivalent. See
+  `include/Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp.audit.md`.
+- **`TextureCollection` is missing FNA's real render-target/sampler-conflict check** (binding a texture that's
+  simultaneously an active render target should throw `InvalidOperationException`; currently silently
+  allowed). See `include/Microsoft/Xna/Framework/Graphics/TextureCollection.hpp.audit.md`.
+- **`DynamicVertexBuffer`/`DynamicIndexBuffer` don't override `GetTypeName()`** — same defect shape as
+  `GamerServicesComponent` (sibling `xna-gamerservices` shard) and `Texture2D` (above): each silently reports
+  its base class's name instead of its own.
+- **`VertexBufferBinding.VertexOffset` is modeled as a vertex-count offset, not FNA's real byte offset**
+  (`VertexBufferBinding.cs` explicitly documents bytes) — a genuine unit-semantics divergence, flagged for
+  cross-check against `GraphicsDevice`'s actual consumption of this field.
+- **`ModelMeshPartCollection::operator[](int)` and `ModelEffectCollection::operator[](int)` both perform
+  unchecked `std::vector::operator[]` indexing** where FNA's real equivalents (`ReadOnlyCollection<T>`) always
+  bounds-check. The same shape as the confirmed `xna-net` shard's `NetworkSessionProperties::Insert`/
+  `RemoveAt` bug. Contrast: `ModelBoneCollection`/`ModelMeshCollection` in this same family correctly use
+  `.at()`.
+- **`Model.cpp`: five throw sites use raw `std::out_of_range`/`std::runtime_error`** instead of
+  `System::ArgumentOutOfRangeException`/`System::InvalidOperationException`, confirmed against FNA's real
+  `Model.cs`, which documents exactly those `System.*` exception types.
+- **`PackedVector/Byte4.hpp`, `Short2.hpp`, `Short4.hpp` all truncate instead of round** in `Pack()`
+  (`static_cast<uint32_t>(clamp(x,0,255))` vs. FNA's `(uint)Math.Round(...)`) — a systematic off-by-up-to-1
+  error for any non-integer input, not just boundary ties. Contrast: `NormalizedByte2/4`/`NormalizedShort2/4`
+  in the same directory correctly use `std::lroundf`.
+- **`VertexPositionColor.hpp` does not implement `IVertexType` at all** — unlike real FNA's
+  `VertexPositionColor : IVertexType` and unlike every other concrete vertex type in this shard.
+- **`GraphicsDevice::Dispose()` disposes owned resources *before* raising `Disposing`**, inverted from FNA's
+  real order (event first, then resource teardown) — a `Disposing` handler here can never observe a
+  still-valid resource, unlike real XNA.
+- **`DisplayMode` is missing `TitleSafeArea`, `GetHashCode()`, and `ToString()`** — all three real, documented
+  FNA members.
+- **`DeviceLostException`/`DeviceNotResetException`/`NoSuitableGraphicsDeviceException` all derive from
+  `std::runtime_error` instead of `System::Exception`**, and are all missing the `(message, innerException)`
+  constructor FNA's real types have.
+- **Four `EffectParameterCollection`/`EffectPassCollection`/`EffectTechniqueCollection`/
+  `EffectAnnotationCollection` `operator[](int)` implementations each throw raw `std::out_of_range`** instead
+  of `System::ArgumentOutOfRangeException` — bounds-checking itself is present and correct in all four; only
+  the exception type deviates.
+- Exception-type convention violated in `SkinnedEffect.cpp` (4 sites), `EnvironmentMapEffect.cpp` (1),
+  `PbrEffect.cpp` (1), `SkinnedPbrEffect.cpp` (4, mirroring `SkinnedEffect` almost verbatim),
+  `SamplerStateCollection.cpp` (both `operator[]` overloads), and pervasively across `Texture`/`Texture2D`/
+  `Texture3D`/`TextureCube`/`TextureCollection` (`Texture2D.cpp` alone has ~15+ raw-`std::`-exception sites,
+  the widest single-file instance in the `Texture*` family).
+
+### LOW findings and other notes
+
+- `SamplerStateCollection` has no per-slot dirty-tracking (unlike FNA's real `modifiedSamplers`); traced the
+  consequence into `GraphicsDevice::applySamplerStatesToBackend()`, which unconditionally re-applies all 16
+  sampler slots every call — a confirmed real performance-architecture divergence from FNA, no correctness
+  impact.
+- `GraphicsResource` has no way to reassign `graphicsDevice_` after construction, unlike FNA's real `internal
+  set`-backed property (used by `VertexDeclaration` to move between devices) — flagged for follow-up.
+- `VertexDeclaration`'s auto-stride constructor doesn't validate for an empty element list, unlike FNA's real
+  constructor (`ArgumentNullException`/`ArgumentException`).
+- A shared, narrow rounding-tie divergence (round-half-up vs. FNA's `Math.Round` banker's-rounding) affects
+  `Alpha8`, `Bgr565`, `Bgra4444`, `Bgra5551`, `Rg32`, `Rgba1010102`, `Rgba64`.
+- `EffectMaterial::Clone()` preserves type identity, unlike FNA's own `EffectMaterial` (no `Clone()` override
+  there, which would slice to a plain `Effect`) — likely an intentional improvement, flagged for visibility,
+  not treated as a defect.
+- `VertexBuffer`/`IndexBuffer`'s plain `SetData` has zero bounds validation in any build config, but this
+  matches FNA's own dominant Release-mode behavior exactly (FNA's equivalent check is
+  `[Conditional("DEBUG")]`) — parity, not regression.
+- `BlendFunction.hpp`'s Doxygen comments for `Max`/`Min` are self-consistent with the enum names, whereas
+  FNA's own doc comments for those two values are internally swapped/contradictory — this port correctly did
+  not copy that FNA documentation bug verbatim.
+
+## Recurring pattern: `NetworkSession*` `Dispose()`d but never `delete`d in example demos
+
+- **CONFIRMED, 5 instances: `demo_qos_probe`, `demo_session_lifecycle_events`, `demo_gamer_roster_hud`,
+  `demo_session_browser`, `demo_simulated_network_conditions` all call `session_->Dispose()` in their
+  destructor/`main()` but never `delete session_`.** `NetworkSession`'s own class-level doc comment (`xna-net`
+  shard, audited this session) explicitly documents that the caller must `delete` the pointer separately once
+  done with it, since `Dispose()` deliberately does not `delete this`. Practically harmless in every instance
+  found (each process exits immediately afterward, so the OS reclaims the leaked allocation), but a
+  consistently-repeated gap across every Net-owning demo audited this session — worth fixing if any of these
+  demos is ever used as a copy-paste template for a longer-running application. **Positive counter-example
+  found in the same session**: `demo_gamer_profile_privileges`'s `ProfileGame` correctly `Dispose()`s **and**
+  `delete`s its owned `GamerProfile*` in both its destructor and its gamer-switching logic, proving the
+  correct pattern is well understood and achievable in this codebase's own demo suite — the `NetworkSession`
+  gap looks like a copy-pasted omission across the Net demo family specifically, not a project-wide habit.
+  See each demo's own `.audit.md` report (`examples/demo_*/src/*.audit.md`) for the individual instances.
