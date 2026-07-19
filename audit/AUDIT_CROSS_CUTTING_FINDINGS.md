@@ -908,6 +908,21 @@ _(pending)_
   FNA-upstream-incomplete siblings when those files (and `BoundingFrustum.cpp`, not yet audited) are
   reviewed.
 
+- **MEDIUM: `Matrix::Invert()` computes every intermediate cofactor determinant in single-precision
+  `float`, unlike FNA's own deliberate double-precision implementation** -- found while auditing
+  `xna-framework-core`, verified directly against `/rv/data/library/github.com/FNA-XNA/FNA/src/Matrix.cs`
+  (`Invert`, starting line 1836). FNA's real implementation promotes every multiplication/subtraction to
+  `double` before rounding back to `float`, for every one of the ~20 intermediate cofactor terms -- a
+  deliberate, consistently-applied precision choice for a classically numerically-sensitive operation
+  (4x4 matrix inversion via cofactor expansion). The CNA port's own source comment acknowledges this
+  ("FNA casts each operand to double... CNA uses plain float arithmetic for simplicity") but asserts "no
+  observable difference in practice" without demonstrating it via any cited test or numerical comparison --
+  unlike this project's own established standard elsewhere (e.g. `SoundEffectContentTypeReader.cpp`'s
+  fixture-verified claims) for this kind of precision/behavior assertion. Given the project's explicit
+  FNA-fidelity policy, this is a testable, currently-unverified claim: construct a poorly-conditioned or
+  widely-varying-magnitude test matrix, invert both ways, and compare against a high-precision reference.
+  See `src/Microsoft/Xna/Framework/Matrix.cpp.audit.md`.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
