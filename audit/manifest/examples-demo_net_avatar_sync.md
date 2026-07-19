@@ -6,6 +6,6 @@ Files in this shard: **3**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_net_avatar_sync/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_net_avatar_sync/src/Main.cpp.audit.md) |
-| 2 | `examples/demo_net_avatar_sync/src/SyncGame.cpp` | PENDING | [SyncGame.cpp.audit.md](../examples/demo_net_avatar_sync/src/SyncGame.cpp.audit.md) |
-| 3 | `examples/demo_net_avatar_sync/src/SyncGame.hpp` | PENDING | [SyncGame.hpp.audit.md](../examples/demo_net_avatar_sync/src/SyncGame.hpp.audit.md) |
+| 1 | `examples/demo_net_avatar_sync/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_net_avatar_sync/src/Main.cpp.audit.md) |
+| 2 | `examples/demo_net_avatar_sync/src/SyncGame.cpp` | AUDITED | [SyncGame.cpp.audit.md](../examples/demo_net_avatar_sync/src/SyncGame.cpp.audit.md) |
+| 3 | `examples/demo_net_avatar_sync/src/SyncGame.hpp` | AUDITED | [SyncGame.hpp.audit.md](../examples/demo_net_avatar_sync/src/SyncGame.hpp.audit.md) |
