@@ -870,13 +870,27 @@ real GL driver (not just compiled) before committing.
   `RenderTargetCube`/`EffectBackend`) have no such registry today. This is NOT a small bounded fix
   like anything in session 8 -- it is a full resource-lifecycle redesign touching every backend
   resource type. Scope as its own multi-part task if ever prioritized; do not attempt piecemeal.
-- **TextureCube/Texture3D mip-level support parity.** Session 8 fixed real mip-level upload +
-  mip-aware filtering for plain `Texture2D` only (`Tex` class). `TextureCube`/`Texture3D`'s own
-  backend classes were deliberately left untouched to keep that fix bounded -- `Texture3D` is
-  already documented above as "level 0 only, no mip chain yet"; `TextureCube` mip status was not
-  re-audited this session. The same `UpdatePixelsLevel`-style gap and `GL_TEXTURE_MAX_LEVEL` clamp
-  reasoning likely applies to both; worth auditing together as a single follow-up task since the
-  fix shape is now well-understood from the `Texture2D` precedent.
+- **`Texture3D` mip-level support (`Texture3DBackend`) remains level-0-only.** Re-audited this
+  session (session 8) after the `Texture2D` mip fix, alongside `TextureCube` (see below, which
+  turned out to already be fine): `Texture3DBackend`'s constructor only ever calls `glTexImage3D`
+  for level 0 and never clamps `GL_TEXTURE_MAX_LEVEL`, and its own header comment already flagged
+  this ("only level 0 is allocated -- mipMap is accepted... but not yet generated/stored"). Real
+  fix needs care beyond a mechanical copy of the `Texture2D` fix: `Texture3D.cpp`'s own
+  `CalculateMipLevels(width, height)` deliberately excludes `depth` from the level-count formula
+  (an established FNA convention, see that file's comment mirroring `Texture3D.cs`'s
+  `LevelCount = mipMap ? CalculateMipLevels(width, height) : 1`), but real GL_TEXTURE_3D mipmap
+  chains still need each level's actual DEPTH dimension to follow the standard halve-to-1 rule for
+  the chain to be GL-spec-complete -- confirming the exact interaction between those two facts
+  (not fully verified from FNA3D's C source this session) is the real risk here, not the
+  mechanical `glTexImage3D`-per-level loop or the `GL_TEXTURE_MAX_LEVEL` clamp themselves. Not
+  attempted tonight because getting a 3D mip dimension subtly wrong is a new, harder-to-notice bug
+  the current "level 0 only" state doesn't have.
+- **`TextureCube` mip-level support was re-audited this session and found to already be correct** --
+  no action needed. Unlike `Texture2D`'s `Tex` class (which only allocated level-0 GL storage,
+  requiring the new `UpdatePixelsLevel` override this session), `TextureCubeBackend`'s constructor
+  already pre-allocates `glTexImage2D` storage for every level of every face up front and already
+  clamps `GL_TEXTURE_MAX_LEVEL` to the real level count, so its existing `SetData(face, level, ...)`
+  (`glTexSubImage2D`) already writes into valid, GL-spec-complete mip storage today.
 - **Anisotropic filtering degree is only wired for the general 3D draw path's `applySampler`
   lambda** (session 8), not `SpriteBatch`'s own two `ToGLFilter` call sites (`Sprite::Draw`/
   `DrawWithCustomEffect`) -- deliberately left unchanged since SpriteBatch textures essentially
