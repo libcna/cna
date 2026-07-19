@@ -105,4 +105,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_RenderTarget2D_Sample COMMAND cna_test_opengl1_rendertarget2d_sample
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 3: ARB_multitexture/core-1.3 DualTextureEffect fixed-function path.
+    # Reused verbatim from EasyGL's own Task 383 test (backend-agnostic) -- isolates FNA's real
+    # "texture0.rgb *= 2" doubling factor from a naive texture0*texture1*diffuse multiply, which
+    # the GL_COMBINE/GL_RGB_SCALE=2 texture-environment chain in DrawInternal must reproduce.
+    cna_opengl1_test(cna_test_opengl1_dualtextureeffect_doubling
+                      examples/easygl_dualtextureeffect_doubling_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_DualTextureEffect_Doubling COMMAND cna_test_opengl1_dualtextureeffect_doubling
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
