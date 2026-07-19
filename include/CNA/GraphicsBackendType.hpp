@@ -10,8 +10,17 @@ namespace CNA
         /** @brief SDL_Renderer (2D-only). */
         SdlRenderer,
 
-        /** @brief EasyGL (OpenGL ES). */
-        EasyGL,
+        /** @brief OpenGL ES (desktop/mobile GLES 3.0), internally implemented by EasyGL. */
+        OpenGLES,
+
+        /** @brief Desktop OpenGL 3.3 core profile, internally implemented by EasyGL. */
+        OpenGL33,
+
+        /** @brief WebGL 1 (Emscripten only, GLES 2.0), internally implemented by EasyGL. */
+        WebGL1,
+
+        /** @brief WebGL 2 (Emscripten only, GLES 3.0), internally implemented by EasyGL. */
+        WebGL2,
 
         /** @brief Bgfx. */
         Bgfx,
@@ -110,7 +119,11 @@ namespace CNA
      *
      * Resolved entirely from the CNA_BACKEND_* compile definition cmake/BackendSelection.cmake
      * sets per backend, so this is a compile-time constant -- usable in a constant expression
-     * (e.g. static_assert(CNA::getCurrentGraphicsBackendType() == CNA::GraphicsBackendType::EasyGL)).
+     * (e.g. static_assert(CNA::getCurrentGraphicsBackendType() == CNA::GraphicsBackendType::OpenGLES)).
+     *
+     * The 4 GL-family public backends (OPENGLES/OPENGL33/WEBGL1/WEBGL2) all share the internal
+     * CNA_BACKEND_EASYGL identity (see plan_glbackends.md) -- the CNA_GL_PROFILE_* compile
+     * definition set alongside it distinguishes which of the 4 public names was selected.
      *
      * @return The active GraphicsBackendType, determined at compile time by CNA_GRAPHICS_BACKEND.
      */
@@ -119,7 +132,15 @@ namespace CNA
 #if defined(CNA_BACKEND_SDL_RENDERER)
         return GraphicsBackendType::SdlRenderer;
 #elif defined(CNA_BACKEND_EASYGL)
-        return GraphicsBackendType::EasyGL;
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        return GraphicsBackendType::OpenGL33;
+#elif defined(CNA_GL_PROFILE_WEBGL1)
+        return GraphicsBackendType::WebGL1;
+#elif defined(CNA_GL_PROFILE_WEBGL2)
+        return GraphicsBackendType::WebGL2;
+#else // CNA_GL_PROFILE_OPENGLES (default within CNA_BACKEND_EASYGL)
+        return GraphicsBackendType::OpenGLES;
+#endif
 #elif defined(CNA_BACKEND_BGFX)
         return GraphicsBackendType::Bgfx;
 #elif defined(CNA_BACKEND_VULKAN)
@@ -189,7 +210,7 @@ namespace CNA
      * @brief Returns the human-readable name of the graphics backend compiled into this build.
      *
      * The returned view matches the CNA_GRAPHICS_BACKEND CMake option value exactly
-     * (e.g. "EASYGL", "SDL_RENDERER", "D3D9") and points at static storage (a string literal),
+     * (e.g. "OPENGLES", "SDL_RENDERER", "D3D9") and points at static storage (a string literal),
      * so it stays valid for the lifetime of the program. Like getCurrentGraphicsBackendType(),
      * this is a compile-time constant.
      *
@@ -200,7 +221,10 @@ namespace CNA
         switch (getCurrentGraphicsBackendType())
         {
             case GraphicsBackendType::SdlRenderer: return "SDL_RENDERER";
-            case GraphicsBackendType::EasyGL:      return "EASYGL";
+            case GraphicsBackendType::OpenGLES:    return "OPENGLES";
+            case GraphicsBackendType::OpenGL33:    return "OPENGL33";
+            case GraphicsBackendType::WebGL1:       return "WEBGL1";
+            case GraphicsBackendType::WebGL2:       return "WEBGL2";
             case GraphicsBackendType::Bgfx:         return "BGFX";
             case GraphicsBackendType::Vulkan:       return "VULKAN";
             case GraphicsBackendType::WebGPU:       return "WEBGPU";
