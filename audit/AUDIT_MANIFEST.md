@@ -86,7 +86,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`tests-cna-devices`](manifest/tests-cna-devices.md) | 10 | PENDING: 10 / AUDITED: 0 |
 | [`tests-cna-input`](manifest/tests-cna-input.md) | 5 | PENDING: 5 / AUDITED: 0 |
 | [`tests-cna-internal`](manifest/tests-cna-internal.md) | 65 | PENDING: 65 / AUDITED: 0 |
-| [`tests-microsoft-devices`](manifest/tests-microsoft-devices.md) | 25 | PENDING: 25 / AUDITED: 0 |
+| [`tests-microsoft-devices`](manifest/tests-microsoft-devices.md) | 25 | PENDING: 0 / AUDITED: 25 |
 | [`tests-misc`](manifest/tests-misc.md) | 1 | PENDING: 1 / AUDITED: 0 |
 
 ## Tools (first-party tooling) (85 files)
