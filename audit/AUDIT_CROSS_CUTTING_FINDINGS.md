@@ -1722,3 +1722,66 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   lines, the shard's largest/most rigorous file) also has zero test for `GetTypeName()`, confirming
   by total absence the already-flagged production defect there, while sibling `Texture3DTests.cpp`/
   `TextureCubeTests.cpp` both correctly test it.
+
+## Per-shard notes: `tests-cna-internal` (65 files)
+
+Exceptional-quality test engineering throughout -- real fixtures over hand-crafted data,
+mechanism-level regression tests rather than symptom-only checks, and several files that document
+catching their own prior test-quality failures. Only two findings, both MEDIUM or below:
+
+- **MEDIUM**: `PictureLibraryIndexTests.cpp` has no symlink-cycle or permission-denied-subdirectory
+  test for the picture scanner, unlike the equivalent music-scanner tests in the same shard --
+  unverified whether the underlying scanner code shares the same risk, but the test-coverage
+  asymmetry between two structurally similar scanners is itself worth noting.
+- **LOW**: `DecimalDateTimeContentTypeReaderTests.cpp`'s MSVC-only `DecimalReader`
+  test/registration exclusion (`#if !defined(_MSC_VER)`) has no stated rationale anywhere in the
+  file, unlike every other platform-conditional test in this shard, which document their reasons.
+
+Two files stand out as reference-quality for the whole project: `ENetBackendTests.cpp` (2083 lines,
+exhaustive pending-send-queue state-machine coverage) and `SoundEffectContentTypeReaderTests.cpp`
+(1105 lines, precise mechanism-level format-parsing verification).
+
+`LzxDecoderFuzzTests.cpp` and `XnbContainerFuzzTests.cpp` are both genuinely adversarial fuzz
+harnesses: real-fixture mutation (not synthetic byte generation), deterministic non-wall-clock
+seeds, and precisely-reasoned exception allowlists. `XnbContainerFuzzTests.cpp` specifically
+hard-fails on `std::bad_alloc`, treating an allocation-bomb near-miss as a real bug rather than an
+acceptable rejection -- one of the sharpest fuzz-harness design choices found in this entire audit.
+
+This shard directly confirms two standing cross-cutting questions:
+- **`GamerServicesDispatcherHangRegressionTest.cpp`** substantively reproduces the confirmed
+  `GamerServicesDispatcher::UpdateAsync()` permanent-no-op-once-initialized hang (see
+  `xna-gamerservices` per-shard notes above) via a genuinely separate, watchdog-monitored OS
+  process -- plus two related bugs (a `GetAchievements` hang and a gamer-leak).
+- **`TwoProcessLoopbackTest.cpp`**'s fresh-process architecture is genuinely necessary, not
+  incidental engineering overhead: only two independent OS processes can each hold their own
+  `NetworkSession` given the project's documented one-session-per-process constraint. Its 3-process
+  host-migration test carefully eliminates races via a "lowest remaining wire id" deterministic
+  promotion rule, matching the identical technique already confirmed in `tools/net/
+  net_two_process_harness.cpp` (`tools-net` shard).
+
+## Per-shard notes: `tools-avatar-builder` (15 files)
+
+`tools/avatar_builder/generate_body.py`'s `fix_automatic_weights()` (lines 169-199) is the
+confirmed fix location for the long-standing, multi-session "infinite slab" bone-weight-blending
+defect (Pants weighted to Shoulders): the original bend-joint blend tested only axial distance from
+a joint, which for a laterally-pointing bone (shoulder) describes an infinite slab perpendicular to
+the bone axis, sweeping through the torso/hips/legs. The fix adds a `perpendicular = (offset - axis
+* signed_dist).length` check, bounding the region to a cylinder around the joint axis. Every
+downstream consumer calls this same shared function, so no other file in the pipeline could have
+silently regressed it.
+
+`tools/avatar_builder/generate_animations.py`'s own top-of-file docstring is stale, describing only
+5 of the file's actual 31 built animation clips (`_GENERIC_BUILDERS` alone has 11 entries,
+`Stand0`-`Stand7` plus `Wave`/`Clap`/`Celebrate`, plus 10 `_FEMALE_BUILDERS`/10 `_MALE_BUILDERS`) --
+LOW, the same class of stale-scope-note finding already seen in `demo_achievement_showcase.hpp`.
+This directly resolves `validate_gltf.py`'s own audit-flagged ambiguity: `REQUIRED_ANIMATIONS`'
+8-name `Stand0`-`Stand7` requirement is correct and matches `generate_animations.py`'s real,
+current behavior -- the project's README, not the validation gate, is the stale artifact.
+
+`_raise_upper_arm`/`_fold_lower_arm`'s doc comments in `generate_animations.py` document a
+genuinely non-obvious, empirically-discovered Blender rigging fact worth calling out as exemplary
+engineering documentation: a child bone's local rotation composes with its parent's *current*
+(possibly already-rotated) world transform, not its rest transform, so the same local angle can
+require an opposite sign depending on whether the parent has already moved -- explicitly flagged as
+something to re-verify empirically per call site rather than assumed to generalize to unaudited
+bone pairs (e.g. `UpperLeg`/`LowerLeg`).
