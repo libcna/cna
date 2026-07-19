@@ -523,6 +523,108 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         };
 
+        // FBO cube-map render target: one shared FBO whose color attachment is re-pointed at
+        // whichever face is currently active (glFramebufferTexture2D with
+        // GL_TEXTURE_CUBE_MAP_POSITIVE_X+face), plus one depth/(stencil) renderbuffer shared
+        // across all 6 faces (matches the common convention of clearing depth per-face rather
+        // than needing 6 independent depth buffers). Single-sample only -- MSAA cube render
+        // targets are a follow-up item (plan_opengl2.md), unlike RenderTarget2D's own MSAA support.
+        class RenderTargetCubeBackend final : public IRenderTargetCubeBackend
+        {
+        public:
+            GLuint fbo{};
+            GLuint colorTex{};
+            GLuint depthRbo{};
+            int size{};
+            int levelCount{1};
+            int boundFace{-1};
+
+            RenderTargetCubeBackend(int cubeSize, int depthFormat, bool mipMap)
+                : size(cubeSize), levelCount(mipMap ? CalculateRenderTargetMipLevels(cubeSize, cubeSize) : 1)
+            {
+                glGenTextures(1, &colorTex);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex);
+                for (int face = 0; face < 6; ++face)
+                {
+                    int levelSize = size;
+                    for (int level = 0; level < levelCount; ++level)
+                    {
+                        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, GL_RGBA,
+                                    levelSize, levelSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                        levelSize = std::max(1, levelSize / 2);
+                    }
+                }
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, levelCount - 1);
+
+                glGenFramebuffers(1, &fbo);
+                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X, colorTex, 0);
+                boundFace = 0;
+
+                GLenum depthInternalFormat = 0, depthAttachment = 0;
+                if (MapDepthFormat(depthFormat, depthInternalFormat, depthAttachment))
+                {
+                    glGenRenderbuffers(1, &depthRbo);
+                    glBindRenderbuffer(GL_RENDERBUFFER, depthRbo);
+                    glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, size, size);
+                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER, depthRbo);
+                }
+
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            }
+
+            ~RenderTargetCubeBackend() override
+            {
+                if (depthRbo) glDeleteRenderbuffers(1, &depthRbo);
+                if (fbo) glDeleteFramebuffers(1, &fbo);
+                if (colorTex) glDeleteTextures(1, &colorTex);
+            }
+
+            int GetSize() const override { return size; }
+            void BindGL() const override { glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex); }
+            unsigned int GetGLHandle() const override { return colorTex; }
+
+            void BindAsRenderTargetFace(int face) override
+            {
+                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                if (face != boundFace)
+                {
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                           GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, colorTex, 0);
+                    boundFace = face;
+                }
+            }
+
+            void UnbindAsRenderTarget() override
+            {
+                if (levelCount > 1)
+                {
+                    glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex);
+                    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+                }
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            }
+
+            // Texture2D-style GetData isn't part of ITextureCubeBackend (only SetData is
+            // pure-virtual there) -- read back via glGetTexImage exactly like TextureCubeBackend.
+            void GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
+            {
+                int levelSize = size;
+                for (int i = 0; i < level; ++i) levelSize = std::max(1, levelSize / 2);
+                std::vector<uint8_t> full(static_cast<std::size_t>(levelSize) * levelSize * 4);
+                glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex);
+                glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
+                auto* dst = static_cast<uint8_t*>(data);
+                for (int row = 0; row < h; ++row)
+                    std::memcpy(dst + static_cast<std::size_t>(row) * w * 4,
+                               full.data() + (static_cast<std::size_t>(y + row) * levelSize + x) * 4, w * 4);
+            }
+        };
+
         // GL_TEXTURE_3D + glTexImage3D/glTexSubImage3D are core desktop GL since 1.2 (no
         // extension needed, unlike GLES).
         class Texture3DBackend final : public ITexture3DBackend
@@ -980,15 +1082,52 @@ namespace CNA::Internal::Backends::OpenGL2
         return std::make_unique<RenderTarget>(w, h, depthFormat, mipMap, multiSampleCount);
     }
 
-    void OpenGL2GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    std::unique_ptr<IRenderTargetCubeBackend> OpenGL2GraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool mipMap, int /*multiSampleCount*/)
+    {
+        // plan_opengl2.md follow-up: MSAA cube render targets are not implemented (unlike
+        // RenderTarget2D's own MSAA support) -- multiSampleCount is accepted (matching the
+        // interface signature) but ignored.
+        return std::make_unique<RenderTargetCubeBackend>(size, depthFormat, mipMap);
+    }
+
+    void OpenGL2GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        if (currentRtCube_ != rt)
+            unbindCurrentRenderTarget();
+
+        if (rt)
+        {
+            rt->BindAsRenderTargetFace(face);
+            currentRtWidth_ = rt->GetSize();
+            currentRtHeight_ = rt->GetSize();
+            currentRtCube_ = rt;
+        }
+        else
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            currentRtWidth_ = 0;
+            currentRtHeight_ = 0;
+        }
+    }
+
+    void OpenGL2GraphicsBackend::unbindCurrentRenderTarget()
     {
         // Must run the OUTGOING target's own UnbindAsRenderTarget() first -- that is where
-        // RenderTarget resolves its MSAA renderbuffer into colorTex and regenerates its mip
-        // chain (mirrors FNA3D's OPENGL_ResolveTarget, invoked when a target stops being the
-        // active render target). Skipping this left both features silently inert: colorTex kept
-        // whatever empty storage glTexImage2D(..., nullptr) initially gave it.
-        if (currentRt_)
-            currentRt_->UnbindAsRenderTarget();
+        // RenderTarget/RenderTargetCube resolve their MSAA renderbuffer into the sampleable
+        // texture and regenerate their mip chain (mirrors FNA3D's OPENGL_ResolveTarget, invoked
+        // when a target stops being the active render target). Skipping this leaves both
+        // features silently inert: the color texture keeps whatever empty storage
+        // glTexImage2D(..., nullptr) initially gave it.
+        if (currentRt_) currentRt_->UnbindAsRenderTarget();
+        if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
+        currentRt_ = nullptr;
+        currentRtCube_ = nullptr;
+    }
+
+    void OpenGL2GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        unbindCurrentRenderTarget();
 
         if (rt)
         {

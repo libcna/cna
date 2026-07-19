@@ -252,8 +252,25 @@ possibilities of OpenGL 2"):
   yet generated/stored, consistent with `TextureCube`'s own already-implemented mip chain being
   the more complete precedent to eventually extend this to. 3/3 PASS.
 
+## Status: RenderTargetCube (2026-07-19, session 6 cont'd)
+
+- **`RenderTargetCube` implemented**: one shared FBO whose color attachment is re-pointed at
+  whichever face is active (`glFramebufferTexture2D` with `GL_TEXTURE_CUBE_MAP_POSITIVE_X+face`),
+  plus one depth/(stencil) renderbuffer shared across all 6 faces (the common convention --
+  cleared per-face rather than needing 6 independent depth buffers). Supports mipmaps (same
+  pre-allocate-then-`glGenerateMipmap`-on-unbind approach as `RenderTarget`/`TextureCubeBackend`).
+  Single-sample only -- MSAA cube render targets are a follow-up item, unlike `RenderTarget2D`'s
+  own MSAA support.
+  Reused the same `unbindCurrentRenderTarget()`/outgoing-target tracking fix `RenderTarget2D`
+  needed (see session 5): `SetRenderTargetCubeFace()` is now an explicit override (the
+  `IGraphicsBackend` default just calls `BindAsRenderTargetFace()` directly, bypassing the
+  Y-flip/MSAA/mipmap tracking entirely) -- without this, cube-face rendering would have hit the
+  exact same "resolve/mipmap regen never runs" bug found and fixed for `RenderTarget2D`.
+  `OpenGL2_RenderTargetCube` verifies all 6 faces hold their own distinct color, real depth-test
+  occlusion inside a face, and mipmap generation. 5/5 PASS.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers nine CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers ten CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -271,6 +288,7 @@ possibilities of OpenGL 2"):
   - `OpenGL2_OcclusionQuery` -- exact GL_SAMPLES_PASSED pixel counts, visible and fully occluded. 4/4 PASS.
   - `OpenGL2_TextureCube` -- SetData/GetData round-trip for all 6 faces + mipmap construction. 3/3 PASS.
   - `OpenGL2_Texture3D` -- SetData/GetData round-trip across depth slices + sub-volume offset. 3/3 PASS.
+  - `OpenGL2_RenderTargetCube` -- per-face FBO, depth occlusion, mipmap generation. 5/5 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -298,6 +316,7 @@ possibilities of OpenGL 2"):
 - `TextureCube` (`GL_TEXTURE_CUBE_MAP`, see `OpenGL2_TextureCube` above); not yet sampled by any
   stock effect (`EnvironmentMapEffect` remains a follow-up item).
 - `Texture3D` (`GL_TEXTURE_3D`, see `OpenGL2_Texture3D` above); level 0 only, no mip chain yet.
+- `RenderTargetCube` (see `OpenGL2_RenderTargetCube` above); single-sample only, no MSAA.
 - RenderTarget2D/FBO, including MSAA (resolve-on-unbind) and mipmap generation.
 - AlphaTestEffect, DualTextureEffect, and BasicEffect lighting (3 directional lights, ambient,
   specular, emissive) + fog (see `OpenGL2_Effects` above).
@@ -316,11 +335,9 @@ possibilities of OpenGL 2"):
 - PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
   effort (its own shader family + texture set), likely lower priority than the items above for a
   "no EasyGL dependency" OpenGL 2.1 backend.
-- `RenderTargetCube` -- only `RenderTarget2D` is implemented; `CreateRenderTargetCube` still
-  returns `nullptr` (default).
-- EnvironmentMapEffect subset (now that plain `TextureCube` exists, this is the remaining piece --
-  a reflection-mapping shader sampling `samplerCube`, plus `RenderTargetCube` above for
-  render-to-cube-map scenarios).
+- EnvironmentMapEffect subset (now that both plain `TextureCube` and `RenderTargetCube` exist,
+  this is the one remaining piece for cube-map support -- a reflection-mapping shader sampling
+  `samplerCube`).
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
   `nullptr` (default). Would let games write their own OpenGL2 shaders through CNA's `Effect`
   API, mirroring `EasyGLEffectBackend`.

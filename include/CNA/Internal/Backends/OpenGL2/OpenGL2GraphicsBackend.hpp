@@ -39,6 +39,10 @@ namespace CNA::Internal::Backends::OpenGL2
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool mipMap = false,
+                                                                          int multiSampleCount = 0) override;
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
 
         // NOXNA: backend-internal helper (not part of IGraphicsBackend) mirroring
         // EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize -- lets Sprite::Draw size its
@@ -102,8 +106,15 @@ namespace CNA::Internal::Backends::OpenGL2
         unsigned dualTextureProgram_{};
         unsigned litProgram_{};
         IRenderTargetBackend* currentRt_{};
+        IRenderTargetCubeBackend* currentRtCube_{};
         int currentRtWidth_{};
         int currentRtHeight_{};
+
+        // Calls UnbindAsRenderTarget() on whichever render target (2D or cube) is currently
+        // active, if any, and clears both tracking pointers -- shared by SetRenderTarget2D() and
+        // SetRenderTargetCubeFace() so switching between (or away from) either kind always runs
+        // the outgoing target's resolve/mipmap-regeneration step exactly once.
+        void unbindCurrentRenderTarget();
         // Per-slot cached SamplerState (GL 2.1 has no sampler objects -- state is applied via
         // glTexParameteri on whichever texture drawInternal() actually binds to that unit, at
         // bind time, not here). Defaults match SamplerStateCollection's own SamplerState::LinearWrap.
