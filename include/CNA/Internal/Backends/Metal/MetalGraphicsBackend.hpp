@@ -22,12 +22,14 @@ namespace CNA::Internal::Backends::Metal
         void SetSwapInterval(int interval) override;
         bool TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         SDL_Window* GetWindowInternal() const override;
         SDL_Renderer* GetRendererInternal() const override;
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

@@ -204,6 +204,33 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
   error instead of silently falling through to a non-PBR shader when both `pbr` and `skinned` are
   set (Phase 8 hasn't landed). **Not ported**: the per-vertex (Gouraud) lit variant (`METAL-76`),
   same already-accepted divergence as `METAL-39`.
+- **`ReadBackbuffer`** (`METAL-130`/`132`/`133`): real `MTLBlitCommandEncoder` copy into a
+  `MTLResourceStorageModeShared` staging buffer. Needs no Y-flip at all (unlike GL's
+  `ReadBackbuffer`, whose framebuffer origin is bottom-left) — Metal's own texture origin is
+  already top-left, matching D3D/XNA convention directly. **Documented, not hidden, tradeoff**:
+  since the drawable's color texture is `MTLStorageModePrivate`, reading it back requires
+  committing the current command buffer (there's no way to resume encoding into an
+  already-committed one for a later, separate `Present()`) — so this function ends the current
+  encoder and commits+presents+waits as one unit, behaving like an early, forced end-of-frame; the
+  game's own subsequent `Present()` becomes a safe no-op rather than a double-present. Also found a
+  pre-existing, cross-backend (not Metal-specific) gap while checking `METAL-132`: neither Metal's
+  nor EasyGL's `ReadBackbuffer` applies logical→physical letterbox scaling to `x,y,w,h` — both use
+  raw physical-drawable coordinates.
+- **Real occlusion queries** (`METAL-136`–`139`): `MetalOcclusionQueryBackend` via a shared
+  `MTLVisibilityResultBuffer` (1024 slots, one 8-byte `uint64_t` count per live query, allocated
+  once and attached to every render pass — Metal requires this at render-pass-creation time, unlike
+  `setVisibilityResultMode:offset:` itself which can be called mid-encoder). Completion is tracked
+  via a `[MTLCommandBuffer addCompletedHandler:]` block writing into a heap-allocated
+  `std::shared_ptr<std::atomic<bool>>` (kept alive by the block itself, not just this object).
+  `SupportsCapability(GraphicsCapability::OcclusionQuery)` flipped back to the real, correct `true`
+  default (previously explicitly `false`, from the `METAL-1`/`METAL-197` pass). **Documented
+  scope limitation**: a `Clear()` call between `Begin()`/`End()` (which commits+waits synchronously,
+  starting a fresh command buffer) would split the visibility write across two command buffers,
+  which this single-completion-handler design does not track correctly — real game code's tight
+  `Begin()`/`End()` brackets around a small draw set don't hit this, but it is a real, narrow,
+  documented gap, not silently absent. Metal reports a genuine `uint64_t` sample-passed **count**
+  (`PixelCount()`), a real capability advantage over EasyGL's GLES3
+  `GL_ANY_SAMPLES_PASSED`-derived boolean.
 
 **Explicitly still open / not attempted this pass** (do not assume these are done): `METAL-5`
 (cull-mode/winding correctness — deliberately left untouched, see its own note about a Vulkan
@@ -238,6 +265,9 @@ docs, iOS/tvOS) — none of it was touched this pass.
 - Real `SkinnedEffect` (72-bone GPU skinning via a real `MTLBuffer`, `WeightsPerVertex` branching,
   a NaN-safety guard for near-180°-relative-bone-rotation blends, lit/fog/specular/emissive) (🟨
   landed 2026-07-19 — `METAL-72`–`75`/`77`/`78`).
+- Real `ReadBackbuffer` (blit-to-staging-buffer, no Y-flip needed) and real occlusion queries
+  (`MTLVisibilityResultBuffer`, genuine `uint64_t` pixel counts — a real capability advantage over
+  EasyGL's GLES3 boolean) (🟨 landed 2026-07-19 — `METAL-130`/`132`/`133`/`136`–`139`).
 - Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
   real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
 - Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
@@ -526,10 +556,10 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-130 | `ReadBackbuffer(x,y,w,h,pixels)` — currently throws (base default); implement via `MTLBlitCommandEncoder` copy into a `MTLResourceStorageModeShared` staging buffer, `memcpy` out after `waitUntilCompleted` | ⬜ |
+| METAL-130 | `ReadBackbuffer(x,y,w,h,pixels)` — currently throws (base default); implement via `MTLBlitCommandEncoder` copy into a `MTLResourceStorageModeShared` staging buffer, `memcpy` out after `waitUntilCompleted` | 🟨 |
 | METAL-131 | Render-target/cube/3D-texture `GetData()` overrides sharing one blit-to-staging-buffer helper instead of 4 near-duplicate implementations | ⬜ |
-| METAL-132 | Confirm `x,y` are top-left in *game* (virtual/logical) coordinates per the interface doc — only meaningful once Phase 15's letterbox transform exists; note the dependency explicitly | ⬜ |
-| METAL-133 | Document that `waitUntilCompleted` on readback is an intentional correctness-over-throughput stall, matching every other backend's own readback tradeoff — not something a future perf pass should "fix" into a race | ⬜ |
+| METAL-132 | Confirm `x,y` are top-left in *game* (virtual/logical) coordinates per the interface doc — **checked against the reference 2026-07-19, found a pre-existing cross-backend gap, not just a Metal one**: `EasyGLGraphicsBackend::ReadBackbuffer` also uses `x,y,w,h` directly against the physical framebuffer with no logical→physical letterbox scaling applied (only a Y-flip). Metal's new implementation matches that same behavior exactly (raw physical-drawable coordinates, no scaling) — consistent with the established reference, not a new Metal-specific divergence, but real callers passing genuinely logical coordinates on a letterboxed window would get the wrong region on *either* backend today | 🟨 |
+| METAL-133 | Document that `waitUntilCompleted` on readback is an intentional correctness-over-throughput stall, matching every other backend's own readback tradeoff — not something a future perf pass should "fix" into a race | 🟨 |
 | METAL-134 | `CTest`: `Metal_Readback` — clear to a known color, read back, assert exact match (the `Software_Smoke`/`Headless_Smoke`/`Dx3_Smoke` proof pattern) | ⬜ |
 | METAL-135 | Extend `Metal_RenderTarget2D` (`METAL-114`) to actually exercise readback now that it's real | ⬜ |
 
@@ -537,10 +567,10 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-136 | `CreateOcclusionQuery()` — currently returns `nullptr`; `MetalOcclusionQueryBackend : IOcclusionQueryBackend` using `MTLVisibilityResultBuffer` + `setVisibilityResultMode:offset:` | ⬜ |
-| METAL-137 | `Begin()`/`End()` — visibility-result-mode toggling and offset management within a shared visibility-result buffer (allocated up front, one per encoder generation) | ⬜ |
-| METAL-138 | `IsComplete()` — tied to command-buffer completion; needs a completion handler or `waitUntilCompleted`-gated flag, not a true async poll | ⬜ |
-| METAL-139 | `PixelCount()` — Metal reports a real `uint64_t` sample-passed **count**, a genuine capability advantage over EasyGL's GLES3 any-samples-passed boolean (noted on `IOcclusionQueryBackend`'s own doc comment) — worth calling out, not just matching parity | ⬜ |
+| METAL-136 | `CreateOcclusionQuery()` — currently returns `nullptr`; `MetalOcclusionQueryBackend : IOcclusionQueryBackend` using `MTLVisibilityResultBuffer` + `setVisibilityResultMode:offset:` | 🟨 |
+| METAL-137 | `Begin()`/`End()` — visibility-result-mode toggling and offset management within a shared visibility-result buffer (allocated up front, one per encoder generation) | 🟨 |
+| METAL-138 | `IsComplete()` — tied to command-buffer completion; needs a completion handler or `waitUntilCompleted`-gated flag, not a true async poll | 🟨 |
+| METAL-139 | `PixelCount()` — Metal reports a real `uint64_t` sample-passed **count**, a genuine capability advantage over EasyGL's GLES3 any-samples-passed boolean (noted on `IOcclusionQueryBackend`'s own doc comment) — worth calling out, not just matching parity | 🟨 |
 | METAL-140 | `CTest`: `Metal_OcclusionQuery` — known occluded vs. visible geometry, count comparison | ⬜ |
 | METAL-141 | Add a `Metal` column to `docs/occlusionquery-support.md`, noting the real-pixel-count advantage | ⬜ |
 

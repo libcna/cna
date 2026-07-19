@@ -7,10 +7,12 @@
 #include <SDL3/SDL_metal.h>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <memory>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -852,6 +854,17 @@ struct MetalGraphicsBackend::Impl
     int ccwStencilFunc=0, ccwStencilPass=0, ccwStencilFail=0, ccwStencilDepthFail=0;
     float blendColor[4]={1,1,1,1}; // BlendState.BlendFactor default == Color.White
 
+    // plan_metal.md METAL-136/137: real occlusion queries via MTLVisibilityResultBuffer. This
+    // buffer must be attached to the MTLRenderPassDescriptor at render-pass-creation time (Metal
+    // has no way to attach it mid-encoder the way setVisibilityResultMode:offset: can be called
+    // mid-encoder) -- so it is allocated once here and referenced by every render pass
+    // ensureFrame()/clear() create, with each MetalOcclusionQueryBackend instance owning one
+    // 8-byte slot (a uint64_t sample-passed count written by the GPU) via a simple incrementing
+    // counter. kMaxOcclusionQuerySlots is a practical, generous cap, not an API-imposed one.
+    static constexpr int kMaxOcclusionQuerySlots = 1024;
+    id<MTLBuffer> visibilityBuffer=nil;
+    int nextQuerySlot=0;
+
     // Re-applies every piece of encoder-scoped dynamic state this backend tracks. Metal has no
     // persistent-across-encoders state at all (unlike, say, retained GL context state) -- a fresh
     // MTLRenderCommandEncoder starts with undefined cull/fill/bias/stencil-ref/blend-color, so
@@ -885,6 +898,7 @@ struct MetalGraphicsBackend::Impl
         rp.colorAttachments[0].loadAction=MTLLoadActionLoad; rp.colorAttachments[0].storeAction=MTLStoreActionStore;
         rp.depthAttachment.texture=depthTexture; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
         rp.stencilAttachment.texture=depthTexture; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
+        rp.visibilityResultBuffer=visibilityBuffer;
         encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
         viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
         applyTrackedEncoderState();
@@ -911,6 +925,7 @@ struct MetalGraphicsBackend::Impl
         rp.colorAttachments[0].texture=drawable.texture; rp.colorAttachments[0].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[0].storeAction=MTLStoreActionStore; rp.colorAttachments[0].clearColor=MTLClearColorMake(r,g,b,a);
         rp.depthAttachment.texture=depthTexture; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
         rp.stencilAttachment.texture=depthTexture; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
+        rp.visibilityResultBuffer=visibilityBuffer;
         encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
         viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
         applyTrackedEncoderState();
@@ -1134,6 +1149,52 @@ public:
 private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty();
 };
 
+// plan_metal.md METAL-136-139: real occlusion queries via a shared MTLVisibilityResultBuffer slot
+// per instance. `completed_` is a heap-allocated flag (not a plain bool member) because Objective-C
+// completion-handler blocks capture it by reference into GPU-driven, asynchronously-invoked code
+// that must outlive this object's own Begin()/End() call stack -- a std::shared_ptr keeps it alive
+// exactly as long as either this object or the in-flight block still needs it.
+//
+// Documented scope limitation, not a hidden bug: Begin() registers its completion handler against
+// whichever command buffer is active at that moment. If a Clear() call (which commits+waits
+// synchronously, starting a fresh command buffer) happens between Begin() and End(), the
+// visibility write ends up split across two command buffers and this simple single-handler
+// design will not track completion correctly. Real game code's Begin()/End() pairs tightly
+// bracket a small set of draws with no Clear() in between, so this is a real but narrow gap, not
+// silently ignored -- flagged here rather than solved with a bigger multi-command-buffer design
+// this pass didn't attempt.
+class MetalOcclusionQueryBackend final : public IOcclusionQueryBackend
+{
+public:
+    MetalOcclusionQueryBackend(MetalGraphicsBackend::Impl& owner, int slot) : owner_(owner), slot_(slot) {}
+    void Begin() override
+    {
+        owner_.ensureFrame();
+        [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeCounting offset:(NSUInteger)(slot_*8)];
+        completed_ = std::make_shared<std::atomic<bool>>(false);
+        auto flag = completed_;
+        [owner_.command addCompletedHandler:^(id<MTLCommandBuffer> cb) { flag->store(true); }];
+    }
+    void End() override
+    {
+        // MTLVisibilityResultModeDisabled's offset argument is ignored by Metal but still
+        // required by the method signature; 0 is the conventional value other Apple sample code
+        // uses for the disable call.
+        if (owner_.encoder) [owner_.encoder setVisibilityResultMode:MTLVisibilityResultModeDisabled offset:0];
+    }
+    bool IsComplete() const override { return completed_ && completed_->load(); }
+    int PixelCount() const override
+    {
+        if (!IsComplete()) return 0;
+        const auto* data = static_cast<const uint64_t*>([owner_.visibilityBuffer contents]);
+        return (int)data[slot_];
+    }
+private:
+    MetalGraphicsBackend::Impl& owner_;
+    int slot_;
+    std::shared_ptr<std::atomic<bool>> completed_;
+};
+
 MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args):impl_(std::make_unique<Impl>())
 {
     auto& p=*impl_; p.window=args.window; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
@@ -1155,9 +1216,13 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     // plan_metal.md METAL-23: pipelines are no longer built eagerly here -- getOrCreatePipeline()
     // lazily builds+caches each (PipelineKind, BlendKey) combination on first use instead.
     MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc]init];sd.minFilter=MTLSamplerMinMagFilterLinear;sd.magFilter=MTLSamplerMinMagFilterLinear;sd.sAddressMode=MTLSamplerAddressModeClampToEdge;sd.tAddressMode=MTLSamplerAddressModeClampToEdge;p.sampler=[p.device newSamplerStateWithDescriptor:sd];[sd release];
+    // plan_metal.md METAL-136: visibility-result buffer for real occlusion queries, attached to
+    // every render pass from here on (must exist at render-pass-creation time, see its own field
+    // comment on Impl).
+    p.visibilityBuffer=[p.device newBufferWithLength:(NSUInteger)(MetalGraphicsBackend::Impl::kMaxOcclusionQuerySlots*8) options:MTLResourceStorageModeShared];
     p.rebuildDepthState();
 }
-MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.depthTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
+MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.visibilityBuffer release];[p.depthTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
 MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl(){return *impl_;} const MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl()const{return *impl_;}
 void MetalGraphicsBackend::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalGraphicsBackend::Present(){impl_->endFrame();}
 void MetalGraphicsBackend::GetViewportSize(int&w,int&h){
@@ -1174,9 +1239,58 @@ void MetalGraphicsBackend::GetViewportSize(int&w,int&h){
 void MetalGraphicsBackend::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->virtualH=h;} void MetalGraphicsBackend::SetPresentationMode(int m){impl_->presentationMode=m;} void MetalGraphicsBackend::SetSwapInterval(int i){impl_->swapInterval=i;}
 bool MetalGraphicsBackend::TransformWindowToLogical(float windowX,float windowY,float& logX,float& logY) const{return impl_->transformWindowToLogical(windowX,windowY,logX,logY);}
 bool MetalGraphicsBackend::TransformLogicalToWindow(float logX,float logY,float& windowX,float& windowY) const{return impl_->transformLogicalToWindow(logX,logY,windowX,windowY);}
+// plan_metal.md METAL-130: real ReadBackbuffer, previously unimplemented (base default throws).
+// x,y are top-left in game/physical-drawable coordinates, pixels is top-down RGBA8 -- confirmed
+// against EasyGLGraphicsBackend::ReadBackbuffer's own documented contract, but Metal (unlike GL,
+// whose framebuffer origin is bottom-left) needs NO row-order Y-flip at all: Metal's own texture
+// origin is already top-left, matching D3D/XNA convention directly, the same reason
+// MTLRegionMake2D()-based texture uploads elsewhere in this file never need one either.
+//
+// Documented tradeoff, not a hidden bug: since the drawable's color texture lives in
+// MTLStorageModePrivate (GPU-only) memory, the only way to get it CPU-readable is a blit into a
+// MTLResourceStorageModeShared staging buffer within the SAME command buffer, which then has to
+// be committed and waited on -- and once a command buffer is committed there is no way to resume
+// encoding into it for a later, separate Present(). So this function ends the current encoder,
+// blits, and commits+presents+waits as one unit (i.e., behaves like an early, forced end-of-frame)
+// -- the game's own subsequent Present() call becomes a safe no-op (Impl::endFrame()'s own
+// `if(!command) return;` guard) rather than a double-present. Net effect: calling ReadBackbuffer
+// mid-Draw() ends that frame slightly earlier than the game intended -- a real, minor, documented
+// behavioral quirk, not a memory-safety or correctness bug.
+void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
+{
+    if (w<=0 || h<=0) return;
+    auto& p=*impl_;
+    p.ensureFrame();
+    id<MTLTexture> src = p.drawable.texture;
+    if (p.encoder) { [p.encoder endEncoding]; [p.encoder release]; p.encoder=nil; }
+    const NSUInteger bytesPerRow=(NSUInteger)w*4;
+    const NSUInteger length=bytesPerRow*(NSUInteger)h;
+    id<MTLBuffer> staging=[p.device newBufferWithLength:length options:MTLResourceStorageModeShared];
+    if(!staging) throw std::runtime_error("Metal: ReadBackbuffer failed to allocate staging buffer");
+    id<MTLBlitCommandEncoder> blit=[p.command blitCommandEncoder];
+    [blit copyFromTexture:src sourceSlice:0 sourceLevel:0
+              sourceOrigin:MTLOriginMake((NSUInteger)x,(NSUInteger)y,0)
+                sourceSize:MTLSizeMake((NSUInteger)w,(NSUInteger)h,1)
+                  toBuffer:staging destinationOffset:0
+    destinationBytesPerRow:bytesPerRow destinationBytesPerImage:length];
+    [blit endEncoding];
+    [p.command presentDrawable:p.drawable];
+    [p.command commit];
+    [p.command waitUntilCompleted];
+    std::memcpy(pixels,[staging contents],length);
+    [staging release];
+    [p.command release]; p.command=nil; p.drawable=nil;
+}
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
 std::unique_ptr<ITextureCubeBackend> MetalGraphicsBackend::CreateTextureCube(int size,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTextureCube>(impl_->device,size,mipMap);}
+std::unique_ptr<IOcclusionQueryBackend> MetalGraphicsBackend::CreateOcclusionQuery()
+{
+    auto& p=*impl_;
+    if(p.nextQuerySlot>=MetalGraphicsBackend::Impl::kMaxOcclusionQuerySlots)
+        throw std::runtime_error("Metal: exceeded the maximum number of live OcclusionQuery slots (plan_metal.md METAL-136)");
+    return std::make_unique<MetalOcclusionQueryBackend>(p, p.nextQuerySlot++);
+}
 std::unique_ptr<ITexture3DBackend> MetalGraphicsBackend::CreateTexture3D(int w,int h,int depth,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTexture3D>(impl_->device,w,h,depth,mipMap);}
 void MetalGraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalGraphicsBackend::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalGraphicsBackend::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalGraphicsBackend::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalGraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalGraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
 void MetalGraphicsBackend::SetDepthTestEnabled(bool e){impl_->depthEnabled=e;impl_->rebuildDepthState();} void MetalGraphicsBackend::SetBlendEnabled(bool e){impl_->blendEnabled=e;} void MetalGraphicsBackend::SetDepthWriteEnabled(bool e){impl_->depthWrite=e;impl_->rebuildDepthState();}
@@ -1450,13 +1564,12 @@ void MetalGraphicsBackend::SetStringMarkerEXT(const char* m){impl_->ensureFrame(
 bool MetalGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
 {
     // plan_metal.md Phase 20: IGraphicsBackend's own default is an unconditional `true`, which is
-    // a false positive for these 3 -- CreateOcclusionQuery()/CreateEffectBackend() both still
-    // return nullptr and SetRenderTargets() still only binds rts[0], so a caller that checks this
-    // capability before relying on the feature would otherwise get a wrong answer today. Revert
-    // each case to the inherited default (remove the explicit `false`) as its own phase lands.
+    // a false positive for these -- a caller that checks this capability before relying on the
+    // feature would otherwise get a wrong answer. Revert each case to the inherited default
+    // (remove the explicit `false`) as its own phase lands. OcclusionQuery flipped to real/true
+    // 2026-07-19 (METAL-136-139) now that CreateOcclusionQuery() is real, not a stub.
     switch (capability) {
         case CNA::GraphicsCapability::MultipleRenderTargets: return false; // plan_metal.md METAL-112
-        case CNA::GraphicsCapability::OcclusionQuery:         return false; // plan_metal.md METAL-136
         case CNA::GraphicsCapability::CustomEffects:          return false; // plan_metal.md METAL-144
         default: return true;
     }
