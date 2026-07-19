@@ -158,57 +158,116 @@ itself evidence of feature completeness.
   remaining synthesis task and does not require re-reading source; it requires re-reading already-written
   `.audit.md` reports for the relevant disposal/effect-parameter evidence.
 
-## 5. What this audit did NOT do (explicitly out of scope or not completed)
+## 5. Update (same day): Passes 4, 5 completed; Passes 3 and 6 substantially progressed
+
+Since §1-4 above were written, four more passes ran:
+
+- **Pass 4 (backend capability matrix) is now COMPLETE.** `AUDIT_GRAPHICS_BACKEND_MATRIX.md`'s
+  previously-skeleton ~30-feature grid is populated (10 XNA-facing-feature rows uniform across all
+  backends, 13 backend-facing-feature rows x 14 backends), plus a full EasyGL cross-comparison
+  section. A handful of cells are honestly left `?` where the audit corpus genuinely lacks
+  first-hand evidence (occlusion-query/MSAA/sRGB depth on several backends) rather than guessed.
+- **Pass 5 (cross-cutting findings + findings index) is now COMPLETE.** `AUDIT_FINDINGS_INDEX.md`
+  was rebuilt from a stale, graphics-backend-only partial draft into a full severity-ranked index
+  (CRITICAL/HIGH/MEDIUM/LOW) plus By-subsystem and By-category views, covering the entire
+  2297-file audit, not just the early batches.
+- **Pass 3 (systematic FNA/XNA API-surface-completeness sweep) is now PARTIALLY done, with a
+  genuinely new methodology**, not just pre-emption by incidental findings: using the real
+  Microsoft XNA 4.0 Windows reference XML doc-comments (`/rv/data/library/github.com/borgesdan/
+  xn65/references/Windows/*.xml` — more authoritative than FNA for API *surface*, since FNA itself
+  sometimes omits real XNA members), every member of `Microsoft.Xna.Framework.Graphics` (781 XML
+  entries, 95 types, 635 individually-checked members), `.Net` (23 types, ~120 members),
+  `.GamerServices` (37 types, ~200 members), and the XACT subset of `.Audio` (7 types, ~60 members)
+  was cross-referenced against CNA's actual implementation. Result: 95/95 and 27/27 (Graphics
+  types/enums), 23/23 (Net), 37/37 (GamerServices) types present — the API surface is
+  overwhelmingly complete. 5 genuine gaps survived manual verification of ~40 initial candidates
+  (most were false positives from expected C#-to-C++ idiom translation): `DisplayMode.
+  TitleSafeArea`/`ToString()` entirely missing; `VertexPositionColor` missing `IVertexType`
+  (independently re-confirms an existing finding via a different method); `NetworkSession.
+  MaxSupportedGamers`/`MaxPreviousGamers` mistagged `NOXNA`; `AudioCategory.ToString()` missing
+  from both CNA and FNA. **Still open**: `Microsoft.Xna.Framework` (root namespace), `.Content`,
+  `.Input.Touch`, `.Media`, `.Storage`, `.Avatar`, and the rest of `.Audio` beyond the XACT subset —
+  a natural, likely similarly high-signal continuation given how clean these four sweeps were.
+- **Pass 6 (build/test evidence gathering) is now PARTIALLY done, and found this audit's most
+  operationally significant discovery.** Built `CnaTests` for EasyGL (the project's Linux default
+  backend) and ran its full 5754-test CTest suite. After ruling out `-j8` parallelism noise (~100
+  spurious failures that vanished on individual re-run), a reliable `-j2` baseline found 229 real
+  failures with one root cause: `cmake/UnitTests.cmake`'s `gtest_discover_tests(CnaTests
+  DISCOVERY_MODE PRE_TEST)` has no `WORKING_DIRECTORY` override, so every discovered test's working
+  directory is baked in as the build directory, not the repo root where `tests/assets/**` fixture
+  files live. This breaks ~220 tests covering Media/Audio-tag-parsing/Xnb-content-pipeline/ENet-
+  networking/Lzx-decompression — confirmed side-by-side (the identical test passes when manually
+  run with the correct working directory) — and is **invisible to every existing CI workflow**: all
+  3 (`d3d-windows-ci.yml`/`devices-tests.yml`/`input-ci.yml`) use a `-L <label>`-filtered `ctest`
+  invocation that never runs the general/default test set this bug affects, meaning these ~220
+  tests have likely never once passed in any CI run this project has had. Two more concrete findings
+  came out of the same sweep: a genuinely new HIGH defect (`EasyGL_MRT_TwoAttachments` —
+  `SetRenderTargets` with 2 attachments only draws to the first one, confirmed reproducible in
+  isolation) and a 4th confirmed instance of the CI-masking-risk pattern
+  (`EasyGL_GraphicsDevice_ReferenceStencil`, disclosed in-comment as known-failing since Task
+  319/872 but with no `WILL_FAIL` property). **Still open**: Bgfx, Vulkan, SdlGpu, D3D9, D3D11,
+  D3D12, Dx3, WebGPU, SdlRenderer, Software, Ascii, Canvas were not built/tested in this pass; no
+  sanitizer (ASan/UBSan/TSan) build was attempted at all.
+
+Both `AUDIT_CROSS_CUTTING_FINDINGS.md` and `AUDIT_FINDINGS_INDEX.md` have been updated with all of
+the above; this section is the only part of this report itself that has been refreshed to match —
+§§1-4's per-backend/per-file counts above remain accurate and unchanged.
+
+## 6. What this audit still did not do (updated)
 
 - **No source code was modified, and no bug listed above was fixed.** This is a read-only inspection.
-- **Pass 3 (a dedicated, systematic FNA/XNA parity sweep)** was never run as its own standalone pass with a
-  fresh checklist; its intended findings were substantially pre-empted by defects found incidentally during the
-  per-file backend/shard audits (fog formula, skinned-normal-transform, and the dozens of smaller items in
-  `AUDIT_CROSS_CUTTING_FINDINGS.md`). A project owner wanting the *specific* guarantee "every public XNA 4.0
-  member was diffed against FNA one at a time" should treat that as still open, distinct from "defects were
-  found" (which did happen, extensively).
-- **The full ~30-feature backend capability grid** (§4 above) remains unpopulated beyond the cross-cutting
-  defect matrix, though its blockers are now cleared.
-- **Pass 6 (systematic build/test/sanitizer evidence gathering)** was not run as a dedicated pass. Some
-  evidence of this kind was gathered opportunistically and incidentally (e.g. `EasyGL_AvatarRenderer_TintRouting`
-  was independently re-confirmed by an actual build+run during this audit, not merely relayed from a report), but
-  a systematic sweep — building every backend, running every CTest suite, and cataloging every currently-failing
-  test with its `WILL_FAIL` status — was not performed. The 3+ already-found unflagged failures (§2 item 13,
-  §3 CI-masking risk) suggest more may exist.
+- Pass 3's API-surface sweep covers 4 of ~9 `Microsoft.Xna.Framework.*` namespaces (Graphics, Net,
+  GamerServices, and the XACT subset of Audio) — the remainder (root namespace, Content, Input.Touch,
+  Media, Storage, Avatar, the rest of Audio) is still open, though the four completed sweeps were
+  consistently high-signal-to-effort (5 genuine gaps across ~1015 combined members checked).
+- Pass 6's build/test sweep covers only EasyGL — the other 13 backends are unbuilt/untested in this
+  audit; no sanitizer instrumentation was used at all.
 - **No attempt was made to reproduce every finding at runtime.** Findings are graded by `Confidence`
-  (`HIGH`/`MEDIUM`/`LOW`) per `AUDIT_CHECKLIST.md`'s scale; several `HIGH`-severity/`HIGH`-confidence findings
-  above were confirmed via direct source-code tracing to a specific failing input or sequence, but this is
-  static analysis at scale, not a substitute for actually running the affected code paths where that wasn't
-  already done.
+  (`HIGH`/`MEDIUM`/`LOW`) per `AUDIT_CHECKLIST.md`'s scale; several `HIGH`-severity/`HIGH`-confidence
+  findings above were confirmed via direct source-code tracing to a specific failing input or
+  sequence, but this is static analysis at scale, not a substitute for actually running every
+  affected code path.
 
-## 6. Final integrity verification
+## 7. Final integrity verification
 
 Re-confirmed at the close of this report:
 
 - `audit/AUDIT_MANIFEST.md`'s rollup shows `PENDING: 0` for all 105 shards (`2297/2297` files `AUDITED`).
 - `git diff --name-only <develop-branch-point> feature/audit -- . ':!audit'` returns `0` — no file outside
-  `audit/**/*.md` was ever created, modified, or staged on this branch, across every commit.
-- Working tree is clean (no uncommitted changes) as of this report.
+  `audit/**/*.md` was ever created, modified, or staged on this branch, across every commit (re-verified
+  independently against the real branch point on `develop`, not assumed).
+- Working tree is clean (no uncommitted changes) as of this report's original writing; §5's update added
+  further commits, all equally audit-only.
 
-## 7. Suggested next steps for the project owner
+## 8. Suggested next steps for the project owner
 
 In rough priority order, based on blast radius and confirmed-vs-disclosed status:
 
-1. Fix the two use-after-free bugs (§2 items 8, 10) — these are the only `HIGH`-severity findings with a
-   concrete crash/corruption path, not just wrong pixels.
-2. Fix `CNA::Logger::ToSDLPriority()` (§2 item 9) — foundational, always-compiled, currently silently
+1. **Fix `gtest_discover_tests(CnaTests ...)`'s missing `WORKING_DIRECTORY` (§5, Pass 6)** — a
+   one-line CMake fix (`WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"`, matching the pattern already
+   correct in `cmake/Tests/EasyGLTests.cmake`'s golden-image tests) that would immediately restore
+   ~220 tests to real, CI-visible pass/fail status. Given these tests currently can't fail loudly in
+   CI at all, this is arguably higher-priority than any single behavioral bug below — it's the
+   difference between "CI would catch a regression here" and "CI structurally cannot."
+2. Fix the two use-after-free bugs (§2 items 8, 10) — these are the only other `HIGH`-severity
+   findings with a concrete crash/corruption path, not just wrong pixels.
+3. Fix `CNA::Logger::ToSDLPriority()` (§2 item 9) — foundational, always-compiled, currently silently
    mis-prioritizing every warning/error/fatal log line project-wide.
-3. Decide on a remediation strategy for the fog-formula and skinned-normal-transform defects (§2 items 1-2) —
+4. Decide on a remediation strategy for the fog-formula and skinned-normal-transform defects (§2 items 1-2) —
    given their traceable propagation via explicit cross-backend porting, a single shared-source fix (where a
    shared source exists, e.g. D3DCommon) or a coordinated per-backend fix pass (where it doesn't) is likely more
    efficient than treating each backend as an independent bug.
-4. Add `WILL_FAIL`/skip annotations to the 3+ already-confirmed currently-failing CTests (§2 item 13, §3) so CI
-   output stops conflating known gaps with new regressions — cheap, immediate risk reduction.
-5. Address the `PackedVector` rounding defect (§2 item 12) and, separately, fix the test-input gap in
+5. Fix the new EasyGL MRT second-attachment defect (§5, Pass 6) — a documented, presumably-once-working
+   XNA feature (Task 145) that's currently confirmed broken.
+6. Add `WILL_FAIL`/skip annotations to the 4 already-confirmed currently-failing CTests (§2 item 13, §3,
+   §5) so CI output stops conflating known gaps with new regressions — cheap, immediate risk reduction.
+7. Address the `PackedVector` rounding defect (§2 item 12) and, separately, fix the test-input gap in
    `tools/fna-reference/PackedVectorReference.cs` that let it go undetected — otherwise a similar defect class
    could recur invisibly.
-6. Narrow `.gitignore`'s `build*` pattern (§3) to the specific directories it was meant to exclude.
-7. Schedule the documentation-rot sweep (§3) — several in-source "known bug" comments actively mislead a reader
+8. Narrow `.gitignore`'s `build*` pattern (§3) to the specific directories it was meant to exclude.
+9. Schedule the documentation-rot sweep (§3) — several in-source "known bug" comments actively mislead a reader
    about the current state of already-fixed code.
-8. If continuing this audit effort: complete the backend capability grid (§4) and run a dedicated Pass 6
-   CTest sweep (§5) — both are now unblocked and represent the highest-value remaining synthesis work.
+10. If continuing this audit effort: extend Pass 3's API-surface sweep to the remaining 5 namespaces, and
+    extend Pass 6's build/test sweep to the other 13 backends plus a sanitizer-instrumented build — both are
+    now well-precedented, proven-valuable methodologies (this session's Pass 3/6 work found 5 and 4+ new
+    findings respectively, including this report's single highest-value discovery) rather than unproven ideas.
