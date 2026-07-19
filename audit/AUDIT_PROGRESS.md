@@ -18,6 +18,49 @@ via parallel `Agent` forks. `AUDIT_MANIFEST.md`'s top-level rollup table was ful
 every shard's own manifest file in the same pass (90 stale rows fixed) rather than deferring that
 resync to Pass 7 as originally planned — Pass 7 will still do an independent final rescan.
 
+**Pass 3 (systematic FNA/XNA API-surface-completeness sweep) — COMPLETE (2026-07-19).** Using the
+real Microsoft-shipped Windows XNA 4.0 reference XML doc-comments (`/rv/data/library/github.com/
+borgesdan/xn65/references/Windows/*.xml` -- authoritative for API *surface*/member existence, more
+so than FNA, which itself sometimes omits real XNA members), every real `Microsoft.Xna.Framework.*`
+namespace with runtime-relevant surface was swept against CNA's actual declared headers: Graphics
+(781 members, 191-file shard), Net, GamerServices, Audio (XACT + plain, full namespace), the root
+`Microsoft.Xna.Framework` namespace (Vector2/3/4, Matrix, Color, Rectangle, Game, etc.), Storage,
+Input.Touch, Video, GamerServices.Avatar* (resolved a real scope question: CNA's placement is
+already correct, the real XNA Avatar API lives in `GamerServices`, not a separate namespace),
+Graphics.PackedVector, Content (runtime), and Input (GamePad/Keyboard/Mouse). `.Content.Pipeline`
+and `.Design` were both confirmed correctly out of scope (build-time/WinForms tooling, zero matching
+CNA files) rather than left unswept. **Total: ~2700+ individually-checked real XNA 4.0 members, 7
+genuine gaps found** (2 MEDIUM: `DisplayMode.TitleSafeArea`/`ToString()`, PackedVector's systemic
+missing `Equals`/`GetHashCode`/`ToString` on all 16 concrete types; 1 re-confirmation of an existing
+finding via an independent method: `VertexPositionColor` missing `IVertexType`; 4 LOW). CNA's real
+XNA API *surface* is confirmed overwhelmingly complete -- nearly every defect this audit has found
+is behavioral, not a missing member.
+
+**Pass 6 (opportunistic build/test/sanitizer evidence gathering) — COMPLETE (2026-07-19).** Every
+one of the 14 real graphics backends (EasyGL, Canvas, D3D9, D3D11, D3D12, Dx3, WebGPU, Vulkan,
+SdlGpu, Bgfx, SdlRenderer, Software, Ascii, Headless) was built AND runtime-tested this session --
+Windows-only backends (D3D9/D3D11/D3D12) via genuine MinGW cross-compilation + Wine+DXVK/vkd3d-proton
+(the project's own established, previously-never-executed-in-this-audit CI pattern), not left as
+static-only; Dx3 turned out to need neither (its `free-direct` dependency is an SDL3-based
+reimplementation, not real DirectDraw); Canvas/Emscripten turned out to be genuinely buildable,
+correcting an earlier "unavailable" assumption. The one specific environmental limitation
+encountered (D3D12's Proton-based swapchain-crash fix path, since no Steam/Proton install exists in
+this sandbox) is explicitly marked as unavailable rather than silently skipped, per the project
+owner's own explicit instruction on this point. **Headline finding, likely the single most severe of
+this entire audit**: a CRITICAL/HIGH cross-backend security-relevant crash -- malformed `Texture2D`
+XNB content crashes both Vulkan (stack smashing) and WebGPU (a non-catchable Rust panic), confirmed
+clean on EasyGL, from the same underlying shape (unvalidated XNB-decoded texture dimensions fed
+directly into a native GPU API). Also found: a project-wide `WORKING_DIRECTORY` CTest registration
+gap invisible to every CI workflow; a universal `cna_demo_xact` build defect, precisely root-caused;
+a "never adopted `WILL_FAIL`" systemic gap (6+ confirmed instances); the `Dx3_SpriteBatch`
+investigation closed empirically; 2 stale findings corrected to FIXED (Vulkan Task 868 BlendState,
+`WebGPU_Msaa`); several new per-backend defects (D3D11 specular asymmetry + vertex-color bug, Bgfx
+cull-mode bug, SdlGpu's stricter GLSL dialect, a shared Texture3D round-trip bug, a shared
+WireFrame-capability-flag ambiguity across 5 backends, `SDL_Renderer_FullscreenToggle`'s
+uncaught-exception crash); and a `MediaLibraryTestFixture` SEGFAULT confirmed universal across
+essentially every backend tested. Full narrative for every finding lives in
+`AUDIT_CROSS_CUTTING_FINDINGS.md`'s "Pass 6"/"Pass 6 continued" sections.
+
 **Operational note for future sessions**: dispatched forks in this audit have repeatedly self-committed
 their own completed shard's `audit/**/*.md` files via `git add`/`git commit`, even when explicitly
 instructed not to ("no git commands, centralized consolidation only") — apparently generalizing the
@@ -513,34 +556,43 @@ directly audited (Pass 4 depends on this).
 
 ## FNA parity progress
 
-Not started as a dedicated pass yet (Pass 3, Task #10), but two major systemic FNA-parity gaps (fog formula,
-skinned-normal-transform) have already been found incidentally via backend audits + mechanical test batches. This
-is ahead of where a dedicated Pass 3 would have started from scratch — when Pass 3 formally begins, start by
-consolidating what's already known rather than re-deriving it.
+**COMPLETE (2026-07-19).** See "Current phase" above for the full account -- ~2700+ real XNA 4.0
+members individually checked across every namespace with runtime-relevant surface, 7 genuine
+API-surface gaps found, CNA's declared surface confirmed overwhelmingly complete. This is in
+addition to (not instead of) the many behavioral FNA-parity defects found incidentally throughout
+Pass 2 (fog formula, skinned-normal-transform, EnvironmentMapEffect emissive bug, etc.) -- Pass 3's
+job was specifically the surface-completeness angle, which those incidental finds didn't cover.
 
 ## Cross-cutting investigations open
 
-- `known_bugs.md`'s SpriteBatch Begin/End defect — needs corroboration once `xna-graphics`/`tests-xna-graphics`
-  are audited. **Possibly already partially corroborated**: the SdlRenderer batch found a *different* SpriteBatch
-  exception-safety bug (`Begin()` wedging on a throwing backend call) — confirm whether these are the same issue
-  or two distinct ones when `SpriteBatch.cpp` itself is audited.
-- External sibling-repo boundary (`easy-gl`, `free-direct`, D-6) — track which findings bottom out at "this lives
-  in a different repository" for the final report.
-- Full CTest-registration sweep (Pass 6) to find every currently-failing/expected-to-fail test, given 2 were
-  found by accident in the Bgfx batch and a 3rd (`EasyGL_AvatarRenderer_TintRouting`, independently re-confirmed
-  by direct build+execution — see Major discoveries #4) in the generic batch, all with no `WILL_FAIL` annotation
-  — there is a real, demonstrated pattern here, not just a theoretical risk.
-- `BasicEffect::VertexColorEnabled`'s bare-public-field issue — check whether it's the only such lapse when
-  `xna-graphics`/`BasicEffect.hpp` is directly audited.
-- `IGraphicsBackend.hpp`'s own audit should confirm/expand the 3 confirmed `Apply*State()` missing-field gaps
-  (`AddressW`, color-write-mask, `MultiSampleAntiAlias`) and check whether `SamplerState.hpp`/`BlendState.hpp`/
-  `RasterizerState.hpp` in `xna-graphics` have any C++-side plumbing for these fields that this audit hasn't yet
-  traced, or whether they're genuinely dead properties project-wide.
-- **RESOLVED**: Vulkan's full backend audit confirmed `SetTransformMatrix`'s no-op is the only instance of its
-  kind in that backend (no other confirmed no-op override anywhere in the class family). Its own render-target
-  viewport-sizing behavior was not separately re-derived here (the `.cpp` report notes the RT-pass viewport is
-  hardcoded to each RT's own full size, an explicitly disclosed limitation, distinct from WebGPU's own confirmed
-  render-target-relative-viewport defect — worth a direct side-by-side comparison in Pass 4's backend matrix).
+**All of the below are now RESOLVED** (this section is kept for historical trail; every item was
+closed out somewhere in Pass 2-6, see `AUDIT_CROSS_CUTTING_FINDINGS.md` for the full account of
+each):
+
+- `known_bugs.md`'s SpriteBatch Begin/End defect — resolved during the `xna-graphics` shard audit
+  (`SpriteBatch.cpp` fully reviewed; the SdlRenderer exception-safety issue and the confirmed
+  `SpriteFont`/`SpriteBatch` default-character UB + `SpriteEffects` OOB-read bugs are all now
+  precisely characterized, distinct findings, not conflated).
+- External sibling-repo boundary (`easy-gl`, `free-direct`, D-6) — tracked throughout; every
+  finding that bottoms out at "this lives in a different repository" is recorded as a scope
+  boundary in the relevant shard's own report, not silently dropped. Dx3's Pass 6 build additionally
+  confirmed `free-direct` is itself an SDL3-based reimplementation, not real DirectDraw.
+- Full CTest-registration sweep — completed in Pass 6: confirmed this project has never adopted
+  `WILL_FAIL` anywhere, for any backend (6+ concrete instances catalogued), and Pass 6's build+test
+  sweep of all 14 backends surfaced several more currently-failing, unflagged tests beyond the
+  original 3.
+- `BasicEffect::VertexColorEnabled`'s bare-public-field issue — confirmed exactly 3 times across
+  Bgfx/Vulkan/generic test audits exercising the same production code; no further instances found
+  anywhere else in the codebase.
+- `IGraphicsBackend.hpp`'s own audit confirmed and expanded the 3 `Apply*State()` missing-field
+  gaps (`AddressW`, color-write-mask, `MultiSampleAntiAlias`) — all 3 are real, correctly-implemented
+  properties at the XNA-facing class level, with the gap 100% confined to the `IGraphicsBackend`
+  interface signatures never carrying them through, affecting every backend uniformly (documented in
+  `AUDIT_GRAPHICS_BACKEND_MATRIX.md`'s XNA-facing-features table).
+- Vulkan's `SetTransformMatrix()` no-op confirmed the only instance of its kind in that backend;
+  its render-target viewport-sizing behavior remains an explicitly disclosed limitation, distinct
+  from WebGPU's own confirmed render-target-relative-viewport defect (both recorded side-by-side in
+  `AUDIT_GRAPHICS_BACKEND_MATRIX.md`'s cross-cutting defect matrix).
 
 ## Commit batches so far (chronological)
 
