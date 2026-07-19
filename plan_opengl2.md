@@ -564,8 +564,31 @@ possibilities of OpenGL 2"):
   entry-point availability, and end-to-end rendering on Windows remain unverified and should be
   the first thing checked on a real Windows machine before relying on this backend there.
 
+## Status: cross-backend golden-image visual parity (2026-07-19/20, session 7 cont'd)
+
+- **A first genuine cross-backend pixel-level visual-parity test added.** Every prior
+  cross-backend check in this branch (e.g. `OpenGL2_EnvironmentMapEffect`'s Check C) compared a
+  single centre pixel against an independently-DERIVED numeric expectation, not another backend's
+  actual rendered output. `opengl2_environmentmapeffect_golden_test.cpp` instead reuses
+  `examples/easygl_environmentmapeffect_golden_test.cpp`'s own combined EnvironmentMapEffect scene
+  VERBATIM (identical texture, cube map, matrices, effect parameters) and calls
+  `PixelTestGame::CompareGoldenImage()` against THAT test's own checked-in golden PNG
+  (`examples/golden/easygl_environmentmapeffect_golden_test.png`, originally captured from the
+  EasyGL/GLES3 backend) -- an 8x8 pixel region, tolerance=20 (matching the golden PNG's own
+  established Task 462 project-wide finding: exact pixel-perfect reproduction across this
+  project's backends/drivers isn't realistic). PASS: this software-rasterizer (llvmpipe), direct
+  GL 2.1 shader render genuinely matches a completely different backend's (GLES3, EasyGL's own
+  shader family) rendered pixels for the same scene, not just the same derived number.
+  Needed `WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"` on the CTest registration (missing from
+  every other OpenGL2 test so far since none of them load a file from a relative path) -- found by
+  checking how `EasyGLTests.cmake` itself registers the same golden-image pattern, since ctest's
+  default working directory is the build tree, not the source tree the relative golden-PNG path
+  assumes.
+  Scoped deliberately to this one scene, not attempted more broadly -- see the follow-up note
+  below for why a wider sweep is real, separate effort, not a small addition.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers nineteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers twenty CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -599,6 +622,8 @@ possibilities of OpenGL 2"):
     per mode (bars / full-coverage-cropped / non-uniform-stretch). 2/2 PASS each.
   - `OpenGL2_PbrEffect` -- metallic-roughness BRDF, tangent-space normal mapping,
     emissive/occlusion maps, SkinnedPbrEffect bone-palette skinning. 7/7 PASS.
+  - `OpenGL2_EnvironmentMapEffect_Golden` -- genuine cross-backend pixel comparison against
+    EasyGL's own checked-in golden PNG for the identical scene. PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -684,14 +709,10 @@ possibilities of OpenGL 2"):
   still NOT tested on an actual Windows runtime -- `wglGetProcAddress`'s real behavior, actual GL
   driver entry-point availability, and end-to-end rendering on Windows remain to be checked on a
   real machine.
-- Visual parity tests against other backends (golden-image comparison) beyond the one
-  cross-backend numeric check already reused from EasyGL's own golden scene (see
-  `OpenGL2_EnvironmentMapEffect` above) -- a real pixel-level golden-image PNG comparison
-  (`PixelTestGame::CompareGoldenImage`, already used by
-  `examples/easygl_environmentmapeffect_golden_test.cpp`) was not attempted for OpenGL2 broadly:
-  this software rasterizer (llvmpipe) and EasyGL's own GLES3 path can legitimately differ in
-  exact AA/rounding at the pixel level even when both are "correct", so a byte-for-byte PNG
-  comparison would need its own tolerance-tuning effort per scene to avoid false failures --
-  larger in scope than the targeted numeric `ExpectPixel` checks this branch's own test suite
-  already relies on throughout.
-- Visual parity tests against other backends (golden-image comparison).
+- Visual parity tests against other backends (golden-image comparison) beyond the one scene now
+  covered (`OpenGL2_EnvironmentMapEffect_Golden`, see the status entry above) -- this project has
+  dozens of `*_golden_test.cpp`/checked-in PNG pairs across its other backends (BasicEffect
+  lighting, fog, DualTextureEffect, SkinnedEffect, PbrEffect, ...); only the one
+  EnvironmentMapEffect scene was ported to OpenGL2 so far. Each additional scene is mechanically
+  similar (reuse the existing golden PNG + its exact scene setup, tolerance=20) but real,
+  incremental effort per scene, not a single remaining task.

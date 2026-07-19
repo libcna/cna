@@ -120,4 +120,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_pbreffect examples/opengl2_pbreffect_test.cpp)
     cna_register_backend_test(NAME OpenGL2_PbrEffect COMMAND cna_test_opengl2_pbreffect
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: genuine cross-backend visual-parity proof -- compares OpenGL2's own
+    # rendered pixels against EasyGL's own checked-in golden PNG for the identical scene.
+    cna_opengl2_test(cna_test_opengl2_environmentmapeffect_golden examples/opengl2_environmentmapeffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_EnvironmentMapEffect_Golden COMMAND cna_test_opengl2_environmentmapeffect_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
