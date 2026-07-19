@@ -1468,7 +1468,7 @@ private:
 class MetalRenderTargetBackend final : public IRenderTargetBackend
 {
 public:
-    MetalRenderTargetBackend(MetalGraphicsBackend::Impl& owner, int w, int h) : owner_(owner), w_(w), h_(h)
+    MetalRenderTargetBackend(MetalGraphicsBackend::Impl& owner, int w, int h, bool mipMap) : owner_(owner), w_(w), h_(h), mipMap_(mipMap)
     {
         // plan_metal.md METAL-101: MUST be BGRA8Unorm, matching every pipeline's own hardcoded
         // colorAttachments[0].pixelFormat (makePipeline(), keyed to the backbuffer's own format) --
@@ -1480,7 +1480,11 @@ public:
         // texture.sample() in MSL always presents components as .rgba regardless of storage order,
         // matching MetalTexture's own separate RGBA8Unorm choice for plain (non-render-target)
         // textures, which never needs to match a pipeline's color-attachment format at all.
-        MTLTextureDescriptor* cd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:(NSUInteger)w height:(NSUInteger)h mipmapped:NO];
+        //
+        // plan_metal.md METAL-103: `mipmapped:mipMap` makes this convenience initializer allocate
+        // the full mip chain (mipmapLevelCount = floor(log2(max(w,h)))+1) when requested, matching
+        // MTLTextureDescriptor's own documented behavior for this factory method.
+        MTLTextureDescriptor* cd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:(NSUInteger)w height:(NSUInteger)h mipmapped:mipMap];
         cd.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
         colorTexture_=[owner_.device newTextureWithDescriptor:cd];
         if(!colorTexture_) throw std::runtime_error("Metal: failed to create RenderTarget2D color texture");
@@ -1509,13 +1513,33 @@ public:
     }
     void UnbindAsRenderTarget() override
     {
-        if (owner_.currentRenderTarget==this) { owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr; }
+        if (owner_.currentRenderTarget==this) {
+            // plan_metal.md METAL-103: regenerate the full mip chain from level 0's just-rendered
+            // content on every unbind when mipMap was requested, unconditionally -- matches
+            // EasyGLRenderTargetBackend::UnbindAsRenderTarget()'s own established precedent exactly
+            // (itself citing FNA3D's OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...
+            // glGenerateMipmap... }"), not gated on whether anything was actually drawn this bind
+            // session -- EasyGL's glGenerateMipmap call isn't gated on that either.
+            if (mipMap_) {
+                if (owner_.encoder) { [owner_.encoder endEncoding]; [owner_.encoder release]; owner_.encoder=nil; }
+                // A blit encoder needs a real command buffer to encode into; if nothing was ever
+                // drawn/cleared this bind session owner_.command is still nil (ensureFrame() was
+                // never called) -- create one just for the blit, mirroring ReadBackbuffer()'s own
+                // precedent of using a small standalone command buffer for a one-off GPU operation.
+                if (!owner_.command) { owner_.command=[owner_.queue commandBuffer]; [owner_.command retain]; }
+                id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
+                [blit generateMipmapsForTexture:colorTexture_];
+                [blit endEncoding];
+            }
+            owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr;
+        }
     }
     id<MTLTexture> colorTexture() const { return colorTexture_; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
 private:
     MetalGraphicsBackend::Impl& owner_;
     int w_, h_;
+    bool mipMap_;
     id<MTLTexture> colorTexture_=nil;
     id<MTLTexture> depthTexture_=nil;
 };
@@ -1705,9 +1729,16 @@ std::unique_ptr<IOcclusionQueryBackend> MetalGraphicsBackend::CreateOcclusionQue
     return std::make_unique<MetalOcclusionQueryBackend>(p, p.nextQuerySlot++);
 }
 std::unique_ptr<ITexture3DBackend> MetalGraphicsBackend::CreateTexture3D(int w,int h,int depth,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTexture3D>(impl_->device,w,h,depth,mipMap);}
-std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2D(int w,int h,int /*depthFormat*/,bool /*preserveContents*/,bool /*mipMap*/,int /*multiSampleCount*/)
+// plan_metal.md METAL-102: preserveContents is deliberately NOT threaded into the backend at all --
+// GraphicsDevice::SetRenderTarget() already implements RenderTargetUsage.DiscardContents entirely
+// at the shared layer (an explicit Clear() call right after binding, see its own real code), and
+// does nothing extra for PreserveContents, which ensureFrame()'s existing unconditional
+// MTLLoadActionLoad already satisfies correctly. EasyGLRenderTargetBackend::CreateRenderTarget2D
+// ignores this same parameter for the identical reason (its own commented-out parameter name) --
+// not a Metal-specific gap, matches established cross-backend precedent exactly.
+std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2D(int w,int h,int /*depthFormat*/,bool /*preserveContents*/,bool mipMap,int /*multiSampleCount*/)
 {
-    return std::make_unique<MetalRenderTargetBackend>(*impl_, w, h);
+    return std::make_unique<MetalRenderTargetBackend>(*impl_, w, h, mipMap);
 }
 void MetalGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
 {

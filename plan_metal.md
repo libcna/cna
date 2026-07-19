@@ -483,6 +483,40 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     handlers) reconfirmed correct with no new information — there is still no concrete stutter/tear
     problem to fix without real hardware to observe one on.
 
+19. **Phase 10 partial — `preserveContents`/mip generation/`GetColorGLHandle`** (`METAL-102`/`108`
+    confirmed already-correct with no code needed; `METAL-103` newly implemented): reading
+    `GraphicsDevice::SetRenderTarget()`'s real code (not just the interface doc comment) settled
+    `METAL-102` outright — `RenderTargetUsage.DiscardContents` is handled entirely at the *shared*
+    layer via an explicit `Clear()` call issued right after binding (see its own real code, around
+    `renderTarget->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents`), and
+    `PreserveContents` needs nothing extra since `ensureFrame()`'s already-unconditional
+    `MTLLoadActionLoad` already preserves correctly. `EasyGLGraphicsBackend::CreateRenderTarget2D`
+    itself already ignores this exact parameter for the identical reason (its own commented-out
+    `/*preserveContents*/`) — confirming this isn't a Metal-specific gap at all, just an unread
+    parameter by design across backends. `METAL-108` confirmed the same way: grepped every `.hpp`/
+    `.cpp` in this repo for `GetColorGLHandle` — only its own declaration and
+    `EasyGLRenderTargetBackend`'s GL-real override exist; nothing anywhere branches on its value, so
+    Metal's inherited `return 0` default is safely correct as-is.
+    `METAL-103` (real mip generation) **was** a genuine gap, now fixed: `CreateRenderTarget2D`'s
+    `mipMap` parameter now actually threads into `MetalRenderTargetBackend`'s constructor (previously
+    silently discarded), which now allocates its color texture with `mipmapped:mipMap` (Apple's own
+    convenience-initializer semantics allocate the full `floor(log2(max(w,h)))+1`-level chain when
+    true). `UnbindAsRenderTarget()` now regenerates the full chain via
+    `MTLBlitCommandEncoder::generateMipmapsForTexture:` on every unbind when `mipMap` was requested —
+    unconditionally, not gated on whether anything was actually drawn that bind session, deliberately
+    matching `EasyGLRenderTargetBackend::UnbindAsRenderTarget()`'s own already-tested precedent
+    exactly (itself citing FNA3D's `OPENGL_ResolveTarget`: `if (target->levelCount > 1) { ...
+    glGenerateMipmap... }` with the identical no-gating behavior). Two real Metal-specific mechanics
+    had to be gotten right, unlike GL's single `glGenerateMipmap` call: (1) a blit encoder cannot
+    coexist with an already-open render encoder on the same command buffer, so any still-active
+    `owner_.encoder` is explicitly ended first; (2) if nothing was ever drawn/cleared this bind
+    session `owner_.command` is still nil (`ensureFrame()` never ran), so a fresh command buffer is
+    created (and retained, matching this file's own established retain convention) purely to host the
+    blit, mirroring `ReadBackbuffer()`'s own precedent of using a small standalone command buffer for
+    a one-off GPU operation — chosen specifically so mip regeneration still happens even for a target
+    that was bound and immediately unbound with zero draws, matching EasyGL's own unconditional
+    behavior rather than silently skipping it as a missed "optimization."
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -491,8 +525,10 @@ tables, BC-compression query); the fully generic `VertexElement`-driven descript
 (`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
 lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
-Phase 10 (`RenderTargetCube`,
-MRT, MSAA, mip, `GetData()`, `METAL-102`–`105`/`108`–`119`); Phase 14 (custom `ShaderEffect`, which
+Phase 10 (`RenderTargetCube` `METAL-109`–`111`,
+MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, `GetData()` `METAL-131`, all `CTest`s `METAL-114`–
+`118`, docs `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108` are now
+closed, see above); Phase 14 (custom `ShaderEffect`, which
 Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
 `VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
 on Phase 14); `METAL-256` (the real texture-update
@@ -548,6 +584,10 @@ iOS/tvOS). Nothing in this list has been touched.
   `layer.displaySyncEnabled` at construction and on every `SetSwapInterval()` call, with the
   `CAMetalLayer`-has-no-true-half-rate-knob limitation for `PresentInterval.Two` explicitly
   documented rather than silently approximated (🟨 landed 2026-07-19 — `METAL-168`).
+- Real `RenderTarget2D` mip-chain generation on unbind (`generateMipmapsForTexture:`, unconditional
+  when `mipMap` was requested, matching `EasyGLRenderTargetBackend`'s own already-tested
+  precedent); `preserveContents`/`GetColorGLHandle` confirmed already-correct with no code needed
+  (🟨 landed 2026-07-19 — `METAL-102`/`103`/`108`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -810,13 +850,13 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-99 | `MetalRenderTargetBackend : IRenderTargetBackend, ITextureBackend` — private `id<MTLTexture>` with `MTLTextureUsageRenderTarget \| MTLTextureUsageShaderRead` | 🟨 |
 | METAL-100 | `BindAsRenderTarget()`/`UnbindAsRenderTarget()` — swap the active `MTLRenderPassDescriptor`'s attachments, ending/starting encoders (Metal render passes are fixed-attachment for their whole encoder lifetime, unlike GL's dynamic FBO rebinding) | 🟨 |
 | METAL-101 | Honor `depthFormat` exactly per target (`METAL-16`'s table) — aim for EasyGL/Bgfx's "honor the exact requested format" tier, not Vulkan's documented "always allocate depth+stencil" simplification (Task 911/877) | 🟨 |
-| METAL-102 | `preserveContents` → `MTLLoadActionDontCare`/`MTLLoadActionLoad` on rebind, matching the shared `GraphicsDevice.cpp` contract every backend already honors identically | ⬜ |
-| METAL-103 | `mipMap` — full mip chain via `MTLBlitCommandEncoder::generateMipmapsForTexture:` on unbind, matching FNA3D's `OPENGL_ResolveTarget` auto-mip semantics (Task 336/878/906 precedent) | ⬜ |
+| METAL-102 | `preserveContents` → `MTLLoadActionDontCare`/`MTLLoadActionLoad` on rebind, matching the shared `GraphicsDevice.cpp` contract every backend already honors identically | 🟨 (found: already correctly handled, no code needed — see narrative) |
+| METAL-103 | `mipMap` — full mip chain via `MTLBlitCommandEncoder::generateMipmapsForTexture:` on unbind, matching FNA3D's `OPENGL_ResolveTarget` auto-mip semantics (Task 336/878/906 precedent) | 🟨 |
 | METAL-104 | `multiSampleCount` — multisampled attachment resolved via the render pass's own `MTLStoreActionMultisampleResolve` (a cheaper, first-class Metal path vs. GL's separate blit) | ⬜ |
 | METAL-105 | `GetMultiSampleCount()` — real, device-queried clamp via `MTLDevice.supportsTextureSampleCount:`, matching every backend's "report the real clamped value" contract | ⬜ |
 | METAL-106 | `HasRealDepthBuffer(bool)` — confirm the default `= depthFormatWasRequested` is already correct once real depth-format honoring (`METAL-101`) lands | 🟨 |
 | METAL-107 | `SetRenderTarget2D(IRenderTargetBackend*)` — real bind/unbind dispatch, currently a no-op | 🟨 |
-| METAL-108 | `GetColorGLHandle()` — confirm the default `return 0` is correct (GL-specific, N/A on Metal) and no caller assumes nonzero means "has a render target" | ⬜ |
+| METAL-108 | `GetColorGLHandle()` — confirm the default `return 0` is correct (GL-specific, N/A on Metal) and no caller assumes nonzero means "has a render target" | 🟨 (confirmed: zero callers anywhere in `include/`/`src/` outside its own declaration/`EasyGLRenderTargetBackend` override — nothing branches on it) |
 | METAL-109 | `CreateRenderTargetCube(size,depthFormat,mipMap,multiSampleCount)` — `MetalRenderTargetCubeBackend : IRenderTargetCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | ⬜ |
 | METAL-110 | `BindAsRenderTargetFace(int face)` — per-face `MTLRenderPassDescriptor` color attachment using `slice:face` | ⬜ |
 | METAL-111 | `SetRenderTargetCubeFace(rt,face)` — verify the base default's composition (`rt ? rt->BindAsRenderTargetFace(face) : SetRenderTarget2D(nullptr)`) is already correct once `METAL-110`/`METAL-107` land, before writing a redundant override | ⬜ |
