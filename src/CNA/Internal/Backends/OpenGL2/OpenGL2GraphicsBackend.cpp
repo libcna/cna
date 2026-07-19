@@ -57,6 +57,7 @@ namespace CNA::Internal::Backends::OpenGL2
         PFNGLDELETEBUFFERSPROC glDeleteBuffers = nullptr;
         PFNGLBINDBUFFERPROC glBindBuffer = nullptr;
         PFNGLBUFFERDATAPROC glBufferData = nullptr;
+        PFNGLBUFFERSUBDATAPROC glBufferSubData = nullptr;
         PFNGLGENQUERIESPROC glGenQueries = nullptr;
         PFNGLDELETEQUERIESPROC glDeleteQueries = nullptr;
         PFNGLBEGINQUERYPROC glBeginQuery = nullptr;
@@ -126,6 +127,7 @@ namespace CNA::Internal::Backends::OpenGL2
             CNA_LOAD_GL(glDeleteBuffers);
             CNA_LOAD_GL(glBindBuffer);
             CNA_LOAD_GL(glBufferData);
+            CNA_LOAD_GL(glBufferSubData);
             CNA_LOAD_GL(glGenQueries);
             CNA_LOAD_GL(glDeleteQueries);
             CNA_LOAD_GL(glBeginQuery);
@@ -1210,21 +1212,56 @@ namespace CNA::Internal::Backends::OpenGL2
             GLuint id{};
             int count{};
             std::size_t stride{};
+            // Vertex capacity requested at CreateVertexBuffer() time (0 if unknown/unspecified) --
+            // used by SetDataWithOptions(Discard) below to size the orphaned allocation to the
+            // buffer's full capacity rather than just the (possibly smaller) count of this upload,
+            // matching EasyGLVertexBufferBackend::uploadWithOptions's identical strategy.
+            int capacity{};
+            bool gpuAllocated{};
             // Task 1080 (this backend's own follow-up item, see plan_opengl2.md): non-empty only
             // when the caller supplied a genuinely custom VertexDeclaration via
             // VertexBuffer::SetDataRaw() -- see SetVertexDeclaration() below and
             // BindVertexAttributesForDeclaration()'s own doc comment for how this is consumed.
             std::vector<VertexElement> declaration;
 
-            VB() { glGenBuffers(1, &id); }
+            explicit VB(int vertexCapacity = 0) : capacity(vertexCapacity) { glGenBuffers(1, &id); }
             ~VB() override { if (id) glDeleteBuffers(1, &id); }
 
             void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override
             {
+                SetDataWithOptions(data, vertex_count, stride_in_bytes, SetDataOptions::None);
+            }
+
+            void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
+                                    SetDataOptions options) override
+            {
                 count = vertex_count;
                 stride = stride_in_bytes;
+                const auto byteCount = static_cast<GLsizeiptr>(vertex_count) * static_cast<GLsizeiptr>(stride_in_bytes);
                 glBindBuffer(GL_ARRAY_BUFFER, id);
-                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertex_count * stride_in_bytes), data, GL_DYNAMIC_DRAW);
+                if (options == SetDataOptions::Discard)
+                {
+                    // Orphan strategy: re-specify storage (a fresh, un-aliased allocation on any
+                    // real driver) so in-flight draws reading the old data don't stall the pipeline,
+                    // then fill it with a sub-data upload.
+                    const auto total = capacity > 0
+                        ? static_cast<GLsizeiptr>(capacity) * static_cast<GLsizeiptr>(stride_in_bytes)
+                        : byteCount;
+                    glBufferData(GL_ARRAY_BUFFER, total, nullptr, GL_STREAM_DRAW);
+                    if (byteCount > 0) glBufferSubData(GL_ARRAY_BUFFER, 0, byteCount, data);
+                    gpuAllocated = true;
+                }
+                else if (options == SetDataOptions::NoOverwrite && gpuAllocated)
+                {
+                    // Driver hint that no in-flight data is overwritten -- safe to sub-data into
+                    // the existing allocation instead of paying for a full glBufferData.
+                    glBufferSubData(GL_ARRAY_BUFFER, 0, byteCount, data);
+                }
+                else
+                {
+                    glBufferData(GL_ARRAY_BUFFER, byteCount, data, GL_DYNAMIC_DRAW);
+                    gpuAllocated = true;
+                }
             }
 
             void SetVertexDeclaration(const std::vector<VertexElement>& elements) override
@@ -1241,26 +1278,60 @@ namespace CNA::Internal::Backends::OpenGL2
             GLuint id{};
             int count{};
             bool thirtyTwoBit{};
+            int capacity{};   // index capacity requested at CreateIndexBufferNN() time; see VB::capacity.
+            bool gpuAllocated{};
 
-            explicit IB(bool isThirtyTwoBit) : thirtyTwoBit(isThirtyTwoBit) { glGenBuffers(1, &id); }
+            explicit IB(bool isThirtyTwoBit, int indexCapacity = 0)
+                : thirtyTwoBit(isThirtyTwoBit), capacity(indexCapacity) { glGenBuffers(1, &id); }
             ~IB() override { if (id) glDeleteBuffers(1, &id); }
+
+            void uploadWithOptions(const void* data, int index_count, GLsizeiptr elemSize, SetDataOptions options)
+            {
+                count = index_count;
+                const auto byteCount = static_cast<GLsizeiptr>(index_count) * elemSize;
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, id);
+                if (options == SetDataOptions::Discard)
+                {
+                    const auto total = capacity > 0 ? static_cast<GLsizeiptr>(capacity) * elemSize : byteCount;
+                    glBufferData(GL_ELEMENT_ARRAY_BUFFER, total, nullptr, GL_STREAM_DRAW);
+                    if (byteCount > 0) glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, byteCount, data);
+                    gpuAllocated = true;
+                }
+                else if (options == SetDataOptions::NoOverwrite && gpuAllocated)
+                {
+                    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, byteCount, data);
+                }
+                else
+                {
+                    glBufferData(GL_ELEMENT_ARRAY_BUFFER, byteCount, data, GL_DYNAMIC_DRAW);
+                    gpuAllocated = true;
+                }
+            }
 
             void SetData16(const void* data, int index_count) override
             {
-                count = index_count;
                 thirtyTwoBit = false;
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, id);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * 2, data, GL_DYNAMIC_DRAW);
+                uploadWithOptions(data, index_count, 2, SetDataOptions::None);
+            }
+
+            void SetData16WithOptions(const void* data, int index_count, SetDataOptions options) override
+            {
+                thirtyTwoBit = false;
+                uploadWithOptions(data, index_count, 2, options);
             }
 
             // Desktop OpenGL (unlike GLES2 without an extension) has always accepted
             // GL_UNSIGNED_INT indices in glDrawElements, so 32-bit index buffers just work here.
             void SetData32(const void* data, int index_count) override
             {
-                count = index_count;
                 thirtyTwoBit = true;
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, id);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * 4, data, GL_DYNAMIC_DRAW);
+                uploadWithOptions(data, index_count, 4, SetDataOptions::None);
+            }
+
+            void SetData32WithOptions(const void* data, int index_count, SetDataOptions options) override
+            {
+                thirtyTwoBit = true;
+                uploadWithOptions(data, index_count, 4, options);
             }
 
             int GetIndexCount() const override { return count; }
@@ -2225,9 +2296,9 @@ namespace CNA::Internal::Backends::OpenGL2
     void OpenGL2GraphicsBackend::SetBlendEnabled(bool enabled) { enabled ? glEnable(GL_BLEND) : glDisable(GL_BLEND); }
     void OpenGL2GraphicsBackend::SetDepthWriteEnabled(bool enabled) { glDepthMask(enabled ? GL_TRUE : GL_FALSE); }
 
-    std::unique_ptr<IVertexBufferBackend> OpenGL2GraphicsBackend::CreateVertexBuffer(int) { return std::make_unique<VB>(); }
-    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer16(int) { return std::make_unique<IB>(false); }
-    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer32(int) { return std::make_unique<IB>(true); }
+    std::unique_ptr<IVertexBufferBackend> OpenGL2GraphicsBackend::CreateVertexBuffer(int vertex_capacity) { return std::make_unique<VB>(vertex_capacity); }
+    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer16(int index_capacity) { return std::make_unique<IB>(false, index_capacity); }
+    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer32(int index_capacity) { return std::make_unique<IB>(true, index_capacity); }
 
     namespace
     {

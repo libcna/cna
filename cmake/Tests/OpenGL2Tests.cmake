@@ -156,4 +156,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_blendstate_blendfactor examples/opengl2_blendstate_blendfactor_test.cpp)
     cna_register_backend_test(NAME OpenGL2_BlendState_BlendFactor COMMAND cna_test_opengl2_blendstate_blendfactor
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: SetDataOptions (Discard/NoOverwrite) upload-path proof --
+    # SetDataWithOptions()/SetData16WithOptions()/SetData32WithOptions() were never overridden on
+    # OpenGL2 (base-class default silently ignored `options`); now implements the same
+    # orphan-then-glBufferSubData (Discard) / glBufferSubData (NoOverwrite) strategy as EasyGL.
+    cna_opengl2_test(cna_test_opengl2_dynamicbuffer_stress examples/opengl2_dynamicbuffer_stress_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_DynamicBuffer_Stress COMMAND cna_test_opengl2_dynamicbuffer_stress
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
