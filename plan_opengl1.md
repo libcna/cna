@@ -36,12 +36,23 @@ Target platforms: Linux and Windows desktop compatibility-profile drivers. The b
 4. Add fixed-function texture environment/combine mappings for the XNA effects that can be represented honestly.
 5. Add cube maps where `ARB_texture_cube_map` exists and implement the subset of EnvironmentMapEffect representable by texture coordinate generation/combine.
 6. Add mipmap generation via available extensions or CPU fallback.
-7. Add readback and render-target readback.
+7. ~~Add readback~~ **Done**: `ReadBackbuffer` implemented (`glReadPixels` off `GL_BACK`). Render-target readback is still N/A (blocked on item 2, RenderTarget2D).
 8. Add context-loss resource recreation registry, separate from EasyGL.
-9. Add Linux X11/Xvfb smoke tests and Windows GitHub Actions compile/smoke jobs.
+9. ~~Add Linux X11/Xvfb smoke tests~~ **Done** (Linux half): `tests/opengl1/README.md`'s 8 priority scenarios are wired to real CTest registrations (`cmake/Tests/OpenGL1Tests.cmake`), 8/8 passing under Xvfb/X11+Mesa llvmpipe. Windows GitHub Actions compile/smoke jobs still open.
 10. Add visual golden-image tests shared with Software/EasyGL for the supported fixed-function subset.
 11. Add explicit `GraphicsCapability` reporting so unsupported shader-era features return false instead of over-reporting support.
 12. Audit XNA Reach-profile behavior against what the fixed-function pipeline can reproduce exactly.
+
+## Bugs found while adding test coverage (2026-07-19)
+
+Fixed alongside the initial `void*`/`SDL_GLContext` build error, `ApplyRasterizerState`'s
+inverted `GL_FRONT`/`GL_BACK` mapping, and `SpriteBatch`'s double-applied origin offset (all
+found and fixed the same day the backend was first run — see git log): the stride==20
+(`VertexPositionTexture`) vertex path in `DrawInternal` ignored `GpuDrawParams::diffuseColor`
+entirely (hardcoded white), and the window's GL context requested `SDL_GL_STENCIL_SIZE=8` too
+late (after `SDL_CreateWindow`) to take effect on X11/GLX, silently producing a 0-bit stencil
+buffer and making every `DepthStencilState.StencilEnable` a no-op. See
+`tests/opengl1/README.md`'s "Bugs found and fixed" section for the full detail on each.
 
 ## Design rule
 Do not turn OPENGL1 into a second modern OpenGL backend. Features should be implemented with true legacy/fixed-function OpenGL or well-defined period-compatible extensions. Shader-dependent XNA/NOXNA features should remain unsupported rather than secretly delegating to EasyGL.

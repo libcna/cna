@@ -43,6 +43,7 @@ private:OpenGL1GraphicsBackend& owner_;bool begun_=false;Matrix transform_=Matri
 class OpenGL1GraphicsBackend final : public IGraphicsBackend {
 public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenGL1GraphicsBackend()override;
  void Clear(float,float,float,float)override;void Present()override;void GetViewportSize(int&,int&)override;void SetVirtualResolution(int,int)override;void SetPresentationMode(int)override;
+ void ReadBackbuffer(int,int,int,int,uint8_t*)override;
  SDL_Window* GetWindowInternal()const override{return window_;} SDL_Renderer* GetRendererInternal()const override{return nullptr;}
  std::unique_ptr<ITextureBackend>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchBackend>CreateSpriteBatch()override;
  void ApplyBlendState(int,int,int,int,int,int)override;void ApplyDepthStencilState(bool,bool,int,bool,int,int,int,int,int,int,int,bool,int,int,int,int)override;

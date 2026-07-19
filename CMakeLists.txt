@@ -104,6 +104,10 @@ include(cmake/Tests/VulkanTests.cmake)
 # SDL_Renderer integration tests (Task 666 audit phase)
 include(cmake/Tests/SdlRendererTests.cmake)
 
+# plan_opengl1.md: OPENGL1 (native legacy fixed-function OpenGL) CTest registration --
+# tests/opengl1/README.md's 8 priority smoke-coverage scenarios.
+include(cmake/Tests/OpenGL1Tests.cmake)
+
 include(cmake/Tests/BgfxTests.cmake)
 
 include(cmake/Tests/WebGpuTests.cmake)

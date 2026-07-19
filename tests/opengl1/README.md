@@ -2,12 +2,25 @@
 
 Configure CNA with `-DCNA_GRAPHICS_BACKEND=OPENGL1` on Linux or Windows. The backend requires a desktop OpenGL compatibility implementation. Linux CI can use Xvfb plus Mesa/llvmpipe; Windows CI can at minimum compile/link the backend and run on a software/VM OpenGL implementation where available.
 
-Priority runtime smoke coverage:
-1. clear + present;
-2. SpriteBatch textured quad;
-3. colored 3D triangle with depth;
-4. textured 3D triangle;
-5. indexed cube with depth/culling;
-6. fixed-function directional lighting on `VertexPositionNormalTexture`;
-7. fog and alpha-test approximations;
-8. stencil and scissor state.
+Run the suite with `ctest -R "OpenGL1_"` from the build directory (needs `-DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=ON`, real `DISPLAY`/Xvfb; see `cmake/Tests/OpenGL1Tests.cmake`).
+
+Priority runtime smoke coverage, each wired to a real CTest registration:
+1. clear + present — `OpenGL1_PixelTestGame_Smoke`;
+2. SpriteBatch textured quad — `OpenGL1_TexturedQuad_Readback`;
+3. colored 3D triangle with depth — `OpenGL1_RasterizerState_CullMode`;
+4. textured 3D triangle — `OpenGL1_BasicEffect_TextureEnabled`;
+5. indexed cube with depth/culling — `OpenGL1_RasterizerState_CullMode_IndexedBasicEffect`;
+6. fixed-function directional lighting on `VertexPositionNormalTexture` — also `OpenGL1_RasterizerState_CullMode_IndexedBasicEffect` (uses `BasicEffect.EnableDefaultLighting()`);
+7. fog and alpha-test approximations — `OpenGL1_Fog_AlphaTest` (`examples/opengl1_fog_alphatest_test.cpp`, OPENGL1-specific: asserts only the qualitative/coarse behavior this backend's real fixed-function `GL_FOG`/`glAlphaFunc` approximation can honestly claim — see that file's header for why the shader-exact EasyGL fog/alpha-test files aren't reused as-is);
+8. stencil and scissor state — `OpenGL1_Scissor` + `OpenGL1_DepthStencilState_StencilOps`.
+
+Scenarios 1-6 and 8 reuse already-verified, backend-agnostic example sources (real public `Game`/`GraphicsDevice`/`BasicEffect`/`SpriteBatch` API only) from `examples/`, confirmed by inspection to contain no EasyGL-specific code before reuse.
+
+## Bugs found and fixed while wiring this suite up
+
+- `OpenGL1GraphicsBackend::glContext_` was `void*` instead of `SDL_GLContext` — didn't compile against SDL3's typed `SDL_GL_MakeCurrent`/`SDL_GL_DestroyContext`.
+- `ApplyRasterizerState` mapped `CullMode::CullClockwiseFace`/`CullCounterClockwiseFace` to `glCullFace(GL_FRONT/GL_BACK)` backwards relative to GL's default CCW-front convention — XNA's default `RasterizerState` (`CullCounterClockwiseFace`) was back-face-culling every `SpriteBatch` quad and any 3D triangle with the same winding, so nothing but the `Clear()` color ever reached the screen.
+- `OpenGL1SpriteBatchBackend::Draw()` translated by `(dest + origin)` before rotating and then subtracted `origin` again, double-applying the origin offset instead of leaving it invariant under rotation (same bug class as the SDL_Renderer backend's own Task 671 fix).
+- `DrawInternal`'s stride==20 (`VertexPositionTexture`) vertex path hardcoded `glColor4f(1,1,1,1)`, silently ignoring `GpuDrawParams::diffuseColor` — any `BasicEffect.TextureEnabled` draw with a non-white `DiffuseColor` and no vertex-color channel rendered with the tint completely missing.
+- `OpenGL1GraphicsBackend` requested `SDL_GL_STENCIL_SIZE=8` only in its own constructor, which runs after `GraphicsDevice` has already created the SDL window. On X11/GLX (unlike EasyGL's ES/EGL context path, which can defer config selection to `SDL_GL_CreateContext()` time), the window's visual — and therefore its depth/stencil buffer bits — is fixed at `SDL_CreateWindow()` time; the late request was silently dropped, producing a 0-bit stencil buffer and making every `DepthStencilState.StencilEnable` a permanent no-op. Fixed by requesting `SDL_GL_STENCIL_SIZE`/`SDL_GL_DEPTH_SIZE`/`SDL_GL_DOUBLEBUFFER` in `GraphicsDevice.cpp` before `SDL_CreateWindow()` for `CNA_BACKEND_OPENGL1`, in addition to the (still-needed, now-redundant-but-harmless) request in the backend's own constructor. Confirmed empirically via `glGetIntegerv(GL_STENCIL_BITS)`: 0 before the fix, 8 after.
+- `ReadBackbuffer` was unimplemented (inherited the default that throws), so `GraphicsDevice::GetBackBufferData()` — and therefore every pixel-readback test in this suite — could not run at all against this backend. Implemented via `glReadPixels` off `GL_BACK`, matching the EasyGL backend's own y-flip convention.
