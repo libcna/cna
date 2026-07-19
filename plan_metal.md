@@ -704,6 +704,37 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     for the compile-time/CTest check that task still asks for, but real confirmation this session's
     accumulated changes are at least internally consistent with each other.
 
+27. **Phase 29 — `METAL-243`/`246`, iOS/tvOS scope audit** (answered from real vendored source, not
+    assumption): `MetalGraphicsBackend.mm` itself was grepped for `NSWindow`/`NSView`/`#import
+    <AppKit`/`#import <Cocoa`/`MTLFeatureSet_macOS`/`MTLGPUFamilyMac` — zero matches. Every
+    platform-specific piece of window/view creation this file touches goes exclusively through
+    SDL3's generic, cross-platform `SDL_Metal_CreateView`/`SDL_Metal_GetLayer`/
+    `SDL_Metal_DestroyView` calls, never a macOS-only API directly. Reading this repo's own vendored
+    SDL3 source further confirms those generic functions have a real, complete iOS/tvOS
+    implementation: `third_party/SDL/src/video/uikit/SDL_uikitmetalview.m`'s
+    `UIKit_Metal_CreateView`/`UIKit_Metal_GetLayer`/`UIKit_Metal_DestroyView` (present in sibling
+    repos this session could read, e.g. `cnaopengl1`) implement the exact same function-pointer
+    shape SDL3 dispatches to internally on iOS — and the SAME `uikit` video-driver directory handles
+    tvOS too, via `#ifdef SDL_PLATFORM_TVOS` branches for the platform's own real behavioral
+    differences (e.g. `SDL_uikitview.m`'s several `#if !defined(SDL_PLATFORM_TVOS)` guards), not a
+    separate driver. This means `cmake/BackendSelection.cmake`'s own iOS/tvOS claim is **likely
+    true, not just aspirational** — the `.mm` file itself has no known platform-incompatible code —
+    though this remains genuinely unverified until a real iOS/tvOS build-only CI job (`METAL-244`/
+    `245`, deliberately not attempted this session: writing CMake/CI configuration blind, with no
+    iOS toolchain available here to test it against, carries the same risk profile as every other
+    "needs a compiler this machine doesn't have" item, just for a different toolchain) actually
+    exercises it. A real, concrete finding surfaced while reading `SDL_uikitmetalview.m`'s own
+    `UIKit_Metal_CreateView`: it too gates its own HiDPI `contentsScale`/`nativeScale` handling on
+    `window->flags & SDL_WINDOW_HIGH_PIXEL_DENSITY` — the exact same flag `METAL-257` (Phase 16)
+    found missing from `GraphicsDevice.cpp`'s shared window creation. This means `METAL-257`'s real
+    gap is not macOS-only as originally scoped — it would affect Retina rendering on iOS/tvOS too,
+    once either platform is ever actually built; `METAL-257`'s own note should be read as covering
+    both, still deliberately not fixed here for the identical cross-backend-scope reasoning.
+    `METAL-246` (touch input ownership) confirmed the same way: grepped every graphics backend in
+    this repo, Metal included, for `SDL_EVENT_FINGER`/`TouchID`/`SDL_Finger` — zero matches
+    anywhere, confirming touch input is architecturally independent of the graphics backend layer
+    entirely (owned by CNA's shared input/device layer, exactly as this task already hypothesized).
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -723,9 +754,11 @@ Phase 9 Instancing is itself blocked on, and which is itself further blocked on 
 on Phase 14); `METAL-256` (the real texture-update
 CPU/GPU-sync hazard Phase 18's audit found but did not fix) and `METAL-257` (the cross-backend
 missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap Phase 16's research found but deliberately left for a
-cross-backend task, not this Metal-only plan); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases
-21–30 in full (all NOXNA extensions, testing infrastructure, CI, docs, cross-backend pixel parity,
-iOS/tvOS). Nothing in this list has been touched.
+cross-backend task, not this Metal-only plan — now also confirmed to affect iOS/tvOS, not just
+macOS, per Phase 29's own research); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases 21–28 and
+30 in full (all NOXNA extensions, testing infrastructure, CI, docs, cross-backend pixel parity); the
+rest of Phase 29 (`METAL-244`/`245`/`247`–`251` — a real iOS/tvOS build-only CI job and everything
+downstream of it, `METAL-243`/`246` themselves answered, see above).
 
 ## Implemented initial foundation
 
@@ -810,6 +843,14 @@ iOS/tvOS). Nothing in this list has been touched.
   `destinationBytesPerImage` argument against a real, previously-unverified Metal API risk found
   while generalizing it for `Texture3D`'s genuine volume copies (🟨 landed 2026-07-19 —
   `METAL-122`/`125`).
+- iOS/tvOS platform-scope audit, from real vendored SDL3 source: `MetalGraphicsBackend.mm` itself
+  has zero macOS-only API usage, and SDL3's own real `UIKit_Metal_CreateView`/`GetLayer`/
+  `DestroyView` (the same `uikit` driver handling tvOS too) implement the identical generic
+  function-pointer shape this file already exclusively calls — `cmake/BackendSelection.cmake`'s
+  iOS/tvOS claim is likely true, not aspirational, though genuinely unverified until a real
+  build-only CI job exists. Found the missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap (`METAL-257`)
+  also affects iOS/tvOS, not just macOS. Touch input confirmed architecturally independent of the
+  graphics backend layer entirely (🟨 landed 2026-07-19 — `METAL-243`/`246`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -1342,10 +1383,10 @@ this plan, the CI job, or the implementation has ever addressed that claim.
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-243 | Audit whether the claim is aspirational or already true — the current `.mm` uses only generic `SDL_Metal_CreateView`/`CAMetalLayer` calls (no macOS-only API spotted), so it may already be iOS/tvOS-buildable, but `metal-macos-ci.yml` only ever targets `macos-14` | ⬜ |
+| METAL-243 | Audit whether the claim is aspirational or already true — the current `.mm` uses only generic `SDL_Metal_CreateView`/`CAMetalLayer` calls (no macOS-only API spotted), so it may already be iOS/tvOS-buildable, but `metal-macos-ci.yml` only ever targets `macos-14` | 🟨 (audited from real vendored source — likely TRUE, not just aspirational, see narrative) |
 | METAL-244 | Add an iOS-targeted CMake/CI configuration as a **build-only** smoke check (no simulator/device execution required) to catch iOS-incompatible API usage early | ⬜ |
 | METAL-245 | tvOS-targeted build, same build-only scope | ⬜ |
-| METAL-246 | Confirm touch input is already fully owned by CNA's existing input/device layer (`plan_input.md`/`plan_cna_devices.md`) and needs no Metal-specific work beyond Phase 15's generic window↔logical transform | ⬜ |
+| METAL-246 | Confirm touch input is already fully owned by CNA's existing input/device layer (`plan_input.md`/`plan_cna_devices.md`) and needs no Metal-specific work beyond Phase 15's generic window↔logical transform | 🟨 (confirmed: grepped every graphics backend, including Metal, for `SDL_EVENT_FINGER`/`TouchID`/`SDL_Finger` — zero matches anywhere; touch is architecturally independent of the graphics backend layer entirely, confirming the hypothesis) |
 | METAL-247 | Audit iOS/tvOS `CAMetalLayer` differences from macOS (`UIView`-hosted, not `NSView`-hosted; different `backingScaleFactor`/@2x/@3x conventions) once a real iOS build exists | ⬜ |
 | METAL-248 | Note `MTLGPUFamilyApple*` vs. `MTLGPUFamilyMac*` feature-set differences (tile-based deferred rendering specifics, programmable blending, imageblocks) as an optional-optimization concern for later NOXNA work, not a correctness blocker | ⬜ |
 | METAL-249 | Confirm current App Store/TestFlight review guidelines still allow runtime shader compilation via `newLibraryWithSource:` (the mechanism `kMetalShaderSource` already relies on) on iOS, or plan a precompiled-`.metallib` fallback — a real distribution-risk item, not a code bug | ⬜ |
