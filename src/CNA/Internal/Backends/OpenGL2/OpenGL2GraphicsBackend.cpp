@@ -356,6 +356,34 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         }
 
+        // Mip-aware MIN/MAG filter pair for the general 3D texture-sampling path (applySampler()
+        // in drawInternal() below) -- mirrors EasyGLGraphicsBackend::ApplySamplerState's own
+        // TextureFilter -> min/mag mapping exactly, including its own documented Linear=0 case
+        // ("CNA does not generate mipmaps by default"), for cross-backend consistency. Unlike
+        // plain ToGLFilter() above (still used verbatim by SpriteBatch's own draw paths, which
+        // don't sample real mip chains), this selects a MIPMAP-suffixed MIN_FILTER for every XNA
+        // filter value whose name says "Mip" (or Anisotropic) -- safe even for a texture with no
+        // real mip levels beyond 0, because Tex's own GL_TEXTURE_MAX_LEVEL clamp (see Tex's
+        // constructor) always keeps the mipmap chain complete per the GL spec.
+        // XNA: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3, PointMipLinear=4,
+        //      MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
+        //      MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8.
+        void ToGLMinMagFilter(int xnaFilter, GLint& outMin, GLint& outMag)
+        {
+            switch (xnaFilter)
+            {
+                case 1: outMin = GL_NEAREST;               outMag = GL_NEAREST; break;
+                case 2: outMin = GL_LINEAR_MIPMAP_LINEAR;  outMag = GL_LINEAR;  break;
+                case 3: outMin = GL_LINEAR_MIPMAP_NEAREST; outMag = GL_LINEAR;  break;
+                case 4: outMin = GL_NEAREST_MIPMAP_LINEAR; outMag = GL_NEAREST; break;
+                case 5: outMin = GL_LINEAR_MIPMAP_LINEAR;  outMag = GL_NEAREST; break;
+                case 6: outMin = GL_LINEAR_MIPMAP_NEAREST; outMag = GL_NEAREST; break;
+                case 7: outMin = GL_NEAREST_MIPMAP_LINEAR; outMag = GL_LINEAR;  break;
+                case 8: outMin = GL_NEAREST_MIPMAP_NEAREST;outMag = GL_LINEAR;  break;
+                default: outMin = GL_LINEAR; outMag = GL_LINEAR; break; // Linear = 0
+            }
+        }
+
         // XNA TextureAddressMode enum ordinals: Wrap=0, Clamp=1, Mirror=2.
         GLint ToGLWrapMode(int xnaAddressMode)
         {
@@ -763,8 +791,12 @@ namespace CNA::Internal::Backends::OpenGL2
             GLuint id{};
             int w{};
             int h{};
+            // Task 924 precedent (EasyGLTextureBackend's own identical field): real mip level
+            // count this texture was created for (1 = no mipmapping).
+            int mipLevels{1};
 
-            explicit Tex(const ImageData& data) : w(data.width), h(data.height)
+            explicit Tex(const ImageData& data)
+                : w(data.width), h(data.height), mipLevels(data.mipLevels > 0 ? data.mipLevels : 1)
             {
                 glGenTextures(1, &id);
                 glBindTexture(GL_TEXTURE_2D, id);
@@ -772,6 +804,12 @@ namespace CNA::Internal::Backends::OpenGL2
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                // Task 924: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise a
+                // mip-requiring TextureFilter (see ToGLMinMagFilter) treats this as an incomplete
+                // mipmap chain (GL's own default max level is 1000) and renders solid black, even
+                // for an ordinary single-level (mipLevels==1) texture that never uploads any level
+                // beyond 0.
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.pixels.data());
             }
 
@@ -796,6 +834,16 @@ namespace CNA::Internal::Backends::OpenGL2
                         std::memcpy(tight.data() + y * w * 4, pixels + y * stride, w * 4);
                     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, tight.data());
                 }
+            }
+
+            // Task 924 follow-up: levels beyond 0 have no storage yet at this point (the
+            // constructor above only allocates level 0), so this must be a full glTexImage2D
+            // (matching EasyGLTextureBackend::UpdatePixelsLevel's own set_image_2d call), not a
+            // glTexSubImage2D into non-existent storage.
+            void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override
+            {
+                glBindTexture(GL_TEXTURE_2D, id);
+                glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, levelW, levelH, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
             }
         };
 
@@ -2489,9 +2537,10 @@ namespace CNA::Internal::Backends::OpenGL2
         // (mirrors Sprite::Draw's identical per-draw glTexParameteri approach).
         auto applySampler = [this](int slot)
         {
-            const GLint glFilter = ToGLFilter(samplerFilter_[slot]);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, glFilter);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, glFilter);
+            GLint glMin, glMag;
+            ToGLMinMagFilter(samplerFilter_[slot], glMin, glMag);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, glMin);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, glMag);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(samplerAddressU_[slot]));
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(samplerAddressV_[slot]));
         };

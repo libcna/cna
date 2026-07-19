@@ -164,4 +164,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_dynamicbuffer_stress examples/opengl2_dynamicbuffer_stress_test.cpp)
     cna_register_backend_test(NAME OpenGL2_DynamicBuffer_Stress COMMAND cna_test_opengl2_dynamicbuffer_stress
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: real Texture2D mip-level upload + mip-aware filter selection proof --
+    # UpdatePixelsLevel() was never overridden (mip levels beyond 0 silently vanished) and
+    # GL_TEXTURE_MAX_LEVEL was never clamped (a real mip chain would have rendered solid black
+    # under a mip-aware GL filter per the GL "incomplete mipmap texture" rule).
+    cna_opengl2_test(cna_test_opengl2_texture_mip_filter examples/opengl2_texture_mip_filter_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_Texture_MipFilter COMMAND cna_test_opengl2_texture_mip_filter
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
