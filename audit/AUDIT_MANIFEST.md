@@ -56,7 +56,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`xna-graphics`](manifest/xna-graphics.md) | 191 | PENDING: 191 / AUDITED: 0 |
 | [`xna-input`](manifest/xna-input.md) | 44 | AUDITED: 44 / PENDING: 0 (complete) |
 | [`xna-media`](manifest/xna-media.md) | 45 | AUDITED: 45 / PENDING: 0 (complete) |
-| [`xna-net`](manifest/xna-net.md) | 42 | PENDING: 42 / AUDITED: 0 |
+| [`xna-net`](manifest/xna-net.md) | 42 | AUDITED: 42 / PENDING: 0 (complete) |
 | [`xna-storage`](manifest/xna-storage.md) | 6 | AUDITED: 6 / PENDING: 0 (complete) |
 
 ## Microsoft.Devices — public API (include+src) (54 files)

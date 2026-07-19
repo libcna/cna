@@ -1170,3 +1170,47 @@ _(pending)_
   copyright line. `include/CNA/Misc.hpp` (also audited, `cna-root-utilities` shard) has no SPDX header at
   all -- a third variant. May be intentional (ENet itself is MIT-licensed), but is currently an unrecorded
   inconsistency across three different conventions in the codebase's own NOXNA code.
+
+## Per-shard notes: `xna-net`
+
+- **`xna-net` shard note: FNA has ZERO reference material at all for this namespace -- not merely a
+  stub family like Media, a total absence.** Confirmed via `find` against the local FNA reference tree
+  (`/rv/data/library/github.com/FNA-XNA/FNA/src`): no `Net`/`GamerServices` directory, no files, nothing.
+  This is a stronger and categorically different situation than `xna-media`'s "FNA implements this as a
+  complete stub" pattern (where at least a `NotImplementedException`-throwing file exists to confirm
+  against) -- here there is no file to confirm anything against, for any of the 42 files in this shard.
+  Several source comments in this shard make specific, sometimes startlingly precise claims about FNA's
+  own internal comments/bugs verbatim (e.g. `NetworkSessionProperties.cpp`'s claimed "TODO: Expand list to
+  index size?"; `QualityOfService.hpp`'s claimed "TODO: Everything below"; `PacketReader`/`PacketWriter`'s
+  claimed Color read/write byte-count asymmetry; `LocalNetworkGamer::ReceiveData(PacketReader&, ...)`'s
+  claimed "declares a length variable that is never updated"; several `BeginJoin`/`BeginJoinInvited`
+  call sites' claimed hardcoded `NetworkSessionType.PlayerMatch`/null-`SessionProperties` FIXMEs). None of
+  these are verifiable against this project's own designated FNA reference, but several are independently
+  corroborable as real, well-documented XNA quirks from general domain knowledge (the `SendDataOptions`
+  `[Flags]`-but-not-bitwise-composable enum shape; the `PacketReader`/`PacketWriter` Color asymmetry) --
+  treated as plausible-and-preserved rather than flagged as unverifiable-therefore-suspect. Future
+  maintenance on this namespace should consult real XNA 4.0 documentation (or the xn65 reference), not
+  FNA source, the same conclusion already reached for `xna-media`'s stub-only types.
+- **Positive finding, independently significant: the previously-known critical `NetworkSession::Dispose()`
+  ASan-confirmed heap-buffer-overflow use-after-free (this project's own prior `audit_net.md`, "Critical
+  finding 1") is confirmed genuinely fixed in the code as it stands today.** `NetworkSession::Dispose()`
+  (`NetworkSession.cpp` lines 297-337) now early-returns on a second call via an `isDisposed_` guard
+  (Task 12.1), with defense-in-depth clearing of all four gamer collections
+  (`localGamers_`/`remoteGamers_`/`allGamers_`/`previousGamers_`) independent of that guard, so even a
+  single `Dispose()` call cannot leave a caller-visible dangling pointer into a gamer `ownedGamers_.clear()`
+  just freed. See `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp.audit.md` for the full verification,
+  which also confirms at least seven other distinct, specifically-tracked defects in this same file
+  (Task 2.1-2.5, 2.15, 3.1-3.3, 6.1, 12) are genuinely fixed, not merely claimed.
+- **MEDIUM finding: `NetworkSessionProperties::Insert(int)`/`RemoveAt(int)` perform unchecked
+  `properties_.begin() + index` iterator arithmetic, unlike every other index-taking member in the same
+  file** (`operator[]` via `.at()`; `CopyTo` via explicit `ArgumentOutOfRangeException`/`ArgumentException`
+  checks). A negative or past-the-end `index` is undefined behavior (invalid iterator construction), not a
+  catchable exception, for a type reachable from the public `NetworkSession::Create`/`Find` API surface.
+  See `src/Microsoft/Xna/Framework/Net/NetworkSessionProperties.cpp.audit.md` for the full analysis and a
+  suggested fix shape (report-only, no source changes made).
+- All 42 files in this shard are otherwise correct; no other new defects found. The shard is notable for
+  unusually thorough self-documentation: nearly every non-trivial member across `NetworkSession`,
+  `NetworkGamer`, `LocalNetworkGamer`, and `AvailableNetworkSession` cites a specific `plan_net.md` task ID
+  and/or a sibling-repo `DEFERRED.md` item number for every claimed FNA-stub-versus-restored-behavior
+  distinction, rather than an unverifiable bare assertion -- the strongest practical substitute available
+  given the total absence of an FNA reference for this namespace.
