@@ -2604,3 +2604,86 @@ D3D12-specific) fails to link under this MinGW cross-compile configuration with 
 reference to `Video::Video`'s constructor/vtable -- `Video.cpp`'s translation unit apparently isn't
 linked into this specific tool target under `CNA_BUILD_EXAMPLES=OFF`. Did not block `D3D12_Smoke`.
 
+### SdlRenderer, Software, Ascii, Headless: all 4 built+tested -- Pass 6 is now COMPLETE across every one of the 14 real graphics backends
+
+This closes out Pass 6: every backend (EasyGL, Canvas, D3D9, D3D11, D3D12, Dx3, WebGPU, Vulkan,
+SdlGpu, Bgfx, SdlRenderer, Software, Ascii, Headless) has now been built AND runtime-tested this
+session, not merely statically reviewed.
+
+**`cna_demo_xact`'s Content-copy build failure is now confirmed universal, on all 5 backends
+independently built and tested this session (EasyGL, Bgfx, SdlRenderer, Software, Ascii, Headless --
+6 counting the earlier root-cause identification against Bgfx specifically)**: `examples/demo_xact/
+Content` genuinely does not exist anywhere in the source tree. Already root-caused precisely in the
+Bgfx section above (an unconditional `POST_BUILD` copy step in `cmake/Examples.cmake`) -- this
+further confirms it as a universal, backend-independent build-system defect, not specific to any
+one backend.
+
+**NEW, real robustness gap**: `SDL_Renderer_FullscreenToggle` crashes the whole test process with an
+uncaught `std::runtime_error` ("`ReadBackbuffer`: physical/logical size mismatch (letterbox or
+stretch scaling active) -- exact-pixel readback unsupported") during a fullscreen toggle, instead of
+failing as a clean, catchable test assertion -- `CTest` reports "Subprocess aborted." Either the
+test needs to avoid calling `ReadBackbuffer` while a letterbox/stretch-scaling mismatch is active, or
+(if verifying behavior *during* that state is the actual intent) production code needs to surface
+this via the project's own exception-safe check pattern rather than an uncaught exception that
+terminates the process.
+
+**NEW, likely shared CPU-side defect, confirmed on 2 (possibly 3) independent backends**: Texture3D
+content-reader round-trip returns all-zero/garbage data instead of the real uploaded pixel values --
+reproduces identically on Software (`Texture3DTextureCubeContentTypeReaderTest.
+Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder`, `CnjTexture3DTest.LoadsRealCnjFixture`)
+and Headless (same 2, plus `TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd`) -- and SdlRenderer's
+own general-suite failure list includes the same content-type-reader test too, though conflated
+there with its broader, expected 2D-only-backend failure set. Reproducing identically on a CPU
+rasterizer AND a no-op/no-GPU backend strongly suggests shared CPU-side code (the XNB/CNJ Texture3D
+content reader, or `Texture3D`'s own generic `GetData`/`SetData` path), not either backend's own
+GPU-texture implementation -- worth checking on EasyGL/Vulkan/other backends too, since none of the
+earlier per-backend Pass 6 passes specifically isolated this exact test case.
+
+**NEW, likely shared default-capability-flag issue, confirmed on 5 backends now (Vulkan, SdlGpu,
+Bgfx, Software, Headless)**: `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` fails
+identically across all 5, though for what may be two different underlying reasons depending on the
+backend -- for Vulkan/SdlGpu/Bgfx, the backend genuinely and correctly supports wireframe fill mode
+(a real GPU capability the test wrongly assumes doesn't exist anywhere, since it was only ever true
+for EasyGL's GLES3). For Software (a CPU rasterizer that could plausibly implement wireframe
+trivially) and especially Headless (which does nothing GPU-side at all, yet reports `true` for this
+capability), the direction is less clear -- Headless claiming wireframe support while doing zero
+real rendering suggests the `WireFrame` capability flag may default to `true` somewhere shared (e.g.
+a base `IGraphicsBackend` default only some backends override to `false`) rather than being
+independently computed per backend. Worth checking `SupportsCapability`'s default implementation
+directly rather than assuming this is purely a test-authoring bug in every instance.
+
+**`MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` SEGFAULTs identically on all 4 of
+these backends too** -- now confirmed backend-independent across at least 6 backends this session
+(EasyGL, WebGPU's own crash aside, SdlRenderer, Software, Ascii, Headless), strongly reinforcing this
+as a genuine, universal robustness bug in shared CPU-side scan/object-graph code, not an
+EasyGL-specific artifact.
+
+**Ambiguous, flagged not resolved**: `SDL_Renderer_RenderTarget_DepthDecision` fails with framing
+that implies binding a `RenderTarget2D` with an explicit `DepthFormat` should unlock some real
+per-target depth capability during `Clear()` -- production code doesn't honor this. Unclear whether
+this is a second, un-updated instance of the same stale-throw-expectation pattern as the
+already-known `SDL_Renderer_ClearOptions_Audit` finding, or a genuinely distinct, never-implemented
+feature -- needs reconciling against `docs/sdl-renderer-2d-completeness.md`'s own depth-support row.
+
+Software/Ascii/Headless's own dedicated CTest suites are all 100% green (6/6, 6/6, 7/7
+respectively); SdlRenderer's is 65/68 (the 3 failures above). Every other general-suite failure on
+the 2D-only backends (SdlRenderer's 56, Ascii's 52) is confirmed expected methodology noise --
+`CnaTests`' shared Model/glTF/CNJ content tests assume 3D capability and aren't written
+backend-conditionally, not a defect in either backend (both correctly throw for every 3D-only API
+entry point per their own clean `ThrowNo3D` dedicated-suite results).
+
+### Pass 6 final tally: every one of this audit's 14 real graphics backends built and runtime-tested
+
+EasyGL, Canvas, D3D9, D3D11, D3D12, Dx3, WebGPU, Vulkan, SdlGpu, Bgfx, SdlRenderer, Software, Ascii,
+Headless -- all 14. Headline findings across the whole sweep: a CRITICAL/HIGH cross-backend
+security-relevant crash (malformed Texture2D content crashes Vulkan and WebGPU, clean on every other
+tested backend); a project-wide `WORKING_DIRECTORY` CTest registration gap invisible to every CI
+workflow; a project-wide "never adopted `WILL_FAIL`" systemic gap (now 6+ confirmed instances); a
+universal `cna_demo_xact` build defect, precisely root-caused; the `Dx3_SpriteBatch` investigation
+closed empirically; Task 868 (Vulkan BlendState) corrected from open to fixed; the `WebGPU_Msaa`
+"intentionally failing" note corrected to fixed; several new per-backend rendering/robustness
+defects (D3D11 specular asymmetry and vertex-color bug, Bgfx cull-mode bug, SdlGpu's stricter GLSL
+dialect, a shared Texture3D round-trip bug, a shared WireFrame-capability-flag ambiguity, and the
+`SDL_Renderer_FullscreenToggle` uncaught-exception crash); and a `MediaLibraryTestFixture` SEGFAULT
+now confirmed universal across essentially every backend tested.
+
