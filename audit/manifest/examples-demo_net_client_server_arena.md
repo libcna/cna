@@ -6,6 +6,6 @@ Files in this shard: **3**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_net_client_server_arena/src/ArenaGame.cpp` | PENDING | [ArenaGame.cpp.audit.md](../examples/demo_net_client_server_arena/src/ArenaGame.cpp.audit.md) |
-| 2 | `examples/demo_net_client_server_arena/src/ArenaGame.hpp` | PENDING | [ArenaGame.hpp.audit.md](../examples/demo_net_client_server_arena/src/ArenaGame.hpp.audit.md) |
-| 3 | `examples/demo_net_client_server_arena/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_net_client_server_arena/src/Main.cpp.audit.md) |
+| 1 | `examples/demo_net_client_server_arena/src/ArenaGame.cpp` | AUDITED | [ArenaGame.cpp.audit.md](../examples/demo_net_client_server_arena/src/ArenaGame.cpp.audit.md) |
+| 2 | `examples/demo_net_client_server_arena/src/ArenaGame.hpp` | AUDITED | [ArenaGame.hpp.audit.md](../examples/demo_net_client_server_arena/src/ArenaGame.hpp.audit.md) |
+| 3 | `examples/demo_net_client_server_arena/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_net_client_server_arena/src/Main.cpp.audit.md) |
