@@ -1901,3 +1901,83 @@ Checks A/B (`TextureCube`/`Texture3D` round-trip) are unconditional `check(true,
 would crash the test process outright instead of reporting a clean `FAIL`. LOW; matches the general
 "a test's own robustness against the very regression it's meant to catch" class of finding already
 noted for other shards this session.
+
+## Pass 3: Systematic API-surface completeness sweep (Microsoft.Xna.Framework.Graphics, vs. real xn65 XML reference)
+
+Per this project's own standing finding that FNA is not authoritative for API *surface* (member
+existence) -- FNA itself sometimes omits real XNA 4.0 members the original Microsoft assemblies
+had -- this sweep used the actual Microsoft-shipped Windows XNA 4.0 reference documentation at
+`/rv/data/library/github.com/borgesdan/xn65/references/Windows/Microsoft.Xna.Framework.Graphics.xml`
+(extracted XML doc comments from the real, shipped `Microsoft.Xna.Framework.Graphics.dll`) as ground
+truth for "does this member exist in real XNA 4.0," cross-referenced against CNA's actual declared
+surface in `include/Microsoft/Xna/Framework/Graphics/*.hpp`.
+
+**Methodology and scale**: 781 raw XML member entries, resolving to 95 real top-level types (99 minus
+4 nested `.Enumerator` helper types) and 635 individually-checked property/method/field/event members,
+plus a separate pass enumerating every named value of the 27 pure-enum types in this namespace (their
+values are documented as nested `<param>` tags under the enum's own `<member name="T:...">` entry, a
+different XML shape than class members, requiring a second extraction pass to cover correctly).
+
+**Result: zero types entirely missing (95/95 real types have a corresponding CNA header) and zero
+missing enum values (27/27 enums, every named value present).** At the member level, an initial naive
+name-match pass flagged 28 types with "possibly missing" members, but manual verification resolved all
+but 2 real items as false positives caused by systematic, expected C#-to-C++ idiom translation, not
+actual gaps:
+- **`Dispose()` on 7 classes** (`BlendState`, `DepthStencilState`, `RasterizerState`, `SamplerState`,
+  `OcclusionQuery`, `SpriteBatch`, `VertexDeclaration`) -- false positive. All 7 correctly inherit
+  `Dispose()` from `GraphicsResource` rather than redeclaring it, exactly matching real XNA's own
+  inheritance-based design.
+- **`Finalize()` on `GraphicsDevice`/`GraphicsResource`** -- false positive. `.NET`'s GC finalizer has
+  no C++ equivalent; `GraphicsResource`'s real C++ destructor (`~GraphicsResource() override`) calls
+  `Dispose(false)` directly, the correct idiomatic translation of the same concept (confirmed via the
+  class's own doc comment: "disposing false = called from finalizer").
+- **`GetEnumerator()`/non-generic `IEnumerable.GetEnumerator()`/`Item` indexer on 11 collection
+  classes** (`DisplayModeCollection`, `EffectAnnotationCollection`, `EffectParameterCollection`,
+  `EffectPassCollection`, `EffectTechniqueCollection`, `ModelBoneCollection`, `ModelEffectCollection`,
+  `ModelMeshCollection`, `ModelMeshPartCollection`, `SamplerStateCollection`, `TextureCollection`) --
+  false positive. All 11 have `operator[]` (the `Item` indexer's correct C++ translation); the 9 that
+  are genuinely `IEnumerable` in real XNA also have `begin()`/`end()` (confirmed
+  `SamplerStateCollection`/`TextureCollection` are indexer-only in real XNA too, per the XML itself --
+  correctly not needing iterator support).
+- **Explicit-interface members** `IEffectLights.LightingEnabled` (`EnvironmentMapEffect`,
+  `SkinnedEffect`) and `IVertexType.VertexDeclaration` (3 of 4 vertex structs) -- false positive for
+  these specific cases. C#'s explicit-interface-implementation member names (which include the
+  interface's own namespace, e.g. `Microsoft#Xna#Framework#Graphics#IEffectLights#LightingEnabled`)
+  are correctly translated to plain `getLightingEnabledProperty()`/`setLightingEnabledProperty()
+  override` and `getVertexDeclarationProperty() const override` in CNA, not literal name matches.
+- **`op_Equality`/`op_Inequality` on `VertexElement` + 4 vertex structs** -- false positive.
+  `operator==`/`operator!=` are correctly implemented under their real C++ operator-overload spelling.
+
+**Two genuine findings survived verification:**
+
+- **NEW, MEDIUM -- `DisplayMode.TitleSafeArea` and `DisplayMode.ToString()` are both real XNA 4.0
+  members, present in FNA with trivial one-line implementations, and entirely absent from CNA's
+  `DisplayMode.hpp`.** FNA's `TitleSafeArea` is `new Rectangle(0, 0, Width, Height)` and its
+  `ToString()` is a simple `"{{Width:...Height:...Format:...}}"` formatter (`FNA/src/Graphics/
+  DisplayMode.cs` lines 52-58, 105-113) -- both are FNA-confirmed-real, trivially portable, and
+  simply never added to CNA's `DisplayMode` class, which otherwise correctly implements `Width`/
+  `Height`/`Format`/`AspectRatio`/`operator==`/`operator!=`/`GetTypeName()`. Not a behavioral bug in
+  anything existing, but a real, clean completeness gap with no known workaround for the missing
+  property (title-safe-area-aware UI layout code has no CNA equivalent to call).
+- **RE-CONFIRMED (not new) -- `VertexPositionColor` is missing `IVertexType`.** Independently
+  re-derived via this systematic sweep: `VertexPositionColor.hpp` declares `struct
+  VertexPositionColor` with no base class and only a `getVertexDeclarationStatic()` static helper,
+  while its 3 siblings (`VertexPositionColorTexture`, `VertexPositionNormalTexture`,
+  `VertexPositionTexture`) all correctly declare `: public IVertexType` and implement
+  `getVertexDeclarationProperty() const override`. This matches and independently corroborates the
+  `xna-graphics` shard's own already-recorded finding (listed among the "8 of 10 production findings
+  simply missed by `tests-xna-graphics`" in the Test-coverage-gaps section above) via a completely
+  different method (XML-reference cross-check vs. incidental per-file review) -- a genuine second
+  confirmation of the same defect, not a duplicate report of it.
+
+**Confidence assessment**: this sweep is genuinely thorough for `Microsoft.Xna.Framework.Graphics`
+specifically -- every real member in the reference XML was individually checked, not sampled, and
+every flagged discrepancy was manually resolved (not left as an unverified false-positive list). It
+does NOT cover the other 8 `Microsoft.Xna.Framework.*` namespaces (`Audio`, `Content`, `GamerServices`,
+`Input`, `Media`, `Net`, `Storage`, plus the top-level `Microsoft.Xna.Framework` namespace itself) --
+the `xn65` reference tree has separate XML files for each
+(`Microsoft.Xna.Framework.xml`, `.GamerServices.xml`, `.Net.xml`, `.Storage.xml`, `.Video.xml`,
+`.Xact.xml`, `.Input.Touch.xml`, plus `.Avatar.xml` and `.Game.xml`) that this pass did not have
+scope to process. Extending this exact method to those namespaces is the natural continuation of
+Pass 3 and would very likely be similarly high-signal, given how clean this result was for the
+Graphics namespace specifically (2 genuine gaps out of 635 members checked).

@@ -1,11 +1,14 @@
 # AUDIT_FINDINGS_INDEX.md
 
-**Status: POPULATED (updated 2026-07-19).** The "By severity" section below was filled in incrementally as
-per-file audits surfaced findings worth surfacing globally (not every `INFO`-level note gets an index entry —
-this index is for anything `MEDIUM`+ severity, or `LOW` if it recurs across many files). The "By subsystem" and
-"By category" sections were mechanically rebuilt from that same severity table in this update — same findings,
-regrouped for two different questions ("what's wrong with backend X" vs. "how many findings are architecture
-bugs vs. shader-math bugs"), not new content.
+**Status: POPULATED (Pass 5, rebuilt 2026-07-19).** This index consolidates every `MEDIUM`+ finding (and
+recurring `LOW`s) from the entire repository-wide audit — all 2297 files across 105 shards. It supersedes an
+earlier partial draft that only covered the first few graphics-backend batches; the fuller narrative for every
+entry below, including every incremental "confirmed in N more backends" update as the investigation progressed,
+lives in `AUDIT_CROSS_CUTTING_FINDINGS.md` (~1900 lines) and each finding's own `audit/<path>.audit.md` report.
+Entries below are deduplicated to their final, fully-confirmed state — e.g. the fog-formula bug went through
+~4 "UPDATE" rounds as more backends were checked; there is one entry for it here, not four.
+
+No `CRITICAL` findings were confirmed anywhere in this audit.
 
 Recommendations recorded here are for future prioritization only — **no implementation work is performed as part
 of this audit** (see `CLAUDE.md`/audit prompt "No-development rule").
@@ -17,271 +20,412 @@ _(none recorded yet)_
 
 ### HIGH
 
-- **SdlGpu-specific: fog is completely unimplemented across all 10 stock-effect shader families** — not a wrong
-  formula (like Bgfx/Vulkan/D3D11+D3D12), a total absence, confirmed by exhaustively grepping every `.glsl` file
-  and the C++ backend file for any fog identifier (zero matches anywhere). `GraphicsDevice.FogEnable`/
-  `BasicEffect.FogEnabled`/`FogColor`/`FogStart`/`FogEnd` have zero visible effect on this backend. See
+**Graphics backends and shared XNA-facing graphics code:**
+
+- **Fog formula backwards (mirrored) in Bgfx, Vulkan, and the entire shared `D3DCommon` shader library
+  (D3D11+D3D12) — all 15 of D3DCommon's fog-capable shaders, the single widest-reaching shader-level defect in
+  this audit.** Correct FNA formula: `(z+FogEnd)/(FogEnd-FogStart)`; these backends compute
+  `(FogEnd-z)/(FogEnd-FogStart)`. Fixed in EasyGL pre-session (Task 1111); never ported to the other three
+  backend-groups. Several shaders' own header comments falsely cite "EasyGL's established formula" as their
+  precedent — a likely propagation mechanism (a later port copied a prior *wrong* instance while believing it
+  matched EasyGL's since-fixed one). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity gaps).
+- **`SkinnedEffect`'s world-space normal transform is completely missing across every one of the 14 backends
+  that implement `SkinnedEffect`** — EasyGL, WebGPU, Vulkan, SdlGpu, Bgfx, D3D11+D3D12 (shared `D3DCommon`, all
+  5 skinned shaders) all confirmed at the shader-source level; propagation explicitly traceable via
+  self-documented "ported from EasyGL/Vulkan line-by-line" comments in at least 3 of them. A related, narrower
+  "raw World instead of inverse-transpose" variant (rather than complete omission) is separately confirmed in 6
+  instances: EasyGL/`EnsurePbrSkinnedProgram`, SdlGpu, Bgfx, D3D9's custom `PbrSkinned3D.hlsl`, and D3D11+D3D12's
+  shared `pbr_skinned3d.vert.hlsl`. Any rotated skinned model's lighting is wrong; invisible to every existing
+  test because they all use `World=Identity`. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **SdlGpu: fog is completely unimplemented across all 10 stock-effect shader families** — not a wrong formula,
+  a total absence (zero fog identifiers anywhere in 23 `.glsl` files or the C++ backend), confirmed deliberate
+  via the shader's own "No fog, deliberately deferred" comment. `GraphicsDevice.FogEnable`/`BasicEffect.
+  FogEnabled`/`FogColor`/`FogStart`/`FogEnd` have zero visible effect on this backend. See
   `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **D3D12-specific: `StencilState` (all fields) and `RasterizerState.ScissorTestEnable`/`DepthBias`/
-  `SlopeScaleDepthBias` are completely non-functional.** `ApplyDepthStencilState()`/`ApplyRasterizerState()`
-  receive these parameters as literally-commented-out unused (`/*stencilEnable*/`, etc.) and never forward them;
-  every PSO hardcodes `StencilEnable = FALSE` and leaves `ScissorEnable` at its zero-init `FALSE` default. A real
-  regression relative to D3D11 (which fully implements both). Honestly disclosed in-code as a first-implementation
-  scope cut, not hidden — but 2 commonly-used XNA features (stencil-buffer effects, scissor-based clipping) are
-  completely inert on this backend. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **D3D12-specific: `OcclusionQuery` only captures the LAST draw call when multiple draws occur between
-  `Begin()`/`End()`**, not the combined total XNA's real semantics require — every draw-recording method wraps
-  its own `BeginQuery`/`EndQuery` pair on the same query-heap slot, so a 2nd draw's query overwrites the 1st's
-  result. Referenced in-code as documented in the header, but the header doesn't actually contain that
-  documentation. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **Vulkan-specific: `SpriteBatch.Begin(transformMatrix)`'s transform is silently dropped —
-  `VulkanSpriteBatchBackend` never overrides `SetTransformMatrix()`, confirmed by an exhaustive grep across the
-  entire Vulkan backend directory (zero matches).** Every other checked backend (EasyGL, Bgfx, D3D9, D3D11,
-  WebGPU, SdlGpu, SdlRenderer, Canvas, Dx3, Software, Headless, and Ascii via delegation) correctly applies it via
-  one of two valid mechanisms. Found incidentally while auditing `D3D11SpriteBatch.cpp`, whose own header comment
-  claims this as a "deliberate improvement" over Vulkan — independently verified true. No test anywhere exercises
-  a non-Identity transform matrix on Vulkan. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **Vulkan-specific: the missing-Y-flip bug (previously known only for `EnvironmentMapEffect`) also affects
-  `PbrEffect`, `SkinnedPbrEffect`, and `InstancedEffect`** — `pbr3d.vert.glsl`, `pbr3d_skinned.vert.glsl`, and
-  `instanced3d.vert.glsl` all omit the `gl_Position.y = -gl_Position.y` flip that every other core 3D vertex
-  shader applies, despite sharing the identical `wvp`/`vp` input computation. `pbr3d_skinned.vert.glsl`'s own
-  comment justifies the omission by claiming "`skinned3d.vert.glsl` never Y-flips" — **this is factually false**;
-  `skinned3d.vert.glsl` line 59 does flip, with its own comment confirming it's deliberate. Net effect: 4 of
-  Vulkan's effect-shader families (env-map, PBR, skinned-PBR, instanced) render vertically mirrored versus XNA/FNA
-  and versus every other effect type in the same Vulkan-rendered scene. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **`FileDialog.cpp` and `MessageBox.cpp` (`cna-devices`) share a use-after-free window**: both implement a
-  swappable-global-backend pattern where `GetBackend()` releases its mutex before returning a raw pointer,
-  which callers then dereference unprotected — if `SetBackendForTesting()` runs concurrently, the pointer can
-  dangle. `SystemTray`/`Camera` avoid this via per-instance constructor-injected backends instead. See
+- **D3D12: `StencilState` (all fields) and `RasterizerState.ScissorTestEnable`/`DepthBias`/`SlopeScaleDepthBias`
+  are completely non-functional** — parameters received as literally-commented-out unused, never forwarded;
+  every PSO hardcodes `StencilEnable=FALSE`/leaves `ScissorEnable=FALSE`. A real regression relative to D3D11.
+  Honestly disclosed in-code as a scope cut, not hidden — but 2 commonly-used XNA features are fully inert. See
   `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **`CNA::Logger::ToSDLPriority()` (`src/CNA/Logger.cpp`) mistags every `Fatal`/`Error`/`Warn` log call with
-  `SDL_LOG_PRIORITY_INFO`** — the switch's cases for these 3 levels (plus `INFO`, which lands correctly by
-  coincidence) are commented out with a literal `//todo` marker; only `DEBUG`/`TRACE`/`EXPERIMENT` have real
-  cases. Also breaks `SetMinimumLevel()`'s `SDL_SetLogPriorities()` call, which routes through the same
-  function. Unlike every other finding in this audit, `Logger` is foundational, always-compiled, project-wide
-  infrastructure — not backend-specific. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **`EasyGL_AvatarRenderer_TintRouting` is a currently-failing CTest, registered with no `WILL_FAIL` annotation —
-  independently re-confirmed by direct build+execution during synthesis (not just relayed from the audit
-  subagent).** `ctest -R EasyGL_AvatarRenderer_TintRouting`: **Failed**, `left=(81,51,31) right=(41,181,255);
-  expected: left=HairColor(40,25,15), right=ShirtColor(20,90,155)`. The sibling `Vulkan_AvatarRenderer_TintRouting`
-  passes only by coincidence (a separate, independently-confirmed Vulkan `SkinnedEffect` ambient/emissive-forwarding
-  bug cancels out the same miscalibration that fails on EasyGL). See
-  [audit report](examples/avatar_tint_routing_integration_test.cpp.audit.md) and `AUDIT_CROSS_CUTTING_FINDINGS.md`
-  (CI-masking risk).
-- **`SpriteFont::MeasureString`/`SpriteBatch::DrawString` dereference an `unordered_map::end()` iterator with no
-  check, reachable via fully public API** — setting `DefaultCharacter` (no validation in `setDefaultCharacterProperty`)
-  to a character absent from the font's own map, then measuring/drawing a genuinely-missing glyph, is undefined
-  behavior in `SpriteFont.cpp:101-111`/`SpriteBatch.cpp:457-465`. FNA throws `KeyNotFoundException` in the
-  equivalent case. See [audit report](examples/sprite_font_test.cpp.audit.md) and
-  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Production correctness bugs outside the graphics-backend layer).
-- **`env_map3d.frag`'s `EmissiveColor`-re-multiply bug now confirmed in 5 backends: Bgfx, WebGPU, Vulkan, SdlGpu,
-  and D3D11+D3D12** (shared `D3DCommon/shaders/env_map3d.frag.hlsl`, also explicitly "ported line-by-line from
-  Vulkan") — same `(emissiveAmount+lightSum)*DiffuseColor` shape everywhere. See
-  [audit report](examples/sdlgpu_envmap_test.cpp.audit.md), [audit report](examples/sdlgpu_smoke_test.cpp.audit.md),
-  and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **The skinned-normal-transform bug (missing world-space normal-matrix contribution) is now confirmed at the
-  shader-source level in ALL 6 backend-groups with a `SkinnedEffect` implementation — EasyGL, WebGPU, Vulkan,
-  SdlGpu, D3D11+D3D12 (shared `D3DCommon` source), and Bgfx — a complete, no-exceptions sweep across every one
-  of the 14 backends in this audit.** Bgfx's `vs_skinned3d.sc` was the last to be directly confirmed:
-  `v_normal = normalize(skinMat[0].xyz*a_normal.x + skinMat[1].xyz*a_normal.y + skinMat[2].xyz*a_normal.z)` — the
-  BGFX-shading-language spelling of `mat3(skinMat)*a_normal`, with no `u_world` contribution anywhere. Within
-  D3DCommon specifically, confirmed in ALL 5 of its skinned vertex shaders (`skinned3d`, `skinned3d_vertexlit`,
-  `skinned_colored3d`, `skinned_colored3d_vertexlit`, `pbr_skinned3d`), with zero exceptions. The shared
-  `D3DCommon/shaders/skinned3d.vert.hlsl` (compiled into both D3D11 and D3D12) carries an explicit header comment
-  stating it was **"Ported line-by-line from `src/CNA/Internal/Backends/Vulkan/shaders/skinned3d.vert.glsl,"`**
-  one of three explicit, self-documented instances of the cross-backend porting chain that propagated this bug
-  (alongside the already-confirmed EasyGL→WebGPU chain, SdlGpu's own "mirrors VulkanGraphicsBackend's own
-  skinned3d.vert.glsl exactly" comment, and Bgfx's own `vs_pbr_skinned3d.sc` comment explicitly contrasting its
-  "extra World-space...transform" against `vs_skinned3d.sc`'s "plain `mat3(skinMat)` multiply"). The related but
-  distinct "raw World instead of inverse-transpose" variant (rather than a complete omission) is separately
-  confirmed in `pbr_skinned3d.vert.hlsl` (D3DCommon), `pbr_skinned3d.vert.glsl` (SdlGpu), `vs_pbr_skinned3d.sc`
-  (Bgfx), `EnsurePbrSkinnedProgram` (EasyGL), and D3D9's own `PbrSkinned3D.hlsl` — 6 confirmed instances.
-  **D3DCommon's own 3 unskinned lit vertex shaders (`lit_textured3d`, `pbr3d`, `lit_textured3d_vertexlit`)
-  correctly use the inverse-transpose convention** — clean proof this is a skinning-specific oversight, not
-  general unfamiliarity with the correct math. Also confirmed while reading this directory: **D3D11/D3D12 do NOT
-  share Vulkan's `EnvironmentMapEffect` Y-flip bug** — a genuine, deliberate, well-documented backend difference.
-  See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity gaps) for full detail and every originating
-  test/source reference.
-- **EasyGL backend: a constructor failure after `RegisterForWindow()` but before construction completes leaves a
-  dangling entry in `IGraphicsBackend`'s static window registry.** Independently discovered via direct production
-  code reading (not from the test batch). `EasyGLGraphicsBackend`'s constructor calls `RegisterForWindow(window,
-  this)` early, then `SDL_GL_CreateContext` can throw shortly after (a real, reachable failure mode — unsupported
-  GLES3 context, headless/CI environment, driver issue). The registry entry is never cleaned up since the
-  destructor never runs on a failed construction. `SdlInputBridge.cpp`/`Mouse.cpp` both dereference
-  `GetForWindow()`'s result unconditionally — a subsequent mouse/input event on that window would be a
-  use-after-free. **The most severe confirmed finding in this audit so far.** See
-  [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F1.
-- **CONFIRMED IN 3 BACKEND-GROUPS — the pre-Task-1111 fog formula (already proven wrong by this project's own
-  XNA-oracle diff and fixed in EasyGL) was never ported to Bgfx, Vulkan, or D3D11/D3D12.** Bgfx's
-  `vs_alpha_test3d.sc`/`vs_colored3d.sc`/`vs_lit_textured3d.sc`, Vulkan's `textured3d.vert.glsl`/
-  `env_map3d.vert.glsl`, and — confirmed by an exhaustive direct read of every fog-capable shader in the shared
-  `D3DCommon` directory — **all 15 of D3DCommon's 15 fog-capable vertex shaders** (compiled into both D3D11 and
-  D3D12) all use the mirror-image `(FogEnd-z)/(FogEnd-FogStart)` formula instead of the FNA-correct
-  `(z+FogEnd)/(FogEnd-FogStart)`. **D3D11/D3D12 is the widest single instance of this bug found in the audit so
-  far — not a handful of shaders, but literally every fog-capable shader in the shared source.** This is this
-  audit's single most widely-confirmed defect. Full detail and all originating reports in
-  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Systematic FNA parity gaps).
-- *(superseded by the 5-backend skinned-normal-transform entry above)* Vulkan's `skinned3d.vert.glsl`/
-  `skinned3d_vertexlit.vert.glsl` share the same missing-world-space-normal-transform defect already confirmed in
-  EasyGL and WebGPU. See `examples/vulkan_skinnedeffect_preferperpixellighting_test.cpp.audit.md`.
-- **Vulkan-specific: `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, and Vulkan's skinned shaders
-  never consume `emissiveColor`** — silently drops `AmbientLightColor`/`EmissiveColor` for skinned models on
-  Vulkan only. Confirmed across 4 test files; this is also the reason `Vulkan_AvatarRenderer_TintRouting`
-  coincidentally passes despite the EasyGL sibling failing (see the currently-failing-CTest entry above).
-  **A narrower variant now confirmed in D3D11+D3D12 too**: the shared `D3DCommon` `SkinnedEffect` fragment
-  shaders (`skinned3d.frag.hlsl` and its 3 siblings) have no `EmissiveColor` cbuffer field at all, unlike their
-  unskinned siblings which do — `AmbientColor` IS correctly present/consumed here, unlike Vulkan, so only the
-  `EmissiveColor` half of the defect transfers. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **Vulkan-specific: `env_map3d.vert.glsl` lacks the Y-flip every other core Vulkan 3D vertex shader has**,
-  rendering `EnvironmentMapEffect` scenes vertically mirrored. Confirmed across 5 test files (a 5th masked instance
-  since found via `environmentmapeffect_alphascaledlerp_test.cpp`); see `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- *(superseded by the 4-backend entry above)* `EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor`
-  by `DiffuseColor` instead of adding it unscaled (FNA's real `Lighting.fxh` convention) — now confirmed in Bgfx,
-  WebGPU, Vulkan (resolving the prior "suspected"), and SdlGpu. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **WebGPU-specific: `SpriteBatch`'s clip-space mapping is always backbuffer-relative, never render-target-relative**
-  — drawing into an off-screen target of a different size mis-maps sprite placement. See
+- **D3D12: `OcclusionQuery` only captures the last draw call when multiple draws occur between `Begin()`/
+  `End()`** — every draw-recording method wraps its own `BeginQuery`/`EndQuery` on the same query-heap slot, so
+  a 2nd draw's query overwrites the 1st's result. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Vulkan: `SpriteBatch.Begin(transformMatrix)`'s transform is silently dropped** — the only one of 14 checked
+  backends (12 real implementations plus Ascii's delegation) that doesn't apply it. No test anywhere exercises a
+  non-Identity transform on Vulkan. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Vulkan: the missing-Y-flip mirroring bug, previously known only for `EnvironmentMapEffect`, also affects
+  `PbrEffect`, `SkinnedPbrEffect`, and `InstancedEffect`** — one of the four omits the flip while its own
+  in-source comment falsely claims a sibling shader "never Y-flips" (that sibling does, and its own comment says
+  so). 4 of Vulkan's effect-shader families render vertically mirrored. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Vulkan: `GraphicsDevice.ScissorRectangle` is completely non-functional whenever a `RenderTarget2D`/
+  `RenderTargetCube` is bound** — hardcodes full-target scissor for every RT pass; only the backbuffer pass
+  correctly checks `scissorEnabled_`. Unlike the paired Viewport-when-RT-bound limitation (explicitly disclosed
+  in-source), this gap has no disclosure anywhere near the scissor code. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`EnvironmentMapEffect`'s fragment shader re-multiplies `EmissiveColor` by `DiffuseColor` instead of adding it
+  unscaled (FNA's real `Lighting.fxh` convention) — confirmed in 5 backends: Bgfx (original source), WebGPU,
+  Vulkan, SdlGpu, and D3D11+D3D12** (shared `D3DCommon`, also explicitly "ported line-by-line from Vulkan"). All
+  masked because no test varies `DiffuseColor` away from white or `EmissiveColor`/`AmbientLightColor` away from
+  black. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`SkinnedEffect::FillGpuDrawParams()`'s `ambientColor`/`emissiveColor` are misconsumed by 2 backend-groups.**
+  Root cause resolved: the C++ layer deliberately pre-folds `AmbientLightColor` into `emissiveColor` for skinned
+  draws (confirmed correct via 4 independent backends' own consumption code — EasyGL, Bgfx, SdlGpu, D3D9 stock
+  effects). Vulkan's skinned shaders read the wrong (always-zero) `ambientColor` field instead and have no
+  `emissiveColor` slot at all; D3D11+D3D12's shared skinned fragment shaders likewise have no `EmissiveColor`
+  cbuffer field (narrower — `AmbientColor` IS correctly present there). See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **WebGPU: `SpriteBatch`'s clip-space mapping is always backbuffer-relative, never render-target-relative** —
+  drawing into an off-screen target of a different size mis-maps sprite placement. See
   [audit report](examples/webgpu_rendertargetcube_test.cpp.audit.md) and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **D3D9's own custom (non-vendored) `PbrSkinned3D.hlsl` shares the skinned-normal-transform bug** (4th confirmed
-  instance) — its *vendored* stock effects do not. See
-  [audit report](examples/d3d9_pbr_test.cpp.audit.md).
-- **NEW pattern: "object-space-only fog" in D3D9's own custom shaders** (`SkinnedVertexColor3D.hlsl`, `Pbr3D.hlsl`,
-  `PbrSkinned3D.hlsl`) — fog computed from raw local-space Z, ignoring World/View, distinct from the Task-1111
-  mirrored-formula bug. See [audit report](examples/d3d9_skinnedvertexcolor_test.cpp.audit.md) and
+- **Bgfx: `EnsureViewState()` unconditionally clears color+depth+stencil on every `Clear*()` call regardless of
+  the requested `ClearOptions`** — a stencil-only clear silently wipes color and depth too. See
+  [audit report](examples/bgfx_graphicsdevice_clear_stencil_test.cpp.audit.md).
+- **EasyGL: a constructor failure after `RegisterForWindow()` but before construction completes leaves a
+  dangling entry in a static window registry**, later dereferenced unconditionally by `SdlInputBridge.cpp`/
+  `Mouse.cpp` on the next mouse/input event — a real, reachable use-after-free. **The most severe confirmed
+  finding in this entire audit.** See
+  [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F1.
+- **D3D9's own custom (non-vendored) `PbrSkinned3D.hlsl` shares the skinned-normal-transform bug** (its
+  *vendored* stock effects do not); separately, D3D9's own custom shaders (`SkinnedVertexColor3D.hlsl`,
+  `Pbr3D.hlsl`, `PbrSkinned3D.hlsl`) share a *second*, distinct "object-space-only fog" defect — fog computed
+  from raw local-space Z ignoring World/View, unlike this same backend's own correct `ComputeFogVectorEXT()`
+  used for every vendored stock effect. See [audit report](examples/d3d9_pbr_test.cpp.audit.md) and
   `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **Bgfx-specific: `BgfxGraphicsBackend::EnsureViewState()` unconditionally clears color+depth+stencil on every
-  `Clear*()` call regardless of the requested `ClearOptions`** — a stencil-only clear silently wipes color and
-  depth too. See [audit report](examples/bgfx_graphicsdevice_clear_stencil_test.cpp.audit.md).
-- **Bgfx-specific: `bgfx_vertex_format_test.cpp`'s entire subject (`BgfxVertexFormatHelper.hpp`'s
-  `VertexElementFormatToBgfx`/`VertexElementUsageToBgfxAttrib`) is never called by production code** — real
-  `MakeBgfxLayout()` dispatches on hardcoded byte-size instead, and the test's own `UploadAndCheck()` never calls
-  `SetData`, so all 4 stride cases silently test the same hardcoded stride-16 layout. See
-  [audit report](examples/bgfx_vertex_format_test.cpp.audit.md).
-- **`SpriteBatch::Begin()` sets `begun_=true` before backend calls that can throw (`SetCustomEffect`/
-  `SetTransformMatrix`/`SetSamplerFilter`/`Begin`); if one throws, the object is permanently stuck reporting
-  "Begin has been called before calling End" on every subsequent `Begin()`, with no documented recovery besides
-  an undocumented explicit `End()` call.** A general `SpriteBatch.cpp` defect, not backend-specific — discovered
-  while auditing `sdlrenderer_custom_effect_throws_test.cpp` (whose own custom-Effect-throws scenario deliberately
-  triggers it, though the test itself doesn't check the stuck-state consequence). See
-  [audit report](examples/sdlrenderer_custom_effect_throws_test.cpp.audit.md).
-- **`GraphicsDevice::SetRenderTargets` mutates `currentRenderTargets_`/`renderTargetBound_` to the requested
-  (rejected) MRT bindings *before* `backend_->SetRenderTargets` can throw** — a caller that doesn't manually
-  restore the render target after catching the MRT-unsupported exception is left with device-tracked state that
-  doesn't match reality. Same "mutate before the fallible call" shape as the SpriteBatch::Begin() finding above.
-  See [audit report](examples/sdlrenderer_rendertargets_mrt_throws_test.cpp.audit.md).
-- **CONFIRMED IN 2 BACKENDS: `SkinnedEffect`'s shaders never apply the object's World transform to lighting
-  normals at all.** `EnsureSkinnedProgram()`/`EnsureSkinnedVertexLitProgram()` (EasyGL) transform the normal with
-  `mat3(skinMat)*aNormal` only; neither registers a `uNormalMatrix` uniform, unlike every non-skinned lit shader
-  in the same file (which correctly uses the inverse-transpose `uNormalMatrix`, a documented prior fix, Task 398).
-  **`CreateSkinnedResources()` (WebGPU) has the byte-for-byte identical defect**, and its own surrounding comment
-  explicitly states the shader was "ported from `EasyGLGraphicsBackend::EnsureSkinnedProgram()`'s GLSL shader
-  line-for-line" — i.e. the bug was knowingly propagated as part of a deliberate cross-backend-consistency porting
-  practice. This makes it very likely every remaining backend with its own SkinnedEffect (Vulkan, Bgfx, D3D9,
-  D3D11, D3D12, SdlGpu) has the same defect. Any rotated skinned model's lighting is wrong; invisible to every
-  existing test because they all use `World=Identity`. See
-  [EasyGL audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F2,
-  [WebGPU audit report](src/CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.cpp.audit.md) F1, and the
-  originating test reports:
-  [easygl_skinnedeffect_preferperpixellighting_test.cpp](examples/easygl_skinnedeffect_preferperpixellighting_test.cpp.audit.md),
-  [easygl_skinnedeffect_specular_test.cpp](examples/easygl_skinnedeffect_specular_test.cpp.audit.md),
-  [easygl_skinnedpbreffect_golden_test.cpp](examples/easygl_skinnedpbreffect_golden_test.cpp.audit.md).
-- **`GraphicsDevice::DrawUserPrimitives(void*, VertexDeclaration&)` never propagates the declaration to the
-  backend** — no `SetVertexDeclaration` call before `SetData`, so EasyGL silently falls back to a hardcoded
-  stride-keyed layout table. A genuinely custom (non-matching-stride or reordered-field) vertex layout would
-  silently render wrong; the existing test can't detect this because its vertex struct happens to alias the
-  fallback layout. See
-  [easygl_draw_user_primitives_custom_test.cpp](examples/easygl_draw_user_primitives_custom_test.cpp.audit.md).
-- **`easygl_msaa_test.cpp` cannot actually verify MSAA.** Two compounding issues: (1) the test/CTest name and
-  header claim "4×" MSAA, but `GraphicsDeviceManager`'s real default for `PreferMultiSampling=true` (with
-  `MultiSampleCount` left at 0) is **8**, not 4 — confirmed in `GraphicsDeviceManager.cpp` and admitted by the
-  file's own constructor comment; (2) the test's solid full-viewport quad produces an identical center pixel
-  whether or not the MSAA resolve pipeline ever actually ran, so the assertion cannot fail in the way its header
-  describes. See [easygl_msaa_test.cpp](examples/easygl_msaa_test.cpp.audit.md).
-- **`easygl_dynamic_buffer_stress_test.cpp`'s index-buffer half never calls `SetIndexBuffer`/
-  `DrawIndexedPrimitives`** despite its header comment claiming pixel-readback verification of dynamic index-buffer
-  streaming — reduces to a static capacity assertion that would pass even if `SetData` were a no-op. See
-  [easygl_dynamic_buffer_stress_test.cpp](examples/easygl_dynamic_buffer_stress_test.cpp.audit.md).
+- **`Bgfx_vertex_format_test.cpp`'s entire subject (`BgfxVertexFormatHelper.hpp`) is never called by production
+  code** — real `MakeBgfxLayout()` dispatches on hardcoded byte-size instead; the test's own `UploadAndCheck()`
+  never calls `SetData`. See [audit report](examples/bgfx_vertex_format_test.cpp.audit.md).
 
-### MEDIUM (SdlGpu, preliminary — full per-file audit not yet done)
+**Recurring architecture pattern:**
 
-- **SdlGpu backend: constructor resource leak if any of 10 sequential shader/pipeline-creation calls throws.**
-  Unlike WebGPU's model-example try/catch+cleanup, `SdlGpuGraphicsBackend`'s constructor has no exception-safety
-  wrapper around `CreateSpriteResources` through `CreatePbrResources` — a failure leaks the SDL GPU device, claimed
-  window, and any already-created pipelines, since the destructor (which correctly tears all of this down) never
-  runs on a failed construction. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **State-mutation-before-fallible-call, 3 confirmed instances**: `SpriteBatch::Begin()` sets `begun_=true`
+  before backend calls that can throw, permanently wedging the object on failure (found via
+  `sdlrenderer_custom_effect_throws_test.cpp`); `GraphicsDevice::SetRenderTargets` mutates tracked MRT-binding
+  state before the backend call that actually throws (found via `sdlrenderer_rendertargets_mrt_throws_test.cpp`);
+  `IGraphicsBackend`'s window registry has the identical shape (EasyGL F1, above). A genuine, repeated authoring
+  pattern, not three coincidences. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 
-### MEDIUM (continued, Bgfx/Vulkan batch)
+**`Microsoft::Xna::Framework::Graphics` (shared XNA-facing layer, affects every backend uniformly):**
 
-- **Two known-failing CTest targets registered with no `WILL_FAIL`/skip annotation**: `Bgfx_RenderTargetCube_DepthFormat`
-  (Task 952, still open) and `Bgfx_SkinnedEffect_WeightsPerVertex` (pre-existing failure since before commit
-  `0cb4a591`). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (CI-masking risk).
-- **`BasicEffect::VertexColorEnabled` is a bare public field with no property wrapper**, violating this project's
-  own C# property convention — confirmed via both Bgfx and Vulkan test audits exercising the same production
-  code. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **Vulkan hardcodes full-target scissor for render-target passes**, ignoring `ScissorRectangle`/
-  `ScissorTestEnable` when a render target is bound. See
-  [audit report](examples/vulkan_scissor_test.cpp.audit.md).
+- **`SpriteFont::MeasureString`/`SpriteBatch::DrawString` dereference an `unordered_map::end()` iterator with no
+  check, reachable via fully public API** — setting `DefaultCharacter` (no validation) to a character absent
+  from the font's own map, then measuring/drawing a genuinely-missing glyph, is undefined behavior. FNA throws
+  `KeyNotFoundException` in the equivalent case. See
+  [audit report](examples/sprite_font_test.cpp.audit.md) and `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`SpriteBatch::DrawString()`'s axis-direction lookup tables are sized for only 3 entries, but real XNA's
+  `SpriteEffects` is a composable `[Flags]` enum with a valid 4th combined value** — an out-of-bounds stack
+  read. FNA's own tables have 4 entries. CNA's `SpriteEffects` is missing the `operator|` overload other flag
+  enums have, but this doesn't prevent the combined value being constructed via `static_cast` (already used at
+  `examples/sdlgpu_2d_test.cpp:126`). See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`EffectParameter`'s Matrix Get/Set/Transpose semantics are inverted relative to FNA across all 8
+  Matrix-related methods.** Cross-validated: the sibling `EffectAnnotation::GetValueMatrix()` implements the
+  identical FNA formula *correctly*, proving the right convention was known elsewhere in this codebase — a
+  transcription slip, not a design choice. Exposure: custom/user-authored `Effect`s using the generic accessors
+  directly (stock effects bypass `EffectParameter` entirely). See
+  `src/Microsoft/Xna/Framework/Graphics/EffectParameter.cpp.audit.md`.
+- **`EffectParameter::Elements`/`StructureMembers` are permanently empty** — nothing anywhere populates them;
+  array/struct-typed custom parameters silently report zero sub-elements. See
+  `include/Microsoft/Xna/Framework/Graphics/EffectParameter.hpp.audit.md`.
+- **`BasicEffect` never populates its own `Effect::Parameters` collection at all** — unlike every sibling stock
+  effect. Rendering is unaffected, but the standard `effect.Parameters["X"]` generic access silently returns
+  nothing for the single most commonly used stock effect in the API. See
+  `src/Microsoft/Xna/Framework/Graphics/BasicEffect.cpp.audit.md`.
+- **`VertexBuffer`/`IndexBuffer` have no destination-byte-offset concept anywhere in their public `SetData`
+  API — the confirmed root cause of an `IVertexBufferBackend`/`IIndexBufferBackend::SetDataWithOptions()` gap
+  independently found in 3 backends (D3D11, EasyGL, D3D9).** Real FNA exposes a genuine `offsetInBytes`
+  overload; this port dropped it entirely, making real ring-buffer/streaming `NoOverwrite` usage architecturally
+  impossible on *any* backend, not just the 3 where a backend audit happened to trip over the symptom. See
+  `include/Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp.audit.md`.
+- **`GraphicsDevice.cpp` has ~27 raw `std::runtime_error`/`std::invalid_argument` throws**, inconsistent with
+  the same file's own correct `System::*Exception` use at 13 other sites — the largest single-file instance of
+  this audit's recurring exception-type pattern, in the framework's single most central class. See
+  `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp.audit.md`.
 
-### MEDIUM (continued)
+**Outside the graphics layer:**
 
-- **Two SDL_Renderer tests (`sdlrenderer_clearoptions_audit_test.cpp`, `sdlrenderer_rendertarget_depth_decision_test.cpp`)
-  have stale expected-throw assertions superseded by a real FNA-parity fix.** Commit `90f5db2c` made
-  `GraphicsDevice::Clear(ClearOptions,...)` mask `DepthBuffer`/`Stencil` out and degrade silently on backends with
-  no real depth/stencil buffer, instead of throwing — the *production* behavior now matches FNA
-  (`plan_graphics.md` Task 1113, still open, tracks this); the *tests* still assert the old throwing behavior and
-  would fail if run today. Production code is correct; tests need updating. See
-  [audit report](examples/sdlrenderer_clearoptions_audit_test.cpp.audit.md) and
-  [audit report](examples/sdlrenderer_rendertarget_depth_decision_test.cpp.audit.md).
-- **SpriteFont's `DrawString` flip-lookup tables are sized 3, not FNA's 4** — combined `SpriteEffects` flips are
-  unsupported, and a raw enum cast forcing an out-of-range combination would read past the end of a `constexpr`
-  array (undefined behavior). See
-  [audit report](examples/sdlrenderer_spritefont_effects_test.cpp.audit.md).
+- **`CNA::Logger::ToSDLPriority()` (`src/CNA/Logger.cpp`) mistags every `Fatal`/`Error`/`Warn` log call as
+  `SDL_LOG_PRIORITY_INFO`** — the switch's real cases are commented out with a literal `//todo`. Also breaks
+  `SetMinimumLevel()`, which routes through the same function. Unlike every other finding in this audit, `Logger`
+  is foundational, always-compiled, project-wide infrastructure. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`FileDialog.cpp` and `MessageBox.cpp` (`cna-devices`) share a real use-after-free window**: a swappable
+  global backend pointer's mutex is released before the returned pointer is dereferenced; a concurrent
+  `SetBackendForTesting()` can free the object out from under an in-flight call. `SystemTray`/`Camera` avoid
+  this via per-instance constructor-injected backends instead. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`StorageDevice::DeleteContainer()` performs a real, unchecked recursive filesystem delete
+  (`fs::remove_all`) driven directly by a caller-supplied `titleName` string, with zero path-containment
+  validation** — and, unlike every other "missing containment check" finding this session, this is NOT a
+  faithful FNA reproduction (FNA's own method is an unimplemented `NotImplementedException` stub; CNA chose to
+  actually implement it). `DeleteContainer("../../../SomeOtherAppData")` or an absolute path resolves outside
+  the storage root and is **deleted**, not just read. A genuine, CNA-introduced path-traversal data-loss
+  vulnerability reachable from public API — arguably the most severe finding in this audit session. See
+  `src/Microsoft/Xna/Framework/Storage/StorageDevice.cpp.audit.md`.
+- **`ENetBackend.cpp`'s `HandleReceive()` dispatches host-only broadcast messages
+  (`ServerWelcome`/`GamerJoinBroadcast`/`GamerLeaveBroadcast`/`StateChangeBroadcast`) with no check that the
+  sending peer is this session's authoritative host** — any connected peer (a modified/custom client speaking
+  this fully-inferable wire format, no MITM needed) can forge these to the host: kick arbitrary gamers, inject
+  fake gamers, or force an arbitrary state change. Orthogonal to the subsystem's extensive prior
+  lifecycle/bookkeeping remediation history, none of which covered an adversarial-client threat model. See
+  `src/CNA/Internal/Net/ENetBackend.cpp.audit.md`.
+- **`AudioTagParser.cpp`'s ID3v2.3 and FLAC-picture-block length validation uses `pos + len > bound`-style
+  bounds checks vulnerable to unsigned-integer-overflow wraparound (32-bit `size_t` targets only)** — safe on
+  64-bit desktop, but a crafted `.mp3`/`.flac` in the user's Music library could trigger a genuine
+  out-of-bounds heap read on a 32-bit build (e.g. Android armeabi-v7a). Contrast with the sibling `XactParser.cpp`,
+  explicitly hardened against this exact class per a cited external audit. See
+  `src/CNA/Internal/Media/AudioTagParser.cpp.audit.md`.
+- **`TextureCubeContentTypeReader.cpp` is missing the byte-count-vs-pixel-count validation both sibling readers
+  correctly have** — a crafted `.xnb` TextureCube asset with an undersized declared byte count triggers a
+  genuine out-of-bounds heap read (crash or heap-memory disclosure via pixels uploaded to the GPU). A clear
+  porting omission, not an intentional scope difference. See
+  `src/CNA/Internal/Xnb/TextureCubeContentTypeReader.cpp.audit.md`.
+- **`ContentReader::ReadExternalReference<T>()`'s documented "rejected outright" containment guarantee has a
+  real absolute-path bypass** — `ResolveRelativeAssetPath()` only rejects a resolved path that is exactly `".."`
+  or begins with `"../"`; an absolute-path external reference (e.g. `/etc/passwd`) in a crafted `.xnb`/`.cnj`
+  file sails through unchanged, and `ContentManager::BuildAssetPath()` doesn't re-contain it downstream. Not
+  FNA-faithful (FNA's own method has no containment check at all) — a disclosed CNA addition that's incomplete.
+  The 3rd confirmed instance this session of the same `fs::path` concatenation pitfall (alongside
+  `StorageDevice`). See `include/Microsoft/Xna/Framework/Content/ContentReader.hpp.audit.md`.
+- **`GameTests.cpp` and `GraphicsDeviceManagerTests.cpp` both have zero real test coverage** (each a 2-line stub
+  citing "requires a live SDL window") — leaves the two confirmed production HIGH bugs (`Game::UnloadContent()`
+  dead hook; `GraphicsDeviceManager` device-event-forwarding gap, both below) completely untested by CI.
+  `GameWindowTests.cpp` demonstrates the correct alternative already used elsewhere in the same directory
+  (attempt a real SDL window, `GTEST_SKIP()` when unavailable). See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`Game::UnloadContent()` is a dead virtual lifecycle hook** — declared with an empty default body exactly
+  like FNA's, but never invoked anywhere. FNA's real `Initialize()` subscribes `graphicsDeviceService.
+  DeviceDisposing += UnloadContent`; CNA's `Initialize()` never performs this subscription (confirmed via
+  whole-repo grep: exactly 2 hits, declaration + empty body, no call site). A game overriding `UnloadContent()`
+  per the documented XNA lifecycle contract silently never has it called. See
+  `include/Microsoft/Xna/Framework/Game.hpp.audit.md`.
+- **`GraphicsDeviceManager` never subscribes to its own `GraphicsDevice`'s `DeviceResetting`/`DeviceReset`/
+  `Disposing` events**, unlike FNA's real `IGraphicsDeviceManager.CreateDevice()`. `GraphicsDevice.cpp`'s own
+  `deviceEventCallback` mechanism can raise a genuine backend-detected device-lost/reset cycle completely
+  outside any `GraphicsDeviceManager` call — since `GraphicsDeviceManager` never forwards it, that real event
+  silently never reaches `IGraphicsDeviceService` listeners, even though `GraphicsDevice` itself correctly
+  raised it. See `include/Microsoft/Xna/Framework/GraphicsDeviceManager.hpp.audit.md`.
 
 ### MEDIUM
 
-- **Headless backend: `HeadlessStatistics::primitiveCount` undercounts instanced draws by a factor of
-  `instanceCount`.** `src/CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.cpp` `DrawInstancedPrimitivesEx`
-  (lines 819-830) corrects `drawCallCount` for instancing but not `primitiveCount`. See
-  [audit report](src/CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.cpp.audit.md) F1.
-- **Software backend: `DepthBufferWriteEnable`/`SetDepthWriteEnabled` have no effect — depth is always written
-  when the test passes.** `src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp` `ApplyDepthStencilState`
-  (lines 1095-1099) never stores the write-enable flag; both rasterizer cores write depth unconditionally. See
-  [audit report](src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp.audit.md) F1.
-- **Software backend: `DepthStencilState.DepthBufferFunction` is ignored — depth test is hardcoded to
-  LessEqual.** Same file, same method; the `depthFunc` parameter is discarded and the rasterizer always does
-  `reject if depth > stored`. See
-  [audit report](src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp.audit.md) F2.
-- **Dx3 backend: a failed resize (`SetVirtualResolution`) destroys the working primary/backbuffer surfaces before
-  confirming the replacement succeeds, leaving the backend permanently unusable.**
-  `Dx3GraphicsBackend::Impl::CreateSurfaces` releases the old DirectDraw surfaces unconditionally before
-  attempting to create new ones; on failure, every subsequent `Clear`/`Present`/`ReadBackbuffer` call dereferences
-  a null surface pointer. See
+**Graphics backends:**
+
+- **SdlGpu backend: constructor resource leak if any of 10 sequential shader/pipeline-creation calls throws** —
+  unlike WebGPU's model-example try/catch+cleanup, no exception-safety wrapper exists around
+  `CreateSpriteResources` through `CreatePbrResources`. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`BasicEffect::VertexColorEnabled` is a bare public field with no property wrapper**, violating this
+  project's own C# property convention — confirmed 3 times across Bgfx, Vulkan, and generic test audits
+  exercising the same production code. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **3+ known-failing CTests registered with no `WILL_FAIL`/skip annotation**: `Bgfx_RenderTargetCube_DepthFormat`
+  (Task 952, still open), `Bgfx_SkinnedEffect_WeightsPerVertex` (pre-existing since before commit `0cb4a591`),
+  and `EasyGL_AvatarRenderer_TintRouting` (independently re-confirmed failing by direct build+execution during
+  synthesis — the `Vulkan_AvatarRenderer_TintRouting` sibling passes only by coincidence, per the Vulkan
+  ambient/emissive HIGH finding above). Recommend a full CTest-registration sweep (Pass 6) to find any more. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` (CI-masking risk).
+- **Two SDL_Renderer tests have stale expected-throw assertions superseded by a real, intentional FNA-parity
+  fix** (commit `90f5db2c` made `Clear(ClearOptions,...)` degrade silently instead of throwing on backends with
+  no real depth/stencil buffer; production code is correct, tests weren't updated). See
+  [audit report](examples/sdlrenderer_clearoptions_audit_test.cpp.audit.md).
+- **Headless: `HeadlessStatistics::primitiveCount` undercounts instanced draws by a factor of `instanceCount`.**
+  See [audit report](src/CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.cpp.audit.md) F1.
+- **Software: `DepthBufferWriteEnable` has no effect (depth always written), and `DepthBufferFunction` is
+  ignored (hardcoded to LessEqual)** — two findings, same method (`ApplyDepthStencilState`). See
+  [audit report](src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp.audit.md) F1/F2.
+- **Dx3: a failed resize destroys the working primary/backbuffer surfaces before confirming the replacement
+  succeeds**, leaving the backend permanently unusable on any subsequent draw call. See
   [audit report](src/CNA/Internal/Backends/Dx3/Dx3GraphicsBackend.cpp.audit.md) F1.
-- **EasyGL backend: `SkinnedPbrEffect`'s shader uses the raw `uWorld` matrix instead of the inverse-transpose
-  normal matrix** for its normal/tangent transform — correct only for rotation/uniform-scale World transforms,
-  wrong for non-uniform scale. A narrower-scope sibling of the HIGH finding above. See
+- **EasyGL: `SkinnedPbrEffect`'s shader uses the raw `uWorld` matrix instead of the inverse-transpose normal
+  matrix** — correct only for rotation/uniform-scale, wrong for non-uniform scale. See
   [audit report](src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp.audit.md) F3.
+- **Recurring mip-regeneration shape across 2 backends, 2 resource types: cube mip regen always touches all 6
+  faces even when only one changed** — SdlGpu's `TextureCube::SetData()`, D3D11's `RenderTargetCube`. Positive
+  counter-example: D3D12's `RenderTargetCube` correctly regenerates only the active face.
+- **Architecture-level, likely universal: `IGraphicsBackend::ApplySamplerState()` has no `AddressW` parameter;
+  `ApplyBlendState()` carries no per-RT color-write mask; `ApplyRasterizerState()` carries no
+  `MultiSampleAntiAlias` flag** — all confirmed real, correct XNA-facing properties silently unenforceable at
+  the shared backend-interface level, not a per-backend defect. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **D3D12: every vertex/index-buffer `SetData` performs a full synchronous GPU stall regardless of
+  `SetDataOptions`** — `options` is a literally-unused parameter; every other backend at least attempts a
+  no-stall path. Performance, not correctness. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 
-### LOW / recurring test-authoring patterns (from the `examples-tests-easygl` mechanical batch, 218 files)
+**`Microsoft::Xna::Framework` core / Graphics (XNA-facing, affects every backend uniformly):**
 
-- **Stale "known bug" documentation comments contradicted by later fixes**, found repeatedly across this shard:
-  `easygl_blendstate_additive_test.cpp`/`_nonpremultiplied_test.cpp`/`_separate_factors_test.cpp`/
-  `_separate_functions_test.cpp` all carry stale claims that Vulkan's blend state is "almost entirely fake" —
-  contradicted by Task 868's since-recorded closure (confirmed via `plan_graphics.md` and current Vulkan source).
-  `easygl_graphicsdevice_reference_stencil_test.cpp` falsely claims `SetReferenceStencil` doesn't exist project-wide
-  when it's implemented on 6 of 14 backends. `easygl_texture_anisotropic_effect_test.cpp` describes Task 867/918
-  anisotropic bugs as open when both are confirmed fixed. `easygl_env_map_test.cpp`'s header documents the
-  pre-fix (buggy) shader formula, not the current one — masked because its specific test parameters happen to
-  make both formulas agree. `easygl_buffer_usage_test.cpp` claims `GetData()` is unimplemented; Task 930 added it.
-  **Pattern for `AUDIT_CROSS_CUTTING_FINDINGS.md`: this codebase's header comments document point-in-time bug
-  investigations accurately at the time, but are not being systematically revisited when the underlying code is
-  later fixed — a recurring documentation-rot risk, not a single mistake.**
-- **Tests that assert only metadata/capacity, not actual data content**: `easygl_vertexbuffer_setdata_test.cpp`
-  only asserts capacity/metadata getters that `SetData` never touches — no scenario verifies uploaded content
-  landed at the correct offset, despite that being the file's stated purpose.
-- **Weak/incomplete enum coverage**: `easygl_depthstencilstate_compare_function_test.cpp` tests only 5 of 8
-  `CompareFunction` values (Equal/GreaterEqual/NotEqual untested).
-- Full per-file detail for all 218 files, including ~15 additional "Needs attention" verdicts not severe enough
-  for this index, lives under `audit/examples/easygl_*.audit.md`.
+- **`Texture2D::GetTypeName()` returns bare `"Texture2D"`** instead of the fully-qualified name every sibling
+  correctly returns. **`RenderTargetCube` lacks `RenderTarget2D`'s own Task 717 `Dispose(bool)` fix** — a real
+  use-after-free risk in the identical pointer pattern. **`DynamicVertexBuffer`/`DynamicIndexBuffer` don't
+  override `GetTypeName()`** either — same shape, 3rd instance.
+- **`RenderTargetBinding`'s two-argument constructors have zero validation** (FNA throws for null texture/
+  invalid `CubeMapFace`), and it carries an undisclosed, non-`NOXNA`-tagged `arraySlice` extension.
+- **`TextureCollection` is missing FNA's real render-target/sampler-conflict check** (binding a texture that's
+  simultaneously an active render target silently succeeds instead of throwing).
+- **`VertexBufferBinding.VertexOffset` is modeled as a vertex-count offset, not FNA's real byte offset.**
+- **`ModelMeshPartCollection`/`ModelEffectCollection::operator[](int)` perform unchecked `std::vector::
+  operator[]` indexing** where FNA's `ReadOnlyCollection<T>` always bounds-checks — same shape as the confirmed
+  `NetworkSessionProperties` bug below. `Model.cpp` has 5 raw `std::out_of_range`/`std::runtime_error` throw
+  sites where FNA documents `System.*` exception types.
+- **`PackedVector/Byte4.hpp`, `Short2.hpp`, `Short4.hpp` all truncate instead of round in `Pack()`** — a
+  systematic off-by-up-to-1 error for any non-integer input. **Root cause of why this went undetected**: the
+  project's own FNA-comparison harness (`tools/fna-reference/PackedVectorReference.cs`)'s `DumpByte4()`/
+  `DumpShort2()`/`DumpShort4()` use only integer test inputs, unlike all 14 sibling `Dump*()` functions, which
+  deliberately include a fractional value — for an exact-integer input, round and truncate agree, so the
+  harness was structurally incapable of catching this. See
+  `audit/tools/fna-reference/PackedVectorReference.cs.audit.md`.
+- **`VertexPositionColor.hpp` does not implement `IVertexType`** — unlike real FNA and every sibling type.
+- **`GraphicsDevice::Dispose()` disposes owned resources *before* raising `Disposing`**, inverted from FNA's
+  real order — a `Disposing` handler can never observe a still-valid resource.
+- **`DisplayMode` is missing `TitleSafeArea`, `GetHashCode()`, and `ToString()`** — all real, documented FNA
+  members. **`DeviceLostException`/`DeviceNotResetException`/`NoSuitableGraphicsDeviceException` all derive from
+  `std::runtime_error` instead of `System::Exception`**, missing the `(message, innerException)` constructor.
+  **4 `EffectXxxCollection::operator[](int)` implementations throw raw `std::out_of_range`** instead of
+  `System::ArgumentOutOfRangeException` (bounds-checking itself is correct in all 4).
+- **Exception-type convention violated in `SkinnedEffect.cpp` (4 sites), `EnvironmentMapEffect.cpp`,
+  `PbrEffect.cpp`, `SkinnedPbrEffect.cpp` (4 sites), `SamplerStateCollection.cpp`, and pervasively across the
+  `Texture*` family** (`Texture2D.cpp` alone has ~15+ raw-`std::`-exception sites) — the same recurring
+  project-wide pattern, largest concentration found in this shard.
+- **`Color::PackFromVector4()` uses an unclamped `static_cast<bytecs>(float)` conversion** — real UB for
+  out-of-range/NaN input, unlike every sibling float-to-component path in the same file, which correctly clamps
+  first. See `src/Microsoft/Xna/Framework/Color.cpp.audit.md`.
+- **A signed-integer-overflow-UB fix applied to `Vector2::GetHashCode()` was never propagated to 4 structurally
+  identical siblings**: `Vector3`, `Vector4`, `Quaternion`, and `Matrix::GetHashCode()` (16 terms — the
+  highest-risk instance). `Point`/`Rectangle` (XOR-combining) are unaffected. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`Matrix::Invert()` computes every intermediate cofactor determinant in single-precision `float`, unlike
+  FNA's deliberate double-precision implementation** — the port's own comment asserts "no observable difference
+  in practice" without demonstrating it. See `src/Microsoft/Xna/Framework/Matrix.cpp.audit.md`.
+- **`GameWindow::EndScreenDeviceChange` never centers/repositions the window onto the named display**, and the
+  orientation model substitutes an unconditional window-aspect-ratio heuristic for FNA's real mobile-gated
+  SDL-display-orientation mechanism — both confirmed via direct comparison against FNA's actual platform
+  implementation, neither disclosed in `GameWindow.hpp`'s doc comments. Concretely reachable: `GraphicsDeviceManager`
+  genuinely calls `EndScreenDeviceChange` with the real adapter name during normal operation.
+- **`Game::PollEvents()` omits four real FNA SDL3 event reactions**: `WINDOW_MOVED` (cross-display move ->
+  `GraphicsDevice.Reset()`), `WINDOW_EXPOSED` (redraw during blocking resize-drag), `ENTER/LEAVE_FULLSCREEN`
+  (sync `IsFullScreen` back from OS-level toggles), `MOUSE_ENTER/LEAVE` (screensaver toggle — CNA disables it
+  unconditionally from an unrelated call site instead). See `src/Microsoft/Xna/Framework/Game.cpp.audit.md`.
+- **3 independent instances in `xna-framework-core` of a raw `std::` exception thrown where a project-provided
+  `System::*Exception` is available and already used elsewhere**: `GameComponentCollection::SetItem()` (claims
+  `NotSupportedException` "isn't available yet" — it is, used by 16 other files), `GraphicsDeviceManager`'s
+  constructor/`registerServices()` (`std::invalid_argument` vs. `ArgumentNullException`/`ArgumentException`),
+  `Game::AssertNotDisposed()` (`std::runtime_error` vs. `ObjectDisposedException`, used by 28 other files).
+
+**Content / Storage / Net / GamerServices / Devices / Media:**
+
+- **`NetworkSessionProperties::Insert(int)`/`RemoveAt(int)` perform unchecked iterator arithmetic**, unlike
+  every other index-taking member in the same file — UB for an out-of-range index, reachable from public API.
+  See `src/Microsoft/Xna/Framework/Net/NetworkSessionProperties.cpp.audit.md`.
+- **`GamerPresence.cpp`'s `presenceModeStrings_` table is sorted alphabetically, not indexed to
+  `GamerPresenceMode`'s declared ordinals** — 59 of 60 modes resolve to the wrong display string. Currently
+  dormant (no public getter exposes it). **`GamerServicesComponent` doesn't override `GetTypeName()`**
+  (confirmed isolated — sibling `DrawableGameComponent` gets it right). **`GuideAlreadyVisibleException` is
+  fully implemented/tested but dead code** — real guards throw a generic `InvalidOperationException` instead.
+  **`PropertyDictionary`'s entire 9-method read-accessor surface throws raw `std::out_of_range`/
+  `std::bad_any_cast`** instead of `System::Collections::Generic::KeyNotFoundException`/
+  `InvalidCastException` — the single largest-blast-radius instance of the exception-type pattern in this shard.
+- **`Dispose(bool disposing)` is re-declared `public` (not `protected`) in all four `Microsoft::Devices::Sensors`
+  classes** (`Accelerometer`, `Compass`, `Gyroscope`, `Motion`) even though the base `SensorBase<T>` correctly
+  declares it `protected` — any external caller can invoke `accel.Dispose(false)` directly, marking the object
+  disposed without running any real cleanup (no `Stop()`, no SDL-subsystem release). A real, externally-reachable
+  resource leak plus a permanently-broken object. See
+  `include/Microsoft/Devices/Sensors/Accelerometer.hpp.audit.md` (and 3 sibling reports).
+- **`PlaylistParser.cpp` performs no path-containment check on `.m3u`/`.m3u8` playlist entries** — accepts
+  absolute/`..`-escaping paths as-is, inconsistent with this same shard's own established containment defenses
+  elsewhere (`CnjSourceFile.hpp`, `SavedPictureStore.cpp`). See `src/CNA/Internal/Media/PlaylistParser.cpp.audit.md`.
+- **`VideoDecoder.cpp`'s `ConvertFrameToRGBA()` indexes a decoded frame using stale cached `width_`/`height_`
+  rather than the frame's own dimensions** — a potential OOB read if a video stream changes resolution
+  mid-decode. Notable: this file otherwise has the densest prior-review-fix documentation in the whole audit
+  (18+ cited findings) yet doesn't address this case. See `src/CNA/Internal/Media/VideoDecoder.cpp.audit.md`.
+- **`MediaLibrary::SavePicture(name, Stream*)` assumes a single `Read()` call fills the whole buffer**,
+  violating this project's own `Stream::Read()` interface contract (a legitimate partial read leaves the
+  trailing buffer portion zeroed and silently saved). See `src/Microsoft/Xna/Framework/Media/MediaLibrary.cpp.audit.md`.
+- **Duplicate NOXNA-extension API surfaces across `CNA::Input` and `CNA::Devices`**: `Clipboard` and
+  `Power`/`PowerState` each have two entirely independent implementations wrapping the identical SDL3 calls,
+  with different naming conventions and minor behavioral differences (return-value discarding). Both
+  individually correct, but a fix to one has no reason to reach the other. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+
+**Testing / documentation:**
+
+- **`GameTests.cpp`/`GraphicsDeviceManagerTests.cpp` zero coverage, `GameCrashTest.cpp` dead file** (all 24
+  lines commented out behind a stale `#ifdef XNA5` gate referencing an API shape the current `Game` class
+  doesn't expose).
+- **`PictureLibraryIndexTests.cpp` has no symlink-cycle or permission-denied-subdirectory test**, unlike the
+  equivalent music-scanner tests in the same shard.
+- **`EffectParameterTests.cpp` and `GraphicsExceptionTests.cpp` actively bake in 2 of the HIGH findings above as
+  asserted-correct**: `SetValueTransposeRawLayoutDiffersFromSetValue` asserts the exact inverse of FNA's real
+  Matrix convention; `GraphicsExceptionTests.cpp` has 6 tests asserting the 3 graphics exceptions inherit as
+  `std::runtime_error`. Fixing either production bug now requires updating the corresponding tests in the same
+  change. A 3rd instance of this shape: `GamerServicesDataTests.cpp` bakes in `PropertyDictionary`'s raw-
+  exception assertions. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`ContentReaderExternalReferenceTests.cpp` has no test for the confirmed absolute-path-escape gap above** —
+  every existing test only constructs a relative `..`-style escape.
+- **7 `docs/*.md` staleness findings**, each a doc's claim directly contradicted by this session's own confirmed
+  current state: `docs/coverage.md` claims ".xnb support entirely absent" (contradicted by 10+ audited readers);
+  `docs/d3d9-backend.md` vs. `docs/cnatests-mingw-setenv-proposal.md` contradict each other on the same task ID;
+  `docs/cna_audio_deep_audit_2026-07-17.md` has no status banner noting its flagship finding is now fixed;
+  `docs/dx3-backend.md` claims SpriteBatch "fully verified" (contradicted by the Dx3_SpriteBatch finding below);
+  `docs/easygl_bugs.md`'s fog-bug row mischaracterizes the current (object-space) shader as clip-space;
+  `docs/gdm-coverage.md` never mentions the `GraphicsDeviceManager` event-forwarding gap above;
+  `docs/graphics-resource-lifetime.md` and `docs/graphicsresource-fna-audit.md` directly contradict each other
+  on whether a resource-tracking list exists. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **Repo-hygiene: root `.gitignore`'s bare `build*` pattern (line 1) silently matches any file/directory
+  anywhere in the repo whose basename starts with "build"** — including this very audit's own
+  `build-cmake.md`/`build-cmake-tests.md` manifest files, which were silently invisible to plain `git add`/
+  `git status` until forced with `git add -f`. A real, currently-live repo-hygiene hazard project-wide, not
+  just inside `audit/`.
+- **Two independent SPDX/license-header inconsistencies**: the entire `CNA::Internal::Net` subsystem (12 files)
+  uses MIT + an explicit copyright line, diverging from every other CNA-original NOXNA file's plain MS-PL; all
+  three `xna-storage` file pairs have an *intra-pair* mismatch (`.hpp` MS-PL, `.cpp` MIT+copyright).
+
+**Resolved standing investigations:**
+
+- **`Dx3_SpriteBatch`'s 2/10-failing-checks (persistent project memory) resolved as two different natures.**
+  Check D (zero-alpha blend): confirmed test-authoring bug — the fixture uses a non-premultiplied
+  `Color(255,0,0,0)` under `BlendState::AlphaBlend` (a premultiplied-convention preset); one fork hand-derived
+  the real result as `(255,6,7)`, not the asserted "destination untouched." Check G (180° rotation): test math
+  independently re-derived and confirmed sound — a failure here means a genuine DX3 rotation-handling defect.
+  See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **D3D11/D3D12's fog tests use `World=View=Projection=Identity`, so they cannot distinguish correct
+  view-space fog from the already-confirmed EasyGL-class "object-space-only" bug** — a test blind spot, not a
+  confirmation either way for these two backends.
+
+### LOW
+
+- **Recurring test-authoring patterns from the `examples-tests-easygl` mechanical batch (218 files)**: stale
+  "known bug" comments contradicted by later fixes (6+ files — Vulkan blend state, `SetReferenceStencil`
+  availability, anisotropic filtering, `GetData()` availability, the pre-fix env-map formula), now confirmed as
+  a systemic documentation-rot pattern recurring in the Bgfx/Vulkan/SdlRenderer batches too (9+ more instances,
+  full list in `AUDIT_CROSS_CUTTING_FINDINGS.md`); tests asserting only metadata/capacity, not actual data
+  content (`easygl_vertexbuffer_setdata_test.cpp`, `easygl_dynamic_buffer_stress_test.cpp`,
+  `easygl_msaa_test.cpp`); weak enum coverage (`easygl_depthstencilstate_compare_function_test.cpp`, only 5/8
+  `CompareFunction` values). Full per-file detail lives under `audit/examples/easygl_*.audit.md`.
+- **A correct, well-mapped generic `VertexElementFormat` -> native-format helper header that is entirely dead
+  code in production, confirmed in 2 backends**: `BgfxVertexFormatHelper.hpp`, `VulkanVertexFormatHelper.hpp` —
+  real per-pipeline layouts are hardcoded per-stride/per-shader instead. Vulkan's own test for this at least
+  directly unit-tests the mapping functions (genuinely verified); Bgfx's equivalent test silently exercises the
+  same hardcoded layout regardless of declaration.
+- **`SoundBank::GetCue()` returns a raw owning `Cue*` instead of `std::unique_ptr<Cue>`**, inconsistent with
+  this codebase's own established ownership-transfer convention (functionally fine, header documents the
+  contract).
+- **`GamePadState`/`MouseState`'s `GetHashCode()` doc comments read as preserving an original FNA formula, but
+  FNA's real implementation is `base.GetHashCode()`** (an opaque CLR default) — the custom formulas are
+  necessary CNA inventions, not preserved ports, though they correctly satisfy the contract.
+- **`SignedInGamerCollection::operator[](PlayerIndex)` checks only the upper bound**, not the lower — reachable
+  only via a deliberately-misused explicit negative cast.
+- **`SamplerStateCollection` has no per-slot dirty-tracking** (unlike FNA's real `modifiedSamplers`) —
+  `GraphicsDevice::applySamplerStatesToBackend()` unconditionally re-applies all 16 slots every call. Pure
+  performance divergence, no correctness impact.
+- **`GraphicsResource` has no way to reassign `graphicsDevice_` after construction**, unlike FNA's real
+  `internal set`-backed property. **`VertexDeclaration`'s auto-stride constructor doesn't validate an empty
+  element list**, unlike FNA's real constructor.
+- **A shared, narrow rounding-tie divergence** (round-half-up vs. FNA's banker's-rounding) affects `Alpha8`,
+  `Bgr565`, `Bgra4444`, `Bgra5551`, `Rg32`, `Rgba1010102`, `Rgba64`.
+- **`DecimalDateTimeContentTypeReaderTests.cpp`'s MSVC-only test/registration exclusion has no stated
+  rationale**, unlike every other platform-conditional test in the same shard.
+- **`tools/avatar_builder/generate_animations.py`'s top-of-file docstring is stale**, describing only 5 of the
+  file's actual 31 built animation clips — resolves `validate_gltf.py`'s own flagged ambiguity in favor of the
+  README being the stale artifact, not the validation gate.
+- **`headless_resource_backends_test.cpp`'s Checks A/B are unconditional `check(true, ...)` with no
+  `try`/`catch`**, unlike every other check in the same file — a real regression would crash the test process
+  instead of reporting a clean `FAIL`.
+- **`docs/devices-api-coverage.md`'s cross-cutting-members table doesn't flag the `Dispose(bool)` MEDIUM finding
+  above; `docs/graphicsdevice-fna-audit.md` (dated 2026-06-26) independently re-verified still accurate today
+  except one easy-to-miss inconsistency; `docs/README.md` predates several newer docs.**
+- Positive notes preserved for context (not defects): `BoundingSphere::Contains(BoundingFrustum)`'s inability to
+  return `Disjoint`, `BoundingFrustum::Intersects(Ray)`'s general-case `NotImplementedException`, and
+  `Curve::ComputeTangent()`'s asymmetric near-zero epsilons are all confirmed **FNA-faithful** reproductions,
+  not CNA regressions — flagged only because the port omits the explanatory comment FNA-fidelity findings
+  elsewhere in this codebase usually carry.
 
 ## By subsystem
 
@@ -350,9 +494,58 @@ multiple backend-groups (e.g. the skinned-normal-transform sweep) is listed once
   `Fatal`/`Error`/`Warn` log call as `SDL_LOG_PRIORITY_INFO` — foundational, always-compiled, project-wide (HIGH).
 - **`Microsoft::Xna::Framework::Graphics`** (XNA-facing shared layer, affects every backend uniformly):
   `SpriteFont::MeasureString`/`SpriteBatch::DrawString` unchecked `unordered_map::end()` dereference (HIGH);
-  `SpriteBatch::Begin()` sets `begun_=true` before fallible backend calls, permanently stuck state on throw
-  (MEDIUM-ish); `GraphicsDevice::SetRenderTargets` mutates tracked state before the backend call can throw
-  (MEDIUM-ish, same shape as the SpriteBatch finding).
+  `SpriteBatch::DrawString`'s undersized `SpriteEffects` table, OOB read (HIGH); `EffectParameter` Matrix
+  inversion, `Elements`/`StructureMembers` always empty (HIGH); `BasicEffect` never populates `Parameters`
+  (HIGH); `VertexBuffer`/`IndexBuffer` missing destination-offset, root cause of the 3-backend `NoOverwrite` gap
+  (HIGH); `GraphicsDevice.cpp`'s ~27 raw exceptions (HIGH); `SpriteBatch::Begin()` sets `begun_=true` before
+  fallible backend calls (MEDIUM, state-mutation-before-fallible-call pattern);
+  `GraphicsDevice::SetRenderTargets` mutates tracked state before the backend call can throw (MEDIUM, same
+  pattern); `Texture2D::GetTypeName()`/`RenderTargetCube.Dispose(bool)`/`RenderTargetBinding`/
+  `TextureCollection`/`VertexBufferBinding.VertexOffset`/`ModelMeshPartCollection`/`Model.cpp` exceptions/
+  `PackedVector` rounding/`VertexPositionColor.IVertexType`/`GraphicsDevice::Dispose()` ordering/`DisplayMode`
+  missing members/graphics-exception base classes/4 `EffectXxxCollection` exceptions (all MEDIUM — see "By
+  severity" for full detail); dead-code mip-regen-whole-cube (MEDIUM, SdlGpu+D3D11); `ApplySamplerState`/
+  `ApplyBlendState`/`ApplyRasterizerState` missing fields, universal (MEDIUM).
+- **`Microsoft::Xna::Framework` core (`Game`/`GraphicsDeviceManager`/`GameWindow`/math types)**: `Color::
+  PackFromVector4()` unclamped cast, real UB (MEDIUM); `Vector3`/`Vector4`/`Quaternion`/`Matrix::GetHashCode()`
+  signed-overflow UB not propagated from the `Vector2` fix (MEDIUM); `Matrix::Invert()` single- vs.
+  double-precision, unverified claim (MEDIUM); `GameWindow::EndScreenDeviceChange`/orientation-heuristic gaps
+  (MEDIUM); `Game::PollEvents()` missing 4 FNA SDL3 event reactions (MEDIUM); 3 raw-`std::`-exception instances
+  (`GameComponentCollection`/`GraphicsDeviceManager`/`Game::AssertNotDisposed`, MEDIUM);
+  `GameTests.cpp`/`GraphicsDeviceManagerTests.cpp` zero coverage (MEDIUM, leaves the `Game::UnloadContent()` and
+  `GraphicsDeviceManager` event-forwarding HIGH bugs untested); `GameCrashTest.cpp` dead file (MEDIUM).
+- **`Microsoft::Xna::Framework.Content`/`.Storage`**: `StorageDevice::DeleteContainer()` unchecked recursive
+  delete, path traversal — **arguably the most severe finding of this audit session** (HIGH);
+  `ContentReader::ReadExternalReference<T>()` absolute-path bypass, 3rd confirmed instance of the same
+  `fs::path` pitfall (HIGH); `TextureCubeContentTypeReader.cpp` missing byte-count validation, OOB heap read
+  (HIGH); `ContentReaderExternalReferenceTests.cpp` untested against its own confirmed gap (MEDIUM); `xna-storage`
+  intra-pair SPDX mismatch (MEDIUM).
+- **`Microsoft::Xna::Framework.Net`/`CNA::Internal::Net`**: `ENetBackend.cpp`'s `HandleReceive()` has no
+  sender-authority check on 4 host-only broadcast message types, adversarial-client forgery (HIGH);
+  `NetworkSessionProperties::Insert`/`RemoveAt` unchecked iterator arithmetic (MEDIUM); `NetworkSession*`
+  `Dispose()`d but never `delete`d across 10 example/tool files, systemic but low-severity (LOW-ish, positive
+  counter-example exists); `CNA::Internal::Net`'s whole-subsystem MIT-vs-MS-PL SPDX inconsistency (MEDIUM).
+  Positive: the previously-known critical `NetworkSession::Dispose()` UAF is confirmed genuinely fixed.
+- **`Microsoft::Xna::Framework.GamerServices`**: `GamerPresence.cpp`'s misindexed display-string table
+  (MEDIUM, dormant); `GamerServicesComponent` missing `GetTypeName()` (MEDIUM); `GuideAlreadyVisibleException`
+  dead code (MEDIUM); `PropertyDictionary`'s 9-method raw-exception surface, largest single-file instance of
+  the exception-type pattern (MEDIUM). Positive: `GamerCollection<T>`/`AchievementCollection` do NOT share the
+  `NetworkSessionProperties` bug; `GamerServicesDispatcher::UpdateAsync()`'s permanent-no-op-once-initialized
+  behavior independently confirmed, validating the `xna-net` shard's own polling-loop fix.
+- **`Microsoft::Devices`**: `Dispose(bool disposing)` incorrectly `public` (not `protected`) across all 4
+  `Sensors` classes, real resource leak + permanently-broken object (MEDIUM). Positive: the most thoroughly
+  self-audited subsystem in the project; does NOT share the `FileDialog`/`MessageBox` UAF bug; Android
+  coordinate-math independently re-derived and correct.
+- **`CNA::Internal::Media`**: `AudioTagParser.cpp`'s 32-bit-`size_t` integer-overflow-vulnerable bounds checks
+  (HIGH, narrow platform scope); `PlaylistParser.cpp` no path-containment check (MEDIUM); `VideoDecoder.cpp`
+  stale cached frame dimensions (MEDIUM); `MediaLibrary::SavePicture()` partial-`Read()` assumption (MEDIUM).
+- **`CNA::Input`/`CNA::Devices` (NOXNA extensions)**: duplicated `Clipboard`/`Power`/`PowerState`
+  implementations across the two namespaces (MEDIUM).
+- **Tools / docs / build**: `tools/fna-reference/PackedVectorReference.cs`'s integer-only test inputs, root
+  cause of the `PackedVector` rounding bug going undetected (documented alongside the MEDIUM finding above);
+  `generate_animations.py`'s stale docstring (LOW); 7 `docs/*.md` staleness findings cross-checked against this
+  session's own confirmed state (MEDIUM); root `.gitignore`'s `build*` pattern silently untracking files
+  project-wide (MEDIUM); `headless_resource_backends_test.cpp`'s unconditional-check robustness gap (LOW).
 
 ## By category
 
@@ -386,4 +579,43 @@ multiple backend-groups (e.g. the skinned-normal-transform sweep) is listed once
   of actual data content; weak enum-value coverage (`CompareFunction` tested for only 5 of 8 values).
 - **Robustness / undefined behavior reachable via public API**: `SpriteFont::MeasureString`/`SpriteBatch::
   DrawString`'s unchecked `unordered_map::end()` dereference; `SpriteFont`'s undersized flip-lookup table
-  (3 entries, not FNA's 4) risking an out-of-bounds `constexpr`-array read for an out-of-range enum cast.
+  (3 entries, not FNA's 4) risking an out-of-bounds `constexpr`-array read for an out-of-range enum cast;
+  `Color::PackFromVector4()`'s unclamped cast; `TextureCubeContentTypeReader.cpp`'s missing byte-count
+  validation; `AudioTagParser.cpp`'s 32-bit integer-overflow-vulnerable bounds checks;
+  `headless_resource_backends_test.cpp`'s unconditional `check(true)` with no `try`/`catch`.
+- **Security / adversarial-input hardening** (a category this audit did not originally expect to need):
+  `ENetBackend.cpp`'s missing sender-authority check on host-only broadcast messages (network-forgeable, no
+  MITM needed); `StorageDevice::DeleteContainer()`'s unchecked recursive delete driven by caller-supplied path
+  (data-loss path traversal, arguably the audit's most severe single finding); `ContentReader::
+  ReadExternalReference<T>()`'s absolute-path containment bypass; `TextureCubeContentTypeReader.cpp`'s OOB heap
+  read from a crafted asset; `PlaylistParser.cpp`'s unrestricted playlist-entry path. Three of these five
+  (`StorageDevice`, `ContentReader`, and a sibling `CnjSourceFile` containment pattern) share the identical
+  C++-specific `fs::path(base) / <caller-supplied string>` pitfall (silently discards `base` when the RHS is
+  absolute) — worth a dedicated project-wide grep for this exact shape.
+  `DeleteContainer` is also the audit's clearest example of a CNA-introduced regression, not an FNA-faithful
+  gap: FNA's own equivalent method is an unimplemented stub, so there was no upstream behavior to inherit.
+- **API-design: raw `std::` exceptions instead of this project's own `System::*Exception` convention** — the
+  single most numerous recurring pattern in this audit, confirmed independently in at least 10 distinct areas:
+  `GraphicsDevice.cpp` (~27 sites, the widest single-file instance), the `Texture*` family (`Texture2D.cpp`
+  alone ~15+ sites), `SkinnedEffect`/`EnvironmentMapEffect`/`PbrEffect`/`SkinnedPbrEffect`/
+  `SamplerStateCollection`, 4 `EffectXxxCollection::operator[]` implementations, `PropertyDictionary` (9
+  methods, `xna-gamerservices`), `ContentLoadException`'s base-class choice, `DeviceLostException`/
+  `DeviceNotResetException`/`NoSuitableGraphicsDeviceException`'s base-class choice, `Model.cpp` (5 sites), and
+  3 independent instances in `xna-framework-core` (`GameComponentCollection`/`GraphicsDeviceManager`/
+  `Game::AssertNotDisposed`). Two test files (`EffectParameterTests.cpp`'s Matrix-convention assertion aside,
+  `GraphicsExceptionTests.cpp` and `GamerServicesDataTests.cpp`) actively bake wrong-exception-type expectations
+  in as the asserted-correct behavior, meaning a fix requires a coordinated test update, not just production code.
+- **Documentation-rot** (a doc/comment claiming a status the current code contradicts, not a code bug per se —
+  confirmed as a systemic, repeated pattern across at least 20 distinct instances this session, not a single
+  mistake): 6+ stale "known bug" comments in the `examples-tests-easygl` batch, 9+ more in the Bgfx/Vulkan/
+  SdlRenderer batches, `D3DConstantBuffers.hpp`/`D3D12RootSignatureCache.hpp`/`D3D12Textures.hpp`/
+  `RenderPipelineSettings.hpp`'s stale class-level doc comments, and 7 `docs/*.md` staleness findings found by
+  cross-checking against this session's own confirmed current state. Recommend a periodic sweep specifically
+  for "Task NNN"/"known bug"/"currently broken"-style comments cross-checked against `git log`, independent of
+  any single file's own audit.
+- **Confirmed FNA-faithful, NOT a regression** (recorded for context — flagged only where the port omits the
+  explanatory comment this codebase otherwise provides for this exact situation elsewhere): `BoundingSphere::
+  Contains(BoundingFrustum)`'s inability to return `Disjoint`; `BoundingFrustum::Intersects(Ray)`'s general-case
+  `NotImplementedException`; `Curve::ComputeTangent()`'s asymmetric near-zero epsilons; `StorageContainer`'s
+  unchecked `Path.Combine`-style joins. Contrast with `StorageDevice::DeleteContainer()` above, which looks
+  superficially similar but is genuinely NOT FNA-faithful (FNA's own method is an unimplemented stub).
