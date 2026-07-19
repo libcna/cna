@@ -150,6 +150,7 @@ namespace CNA::Internal::Backends::OpenGL2
         int samplerFilter_[kMaxSamplerSlots] = {};
         int samplerAddressU_[kMaxSamplerSlots] = {};
         int samplerAddressV_[kMaxSamplerSlots] = {};
+        int samplerMaxAnisotropy_[kMaxSamplerSlots] = {};
 
         // Lazily-created 1x1 white fallbacks for effects that always sample a texture regardless
         // of whether the XNA-level Texture property was actually set (unlike BasicEffect/

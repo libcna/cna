@@ -172,4 +172,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_texture_mip_filter examples/opengl2_texture_mip_filter_test.cpp)
     cna_register_backend_test(NAME OpenGL2_Texture_MipFilter COMMAND cna_test_opengl2_texture_mip_filter
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: single-level (mipMap=false, the common case) texture must still render
+    # correctly under TextureFilter::Anisotropic, and ApplySamplerState()'s previously-discarded
+    # MaxAnisotropy now actually reaches GL_TEXTURE_MAX_ANISOTROPY_EXT.
+    cna_opengl2_test(cna_test_opengl2_texture2d_anisotropic_singlelevel examples/opengl2_texture2d_anisotropic_singlelevel_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_Texture2D_Anisotropic_SingleLevel COMMAND cna_test_opengl2_texture2d_anisotropic_singlelevel
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

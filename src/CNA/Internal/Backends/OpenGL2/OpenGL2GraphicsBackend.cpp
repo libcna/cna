@@ -2543,6 +2543,20 @@ namespace CNA::Internal::Backends::OpenGL2
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, glMag);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(samplerAddressU_[slot]));
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(samplerAddressV_[slot]));
+
+            // TextureFilter::Anisotropic = 2 (mirrors EasyGLGraphicsBackend::ApplySamplerState's
+            // own gate-on-extension-presence + clamp-to-device-max pattern exactly) -- maxAnisotropy
+            // was accepted but silently discarded before this fix, so SamplerState.MaxAnisotropy
+            // never reached the GPU regardless of TextureFilter::Anisotropic being requested.
+            if (samplerFilter_[slot] == 2 && SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering))
+            {
+                GLfloat maxAnisoCap = 1.0f;
+                glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAnisoCap);
+                float requested = static_cast<float>(samplerMaxAnisotropy_[slot]);
+                float clamped = (maxAnisoCap > 0.0f && requested > maxAnisoCap) ? maxAnisoCap : requested;
+                if (clamped < 1.0f) clamped = 1.0f;
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, clamped);
+            }
         };
 
         // Lit draws with textureEnabled=false (VertexPositionNormalTexture but no BasicEffect
@@ -2772,7 +2786,7 @@ namespace CNA::Internal::Backends::OpenGL2
         scissorTestEnable ? glEnable(GL_SCISSOR_TEST) : glDisable(GL_SCISSOR_TEST);
     }
 
-    void OpenGL2GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int /*maxAnisotropy*/)
+    void OpenGL2GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
     {
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         // GL 2.1 has no sampler objects -- just cache the request; drawInternal() applies it via
@@ -2781,6 +2795,7 @@ namespace CNA::Internal::Backends::OpenGL2
         samplerFilter_[slot] = filter;
         samplerAddressU_[slot] = addressU;
         samplerAddressV_[slot] = addressV;
+        samplerMaxAnisotropy_[slot] = maxAnisotropy;
     }
 
     void OpenGL2GraphicsBackend::SetScissorRect(int x, int y, int w, int h)
