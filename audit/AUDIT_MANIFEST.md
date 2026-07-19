@@ -95,7 +95,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 |---|---|---|
 | [`tools-audio`](manifest/tools-audio.md) | 6 | AUDITED: 6 / PENDING: 0 (complete) |
 | [`tools-avatar-asset-pipeline`](manifest/tools-avatar-asset-pipeline.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
-| [`tools-avatar-builder`](manifest/tools-avatar-builder.md) | 15 | PENDING: 15 / AUDITED: 0 |
+| [`tools-avatar-builder`](manifest/tools-avatar-builder.md) | 15 | PENDING: 0 / AUDITED: 15 (complete) |
 | [`tools-cna-reference`](manifest/tools-cna-reference.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
 | [`tools-devices`](manifest/tools-devices.md) | 5 | AUDITED: 5 / PENDING: 0 (complete) |
 | [`tools-fna-reference`](manifest/tools-fna-reference.md) | 7 | AUDITED: 7 / PENDING: 0 (complete) |

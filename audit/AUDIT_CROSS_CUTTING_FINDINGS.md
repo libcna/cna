@@ -1588,6 +1588,29 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   `SdlSensorSubsystem`) is correct, several files notably citing specific archived MSDN page numbers to
   justify NOXNA-extension claims rather than asserting parity without evidence.
 
+## Repo-hygiene finding: root `.gitignore`'s `build*` pattern silently ignores this audit's own manifest files
+
+- **MEDIUM, discovered while committing the `build-cmake`/`build-cmake-tests` manifest shard
+  files**: the root `.gitignore`'s first line is a bare `build*` (line 1), evidently intended to
+  ignore a generic ad-hoc `build/` directory (all the project's real CMake build directories are
+  separately, explicitly listed as `cmake-build-<backend>/*`, which do NOT start with `build` and
+  are unaffected). Because gitignore patterns without a leading `/` match at any path depth against
+  the basename, `build*` also matches `audit/manifest/build-ci.md`, `audit/manifest/build-cmake.md`,
+  `audit/manifest/build-cmake-tests.md`, and `audit/manifest/build-root.md` — the four manifest
+  shard files this very audit created to track the `build-ci`/`build-cmake`/`build-cmake-tests`/
+  `build-root` shards. `build-ci.md`/`build-root.md` happen to already be tracked (added with
+  `git add -f`, or added before this ignore line existed) and so continue to update normally once
+  tracked (gitignore has no effect on already-tracked paths), but `build-cmake.md`/
+  `build-cmake-tests.md` were never yet committed and are silently invisible to plain `git add`/
+  `git status` — confirmed via `git status --porcelain --ignored=matching audit/`, which lists
+  exactly these two files with `!!`. Required `git add -f` to stage them. This is a real,
+  currently-live repo-hygiene hazard: any future file or directory anywhere in this repository
+  whose name happens to start with `build` (not just inside `audit/`) is silently untracked by
+  default with no warning from a plain `git add .`/`git status`. Not fixed here (`.gitignore` is
+  outside this audit's `audit/**/*.md`-only scope) — flagging for the project owner to narrow the
+  pattern (e.g. `/build/` or `/build*/`, matching the already-precise `cmake-build-*/*` entries
+  immediately below it) rather than the current unanchored, extension-less `build*`.
+
 ## Per-shard notes: `tests-xna-framework-core` (46 files) + `tests-cna-input` (5 files) + `tests-misc` (1 file)
 
 - **HIGH finding: `GameTests.cpp` and `GraphicsDeviceManagerTests.cpp` both have zero real test
