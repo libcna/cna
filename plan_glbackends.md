@@ -24,6 +24,14 @@
 **Status legend:** ✅ implemented and verified; 🟨 code exists but not fully verified; ⬜ not
 started.
 
+> **2026-07-19, later same day — another agent's commits landed on this branch (`feature/gl`)
+> after `GLB-1`-`GLB-8`**: `ff1f3087` (EasyGL adapted to an unrelated upstream texture-API change,
+> no overlap with the context-creation code this plan touches), `5aa6b348` (new configurable
+> `Unsupported3DCallBehavior` policy, backend-agnostic, no overlap), `98693409` (backend-name
+> startup log — **exposed a real gap**, tracked as `GLB-17` above), `8521c0ad`/`6610b88f` (NEXT.md
+> doc refresh only). None conflict with this plan's Phase A changes; `GLB-17` is the one concrete
+> follow-up they created.
+
 ---
 
 ## 1. Current state (verified 2026-07-19)
@@ -181,6 +189,21 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
   doc) to the new 4 names, keeping "internal EasyGL implementation" as an explanatory footnote
   rather than removing the term everywhere (users debugging a stack trace still see `EasyGL` symbol
   names).
+- ⬜ **GLB-17** — **New, found 2026-07-19** (see `NEXT.md` commit `98693409`, "feat: report
+  graphics backend at startup", landed on this branch after `GLB-1`-`GLB-8`): `GraphicsDevice`
+  now logs `"CNA: graphics backend: <name>"` on first backend creation via
+  `CNA::getCurrentGraphicsBackendName()` (`include/CNA/GraphicsBackendType.hpp`). That function
+  still only knows the internal identity (`#elif defined(CNA_BACKEND_EASYGL) ... return
+  "EASYGL";`) — it has no awareness of the new `CNA_GL_PROFILE_OPENGLES`/`_OPENGL33`/`_WEBGL1`/
+  `_WEBGL2` compile definitions this plan added. **Concrete bug this causes**: a build configured
+  with `-DCNA_GRAPHICS_BACKEND=OPENGL33` (or `WEBGL1`/`WEBGL2`) prints `"CNA: graphics backend:
+  EASYGL"` at startup — directly undermining this plan's whole premise that `EASYGL` is not a
+  name public users should see. Fix: add a `GraphicsBackendType::OpenGLES/OpenGL33/WebGL1/WebGL2`
+  split (or a second `#if defined(CNA_GL_PROFILE_...)` layer inside the existing `EasyGL` case)
+  so `getCurrentGraphicsBackendName()` returns the actual public name selected in
+  `cmake/BackendSelection.cmake`, not the internal one. Also update
+  `GraphicsBackendTypeTests.cpp`'s static asserts/tests, which currently assume the compile-time
+  name equals the `CNA_BACKEND_*` define name 1:1.
 
 ### Phase D — `OPENGL33` (new desktop core-profile backend)
 
