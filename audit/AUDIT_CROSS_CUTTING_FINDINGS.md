@@ -892,6 +892,22 @@ _(pending)_
   landing (only `Vector2`/`Vector3` have been fully audited as of this note); update each file's own report
   and mark this resolved as each is confirmed fixed or accepted.
 
+- **CONFIRMED FNA-FAITHFUL (not a port defect): `BoundingSphere::Contains(BoundingFrustum)` can never
+  return `ContainmentType::Disjoint`** -- found while auditing `xna-framework-core`, verified directly
+  against `/rv/data/library/github.com/FNA-XNA/FNA/src/BoundingSphere.cs` (lines 218-248). FNA's own source
+  has the identical dead-code shape (`double dmin = 0; // TODO : calcul dmin; if (dmin <= Radius*Radius)
+  return Intersects;`) with FNA's own comment admitting the per-axis distance calculation was never written
+  for this one overload -- a real, known, upstream-incomplete method in XNA/FNA itself. Per this project's
+  own FNA-fidelity policy, faithfully preserving this is correct and should NOT be independently "fixed" --
+  but the CNA port is missing FNA's own explanatory `// TODO` comment at this spot, unlike this project's
+  established practice of flagging known-incomplete-but-faithfully-preserved FNA behavior elsewhere
+  (`LzxDecoder.cpp`'s Intel E8 handling, `VideoDecoder.cpp`'s several similar notes). Recommended fix is
+  documentation-only (add a comment citing this exact FNA source location), not a behavior change. See
+  `src/Microsoft/Xna/Framework/BoundingSphere.cpp.audit.md`. Worth checking whether `BoundingBox`/
+  `BoundingFrustum`'s own `Contains`/`Intersects` overloads against each other have any similar
+  FNA-upstream-incomplete siblings when those files (and `BoundingFrustum.cpp`, not yet audited) are
+  reviewed.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
