@@ -7,7 +7,7 @@ Files in this shard: **78**
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
 | 1 | `include/Microsoft/Xna/Framework/BoundingBox.hpp` | AUDITED | [BoundingBox.hpp.audit.md](../include/Microsoft/Xna/Framework/BoundingBox.hpp.audit.md) |
-| 2 | `include/Microsoft/Xna/Framework/BoundingFrustum.hpp` | PENDING | [BoundingFrustum.hpp.audit.md](../include/Microsoft/Xna/Framework/BoundingFrustum.hpp.audit.md) |
+| 2 | `include/Microsoft/Xna/Framework/BoundingFrustum.hpp` | AUDITED | [BoundingFrustum.hpp.audit.md](../include/Microsoft/Xna/Framework/BoundingFrustum.hpp.audit.md) |
 | 3 | `include/Microsoft/Xna/Framework/BoundingSphere.hpp` | AUDITED | [BoundingSphere.hpp.audit.md](../include/Microsoft/Xna/Framework/BoundingSphere.hpp.audit.md) |
 | 4 | `include/Microsoft/Xna/Framework/Color.hpp` | AUDITED | [Color.hpp.audit.md](../include/Microsoft/Xna/Framework/Color.hpp.audit.md) |
 | 5 | `include/Microsoft/Xna/Framework/ContainmentType.hpp` | AUDITED | [ContainmentType.hpp.audit.md](../include/Microsoft/Xna/Framework/ContainmentType.hpp.audit.md) |
@@ -52,7 +52,7 @@ Files in this shard: **78**
 | 44 | `include/Microsoft/Xna/Framework/Vector3.hpp` | AUDITED | [Vector3.hpp.audit.md](../include/Microsoft/Xna/Framework/Vector3.hpp.audit.md) |
 | 45 | `include/Microsoft/Xna/Framework/Vector4.hpp` | AUDITED | [Vector4.hpp.audit.md](../include/Microsoft/Xna/Framework/Vector4.hpp.audit.md) |
 | 46 | `src/Microsoft/Xna/Framework/BoundingBox.cpp` | AUDITED | [BoundingBox.cpp.audit.md](../src/Microsoft/Xna/Framework/BoundingBox.cpp.audit.md) |
-| 47 | `src/Microsoft/Xna/Framework/BoundingFrustum.cpp` | PENDING | [BoundingFrustum.cpp.audit.md](../src/Microsoft/Xna/Framework/BoundingFrustum.cpp.audit.md) |
+| 47 | `src/Microsoft/Xna/Framework/BoundingFrustum.cpp` | AUDITED | [BoundingFrustum.cpp.audit.md](../src/Microsoft/Xna/Framework/BoundingFrustum.cpp.audit.md) |
 | 48 | `src/Microsoft/Xna/Framework/BoundingSphere.cpp` | AUDITED | [BoundingSphere.cpp.audit.md](../src/Microsoft/Xna/Framework/BoundingSphere.cpp.audit.md) |
 | 49 | `src/Microsoft/Xna/Framework/Color.cpp` | AUDITED | [Color.cpp.audit.md](../src/Microsoft/Xna/Framework/Color.cpp.audit.md) |
 | 50 | `src/Microsoft/Xna/Framework/Curve.cpp` | PENDING | [Curve.cpp.audit.md](../src/Microsoft/Xna/Framework/Curve.cpp.audit.md) |
