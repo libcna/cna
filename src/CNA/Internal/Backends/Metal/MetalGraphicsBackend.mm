@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Metal/MetalGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Backends/Metal/MetalNormalMatrix.hpp"
+#include "CNA/Internal/Backends/Metal/MetalPrimitiveVertexCount.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -560,17 +561,13 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
 }
 )MSL";
 
+    // plan_metal.md METAL-34-style extraction: this formula's real logic now lives in the plain-C++
+    // MetalPrimitiveVertexCount.hpp (no Objective-C, buildable and unit-tested on any platform
+    // without an Apple toolchain) -- kept as a thin same-signature wrapper here so the existing call
+    // site is unaffected.
     static int primitiveVertexCount(PrimitiveType p, int count)
     {
-        using PT = PrimitiveType;
-        switch (p) {
-            case PT::TriangleList: return count * 3;
-            case PT::TriangleStrip: return count + 2;
-            case PT::LineList: return count * 2;
-            case PT::LineStrip: return count + 1;
-            case PT::PointListEXT: return count; // plan_metal.md METAL-13: was falling to the *3 default
-            default: return count * 3;
-        }
+        return ComputeMetalPrimitiveVertexCount(p, count);
     }
 
     static MTLPrimitiveType metalPrimitive(PrimitiveType p)

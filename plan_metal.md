@@ -799,6 +799,20 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     non-uniform-scale `World` transform) — though `METAL-40` itself stays 🟨 overall since its MSL-
     side consumption remains genuinely unverified.
 
+30. **`METAL-13`, machine-verified the same way**: `primitiveVertexCount()`'s formula only reads a
+    plain XNA framework enum (`PrimitiveType`) and plain `int`s — zero Objective-C dependency,
+    extracted to `MetalPrimitiveVertexCount.hpp`. This is the exact function `METAL-12`/`13` fixed
+    earlier this session (`PointList` was silently falling through to the triangle-count `*3`
+    default) — 5 new `CnaTests`, one per `PrimitiveType` value, with a dedicated `PointListEXT`
+    regression test locking that fix in against ever silently regressing back to the `*3` default,
+    every formula additionally cross-checked against `EasyGLGraphicsBackend`'s own already-tested
+    equivalent switch statement, not just re-derived from memory. All 5 pass on this Linux machine.
+    Three real, machine-verified pieces of the Metal backend now exist tonight (`METAL-34`'s
+    pipeline-cache key/hash, `METAL-40`'s normal-matrix formula, and this) — every one of them found
+    by the same discipline: after landing `METAL-34`, deliberately went looking for *more* pure-C++
+    logic hiding inside Objective-C++ files specifically *because* the technique had just been
+    proven to work, rather than treating it as a one-off.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -925,6 +939,12 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   negative-control assertion) — all pass on this Linux machine, real evidence for the single
   riskiest hand-derived formula in the whole lighting pipeline, though `METAL-40` overall stays 🟨
   pending the still-unverifiable MSL-side consumption (🟨 landed 2026-07-19 — `METAL-40`'s formula).
+- `METAL-13`'s `primitiveVertexCount()` formula machine-verified the same way: `MetalPrimitiveVertexCount.hpp`,
+  5 real `CnaTests`/`ctest` tests (one per `PrimitiveType`, including a dedicated `PointListEXT`
+  regression test locking in the earlier `*3`-default bug fix), cross-checked against
+  `EasyGLGraphicsBackend`'s own already-tested equivalent switch — all pass on this Linux machine
+  (✅ landed 2026-07-19 — `METAL-13`, a third genuinely real, fully-earned tier tonight alongside
+  `METAL-34`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -1016,7 +1036,7 @@ that replace it; do not re-derive scope from this table, use the phases:
 | METAL-10 | Wire two-sided stencil (`twoSidedStencilMode`/`ccwStencilFunc`/`ccwStencilPass`/`ccwStencilFail`/`ccwStencilDepthFail`) into `MTLDepthStencilDescriptor.backFaceStencil` | 🟨 |
 | METAL-11 | `SetBlendFactor(r,g,b,a)` via `[encoder setBlendColor:...]` — currently unimplemented (base no-op) | 🟨 |
 | METAL-12 | `PrimitiveType`→`MTLPrimitiveType`: add the missing `PointList` case (currently falls through `metalPrimitive()`'s default to `Triangle`, silently wrong) | 🟨 |
-| METAL-13 | `primitiveVertexCount()`: fix the `PointList` case (currently falls to default `count*3`; should be `count`) | 🟨 |
+| METAL-13 | `primitiveVertexCount()`: fix the `PointList` case (currently falls to default `count*3`; should be `count`) | 🟨→✅ **the formula itself is now real-build-verified** — extracted to `MetalPrimitiveVertexCount.hpp` (same `METAL-34` technique) and covered by 5 real `CnaTests`/`ctest` tests, one per `PrimitiveType` value including a dedicated `PointListEXT` regression test locking this exact fix in, all passing on this Linux machine, cross-checked against `EasyGLGraphicsBackend`'s own already-tested equivalent switch |
 | METAL-14 | `VertexElementFormat`→`MTLVertexFormat` full table (Single/Vector2/Vector3/Vector4/Color/Byte4/Short2/Short4/NormalizedShort2/NormalizedShort4/HalfVector2/HalfVector4) — today only 3 hand-picked fixed vertex descriptors exist, no general element-format mapping | ⬜ (still genuinely open — this is real, unlike `METAL-15`/`17` below, and stays scoped under Phase 2's already-deferred generic `VertexElement`-driven descriptor builder, `METAL-26`/`27`; do not attempt in isolation, see that phase's own note) |
 | METAL-15 | `SurfaceFormat`→`MTLPixelFormat` table (Color/Bgr565/Bgra5551/Bgra4444/Dxt1/Dxt3/Dxt5/NormalizedByte2/NormalizedByte4/Rgba1010102/Rg32/Rgba64/Alpha8/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable) — every texture is currently hardcoded `RGBA8Unorm` regardless of `ImageData`'s real format | 🟨 (**found to be based on a false premise**: `include/CNA/Internal/Graphics/ImageData.hpp` has no format field at all — its own doc comment states "RGBA8 pixel data," and `Texture2D.cpp`'s own real code confirms DXT1/DXT5 are decompressed to RGBA8 via `DxtUtil::DecompressDxt1`/`DecompressDxt5` *before* `CreateTexture(img)` is ever called, for every backend uniformly, not just Metal. There is no "real format" for `CreateTexture()` to diverge from — this was never a Metal-specific gap) |
 | METAL-16 | `DepthFormat`→`MTLPixelFormat` table (None/Depth16/Depth24/Depth24Stencil8) — backbuffer currently always allocates `Depth32Float_Stencil8` regardless of what `PresentationParameters` requested | 🟨 (confirmed intentional, not overlooked: matches `VulkanGraphicsBackend`'s own already-accepted "always allocate depth+stencil" simplification, explicitly called out as the deliberately-chosen tier back in `METAL-101`'s own note — not a priority fix) |
