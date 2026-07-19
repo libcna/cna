@@ -231,17 +231,73 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
   documented gap, not silently absent. Metal reports a genuine `uint64_t` sample-passed **count**
   (`PixelCount()`), a real capability advantage over EasyGL's GLES3
   `GL_ANY_SAMPLES_PASSED`-derived boolean.
+- **`RenderTarget2D`** (`METAL-98`–`101`/`106`/`107`, the architecturally riskiest piece landed
+  this session — it touches `ensureFrame()`/`endFrame()`/`clear()`, the core frame lifecycle every
+  other draw path depends on): `MetalRenderTargetBackend` with real bind/unbind. Metal render
+  passes are fixed-attachment for their whole encoder lifetime (unlike GL's dynamic FBO rebinding),
+  so switching targets means ending the current encoder/command-buffer and starting a new one
+  against different attachments — `Impl::resolveActiveAttachments()` centralizes "which
+  color/depth texture should the next render pass use" (the bound render target, or the backbuffer
+  drawable) so `ensureFrame()`/`clear()` share one answer instead of duplicating the branch.
+  `Impl::endActiveEncoding()` (shared by `endFrame()` and the render target's own `Bind`/
+  `UnbindAsRenderTarget()`) guards `presentDrawable:` with `if (drawable)` so it's a correct no-op
+  for a render-target-only encoder cycle. Every `RenderTarget2D` always gets a real depth+stencil
+  texture regardless of the requested `DepthFormat` — the same simplification tier `Vulkan`'s own
+  `CreateRenderTarget2D` doc comment already documents and the project already accepts (not EasyGL/
+  Bgfx's more honest "only allocate what was requested" tier), because every pipeline in this file
+  hardcodes `depthAttachmentPixelFormat`/`stencilAttachmentPixelFormat` unconditionally already.
+  **Not done this pass**: MSAA/mip (`METAL-103`/`104`, silently ignored, matching the interface's
+  own established "backends that cannot honor a preference silently clamp" convention), the
+  `preserveContents`-driven `DontCare`-on-rebind optimization (`METAL-102`, always `Load` — correct,
+  just not optimized), `RenderTargetCube`/MRT (Phase 10's remaining rows), and `GetData()`
+  (`METAL-131`, left at the interface's own no-op default).
+  - **Four real, independently-found-and-fixed bugs surfaced by self-review before this was
+    committed** (not caught by a compiler — none is available here — caught by re-reading the diff
+    line-by-line against what each function actually needs, which is exactly why that discipline
+    matters most on exactly this kind of core-lifecycle change): (1) a genuine pipeline/attachment
+    **format mismatch** — `MetalRenderTargetBackend`'s color texture was first written as
+    `RGBA8Unorm`, but every pipeline in this file hardcodes `colorAttachments[0].pixelFormat =
+    BGRA8Unorm` (matching the backbuffer) — fixed to `BGRA8Unorm` (zero shader-visible difference
+    either way; BGRA/RGBA naming is memory byte order only, `texture.sample()` always presents
+    `.rgba` to MSL code regardless). (2) a **compile error** in the refactored `clear()`: `w`/`h`
+    were referenced for the post-encoder-creation viewport/scissor setup but no longer declared
+    after replacing the old `drawable`-only texture-fetch with the new shared attachment-resolution
+    helper — fixed by re-adding the declaration. (3) an **incomplete-type compile error**: this
+    session's Phase 15 `computeSpriteTransform()` was still defined *inline* inside `Impl` (i.e.
+    textually before `MetalRenderTargetBackend` is a complete type) but needed updating to read
+    `currentRenderTarget->colorTexture()` — C++ does not allow calling a method through a pointer to
+    an as-yet-incomplete type even from another member of the same enclosing class; fixed by moving
+    it to a declaration-only stub with the body defined out-of-line, after `MetalRenderTargetBackend`
+    (the same pattern already used for `resolveActiveAttachments()`). (4) a real, **silent-wrong-answer
+    bug**, not a compile error: `computeSpriteTransform()` (and separately, last session's
+    `ReadBackbuffer()`) both unconditionally read `drawable.texture.width/height` — but `drawable`
+    is `nil` whenever a `RenderTarget2D` is currently bound (`resolveActiveAttachments()`'s
+    render-target branch never touches it), so a message-to-nil would have silently produced a
+    degenerate identity transform (wrong sprite positions when drawing into a bound render target)
+    or, for `ReadBackbuffer`, a nil blit source and a nil argument to `presentDrawable:` (a real
+    Metal API misuse, likely an exception) — fixed by giving `computeSpriteTransform()` a real,
+    deliberate 1:1 (no window-relative letterbox) mapping when a render target is active, since an
+    offscreen texture's own pixel space *is* its logical space, and by making `ReadBackbuffer` throw
+    a clear, honest error when a render target is currently bound instead of misreading the wrong
+    surface (`ReadBackbuffer`'s own contract is specifically about the backbuffer; a render target's
+    own readback is the still-open `GetData()`, `METAL-131`).
 
-**Explicitly still open / not attempted this pass** (do not assume these are done): `METAL-5`
-(cull-mode/winding correctness — deliberately left untouched, see its own note about a Vulkan
-front/back stencil swap this project already had to empirically discover the hard way, i.e. this is
-a real risk area, not a formality); `METAL-14`–`METAL-20` (VertexElementFormat/SurfaceFormat/
-DepthFormat tables, BC-compression query); the fully generic `VertexElement`-driven descriptor
-builder (`METAL-26`/`METAL-27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/
-`METAL-32`); the per-vertex lit variant (`METAL-39`); Phases 7–10 and 12–14 and 16–30 in full
-(instancing, render targets, cube/3D textures, readback, occlusion queries, custom effects,
-skinning, PBR, resize/Retina, frame pacing, resource-lifetime audit, everything NOXNA, testing/CI/
-docs, iOS/tvOS) — none of it was touched this pass.
+**Explicitly still open / not attempted across this whole overnight session** (do not assume these
+are done — this list is kept current as the authoritative "what's actually left" summary, updated
+at the end of each landed phase rather than trusted from an earlier revision):
+`METAL-5` (cull-mode/winding correctness — deliberately left untouched, see its own note about a
+Vulkan front/back stencil swap this project already had to empirically discover the hard way, a
+real risk area, not a formality); `METAL-14`–`20` (VertexElementFormat/SurfaceFormat/DepthFormat
+tables, BC-compression query); the fully generic `VertexElement`-driven descriptor builder
+(`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
+lit variant (`METAL-39`/`76`); Phase 8 (PBR/SkinnedPbr — `params->pbr` throws a clear "not
+implemented" error rather than silently misrendering); the rest of Phase 10 (`RenderTargetCube`,
+MRT, MSAA, mip, `GetData()`, `METAL-102`–`105`/`108`–`119`); Phase 14 (custom `ShaderEffect`, which
+Phase 9 Instancing is itself blocked on); Phase 9 itself (blocked on Phase 14); Phases 16–18 (resize/
+Retina, frame pacing, the resource-lifetime/command-buffer-sync audit — genuinely relevant now that
+render targets exist and can interleave encoder cycles with the backbuffer's); Phases 20–30 in full
+(remaining `SupportsCapability` wiring, all NOXNA extensions, testing infrastructure, CI, docs,
+cross-backend pixel parity, iOS/tvOS). Nothing in this list has been touched.
 
 ## Implemented initial foundation
 
@@ -268,6 +324,12 @@ docs, iOS/tvOS) — none of it was touched this pass.
 - Real `ReadBackbuffer` (blit-to-staging-buffer, no Y-flip needed) and real occlusion queries
   (`MTLVisibilityResultBuffer`, genuine `uint64_t` pixel counts — a real capability advantage over
   EasyGL's GLES3 boolean) (🟨 landed 2026-07-19 — `METAL-130`/`132`/`133`/`136`–`139`).
+- Real `RenderTarget2D` (bind/unbind, sampleable afterward as an ordinary texture or sprite,
+  correct sprite-transform math when rendering into it) — the architecturally riskiest change this
+  session, since it touches the core frame/encoder lifecycle every draw path depends on; 4 real
+  bugs found and fixed by self-review before commit (a pipeline/attachment pixel-format mismatch,
+  a compile error, an incomplete-type compile error, and a silent-wrong-transform bug) (🟨 landed
+  2026-07-19 — `METAL-98`–`101`/`106`/`107`; `RenderTargetCube`/MRT/MSAA/mip still open).
 - Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
   real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
 - Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
@@ -514,16 +576,16 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-98 | `CreateRenderTarget2D(w,h,depthFormat,preserveContents,mipMap,multiSampleCount)` — currently returns `nullptr` (base default); confirm the exact current upstream failure mode as a baseline first | ⬜ |
-| METAL-99 | `MetalRenderTargetBackend : IRenderTargetBackend, ITextureBackend` — private `id<MTLTexture>` with `MTLTextureUsageRenderTarget \| MTLTextureUsageShaderRead` | ⬜ |
-| METAL-100 | `BindAsRenderTarget()`/`UnbindAsRenderTarget()` — swap the active `MTLRenderPassDescriptor`'s attachments, ending/starting encoders (Metal render passes are fixed-attachment for their whole encoder lifetime, unlike GL's dynamic FBO rebinding) | ⬜ |
-| METAL-101 | Honor `depthFormat` exactly per target (`METAL-16`'s table) — aim for EasyGL/Bgfx's "honor the exact requested format" tier, not Vulkan's documented "always allocate depth+stencil" simplification (Task 911/877) | ⬜ |
+| METAL-98 | `CreateRenderTarget2D(w,h,depthFormat,preserveContents,mipMap,multiSampleCount)` — currently returns `nullptr` (base default); confirm the exact current upstream failure mode as a baseline first | 🟨 |
+| METAL-99 | `MetalRenderTargetBackend : IRenderTargetBackend, ITextureBackend` — private `id<MTLTexture>` with `MTLTextureUsageRenderTarget \| MTLTextureUsageShaderRead` | 🟨 |
+| METAL-100 | `BindAsRenderTarget()`/`UnbindAsRenderTarget()` — swap the active `MTLRenderPassDescriptor`'s attachments, ending/starting encoders (Metal render passes are fixed-attachment for their whole encoder lifetime, unlike GL's dynamic FBO rebinding) | 🟨 |
+| METAL-101 | Honor `depthFormat` exactly per target (`METAL-16`'s table) — aim for EasyGL/Bgfx's "honor the exact requested format" tier, not Vulkan's documented "always allocate depth+stencil" simplification (Task 911/877) | 🟨 |
 | METAL-102 | `preserveContents` → `MTLLoadActionDontCare`/`MTLLoadActionLoad` on rebind, matching the shared `GraphicsDevice.cpp` contract every backend already honors identically | ⬜ |
 | METAL-103 | `mipMap` — full mip chain via `MTLBlitCommandEncoder::generateMipmapsForTexture:` on unbind, matching FNA3D's `OPENGL_ResolveTarget` auto-mip semantics (Task 336/878/906 precedent) | ⬜ |
 | METAL-104 | `multiSampleCount` — multisampled attachment resolved via the render pass's own `MTLStoreActionMultisampleResolve` (a cheaper, first-class Metal path vs. GL's separate blit) | ⬜ |
 | METAL-105 | `GetMultiSampleCount()` — real, device-queried clamp via `MTLDevice.supportsTextureSampleCount:`, matching every backend's "report the real clamped value" contract | ⬜ |
-| METAL-106 | `HasRealDepthBuffer(bool)` — confirm the default `= depthFormatWasRequested` is already correct once real depth-format honoring (`METAL-101`) lands | ⬜ |
-| METAL-107 | `SetRenderTarget2D(IRenderTargetBackend*)` — real bind/unbind dispatch, currently a no-op | ⬜ |
+| METAL-106 | `HasRealDepthBuffer(bool)` — confirm the default `= depthFormatWasRequested` is already correct once real depth-format honoring (`METAL-101`) lands | 🟨 |
+| METAL-107 | `SetRenderTarget2D(IRenderTargetBackend*)` — real bind/unbind dispatch, currently a no-op | 🟨 |
 | METAL-108 | `GetColorGLHandle()` — confirm the default `return 0` is correct (GL-specific, N/A on Metal) and no caller assumes nonzero means "has a render target" | ⬜ |
 | METAL-109 | `CreateRenderTargetCube(size,depthFormat,mipMap,multiSampleCount)` — `MetalRenderTargetCubeBackend : IRenderTargetCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | ⬜ |
 | METAL-110 | `BindAsRenderTargetFace(int face)` — per-face `MTLRenderPassDescriptor` color attachment using `slice:face` | ⬜ |
