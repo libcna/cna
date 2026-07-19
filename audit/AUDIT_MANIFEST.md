@@ -85,7 +85,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`tests-cna-core`](manifest/tests-cna-core.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 | [`tests-cna-devices`](manifest/tests-cna-devices.md) | 10 | AUDITED: 10 / PENDING: 0 (complete) |
 | [`tests-cna-input`](manifest/tests-cna-input.md) | 5 | AUDITED: 5 / PENDING: 0 (complete) |
-| [`tests-cna-internal`](manifest/tests-cna-internal.md) | 65 | PENDING: 65 / AUDITED: 0 |
+| [`tests-cna-internal`](manifest/tests-cna-internal.md) | 65 | PENDING: 0 / AUDITED: 65 (complete) |
 | [`tests-microsoft-devices`](manifest/tests-microsoft-devices.md) | 25 | PENDING: 0 / AUDITED: 25 |
 | [`tests-misc`](manifest/tests-misc.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 
@@ -168,10 +168,10 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`build-ci`](manifest/build-ci.md) | 3 | PENDING: 3 / AUDITED: 0 |
-| [`build-cmake`](manifest/build-cmake.md) | 13 | PENDING: 13 / AUDITED: 0 |
+| [`build-ci`](manifest/build-ci.md) | 3 | PENDING: 0 / AUDITED: 3 (complete) |
+| [`build-cmake`](manifest/build-cmake.md) | 13 | PENDING: 0 / AUDITED: 13 (complete) |
 | [`build-cmake-tests`](manifest/build-cmake-tests.md) | 14 | PENDING: 14 / AUDITED: 0 |
-| [`build-root`](manifest/build-root.md) | 5 | PENDING: 5 / AUDITED: 0 |
+| [`build-root`](manifest/build-root.md) | 5 | PENDING: 0 / AUDITED: 5 (complete) |
 | [`scripts`](manifest/scripts.md) | 12 | PENDING: 11 / AUDITED: 1 |
 
 ## EXEMPT files (by reason)
