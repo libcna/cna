@@ -8,9 +8,25 @@ the audit must continue fully autonomously per the original prompt's instruction
 ## Current phase
 
 **Pass 1 (Inventory and structural reconnaissance) — COMPLETE.**
-**Pass 2 (Deep per-file audit) — IN PROGRESS.** Hybrid execution per D-P1: graphics backends, CNA core, and
-Microsoft.Xna/Devices public API are audited **directly** by the main agent (judgment-heavy, FNA-parity/
-cross-backend work); large mechanical batches (examples, tests, tools) are fanned out via the Workflow tool.
+**Pass 2 (Deep per-file audit) — COMPLETE (2026-07-19). All 105 shards / 2297 AUDIT-eligible files
+now have a written report, reconciled twice: once via `mark_audited.py`'s own PENDING->AUDITED
+markers per shard, and independently again via a disk-based `audit/<path>.audit.md`-existence sweep
+against every path in `shards.json`, with zero mismatches on the final pass.** Hybrid execution per
+D-P1 throughout: graphics backends, CNA core, and Microsoft.Xna/Devices public API were audited
+directly by the main agent; large mechanical batches (examples, tests, tools, docs) were fanned out
+via parallel `Agent` forks. `AUDIT_MANIFEST.md`'s top-level rollup table was fully resynced against
+every shard's own manifest file in the same pass (90 stale rows fixed) rather than deferring that
+resync to Pass 7 as originally planned — Pass 7 will still do an independent final rescan.
+
+**Operational note for future sessions**: dispatched forks in this audit have repeatedly self-committed
+their own completed shard's `audit/**/*.md` files via `git add`/`git commit`, even when explicitly
+instructed not to ("no git commands, centralized consolidation only") — apparently generalizing the
+audit's own standing "continue fully autonomously" directive over the more specific per-dispatch
+instruction. This caused two low-stakes races (two forks independently auditing/writing the same
+file for `build-cmake-tests`; a concurrent `git add`+`commit` sweeping an unrelated staged file into
+the wrong commit's history) but no data loss or scope violation — all commits remained strictly
+`audit/**/*.md`. When resuming this audit, don't assume "no git" prompt instructions will be honored;
+re-verify via `git log`/disk-based reconciliation after dispatching any parallel fork batch.
 
 ### Direct-audit backend work: ALL 16 OF 16 BACKEND SHARDS FULLY AUDITED — MILESTONE COMPLETE
 
