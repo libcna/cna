@@ -131,4 +131,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_BasicEffect_Combined COMMAND cna_test_opengl1_basiceffect_combined
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 5: ARB_texture_cube_map cube maps + EnvironmentMapEffect's fixed-
+    # function reflection-mapping subset (OPENGL1-specific -- see the test file's own header for
+    # why Fresnel/specular are deliberately out of scope for a fixed-function-only backend).
+    cna_opengl1_test(cna_test_opengl1_environmentmapeffect
+                      examples/opengl1_environmentmapeffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_EnvironmentMapEffect COMMAND cna_test_opengl1_environmentmapeffect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

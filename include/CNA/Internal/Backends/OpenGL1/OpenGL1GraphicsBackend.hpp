@@ -33,6 +33,13 @@ public: explicit OpenGL1TextureBackend(const ImageData&); ~OpenGL1TextureBackend
  unsigned int Id()const{return id_;}
 private:unsigned int id_=0;int width_=0,height_=0;
 };
+class OpenGL1TextureCubeBackend final : public ITextureCubeBackend {
+public: OpenGL1TextureCubeBackend(int size,bool mipMap,int surfaceFormat); ~OpenGL1TextureCubeBackend() override;
+ void SetData(int face,int level,int x,int y,int w,int h,const void*data,int dataLength) override;
+ void GetData(int face,int level,int x,int y,int w,int h,void*data,int dataLength) const override;
+ void BindGL()const override;
+private:unsigned int id_=0;int size_=0;
+};
 class OpenGL1SpriteBatchBackend final : public ISpriteBatchBackend {
 public: explicit OpenGL1SpriteBatchBackend(class OpenGL1GraphicsBackend& o):owner_(o){}
  void Begin()override;void End()override;void SetTransformMatrix(const Matrix& m)override{transform_=m;}
@@ -49,6 +56,7 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  SDL_Window* GetWindowInternal()const override{return window_;} SDL_Renderer* GetRendererInternal()const override{return nullptr;}
  std::unique_ptr<ITextureBackend>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchBackend>CreateSpriteBatch()override;
  std::unique_ptr<IRenderTargetBackend>CreateRenderTarget2D(int,int,int,bool,bool,int)override;void SetRenderTarget2D(IRenderTargetBackend*)override;
+ std::unique_ptr<ITextureCubeBackend>CreateTextureCube(int,bool,int)override;
  void ApplyBlendState(int,int,int,int,int,int)override;void ApplyDepthStencilState(bool,bool,int,bool,int,int,int,int,int,int,int,bool,int,int,int,int)override;
  void ApplyRasterizerState(int,int,bool,float,float)override;void ApplySamplerState(int,int,int,int,int)override;void SetBlendFactor(float,float,float,float)override;void SetReferenceStencil(int)override;
  void SetScissorRect(int,int,int,int)override;void SetViewport(int,int,int,int,float,float)override;

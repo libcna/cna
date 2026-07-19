@@ -42,6 +42,23 @@ void OpenGL1IndexBufferBackend::SetData16(const void*d,int c){i32_=false;count_=
 void OpenGL1IndexBufferBackend::SetData32(const void*d,int c){i32_=true;count_=c;data_.resize((size_t)c*4);if(d&&c)std::memcpy(data_.data(),d,data_.size());}
 OpenGL1TextureBackend::OpenGL1TextureBackend(const ImageData&d):width_(d.width),height_(d.height){glGenTextures(1,&id_);glBindTexture(GL_TEXTURE_2D,id_);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,width_,height_,0,GL_RGBA,GL_UNSIGNED_BYTE,d.pixels.empty()?nullptr:d.pixels.data());}
 OpenGL1TextureBackend::~OpenGL1TextureBackend(){if(id_)glDeleteTextures(1,&id_);}void OpenGL1TextureBackend::BindGL()const{glBindTexture(GL_TEXTURE_2D,id_);}void OpenGL1TextureBackend::UpdatePixels(const uint8_t*p,int stride){if(!p)return;glBindTexture(GL_TEXTURE_2D,id_);glPixelStorei(GL_UNPACK_ALIGNMENT,1);if(stride==width_*4)glTexSubImage2D(GL_TEXTURE_2D,0,0,0,width_,height_,GL_RGBA,GL_UNSIGNED_BYTE,p);else for(int y=0;y<height_;++y)glTexSubImage2D(GL_TEXTURE_2D,0,0,y,width_,1,GL_RGBA,GL_UNSIGNED_BYTE,p+y*stride);}void OpenGL1TextureBackend::UpdatePixelsLevel(int level,const uint8_t*p,int w,int h){glBindTexture(GL_TEXTURE_2D,id_);glTexImage2D(GL_TEXTURE_2D,level,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,p);}
+// plan_opengl1.md phase 5: ARB_texture_cube_map/core-1.3 cube map backend for EnvironmentMapEffect.
+// GL_TEXTURE_CUBE_MAP_POSITIVE_X..NEGATIVE_Z are consecutive enum values in exactly
+// Microsoft::Xna::Framework::Graphics::CubeMapFace's own declaration order (PositiveX=0 ..
+// NegativeZ=5, same convention EasyGLTextureCubeBackend's kCubeFaceTargets table already relies
+// on), so face->target is a plain offset, no lookup table needed. Every mip level is
+// pre-allocated with a defined (if empty) image up front -- same reasoning as
+// OpenGL1RenderTargetBackend/EasyGLTextureCubeBackend's own comments: glTexSubImage2D (used by
+// SetData) requires the target level to already have a defined image, so skipping this loop
+// would silently break SetData(level>0,...).
+OpenGL1TextureCubeBackend::OpenGL1TextureCubeBackend(int size,bool mipMap,int /*surfaceFormat*/):size_(size){glGenTextures(1,&id_);glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levels=1;if(mipMap){int sz=size;while(sz>1){sz/=2;levels++;}}for(int face=0;face<6;++face){int levelSize=size;for(int lvl=0;lvl<levels;++lvl){glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,lvl,GL_RGBA,levelSize,levelSize,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);levelSize=std::max(1,levelSize/2);}}glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_R,GL_CLAMP_TO_EDGE);}
+OpenGL1TextureCubeBackend::~OpenGL1TextureCubeBackend(){if(id_)glDeleteTextures(1,&id_);}
+void OpenGL1TextureCubeBackend::BindGL()const{glBindTexture(GL_TEXTURE_CUBE_MAP,id_);}
+void OpenGL1TextureCubeBackend::SetData(int face,int level,int x,int y,int w,int h,const void*data,int /*dataLength*/){if(face<0||face>=6||!data)return;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,x,y,w,h,GL_RGBA,GL_UNSIGNED_BYTE,data);}
+// Desktop GL (unlike EasyGL's GLES3 target) has glGetTexImage, but it always reads the FULL
+// face/level image -- no sub-rectangle readback exists at the GL API level -- so the requested
+// [x,y,w,h] box is copied out of a full-image temporary rather than read directly.
+void OpenGL1TextureCubeBackend::GetData(int face,int level,int x,int y,int w,int h,void*data,int /*dataLength*/)const{if(face<0||face>=6||!data)return;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levelSize=size_;for(int i=0;i<level;i++)levelSize=std::max(1,levelSize/2);std::vector<uint8_t>full((size_t)levelSize*levelSize*4);glPixelStorei(GL_PACK_ALIGNMENT,1);glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,GL_RGBA,GL_UNSIGNED_BYTE,full.data());uint8_t*dest=static_cast<uint8_t*>(data);for(int row=0;row<h;++row)std::memcpy(dest+(size_t)row*w*4,full.data()+((size_t)(y+row)*levelSize+x)*4,(size_t)w*4);}
 OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();
 std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.versionMinor
  <<"; framebuffer object: "<<(caps_.framebufferObject?"yes":"no")
@@ -55,6 +72,7 @@ OpenGL1GraphicsBackend::~OpenGL1GraphicsBackend(){IGraphicsBackend::UnregisterFo
 void OpenGL1GraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t*pixels){int W,H;GetViewportSize(W,H);glReadBuffer(GL_BACK);glPixelStorei(GL_PACK_ALIGNMENT,1);const int glY=H-y-h;glReadPixels(x,glY,w,h,GL_RGBA,GL_UNSIGNED_BYTE,pixels);const int rowBytes=w*4;std::vector<uint8_t>tmp(rowBytes);for(int i=0;i<h/2;++i){uint8_t*top=pixels+i*rowBytes;uint8_t*bot=pixels+(h-1-i)*rowBytes;std::copy(top,top+rowBytes,tmp.data());std::copy(bot,bot+rowBytes,top);std::copy(tmp.begin(),tmp.end(),bot);}}
 std::unique_ptr<ITextureBackend>OpenGL1GraphicsBackend::CreateTexture(const ImageData&d){return std::make_unique<OpenGL1TextureBackend>(d);}std::unique_ptr<ISpriteBatchBackend>OpenGL1GraphicsBackend::CreateSpriteBatch(){return std::make_unique<OpenGL1SpriteBatchBackend>(*this);}std::unique_ptr<IVertexBufferBackend>OpenGL1GraphicsBackend::CreateVertexBuffer(int c){return std::make_unique<OpenGL1VertexBufferBackend>(c);}std::unique_ptr<IIndexBufferBackend>OpenGL1GraphicsBackend::CreateIndexBuffer16(int){return std::make_unique<OpenGL1IndexBufferBackend>(false);}std::unique_ptr<IIndexBufferBackend>OpenGL1GraphicsBackend::CreateIndexBuffer32(int){return std::make_unique<OpenGL1IndexBufferBackend>(true);}
 std::unique_ptr<IRenderTargetBackend>OpenGL1GraphicsBackend::CreateRenderTarget2D(int w,int h,int depthFormat,bool,bool,int){if(!caps_.framebufferObject)return nullptr;try{return std::make_unique<OpenGL1RenderTargetBackend>(w,h,depthFormat);}catch(const std::exception&){return nullptr;}}
+std::unique_ptr<ITextureCubeBackend>OpenGL1GraphicsBackend::CreateTextureCube(int size,bool mipMap,int surfaceFormat){if(!caps_.textureCubeMap)return nullptr;return std::make_unique<OpenGL1TextureCubeBackend>(size,mipMap,surfaceFormat);}
 void OpenGL1GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend*rt){if(currentRt_&&currentRt_!=rt)currentRt_->UnbindAsRenderTarget();currentRt_=rt;if(rt)rt->BindAsRenderTarget();}
 void OpenGL1GraphicsBackend::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1GraphicsBackend::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1GraphicsBackend::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1GraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepth(float d){glClearDepth(d);glClear(GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearStencil(int s){glClearStencil(s);glClear(GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);glClear(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
 void OpenGL1GraphicsBackend::ApplyBlendState(int cs,int,int cd,int,int,int){glEnable(GL_BLEND);glBlendFunc(BlendF(cs),BlendF(cd));}void OpenGL1GraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int df,bool se,int sf,int sp,int sfa,int sdf,int sm,int sw,int ref,bool,int,int,int,int){de?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);glDepthMask(dw);glDepthFunc(Cmp(df));se?glEnable(GL_STENCIL_TEST):glDisable(GL_STENCIL_TEST);stencilRef_=ref;glStencilFunc(Cmp(sf),ref,(GLuint)sm);glStencilMask((GLuint)sw);glStencilOp(StencilOp(sfa),StencilOp(sdf),StencilOp(sp));}
@@ -62,6 +80,18 @@ void OpenGL1GraphicsBackend::ApplyRasterizerState(int c,int f,bool sc,float db,f
 void OpenGL1GraphicsBackend::SetupMatrices(const Matrix&w,const Matrix&v,const Matrix&p){float a[16];glMatrixMode(GL_PROJECTION);Mat(p,a);glLoadMatrixf(a);glMatrixMode(GL_MODELVIEW);Mat(v,a);glLoadMatrixf(a);Mat(w,a);glMultMatrixf(a);}
 void OpenGL1GraphicsBackend::DrawInternal(const OpenGL1VertexBufferBackend&vb,const OpenGL1IndexBufferBackend*ib,PrimitiveType prim,int pc,const GpuDrawParams*params){const auto&s=vb.Data();const size_t st=vb.Stride();if(st<12||s.empty())return;bool tex=params&&params->texture0&&(st==20||st==24||st==32);bool normal=(st==32);
 bool dual=tex&&params->dualTexture&&params->texture1&&glActiveTexture_&&glMultiTexCoord2f_;
+// plan_opengl1.md phase 5: EnvironmentMapEffect's fixed-function reflection-mapping subset.
+// Needs a normal (stride 32), a real ARB_texture_cube_map cube texture and a second texture
+// unit (the cube map rides unit 1, exactly like DualTextureEffect's unit 1 -- the two are
+// mutually exclusive per draw, XNA has no effect that is both dual-textured and env-mapped).
+bool envMap=params&&params->envMapping&&params->envMap&&normal&&caps_.textureCubeMap&&glActiveTexture_;
+// Unit 1 previously left in GL_TEXTURE_CUBE_MAP/GL_TEXTURE_GEN_* state by an earlier envMap draw
+// would otherwise silently corrupt a later DualTextureEffect or plain textured draw (per-unit
+// enables persist across draw calls here -- there is no glPushAttrib/glPopAttrib bracketing
+// DrawInternal the way SpriteBatch::Begin()/End() has). Reset unconditionally whenever this
+// draw is not itself doing env mapping.
+auto resetUnit1EnvGen=[&](){if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_GEN_S);glDisable(GL_TEXTURE_GEN_T);glDisable(GL_TEXTURE_GEN_R);if(caps_.textureCubeMap)glDisable(GL_TEXTURE_CUBE_MAP);glActiveTexture_(GL_TEXTURE0);}};
+if(tex||envMap){
 if(tex){glEnable(GL_TEXTURE_2D);params->texture0->BindGL();
 // Render targets sample bottom-up relative to every CPU-uploaded texture's top-down convention
 // (see OpenGL1SpriteBatchBackend::Draw's identical fix/comment) -- flip V via the legacy texture
@@ -69,6 +99,7 @@ if(tex){glEnable(GL_TEXTURE_2D);params->texture0->BindGL();
 glMatrixMode(GL_TEXTURE);
 if(dynamic_cast<const IRenderTargetBackend*>(params->texture0)){glLoadIdentity();glScalef(1.0f,-1.0f,1.0f);glTranslatef(0.0f,-1.0f,0.0f);}else glLoadIdentity();
 glMatrixMode(GL_MODELVIEW);
+}else glDisable(GL_TEXTURE_2D);
 // plan_opengl1.md phase 3: DualTextureEffect's fixed-function equivalent, matching this
 // project's own shader backends' "base.rgb*=2.0; FragColor=base*texture(uTexture2,vUV)*
 // uDiffuseColor" formula exactly via GL_COMBINE texture environment chaining -- unit 0
@@ -76,12 +107,45 @@ glMatrixMode(GL_MODELVIEW);
 // (the classic "modulate2x" lightmap headroom XNA's own DualTextureEffect.fx uses), then unit 1
 // modulates that result (GL_PREVIOUS) by texture1. Both units sample the SAME per-vertex UV
 // (XNA's own DualTextureEffect has no second texcoord channel either -- see FillGpuDrawParams).
-if(dual){glActiveTexture_(GL_TEXTURE1);glEnable(GL_TEXTURE_2D);params->texture1->BindGL();
+if(dual){resetUnit1EnvGen();glActiveTexture_(GL_TEXTURE1);glEnable(GL_TEXTURE_2D);params->texture1->BindGL();
 glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_COMBINE);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_RGB,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_RGB,GL_PREVIOUS);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_RGB,GL_TEXTURE);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_ALPHA,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_ALPHA,GL_PREVIOUS);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_ALPHA,GL_TEXTURE);
 glActiveTexture_(GL_TEXTURE0);glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_COMBINE);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_RGB,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_RGB,GL_TEXTURE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_RGB,GL_PRIMARY_COLOR);glTexEnvf(GL_TEXTURE_ENV,GL_RGB_SCALE,2.0f);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_ALPHA,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_ALPHA,GL_TEXTURE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_ALPHA,GL_PRIMARY_COLOR);glTexEnvf(GL_TEXTURE_ENV,GL_ALPHA_SCALE,1.0f);
-}else{glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_MODULATE);if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_2D);glActiveTexture_(GL_TEXTURE0);}}
-}else glDisable(GL_TEXTURE_2D);if(params&&params->lightingEnabled&&normal){glEnable(GL_LIGHTING);glEnable(GL_LIGHT0);float amb[4]={params->ambientColor[0],params->ambientColor[1],params->ambientColor[2],1};float dif[4]={params->light0Diffuse[0],params->light0Diffuse[1],params->light0Diffuse[2],1};float pos[4]={-params->light0Dir[0],-params->light0Dir[1],-params->light0Dir[2],0};glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);glLightfv(GL_LIGHT0,GL_POSITION,pos);glEnable(GL_COLOR_MATERIAL);glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE);}else glDisable(GL_LIGHTING);if(params&&params->fogEnabled){glEnable(GL_FOG);float fc[4]={params->fogColor[0],params->fogColor[1],params->fogColor[2],1};glFogi(GL_FOG_MODE,GL_LINEAR);glFogfv(GL_FOG_COLOR,fc);glFogf(GL_FOG_START,params->fogStart);glFogf(GL_FOG_END,params->fogEnd);}else glDisable(GL_FOG);if(params&&params->alphaTest[3]<0){glEnable(GL_ALPHA_TEST);glAlphaFunc(GL_GEQUAL,params->alphaTest[0]);}else glDisable(GL_ALPHA_TEST);
- auto emitTexCoord=[&](float u,float v){if(dual){glMultiTexCoord2f_(GL_TEXTURE0,u,v);glMultiTexCoord2f_(GL_TEXTURE1,u,v);}else glTexCoord2f(u,v);};
+}else if(envMap){
+// Unit 1 samples the cube map via GL_REFLECTION_MAP texture-coordinate generation off the
+// eye-space normal/vertex (hence GL_NORMALIZE below, since a non-uniform World scale can leave
+// normals non-unit-length) and GL_INTERPOLATEs it against unit 0's result (the lit/textured
+// base color, or the bare vertex-lit primary color when there is no diffuse Texture) using
+// GL_CONSTANT.a = EnvironmentMapAmount -- i.e. exactly FNA's own real
+// `mix(baseColor,envColor,Amount)` blend (docs/environmentmapeffect-support.md Task 394).
+// Deliberately NOT attempted: Fresnel edge-weighting and EnvironmentMapSpecular's alpha-scaled
+// specular term are both inherently per-pixel/view-angle-dependent and cannot be expressed with
+// fixed-function texture combiners -- an honest, documented limitation (plan_opengl1.md), not a
+// silent wrong answer. OPENGL1 always behaves as if FresnelEnabled=false/EnvironmentMapSpecular=0.
+glActiveTexture_(GL_TEXTURE1);glEnable(GL_TEXTURE_CUBE_MAP);glDisable(GL_TEXTURE_2D);params->envMap->BindGL();
+glTexGeni(GL_S,GL_TEXTURE_GEN_MODE,GL_REFLECTION_MAP);glTexGeni(GL_T,GL_TEXTURE_GEN_MODE,GL_REFLECTION_MAP);glTexGeni(GL_R,GL_TEXTURE_GEN_MODE,GL_REFLECTION_MAP);
+glEnable(GL_TEXTURE_GEN_S);glEnable(GL_TEXTURE_GEN_T);glEnable(GL_TEXTURE_GEN_R);
+float envConst[4]={0,0,0,params->envMapAmount};
+glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_COMBINE);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_RGB,GL_INTERPOLATE);
+glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_RGB,GL_TEXTURE);glTexEnvi(GL_TEXTURE_ENV,GL_OPERAND0_RGB,GL_SRC_COLOR);
+glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_RGB,GL_PREVIOUS);glTexEnvi(GL_TEXTURE_ENV,GL_OPERAND1_RGB,GL_SRC_COLOR);
+glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE2_RGB,GL_CONSTANT);glTexEnvi(GL_TEXTURE_ENV,GL_OPERAND2_RGB,GL_SRC_ALPHA);
+glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_ALPHA,GL_REPLACE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_ALPHA,GL_PREVIOUS);glTexEnvi(GL_TEXTURE_ENV,GL_OPERAND0_ALPHA,GL_SRC_ALPHA);
+glTexEnvfv(GL_TEXTURE_ENV,GL_TEXTURE_ENV_COLOR,envConst);
+glActiveTexture_(GL_TEXTURE0);glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_MODULATE);
+}else{resetUnit1EnvGen();glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_MODULATE);if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_2D);glActiveTexture_(GL_TEXTURE0);}}
+}else{glDisable(GL_TEXTURE_2D);resetUnit1EnvGen();if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_2D);glActiveTexture_(GL_TEXTURE0);}}
+normal?glEnable(GL_NORMALIZE):glDisable(GL_NORMALIZE);
+if(params&&params->lightingEnabled&&normal){glEnable(GL_LIGHTING);glEnable(GL_LIGHT0);float amb[4]={params->ambientColor[0],params->ambientColor[1],params->ambientColor[2],1};float dif[4]={params->light0Diffuse[0],params->light0Diffuse[1],params->light0Diffuse[2],1};float pos[4]={-params->light0Dir[0],-params->light0Dir[1],-params->light0Dir[2],0};glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);glLightfv(GL_LIGHT0,GL_POSITION,pos);glEnable(GL_COLOR_MATERIAL);glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE);
+// plan_opengl1.md phase 5 finding: the lit (stride 32) path never set GL_EMISSION, so
+// EnvironmentMapEffect's EmissiveColor/AmbientLightColor contribution (pre-combined into
+// GpuDrawParams::emissiveColor by FillGpuDrawParams -- EnvironmentMapEffect does not populate
+// ambientColor at all, unlike BasicEffect) was silently dropped entirely. Real XNA/GL fixed-
+// function lighting sums material emission flatly regardless of any light; also benefits
+// BasicEffect's own EmissiveColor for the same lit path.
+float emis[4]={params->emissiveColor[0],params->emissiveColor[1],params->emissiveColor[2],0};
+glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,emis);
+}else glDisable(GL_LIGHTING);if(params&&params->fogEnabled){glEnable(GL_FOG);float fc[4]={params->fogColor[0],params->fogColor[1],params->fogColor[2],1};glFogi(GL_FOG_MODE,GL_LINEAR);glFogfv(GL_FOG_COLOR,fc);glFogf(GL_FOG_START,params->fogStart);glFogf(GL_FOG_END,params->fogEnd);}else glDisable(GL_FOG);if(params&&params->alphaTest[3]<0){glEnable(GL_ALPHA_TEST);glAlphaFunc(GL_GEQUAL,params->alphaTest[0]);}else glDisable(GL_ALPHA_TEST);
+ auto emitTexCoord=[&](float u,float v){if(dual){glMultiTexCoord2f_(GL_TEXTURE0,u,v);glMultiTexCoord2f_(GL_TEXTURE1,u,v);}else if(envMap){glMultiTexCoord2f_(GL_TEXTURE0,u,v);}else glTexCoord2f(u,v);};
  // plan_opengl1.md phase 4: matches FNA's real BasicEffect.fx combine -- when VertexColorEnabled,
  // the vertex color is multiplied by the material DiffuseColor (Task/GpuDrawParams convention:
  // diffuseColor already carries DiffuseColor*Alpha), not used alone. Stride 20/32 already applied
