@@ -60,7 +60,7 @@ The CMake/link-flag infrastructure below is real, non-trivial engineering — no
   -sNO_DISABLE_EXCEPTION_CATCHING=1`, applied before `sharp-runtime` is added) — Emscripten disables
   exception unwinding by default, but CNA's `System::Exception` hierarchy and every `EXPECT_THROW`
   test in this codebase depend on real unwinding working end-to-end.
-- **`cna_house3d_demo`** (the one real 3D EasyGL/Vulkan demo, gated to `EASYGL OR VULKAN`) pins
+- **`cna_house3d_demo`** (the one real 3D EasyGL/Vulkan demo, gated to `OPENGLES OR OPENGL33 OR WEBGL1 OR WEBGL2 OR VULKAN`) pins
   `-sMIN_WEBGL_VERSION=2`/`-sMAX_WEBGL_VERSION=2` explicitly — the only target in the whole build
   that does. `cna_demo_2d`/`cna_demo_sound` have Emscripten link options (`.html` output suffix,
   `-sALLOW_MEMORY_GROWTH=1`, `--preload-file` for their `Content` directories, per-demo memory
@@ -104,7 +104,7 @@ in this project**:
 
 - **No geometry or tessellation shaders.** GLES 3.0/WebGL 2 has neither stage. CNA's `Effect`/shader
   pipeline does not currently use either, so this is likely a non-issue in practice, but any future
-  shader work must not assume desktop-GL-only stages are available when `EASYGL` is targeting
+  shader work must not assume desktop-GL-only stages are available when the EasyGL implementation is targeting
   Emscripten.
 - **Anisotropic filtering requires the `EXT_texture_filter_anisotropic` WebGL extension**, which is
   not guaranteed present on every browser/GPU combination (unlike desktop GL, where it is

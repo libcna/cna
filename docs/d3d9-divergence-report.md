@@ -181,7 +181,7 @@ rendering differences with GPU/driver-stack differences, exactly the confound th
 ### What was built
 
 - `CMakeLists.txt`: one new `cna_easygl_test(cna_oracle_render_easygl tools/xna-oracle/CnaOracleRender.cpp)`
-  call inside the existing `CNA_GRAPHICS_BACKEND STREQUAL "EASYGL"` test section (same section that
+  call inside the existing `CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES"` test section (same section that
   already builds `cna_diag_easygl`), building the exact same source file as a plain native
   executable — no Wine, no cross-compilation, not registered as a CTest. The existing D3D9
   `cna_oracle_render` registration (`cna_d3d9_test(...)`, D3D9 CTest section) is untouched.

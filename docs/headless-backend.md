@@ -19,7 +19,7 @@ and `../sharp-runtime` checkout every other backend already requires.
 
 ## What this backend is for (and isn't)
 
-Every other CNA backend (`SDL_RENDERER`/`EASYGL`/`BGFX`/`VULKAN`/`WEBGPU`) needs a real window and
+Every other CNA backend (`SDL_RENDERER`/`OPENGLES`/`BGFX`/`VULKAN`/`WEBGPU`) needs a real window and
 a real GPU context to run at all. That makes them unsuitable for fast, CI-friendly testing of game
 *logic* — a CI container with no display server can't run them, and even where a virtual display
 (Xvfb) is available, spinning one up per test run is slow compared to what a logic test actually

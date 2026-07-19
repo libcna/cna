@@ -52,7 +52,7 @@ specifically want a CNA extension your original XNA code never used.
 ## Choosing a backend
 
 CNA has 4 pluggable graphics backends, chosen at CMake configure time
-(`-DCNA_GRAPHICS_BACKEND=<SDL_RENDERER|EASYGL|VULKAN|BGFX>`). Full per-feature detail is in
+(`-DCNA_GRAPHICS_BACKEND=<SDL_RENDERER|OPENGLES|OPENGL33|WEBGL1|WEBGL2|VULKAN|BGFX>`). Full per-feature detail is in
 `docs/graphics-backend-feature-matrix.md`; the practical summary:
 
 - **Your game is 2D only** (SpriteBatch/SpriteFont, no 3D models or stock Effects): any backend
@@ -60,8 +60,9 @@ CNA has 4 pluggable graphics backends, chosen at CMake configure time
   2D path (`docs/sdl-renderer-2d-completeness.md`). It cannot do 3D rendering at all — any 3D call
   throws `std::runtime_error` by design, this is not a bug to work around.
 - **Your game uses 3D** (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
-  `SkinnedEffect`, `Model`, render targets): use **EasyGL** — it is the most mature 3D backend,
-  with the fewest open gaps and the most complete pixel-test coverage.
+  `SkinnedEffect`, `Model`, render targets): use **OPENGLES** (or **WEBGL2** under Emscripten) —
+  internally implemented by EasyGL, it is the most mature 3D backend, with the fewest open gaps
+  and the most complete pixel-test coverage.
 - **Vulkan** and **Bgfx** both have working 3D pipelines (core MVP/lighting/texture/fog is
   pixel-verified on all 3), but each has its own real, currently-open gaps — see the next section
   before picking one over EasyGL.
@@ -308,11 +309,11 @@ knowledge.
 ### Picking/overriding the backend at configure time
 
 ```bash
-cmake -S . -B build -DCNA_GRAPHICS_BACKEND=EASYGL      # or SDL_RENDERER / VULKAN / BGFX
+cmake -S . -B build -DCNA_GRAPHICS_BACKEND=OPENGLES      # or SDL_RENDERER / VULKAN / BGFX
 cmake --build build --target CNA CnaTests
 ```
 
-`CNA_GRAPHICS_BACKEND` defaults to `EASYGL` on Linux/Emscripten, `SDL_RENDERER` elsewhere. See the
+`CNA_GRAPHICS_BACKEND` defaults to `OPENGLES` on Linux/Emscripten, `SDL_RENDERER` elsewhere. See the
 top-level `README.md` §9 for the full per-platform build matrix (Windows/MinGW cross-compile
 included) — not repeated here.
 
