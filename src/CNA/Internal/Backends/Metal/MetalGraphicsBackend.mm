@@ -992,6 +992,10 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
 // same reason -- C++ allows this: a member function's body has complete-class access to sibling
 // members regardless of textual declaration/definition order.
 class MetalRenderTargetBackend;
+// plan_metal.md METAL-109: same forward-declaration reasoning as MetalRenderTargetBackend above,
+// for the cube-map analog -- Impl needs a non-owning pointer to whichever RenderTargetCube face is
+// currently bound.
+class MetalRenderTargetCubeBackend;
 
 // plan_metal.md Phase 10: a previously-rendered-to RenderTarget2D used as an ordinary texture in a
 // later draw (post-processing, portals, mirrors, etc.) is a real, common XNA pattern --
@@ -1005,6 +1009,14 @@ class MetalRenderTargetBackend;
 // (needs MetalSpriteBatch, defined before MetalRenderTargetBackend, to be able to call it), defined
 // out-of-line after MetalRenderTargetBackend for the same reason as resolveActiveAttachments above.
 static id<MTLTexture> nativeTextureFor(const ITextureBackend* t);
+
+// plan_metal.md METAL-109/METAL-64ff: same reasoning as nativeTextureFor() above, for the cube
+// case -- EnvironmentMapEffect's envMap slot is an ITextureCubeBackend*, and a RenderTargetCube
+// rendered into and then sampled as a reflection source (a very common real-time-reflection XNA
+// pattern -- arguably RenderTargetCube's single most common real use) must resolve through here
+// too, or the existing bare `dynamic_cast<const MetalTextureCube*>` at the EnvMap32 draw site would
+// silently fail for it exactly the way the 2D case did before nativeTextureFor() existed.
+static id<MTLTexture> nativeCubeTextureFor(const ITextureCubeBackend* t);
 
 struct MetalGraphicsBackend::Impl
 {
@@ -1059,6 +1071,14 @@ struct MetalGraphicsBackend::Impl
     // backend's convention -- MetalRenderTargetBackend's own destructor clears this pointer if it
     // is destroyed while still bound, so it never dangles.
     MetalRenderTargetBackend* currentRenderTarget=nullptr;
+
+    // plan_metal.md METAL-109/110: same non-owning-pointer convention as currentRenderTarget above,
+    // for whichever face of whichever RenderTargetCube is currently bound (mutually exclusive with
+    // currentRenderTarget -- SetRenderTarget2D()/SetRenderTargetCubeFace() each cross-unbind the
+    // other before binding, matching EasyGLGraphicsBackend::SetRenderTarget2D/SetRenderTargetCubeFace's
+    // own established real contract exactly, not an invented convention).
+    MetalRenderTargetCubeBackend* currentRenderTargetCube=nullptr;
+    NSUInteger currentRenderTargetCubeFace=0;
 
     // plan_metal.md METAL-87: fallback textures for PbrEffect's 4 optional maps (normalMap/
     // metallicRoughnessMap/emissiveMap/occlusionMap) when left unbound, mirroring
@@ -1115,7 +1135,11 @@ struct MetalGraphicsBackend::Impl
     // refactor -- preserved exactly as each caller's own choice below, not unified into one
     // behavior (which would have been a real, unintended regression for whichever caller didn't
     // already do that).
-    bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut);
+    // plan_metal.md METAL-109/110: sliceOut is always 0 except when a RenderTargetCube face is the
+    // active target (MTLRenderPassColorAttachmentDescriptor.slice selects which cube face/array
+    // layer of colorOut a render pass actually writes to; 0 is simply ignored/inert for a plain 2D
+    // texture, so callers can set it unconditionally with no branching of their own).
+    bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut);
 
     // Ends whatever encoder/command-buffer is currently active -- shared by endFrame() and
     // MetalRenderTargetBackend's own Bind/UnbindAsRenderTarget() (Metal render passes are
@@ -1150,11 +1174,11 @@ struct MetalGraphicsBackend::Impl
     void ensureFrame()
     {
         if (encoder) return;
-        id<MTLTexture> colorTex=nil, depthTex=nil;
-        if (!resolveActiveAttachments(colorTex, depthTex)) throw std::runtime_error("Metal: CAMetalLayer returned no drawable");
+        id<MTLTexture> colorTex=nil, depthTex=nil; NSUInteger slice=0;
+        if (!resolveActiveAttachments(colorTex, depthTex, slice)) throw std::runtime_error("Metal: CAMetalLayer returned no drawable");
         command=[queue commandBuffer]; [command retain];
         MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
-        rp.colorAttachments[0].texture=colorTex;
+        rp.colorAttachments[0].texture=colorTex; rp.colorAttachments[0].slice=slice;
         rp.colorAttachments[0].loadAction=MTLLoadActionLoad; rp.colorAttachments[0].storeAction=MTLStoreActionStore;
         rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
         rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
@@ -1174,11 +1198,11 @@ struct MetalGraphicsBackend::Impl
     void clear(bool color,float r,float g,float b,float a,bool depth,float dv,bool stencil,int sv)
     {
         endActiveEncoding(false); // mid-frame boundary only -- see endActiveEncoding()'s own METAL-180 note.
-        id<MTLTexture> colorTex=nil, depthTex=nil;
-        if (!resolveActiveAttachments(colorTex, depthTex)) return;
+        id<MTLTexture> colorTex=nil, depthTex=nil; NSUInteger slice=0;
+        if (!resolveActiveAttachments(colorTex, depthTex, slice)) return;
         command=[queue commandBuffer]; [command retain];
         MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
-        rp.colorAttachments[0].texture=colorTex; rp.colorAttachments[0].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[0].storeAction=MTLStoreActionStore; rp.colorAttachments[0].clearColor=MTLClearColorMake(r,g,b,a);
+        rp.colorAttachments[0].texture=colorTex; rp.colorAttachments[0].slice=slice; rp.colorAttachments[0].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[0].storeAction=MTLStoreActionStore; rp.colorAttachments[0].clearColor=MTLClearColorMake(r,g,b,a);
         rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
         rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
         rp.visibilityResultBuffer=visibilityBuffer;
@@ -1544,11 +1568,86 @@ private:
     id<MTLTexture> depthTexture_=nil;
 };
 
-bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut)
+// plan_metal.md METAL-109/110/111: RenderTargetCube backend. A single MTLTextureTypeCube color
+// texture (6 slices) plus ONE shared 2D depth texture reused across every face -- matches
+// EasyGLRenderTargetCubeBackend's own already-tested precedent exactly (its own comment: "single
+// depth renderbuffer regardless of face (since only one face is ever rendered into at a time) --
+// matches FNA's RenderTargetCube.cs, which also allocates a single glColorBuffer regardless of
+// face"), not a Metal-specific shortcut. Per-face binding uses
+// MTLRenderPassColorAttachmentDescriptor.slice (see resolveActiveAttachments() below) rather than
+// 6 separate 2D texture views, mirroring MetalTextureCube's own existing SetData(face,...) ->
+// replaceRegion:...slice:face convention (face ordinals already match Metal's own cube slice
+// order, see MetalTextureCube's own comment on this).
+class MetalRenderTargetCubeBackend final : public IRenderTargetCubeBackend
 {
+public:
+    MetalRenderTargetCubeBackend(MetalGraphicsBackend::Impl& owner, int size, bool mipMap) : owner_(owner), size_(size), mipMap_(mipMap)
+    {
+        MTLTextureDescriptor* cd=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm size:(NSUInteger)size mipmapped:mipMap];
+        cd.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
+        colorTexture_=[owner_.device newTextureWithDescriptor:cd];
+        if(!colorTexture_) throw std::runtime_error("Metal: failed to create RenderTargetCube color texture");
+        MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)size height:(NSUInteger)size mipmapped:NO];
+        dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
+        depthTexture_=[owner_.device newTextureWithDescriptor:dd];
+        if(!depthTexture_) throw std::runtime_error("Metal: failed to create RenderTargetCube depth texture");
+    }
+    ~MetalRenderTargetCubeBackend() override
+    {
+        // Same reasoning as MetalRenderTargetBackend's own destructor: end any still-active
+        // encoding referencing these textures before releasing them.
+        if (owner_.currentRenderTargetCube==this) { owner_.endActiveEncoding(false); owner_.currentRenderTargetCube=nullptr; }
+        [depthTexture_ release]; [colorTexture_ release];
+    }
+    int GetSize() const override { return size_; }
+    void BindAsRenderTargetFace(int face) override
+    {
+        owner_.endActiveEncoding(false); // mid-frame switch, never presents -- see METAL-180 note.
+        owner_.currentRenderTargetCube=this;
+        owner_.currentRenderTargetCubeFace=(NSUInteger)face;
+    }
+    void UnbindAsRenderTarget() override
+    {
+        if (owner_.currentRenderTargetCube==this) {
+            // plan_metal.md METAL-103 (cube analog): same unconditional mip-regeneration-on-unbind
+            // policy as MetalRenderTargetBackend's own, applied to the whole cube map at once (all
+            // 6 faces' mip chains regenerate together in one generateMipmapsForTexture: call --
+            // Metal's own documented behavior for a cube texture, matching
+            // EasyGLRenderTargetCubeBackend::UnbindAsRenderTarget's own single glGenerateMipmap
+            // call over the whole cube map, not a separate call per face).
+            if (mipMap_) {
+                if (owner_.encoder) { [owner_.encoder endEncoding]; [owner_.encoder release]; owner_.encoder=nil; }
+                if (!owner_.command) { owner_.command=[owner_.queue commandBuffer]; [owner_.command retain]; }
+                id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
+                [blit generateMipmapsForTexture:colorTexture_];
+                [blit endEncoding];
+            }
+            owner_.endActiveEncoding(false);
+            owner_.currentRenderTargetCube=nullptr;
+        }
+    }
+    id<MTLTexture> colorTexture() const { return colorTexture_; }
+    id<MTLTexture> depthTextureNative() const { return depthTexture_; }
+private:
+    MetalGraphicsBackend::Impl& owner_;
+    int size_;
+    bool mipMap_;
+    id<MTLTexture> colorTexture_=nil;
+    id<MTLTexture> depthTexture_=nil;
+};
+
+bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut)
+{
+    sliceOut = 0;
     if (currentRenderTarget) {
         colorOut = currentRenderTarget->colorTexture();
         depthOut = currentRenderTarget->depthTextureNative();
+        return true;
+    }
+    if (currentRenderTargetCube) {
+        colorOut = currentRenderTargetCube->colorTexture();
+        depthOut = currentRenderTargetCube->depthTextureNative();
+        sliceOut = currentRenderTargetCubeFace;
         return true;
     }
     if (!drawable) drawable=[layer nextDrawable];
@@ -1580,6 +1679,17 @@ MetalGraphicsBackend::Impl::Sprite2DTransform MetalGraphicsBackend::Impl::comput
         t.scaleY = -2.0f/dh; t.offsetY = 1.0f;
         return t;
     }
+    if (currentRenderTargetCube) {
+        // Same 1:1 reasoning as the RenderTarget2D branch above -- sprite drawing into a bound cube
+        // face (e.g. rendering a 2D overlay/skybox-adjacent element directly into a reflection
+        // probe face) uses that face's own size x size pixel space directly.
+        id<MTLTexture> rtColor = currentRenderTargetCube->colorTexture();
+        const float dw=(float)rtColor.width, dh=(float)rtColor.height;
+        if (dw<=0 || dh<=0) return t;
+        t.scaleX = 2.0f/dw; t.offsetX = -1.0f;
+        t.scaleY = -2.0f/dh; t.offsetY = 1.0f;
+        return t;
+    }
     const float dw=(float)drawable.texture.width, dh=(float)drawable.texture.height;
     if (dw<=0 || dh<=0) return t;
     LogicalViewport vp = computeLogicalViewport();
@@ -1596,6 +1706,14 @@ static id<MTLTexture> nativeTextureFor(const ITextureBackend* t)
     if (!t) return nil;
     if (auto* mt = dynamic_cast<const MetalTexture*>(t)) return mt->native();
     if (auto* rt = dynamic_cast<const MetalRenderTargetBackend*>(t)) return rt->colorTexture();
+    return nil;
+}
+
+static id<MTLTexture> nativeCubeTextureFor(const ITextureCubeBackend* t)
+{
+    if (!t) return nil;
+    if (auto* mt = dynamic_cast<const MetalTextureCube*>(t)) return mt->native();
+    if (auto* rt = dynamic_cast<const MetalRenderTargetCubeBackend*>(t)) return rt->colorTexture();
     return nil;
 }
 
@@ -1695,7 +1813,11 @@ void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixel
     // specifically about the backbuffer (RenderTarget2D's own readback is GetData(), METAL-131,
     // still open) -- so this throws a clear, honest error instead of the game restoring the
     // backbuffer implicitly or silently reading the wrong surface.
-    if (p.currentRenderTarget)
+    // plan_metal.md METAL-109: same guard, extended -- a bound RenderTargetCube face is exactly the
+    // same hazard as a bound RenderTarget2D (resolveActiveAttachments()'s cube branch never touches
+    // drawable either), found while re-reading this function against the newly-added cube branch
+    // rather than assuming the original RenderTarget2D-only guard still covered every case.
+    if (p.currentRenderTarget || p.currentRenderTargetCube)
         throw std::runtime_error("Metal: ReadBackbuffer requires the backbuffer to be the active render target (call SetRenderTarget2D(null) first)");
     p.ensureFrame();
     id<MTLTexture> src = p.drawable.texture;
@@ -1740,13 +1862,38 @@ std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2D
 {
     return std::make_unique<MetalRenderTargetBackend>(*impl_, w, h, mipMap);
 }
+// plan_metal.md METAL-109: always allocates depth32+stencil8 and ignores multiSampleCount, matching
+// CreateRenderTarget2D's own already-documented simplification exactly (METAL-101's own note) --
+// not a new, cube-specific gap.
+std::unique_ptr<IRenderTargetCubeBackend> MetalGraphicsBackend::CreateRenderTargetCube(int size,int /*depthFormat*/,bool mipMap,int /*multiSampleCount*/)
+{
+    return std::make_unique<MetalRenderTargetCubeBackend>(*impl_, size, mipMap);
+}
+// plan_metal.md METAL-109/110/111 (real bug fixed alongside RenderTargetCube's own addition): both
+// SetRenderTarget2D() and the new SetRenderTargetCubeFace() below must cross-unbind whichever OTHER
+// kind of render target (2D vs. cube) is currently active before binding a new one -- mirroring
+// EasyGLGraphicsBackend::SetRenderTarget2D/SetRenderTargetCubeFace's own real, already-tested
+// contract exactly (both cross-check `currentRt2D_`/`currentRtCube_` against each other). Without
+// this, switching directly from RenderTarget A to RenderTarget B (a normal XNA multi-pass pattern --
+// no intervening SetRenderTarget2D(null) call) would never call UnbindAsRenderTarget() on A, so A's
+// mip chain (METAL-103) would silently never regenerate. This gap was latent and harmless before
+// METAL-103 existed (nothing depended on UnbindAsRenderTarget() actually running) but became a real
+// correctness bug the moment mip generation started living there -- fixed here as part of the same
+// pass that made it observable, not left for a later phase to rediscover.
 void MetalGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
 {
-    if (rt) {
-        static_cast<MetalRenderTargetBackend*>(rt)->BindAsRenderTarget();
-    } else if (impl_->currentRenderTarget) {
-        impl_->currentRenderTarget->UnbindAsRenderTarget();
-    }
+    auto& p=*impl_;
+    if (p.currentRenderTarget && p.currentRenderTarget != rt) p.currentRenderTarget->UnbindAsRenderTarget();
+    if (p.currentRenderTargetCube) p.currentRenderTargetCube->UnbindAsRenderTarget();
+    if (rt) static_cast<MetalRenderTargetBackend*>(rt)->BindAsRenderTarget();
+}
+void MetalGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt,int face)
+{
+    if (!rt) { SetRenderTarget2D(nullptr); return; }
+    auto& p=*impl_;
+    if (p.currentRenderTarget) p.currentRenderTarget->UnbindAsRenderTarget();
+    if (p.currentRenderTargetCube && p.currentRenderTargetCube != rt) p.currentRenderTargetCube->UnbindAsRenderTarget();
+    static_cast<MetalRenderTargetCubeBackend*>(rt)->BindAsRenderTargetFace(face);
 }
 void MetalGraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalGraphicsBackend::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalGraphicsBackend::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalGraphicsBackend::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalGraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalGraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
 void MetalGraphicsBackend::SetDepthTestEnabled(bool e){impl_->depthEnabled=e;impl_->rebuildDepthState();} void MetalGraphicsBackend::SetBlendEnabled(bool e){impl_->blendEnabled=e;} void MetalGraphicsBackend::SetDepthWriteEnabled(bool e){impl_->depthWrite=e;impl_->rebuildDepthState();}
@@ -1993,9 +2140,12 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
         // plan_metal.md: same established null-envMap fallback gap as texture0/texture1 (leaves
         // whatever a prior draw last bound at unit 1) -- not a new class of gap, matches the
-        // existing DualTexture-null-Texture2 precedent exactly.
-        auto* mc=dynamic_cast<const MetalTextureCube*>(params->envMap);
-        if(mc)[p.encoder setFragmentTexture:mc->native() atIndex:1];
+        // existing DualTexture-null-Texture2 precedent exactly. Resolved through
+        // nativeCubeTextureFor() (METAL-109) rather than a bare dynamic_cast<MetalTextureCube*>, so
+        // a RenderTargetCube just rendered into (a real-time-reflection-probe pattern -- arguably
+        // RenderTargetCube's single most common real use) can be sampled here too.
+        id<MTLTexture> envMapTex=nativeCubeTextureFor(params->envMap);
+        if(envMapTex)[p.encoder setFragmentTexture:envMapTex atIndex:1];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
     } else if (kind == PipelineKind::Skinned52 || kind == PipelineKind::Skinned56) {
         // plan_metal.md METAL-72-80: real skinned lit/fog/specular/emissive path.

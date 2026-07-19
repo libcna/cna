@@ -35,6 +35,10 @@ namespace CNA::Internal::Backends::Metal
                                                                      bool mipMap = false,
                                                                      int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                           bool mipMap = false,
+                                                                           int multiSampleCount = 0) override;
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

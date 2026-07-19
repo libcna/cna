@@ -517,6 +517,42 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     that was bound and immediately unbound with zero draws, matching EasyGL's own unconditional
     behavior rather than silently skipping it as a missed "optimization."
 
+20. **Phase 10 continued — `RenderTargetCube`** (`METAL-109`/`110` landed; `METAL-111` found to
+    need real code, not just verification): a single `MTLTextureTypeCube` color texture (6 slices)
+    plus ONE shared 2D depth texture reused across whichever face is currently bound — deliberately
+    matching `EasyGLRenderTargetCubeBackend`'s own already-tested precedent exactly (its own
+    comment: only one face is ever rendered into at a time, matching FNA's `RenderTargetCube.cs`
+    itself allocating a single depth/color buffer regardless of face), not a Metal-specific
+    shortcut. Per-face binding uses `MTLRenderPassColorAttachmentDescriptor.slice` rather than 6
+    separate texture views, which required widening `resolveActiveAttachments()` with a third
+    `NSUInteger& sliceOut` parameter (0 for every existing branch, the bound face index for the new
+    cube branch) threaded through into both `ensureFrame()`'s and `clear()`'s
+    `rp.colorAttachments[0].slice=slice` — the third pass over this exact core rendering path this
+    session, done carefully given the first two passes each found real bugs. `computeSpriteTransform()`
+    got a third branch mirroring the `RenderTarget2D` one exactly (a bound face's own `size×size`
+    pixel space is its own logical space). `METAL-111` turned out to need a genuine override, not
+    just a "confirm the base default composes correctly" check as originally scoped: reading
+    `EasyGLGraphicsBackend::SetRenderTarget2D`/`SetRenderTargetCubeFace`'s own real code (not just
+    the interface's doc comment) showed both methods cross-unbind whichever *other* kind of target
+    (2D vs. cube) is currently active before binding a new one — the base `IGraphicsBackend`
+    default's simple `rt ? rt->BindAsRenderTargetFace(face) : SetRenderTarget2D(nullptr)` composition
+    does no such cross-unbinding at all. Without it, switching directly from render target A to
+    render target B (a normal XNA multi-pass pattern — no intervening `SetRenderTarget2D(nullptr)`
+    call) would never call `UnbindAsRenderTarget()` on A, so A's mip chain (`METAL-103`, landed
+    earlier this same session) would silently never regenerate — a real correctness gap that was
+    latent and harmless before mip generation existed, but became a real, observable bug the instant
+    it did. Fixed by giving `SetRenderTarget2D()` the same cross-unbind logic and adding a real
+    `SetRenderTargetCubeFace()` override, both mirroring EasyGL's exact contract. A `RenderTargetCube`
+    can now also be sampled as an `EnvironmentMapEffect` reflection source immediately after being
+    rendered into — arguably `RenderTargetCube`'s single most common real use — via a new
+    `nativeCubeTextureFor()` helper (mirroring `nativeTextureFor()`'s own established pattern
+    exactly) used at the `EnvMap32` draw site instead of a bare `dynamic_cast<MetalTextureCube*>`
+    that would have silently failed for a render-target cube. Self-review before commit caught one
+    more real regression this introduced: `ReadBackbuffer()`'s existing "throw if a render target is
+    active" guard only checked `currentRenderTarget` (the 2D case, fixed in an earlier phase this
+    session) — a bound `RenderTargetCube` face hits the exact same message-to-nil-`drawable` hazard
+    and was not yet covered; extended the guard to check both.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -525,10 +561,10 @@ tables, BC-compression query); the fully generic `VertexElement`-driven descript
 (`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
 lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
-Phase 10 (`RenderTargetCube` `METAL-109`–`111`,
-MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, `GetData()` `METAL-131`, all `CTest`s `METAL-114`–
-`118`, docs `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108` are now
-closed, see above); Phase 14 (custom `ShaderEffect`, which
+Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, `GetData()` `METAL-131`, all `CTest`s
+`METAL-114`–`118`, docs `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/
+`108` and `RenderTargetCube` `METAL-109`–`111` are now closed, see above); Phase 14 (custom
+`ShaderEffect`, which
 Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
 `VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
 on Phase 14); `METAL-256` (the real texture-update
@@ -588,6 +624,13 @@ iOS/tvOS). Nothing in this list has been touched.
   when `mipMap` was requested, matching `EasyGLRenderTargetBackend`'s own already-tested
   precedent); `preserveContents`/`GetColorGLHandle` confirmed already-correct with no code needed
   (🟨 landed 2026-07-19 — `METAL-102`/`103`/`108`).
+- Real `RenderTargetCube` (per-face bind via `MTLRenderPassColorAttachmentDescriptor.slice`, one
+  shared depth texture across faces, mip generation over the whole cube on unbind, sampleable as an
+  `EnvironmentMapEffect` reflection source immediately after rendering into it); found and fixed a
+  real latent `SetRenderTarget2D()`/`SetRenderTargetCubeFace()` cross-target-unbind gap (mip chains
+  would never regenerate when switching directly between two render targets) and a `ReadBackbuffer()`
+  guard gap, both in the same pass that made them observable (🟨 landed 2026-07-19 —
+  `METAL-109`–`111`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -857,9 +900,9 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-106 | `HasRealDepthBuffer(bool)` — confirm the default `= depthFormatWasRequested` is already correct once real depth-format honoring (`METAL-101`) lands | 🟨 |
 | METAL-107 | `SetRenderTarget2D(IRenderTargetBackend*)` — real bind/unbind dispatch, currently a no-op | 🟨 |
 | METAL-108 | `GetColorGLHandle()` — confirm the default `return 0` is correct (GL-specific, N/A on Metal) and no caller assumes nonzero means "has a render target" | 🟨 (confirmed: zero callers anywhere in `include/`/`src/` outside its own declaration/`EasyGLRenderTargetBackend` override — nothing branches on it) |
-| METAL-109 | `CreateRenderTargetCube(size,depthFormat,mipMap,multiSampleCount)` — `MetalRenderTargetCubeBackend : IRenderTargetCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | ⬜ |
-| METAL-110 | `BindAsRenderTargetFace(int face)` — per-face `MTLRenderPassDescriptor` color attachment using `slice:face` | ⬜ |
-| METAL-111 | `SetRenderTargetCubeFace(rt,face)` — verify the base default's composition (`rt ? rt->BindAsRenderTargetFace(face) : SetRenderTarget2D(nullptr)`) is already correct once `METAL-110`/`METAL-107` land, before writing a redundant override | ⬜ |
+| METAL-109 | `CreateRenderTargetCube(size,depthFormat,mipMap,multiSampleCount)` — `MetalRenderTargetCubeBackend : IRenderTargetCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | 🟨 |
+| METAL-110 | `BindAsRenderTargetFace(int face)` — per-face `MTLRenderPassDescriptor` color attachment using `slice:face` | 🟨 |
+| METAL-111 | `SetRenderTargetCubeFace(rt,face)` — verify the base default's composition (`rt ? rt->BindAsRenderTargetFace(face) : SetRenderTarget2D(nullptr)`) is already correct once `METAL-110`/`METAL-107` land, before writing a redundant override | 🟨 (found: base default is NOT sufficient once mip-gen-on-unbind exists — a real override was needed, see narrative) |
 | METAL-112 | `SetRenderTargets(rts[],count)` — real MRT (up to 8 simultaneous color attachments), replacing the base default's "bind only the first target" | ⬜ |
 | METAL-113 | `MetalPipelineKey` must include the *set* of attachment pixel formats, not just one, once MRT lands | ⬜ |
 | METAL-114 | `CTest`: `Metal_RenderTarget2D` — bind+clear+draw+unbind+readback (depends on Phase 12) | ⬜ |
