@@ -100,7 +100,19 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  void DebugRestoreContext()override;
  OpenGL1ResourceRegistry* RegistryIfEnabled(){return contextRecoveryEnabled_?&registry_:nullptr;}
 private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawInternal(const OpenGL1VertexBufferBackend&,const OpenGL1IndexBufferBackend*,PrimitiveType,int,const GpuDrawParams*);
+ // Fixes a real, pre-existing bug found while implementing phase 6's mip-aware filtering:
+ // ApplySamplerState() used to write glTexParameteri directly, once per draw for every sampler
+ // slot, called (via GraphicsDevice::applySamplerStatesToBackend()) BEFORE DrawInternal actually
+ // binds the corresponding texture -- so its writes landed on whichever texture happened to be
+ // bound from the PREVIOUS draw call, not the one about to be sampled, and its own `slot`
+ // parameter was ignored entirely (every slot wrote to whichever unit was currently active).
+ // ApplySamplerState now only caches per-slot params here; ApplySamplerFilterAndWrap() applies
+ // them to whatever texture is actually bound, called from DrawInternal right after each
+ // BindGL() call, on the correct active unit, with the SPECIFIC texture's own HasMips().
+ struct GL1SamplerParams{int filter=0,addrU=0,addrV=0,maxAniso=4;};
+ void ApplySamplerFilterAndWrap(int slot,bool hasMips);
  SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;IRenderTargetBackend* currentRt_=nullptr;
  OpenGL1ResourceRegistry registry_;bool contextRecoveryEnabled_=true;
+ GL1SamplerParams samplerSlot_[2];
 };
 }

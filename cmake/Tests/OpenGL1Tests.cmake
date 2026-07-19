@@ -216,4 +216,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_MipmapGeneration COMMAND cna_test_opengl1_mipmap_generation
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # SamplerState ordering (ApplySamplerState fired before BindGL) + per-slot (slot param
+    # ignored) bugs found and fixed while implementing phase 6's mip-aware filtering.
+    cna_opengl1_test(cna_test_opengl1_samplerstate_bind_order
+                      examples/opengl1_samplerstate_bind_order_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_SamplerState_BindOrder COMMAND cna_test_opengl1_samplerstate_bind_order
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
