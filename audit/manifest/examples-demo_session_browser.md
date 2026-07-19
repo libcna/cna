@@ -6,6 +6,6 @@ Files in this shard: **3**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_session_browser/src/BrowserGame.cpp` | PENDING | [BrowserGame.cpp.audit.md](../examples/demo_session_browser/src/BrowserGame.cpp.audit.md) |
-| 2 | `examples/demo_session_browser/src/BrowserGame.hpp` | PENDING | [BrowserGame.hpp.audit.md](../examples/demo_session_browser/src/BrowserGame.hpp.audit.md) |
-| 3 | `examples/demo_session_browser/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_session_browser/src/Main.cpp.audit.md) |
+| 1 | `examples/demo_session_browser/src/BrowserGame.cpp` | AUDITED | [BrowserGame.cpp.audit.md](../examples/demo_session_browser/src/BrowserGame.cpp.audit.md) |
+| 2 | `examples/demo_session_browser/src/BrowserGame.hpp` | AUDITED | [BrowserGame.hpp.audit.md](../examples/demo_session_browser/src/BrowserGame.hpp.audit.md) |
+| 3 | `examples/demo_session_browser/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_session_browser/src/Main.cpp.audit.md) |
