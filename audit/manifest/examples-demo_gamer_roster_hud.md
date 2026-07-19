@@ -6,6 +6,6 @@ Files in this shard: **3**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_gamer_roster_hud/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_gamer_roster_hud/src/Main.cpp.audit.md) |
-| 2 | `examples/demo_gamer_roster_hud/src/RosterGame.cpp` | PENDING | [RosterGame.cpp.audit.md](../examples/demo_gamer_roster_hud/src/RosterGame.cpp.audit.md) |
-| 3 | `examples/demo_gamer_roster_hud/src/RosterGame.hpp` | PENDING | [RosterGame.hpp.audit.md](../examples/demo_gamer_roster_hud/src/RosterGame.hpp.audit.md) |
+| 1 | `examples/demo_gamer_roster_hud/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_gamer_roster_hud/src/Main.cpp.audit.md) |
+| 2 | `examples/demo_gamer_roster_hud/src/RosterGame.cpp` | AUDITED | [RosterGame.cpp.audit.md](../examples/demo_gamer_roster_hud/src/RosterGame.cpp.audit.md) |
+| 3 | `examples/demo_gamer_roster_hud/src/RosterGame.hpp` | AUDITED | [RosterGame.hpp.audit.md](../examples/demo_gamer_roster_hud/src/RosterGame.hpp.audit.md) |
