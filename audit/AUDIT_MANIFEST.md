@@ -153,7 +153,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`examples-demo_qos_probe`](manifest/examples-demo_qos_probe.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 | [`examples-demo_session_browser`](manifest/examples-demo_session_browser.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
 | [`examples-demo_session_lifecycle_events`](manifest/examples-demo_session_lifecycle_events.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
-| [`examples-demo_simulated_network_conditions`](manifest/examples-demo_simulated_network_conditions.md) | 3 | PENDING: 3 / AUDITED: 0 |
+| [`examples-demo_simulated_network_conditions`](manifest/examples-demo_simulated_network_conditions.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
 | [`examples-demo_sound`](manifest/examples-demo_sound.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_xact`](manifest/examples-demo_xact.md) | 4 | PENDING: 4 / AUDITED: 0 |
 | [`examples-input_smoke`](manifest/examples-input_smoke.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
