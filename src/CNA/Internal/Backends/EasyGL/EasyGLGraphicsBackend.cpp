@@ -36,6 +36,7 @@
 #include <cmath>
 #include <cstring>
 #include <SDL3/SDL.h>
+#include <string>
 #include "Microsoft/Xna/Framework/Color.hpp"
 
 #if defined(__EMSCRIPTEN__)
@@ -298,6 +299,49 @@ namespace CNA::Internal::Backends::EasyGL
                << " dim=" << w << 'x' << h << " msaa=" << samples << " levels=" << levels;
             return os.str();
         }
+    }
+
+    // plan_glbackends.md Phase B (GLB-10/11): every embedded shader in this file is authored
+    // once, against GLSL ES 3.00 (the OPENGLES/WEBGL2 profiles' native syntax). Body syntax
+    // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
+    // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
+    // need a second copy of every shader, just a header rewrite performed here at first-use time.
+    //
+    // WEBGL1 (GLSL ES 1.00: attribute/varying/texture2D() instead of in/out/texture(), a real
+    // body difference, not header-only) is NOT handled by this function -- GLB-12/GLB-36 track
+    // that separately and it is intentionally deferred behind the easy-gl WebGL1 fixes (Phase F,
+    // GLB-30-35). Sources are passed through unchanged for WEBGL1 today; they will fail to
+    // compile against a real WebGL1/GLES2 context until GLB-36 lands.
+    static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source)
+    {
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        std::string src(es300Source);
+        const std::string versionLine = "#version 300 es\n";
+        const auto versionPos = src.find(versionLine);
+        if (versionPos == std::string::npos)
+        {
+            // Not one of the standard ES3-header shaders this function expects -- leave untouched
+            // rather than corrupt something it doesn't recognize.
+            return src;
+        }
+        src.replace(versionPos, versionLine.size(), "#version 330 core\n");
+
+        // Desktop GLSL 3.30 core does not accept "precision ... float;" (that syntax is only
+        // valid GLSL ES / with GL_ARB_ES2_compatibility) -- drop the line immediately following
+        // the version pragma if it is a precision qualifier.
+        const auto afterVersion = versionPos + std::string("#version 330 core\n").size();
+        if (src.compare(afterVersion, 10, "precision ") == 0)
+        {
+            const auto lineEnd = src.find('\n', afterVersion);
+            if (lineEnd != std::string::npos)
+            {
+                src.erase(afterVersion, lineEnd + 1 - afterVersion);
+            }
+        }
+        return src;
+#else
+        return std::string(es300Source);
+#endif
     }
 
     // --- EasyGLTexture3DBackend ---
@@ -1651,9 +1695,12 @@ void main()
 }
 )";
 
+        const std::string adaptedVertexSource = AdaptGlslEs300ForActiveProfile(vertexShaderSource);
+        const std::string adaptedFragmentSource = AdaptGlslEs300ForActiveProfile(fragmentShaderSource);
+
         ::easygl::Shader vertexShader(::easygl::ShaderType::Vertex);
         vertexShader.create();
-        vertexShader.compile_from_source(vertexShaderSource);
+        vertexShader.compile_from_source(adaptedVertexSource.c_str());
 
         if (!vertexShader.is_compiled())
         {
@@ -1662,7 +1709,7 @@ void main()
 
         ::easygl::Shader fragmentShader(::easygl::ShaderType::Fragment);
         fragmentShader.create();
-        fragmentShader.compile_from_source(fragmentShaderSource);
+        fragmentShader.compile_from_source(adaptedFragmentSource.c_str());
 
         if (!fragmentShader.is_compiled())
         {
@@ -3833,15 +3880,18 @@ void main()
         void CompileAndLink(::easygl::Program& prog, const char* vsrc, const char* fsrc,
                             const char* label)
         {
+            const std::string adaptedVsrc = AdaptGlslEs300ForActiveProfile(vsrc);
+            const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc);
+
             ::easygl::Shader vs(::easygl::ShaderType::Vertex);
             vs.create();
-            vs.compile_from_source(vsrc);
+            vs.compile_from_source(adaptedVsrc.c_str());
             if (!vs.is_compiled())
                 std::cerr << "[CNA EasyGL 3D] " << label << " VS failed:\n" << vs.info_log() << "\n";
 
             ::easygl::Shader fs(::easygl::ShaderType::Fragment);
             fs.create();
-            fs.compile_from_source(fsrc);
+            fs.compile_from_source(adaptedFsrc.c_str());
             if (!fs.is_compiled())
                 std::cerr << "[CNA EasyGL 3D] " << label << " FS failed:\n" << fs.info_log() << "\n";
 
