@@ -679,6 +679,14 @@ possibilities of OpenGL 2"):
     checked-in golden PNGs for each identical scene. PASS x4.
   - `OpenGL2_CustomVertexDeclaration` -- a reordered, non-fixed-stride vertex layout bound
     generically by attribute name, combined with a custom `ShaderEffect`. 2/2 PASS.
+  - `OpenGL2_BlendState_BlendFactor` -- `Blend::BlendFactor`/`glBlendColor` propagation. 1/1 PASS.
+  - `OpenGL2_DynamicBuffer_Stress` -- `SetDataOptions.None`/`Discard`/`NoOverwrite` across 12
+    frames of `DynamicVertexBuffer`/`DynamicIndexBuffer` updates. 12 frames x 3 checks, all PASS.
+  - `OpenGL2_Texture_MipFilter` -- real mip-level upload + mip-aware `TextureFilter` selection
+    (`LinearMipPoint` samples a high mip; `Point` stays non-mip, matching CNA's documented
+    convention). 2/2 PASS.
+  - `OpenGL2_Texture2D_Anisotropic_SingleLevel` -- a single-level (non-mipmapped) `Texture2D`
+    renders correctly (not solid black) under `TextureFilter::Anisotropic`. 1/1 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -697,6 +705,62 @@ possibilities of OpenGL 2"):
   against a fully 3D-capable backend (EasyGL by default on Linux)") -- it fails because OpenGL2's
   `SupportsCapability` still uses the blanket "everything supported" default (see the
   already-tracked follow-up item below), not because of any regression introduced here.
+
+## Status: EasyGL capability audit + 5 real gaps fixed (2026-07-20, session 8)
+With all 6 explicitly-requested follow-up items from session 7 complete, per the standing
+instruction this session did a systematic audit of `IGraphicsBackend`'s virtual method list against
+which ones OpenGL2 overrides vs. silently relies on the shared base-class default, cross-referenced
+against which of those EasyGL (the reference backend) actually implements. Every gap below was
+confirmed as a REAL, currently-broken (or misleadingly-reported) behavior before being fixed --
+not a speculative/theoretical one -- each with its own new CTest proving the before-state would
+have failed and the after-state passes on the first real run against this sandbox's GL driver.
+
+- **`BlendState.BlendFactor` silently had no effect.** `IGraphicsBackend::SetBlendFactor()` was
+  never overridden; `Blend::BlendFactor`/`InverseBlendFactor` already mapped to
+  `GL_CONSTANT_COLOR`/`GL_ONE_MINUS_CONSTANT_COLOR` in `ToGLBlendFactor`, but the GL constant-color
+  register itself was never set via `glBlendColor`. Fixed; added `glBlendColor` to the Windows GL
+  loader (GL 1.4, not exported beyond GL 1.1 by `opengl32.dll`). `OpenGL2_BlendState_BlendFactor`
+  (ports `easygl_blendstate_blendfactor_test.cpp`'s scene verbatim) 1/1 PASS.
+- **`SetDataOptions.Discard`/`NoOverwrite` upload hints were silently ignored.**
+  `SetDataWithOptions()`/`SetData16WithOptions()`/`SetData32WithOptions()` were never overridden on
+  `VB`/`IB` (always-correct but always-full-`glBufferData` base-class default). Implemented the same
+  orphan-then-`glBufferSubData` (Discard) / plain-`glBufferSubData` (NoOverwrite) strategy as
+  `EasyGLVertexBufferBackend::uploadWithOptions`, using the vertex/index capacity `CreateVertexBuffer`/
+  `CreateIndexBufferNN` already received but previously discarded. `OpenGL2_DynamicBuffer_Stress`
+  (ports `easygl_dynamic_buffer_stress_test.cpp`'s 12-frame None/Discard/NoOverwrite cycling scene)
+  1/1 PASS.
+- **`SupportsCapability(MultipleRenderTargets)` reported `true` but MRT isn't implemented.**
+  `SetRenderTargets()` is not overridden (falls back to the shared single-target default, silently
+  dropping every target past index 0), but `SupportsCapability` hit its blanket `default: return
+  true`. Fixed to report `false` truthfully; updated `opengl2_graphics_capability_test.cpp`'s own
+  (previously-wrong) assertion to match. Real MRT support remains a real follow-up item (see below).
+- **`Texture2D.SetData(level > 0, ...)` silently did nothing; mip-aware `TextureFilter`s risked
+  solid-black "incomplete mipmap" rendering.** `ITextureBackend::UpdatePixelsLevel()` was never
+  overridden on `Tex`, and `GL_TEXTURE_MAX_LEVEL` was never clamped to the texture's real level count
+  (GL's own default is 1000) -- the exact root cause `easygl_texture_mip_filter_effect_test.cpp`'s
+  own header comment already documented and worked around for EasyGL (Task 924). Fixed: `Tex` now
+  stores its real mip level count and clamps `GL_TEXTURE_MAX_LEVEL` at construction (applies to
+  EVERY texture, not just explicitly mipmapped ones); `UpdatePixelsLevel()` uploads via
+  `glTexImage2D` per level. Added `ToGLMinMagFilter()`, a new mip-aware MIN/MAG mapping mirroring
+  `EasyGLGraphicsBackend::ApplySamplerState`'s own `TextureFilter` table exactly (including its
+  documented `Linear=0` -> non-mip simplification: "CNA does not generate mipmaps by default"), used
+  by the general 3D draw path's sampler application; `SpriteBatch`'s own filter call sites
+  (don't sample real mip chains) deliberately left on the original non-mip-aware `ToGLFilter()`.
+  `OpenGL2_Texture_MipFilter` (ports `easygl_texture_mip_filter_effect_test.cpp`'s 128x128 8-level
+  RED/GREEN scene at extreme 8x8px minification) 1/1 PASS.
+- **`SamplerState.MaxAnisotropy` was accepted but silently discarded.** `ApplySamplerState`'s
+  `maxAnisotropy` parameter was never used. Fixed: caches per-slot, applies via
+  `glTexParameterf(GL_TEXTURE_MAX_ANISOTROPY_EXT, ...)` gated on `TextureFilter::Anisotropic` and
+  real extension presence, clamped to the device's `GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT` -- mirrors
+  `EasyGLGraphicsBackend::ApplySamplerState`'s own gate/clamp pattern exactly.
+  `OpenGL2_Texture2D_Anisotropic_SingleLevel` (ports
+  `easygl_texture2d_anisotropic_singlelevel_test.cpp`'s scene, proving the common non-mipmapped
+  case still renders correctly, not solid black, now that both the MAX_LEVEL clamp and this
+  anisotropy wiring are in place) 1/1 PASS.
+
+All 28 `OpenGL2`-labeled CTests pass after every fix in this round (up from 24 at the start of the
+session); each fix landed as its own commit with its own new test, verified against this sandbox's
+real GL driver (not just compiled) before committing.
 
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
@@ -727,7 +791,7 @@ possibilities of OpenGL 2"):
 - SkinnedEffect (bone-palette vertex skinning, `WeightsPerVertex` gating; see
   `OpenGL2_SkinnedEffect` above).
 - Real `SupportsCapability` values for `WireFrame`/`MultiSampleAntiAliasing`/
-  `AnisotropicFiltering` (see `OpenGL2_GraphicsCapability` above).
+  `AnisotropicFiltering`/`MultipleRenderTargets` (see `OpenGL2_GraphicsCapability` above).
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) for both the direct 3D
   draw path (see `OpenGL2_ShaderEffect` above) and `SpriteBatch::Begin(..., Effect*)` (see
   `OpenGL2_SpriteBatchCustomEffect` above).
@@ -749,6 +813,14 @@ possibilities of OpenGL 2"):
   `glGetAttribLocation`, not just the fixed byte-stride table; see `OpenGL2_CustomVertexDeclaration`
   above) alongside the pre-existing stride-inferred fast path, which every existing test/scene
   still uses unchanged.
+- `BlendState.BlendFactor` (real `glBlendColor`; see `OpenGL2_BlendState_BlendFactor` above).
+- `SetDataOptions.Discard`/`NoOverwrite` upload paths for `VertexBuffer`/`IndexBuffer` (orphan +
+  sub-data strategy; see `OpenGL2_DynamicBuffer_Stress` above).
+- Real `Texture2D` mip-level upload (`SetData(level > 0, ...)`) and mip-aware `TextureFilter`
+  selection (`GL_TEXTURE_MAX_LEVEL` clamp + `GL_*_MIPMAP_*` filter mapping; see
+  `OpenGL2_Texture_MipFilter`/`OpenGL2_Texture2D_Anisotropic_SingleLevel` above).
+- `SamplerState.MaxAnisotropy` (real `GL_TEXTURE_MAX_ANISOTROPY_EXT`; see
+  `OpenGL2_Texture2D_Anisotropic_SingleLevel` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -765,3 +837,49 @@ possibilities of OpenGL 2"):
   PbrEffect's 4 golden images, texture-filter/sampler-state scenes, ...). Each additional scene is
   mechanically similar to the four already ported (reuse the existing golden PNG + its exact scene
   setup verbatim) but real, incremental effort per scene, not a single remaining task.
+- **Real Multiple Render Targets (MRT).** `IGraphicsBackend::SetRenderTargets()` is not overridden
+  (falls back to the shared single-target default); `SupportsCapability(MultipleRenderTargets)` now
+  correctly reports `false` (session 8, see above) rather than misleadingly `true`. GL 2.1's
+  `EXT_framebuffer_object` genuinely supports multiple color attachments + `glDrawBuffers`
+  (`glDrawBuffers` itself is GL 2.0 core, so no extra extension needed beyond what this backend
+  already requires) -- implementable, but touches the `RenderTarget`/FBO class's single-attachment
+  design and needs its own new test (`easygl_mrt_test.cpp` is the reference scene to port). Bigger
+  and more architecturally invasive than any single fix in session 8; scope as its own task.
+- **`DrawInstancedPrimitivesEx` (hardware instancing) throws `std::runtime_error` on OpenGL2.**
+  This IS the documented, acceptable default for backends that don't support it (the interface's own
+  doc comment says so) -- not a bug, unlike the 5 gaps fixed in session 8. EasyGL implements it for
+  real. GL 2.1 has no instancing in core, but `ARB_draw_instanced`
+  (`glDrawArraysInstancedARB`/`glDrawElementsInstancedARB`) + `ARB_instanced_arrays`
+  (`glVertexAttribDivisorARB`) are widely-supported extensions on real GL2.1-era desktop
+  drivers/GPUs (the per-instance-attribute-divisor technique needs no `gl_InstanceID`, so plain
+  GLSL 1.10 is sufficient) -- a legitimate, in-scope GL 2.1 feature per this project's own "EasyGL
+  parity, within OpenGL 2.1's real limits" mandate, but needs: a runtime extension-presence check
+  (report via `SupportsCapability` -- note `CNA::GraphicsCapability` has no `Instancing` entry yet,
+  add one), per-instance VBO wiring with attribute divisors, and its own test. Not attempted this
+  session: real risk of a subtly-wrong-but-plausible instanced-transform implementation, which is
+  worse than the current honest "throws" default, and no way to cross-check the driver's actual
+  ARB extension behavior without deeper, unhurried verification.
+- **Context-loss recovery (`DebugSimulateContextLoss`/`DebugRestoreContext`/
+  `SetContextRecoveryEnabled`) is entirely unimplemented on OpenGL2** (all three fall back to
+  no-op base-class defaults). EasyGL's version of this is a substantial, cross-cutting
+  architectural feature -- every EasyGL resource class (`VB`/`IB`/`Tex`/render targets/programs)
+  implements a `release_gl_handle_only()`/`recreate_gl_resource()` pair plus a shared
+  `ResourceRegistry` that iterates every live resource on simulated loss/restore, and
+  `ShareCpuPixels()` exists specifically so a lost texture can re-upload from a shared CPU shadow
+  instead of a duplicate copy. OpenGL2's resource classes (`VB`/`IB`/`Tex`/`RenderTarget`/
+  `RenderTargetCube`/`EffectBackend`) have no such registry today. This is NOT a small bounded fix
+  like anything in session 8 -- it is a full resource-lifecycle redesign touching every backend
+  resource type. Scope as its own multi-part task if ever prioritized; do not attempt piecemeal.
+- **TextureCube/Texture3D mip-level support parity.** Session 8 fixed real mip-level upload +
+  mip-aware filtering for plain `Texture2D` only (`Tex` class). `TextureCube`/`Texture3D`'s own
+  backend classes were deliberately left untouched to keep that fix bounded -- `Texture3D` is
+  already documented above as "level 0 only, no mip chain yet"; `TextureCube` mip status was not
+  re-audited this session. The same `UpdatePixelsLevel`-style gap and `GL_TEXTURE_MAX_LEVEL` clamp
+  reasoning likely applies to both; worth auditing together as a single follow-up task since the
+  fix shape is now well-understood from the `Texture2D` precedent.
+- **Anisotropic filtering degree is only wired for the general 3D draw path's `applySampler`
+  lambda** (session 8), not `SpriteBatch`'s own two `ToGLFilter` call sites (`Sprite::Draw`/
+  `DrawWithCustomEffect`) -- deliberately left unchanged since SpriteBatch textures essentially
+  never use mip-aware filters in practice (this matches the existing precedent of those two sites
+  never having had mip-aware filtering either). Revisit only if a real SpriteBatch+Anisotropic use
+  case surfaces.
