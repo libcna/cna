@@ -1,5 +1,22 @@
 # GL Backends Restructuring Plan — EasyGL becomes internal, 4 new public backends
 
+> **TL;DR for a clean-context morning read (2026-07-20, overnight session):** All 4 public
+> backends (`OPENGLES`, `OPENGL33`, `WEBGL1`, `WEBGL2`) exist, build, and are verified as far as
+> this sandbox allows. `OPENGLES`/`OPENGL33` are real-driver-verified on Linux (Mesa) — `OPENGL33`
+> ran its **full 241-binary example suite for real**: 235 pass, 6 fail (5 pre-existing/unrelated,
+> 1 real-but-expected — see Phase D). `WEBGL1`/`WEBGL2` build and link for real via a genuine
+> `emcmake`/`emcc` toolchain found in this sandbox at `~/emsdk` (not on `PATH` by default) and run
+> under Node up to a real browser-only DOM API limit (no way to verify actual GL rendering without
+> a real browser here). **3 real bugs were found and fixed tonight**, not just the planned
+> restructuring: `GLB-17` (startup log printed the old internal `EASYGL` name), `GLB-39` (a real
+> Emscripten link failure, wrong exception-handling ABI), and `GLB-9`-revisited (a hardcoded
+> `MIN/MAX_WEBGL_VERSION=2` that would have silently forced `WEBGL1` into a `WEBGL2` context).
+> **Deliberately not done, by explicit decision** (see §4): `GLB-14` (no example-file rename),
+> `GLB-38` (no autonomous repo merge/push), and the `SkinnedEffect`/`SkinnedPbrEffect`
+> `uvec4`-bone-index fix under `WEBGL1` (a real architecture change needing a go-ahead — see §4's
+> newest entry). Everything is committed on `feature/gl`; read the phase-by-phase detail below for
+> exactly what each task verified and how.
+>
 > **Origin (2026-07-19):** project owner decision — `EasyGL` is a good internal implementation
 > name but means nothing to a `libcna.com` user. Public backend selection should use names users
 > already know: `OPENGLES`, `OPENGL33`, `WEBGL1`, `WEBGL2`. All four are implemented internally by
