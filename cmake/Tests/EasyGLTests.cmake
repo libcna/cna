@@ -2,8 +2,11 @@
 # EASYGL/VULKAN backends), so EasyGL's test suite has always additionally required
 # CNA_BUILD_EXAMPLES=ON, unlike every other backend's test block. Preserved verbatim here as its
 # own self-contained condition rather than silently dropped during the file split.
+# plan_glbackends.md GLB-6: widened to both non-Emscripten public GL profiles (OPENGLES/OPENGL33)
+# -- WEBGL1/WEBGL2 are already excluded by the NOT EMSCRIPTEN guard below, matching their
+# Emscripten-only gate in BackendSelection.cmake.
 if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
+   AND (CNA_GRAPHICS_BACKEND STREQUAL "OPENGLES" OR CNA_GRAPHICS_BACKEND STREQUAL "OPENGL33"))
 
         # --- helper macro: build a headless EasyGL test exe --------------------
         macro(cna_easygl_test target src)

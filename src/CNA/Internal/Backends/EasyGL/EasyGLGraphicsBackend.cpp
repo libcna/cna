@@ -2018,9 +2018,24 @@ void main()
         // NOTE: SDL_Window is NOT owned by EasyGL backend.
         // It is owned by GraphicsDevice or higher level platform layer.
 
+        // plan_glbackends.md GLB-8: context attributes depend on which of the 4 public GL
+        // profiles this translation unit was compiled for (see cmake/BackendSelection.cmake).
+        // OPENGLES/WEBGL2 request GLES 3.0 (today's original, unchanged behavior); WEBGL1
+        // requests GLES 2.0 (Emscripten maps this to a real WebGL 1 context); OPENGL33 requests
+        // a desktop GL 3.3 core profile context instead of an ES profile.
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#elif defined(CNA_GL_PROFILE_WEBGL1)
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#else // CNA_GL_PROFILE_OPENGLES or CNA_GL_PROFILE_WEBGL2
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+#endif
         // Without this, no window ever gets stencil bits (SDL defaults to 0), making
         // DepthStencilState.StencilEnable a permanent no-op regardless of what's requested.
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
