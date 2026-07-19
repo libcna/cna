@@ -411,3 +411,12 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   scope for `OPENGLES` (matching current behavior) and treats ES2-class support as exclusively the
   `WEBGL1` profile's problem, since no current CNA use case needs desktop/mobile ES2. **Not asked
   this round — still open if it turns out to matter.**
+
+## 5. Unrelated finding (not fixed, out of scope, noted for completeness)
+
+Running the full `CnaTests` suite under `OPENGLES` (both before and after all of this session's
+`GLB-36` changes — confirmed identical, so not a regression from this plan) segfaults partway
+through `MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` (`exit=139`). Zero relation to
+graphics/GL-family code — a `Microsoft::Xna::Framework::Media` subsystem test, same family as this
+sandbox's other known pre-existing Media/Content/XNB gaps (no real media library/devices here).
+Not investigated further — flagging so it isn't mistaken for something this plan's work caused.
