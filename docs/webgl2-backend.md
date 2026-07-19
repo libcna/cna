@@ -18,8 +18,14 @@ plan gave it its own public name.
   (`third_party/SDL/src/video/emscripten/SDL_emscriptenopengles.c:87-98`) — it derives WebGL-1-vs-2
   purely from whether the requested GL major version is 3, which `EasyGLGraphicsBackend`'s
   constructor already sets correctly for this profile. No `-s USE_WEBGL2`/`FULL_ES3` emcc flags
-  are needed (`plan_glbackends.md` GLB-9 — that whole class of flag only matters for a GLES-
-  emulation-shim code path SDL3 doesn't use here).
+  are needed for SDL3's own context creation (`plan_glbackends.md` GLB-9 — that whole class of
+  flag only matters for a GLES-emulation-shim code path SDL3 doesn't use here). **Correction found
+  later the same night**: `cna_house3d_demo`'s own Emscripten *link* options (a separate, per-target
+  CMake setting, not SDL3's context creation) did hardcode `-sMIN_WEBGL_VERSION`/
+  `-sMAX_WEBGL_VERSION` — happened to already be the correct value (`2`/`2`) for this profile, but
+  was wrong for `WEBGL1` (see `docs/webgl1-backend.md`'s GLB-9-revisited note and
+  `cmake/Examples.cmake` commit `d44ed617`) and has since been made conditional on
+  `CNA_GRAPHICS_BACKEND` for both profiles.
 - ✅ **Real `emcmake`/`emcc` build** — this sandbox has a working Emscripten SDK at `~/emsdk` (not
   on `PATH` by default — source `~/emsdk/emsdk_env.sh` and additionally add
   `~/emsdk/upstream/emscripten` and `~/emsdk/node/*/bin` to `PATH`). `emcmake cmake
