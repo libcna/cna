@@ -923,6 +923,23 @@ _(pending)_
   widely-varying-magnitude test matrix, invert both ways, and compare against a high-precision reference.
   See `src/Microsoft/Xna/Framework/Matrix.cpp.audit.md`.
 
+- **Recurring pattern in `xna-framework-core`: several spots that look like defects in isolation are
+  confirmed-faithful FNA reproductions once checked against the FNA reference source, and in each case the
+  port omits the kind of explanatory comment this codebase otherwise uses well elsewhere.** Three confirmed
+  instances so far, all found by directly reading `/rv/data/library/github.com/FNA-XNA/FNA/src/`:
+  (1) `BoundingSphere::Contains(BoundingFrustum)` can never return `Disjoint` (FNA's own `// TODO : calcul
+  dmin`, never implemented); (2) `BoundingFrustum::Intersects(Ray)`'s general case throws
+  `NotImplementedException` (identical in FNA, though the CNA port's message is clearer than FNA's bare
+  exception); (3) `Curve::ComputeTangent()`'s `Smooth`-tangent branches use inconsistent near-zero epsilon
+  thresholds for `TangentIn` vs. `TangentOut` (FNA's own code has the identical asymmetry, stemming from
+  a well-known easy-to-misuse C# API -- `float.Epsilon` is the smallest representable float, not a
+  tolerance value -- that this port's `std::numeric_limits<float>::denorm_min()` correctly-but-confusingly
+  mirrors). None of the three is a port-introduced regression; all three are correct per this project's own
+  FNA-fidelity policy. Recommended as a documentation-only pass once the `xna-framework-core` shard (and
+  any other shard where this pattern recurs) is fully audited: add a short comment at each spot citing the
+  FNA source location, so a future maintainer doesn't mistake faithful-but-surprising behavior for an
+  accidental regression and "fix" it in a way that would silently diverge from FNA.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
