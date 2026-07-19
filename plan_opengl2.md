@@ -299,8 +299,45 @@ possibilities of OpenGL 2"):
   This closes the "one remaining piece for cube-map support" note left in the RenderTargetCube
   status entry above -- `TextureCube`/`RenderTargetCube` now have a real stock-effect consumer.
 
+## Status: SkinnedEffect (2026-07-19, session 6 cont'd)
+
+- **`SkinnedEffect` implemented**: a dedicated `skinnedProgram_` GLSL shader (bone-palette vertex
+  skinning), matching `EasyGLGraphicsBackend::EnsureSkinnedProgram`'s formula exactly -- same
+  `skinMat=sum(uBones[index]*weight)` over the first `WeightsPerVertex` weight/index pairs, same
+  degenerate-blend-normal guard (falls back to the bind-pose normal if the skinned normal's
+  length collapses toward zero from near-cancelling bone rotations), same
+  `litRGB=lightSum*diffuse+emissive` composition, same vertex-color-modulates-diffuse-and-specular
+  ordering. `drawInternal()` selects it via a new `skinned` flag, checked before `envMapped`/`lit`
+  (`SkinnedEffect::FillGpuDrawParams()` also sets `lightingEnabled=true`).
+  New vertex layout support for `VertexPositionNormalTextureSkinned` (stride 52: position, normal,
+  texcoord, `Vector4` blend weight, `Byte4` blend indices) and its stride-56 vertex-color variant
+  (matches every other CNA backend's own "stride 52/56" convention). GL 2.1 has no integer vertex
+  attributes (`glVertexAttribIPointer` is GL 3.0+), so bone indices are uploaded as an
+  unnormalized `GL_UNSIGNED_BYTE`-as-float attribute (exact for byte-range values, no precision
+  loss) and rounded back to `int` in the shader; vertex-shader dynamic (non-constant) indexing of
+  a uniform array (`uBones[i]`) is valid GLSL back to 1.10, so this is portable GL 2.1 -- no
+  `#version` bump needed anywhere in this file. Added two new globally-bound attribute locations
+  (4=`aBoneWeight`, 5=`aBoneIndices`, harmless no-ops for every other program, same convention as
+  the existing `aNormal` binding) and explicitly disables them in every non-skinned stride branch
+  (a previous skinned draw's stale enabled state would otherwise persist into later draws).
+  `mat3(mat4)` truncation requires GLSL 1.20 and this file targets 1.10 everywhere else, so the
+  skin matrix's rotation part is extracted manually (`mat3(skinMat[0].xyz, skinMat[1].xyz,
+  skinMat[2].xyz)`) instead of bumping the shader version.
+  Reused `EnvironmentMapEffect`'s `ensureDefaultWhiteTextures()` fallback (renamed from
+  `ensureDefaultEnvMapTextures()` now that a second effect needs it) -- `SkinnedEffect`'s fragment
+  shader always samples `uTex` unconditionally (no `uTextureEnabled` toggle, matching
+  `EnsureSkinnedProgram`'s own shader), so a null `Texture` needs a real bound fallback, same
+  reasoning as `EnvironmentMapEffect`.
+  `OpenGL2_SkinnedEffect` verifies: per-vertex bone selection and the position transform are both
+  real (a quad fully weighted to a translating bone moves off-screen, the same quad fully weighted
+  to an identity bone stays put); `WeightsPerVertex` gating genuinely limits how many weight/index
+  pairs are summed (derived and confirmed the single-bone-at-partial-weight "W cancels in the
+  perspective divide" edge case, and the two-bone weights-sum-to-1 rigid-translation case, by hand
+  before running -- both matched on the first real run); per-fragment lighting; and the
+  null-Texture fallback. 7/7 PASS on the first run.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers eleven CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers twelve CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -322,6 +359,8 @@ possibilities of OpenGL 2"):
   - `OpenGL2_EnvironmentMapEffect` -- reflection blend, per-vertex Fresnel suppression, correct
     cube face sampled, cross-backend consistency vs the EasyGL golden scene, default-white
     sampler fallback. 5/5 PASS.
+  - `OpenGL2_SkinnedEffect` -- bone-palette position/normal skinning, `WeightsPerVertex` gating,
+    per-fragment lighting, default-white sampler fallback. 7/7 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -330,6 +369,16 @@ possibilities of OpenGL 2"):
   except `cna_demo_xact`, which fails only at its Content-copy POST_BUILD step because
   `examples/demo_xact/Content/` does not exist in this checkout at all (never committed to git) --
   pre-existing, unrelated to this backend or this branch.
+- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5521
+  cases) has 224 pre-existing failures, none caused by this backend: ~220 are missing local test
+  fixture files (media/audio/video/XNB content assets absent from this checkout, e.g.
+  `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`) that fail
+  identically regardless of graphics backend, and
+  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` is a pre-existing EasyGL-specific
+  assumption baked into that test file's own header comment ("this test target only ever builds
+  against a fully 3D-capable backend (EasyGL by default on Linux)") -- it fails because OpenGL2's
+  `SupportsCapability` still uses the blanket "everything supported" default (see the
+  already-tracked follow-up item below), not because of any regression introduced here.
 
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
@@ -357,6 +406,8 @@ possibilities of OpenGL 2"):
   specular, emissive) + fog (see `OpenGL2_Effects` above).
 - EnvironmentMapEffect (reflection mapping, per-vertex Fresnel, specular tint; see
   `OpenGL2_EnvironmentMapEffect` above).
+- SkinnedEffect (bone-palette vertex skinning, `WeightsPerVertex` gating; see
+  `OpenGL2_SkinnedEffect` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -365,10 +416,8 @@ possibilities of OpenGL 2"):
   own current behavior (not a new OpenGL2-specific gap), but neither backend actually implements
   those three modes' real semantics yet.
 - Full vertex declaration support rather than stride inference (blocks any vertex format beyond
-  the 4 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
+  the 5 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
   attribute order/extra streams).
-- SkinnedEffect (bone palette skinning) -- EasyGL has this; would need a new vertex format
-  (blend indices/weights) and a skinned variant of the lit shader.
 - PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
   effort (its own shader family + texture set), likely lower priority than the items above for a
   "no EasyGL dependency" OpenGL 2.1 backend.

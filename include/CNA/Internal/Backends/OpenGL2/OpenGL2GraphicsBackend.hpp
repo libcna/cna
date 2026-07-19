@@ -106,6 +106,7 @@ namespace CNA::Internal::Backends::OpenGL2
         unsigned dualTextureProgram_{};
         unsigned litProgram_{};
         unsigned envMapProgram_{};
+        unsigned skinnedProgram_{};
         IRenderTargetBackend* currentRt_{};
         IRenderTargetCubeBackend* currentRtCube_{};
         int currentRtWidth_{};
@@ -124,15 +125,14 @@ namespace CNA::Internal::Backends::OpenGL2
         int samplerAddressU_[kMaxSamplerSlots] = {};
         int samplerAddressV_[kMaxSamplerSlots] = {};
 
-        // Lazily-created 1x1 white fallbacks for EnvironmentMapEffect's always-on texture/envMap
-        // sampling (unlike BasicEffect/AlphaTestEffect/DualTextureEffect, which only select a
-        // texturing program when texture0 is actually non-null -- see drawInternal()'s
-        // dispatch). A real XNA EnvironmentMapEffect with Texture==null or EnvironmentMap==null
-        // still renders (just with a flat white base / no reflection contribution), so the GLSL
-        // sampler must always have something bound.
+        // Lazily-created 1x1 white fallbacks for effects that always sample a texture regardless
+        // of whether the XNA-level Texture property was actually set (unlike BasicEffect/
+        // AlphaTestEffect/DualTextureEffect, which only select a texturing program when texture0
+        // is actually non-null -- see drawInternal()'s dispatch). Used by both
+        // EnvironmentMapEffect (Texture + EnvironmentMap) and SkinnedEffect (Texture).
         unsigned defaultWhiteTexture2D_{};
         unsigned defaultWhiteTextureCube_{};
-        void ensureDefaultEnvMapTextures();
+        void ensureDefaultWhiteTextures();
 
         void ensurePrograms();
         void drawInternal(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,

@@ -45,6 +45,10 @@ namespace CNA::Internal::Backends::OpenGL2
             glBindAttribLocation(program, 1, "aColor");
             glBindAttribLocation(program, 2, "aTexCoord");
             glBindAttribLocation(program, 3, "aNormal");
+            // SkinnedEffect-only attributes (VertexPositionNormalTextureSkinned, stride 52/56).
+            // Harmless no-op for every other program, same convention as aNormal above.
+            glBindAttribLocation(program, 4, "aBoneWeight");
+            glBindAttribLocation(program, 5, "aBoneIndices");
             glLinkProgram(program);
             glDeleteShader(vs);
             glDeleteShader(fs);
@@ -914,6 +918,7 @@ namespace CNA::Internal::Backends::OpenGL2
         if (dualTextureProgram_) glDeleteProgram(dualTextureProgram_);
         if (litProgram_) glDeleteProgram(litProgram_);
         if (envMapProgram_) glDeleteProgram(envMapProgram_);
+        if (skinnedProgram_) glDeleteProgram(skinnedProgram_);
         if (defaultWhiteTexture2D_) glDeleteTextures(1, &defaultWhiteTexture2D_);
         if (defaultWhiteTextureCube_) glDeleteTextures(1, &defaultWhiteTextureCube_);
         if (context_) SDL_GL_DestroyContext(context_);
@@ -1074,14 +1079,80 @@ namespace CNA::Internal::Backends::OpenGL2
             "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
             "}";
 
+        // SkinnedEffect: bone-palette vertex skinning (matches
+        // EasyGLGraphicsBackend::EnsureSkinnedProgram's formula exactly -- same
+        // skinMat=sum(uBones[index]*weight) for the first WeightsPerVertex pairs, same
+        // degenerate-blend-normal guard, same litRGB=lightSum*diffuse+emissive composition, same
+        // vertex-color-modulates-diffuse-and-specular ordering). GL 2.1 has no integer vertex
+        // attributes (glVertexAttribIPointer is GL 3.0+), so bone indices are uploaded as an
+        // unnormalized GL_UNSIGNED_BYTE-as-float attribute and rounded back to int in the shader
+        // -- exact for byte-range values, no precision loss. Vertex-shader dynamic (non-constant)
+        // array indexing of a uniform array is valid GLSL back to 1.10 (only fragment shaders had
+        // historical restrictions), so `uBones[i]` with a non-constant `i` is portable GL 2.1.
+        const char* skinnedVertexSrc =
+            "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;"
+            "attribute vec4 aBoneWeight;attribute vec4 aBoneIndices;attribute vec4 aColor;"
+            "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat4 uBones[72];uniform int uWeightsPerVertex;"
+            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
+            "void main(){"
+            "int i0=int(aBoneIndices.x+0.5);int i1=int(aBoneIndices.y+0.5);"
+            "int i2=int(aBoneIndices.z+0.5);int i3=int(aBoneIndices.w+0.5);"
+            "mat4 skinMat=uBones[i0]*aBoneWeight.x;"
+            "if(uWeightsPerVertex>=2) skinMat+=uBones[i1]*aBoneWeight.y;"
+            "if(uWeightsPerVertex>=4) skinMat+=uBones[i2]*aBoneWeight.z+uBones[i3]*aBoneWeight.w;"
+            "vec4 skinnedPos=skinMat*vec4(aPosition,1.0);"
+            "gl_Position=uWVP*skinnedPos;"
+            // mat3(mat4) truncation requires GLSL 1.20 (this file targets 1.10, matching every
+            // other program here, which never needs this construct); built manually instead.
+            "mat3 skinMat3=mat3(skinMat[0].xyz,skinMat[1].xyz,skinMat[2].xyz);"
+            "vec3 skinnedNormal=skinMat3*aNormal;"
+            "float skinnedNormalLen=length(skinnedNormal);"
+            "vNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;"
+            "vTex=aTexCoord;"
+            "vWorldPos=(uWorld*skinnedPos).xyz;"
+            "vColor=aColor;"
+            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
+            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "}";
+        const char* skinnedFragmentSrc =
+            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
+            "uniform sampler2D uTex;uniform vec4 uDiffuse;uniform vec3 uEmissiveColor;"
+            "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;uniform vec3 uLight0Specular;"
+            "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;uniform vec3 uLight1Specular;"
+            "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;uniform vec3 uLight2Specular;"
+            "uniform vec3 uSpecularColor;uniform float uSpecularPower;uniform vec3 uEyePosition;"
+            "uniform vec4 uAlphaTest;uniform vec3 uFogColor;uniform float uVertexColorEnabled;"
+            "void main(){"
+            "vec3 N=normalize(vNormal);vec3 E=normalize(uEyePosition-vWorldPos);"
+            "float dotL0=dot(N,-uLight0Dir);float zeroL0=step(0.0,dotL0);float NdotL0=max(dotL0,0.0);"
+            "float dotL1=dot(N,-uLight1Dir);float zeroL1=step(0.0,dotL1);float NdotL1=max(dotL1,0.0);"
+            "float dotL2=dot(N,-uLight2Dir);float zeroL2=step(0.0,dotL2);float NdotL2=max(dotL2,0.0);"
+            "vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;"
+            "vec3 litRGB=lightSum*uDiffuse.rgb+uEmissiveColor;"
+            "vec3 h0=normalize(E-uLight0Dir);float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);"
+            "vec3 h1=normalize(E-uLight1Dir);float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);"
+            "vec3 h2=normalize(E-uLight2Dir);float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);"
+            "vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;"
+            "vec4 texColor=texture2D(uTex,vTex);"
+            "vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"
+            "gl_FragColor=vec4(litRGB*texColor.rgb,uDiffuse.a*texColor.a*vc.a);"
+            "gl_FragColor.rgb+=specularRGB*gl_FragColor.a;"
+            "gl_FragColor.rgb*=vc.rgb;"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "}";
+
         colorProgram_ = LinkProgram(colorVertexSrc.c_str(), colorFragmentSrc.c_str());
         texturedProgram_ = LinkProgram(texturedVertexSrc.c_str(), texturedFragmentSrc.c_str());
         dualTextureProgram_ = LinkProgram(texturedVertexSrc.c_str(), dualTextureFragmentSrc.c_str());
         litProgram_ = LinkProgram(litVertexSrc, litFragmentSrc);
         envMapProgram_ = LinkProgram(envMapVertexSrc, envMapFragmentSrc);
+        skinnedProgram_ = LinkProgram(skinnedVertexSrc, skinnedFragmentSrc);
     }
 
-    void OpenGL2GraphicsBackend::ensureDefaultEnvMapTextures()
+    void OpenGL2GraphicsBackend::ensureDefaultWhiteTextures()
     {
         if (defaultWhiteTexture2D_) return;
 
@@ -1340,12 +1411,13 @@ namespace CNA::Internal::Backends::OpenGL2
             throw std::runtime_error("OPENGL2: incompatible vertex buffer");
         const auto* ib = dynamic_cast<const IB*>(ibi);
 
-        const bool envMapped = params && params->envMapping && vb->stride >= 32;
-        const bool lit = params && params->lightingEnabled && !envMapped && vb->stride >= 32;
+        const bool skinned = params && params->skinned && (vb->stride == 52 || vb->stride == 56);
+        const bool envMapped = params && params->envMapping && !skinned && vb->stride >= 32;
+        const bool lit = params && params->lightingEnabled && !envMapped && !skinned && vb->stride >= 32;
         const bool dual = params && params->dualTexture && params->texture1 && vb->stride >= 20;
         const bool textured = params && params->texture0 && vb->stride >= 20;
 
-        const GLuint program = envMapped ? envMapProgram_ : lit ? litProgram_ : dual ? dualTextureProgram_ : textured ? texturedProgram_ : colorProgram_;
+        const GLuint program = skinned ? skinnedProgram_ : envMapped ? envMapProgram_ : lit ? litProgram_ : dual ? dualTextureProgram_ : textured ? texturedProgram_ : colorProgram_;
         glUseProgram(program);
 
         float wvp[16];
@@ -1368,7 +1440,7 @@ namespace CNA::Internal::Backends::OpenGL2
             glUniform1f(glGetUniformLocation(program, "uFogEnd"), params->fogEnd);
         }
 
-        if (lit || envMapped)
+        if (lit || envMapped || skinned)
         {
             float worldColMajor[16];
             for (int r = 0; r < 4; ++r)
@@ -1385,10 +1457,10 @@ namespace CNA::Internal::Backends::OpenGL2
             ComputeNormalMatrix3x3(world, normalMat);
             glUniformMatrix3fv(glGetUniformLocation(program, "uNormalMatrix"), 1, GL_FALSE, normalMat);
 
-            // Locations that one of the two programs doesn't declare resolve to -1 and glUniform*
-            // silently no-ops per the GL spec (same established convention as the alphaTest/fog
-            // uniforms above, uploaded unconditionally for colorProgram_ too) -- so it's simplest
-            // to upload the full lit ∪ env-map uniform set here rather than branching further.
+            // Locations a given program doesn't declare resolve to -1 and glUniform* silently
+            // no-ops per the GL spec (same established convention as the alphaTest/fog uniforms
+            // above, uploaded unconditionally for colorProgram_ too) -- so it's simplest to
+            // upload the full lit ∪ env-map ∪ skinned uniform set here rather than branching further.
             glUniform1i(glGetUniformLocation(program, "uTextureEnabled"), params->textureEnabled ? 1 : 0);
             glUniform3fv(glGetUniformLocation(program, "uAmbientColor"), 1, params->ambientColor);
             glUniform3fv(glGetUniformLocation(program, "uLight0Dir"), 1, params->light0Dir);
@@ -1410,6 +1482,15 @@ namespace CNA::Internal::Backends::OpenGL2
             glUniform1f(glGetUniformLocation(program, "uFresnelEnabled"), params->fresnelEnabled ? 1.0f : 0.0f);
             glUniform1f(glGetUniformLocation(program, "uFresnelFactor"), params->fresnelFactor);
             glUniform3fv(glGetUniformLocation(program, "uEnvMapSpecular"), 1, params->envMapSpecular);
+
+            // SkinnedEffect-only uniforms (silently ignored by litProgram_/envMapProgram_).
+            if (skinned)
+            {
+                glUniformMatrix4fv(glGetUniformLocation(program, "uBones[0]"), params->boneCount,
+                                   GL_FALSE, params->boneTransforms);
+                glUniform1i(glGetUniformLocation(program, "uWeightsPerVertex"), params->weightsPerVertex);
+                glUniform1f(glGetUniformLocation(program, "uVertexColorEnabled"), params->vertexColorEnabled ? 1.0f : 0.0f);
+            }
         }
 
         glBindBuffer(GL_ARRAY_BUFFER, vb->id);
@@ -1417,15 +1498,22 @@ namespace CNA::Internal::Backends::OpenGL2
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), nullptr);
 
         // Stride-based vertex-layout dispatch: VertexPositionColor=16, VertexPositionTexture=20,
-        // VertexPositionColorTexture=24, VertexPositionNormalTexture>=32 (normal bound at
-        // location 3, read only by litProgram_ -- harmless for the other programs, which don't
-        // declare an aNormal attribute at all).
+        // VertexPositionColorTexture=24, VertexPositionNormalTextureSkinned=52/56 (checked before
+        // the >=32 catch-all below, since 52/56 also satisfy >=32), VertexPositionNormalTexture
+        // (any other size >=32; normal bound at location 3, read only by litProgram_/
+        // envMapProgram_ -- harmless for the other programs, which don't declare an aNormal
+        // attribute at all). Locations 4/5 (aBoneWeight/aBoneIndices) are skinned-only and must be
+        // explicitly disabled in every other branch, or a previous skinned draw's now-stale
+        // pointers would remain enabled (harmless to non-skinned programs, which don't declare
+        // those attributes, but left disabled for cleanliness/defensiveness).
         if (vb->stride == 16)
         {
             glEnableVertexAttribArray(1);
             glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
             glDisableVertexAttribArray(2);
             glDisableVertexAttribArray(3);
+            glDisableVertexAttribArray(4);
+            glDisableVertexAttribArray(5);
         }
         else if (vb->stride == 20)
         {
@@ -1434,6 +1522,8 @@ namespace CNA::Internal::Backends::OpenGL2
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
             glDisableVertexAttribArray(3);
+            glDisableVertexAttribArray(4);
+            glDisableVertexAttribArray(5);
         }
         else if (vb->stride == 24)
         {
@@ -1442,6 +1532,36 @@ namespace CNA::Internal::Backends::OpenGL2
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(16));
             glDisableVertexAttribArray(3);
+            glDisableVertexAttribArray(4);
+            glDisableVertexAttribArray(5);
+        }
+        else if (vb->stride == 52 || vb->stride == 56)
+        {
+            // VertexPositionNormalTextureSkinned: float3 pos(0) + float3 normal(12) +
+            // float2 uv(24) + float4 boneWeight(32) + ubyte4 boneIndices(48) [+ ubyte4 color(52)
+            // for the stride-56 variant -- matches EasyGLGraphicsBackend's own stride-56 comment:
+            // "the stride-52 layout with a per-vertex Color appended at the end (offset 52)
+            // rather than inserted mid-layout"]. Bone indices are read as unnormalized
+            // GL_UNSIGNED_BYTE (converted to float 0..255 exactly, no precision loss), NOT
+            // normalized to [0,1] -- the vertex shader casts them back to int bone-array indices.
+            glEnableVertexAttribArray(3);
+            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
+            glEnableVertexAttribArray(2);
+            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(24));
+            glEnableVertexAttribArray(4);
+            glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(32));
+            glEnableVertexAttribArray(5);
+            glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(48));
+            if (vb->stride == 56)
+            {
+                glEnableVertexAttribArray(1);
+                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(52));
+            }
+            else
+            {
+                glDisableVertexAttribArray(1);
+                glVertexAttrib4f(1, 1, 1, 1, 1);
+            }
         }
         else if (vb->stride >= 32)
         {
@@ -1451,6 +1571,8 @@ namespace CNA::Internal::Backends::OpenGL2
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(24));
             glEnableVertexAttribArray(3);
             glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
+            glDisableVertexAttribArray(4);
+            glDisableVertexAttribArray(5);
         }
         else
         {
@@ -1486,7 +1608,7 @@ namespace CNA::Internal::Backends::OpenGL2
         // samplers need something bound even when the corresponding CNA texture is absent.
         if (envMapped)
         {
-            ensureDefaultEnvMapTextures();
+            ensureDefaultWhiteTextures();
 
             glActiveTexture(GL_TEXTURE0);
             if (params->texture0) params->texture0->BindGL();
@@ -1499,6 +1621,20 @@ namespace CNA::Internal::Backends::OpenGL2
             else glBindTexture(GL_TEXTURE_CUBE_MAP, defaultWhiteTextureCube_);
             glUniform1i(glGetUniformLocation(program, "uEnvMap"), 1);
             glActiveTexture(GL_TEXTURE0);
+        }
+        // SkinnedEffect::FillGpuDrawParams() also always sets textureEnabled=true and
+        // skinnedFragmentSrc always samples uTex unconditionally (no uTextureEnabled toggle,
+        // matching EasyGLGraphicsBackend::EnsureSkinnedProgram's identical fragment shader) --
+        // same null-texture0 fallback reasoning as envMapped above.
+        if (skinned)
+        {
+            ensureDefaultWhiteTextures();
+
+            glActiveTexture(GL_TEXTURE0);
+            if (params->texture0) params->texture0->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(0);
+            glUniform1i(glGetUniformLocation(program, "uTex"), 0);
         }
         if (dual)
         {
