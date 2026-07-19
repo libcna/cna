@@ -959,6 +959,39 @@ _(pending)_
   for that behavior. See `include/Microsoft/Xna/Framework/GameWindow.hpp.audit.md` and
   `src/Microsoft/Xna/Framework/GameWindow.cpp.audit.md`.
 
+- **`GraphicsDeviceManager` never subscribes to its own `Graphics::GraphicsDevice`'s
+  `DeviceResetting`/`DeviceReset`/`Disposing` events, unlike FNA's real
+  `IGraphicsDeviceManager.CreateDevice()`, which wires `graphicsDevice.DeviceResetting +=
+  OnDeviceResetting; graphicsDevice.DeviceReset += OnDeviceReset;` (`GraphicsDeviceManager.cs` lines
+  556-557) so that ANY device reset — however triggered — reaches `IGraphicsDeviceService`
+  listeners.** CNA's `GraphicsDeviceManager::ApplyChanges()`/`CreateDevice()` instead raise their own
+  separate copies of `DeviceResetting`/`DeviceReset` manually, only around their own call into
+  `applyToExistingBackend()`. This "happens to work" for preference-change resets routed through
+  `GraphicsDeviceManager` itself, but a confirmed, real, independent path exists that bypasses it
+  entirely: `Graphics::GraphicsDevice.cpp`'s `createBackend()` installs a `deviceEventCallback`
+  (lines 1459-1478, cited by its own comment as "plan_dx9.md D9-34: forward a REAL, backend-detected
+  device-lost/reset event... Nine of the ten backends never call this") that raises
+  `GraphicsDevice`'s *own* `DeviceResetting`/`DeviceReset` directly for a genuine backend-detected
+  device-lost recovery (e.g. a D3D9-class alt-tab/display-mode-change scenario) — completely outside
+  any `GraphicsDeviceManager` call. Since `GraphicsDeviceManager` never forwards `GraphicsDevice`'s
+  events, this real device-lost-then-reset cycle silently never reaches `IGraphicsDeviceService`
+  listeners (the conventional surface resource-reload code subscribes to), even though
+  `GraphicsDevice` itself correctly tracked and raised it. See
+  `include/Microsoft/Xna/Framework/GraphicsDeviceManager.hpp.audit.md` and
+  `src/Microsoft/Xna/Framework/GraphicsDeviceManager.cpp.audit.md` for full detail; flag again when
+  the one backend implementing this callback is formally audited under `xna-graphics`.
+
+- **`GraphicsDeviceManager.cpp`'s own `platformSupportsOrientations()` (correctly gating orientation
+  support to iOS/Android only, matching FNA) directly contradicts `GameWindow.cpp`'s unconditional,
+  every-platform window-aspect-ratio orientation heuristic noted above** — this is not merely a CNA
+  deviation from FNA, it is an internal inconsistency: the project already correctly implements FNA's
+  real orientation-support gate in one sibling file but omits it in another within the same
+  subsystem. Also independently confirmed: `GraphicsDeviceManager` genuinely calls
+  `EndScreenDeviceChange` with the real adapter device name (`ApplyChanges()`/`CreateDevice()`,
+  passing `gdi.getAdapterProperty()->getDeviceNameProperty()`), so the `GameWindow` finding about
+  `EndScreenDeviceChange` never repositioning the window is concretely reachable through normal
+  `GraphicsDeviceManager` operation, not a theoretical gap in an unused parameter.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
