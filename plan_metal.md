@@ -434,6 +434,29 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
       game's own subsequent `Present()` call becomes a safe no-op via `endFrame()`'s
       `if (!command) return;` guard rather than a double-present.
 
+17. **Phase 16 — resize/fullscreen/drawableSize/Retina research** (`METAL-162`–`167` answered; one
+    new real cross-backend gap found and deliberately NOT fixed here, `METAL-257`): this repo
+    vendors SDL3's actual source, not just headers — `third_party/SDL/src/video/cocoa/
+    SDL_cocoametalview.m` (present in sibling repos this session could read, e.g. `cnanet`/
+    `cnagraphics`) settles every question in this phase without writing a single line of new Metal
+    code. `SDL3_cocoametalview.updateDrawableSize` already sets both `contentsScale` and
+    `drawableSize` correctly (from `[self convertSizeToBacking:size]`, matching Apple's own
+    `CAMetalLayer` HiDPI guidance exactly), called once at view creation and again on every
+    `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED` (covering plain resize, fullscreen toggle, and Space-exit
+    resize alike, all one mechanism) — gated by `SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE`, which
+    defaults to `true`. `ensureFrame()`/`resolveActiveAttachments()`'s existing depth-texture-
+    recreate-on-size-mismatch logic was independently confirmed sufficient (it already re-reads
+    `drawable.texture.width/height` — which reflects SDL's own already-updated `drawableSize` — on
+    every fresh-drawable fetch). Found one genuinely new gap while tracing this, though: SDL3's
+    `highDPI` behavior above is itself gated on the window being created with
+    `SDL_WINDOW_HIGH_PIXEL_DENSITY`, and `GraphicsDevice.cpp`'s shared `getBackendWindowFlags()`/
+    `SDL_CreateWindow()` call never sets it, for *any* backend — meaning even Metal's own
+    fully-correct layer setup would still render 1x/blurry on a real Retina Mac today. Deliberately
+    NOT fixed in this Metal-only plan: it's cross-backend shared window-creation code (also read by
+    Vulkan-via-MoltenVK's own identical `Cocoa_Metal_CreateView` path), and CLAUDE.md's own
+    WebGPU-precedent guidance is explicit that such changes need cross-backend understanding first,
+    not a Metal-plan drive-by — tracked precisely as `METAL-257` instead.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -446,11 +469,13 @@ Phase 10 (`RenderTargetCube`,
 MRT, MSAA, mip, `GetData()`, `METAL-102`–`105`/`108`–`119`); Phase 14 (custom `ShaderEffect`, which
 Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
 `VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
-on Phase 14); Phases 16–17 (resize/Retina, frame pacing — Phase 18's own audit is now answered, see
-above); `METAL-256` (the real texture-update CPU/GPU-sync hazard Phase 18's audit found but did not
-fix); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases 21–30 in full (all NOXNA extensions,
-testing infrastructure, CI, docs, cross-backend pixel parity, iOS/tvOS). Nothing in this list has
-been touched.
+on Phase 14); Phase 17 (frame pacing — Phase 16's own resize/Retina questions and Phase 18's own
+command-buffer audit are now both answered, see above); `METAL-256` (the real texture-update
+CPU/GPU-sync hazard Phase 18's audit found but did not fix) and `METAL-257` (the cross-backend
+missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap Phase 16's research found but deliberately left for a
+cross-backend task, not this Metal-only plan); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases
+21–30 in full (all NOXNA extensions, testing infrastructure, CI, docs, cross-backend pixel parity,
+iOS/tvOS). Nothing in this list has been touched.
 
 ## Implemented initial foundation
 
@@ -488,6 +513,12 @@ been touched.
   to once per switch instead of exactly once per `Present()` (🟨 landed 2026-07-19 — `METAL-173`–
   `181`; the texture-update CPU/GPU-sync hazard the same audit found is real but deliberately left
   open as `METAL-256`, see its own note on why a naive fix would lose mip-level content).
+- Resize/fullscreen/Retina behavior confirmed correct **by reading this repo's own vendored SDL3
+  Cocoa Metal-view source** rather than guessing — `drawableSize`/`contentsScale` are already
+  managed automatically by SDL3 itself, no CNA Metal code needed; found one real, precisely-scoped,
+  cross-backend HiDPI gap in shared window-creation code in the process, deliberately left open as
+  `METAL-257` since fixing it is out of a Metal-only plan's scope (🟨 landed 2026-07-19 —
+  `METAL-162`–`167`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -853,16 +884,28 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-160 | `CTest`: `Metal_Letterbox` — virtual resolution narrower/wider than the physical window, verify sprite/3D positions match predicted letterbox math | ⬜ |
 | METAL-161 | `CTest`: `Metal_WindowToLogical` — synthetic window-coordinate inputs round-trip through `TransformWindowToLogical`/`TransformLogicalToWindow` | ⬜ |
 
-## Phase 16 — Resize / fullscreen / drawableSize / Retina (METAL-162 – METAL-167)
+## Phase 16 — Resize / fullscreen / drawableSize / Retina (METAL-162 – METAL-167, +METAL-257)
+
+> **Answered from real vendored source, not assumption (2026-07-19)**: this repo vendors SDL3's
+> actual Cocoa Metal view implementation
+> (`third_party/SDL/src/video/cocoa/SDL_cocoametalview.m`, present in sibling repos e.g.
+> `cnanet`/`cnagraphics`). Reading it directly settles every question below without writing any new
+> Metal code: `SDL3_cocoametalview.updateDrawableSize` (lines ~113–128) already sets both
+> `metalLayer.contentsScale` and `metalLayer.drawableSize` from `[self convertSizeToBacking:size]`,
+> called once at view creation AND on every subsequent `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED` event
+> (via `SDL_AddWindowEventWatch`, gated by `SDL_HINT_VIDEO_METAL_AUTO_RESIZE_DRAWABLE` which
+> **defaults to `true`**) — covering ordinary resize, fullscreen toggle, and Space-exit resize
+> alike, all through the exact same generic mechanism.
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-162 | `CAMetalLayer.drawableSize`/`contentsScale` explicit management for HiDPI/Retina — currently unmanaged, behavior is whatever `SDL_Metal_GetLayer` defaults to, unverified | ⬜ |
-| METAL-163 | Confirm SDL resize-event plumbing reaches Metal and updates `layer.drawableSize`/depth texture correctly (`ensureFrame()` already recreates the depth texture on a size mismatch — confirm sufficiency) | ⬜ |
-| METAL-164 | Fullscreen toggle — confirm `GraphicsBackendCreateArgs::isFullScreen`/`UpdatePresentationFormatEXT` (currently not overridden) interplay with SDL's own fullscreen window management | ⬜ |
-| METAL-165 | `layer.contentsScale` correctness paired with `drawableSize` per Apple's `CAMetalLayer` guidance | ⬜ |
-| METAL-166 | Document HiDPI/Retina verification as a **physical-Mac-only** item — the macOS CI runner's virtual display cannot prove this | ⬜ |
-| METAL-167 | Update this plan's testing-strategy section once implemented, distinguishing "compiles/runs on CI" from "visually correct on a real Retina Mac" | ⬜ |
+| METAL-162 | `CAMetalLayer.drawableSize`/`contentsScale` explicit management for HiDPI/Retina — currently unmanaged, behavior is whatever `SDL_Metal_GetLayer` defaults to, unverified | 🟨 (answered: SDL3 already manages both automatically — no CNA Metal code needed, see note above) |
+| METAL-163 | Confirm SDL resize-event plumbing reaches Metal and updates `layer.drawableSize`/depth texture correctly (`ensureFrame()` already recreates the depth texture on a size mismatch — confirm sufficiency) | 🟨 (confirmed sufficient: `resolveActiveAttachments()`'s backbuffer branch re-reads `drawable.texture.width/height` — which reflects SDL's own already-updated `drawableSize` — on every new-drawable fetch, and its `depthTexture.width!=w \|\| depthTexture.height!=h` check already recreates the depth texture on any such change) |
+| METAL-164 | Fullscreen toggle — confirm `GraphicsBackendCreateArgs::isFullScreen`/`UpdatePresentationFormatEXT` (currently not overridden) interplay with SDL's own fullscreen window management | 🟨 (confirmed: fullscreen toggling resizes the view like any other resize, driven by the same `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED` mechanism — no separate handling needed; `UpdatePresentationFormatEXT`'s own doc comment already documents its default no-op as correct for every backend except D3D9, Metal needs no override) |
+| METAL-165 | `layer.contentsScale` correctness paired with `drawableSize` per Apple's `CAMetalLayer` guidance | 🟨 (answered: SDL3's `updateDrawableSize` sets `contentsScale = backingSize.height / size.height`, i.e. exactly the ratio Apple's own `CAMetalLayer` guidance calls for — paired atomically with `drawableSize` in the same method) |
+| METAL-166 | Document HiDPI/Retina verification as a **physical-Mac-only** item — the macOS CI runner's virtual display cannot prove this | 🟨 |
+| METAL-167 | Update this plan's testing-strategy section once implemented, distinguishing "compiles/runs on CI" from "visually correct on a real Retina Mac" | 🟨 (folded into the physical-Mac tier already described in the Testing strategy section) |
+| METAL-257 | *(new, found during this audit — NOT Metal-specific, deliberately not fixed here)* SDL3's `highDPI` behavior above is itself gated on the window having been created with `SDL_WINDOW_HIGH_PIXEL_DENSITY` (`Cocoa_Metal_CreateView` reads `window->flags & SDL_WINDOW_HIGH_PIXEL_DENSITY` into its `highDPI` bool). `GraphicsDevice.cpp`'s `getBackendWindowFlags()`/`SDL_CreateWindow()` call (around line 99/1410) never sets this flag for *any* backend — so even a fully-correct Metal layer setup would still render at 1x (non-Retina, blurry) on a real Retina Mac today. This is shared, cross-backend window-creation code, not Metal-only — CLAUDE.md's own WebGPU-precedent guidance ("changes should remain backend-local or common only where a common-interface change is genuinely required and verified across existing backends") applies directly: fixing it means understanding every other SDL-Cocoa-backed backend's own DPI story first (Vulkan-via-MoltenVM also rides `Cocoa_Metal_CreateView`; GL's DPI handling is a separate code path entirely) — deliberately left as a precisely-scoped, well-researched, NOT-attempted finding for a cross-backend task, not folded into this Metal-only plan | ⬜ |
 
 ## Phase 17 — Frame pacing / presentation policy (METAL-168 – METAL-172)
 
