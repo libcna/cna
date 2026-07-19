@@ -2354,3 +2354,171 @@ XNA 4.0 API *surface* is confirmed overwhelmingly complete -- almost every defec
 has found is *behavioral* (wrong formulas, dropped events, missing null checks), not a missing
 member. Pass 3 is now considered complete for every namespace with runtime-relevant surface.
 
+## Pass 6 continued: build/test verification for every remaining feasible backend
+
+Extends the EasyGL-only Pass 6 sweep above to 7 more backends, each built and runtime-tested (not
+just statically reviewed), all via dedicated per-backend build directories to avoid cross-contamination.
+The remaining backends (Bgfx, SdlRenderer, D3D12, Software, Ascii, Headless) are covered in a
+follow-up continuation once their builds finish.
+
+### HEADLINE, CRITICAL/HIGH: a real, security-relevant memory-safety crash confirmed on 2 of 7 backends so far, from malformed Texture2D content -- the single most severe finding of this entire audit
+
+`XnbContainerFuzzTest.MutatedRealTexture2DFixtureNeverCrashesAndOnlyFailsCleanly` -- a test whose
+entire stated purpose is guaranteeing 1500 rounds of mutated/corrupted `.xnb` content never crashes
+the process -- **genuinely crashes the process on both Vulkan and WebGPU**, confirmed reproducible
+in complete isolation on each, via two structurally different but conceptually identical root
+causes:
+
+- **Vulkan**: `*** stack smashing detected ***: terminated`. `VulkanTextureBackend`'s constructor
+  takes XNB-decoded `width`/`height`/`mipLevels` with no validation against the device's own image
+  limits before computing a staging-buffer size and driving `vkCreateImage`. Vulkan's own validation
+  layer flags the resulting grossly out-of-spec parameters (`extent.width=16777217`,
+  `mipLevels=25` against a 15-level maximum) as advisory warnings, but the RADV driver proceeds
+  anyway, corrupting the stack downstream.
+- **WebGPU**: a fatal, non-catchable Rust panic across the wgpu-native FFI boundary
+  (`"thread '<unnamed>' panicked... panic in a function that cannot unwind... aborting"`).
+  `GenerateMipsForLayer()` does check `wgpuTextureCreateView()`'s synchronous return value for
+  `nullptr`, but wgpu-native validates the view's `baseMipLevel` *lazily*, at `wgpuQueueSubmit()`
+  time, not at view-creation time -- a mismatched mip level (derived from the same class of
+  corrupted/fuzzed dimension data) slips past the existing defensive check entirely and only
+  surfaces as a fatal panic several calls downstream.
+
+**Confirmed NOT present on EasyGL** (this session's own earlier EasyGL Pass 6 run reported a clean
+5503/5507 with 0 failures for the full suite, which necessarily includes this test) — this is a
+genuine, backend-specific class of defect, not a universal one, and not present in the
+project's own default/most-mature backend. **Both instances share the same underlying shape**: XNB-
+decoded texture dimensions/mip-counts are trusted and passed directly into a native GPU API
+(`vkCreateImage`/`wgpuQueueSubmit`) with no sanity check against real device/format limits before
+use, and the native API's own advisory-only validation (Vulkan) or lazily-timed validation (WebGPU)
+does not substitute for an explicit CNA-side bounds check. **Impact**: any CNA application on either
+backend that loads a corrupted, truncated, or maliciously-crafted `Texture2D` `.xnb` asset -- a
+realistic scenario for any game loading content from disk, mods, or network transfer -- can be
+crashed outright (denial of service), contradicting this exact test's own name and the clean,
+catchable-exception behavior every other tested backend provides. **Suggested fix (report-only)**:
+validate decoded `width`/`height`/`mipLevels` for sanity (positive, non-degenerate, within the
+device's real reported limits) immediately after XNB decode and before any backend-specific texture
+creation, throwing the same allowlisted `ContentLoadException` every other malformed-input case in
+this test already expects -- ideally in shared `Texture2DContentTypeReader`/`Texture2D` construction
+code rather than duplicated per-backend, so a single fix closes it everywhere at once. Whether D3D9/
+D3D11/D3D12/Bgfx/SdlGpu/SdlRenderer/Software/Ascii/Headless/Canvas share this exact crash is not yet
+fully determined -- D3D9/D3D11/Dx3/SdlGpu's own Pass 6 runs did not specifically isolate this exact
+test case; a targeted follow-up re-running `XnbContainerFuzzTest.MutatedRealTexture2DFixtureNeverCrashesAndOnlyFailsCleanly`
+in isolation on every remaining backend would settle the true blast radius precisely.
+
+### Vulkan: build+test complete, 5495/5507 pass; corrects a previously-documented finding to FIXED
+
+Real Vulkan 1.4.309 (AMD Radeon 780M, RADV). Beyond the crash above:
+
+- **Task 868 (Vulkan `BlendState` hardcoding) is CONFIRMED FIXED, correcting this audit's own
+  earlier static-review finding.** `AUDIT_GRAPHICS_BACKEND_MATRIX.md`/`cmake/Tests/VulkanTests.cmake`
+  document this as an open defect with precise per-check failure predictions for 5 blend-state
+  tests -- **all 6 blend-state test executables now pass cleanly**, including every case the
+  documented predictions said should genuinely fail. `ApplyBlendState`'s own source comment confirms
+  the fix landed since this audit's static review: "Task 868: previously every one of these 6 real
+  values was discarded... Now stored for real use." `AUDIT_GRAPHICS_BACKEND_MATRIX.md`'s Stencil+
+  Scissor+DepthBias row and `VulkanTests.cmake`'s own per-check predictions both need updating to
+  reflect this.
+- **NEW, MEDIUM-HIGH**: SkinnedEffect+Fog renders completely black on all 3 checks, *including the
+  fog-disabled control case* -- not the already-documented mirrored-fog-formula bug (which produces
+  a wrong-but-non-black color), but an apparent silent pipeline-creation or descriptor-binding
+  failure in the skinned3d+fog pipeline specifically (which needed a 3rd descriptor-set binding
+  added to carry fog data). Not root-caused further; even once the black-screen issue is fixed, the
+  test's own expected values still encode the already-known wrong mirrored fog formula and would
+  need correcting too.
+- **NEW, LOW**: `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` is a test-authoring bug, not
+  a Vulkan defect -- Vulkan genuinely supports wireframe fill mode, but the test asserts universally
+  that no backend does, when this was only ever true for EasyGL's underlying GLES3. (Independently
+  re-confirmed by the SdlGpu sweep below, which hits the identical test with the identical
+  root cause on a third backend.)
+- Environment gap, not a CNA defect: `glslc`/`glslangValidator` CLI tools are missing from this
+  sandbox (only the shared `libshaderc1` library is installed), blocking 2 CNJ/custom-GLSL-effect
+  tests -- needs `sudo apt-get install glslang-tools` to close, unavailable to this pass.
+  Fog-formula/scissor/environment-map-normal-transform findings already on record were all
+  empirically re-verified consistent with their existing characterization (no new information).
+
+### D3D11: build+test complete via real Wine+DXVK (not a WineD3D fallback), 5/7 pass; 2 new runtime-confirmed defects
+
+Confirmed genuine via real DXVK log lines ("DXVK: Using 16 compiler threads"), not a silent
+fallback. `CnaTests.exe` correctly never attempted (documented, pre-existing cross-compile
+limitation, `.github/workflows/d3d-windows-ci.yml`'s own header comment). Fog-at-boundary tests
+passing is expected and does not contradict the already-confirmed mirrored-formula bug (both
+formulas saturate identically at the exact `Z=FogEnd` boundary this smoke test samples).
+
+- **NEW**: `D3D11_Smoke` (152/153 individual checks) -- Blinn-Phong specular fails for non-skinned
+  `lit_textured3d` at a geometry chosen so `dot(H,N)=1` exactly (should produce a full-white
+  highlight with diffuse/ambient/emissive all zero), while the structurally identical `skinned3d`
+  specular check at the same geometry passes. A genuine asymmetry, not yet root-caused to a specific
+  shader line.
+- **NEW**: `D3D11_Pbr_VertexColor` fails -- `skinned3dvertexlitcolored-black-vertexcolor` produces
+  green `(0,255,0,255)` instead of the expected black; a vertex explicitly colored black is not
+  correctly applied for the skinned+vertex-lit+vertex-color effect combination specifically.
+
+### Dx3: build+test complete natively (no Wine needed -- `free-direct` is an SDL3-based reimplementation, not real DirectDraw); CLOSES this project's long-standing `Dx3_SpriteBatch` investigation
+
+**Both of this audit's static predictions for `Dx3_SpriteBatch`'s 2 historically-failing checks are
+now empirically confirmed for the first time**, exactly matching the persistent "2/10 failing"
+record: Check D (zero-alpha `AlphaBlend`) fails, confirming the test-authoring-bug hypothesis
+(non-premultiplied fixture color under a premultiplied-convention blend preset); Check G (180°
+rotation) fails, confirming the real-backend-defect hypothesis. **New lead on Check G**: the
+rotation formula is a byte-for-byte verbatim port of `SoftwareGraphicsBackend.cpp`'s identical code
+-- if Software's own equivalent rotation test also fails the same way (see below), this reframes the
+bug as a shared defect inherited from Software's original code, not independently introduced in
+Dx3. Every other Dx3 test executable is 100% clean: 59/61 checks across all 8 executables (96.7%),
+both failures now fully explained.
+
+### D3D9: build+test complete via real Wine+DXVK, 100% clean (280+ checks across 18 executables)
+
+Zero real test failures, after the investigating fork caught and corrected its own initial
+methodology error (using the wrong Wine prefix for the shader-compiler-oracle test specifically,
+per `scripts/run-wine-dxvk9.sh`'s own documented prefix-selection rule -- corrected before
+reporting, a good example of self-caught rigor). Corroborates this backend's stock-effect-fidelity
+and Reach/HiDef-profile-enforcement claims with no regression. The already-known object-space-only
+fog defect in the 3 CNA-custom shaders was not independently re-exercised (none of the 18
+executables specifically test `FogEnabled=true` on those shaders) -- still only statically
+confirmed, a natural follow-up target.
+
+### SdlGpu: build+test complete, 5500/5507 pass on the general suite, 21/21 on its own dedicated suite; 3 new findings
+
+- **NEW**: 2 CNJ/custom-`ShaderEffect` tests (`CnjEffectTest.LoadsRealCnjFixture`,
+  `CnjStockEffectTest.CustomGlslEffectStillWorks`) fail -- SdlGpu's SPIR-V-based shader pipeline
+  rejects a real, already-committed test-fixture GLSL shader that works on EasyGL's more permissive
+  raw-OpenGL GLSL (errors: missing `#version 310 es`+, missing explicit `location` qualifiers,
+  non-block uniforms). A real cross-backend compatibility gap for user-authored custom-effect
+  content, not merely a test-fixture issue -- whether the fix belongs in SdlGpu (auto-upgrade older
+  GLSL), documentation (a stricter dialect requirement disclosed to effect authors), or the fixture
+  itself is a judgment call for the project owner.
+- **NEW, confirms the Vulkan finding above on a second/third backend**:
+  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` fails identically -- SdlGpu also genuinely
+  supports wireframe, the same universal-assertion test-authoring bug.
+- SdlGpu's own dedicated 21-test suite is 100% green, but (as this fork itself was careful to note)
+  this doesn't confirm or deny any of the 6 already-known static findings for this backend (fog
+  unimplemented, skinned-normal-transform, EnvironmentMapEffect emissive bug, constructor-resource-
+  leak, DepthBias-stored-not-applied, whole-cube-mip-regen) since none of them have any direct test
+  coverage in either direction -- genuinely untested territory, not silently confirmed-clean.
+
+### Canvas (Emscripten): buildable after all -- corrects an earlier "unavailable" assumption, plus a new build-config finding shared across 3 toolchains
+
+**Emscripten IS available in this sandbox** (a full `emsdk` install at `~/emsdk`, not on `PATH` by
+default) -- corrects this pass's own earlier quick `which emcc` check. Configure succeeds; the core
+`libCNA.a` and the Canvas backend library itself build with zero Canvas-specific errors across 64%+
+of the full target graph. `CnaTests` itself cannot finish building, but the cause is unrelated to
+Canvas: **`cmake/Harnesses.cmake`'s two mixer-destroy-voice harnesses
+(`cna_audio_mixer_destroy_active_static_voice_harness`/`..._dynamic_voice_harness`) omit an explicit
+`SDL3::SDL3` link**, relying on fragile transitive propagation from `CNA` that fails specifically
+under this Emscripten toolchain (`fatal error: 'SDL3/SDL.h' file not found`) -- **the same exact
+finding independently rediscovered by the D3D9 and D3D11 MinGW cross-compile passes above (3 of 3
+non-native-GCC toolchains hit it)**, confirming this is a real, reproducible, toolchain-general
+build-config gap in those two specific harness registrations (missing `SDL3::SDL3` in their
+`target_link_libraries()` calls), not a one-off. LOW/MEDIUM severity -- harmless on every native
+desktop build this project's existing CI already exercises, but a real gap once cross-compiling to
+anything else. No new Canvas-backend source-level defect found; existing static findings re-read
+and not contradicted.
+
+### Recurring build-config finding, now confirmed under 3 independent toolchains: `cmake/Harnesses.cmake`'s 2 mixer-destroy harnesses need an explicit `SDL3::SDL3` link
+
+Confirmed independently by the Canvas (Emscripten), D3D11 (MinGW), and D3D9 (MinGW) passes above --
+all three hit the identical `fatal error: SDL3/SDL.h: No such file or directory` for the exact same
+2 targets. Suggested fix (report-only): add `SDL3::SDL3` to both harnesses' `target_link_libraries()`
+calls in `cmake/Harnesses.cmake`, matching the pattern other `AudioMixer.hpp`-consuming targets
+already use.
+
