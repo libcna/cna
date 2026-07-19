@@ -157,6 +157,46 @@ fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[text
     return c;
 }
 
+// plan_metal.md METAL-39: real XNA BasicEffect defaults PreferPerPixelLighting=false, which selects
+// a per-vertex (Gouraud) lit shader family -- lighting is computed ONCE per vertex and interpolated
+// across the triangle, not re-evaluated per fragment. cna_v3d_lit/cna_f3d_lit above are the
+// PreferPerPixelLighting=true family; this is its per-vertex-lit sibling, ported line-for-line from
+// EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram()'s real GLSL (identical Blinn-Phong math to
+// EnsureLit3DProgram() -- only the STAGE it runs in changes). Reuses the SAME LitTransform/
+// LitUniforms structs as the per-pixel variant (just consumed differently), so fillLitUniforms()
+// needs no changes at all.
+struct VLitVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; };
+vertex VLitVertexLitOut cna_v3d_lit_vertexlit(V3NormalTexIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
+    VLitVertexLitOut o;
+    o.position = t.wvp * float4(in.position, 1.0);
+    o.uv = in.uv;
+    float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
+    float3 N = normalize(normalMat * in.normal);
+    float3 worldPos = (t.world * float4(in.position, 1.0)).xyz;
+    float3 E = normalize(lu.eyePosition.xyz - worldPos);
+    float dotL0 = dot(N, -lu.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+    float dotL1 = dot(N, -lu.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+    float dotL2 = dot(N, -lu.light2Dir.xyz); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+    float3 lightSum = lu.ambientColor.xyz + lu.light0Diffuse.xyz*NdotL0 + lu.light1Diffuse.xyz*NdotL1 + lu.light2Diffuse.xyz*NdotL2;
+    o.litRGB = lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz;
+    float3 h0 = normalize(E - lu.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, lu.specularColorPower.w);
+    float3 h1 = normalize(E - lu.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, lu.specularColorPower.w);
+    float3 h2 = normalize(E - lu.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, lu.specularColorPower.w);
+    o.specularRGB = (spec0*lu.light0Specular.xyz + spec1*lu.light1Specular.xyz + spec2*lu.light2Specular.xyz) * lu.specularColorPower.xyz;
+    float fogStart = lu.fogStartEnd.x, fogEnd = lu.fogStartEnd.y;
+    o.fogFactor = (lu.fogColorEnabled.w > 0.5)
+        ? ((abs(fogEnd - fogStart) < 1e-6) ? 0.0 : clamp((in.position.z + fogEnd) / (fogEnd - fogStart), 0.0, 1.0))
+        : 1.0;
+    return o;
+}
+fragment float4 cna_f3d_lit_vertexlit(VLitVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]]) {
+    float4 c = tex.sample(smp, in.uv) * float4(in.litRGB, lu.diffuseColor.w);
+    c.rgb += in.specularRGB * c.a;
+    if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
+    c.rgb = mix(lu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    return c;
+}
+
 // EnvironmentMapEffect (plan_metal.md METAL-64/66-68), ported line-for-line from
 // EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()'s real GLSL. Real XNA `EnvironmentMapEffect`
 // has no separate AmbientLightColor uniform in its own shader at all -- `GpuDrawParams::
@@ -605,7 +645,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // verified by reading that exact branch, not assumed).
     enum class PipelineKind : uint8_t
     {
-        Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, EnvMap32,
+        Colored16, Textured20, ColorTex24, LitTex32, LitTex32VertexLit, DualTex20, DualTex24Colored, EnvMap32,
         Skinned52, Skinned56, Pbr48, SkinnedPbr68, Sprite2D
     };
 
@@ -1273,6 +1313,7 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::Textured20:       vs=@"cna_v3d_tex";      fs=@"cna_f3d_texture"; stride=20; break;
             case PipelineKind::ColorTex24:       vs=@"cna_v3d_colortex"; fs=@"cna_f3d_texture"; stride=24; break;
             case PipelineKind::LitTex32:         vs=@"cna_v3d_lit";      fs=@"cna_f3d_lit";     stride=32; break;
+            case PipelineKind::LitTex32VertexLit: vs=@"cna_v3d_lit_vertexlit"; fs=@"cna_f3d_lit_vertexlit"; stride=32; break;
             case PipelineKind::DualTex20:        vs=@"cna_v3d_tex";      fs=@"cna_f3d_dualtex"; stride=20; break;
             case PipelineKind::DualTex24Colored: vs=@"cna_v3d_colortex"; fs=@"cna_f3d_dualtex"; stride=24; break;
             case PipelineKind::EnvMap32:         vs=@"cna_v3d_envmap";   fs=@"cna_f3d_envmap";  stride=32; break;
@@ -2033,7 +2074,15 @@ static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* 
         switch (stride) {
             case 20: return PipelineKind::Textured20;
             case 24: return PipelineKind::ColorTex24;
-            case 32: return PipelineKind::LitTex32;
+            case 32:
+                // plan_metal.md METAL-39: real XNA BasicEffect precedence (matches
+                // EasyGLGraphicsBackend::SelectProgram()'s own stride-32 case exactly) -- with
+                // lighting disabled, both shaders degenerate to the identical trivial
+                // ambient=(1,1,1) case, so the per-pixel-lit pipeline stays selected there rather
+                // than forcing an unnecessary extra PipelineKind/pipeline-cache entry.
+                if (params && params->lightingEnabled && !params->preferPerPixelLighting)
+                    return PipelineKind::LitTex32VertexLit;
+                return PipelineKind::LitTex32;
             default: throw std::runtime_error("Metal: textured 3D requires stride 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented");
         }
     }
@@ -2174,8 +2223,12 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
     [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
 
-    if (kind == PipelineKind::LitTex32) {
-        // plan_metal.md METAL-38-47: real per-pixel lighting/fog/specular/emissive path.
+    if (kind == PipelineKind::LitTex32 || kind == PipelineKind::LitTex32VertexLit) {
+        // plan_metal.md METAL-38-47/39: real per-pixel (LitTex32) or per-vertex/Gouraud
+        // (LitTex32VertexLit, XNA's real PreferPerPixelLighting=false default) lighting/fog/
+        // specular/emissive path -- both share the identical LitTransform/LitUniforms uniform
+        // layout and texture binding, only the vertex/fragment shader pair (selected via `kind` by
+        // getOrCreatePipeline()) differs in which pipeline stage actually does the lighting math.
         LitTransform t{}; LitUniforms lu{};
         fillLitUniforms(t, lu, wvp, *params);
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];

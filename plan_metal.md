@@ -168,7 +168,8 @@ before any status here can honestly change.
   match-the-reference discipline. **Not ported this pass**: the per-vertex (Gouraud) lit variant
   (`METAL-39`) — every lit draw currently takes the per-pixel path regardless of
   `preferPerPixelLighting`, the same already-documented, already-accepted divergence every backend
-  except D3D9 has.
+  except D3D9 has. *(Closed later the same session — see item 23 below: `METAL-39` now has a real
+  `cna_v3d_lit_vertexlit`/`cna_f3d_lit_vertexlit` pair, selected correctly.)*
 
 **A real, previously-unknown blocking dependency was found and documented in-place** (not worked
 around, not silently skipped) while investigating Phase 9 — see that phase's own header note in
@@ -203,7 +204,8 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
   `LitTransform`/`EnvTransform`. `params->pbr` now throws a clear, honest "not yet implemented"
   error instead of silently falling through to a non-PBR shader when both `pbr` and `skinned` are
   set (Phase 8 hasn't landed). **Not ported**: the per-vertex (Gouraud) lit variant (`METAL-76`),
-  same already-accepted divergence as `METAL-39`.
+  the same class of divergence `METAL-39` had — `METAL-39` itself was closed later the same
+  session (see item 23 below); `METAL-76` remains open.
 - **`ReadBackbuffer`** (`METAL-130`/`132`/`133`): real `MTLBlitCommandEncoder` copy into a
   `MTLResourceStorageModeShared` staging buffer. Needs no Y-flip at all (unlike GL's
   `ReadBackbuffer`, whose framebuffer origin is bottom-left) — Metal's own texture origin is
@@ -601,6 +603,35 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `METAL-19` (enum-reordering regression guard) remains open, needing a real compile-time check or
     CTest unreachable from this Linux machine.
 
+23. **Phase 3 — `METAL-39`, BasicEffect's real per-vertex (Gouraud) lighting default**: reading
+    `EasyGLGraphicsBackend::SelectProgram()`'s own real stride-32 dispatch (not just its per-pixel
+    shader's own code, already ported earlier this session) revealed a genuine, currently-shipping
+    visual divergence from XNA/FNA: real `BasicEffect` defaults `PreferPerPixelLighting=false`,
+    which selects a *per-vertex* Gouraud-shaded lighting path — lighting computed once per vertex and
+    linearly interpolated across the triangle — not the per-pixel (Phong-style) path Metal has used
+    unconditionally for every lit draw all session. This is a real, visible difference (most
+    noticeable on large, sparsely-tessellated triangles), not a cosmetic nuance, and would fail a
+    real pixel-parity test against EasyGL/FNA. Fixed by porting
+    `EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram()`'s real GLSL line-for-line into a new
+    `cna_v3d_lit_vertexlit`/`cna_f3d_lit_vertexlit` MSL pair — identical Blinn-Phong math to the
+    existing per-pixel shader, just computed in the vertex stage and passed as interpolated `litRGB`/
+    `specularRGB` varyings instead of interpolating `normal`/`worldPos` and recomputing per pixel.
+    Deliberately reuses the *exact same* `LitTransform`/`LitUniforms` uniform structs as the
+    per-pixel variant (only the shader source differs), so `fillLitUniforms()` needed zero changes.
+    New `PipelineKind::LitTex32VertexLit` entry, selected by `selectPipelineKind()`'s stride-32 case
+    only when `lightingEnabled && !preferPerPixelLighting` — matching
+    `EasyGLGraphicsBackend::SelectProgram()`'s own exact precedence, including its own documented
+    reasoning for the `else` case: with lighting *disabled*, both shaders degenerate to the identical
+    trivial `ambient=(1,1,1)` case, so the existing per-pixel pipeline correctly stays selected there
+    too, avoiding an unnecessary extra pipeline-cache entry — confirming Metal's prior "always
+    `LitTex32`" behavior was already correct for that specific case, not a second bug. `drawMetal3D`'s
+    dispatch widened to treat both `PipelineKind`s identically (same uniform fill, same texture
+    binding) since only `getOrCreatePipeline()`'s shader-pair selection actually differs between them.
+    **Not done this pass**: `SkinnedEffect`'s identical divergence (`METAL-76`, EasyGL's own
+    `prog_skinned_vertexlit_`/`EnsureSkinnedVertexLitProgram()`) — same real gap, same fix shape,
+    left for a following pass rather than risk a second large shader port without a compiler to
+    verify the first one against first.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -608,8 +639,9 @@ at the end of each landed phase rather than trusted from an earlier revision):
 `VertexElement`-driven descriptor builder below, and the enum-reordering regression guard —
 `METAL-15`–`18`/`20` are now closed, several found to be based on a false premise, see above); the
 fully generic `VertexElement`-driven descriptor builder
-(`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
-lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
+(`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); `SkinnedEffect`'s
+own identical per-vertex-lit gap (`METAL-76` — `BasicEffect`'s own `METAL-39` is now closed, see
+above); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
 Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
 `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108`, `RenderTargetCube`
@@ -643,6 +675,12 @@ iOS/tvOS). Nothing in this list has been touched.
 - `TextureCube`/`Texture3D` backends, and a real `EnvironmentMapEffect` (world-space cube-map
   reflection, flat + Fresnel-weighted blend, lit+fogged) built on top of them (🟨 landed
   2026-07-19 — `METAL-64`/`66`–`69`/`120`/`121`/`123`/`124`).
+- Real per-vertex (Gouraud) `BasicEffect` lighting (`PipelineKind::LitTex32VertexLit`, ported from
+  `EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram()`'s real GLSL), correctly selected only when
+  `lightingEnabled && !preferPerPixelLighting` (XNA's real default) — closes a real, visible,
+  currently-shipping divergence from XNA/FNA where every lit draw silently used per-pixel shading
+  regardless of the requested lighting model (🟨 landed 2026-07-19 — `METAL-39`; `SkinnedEffect`'s
+  identical gap, `METAL-76`, remains open).
 - Real `SkinnedEffect` (72-bone GPU skinning via a real `MTLBuffer`, `WeightsPerVertex` branching,
   a NaN-safety guard for near-180°-relative-bone-rotation blends, lit/fog/specular/emissive) (🟨
   landed 2026-07-19 — `METAL-72`–`75`/`77`/`78`).
@@ -829,7 +867,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-36 | `textured3d.metal`: multiply by `diffuseColor` (currently hardcodes `color=(1,1,1,1)`, i.e. `DiffuseColor` has zero effect) | 🟨 |
 | METAL-37 | `colortex3d.metal`: same `diffuseColor` multiply for the vertex-color+texture combined path | 🟨 |
 | METAL-38 | Per-pixel lit shader (`lit_textured3d.metal`, stride 32): port FNA's `Lighting.fxh`/`ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive) — direct MSL port from `VulkanGraphicsBackend`'s already-shipped GLSL or `EnsureLit3DProgram()`, not new design | 🟨 |
-| METAL-39 | Per-vertex (Gouraud) lit shader (`lit_textured3d_vertexlit.metal`), selected when `lightingEnabled && !preferPerPixelLighting` (XNA's real default, Task 1102) — Metal currently has **no** lighting shader of either kind | ⬜ |
+| METAL-39 | Per-vertex (Gouraud) lit shader (`lit_textured3d_vertexlit.metal`), selected when `lightingEnabled && !preferPerPixelLighting` (XNA's real default, Task 1102) — Metal currently has **no** lighting shader of either kind | 🟨 |
 | METAL-40 | Normal matrix (`inverse(world3x3)`, no shader-side transpose given this codebase's column-major GPU convention) computed CPU-side, cross-verified against `BgfxGraphicsBackend::ComputeNormalMatrix3x3` | 🟨 |
 | METAL-41 | Safe-normalize guard for a disabled/zero-direction light — **audited 2026-07-19**: `cna_f3d_lit` (ported verbatim from `EnsureLit3DProgram()`, not WebGPU's own shader) never normalizes a raw light-direction vector directly — only `dot(N,-lightDir)` (zero when `lightDir=0`, safe) and `normalize(E-lightDir)` (degrades to `normalize(E)`, already unit-length, safe) — so this specific formula structure has no zero-vector `normalize()` call to guard, unlike WebGPU's own shader shape. Left ⬜ rather than claiming done: not verified on real hardware, and EasyGL's own GLSL (the ground truth here) has no matching guard either | ⬜ |
 | METAL-42 | Fog: `fogEnabled`/`fogColor`/`fogStart`/`fogEnd` plumbing + eye-space-Z linear blend in every textured/lit fragment variant — zero fog support exists today | 🟨 |
