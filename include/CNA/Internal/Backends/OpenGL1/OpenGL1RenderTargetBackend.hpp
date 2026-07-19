@@ -1,5 +1,6 @@
 #pragma once
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/OpenGL1/OpenGL1ContextRecovery.hpp"
 
 namespace CNA::Internal::Backends::OpenGL1
 {
@@ -19,7 +20,7 @@ namespace CNA::Internal::Backends::OpenGL1
      * SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing) == false) or mip-chain
      * auto-generation (mipMap is accepted but currently ignored -- level 0 only).
      */
-    class OpenGL1RenderTargetBackend final : public IRenderTargetBackend
+    class OpenGL1RenderTargetBackend final : public IRenderTargetBackend, public IOpenGL1Recoverable
     {
     public:
         /**
@@ -29,9 +30,12 @@ namespace CNA::Internal::Backends::OpenGL1
          * @param height      Render target height in pixels.
          * @param depthFormat Raw ordinal of Microsoft::Xna::Framework::Graphics::DepthFormat
          *                    (None=0, Depth16=1, Depth24=2, Depth24Stencil8=3).
+         * @param registry    Context-loss recovery registry to register with, or nullptr when
+         *                    context recovery is disabled (IGraphicsBackend::
+         *                    SetContextRecoveryEnabled(false)).
          * @throws std::runtime_error if the resulting framebuffer is incomplete.
          */
-        OpenGL1RenderTargetBackend(int width, int height, int depthFormat);
+        OpenGL1RenderTargetBackend(int width, int height, int depthFormat, OpenGL1ResourceRegistry* registry);
         ~OpenGL1RenderTargetBackend() override;
 
         int GetWidth() const override { return width_; }
@@ -44,12 +48,27 @@ namespace CNA::Internal::Backends::OpenGL1
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetColorGLHandle() const override { return colorTex_; }
 
+        /**
+         * @brief plan_opengl1.md phase 8: drops the FBO/texture/renderbuffer handles without
+         * issuing any gl* calls. A render target's content is GPU-produced (no CPU shadow to
+         * restore it from), so this only preserves the object's identity/dimensions/format --
+         * RecreateGLResource() rebuilds an empty target, matching real XNA/FNA RenderTarget2D
+         * semantics after a device reset (content is not implicitly preserved unless
+         * RenderTargetUsage.PreserveContents, which this backend does not implement).
+         */
+        void ReleaseGLHandleOnly() override;
+        /** @brief Rebuilds an empty FBO/color-texture/depth-renderbuffer of the same size/format. */
+        void RecreateGLResource() override;
+
     private:
+        void Build();
         unsigned int fbo_ = 0;
         unsigned int colorTex_ = 0;
         unsigned int depthRbo_ = 0;
         int width_ = 0;
         int height_ = 0;
+        int depthFormat_ = 0;
+        OpenGL1ResourceRegistry* registry_ = nullptr;
     };
 
     /**

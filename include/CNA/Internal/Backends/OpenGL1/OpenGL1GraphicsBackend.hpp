@@ -1,6 +1,7 @@
 #pragma once
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1Capabilities.hpp"
+#include "CNA/Internal/Backends/OpenGL1/OpenGL1ContextRecovery.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1RenderTargetBackend.hpp"
 #include <SDL3/SDL.h>
 #include <cstddef>
@@ -26,12 +27,20 @@ public: explicit OpenGL1IndexBufferBackend(bool i32):i32_(i32){}
  const std::vector<std::uint8_t>& Data()const{return data_;}
 private:bool i32_=false;int count_=0;std::vector<std::uint8_t> data_;
 };
-class OpenGL1TextureBackend final : public ITextureBackend {
-public: explicit OpenGL1TextureBackend(const ImageData&); ~OpenGL1TextureBackend() override;
+// plan_opengl1.md phase 8: implements IOpenGL1Recoverable so Texture2D content survives a
+// simulated/real GL context loss -- ShareCpuPixels() retains the SAME shared_ptr<vector<uint8_t>>
+// Texture2D itself keeps (no duplicate copy; Texture2D's own SetData mutations are visible
+// through it automatically), which RecreateGLResource() re-uploads from after the context is
+// recreated.
+class OpenGL1TextureBackend final : public ITextureBackend, public IOpenGL1Recoverable {
+public: OpenGL1TextureBackend(const ImageData&,OpenGL1ResourceRegistry*); ~OpenGL1TextureBackend() override;
  int GetWidth()const override{return width_;} int GetHeight()const override{return height_;} SDL_Texture* GetNativeTexture()const override{return nullptr;}
  void UpdatePixels(const uint8_t*,int) override; void UpdatePixelsLevel(int,const uint8_t*,int,int) override; void BindGL()const override;
+ void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override{cpuPixels_=std::move(pixels);}
+ void ReleaseGLHandleOnly() override{id_=0;}
+ void RecreateGLResource() override;
  unsigned int Id()const{return id_;}
-private:unsigned int id_=0;int width_=0,height_=0;
+private:unsigned int id_=0;int width_=0,height_=0;OpenGL1ResourceRegistry* registry_=nullptr;std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
 };
 class OpenGL1TextureCubeBackend final : public ITextureCubeBackend {
 public: OpenGL1TextureCubeBackend(int size,bool mipMap,int surfaceFormat); ~OpenGL1TextureCubeBackend() override;
@@ -72,7 +81,17 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  const OpenGL1Capabilities& Capabilities()const{return caps_;}
  int EffectiveWidth()const{return currentRt_?currentRt_->GetWidth():virtualWidth_;}
  int EffectiveHeight()const{return currentRt_?currentRt_->GetHeight():virtualHeight_;}
+ // plan_opengl1.md phase 8: context-loss resource recreation registry, independent of EasyGL's
+ // own (::easygl::ResourceRegistry). SetContextRecoveryEnabled(false) stops future Create* calls
+ // from registering (matches the documented IGraphicsBackend contract: "safe to call ... when no
+ // resources have been loaded yet"); DebugSimulateContextLoss()/DebugRestoreContext() perform one
+ // atomic destroy+recreate cycle, same as every other desktop backend that implements this.
+ void SetContextRecoveryEnabled(bool)override;
+ void DebugSimulateContextLoss()override;
+ void DebugRestoreContext()override;
+ OpenGL1ResourceRegistry* RegistryIfEnabled(){return contextRecoveryEnabled_?&registry_:nullptr;}
 private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawInternal(const OpenGL1VertexBufferBackend&,const OpenGL1IndexBufferBackend*,PrimitiveType,int,const GpuDrawParams*);
  SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;IRenderTargetBackend* currentRt_=nullptr;
+ OpenGL1ResourceRegistry registry_;bool contextRecoveryEnabled_=true;
 };
 }

@@ -139,4 +139,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_EnvironmentMapEffect COMMAND cna_test_opengl1_environmentmapeffect
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 8: context-loss resource recreation registry (OpenGL1ResourceRegistry/
+    # IOpenGL1Recoverable, independent of EasyGL's own ::easygl::ResourceRegistry).
+    cna_opengl1_test(cna_test_opengl1_context_loss
+                      examples/opengl1_context_loss_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_ContextLoss COMMAND cna_test_opengl1_context_loss
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

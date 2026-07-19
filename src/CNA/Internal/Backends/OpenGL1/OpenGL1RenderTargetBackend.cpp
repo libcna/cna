@@ -5,6 +5,7 @@
 #endif
 #include <SDL3/SDL_opengl.h>
 #include <algorithm>
+#include <iostream>
 #include <stdexcept>
 #include <vector>
 
@@ -60,8 +61,17 @@ bool TryLoadOpenGL1FramebufferObjectFunctions()
     return loaded_;
 }
 
-OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, int depthFormat)
-    : width_(width), height_(height)
+OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, int depthFormat, OpenGL1ResourceRegistry* registry)
+    : width_(width), height_(height), depthFormat_(depthFormat), registry_(registry)
+{
+    Build();
+    if (registry_) registry_->Add(this);
+}
+
+// plan_opengl1.md phase 8: shared by the constructor and RecreateGLResource() -- a render
+// target's content is GPU-produced (nothing to restore from), so both paths build an identical
+// empty FBO/color-texture/depth-renderbuffer from width_/height_/depthFormat_ alone.
+void OpenGL1RenderTargetBackend::Build()
 {
     if (!loaded_)
         throw std::runtime_error("OpenGL1RenderTargetBackend: framebuffer object functions not loaded");
@@ -79,7 +89,7 @@ OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, in
     glFramebufferTexture2D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex_, 0);
 
     bool hasStencil = false;
-    const GLenum depthInternalFormat = DepthRenderbufferInternalFormat(depthFormat, hasStencil);
+    const GLenum depthInternalFormat = DepthRenderbufferInternalFormat(depthFormat_, hasStencil);
     if (depthInternalFormat != 0)
     {
         glGenRenderbuffers_(1, &depthRbo_);
@@ -109,9 +119,27 @@ OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, in
 
 OpenGL1RenderTargetBackend::~OpenGL1RenderTargetBackend()
 {
+    if (registry_) registry_->Remove(this);
     if (depthRbo_) glDeleteRenderbuffers_(1, &depthRbo_);
     if (fbo_) glDeleteFramebuffers_(1, &fbo_);
     if (colorTex_) glDeleteTextures(1, &colorTex_);
+}
+
+void OpenGL1RenderTargetBackend::ReleaseGLHandleOnly()
+{
+    fbo_ = 0;
+    colorTex_ = 0;
+    depthRbo_ = 0;
+}
+
+void OpenGL1RenderTargetBackend::RecreateGLResource()
+{
+    try { Build(); }
+    catch (const std::exception& e)
+    {
+        std::cerr << "CNA: OpenGL1RenderTargetBackend failed to recreate after context loss: "
+                  << e.what() << std::endl;
+    }
 }
 
 void OpenGL1RenderTargetBackend::BindGL() const { glBindTexture(GL_TEXTURE_2D, colorTex_); }
