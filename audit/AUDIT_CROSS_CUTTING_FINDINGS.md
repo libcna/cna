@@ -2060,6 +2060,26 @@ attempted (EasyGL was built and fully tested; Bgfx/Vulkan/SdlGpu/D3D9/D3D11/D3D1
 attempted in this pass due to time -- a natural continuation for a future opportunistic pass, not
 skipped for any environmental reason).
 
+### Reconciliation note: this is a THIRD, previously-undocumented reason `ctest` is unreliable here, distinct from the project's own two already-known reasons
+
+Before detailing the finding below: this project's own `CMakePresets.json` ("tests" preset
+description) and `plan_audio20260717.md` (task `P9-BUILD-007`, consulted as secondary context per
+D-3 -- not authoritative, but relevant here) already document that running the general suite via
+`ctest` (rather than the `CnaTests` binary directly) is unreliable, for two *specific*, different,
+already-disclosed reasons: (a) several tests share hardcoded `/tmp/cna_*_test/` scratch paths,
+safe under this project's own single-process full-suite convention but racy under `ctest`'s
+per-process parallelism (explicitly accepted as an undertaken, deliberately-not-fixed limitation,
+per P9-BUILD-007's own account), and (b) `ctest` spuriously reports "unbuilt display-dependent
+graphics smoke-test executables" as failed. **Neither of those two already-known reasons is the
+`WORKING_DIRECTORY` mechanism below.** The `WORKING_DIRECTORY` gap is deterministic (reproduces at
+any parallelism level, including `-j1`, since it's a wrong-directory bug, not a race), affects a
+different, much larger set of tests (Media/Audio-tag-parsing/Xnb/ENet/Lzx -- not the `/tmp`-path
+tests P9-BUILD-007 describes), and has never been named or root-caused in any pre-existing
+project documentation this audit has read. The project's own general advice ("use the binary
+directly, not `ctest`") happens to also work around this third, undocumented cause -- which may be
+exactly why it was never separately diagnosed: the known workaround silently papers over an
+additional, unrelated bug.
+
 ### ROOT CAUSE, HIGH severity: `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` has no `WORKING_DIRECTORY` override -- breaks every fixture-file-loading test, invisibly to CI
 
 `cmake/UnitTests.cmake` (line 215) calls `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)`
