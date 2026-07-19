@@ -351,6 +351,64 @@ fragment float4 cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> te
     return c;
 }
 
+// plan_metal.md METAL-76: real XNA SkinnedEffect defaults PreferPerPixelLighting=false too, same as
+// BasicEffect (METAL-39) -- this is its per-vertex-lit sibling, ported line-for-line from
+// EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram()'s real GLSL (same technique as METAL-39:
+// move the Blinn-Phong math from the fragment stage into the vertex stage, Gouraud-interpolate the
+// result). The skinning itself (bone blend, degenerate-normal guard) is unchanged from
+// cna_skin_common -- only WHERE lighting is evaluated moves. No separate ambient uniform here,
+// matching cna_f3d_skinned's own shape (SkinnedEffect pre-folds ambient into emissiveColor at the
+// C++ effect layer), so SkinnedUniforms/fillSkinnedUniforms() need no changes.
+struct VSkinnedVertexLitOut { float4 position [[position]]; float2 uv; float fogFactor; float3 litRGB; float3 specularRGB; float4 color; };
+inline VSkinnedVertexLitOut cna_skin_vertexlit_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uchar4 boneIndices, float4 vcolor,
+                                    constant SkinnedTransform& t, constant SkinnedUniforms& su, constant float4x4* bones) {
+    VSkinnedVertexLitOut o;
+    int weightsPerVertex = int(t.skinParams.x);
+    float4x4 skinMat = bones[boneIndices.x] * boneWeights.x;
+    if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * boneWeights.y;
+    if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * boneWeights.z + bones[boneIndices.w] * boneWeights.w;
+    float4 skinnedPos = skinMat * float4(position, 1.0);
+    o.position = t.wvp * skinnedPos;
+    float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    float3 skinnedNormal = skinMat3 * normal;
+    float skinnedNormalLen = length(skinnedNormal);
+    float3 N = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
+    o.uv = uv;
+    o.color = vcolor;
+    float3 worldPos = (t.world * skinnedPos).xyz;
+    float3 E = normalize(su.eyePosition.xyz - worldPos);
+    float dotL0 = dot(N, -su.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+    float dotL1 = dot(N, -su.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+    float dotL2 = dot(N, -su.light2Dir.xyz); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+    float3 lightSum = su.light0Diffuse.xyz*NdotL0 + su.light1Diffuse.xyz*NdotL1 + su.light2Diffuse.xyz*NdotL2;
+    o.litRGB = lightSum * su.diffuseColor.xyz + su.emissiveColor.xyz;
+    float3 h0 = normalize(E - su.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, su.specularColorPower.w);
+    float3 h1 = normalize(E - su.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, su.specularColorPower.w);
+    float3 h2 = normalize(E - su.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, su.specularColorPower.w);
+    o.specularRGB = (spec0*su.light0Specular.xyz + spec1*su.light1Specular.xyz + spec2*su.light2Specular.xyz) * su.specularColorPower.xyz;
+    float fogStart = su.fogStartEnd.x, fogEnd = su.fogStartEnd.y;
+    o.fogFactor = (su.fogColorEnabled.w > 0.5)
+        ? ((abs(fogEnd - fogStart) < 1e-6) ? 0.0 : clamp((position.z + fogEnd) / (fogEnd - fogStart), 0.0, 1.0))
+        : 1.0;
+    return o;
+}
+vertex VSkinnedVertexLitOut cna_v3d_skinned_vertexlit(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
+    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, su, bones);
+}
+vertex VSkinnedVertexLitOut cna_v3d_skinned_color_vertexlit(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
+    return cna_skin_vertexlit_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, su, bones);
+}
+fragment float4 cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]]) {
+    float4 texColor = tex.sample(smp, in.uv);
+    float4 vc = (su.vertexColorEnabled.x > 0.5) ? in.color : float4(1.0);
+    float4 c = float4(in.litRGB * texColor.rgb, su.diffuseColor.w * texColor.a * vc.a);
+    c.rgb += in.specularRGB * c.a;
+    c.rgb *= vc.rgb;
+    if (cna_alpha_test_fails(c.a, su.alphaTest)) discard_fragment();
+    c.rgb = mix(su.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    return c;
+}
+
 // NOXNA PBR (plan_metal.md METAL-81/83-86, plan_cnj.md CNB-58), ported line-for-line from
 // EasyGLGraphicsBackend::EnsurePbrProgram()'s real GLSL -- the glTF 2.0 spec's own reference
 // metallic-roughness BRDF (Appendix B.3.2-B.3.4: GGX/Trowbridge-Reitz D, Smith-Schlick-GGX
@@ -646,7 +704,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     enum class PipelineKind : uint8_t
     {
         Colored16, Textured20, ColorTex24, LitTex32, LitTex32VertexLit, DualTex20, DualTex24Colored, EnvMap32,
-        Skinned52, Skinned56, Pbr48, SkinnedPbr68, Sprite2D
+        Skinned52, Skinned56, Skinned52VertexLit, Skinned56VertexLit, Pbr48, SkinnedPbr68, Sprite2D
     };
 
     // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
@@ -1319,6 +1377,8 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::EnvMap32:         vs=@"cna_v3d_envmap";   fs=@"cna_f3d_envmap";  stride=32; break;
             case PipelineKind::Skinned52:        vs=@"cna_v3d_skinned";       fs=@"cna_f3d_skinned"; stride=52; break;
             case PipelineKind::Skinned56:        vs=@"cna_v3d_skinned_color"; fs=@"cna_f3d_skinned"; stride=56; break;
+            case PipelineKind::Skinned52VertexLit: vs=@"cna_v3d_skinned_vertexlit";       fs=@"cna_f3d_skinned_vertexlit"; stride=52; break;
+            case PipelineKind::Skinned56VertexLit: vs=@"cna_v3d_skinned_color_vertexlit"; fs=@"cna_f3d_skinned_vertexlit"; stride=56; break;
             case PipelineKind::Pbr48:            vs=@"cna_v3d_pbr";           fs=@"cna_f3d_pbr";     stride=48; break;
             case PipelineKind::SkinnedPbr68:      vs=@"cna_v3d_skinned_pbr";  fs=@"cna_f3d_pbr";      stride=68; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
@@ -2056,8 +2116,14 @@ static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* 
         return PipelineKind::Pbr48;
     }
     if (skinned) {
-        if (stride == 56) return PipelineKind::Skinned56;
-        if (stride == 52) return PipelineKind::Skinned52;
+        // plan_metal.md METAL-76: same real XNA precedence as METAL-39's BasicEffect case
+        // (matching EasyGLGraphicsBackend::SelectProgram()'s own identical skinned branch) --
+        // per-vertex-lit only when lighting is actually on and per-pixel wasn't explicitly
+        // requested; with lighting disabled both shaders degenerate identically, so the existing
+        // per-pixel pipeline stays selected there too.
+        const bool vertexLit = params && params->lightingEnabled && !params->preferPerPixelLighting;
+        if (stride == 56) return vertexLit ? PipelineKind::Skinned56VertexLit : PipelineKind::Skinned56;
+        if (stride == 52) return vertexLit ? PipelineKind::Skinned52VertexLit : PipelineKind::Skinned52;
         throw std::runtime_error("Metal: SkinnedEffect requires stride 52 or 56");
     }
     if (envMapping) {
@@ -2256,8 +2322,13 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         id<MTLTexture> envMapTex=nativeCubeTextureFor(params->envMap);
         if(envMapTex)[p.encoder setFragmentTexture:envMapTex atIndex:1];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
-    } else if (kind == PipelineKind::Skinned52 || kind == PipelineKind::Skinned56) {
-        // plan_metal.md METAL-72-80: real skinned lit/fog/specular/emissive path.
+    } else if (kind == PipelineKind::Skinned52 || kind == PipelineKind::Skinned56
+            || kind == PipelineKind::Skinned52VertexLit || kind == PipelineKind::Skinned56VertexLit) {
+        // plan_metal.md METAL-72-80/76: real skinned lit/fog/specular/emissive path, either
+        // per-pixel (Skinned52/56) or per-vertex/Gouraud (Skinned52/56VertexLit, XNA's real
+        // PreferPerPixelLighting=false default) -- both share the identical SkinnedTransform/
+        // SkinnedUniforms uniform layout, bone buffer, and texture binding, only the vertex/
+        // fragment shader pair (selected via `kind` by getOrCreatePipeline()) differs.
         SkinnedTransform t{}; SkinnedUniforms su{};
         fillSkinnedUniforms(t, su, wvp, *params);
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];

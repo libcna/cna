@@ -203,9 +203,9 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
   own `mat3(skinMat)` — so `SkinnedTransform` correctly carries no normal-matrix columns, unlike
   `LitTransform`/`EnvTransform`. `params->pbr` now throws a clear, honest "not yet implemented"
   error instead of silently falling through to a non-PBR shader when both `pbr` and `skinned` are
-  set (Phase 8 hasn't landed). **Not ported**: the per-vertex (Gouraud) lit variant (`METAL-76`),
-  the same class of divergence `METAL-39` had — `METAL-39` itself was closed later the same
-  session (see item 23 below); `METAL-76` remains open.
+  set (Phase 8 hasn't landed). **Not ported this pass**: the per-vertex (Gouraud) lit variant
+  (`METAL-76`), the same class of divergence `METAL-39` had. *(Both closed later the same session —
+  see items 23/24 below.)*
 - **`ReadBackbuffer`** (`METAL-130`/`132`/`133`): real `MTLBlitCommandEncoder` copy into a
   `MTLResourceStorageModeShared` staging buffer. Needs no Y-flip at all (unlike GL's
   `ReadBackbuffer`, whose framebuffer origin is bottom-left) — Metal's own texture origin is
@@ -627,10 +627,26 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `LitTex32`" behavior was already correct for that specific case, not a second bug. `drawMetal3D`'s
     dispatch widened to treat both `PipelineKind`s identically (same uniform fill, same texture
     binding) since only `getOrCreatePipeline()`'s shader-pair selection actually differs between them.
-    **Not done this pass**: `SkinnedEffect`'s identical divergence (`METAL-76`, EasyGL's own
-    `prog_skinned_vertexlit_`/`EnsureSkinnedVertexLitProgram()`) — same real gap, same fix shape,
-    left for a following pass rather than risk a second large shader port without a compiler to
-    verify the first one against first.
+24. **Phase 7 — `METAL-76`, `SkinnedEffect`'s identical per-vertex-lit gap, closed the same
+    session**: ported `EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram()`'s real GLSL line-
+    for-line into a new `cna_v3d_skinned_vertexlit`/`cna_v3d_skinned_color_vertexlit`/
+    `cna_f3d_skinned_vertexlit` MSL set, using the exact same technique `METAL-39` just proved for
+    `BasicEffect` — Blinn-Phong math moved from the fragment stage into the vertex stage and
+    Gouraud-interpolated, via a new shared `cna_skin_vertexlit_common()` helper mirroring
+    `cna_skin_common()`'s own existing shape (same bone blend, same degenerate-normal safety guard,
+    only the lighting-evaluation stage differs). No separate ambient uniform, matching
+    `cna_f3d_skinned`'s own established shape (`SkinnedEffect` pre-folds ambient into
+    `emissiveColor` at the C++ effect layer) — `SkinnedUniforms`/`fillSkinnedUniforms()` needed zero
+    changes, same as `METAL-39`'s finding for `LitUniforms`. Two new `PipelineKind` entries
+    (`Skinned52VertexLit`/`Skinned56VertexLit`, stride 52/56 matching their existing per-pixel
+    siblings), selected by `selectPipelineKind()`'s skinned branch using the identical
+    `lightingEnabled && !preferPerPixelLighting` precedence `METAL-39` established, cross-checked
+    against `EasyGLGraphicsBackend::SelectProgram()`'s own real skinned branch (same
+    lighting-disabled-degenerates-to-per-pixel reasoning). `drawMetal3D`'s skinned dispatch widened
+    to treat all 4 skinned `PipelineKind`s identically (same uniform fill, same bone-buffer upload,
+    same texture binding) since only the shader pair differs. Both `METAL-39` and `METAL-76` are now
+    closed — `BasicEffect` and `SkinnedEffect` both correctly default to per-vertex Gouraud lighting,
+    matching real XNA/FNA behavior instead of silently always using per-pixel shading.
 
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
@@ -639,9 +655,8 @@ at the end of each landed phase rather than trusted from an earlier revision):
 `VertexElement`-driven descriptor builder below, and the enum-reordering regression guard —
 `METAL-15`–`18`/`20` are now closed, several found to be based on a false premise, see above); the
 fully generic `VertexElement`-driven descriptor builder
-(`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); `SkinnedEffect`'s
-own identical per-vertex-lit gap (`METAL-76` — `BasicEffect`'s own `METAL-39` is now closed, see
-above); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
+(`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); Phase 8's
+remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
 Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
 `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108`, `RenderTargetCube`
@@ -679,8 +694,10 @@ iOS/tvOS). Nothing in this list has been touched.
   `EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram()`'s real GLSL), correctly selected only when
   `lightingEnabled && !preferPerPixelLighting` (XNA's real default) — closes a real, visible,
   currently-shipping divergence from XNA/FNA where every lit draw silently used per-pixel shading
-  regardless of the requested lighting model (🟨 landed 2026-07-19 — `METAL-39`; `SkinnedEffect`'s
-  identical gap, `METAL-76`, remains open).
+  regardless of the requested lighting model, for both `BasicEffect` and `SkinnedEffect`
+  (`PipelineKind::Skinned52/56VertexLit`, ported from
+  `EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram()`'s real GLSL) (🟨 landed 2026-07-19 —
+  `METAL-39`/`76`).
 - Real `SkinnedEffect` (72-bone GPU skinning via a real `MTLBuffer`, `WeightsPerVertex` branching,
   a NaN-safety guard for near-180°-relative-bone-rotation blends, lit/fog/specular/emissive) (🟨
   landed 2026-07-19 — `METAL-72`–`75`/`77`/`78`).
@@ -935,7 +952,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-73 | `boneTransforms[72*16]`/`boneCount` uniform — 4,608 floats (18KB) **exceeds** `setVertexBytes:`'s 4KB inline limit; must be a real `MTLBuffer`, not the inline path every other uniform in this file currently uses — a concrete, easy-to-get-silently-wrong detail called out explicitly | 🟨 |
 | METAL-74 | `weightsPerVertex` (1/2/4) — real XNA `Skin(vin, boneCount)` only sums the first N pairs (Task 895); the MSL vertex shader must branch on this, not always sum all 4 | 🟨 |
 | METAL-75 | Per-pixel-lit skinned variant (`EnsureSkinnedProgram()` equivalent) | 🟨 |
-| METAL-76 | Per-vertex-lit skinned variant (`EnsureSkinnedVertexLitProgram()` equivalent), same `preferPerPixelLighting` XNA-default logic as BasicEffect (Task 1102b) | ⬜ |
+| METAL-76 | Per-vertex-lit skinned variant (`EnsureSkinnedVertexLitProgram()` equivalent), same `preferPerPixelLighting` XNA-default logic as BasicEffect (Task 1102b) | 🟨 |
 | METAL-77 | Confirm skinned normals are transformed by each bone's own 3×3, not the single mesh-level normal matrix `METAL-40` computes for unskinned draws — **confirmed 2026-07-19, more precisely than originally worded**: the reference shader applies *no* world-space normal-matrix step at all for skinned draws (only `mat3(skinMat)`, the bone blend's own upper-left 3x3), so `SkinnedTransform` correctly carries no `normalCol0/1/2` fields at all, unlike `LitTransform`/`EnvTransform` | 🟨 |
 | METAL-78 | Dispatch: `params.skinned` checked before `envMapping`/`dualTexture`, combined with `params.pbr` for the skinned-PBR case (Phase 8) | 🟨 |
 | METAL-79 | `CTest`: `Metal_Skinned` — a 2-bone rig with known transforms, probe-vertex-position-dependent pixel check | ⬜ |
