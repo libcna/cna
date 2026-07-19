@@ -74,7 +74,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`tests-xna-framework-core`](manifest/tests-xna-framework-core.md) | 46 | AUDITED: 46 / PENDING: 0 (complete) |
 | [`tests-xna-gamerservices`](manifest/tests-xna-gamerservices.md) | 16 | AUDITED: 16 / PENDING: 0 (complete) |
 | [`tests-xna-graphics`](manifest/tests-xna-graphics.md) | 64 | AUDITED: 64 / PENDING: 0 (complete) |
-| [`tests-xna-input`](manifest/tests-xna-input.md) | 24 | PENDING: 24 / AUDITED: 0 |
+| [`tests-xna-input`](manifest/tests-xna-input.md) | 24 | AUDITED: 24 / PENDING: 0 (complete) |
 | [`tests-xna-media`](manifest/tests-xna-media.md) | 22 | AUDITED: 22 / PENDING: 0 (complete) |
 | [`tests-xna-net`](manifest/tests-xna-net.md) | 9 | AUDITED: 9 / PENDING: 0 (complete) |
 
@@ -102,7 +102,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`tools-gltf-to-cnj`](manifest/tools-gltf-to-cnj.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 | [`tools-input-parity`](manifest/tools-input-parity.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
 | [`tools-net`](manifest/tools-net.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
-| [`tools-xna-oracle`](manifest/tools-xna-oracle.md) | 42 | PENDING: 42 / AUDITED: 0 |
+| [`tools-xna-oracle`](manifest/tools-xna-oracle.md) | 42 | AUDITED: 42 / PENDING: 0 (complete) |
 
 ## Examples — backend-named integration test executables (570 files)
 
@@ -172,7 +172,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`build-cmake`](manifest/build-cmake.md) | 13 | PENDING: 13 / AUDITED: 0 |
 | [`build-cmake-tests`](manifest/build-cmake-tests.md) | 14 | PENDING: 14 / AUDITED: 0 |
 | [`build-root`](manifest/build-root.md) | 5 | PENDING: 5 / AUDITED: 0 |
-| [`scripts`](manifest/scripts.md) | 12 | PENDING: 12 / AUDITED: 0 |
+| [`scripts`](manifest/scripts.md) | 12 | PENDING: 11 / AUDITED: 1 |
 
 ## EXEMPT files (by reason)
 

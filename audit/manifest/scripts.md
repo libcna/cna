@@ -17,4 +17,4 @@ Files in this shard: **12**
 | 9 | `scripts/run-wine-vkd3d.sh` | PENDING | [run-wine-vkd3d.sh.audit.md](../scripts/run-wine-vkd3d.sh.audit.md) |
 | 10 | `scripts/verify-d3d9-stock-effects-vendored.sh` | PENDING | [verify-d3d9-stock-effects-vendored.sh.audit.md](../scripts/verify-d3d9-stock-effects-vendored.sh.audit.md) |
 | 11 | `scripts/verify_hlsl_shaders_native_msvc.py` | PENDING | [verify_hlsl_shaders_native_msvc.py.audit.md](../scripts/verify_hlsl_shaders_native_msvc.py.audit.md) |
-| 12 | `scripts/xna-diff.py` | PENDING | [xna-diff.py.audit.md](../scripts/xna-diff.py.audit.md) |
+| 12 | `scripts/xna-diff.py` | AUDITED | [xna-diff.py.audit.md](../scripts/xna-diff.py.audit.md) |
