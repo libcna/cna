@@ -139,6 +139,44 @@ before any status here can honestly change.
   per-`BlendState` 2D blending (`METAL-184`) turned out to need no new code at all: `Sprite2D` is
   just another `PipelineKind` sharing the same `(kind, BlendKey)`-keyed cache every 3D pipeline
   already uses.
+- **`TextureCube`/`Texture3D`** (`METAL-120`/`121`/`123`/`124`): both entirely absent before this
+  pass (`nullptr` via `IGraphicsBackend`'s own base default). Deliberately ignore `surfaceFormat`
+  and hardcode RGBA8Unorm, matching `EasyGLTextureCubeBackend`'s/`EasyGLTexture3DBackend`'s own
+  established convention exactly (confirmed by reading their constructors — the parameter is
+  literally named `int /*surfaceFormat*/` there too), not a new gap. This unblocked `METAL-65`
+  (`EnvironmentMapEffect`'s cube-map bind), though Phase 6 turned out to have a second, deeper
+  blocker — see its own note below.
+- **BasicEffect per-pixel lighting/fog/specular/emissive** (`METAL-38`/`40`/`42`–`44`/`46`/`47`,
+  the highest-leverage remaining piece — Phase 6/8 both depend on it): ported
+  `EnsureLit3DProgram()`'s real GLSL line-for-line into MSL. The normal-matrix formula
+  (`transpose(inverse(world3x3))` via the cofactor/determinant shortcut) was independently
+  re-derived and hand-verified against EasyGL's own `nm[9]` construction, not just transcribed —
+  EasyGL's array is `inv(M)` stored row-major, fed to a column-major GL uniform upload with no
+  transpose flag, which is *why* it ends up as `transpose(inv(M))` without an explicit transpose
+  step; the MSL port reaches the identical matrix via 3 separate float4 "columns" reassembled with
+  `float3x3(col0,col1,col2)` instead, for the same float3-padding-safety reason as `UMaterialParams`.
+  Every uniform crossing the CPU/GPU boundary is 4-float-group padded (17 `float4`s for
+  `LitUniforms`, none of them a bare `float3`) for the same reason. Confirmed via a real, load-bearing
+  finding: `VertexPositionNormalTexture` (stride 32) draws **always** go through the lit shader in
+  the real reference implementation, even with `lightingEnabled=false` — `BindDrawParams()` sets
+  `ambient=(1,1,1)` and zeroes every light's contribution in that case, which makes the lit formula
+  degenerate to plain `DiffuseColor * texture`, the same result an unlit shader would give — so the
+  separate unlit `NormalTex32` pipeline this file had until tonight was actually the wrong design
+  and is now replaced by `LitTex32` unconditionally. The object-space-only fog-factor formula (a
+  known, already-documented EasyGL simplification, only exactly correct when World/View are
+  identity) was copied bug-for-bug on purpose, not "improved," matching this project's own
+  match-the-reference discipline. **Not ported this pass**: the per-vertex (Gouraud) lit variant
+  (`METAL-39`) — every lit draw currently takes the per-pixel path regardless of
+  `preferPerPixelLighting`, the same already-documented, already-accepted divergence every backend
+  except D3D9 has.
+
+**Two real, previously-unknown blocking dependencies were found and documented in-place** (not
+worked around, not silently skipped) while investigating Phase 9 and Phase 6 — see those phases'
+own header notes in the table below for the full detail: Phase 9 (Instancing) needs Phase 14
+(custom `ShaderEffect`) to be meaningful at all; Phase 6 (`EnvironmentMapEffect`) needs Phase 3's
+lighting work (now landed) — its `METAL-65` blocker is closed, but confirm `METAL-64`/`66`–`68`
+against a freshly-re-read `EnsureEnvMapped3DProgram()` before attempting them, since that function
+also has its own env-map-specific specular/Fresnel math not yet ported.
 
 **Explicitly still open / not attempted this pass** (do not assume these are done): `METAL-5`
 (cull-mode/winding correctness — deliberately left untouched, see its own note about a Vulkan
@@ -146,7 +184,7 @@ front/back stencil swap this project already had to empirically discover the har
 a real risk area, not a formality); `METAL-14`–`METAL-20` (VertexElementFormat/SurfaceFormat/
 DepthFormat tables, BC-compression query); the fully generic `VertexElement`-driven descriptor
 builder (`METAL-26`/`METAL-27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/
-`METAL-32`); fog/lighting/specular/emissive (rest of Phase 3); Phases 6–14 and 16–30 in full
+`METAL-32`); the per-vertex lit variant (`METAL-39`); Phases 6–10 and 12–14 and 16–30 in full
 (instancing, render targets, cube/3D textures, readback, occlusion queries, custom effects,
 skinning, PBR, resize/Retina, frame pacing, resource-lifetime audit, everything NOXNA, testing/CI/
 docs, iOS/tvOS) — none of it was touched this pass.
@@ -162,10 +200,12 @@ docs, iOS/tvOS) — none of it was touched this pass.
 - Native `MTLBuffer` vertex and 16/32-bit index buffers.
 - Native RGBA8 `MTLTexture` creation and updates.
 - Runtime-compiled Metal Shading Language library.
-- Colored/textured 3D draw paths, now dispatched through a `PipelineKind`-keyed lazy pipeline
-  cache (7 variants: colored-16, textured-20, colortex-24, normaltex-32, dualtex-20,
-  dualtex-colored-24, sprite-2d) instead of 5 eagerly-built fixed fields (🟨 landed 2026-07-19 —
-  `METAL-22`/`METAL-23`/`METAL-25`).
+- Colored/textured/**lit** 3D draw paths, now dispatched through a `PipelineKind`-keyed lazy
+  pipeline cache (7 variants: colored-16, textured-20, colortex-24, **lit-32 with real per-pixel
+  lighting/fog/specular/emissive**, dualtex-20, dualtex-colored-24, sprite-2d) instead of 5
+  eagerly-built fixed fields (🟨 landed 2026-07-19 — `METAL-22`/`METAL-23`/`METAL-25`/`METAL-38`/
+  `40`/`42`–`44`/`46`/`47`).
+- `TextureCube`/`Texture3D` backends (🟨 landed 2026-07-19 — `METAL-120`/`121`/`123`/`124`).
 - Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
   real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
 - Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
@@ -291,16 +331,16 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-35 | `colored3d.metal`: honor `diffuseColor`/`vertexColorEnabled` (fragment shader currently just returns the raw vertex color, ignoring both fields) | 🟨 |
 | METAL-36 | `textured3d.metal`: multiply by `diffuseColor` (currently hardcodes `color=(1,1,1,1)`, i.e. `DiffuseColor` has zero effect) | 🟨 |
 | METAL-37 | `colortex3d.metal`: same `diffuseColor` multiply for the vertex-color+texture combined path | 🟨 |
-| METAL-38 | Per-pixel lit shader (`lit_textured3d.metal`, stride 32): port FNA's `Lighting.fxh`/`ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive) — direct MSL port from `VulkanGraphicsBackend`'s already-shipped GLSL or `EnsureLit3DProgram()`, not new design | ⬜ |
+| METAL-38 | Per-pixel lit shader (`lit_textured3d.metal`, stride 32): port FNA's `Lighting.fxh`/`ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive) — direct MSL port from `VulkanGraphicsBackend`'s already-shipped GLSL or `EnsureLit3DProgram()`, not new design | 🟨 |
 | METAL-39 | Per-vertex (Gouraud) lit shader (`lit_textured3d_vertexlit.metal`), selected when `lightingEnabled && !preferPerPixelLighting` (XNA's real default, Task 1102) — Metal currently has **no** lighting shader of either kind | ⬜ |
-| METAL-40 | Normal matrix (`inverse(world3x3)`, no shader-side transpose given this codebase's column-major GPU convention) computed CPU-side, cross-verified against `BgfxGraphicsBackend::ComputeNormalMatrix3x3` | ⬜ |
-| METAL-41 | Safe-normalize guard for a disabled/zero-direction light — port the `select()`-based zero-vector guard `WebGPUGraphicsBackend`'s `lit_textured3d.wgsl` needed, MSL equivalent | ⬜ |
-| METAL-42 | Fog: `fogEnabled`/`fogColor`/`fogStart`/`fogEnd` plumbing + eye-space-Z linear blend in every textured/lit fragment variant — zero fog support exists today | ⬜ |
-| METAL-43 | Specular: `specularColor`/`specularPower` Blinn-Phong term using `eyePositionWorld`, applied once at material level | ⬜ |
-| METAL-44 | Emissive: `emissiveColor` additive term after the ambient/light-sum multiply, matching CNA's ambient-folded-into-multiply convention (documented on the field itself) | ⬜ |
+| METAL-40 | Normal matrix (`inverse(world3x3)`, no shader-side transpose given this codebase's column-major GPU convention) computed CPU-side, cross-verified against `BgfxGraphicsBackend::ComputeNormalMatrix3x3` | 🟨 |
+| METAL-41 | Safe-normalize guard for a disabled/zero-direction light — **audited 2026-07-19**: `cna_f3d_lit` (ported verbatim from `EnsureLit3DProgram()`, not WebGPU's own shader) never normalizes a raw light-direction vector directly — only `dot(N,-lightDir)` (zero when `lightDir=0`, safe) and `normalize(E-lightDir)` (degrades to `normalize(E)`, already unit-length, safe) — so this specific formula structure has no zero-vector `normalize()` call to guard, unlike WebGPU's own shader shape. Left ⬜ rather than claiming done: not verified on real hardware, and EasyGL's own GLSL (the ground truth here) has no matching guard either | ⬜ |
+| METAL-42 | Fog: `fogEnabled`/`fogColor`/`fogStart`/`fogEnd` plumbing + eye-space-Z linear blend in every textured/lit fragment variant — zero fog support exists today | 🟨 |
+| METAL-43 | Specular: `specularColor`/`specularPower` Blinn-Phong term using `eyePositionWorld`, applied once at material level | 🟨 |
+| METAL-44 | Emissive: `emissiveColor` additive term after the ambient/light-sum multiply, matching CNA's ambient-folded-into-multiply convention (documented on the field itself) | 🟨 |
 | METAL-45 | Audit whether a `oneLight`-only fast-path shader variant is worth adding (EasyGL/Vulkan precedent check) or whether the general 3-light path is sufficient since disabled lights are already zeroed | ⬜ |
-| METAL-46 | Extend the single `U3D{float4x4 wvp}` uniform to a full `BasicEffectUniforms` struct (world matrix, ambient, 3 lights' dir/diffuse/specular, material diffuse/specular/emissive, specular power, fog, eye position), 16-byte-aligned | ⬜ |
-| METAL-47 | `BindDrawParams()`-equivalent Metal-side function filling `BasicEffectUniforms` from `GpuDrawParams`, field-for-field matching `EasyGLGraphicsBackend::BindDrawParams()` | ⬜ |
+| METAL-46 | Extend the single `U3D{float4x4 wvp}` uniform to a full `BasicEffectUniforms` struct (world matrix, ambient, 3 lights' dir/diffuse/specular, material diffuse/specular/emissive, specular power, fog, eye position), 16-byte-aligned | 🟨 |
+| METAL-47 | `BindDrawParams()`-equivalent Metal-side function filling `BasicEffectUniforms` from `GpuDrawParams`, field-for-field matching `EasyGLGraphicsBackend::BindDrawParams()` | 🟨 |
 | METAL-48 | `VertexColorEnabled=false` path must ignore the vertex color attribute even when physically present in the buffer — verify against FNA's exact semantics | ⬜ |
 | METAL-49 | Regression tests, one axis at a time: texture on/off, vertex-color on/off, fog on/off, lighting off/vertex/pixel, specular zero/non-zero, emissive zero/non-zero — same coverage `docs/basiceffect-support.md` tracks for other backends | ⬜ |
 | METAL-50 | Add a `Metal` column to `docs/basiceffect-support.md` (currently absent) | ⬜ |

@@ -85,6 +85,76 @@ fragment float4 cna_f3d_dualtex(V3Out in [[stage_in]], texture2d<float> tex0 [[t
     return c;
 }
 
+// BasicEffect per-pixel lighting (plan_metal.md METAL-38/40-47), ported line-for-line from
+// EasyGLGraphicsBackend::EnsureLit3DProgram()'s real GLSL (both vertex and fragment stage), the
+// same reference every other backend's own lit-textured shader already matches. Every `vec3`
+// uniform is carried as a `float4` here (xyz + unused pad) to sidestep MSL `constant`-address-space
+// float3 column-padding ambiguity entirely -- deliberately NOT a float3x3 uniform either, for the
+// same reason (a 3x3 matrix's columns are *also* individually padded to 16 bytes in `constant`
+// address space); the normal matrix crosses the CPU/GPU boundary as 3 separate float4 columns and
+// is reassembled into a real float3x3 inside the shader instead.
+//
+// Deliberately NOT ported this pass: the fog-factor formula below uses raw OBJECT-SPACE vertex Z
+// (`in.position.z`), an already-known, already-documented EasyGL simplification (only exactly
+// correct when World/View are identity) -- copied here bug-for-bug to match the established
+// cross-backend reference exactly, not "improved," per this project's own match-the-reference
+// discipline. The per-vertex (Gouraud) lit variant (EnsureLit3DVertexLitProgram(), selected when
+// lightingEnabled && !preferPerPixelLighting) is NOT ported this pass -- every draw with lighting
+// on always takes the per-pixel path here, the same accepted, already-documented divergence
+// GpuDrawParams::preferPerPixelLighting's own doc comment describes for "every backend except D3D9".
+struct LitTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; };
+struct LitUniforms {
+    float4 diffuseColor;
+    float4 ambientColor;
+    float4 light0Dir;
+    float4 light0Diffuse;
+    float4 light0Specular;
+    float4 light1Dir;
+    float4 light1Diffuse;
+    float4 light1Specular;
+    float4 light2Dir;
+    float4 light2Diffuse;
+    float4 light2Specular;
+    float4 specularColorPower; // xyz = SpecularColor, w = SpecularPower
+    float4 eyePosition;
+    float4 emissiveColor;
+    float4 alphaTest;
+    float4 fogColorEnabled;    // xyz = FogColor, w = FogEnabled (0/1)
+    float4 fogStartEnd;        // x = FogStart, y = FogEnd
+};
+struct VLitOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; };
+vertex VLitOut cna_v3d_lit(V3NormalTexIn in [[stage_in]], constant LitTransform& t [[buffer(1)]], constant LitUniforms& lu [[buffer(2)]]) {
+    VLitOut o;
+    o.position = t.wvp * float4(in.position, 1.0);
+    float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
+    o.normal = normalMat * in.normal;
+    o.uv = in.uv;
+    float fogStart = lu.fogStartEnd.x, fogEnd = lu.fogStartEnd.y;
+    o.fogFactor = (lu.fogColorEnabled.w > 0.5)
+        ? ((abs(fogEnd - fogStart) < 1e-6) ? 0.0 : clamp((in.position.z + fogEnd) / (fogEnd - fogStart), 0.0, 1.0))
+        : 1.0;
+    o.worldPos = (t.world * float4(in.position, 1.0)).xyz;
+    return o;
+}
+fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant LitUniforms& lu [[buffer(2)]]) {
+    float3 N = normalize(in.normal);
+    float3 E = normalize(lu.eyePosition.xyz - in.worldPos);
+    float dotL0 = dot(N, -lu.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+    float dotL1 = dot(N, -lu.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+    float dotL2 = dot(N, -lu.light2Dir.xyz); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+    float3 lightSum = lu.ambientColor.xyz + lu.light0Diffuse.xyz*NdotL0 + lu.light1Diffuse.xyz*NdotL1 + lu.light2Diffuse.xyz*NdotL2;
+    float3 litRGB = lightSum * lu.diffuseColor.xyz + lu.emissiveColor.xyz;
+    float3 h0 = normalize(E - lu.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, lu.specularColorPower.w);
+    float3 h1 = normalize(E - lu.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, lu.specularColorPower.w);
+    float3 h2 = normalize(E - lu.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, lu.specularColorPower.w);
+    float3 specularRGB = (spec0*lu.light0Specular.xyz + spec1*lu.light1Specular.xyz + spec2*lu.light2Specular.xyz) * lu.specularColorPower.xyz;
+    float4 c = tex.sample(smp, in.uv) * float4(litRGB, lu.diffuseColor.w);
+    c.rgb += specularRGB * c.a;
+    if (cna_alpha_test_fails(c.a, lu.alphaTest)) discard_fragment();
+    c.rgb = mix(lu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    return c;
+}
+
 struct V2In { float2 position; float2 uv; float4 color; };
 // plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
 // bypassing virtual-resolution/letterbox scaling -- a real, currently-shipping bug. `scale`/
@@ -245,9 +315,16 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // exactly mirroring the "one Prog3D per Ensure*Program()" shape EasyGLGraphicsBackend already
     // uses -- lower risk to get right without a compiler than inventing a hashed-VertexElement-list
     // key blind).
+    // plan_metal.md METAL-38: `LitTex32` replaces the earlier plain-unlit `NormalTex32` entry --
+    // confirmed by reading EasyGLGraphicsBackend::SelectProgram()'s real `switch(stride)` that
+    // stride 32 (VertexPositionNormalTexture) *always* selects a lit shader, never an unlit one,
+    // even when `lightingEnabled=false` (BindDrawParams() sets ambient=(1,1,1) and zeroes every
+    // light's diffuse/specular contribution in that case, which makes the lit formula degenerate
+    // to the exact same "just DiffuseColor * texture" result an unlit shader would produce --
+    // verified by reading that exact branch, not assumed).
     enum class PipelineKind : uint8_t
     {
-        Colored16, Textured20, ColorTex24, NormalTex32, DualTex20, DualTex24Colored, Sprite2D
+        Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, Sprite2D
     };
 
     // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
@@ -370,6 +447,47 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     static Mat4 transpose(const Mat4& x)
     {
         Mat4 r{}; for(int i=0;i<4;++i) for(int j=0;j<4;++j) r.m[j*4+i]=x.m[i*4+j]; return r;
+    }
+
+    // Plain C++ mirrors of kMetalShaderSource's `LitTransform`/`LitUniforms` -- see that struct's
+    // own comment for why every logical vec3 is carried as a 4-float (xyz+pad) group and the
+    // normal matrix as 3 separate 4-float "columns" rather than a 3x3 or float3-containing type.
+    struct LitTransform { float wvp[16]; float world[16]; float normalCol0[4]; float normalCol1[4]; float normalCol2[4]; };
+    struct LitUniforms {
+        float diffuseColor[4], ambientColor[4];
+        float light0Dir[4], light0Diffuse[4], light0Specular[4];
+        float light1Dir[4], light1Diffuse[4], light1Specular[4];
+        float light2Dir[4], light2Diffuse[4], light2Specular[4];
+        float specularColorPower[4], eyePosition[4], emissiveColor[4], alphaTest[4];
+        float fogColorEnabled[4], fogStartEnd[4];
+    };
+
+    // Normal matrix = transpose(inverse(world3x3)), via the cofactor/determinant shortcut --
+    // ported verbatim from EasyGLGraphicsBackend::BindDrawParams()'s own real formula (Task 398:
+    // handles non-uniform-scale World transforms correctly, unlike the raw upper-left 3x3). Reads
+    // directly from GpuDrawParams::worldColMajor (already column-major, already provided by the
+    // shared XNA-facing effect layer) rather than re-deriving a world matrix independently, so
+    // there is no separate risk of a row-major/column-major mixup here. Output is 3 separate
+    // 4-float "columns" (xyz + unused pad), matching LitTransform's own layout.
+    static void computeNormalMatrixCols(const float* w, float col0[4], float col1[4], float col2[4])
+    {
+        const float a=w[0], d=w[1], g=w[2];
+        const float b=w[4], e=w[5], h=w[6];
+        const float c=w[8], f=w[9], i=w[10];
+        const float det = a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g);
+        const float invDet = (det != 0.0f) ? (1.0f/det) : 0.0f;
+        // Independently re-derived and hand-verified (not just transcribed) that this produces
+        // exactly transpose(inverse(M)) when consumed as float3x3(col0,col1,col2) in MSL (a
+        // columns-constructor): EasyGL's own `nm[9]` is inv(M) written out ROW-major
+        // (nm[0..2]=row0, nm[3..5]=row1, nm[6..8]=row2), fed to glUniformMatrix3fv(transpose=
+        // GL_FALSE) which reads COLUMN-major -- so GL ends up storing transpose(inv(M)), the
+        // correct result, without an explicit transpose step. Each `colN` group below is
+        // literally EasyGL's `nm[3*N .. 3*N+2]` (row N of inv(M)), which is exactly column N of
+        // transpose(inv(M)) -- i.e. the same target matrix, reached the same way, just spelled
+        // for MSL's column-vector constructor instead of GL's transpose-flag uniform upload.
+        col0[0]=(e*i-f*h)*invDet; col0[1]=-(b*i-c*h)*invDet; col0[2]=(b*f-c*e)*invDet; col0[3]=0;
+        col1[0]=-(d*i-f*g)*invDet; col1[1]=(a*i-c*g)*invDet; col1[2]=-(a*f-c*d)*invDet; col1[3]=0;
+        col2[0]=(d*h-e*g)*invDet; col2[1]=-(a*h-b*g)*invDet; col2[2]=(a*e-b*d)*invDet; col2[3]=0;
     }
 
     class MetalTexture final : public ITextureBackend
@@ -655,7 +773,7 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::Colored16:        vs=@"cna_v3d_color";    fs=@"cna_f3d_color";   stride=16; break;
             case PipelineKind::Textured20:       vs=@"cna_v3d_tex";      fs=@"cna_f3d_texture"; stride=20; break;
             case PipelineKind::ColorTex24:       vs=@"cna_v3d_colortex"; fs=@"cna_f3d_texture"; stride=24; break;
-            case PipelineKind::NormalTex32:      vs=@"cna_v3d_normaltex";fs=@"cna_f3d_texture"; stride=32; break;
+            case PipelineKind::LitTex32:         vs=@"cna_v3d_lit";      fs=@"cna_f3d_lit";     stride=32; break;
             case PipelineKind::DualTex20:        vs=@"cna_v3d_tex";      fs=@"cna_f3d_dualtex"; stride=20; break;
             case PipelineKind::DualTex24Colored: vs=@"cna_v3d_colortex"; fs=@"cna_f3d_dualtex"; stride=24; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
@@ -915,12 +1033,41 @@ static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* 
         switch (stride) {
             case 20: return PipelineKind::Textured20;
             case 24: return PipelineKind::ColorTex24;
-            case 32: return PipelineKind::NormalTex32;
+            case 32: return PipelineKind::LitTex32;
             default: throw std::runtime_error("Metal: textured 3D requires stride 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented");
         }
     }
     if (stride != 16) throw std::runtime_error("Metal: colored 3D currently requires VertexPositionColor stride 16");
     return PipelineKind::Colored16;
+}
+
+// plan_metal.md METAL-38-47: fills LitTransform/LitUniforms from GpuDrawParams, field-for-field
+// matching EasyGLGraphicsBackend::BindDrawParams()'s own real mapping (ground truth, ported not
+// redesigned). `params` is never null here -- LitTex32 is only reachable via `textured`, which
+// requires a non-null `params` (see selectPipelineKind's own `textured = params && ...` gate).
+static void fillLitUniforms(LitTransform& t, LitUniforms& lu, const Mat4& wvp, const GpuDrawParams& params)
+{
+    std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
+    std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
+    computeNormalMatrixCols(params.worldColMajor, t.normalCol0, t.normalCol1, t.normalCol2);
+
+    std::memcpy(lu.diffuseColor, params.diffuseColor, sizeof(lu.diffuseColor));
+    lu.ambientColor[0]=params.ambientColor[0]; lu.ambientColor[1]=params.ambientColor[1]; lu.ambientColor[2]=params.ambientColor[2]; lu.ambientColor[3]=0;
+    lu.light0Dir[0]=params.light0Dir[0]; lu.light0Dir[1]=params.light0Dir[1]; lu.light0Dir[2]=params.light0Dir[2]; lu.light0Dir[3]=0;
+    lu.light0Diffuse[0]=params.light0Diffuse[0]; lu.light0Diffuse[1]=params.light0Diffuse[1]; lu.light0Diffuse[2]=params.light0Diffuse[2]; lu.light0Diffuse[3]=0;
+    lu.light0Specular[0]=params.light0Specular[0]; lu.light0Specular[1]=params.light0Specular[1]; lu.light0Specular[2]=params.light0Specular[2]; lu.light0Specular[3]=0;
+    lu.light1Dir[0]=params.light1Dir[0]; lu.light1Dir[1]=params.light1Dir[1]; lu.light1Dir[2]=params.light1Dir[2]; lu.light1Dir[3]=0;
+    lu.light1Diffuse[0]=params.light1Diffuse[0]; lu.light1Diffuse[1]=params.light1Diffuse[1]; lu.light1Diffuse[2]=params.light1Diffuse[2]; lu.light1Diffuse[3]=0;
+    lu.light1Specular[0]=params.light1Specular[0]; lu.light1Specular[1]=params.light1Specular[1]; lu.light1Specular[2]=params.light1Specular[2]; lu.light1Specular[3]=0;
+    lu.light2Dir[0]=params.light2Dir[0]; lu.light2Dir[1]=params.light2Dir[1]; lu.light2Dir[2]=params.light2Dir[2]; lu.light2Dir[3]=0;
+    lu.light2Diffuse[0]=params.light2Diffuse[0]; lu.light2Diffuse[1]=params.light2Diffuse[1]; lu.light2Diffuse[2]=params.light2Diffuse[2]; lu.light2Diffuse[3]=0;
+    lu.light2Specular[0]=params.light2Specular[0]; lu.light2Specular[1]=params.light2Specular[1]; lu.light2Specular[2]=params.light2Specular[2]; lu.light2Specular[3]=0;
+    lu.specularColorPower[0]=params.specularColor[0]; lu.specularColorPower[1]=params.specularColor[1]; lu.specularColorPower[2]=params.specularColor[2]; lu.specularColorPower[3]=params.specularPower;
+    lu.eyePosition[0]=params.eyePositionWorld[0]; lu.eyePosition[1]=params.eyePositionWorld[1]; lu.eyePosition[2]=params.eyePositionWorld[2]; lu.eyePosition[3]=0;
+    lu.emissiveColor[0]=params.emissiveColor[0]; lu.emissiveColor[1]=params.emissiveColor[1]; lu.emissiveColor[2]=params.emissiveColor[2]; lu.emissiveColor[3]=0;
+    std::memcpy(lu.alphaTest, params.alphaTest, sizeof(lu.alphaTest));
+    lu.fogColorEnabled[0]=params.fogColor[0]; lu.fogColorEnabled[1]=params.fogColor[1]; lu.fogColorEnabled[2]=params.fogColor[2]; lu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
+    lu.fogStartEnd[0]=params.fogStart; lu.fogStartEnd[1]=params.fogEnd; lu.fogStartEnd[2]=0; lu.fogStartEnd[3]=0;
 }
 
 static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
@@ -930,40 +1077,53 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
     const bool dual = params && params->dualTexture;
     const PipelineKind kind = selectPipelineKind(vb.stride(), params);
     id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind);
+    [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
+    [p.encoder setDepthStencilState:p.depthState]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
 
-    // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now actually
-    // reach the shader (previously silently ignored for every draw). Defaults below exactly
-    // reproduce this function's own prior hardcoded behavior for the non-Ex (params==nullptr)
-    // path: diffuseColor=white, alphaTest=always-pass, vertexColorEnabled=true.
-    UMaterialParams mp;
-    if (params) {
-        mp.diffuseColor[0]=params->diffuseColor[0]; mp.diffuseColor[1]=params->diffuseColor[1];
-        mp.diffuseColor[2]=params->diffuseColor[2]; mp.diffuseColor[3]=params->diffuseColor[3];
-        mp.alphaTest[0]=params->alphaTest[0]; mp.alphaTest[1]=params->alphaTest[1];
-        mp.alphaTest[2]=params->alphaTest[2]; mp.alphaTest[3]=params->alphaTest[3];
-        mp.flags[0]=params->vertexColorEnabled?1.0f:0.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
-    } else {
-        mp.diffuseColor[0]=mp.diffuseColor[1]=mp.diffuseColor[2]=mp.diffuseColor[3]=1.0f;
-        mp.alphaTest[0]=0.0f; mp.alphaTest[1]=0.0f; mp.alphaTest[2]=1.0f; mp.alphaTest[3]=1.0f;
-        mp.flags[0]=1.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
-    }
-
-    [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0]; [p.encoder setVertexBytes:&wvp length:sizeof(wvp) atIndex:1]; [p.encoder setDepthStencilState:p.depthState]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
-    [p.encoder setFragmentBytes:&mp length:sizeof(mp) atIndex:2];
-    if(textured){
+    if (kind == PipelineKind::LitTex32) {
+        // plan_metal.md METAL-38-47: real per-pixel lighting/fog/specular/emissive path.
+        LitTransform t{}; LitUniforms lu{};
+        fillLitUniforms(t, lu, wvp, *params);
+        [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
+        [p.encoder setVertexBytes:&lu length:sizeof(lu) atIndex:2];
+        [p.encoder setFragmentBytes:&lu length:sizeof(lu) atIndex:2];
         auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);
         if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
-        if(dual){
-            // plan_metal.md: EasyGL/Vulkan/Bgfx fall back to a 1x1 opaque white texture when
-            // Texture2 is left null (docs/dualtextureeffect-support.md Task 386/387); Metal does
-            // not yet have that fallback mechanism (a real, tracked follow-up gap, not silently
-            // dropped), so a null Texture2 here leaves texture unit 1 holding whatever a prior
-            // draw last bound there -- matches this same function's own pre-existing texture0
-            // null-handling pattern exactly, not a new class of gap introduced by DualTexture.
-            auto* mt1=dynamic_cast<const MetalTexture*>(params->texture1);
-            if(mt1)[p.encoder setFragmentTexture:mt1->native() atIndex:1];
-            [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
+    } else {
+        // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
+        // actually reach the shader (previously silently ignored for every draw). Defaults below
+        // exactly reproduce this function's own prior hardcoded behavior for the non-Ex
+        // (params==nullptr) path: diffuseColor=white, alphaTest=always-pass, vertexColorEnabled=true.
+        UMaterialParams mp;
+        if (params) {
+            mp.diffuseColor[0]=params->diffuseColor[0]; mp.diffuseColor[1]=params->diffuseColor[1];
+            mp.diffuseColor[2]=params->diffuseColor[2]; mp.diffuseColor[3]=params->diffuseColor[3];
+            mp.alphaTest[0]=params->alphaTest[0]; mp.alphaTest[1]=params->alphaTest[1];
+            mp.alphaTest[2]=params->alphaTest[2]; mp.alphaTest[3]=params->alphaTest[3];
+            mp.flags[0]=params->vertexColorEnabled?1.0f:0.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
+        } else {
+            mp.diffuseColor[0]=mp.diffuseColor[1]=mp.diffuseColor[2]=mp.diffuseColor[3]=1.0f;
+            mp.alphaTest[0]=0.0f; mp.alphaTest[1]=0.0f; mp.alphaTest[2]=1.0f; mp.alphaTest[3]=1.0f;
+            mp.flags[0]=1.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
+        }
+        [p.encoder setVertexBytes:&wvp length:sizeof(wvp) atIndex:1];
+        [p.encoder setFragmentBytes:&mp length:sizeof(mp) atIndex:2];
+        if(textured){
+            auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);
+            if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];
+            [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
+            if(dual){
+                // plan_metal.md: EasyGL/Vulkan/Bgfx fall back to a 1x1 opaque white texture when
+                // Texture2 is left null (docs/dualtextureeffect-support.md Task 386/387); Metal does
+                // not yet have that fallback mechanism (a real, tracked follow-up gap, not silently
+                // dropped), so a null Texture2 here leaves texture unit 1 holding whatever a prior
+                // draw last bound there -- matches this same function's own pre-existing texture0
+                // null-handling pattern exactly, not a new class of gap introduced by DualTexture.
+                auto* mt1=dynamic_cast<const MetalTexture*>(params->texture1);
+                if(mt1)[p.encoder setFragmentTexture:mt1->native() atIndex:1];
+                [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
+            }
         }
     }
     int n=primitiveVertexCount(pt,pc); if(ib)[p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16 indexBuffer:ib->native() indexBufferOffset:0];else[p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:0 vertexCount:n];
