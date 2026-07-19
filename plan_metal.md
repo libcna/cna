@@ -322,12 +322,27 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     done: `CTest` probe-pixel coverage (`METAL-89`, no compiler available here) and the `METAL-90`
     doc-ownership decision (deferred, not urgent) — both now the only open items in Phase 8.
 
+14. **`METAL-5` — explicit front-facing winding** (a real risk area this doc had itself flagged as
+    "deliberately left untouched," not a formality — see this project's own history of an empirically
+    hard-won Vulkan front/back stencil swap for why silently-correct-by-default assumptions in this
+    codebase deserve real scrutiny, not just tuning). Verified first, not just tuned, per that same
+    lesson: `VulkanGraphicsBackend`'s own tested rasterization state hardcodes `rs.frontFace =
+    VK_FRONT_FACE_CLOCKWISE` and maps XNA `CullClockwiseFace`(1)/`CullCounterClockwiseFace`(2) to
+    `VK_CULL_MODE_FRONT_BIT`/`BACK_BIT` — exactly what Metal's existing `c==1?Front:(c==2?Back:None)`
+    already does. Cross-checking against Apple's own `MTLRenderCommandEncoder.setFrontFacingWinding:`
+    documentation (front-facing primitives are clockwise-wound *by default* if never called) confirms
+    Metal's default already matches Vulkan's explicit choice — the existing code was not actually
+    producing wrong culling, but was depending on an *unstated* SDK default rather than an explicit
+    guarantee, exactly the fragile pattern this project has been burned by before. Fixed by adding
+    `[encoder setFrontFacingWinding:MTLWindingClockwise]` explicitly at all 3 call sites that set cull
+    mode (`Impl::applyTrackedEncoderState()`, `ApplyRasterizerState()`'s live-encoder branch, and
+    `drawMetal3D()`'s per-draw state application) rather than changing any actual mapping — this
+    removes the risk permanently without altering current (correct) rendering behavior.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
-`METAL-5` (cull-mode/winding correctness — deliberately left untouched, see its own note about a
-Vulkan front/back stencil swap this project already had to empirically discover the hard way, a
-real risk area, not a formality); `METAL-14`–`20` (VertexElementFormat/SurfaceFormat/DepthFormat
+`METAL-14`–`20` (VertexElementFormat/SurfaceFormat/DepthFormat
 tables, BC-compression query); the fully generic `VertexElement`-driven descriptor builder
 (`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
 lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
@@ -382,6 +397,10 @@ cross-backend pixel parity, iOS/tvOS). Nothing in this list has been touched.
   blend-color/per-`BlendState` blending** state plumbing, all XNA-enum-to-Metal mappings
   cross-checked against EasyGL's/Vulkan's own already-tested equivalents (🟨 landed 2026-07-19 —
   `METAL-6` through `METAL-13`, `METAL-24`).
+- Explicit `setFrontFacingWinding:MTLWindingClockwise` at all 3 cull-mode call sites, verified (not
+  just assumed) to match `VulkanGraphicsBackend`'s own explicit `VK_FRONT_FACE_CLOCKWISE` choice and
+  Apple's documented Metal default — removes a real "silently correct by unstated default" risk
+  without changing current rendering behavior (🟨 landed 2026-07-19 — `METAL-5`).
 - `DiffuseColor`/`VertexColorEnabled`/`AlphaTest` (AlphaTestEffect, needing no separate pipeline —
   see the 2026-07-19 section above) and `DualTextureEffect` (real FNA-verified `*2` doubling
   formula) now reach the shader for every textured draw (🟨 landed 2026-07-19 — `METAL-35`–
@@ -447,7 +466,7 @@ that replace it; do not re-derive scope from this table, use the phases:
 | METAL-2 | Wire the same cache into `MetalSpriteBatch::Draw()` via a new `SetSamplerAddressMode()` override (previously `filter_` was set but never read, and address mode had no override at all) | 🟨 |
 | METAL-3 | Extend sampler-slot consultation beyond unit 0 in `drawMetal3D` — needed once DualTextureEffect (Phase 5, unit 1) / EnvironmentMapEffect (Phase 6) / PBR (Phase 8, up to 4 map units) land | ⬜ |
 | METAL-4 | Audit `TextureFilter::Anisotropic` mapping (min/mag/mip = Linear + `maxAnisotropy`) against real Apple GPU behavior — no surprising clamp/driver quirk | ⬜ |
-| METAL-5 | `CullMode`→`MTLCullMode` + `MTLWinding` audit: current code (`c==1?Front:(c==2?Back:None)`) never calls `setFrontFacingWinding:`, relying on Metal's default winding — cross-check against `VulkanGraphicsBackend`'s tested `VkFrontFace`/`VkCullModeFlags` mapping and set winding explicitly instead of assuming a default | ⬜ |
+| METAL-5 | `CullMode`→`MTLCullMode` + `MTLWinding` audit: current code (`c==1?Front:(c==2?Back:None)`) never calls `setFrontFacingWinding:`, relying on Metal's default winding — cross-check against `VulkanGraphicsBackend`'s tested `VkFrontFace`/`VkCullModeFlags` mapping and set winding explicitly instead of assuming a default | 🟨 |
 | METAL-6 | `Blend`/`BlendFunction`→`MTLBlendFactor`/`MTLBlendOperation` full table (Zero/One/SourceColor/InverseSourceColor/SourceAlpha/InverseSourceAlpha/DestinationAlpha/InverseDestinationAlpha/DestinationColor/InverseDestinationColor/SourceAlphaSaturation/BlendFactor/InverseBlendFactor; Add/Subtract/ReverseSubtract/Max/Min) — `ApplyBlendState` is currently a complete no-op | 🟨 |
 | METAL-7 | `CompareFunction`→`MTLCompareFunction` full table (Always/Never/Less/LessEqual/Equal/GreaterEqual/Greater/NotEqual) — `rebuildDepthState()` currently hardcodes only LessEqual/Always, ignoring the real `depthFunc` parameter | 🟨 |
 | METAL-8 | `StencilOperation`→`MTLStencilOperation` full table (Keep/Zero/Replace/Increment/Decrement/IncrementSaturation/DecrementSaturation/Invert) — no stencil-op plumbing exists at all today, only a depth compare function and reference value | 🟨 |

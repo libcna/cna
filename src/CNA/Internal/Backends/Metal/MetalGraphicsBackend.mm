@@ -1080,6 +1080,16 @@ struct MetalGraphicsBackend::Impl
     // inconsistency between the two encoder-creation paths, fixed here by sharing one function.
     void applyTrackedEncoderState()
     {
+        // plan_metal.md METAL-5: explicit, not relied-on-by-accident. XNA CullMode's
+        // CullClockwiseFace(1)/CullCounterClockwiseFace(2) map to MTLCullModeFront/Back exactly like
+        // VulkanGraphicsBackend's own VK_CULL_MODE_FRONT_BIT/BACK_BIT mapping (see its own comment:
+        // "Pipeline uses VK_FRONT_FACE_CLOCKWISE, so CW faces are front faces") ONLY if Metal's front
+        // face is also clockwise-winding -- Apple's own MTLRenderCommandEncoder docs state clockwise
+        // IS the default, so this was already behaviorally correct, but silently depending on an
+        // unstated default is exactly the kind of fragile assumption this project's own history has
+        // been burned by before (see Vulkan's own front/back stencil swap, discovered the hard way).
+        // Setting it explicitly here removes that risk permanently.
+        [encoder setFrontFacingWinding:MTLWindingClockwise];
         [encoder setViewport:viewport]; [encoder setCullMode:cull]; [encoder setTriangleFillMode:fill];
         [encoder setDepthBias:depthBias slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
         [encoder setStencilReferenceValue:(uint32_t)refStencil];
@@ -1716,7 +1726,7 @@ void MetalGraphicsBackend::ApplyDepthStencilState(bool depthEnable,bool depthWri
     p.rebuildDepthState();
     if(p.encoder)[p.encoder setStencilReferenceValue:referenceStencil];
 }
-void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb){impl_->cull=c==1?MTLCullModeFront:(c==2?MTLCullModeBack:MTLCullModeNone);impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;impl_->scissorEnabled=se;impl_->depthBias=db;impl_->slopeBias=sb;if(impl_->encoder){[impl_->encoder setCullMode:impl_->cull];[impl_->encoder setTriangleFillMode:impl_->fill];[impl_->encoder setDepthBias:db slopeScale:sb clamp:0];}}
+void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb){impl_->cull=c==1?MTLCullModeFront:(c==2?MTLCullModeBack:MTLCullModeNone);impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;impl_->scissorEnabled=se;impl_->depthBias=db;impl_->slopeBias=sb;if(impl_->encoder){[impl_->encoder setFrontFacingWinding:MTLWindingClockwise];[impl_->encoder setCullMode:impl_->cull];[impl_->encoder setTriangleFillMode:impl_->fill];[impl_->encoder setDepthBias:db slopeScale:sb clamp:0];}}
 void MetalGraphicsBackend::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy){if(slot<0||slot>=16)return;impl_->samplerSlots[slot]=impl_->samplerFor(filter,addressU,addressV,maxAnisotropy);}
 void MetalGraphicsBackend::SetBlendFactor(float r,float g,float b,float a){impl_->blendColor[0]=r;impl_->blendColor[1]=g;impl_->blendColor[2]=b;impl_->blendColor[3]=a;if(impl_->encoder)[impl_->encoder setBlendColorRed:r green:g blue:b alpha:a];}
 void MetalGraphicsBackend::SetReferenceStencil(int v){impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}
@@ -1903,7 +1913,7 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
     const PipelineKind kind = selectPipelineKind(vb.stride(), params);
     id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind);
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0];
-    [p.encoder setDepthStencilState:p.depthState]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
+    [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
 
     if (kind == PipelineKind::LitTex32) {
         // plan_metal.md METAL-38-47: real per-pixel lighting/fog/specular/emissive path.
