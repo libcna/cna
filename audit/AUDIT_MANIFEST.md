@@ -6,36 +6,44 @@ Manifest shards are an organizational device only (grouped roughly by subsystem/
 
 **Totals: 2297 AUDIT-eligible files across 105 shards, 337 EXEMPT files across 8 reason-categories, 2634 tracked files overall.**
 
+**Note (as of the `cna-internal-core` shard closing out Task #3):** the per-shard rollup counts below are
+refreshed opportunistically, not automatically, as each shard's own manifest file is updated via
+`mark_audited.py` — several shards below may show a stale `PENDING` count even though their own
+`manifest/<shard>.md` file is actually fully `AUDITED` (confirmed directly: all 16 graphics-backend shards
+and all 5 `cna-*` shards are fully complete as of this note, and this table has been refreshed for those 21
+shards specifically). Treat each shard's own `manifest/<shard>.md` file, not this rollup, as the source of
+truth; a full resync of this table across all 105 shards is deferred to Pass 7 (completeness verification).
+
 ## Graphics backends (src+include, mirrored) (271 files)
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`backend-ascii`](manifest/backend-ascii.md) | 6 | PENDING: 6 / AUDITED: 0 |
-| [`backend-bgfx`](manifest/backend-bgfx.md) | 34 | PENDING: 34 / AUDITED: 0 |
-| [`backend-canvas`](manifest/backend-canvas.md) | 8 | PENDING: 8 / AUDITED: 0 |
-| [`backend-common`](manifest/backend-common.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`backend-d3d11`](manifest/backend-d3d11.md) | 20 | PENDING: 20 / AUDITED: 0 |
-| [`backend-d3d12`](manifest/backend-d3d12.md) | 26 | PENDING: 26 / AUDITED: 0 |
-| [`backend-d3d9`](manifest/backend-d3d9.md) | 50 | PENDING: 50 / AUDITED: 0 |
-| [`backend-d3dcommon`](manifest/backend-d3dcommon.md) | 46 | PENDING: 46 / AUDITED: 0 |
-| [`backend-dx3`](manifest/backend-dx3.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`backend-easygl`](manifest/backend-easygl.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`backend-headless`](manifest/backend-headless.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`backend-sdlgpu`](manifest/backend-sdlgpu.md) | 27 | PENDING: 27 / AUDITED: 0 |
-| [`backend-sdlrenderer`](manifest/backend-sdlrenderer.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`backend-software`](manifest/backend-software.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`backend-vulkan`](manifest/backend-vulkan.md) | 40 | PENDING: 40 / AUDITED: 0 |
-| [`backend-webgpu`](manifest/backend-webgpu.md) | 2 | PENDING: 2 / AUDITED: 0 |
+| [`backend-ascii`](manifest/backend-ascii.md) | 6 | AUDITED: 6 / PENDING: 0 (complete) |
+| [`backend-bgfx`](manifest/backend-bgfx.md) | 34 | AUDITED: 34 / PENDING: 0 (complete) |
+| [`backend-canvas`](manifest/backend-canvas.md) | 8 | AUDITED: 8 / PENDING: 0 (complete) |
+| [`backend-common`](manifest/backend-common.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
+| [`backend-d3d11`](manifest/backend-d3d11.md) | 20 | AUDITED: 20 / PENDING: 0 (complete) |
+| [`backend-d3d12`](manifest/backend-d3d12.md) | 26 | AUDITED: 26 / PENDING: 0 (complete) |
+| [`backend-d3d9`](manifest/backend-d3d9.md) | 50 | AUDITED: 50 / PENDING: 0 (complete) |
+| [`backend-d3dcommon`](manifest/backend-d3dcommon.md) | 46 | AUDITED: 46 / PENDING: 0 (complete) |
+| [`backend-dx3`](manifest/backend-dx3.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
+| [`backend-easygl`](manifest/backend-easygl.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
+| [`backend-headless`](manifest/backend-headless.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
+| [`backend-sdlgpu`](manifest/backend-sdlgpu.md) | 27 | AUDITED: 27 / PENDING: 0 (complete) |
+| [`backend-sdlrenderer`](manifest/backend-sdlrenderer.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
+| [`backend-software`](manifest/backend-software.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
+| [`backend-vulkan`](manifest/backend-vulkan.md) | 40 | AUDITED: 40 / PENDING: 0 (complete) |
+| [`backend-webgpu`](manifest/backend-webgpu.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
 
 ## CNA internal core (non-backend) (205 files)
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`cna-devices`](manifest/cna-devices.md) | 39 | PENDING: 39 / AUDITED: 0 |
-| [`cna-graphics`](manifest/cna-graphics.md) | 7 | PENDING: 7 / AUDITED: 0 |
-| [`cna-input`](manifest/cna-input.md) | 31 | PENDING: 31 / AUDITED: 0 |
-| [`cna-internal-core`](manifest/cna-internal-core.md) | 113 | PENDING: 113 / AUDITED: 0 |
-| [`cna-root-utilities`](manifest/cna-root-utilities.md) | 15 | PENDING: 15 / AUDITED: 0 |
+| [`cna-devices`](manifest/cna-devices.md) | 39 | AUDITED: 39 / PENDING: 0 (complete) |
+| [`cna-graphics`](manifest/cna-graphics.md) | 7 | AUDITED: 7 / PENDING: 0 (complete) |
+| [`cna-input`](manifest/cna-input.md) | 31 | AUDITED: 31 / PENDING: 0 (complete) |
+| [`cna-internal-core`](manifest/cna-internal-core.md) | 113 | AUDITED: 113 / PENDING: 0 (complete) |
+| [`cna-root-utilities`](manifest/cna-root-utilities.md) | 15 | AUDITED: 15 / PENDING: 0 (complete) |
 
 ## Microsoft.Xna.Framework — public API (include+src) (541 files)
 
