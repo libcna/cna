@@ -1,10 +1,12 @@
 # AUDIT_FINDINGS_INDEX.md
 
-**Status: POPULATED (Pass 5, rebuilt 2026-07-19).** This index consolidates every `MEDIUM`+ finding (and
-recurring `LOW`s) from the entire repository-wide audit — all 2297 files across 105 shards. It supersedes an
+**Status: POPULATED (Pass 5, rebuilt 2026-07-19; extended with Pass 3/6 findings same day).** This index
+consolidates every `MEDIUM`+ finding (and recurring `LOW`s) from the entire repository-wide audit — all 2297
+files across 105 shards, plus Pass 3's API-surface-completeness sweep (Graphics/Net/GamerServices/Xact-Audio
+namespaces vs. the real xn65 XML reference) and Pass 6's opportunistic EasyGL build/CTest sweep. It supersedes an
 earlier partial draft that only covered the first few graphics-backend batches; the fuller narrative for every
 entry below, including every incremental "confirmed in N more backends" update as the investigation progressed,
-lives in `AUDIT_CROSS_CUTTING_FINDINGS.md` (~1900 lines) and each finding's own `audit/<path>.audit.md` report.
+lives in `AUDIT_CROSS_CUTTING_FINDINGS.md` (~2170 lines) and each finding's own `audit/<path>.audit.md` report.
 Entries below are deduplicated to their final, fully-confirmed state — e.g. the fog-formula bug went through
 ~4 "UPDATE" rounds as more backends were checked; there is one entry for it here, not four.
 
@@ -19,6 +21,26 @@ of this audit** (see `CLAUDE.md`/audit prompt "No-development rule").
 _(none recorded yet)_
 
 ### HIGH
+
+**Testing infrastructure / CI (Pass 6, new this pass):**
+
+- **`gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` has no `WORKING_DIRECTORY` override,
+  breaking ~220 fixture-file-loading tests invisibly to every existing CI workflow.** Confirmed via
+  the generated `CTestTestfile.cmake`: all 5507 discovered test cases have
+  `WORKING_DIRECTORY=cmake-build-debug` baked in, not the repo root where `tests/assets/**` lives —
+  any test loading a real fixture file by repo-root-relative path (Media/Audio-tag-parsing/Xnb-
+  content-pipeline/ENet-networking/Lzx-decompression test groups) throws `FileNotFoundException`
+  under `ctest`, despite passing cleanly when manually run with the correct working directory. All
+  3 existing GitHub Actions workflows use a `-L <label>`-filtered `ctest --test-dir build` invocation
+  that never runs the general/default test set this bug affects — meaning these ~220 tests have
+  likely never once passed in any CI run this project has had, not because they're known-broken and
+  excluded, but as a side effect of CI's narrow labeled-subset structure combined with this
+  registration gap. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
+- **EasyGL: `SetRenderTargets` with 2 attachments only draws to the first one** — confirmed
+  reproducible in complete isolation (`EasyGL_MRT_TwoAttachments`): left attachment correctly green,
+  right attachment stays black instead of the expected blue. A real, previously-undisclosed defect
+  in a documented XNA 4.0 feature (multiple render targets), not an untested edge case. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
 
 **Graphics backends and shared XNA-facing graphics code:**
 
@@ -209,12 +231,19 @@ _(none recorded yet)_
 - **`BasicEffect::VertexColorEnabled` is a bare public field with no property wrapper**, violating this
   project's own C# property convention — confirmed 3 times across Bgfx, Vulkan, and generic test audits
   exercising the same production code. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
-- **3+ known-failing CTests registered with no `WILL_FAIL`/skip annotation**: `Bgfx_RenderTargetCube_DepthFormat`
+- **4 known-failing CTests registered with no `WILL_FAIL`/skip annotation**: `Bgfx_RenderTargetCube_DepthFormat`
   (Task 952, still open), `Bgfx_SkinnedEffect_WeightsPerVertex` (pre-existing since before commit `0cb4a591`),
-  and `EasyGL_AvatarRenderer_TintRouting` (independently re-confirmed failing by direct build+execution during
+  `EasyGL_AvatarRenderer_TintRouting` (independently re-confirmed failing by direct build+execution during
   synthesis — the `Vulkan_AvatarRenderer_TintRouting` sibling passes only by coincidence, per the Vulkan
-  ambient/emissive HIGH finding above). Recommend a full CTest-registration sweep (Pass 6) to find any more. See
-  `AUDIT_CROSS_CUTTING_FINDINGS.md` (CI-masking risk).
+  ambient/emissive HIGH finding above), and **`EasyGL_GraphicsDevice_ReferenceStencil`** (Pass 6, new: disclosed
+  in-comment as "a documented known failure" since Task 319/872, confirmed still genuinely failing and still
+  has no `WILL_FAIL` property backing that disclosure). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (CI-masking risk,
+  Pass 6).
+- **`MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` SEGFAULTs rather than failing cleanly** (Pass 6)
+  when the picture-library scan's root result is null/empty — a sibling test in the same fixture fails cleanly
+  on the identical condition, so some downstream object-graph-walking code dereferences the null without a
+  check. A real defensive-programming gap, independent of whatever causes the scan to come up empty in a given
+  environment. See `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
 - **Two SDL_Renderer tests have stale expected-throw assertions superseded by a real, intentional FNA-parity
   fix** (commit `90f5db2c` made `Clear(ClearOptions,...)` degrade silently instead of throwing on backends with
   no real depth/stencil buffer; production code is correct, tests weren't updated). See
