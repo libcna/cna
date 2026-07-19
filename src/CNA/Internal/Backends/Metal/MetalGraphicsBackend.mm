@@ -1590,6 +1590,14 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     p.device=MTLCreateSystemDefaultDevice(); if(!p.device) throw std::runtime_error("Metal: MTLCreateSystemDefaultDevice failed"); [p.device retain];
     p.view=SDL_Metal_CreateView(p.window); if(!p.view) throw std::runtime_error(std::string("Metal: SDL_Metal_CreateView failed: ")+SDL_GetError());
     p.layer=(CAMetalLayer*)SDL_Metal_GetLayer(p.view); [p.layer retain]; p.layer.device=p.device; p.layer.pixelFormat=MTLPixelFormatBGRA8Unorm; p.layer.framebufferOnly=NO;
+    // plan_metal.md METAL-168: swapInterval was previously stored but never applied -- CAMetalLayer
+    // has no direct integer-interval knob (unlike SDL_GL_SetSwapInterval's 0/1/-1 or Vulkan's
+    // present-mode choice, both real per-value behavior elsewhere in this codebase), only the
+    // boolean displaySyncEnabled. XNA PresentInterval::Immediate(0) -> NO (uncapped); One(1, the
+    // default)/Two(2) both -> YES (real, honest vsync) since Metal has no true half-rate present
+    // mode to map Two to -- an approximation, not a silent gap, and documented as such rather than
+    // pretending Two behaves differently from One.
+    p.layer.displaySyncEnabled = (p.swapInterval != 0);
     p.queue=[p.device newCommandQueue];
     NSError* err=nil; NSString* src=[NSString stringWithUTF8String:kMetalShaderSource]; p.library=[p.device newLibraryWithSource:src options:nil error:&err];
     if(!p.library) throw std::runtime_error(std::string("Metal shader compile failed: ")+([[err localizedDescription] UTF8String]?:"unknown"));
@@ -1628,7 +1636,8 @@ void MetalGraphicsBackend::GetViewportSize(int&w,int&h){
     auto vp=impl_->computeLogicalViewport();
     w=(int)std::lround(vp.logicalWidth); h=(int)std::lround(vp.logicalHeight);
 }
-void MetalGraphicsBackend::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->virtualH=h;} void MetalGraphicsBackend::SetPresentationMode(int m){impl_->presentationMode=m;} void MetalGraphicsBackend::SetSwapInterval(int i){impl_->swapInterval=i;}
+void MetalGraphicsBackend::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->virtualH=h;} void MetalGraphicsBackend::SetPresentationMode(int m){impl_->presentationMode=m;}
+void MetalGraphicsBackend::SetSwapInterval(int i){impl_->swapInterval=i;impl_->layer.displaySyncEnabled=(i!=0);} // plan_metal.md METAL-168, same mapping as the constructor.
 bool MetalGraphicsBackend::TransformWindowToLogical(float windowX,float windowY,float& logX,float& logY) const{return impl_->transformWindowToLogical(windowX,windowY,logX,logY);}
 bool MetalGraphicsBackend::TransformLogicalToWindow(float logX,float logY,float& windowX,float& windowY) const{return impl_->transformLogicalToWindow(logX,logY,windowX,windowY);}
 // plan_metal.md METAL-130: real ReadBackbuffer, previously unimplemented (base default throws).

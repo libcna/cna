@@ -457,6 +457,32 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     WebGPU-precedent guidance is explicit that such changes need cross-backend understanding first,
     not a Metal-plan drive-by — tracked precisely as `METAL-257` instead.
 
+18. **Phase 17 — frame pacing / presentation policy** (`METAL-168` fixed; `169`–`172` decided/
+    confirmed, no code needed): `swapInterval` was a real, previously-dead field — stored by the
+    constructor and `SetSwapInterval()` but never read by anything that touched the actual
+    `CAMetalLayer`. Fixed by applying `layer.displaySyncEnabled = (swapInterval != 0)` in both
+    places. `CAMetalLayer` has no true per-value interval knob the way `SDL_GL_SetSwapInterval`'s
+    0/1/-1 or Vulkan's present-mode choice (`VulkanGraphicsBackend`'s own real code, already choosing
+    `IMMEDIATE`/`MAILBOX`/`FIFO_RELAXED`/`FIFO` per the exact same 0/1/2 XNA `PresentInterval`
+    convention) do — only a boolean, so `PresentInterval.Two` maps to the same real vsync as
+    `PresentInterval.One`, an honest, documented approximation rather than a silent gap.
+    `maximumDrawableCount` (`METAL-169`): decided to leave at Apple's platform default rather than
+    force an explicit value — unlike Vulkan's own `minImageCount+1` (a safe pattern derived from
+    querying the real surface capability minimum), Metal's property is a fixed app-chosen 2-or-3
+    latency/throughput tradeoff with no objectively-more-correct answer reachable without real
+    hardware measurement, so forcing a value now would be a guess dressed up as a decision.
+    `presentsWithTransaction`/`allowsNextDrawableTimeout` (`METAL-170`): both audited and confirmed
+    correct at their defaults — `presentsWithTransaction=NO` is right since this is a dedicated,
+    full-window layer with no other Core Animation content to transaction-synchronize against, and
+    `allowsNextDrawableTimeout=YES` was specifically checked against this file's own existing
+    minimized/occluded-window handling (`resolveActiveAttachments()`'s `if (!drawable) return false`
+    path) — the default's ~1-second-timeout-then-nil behavior is exactly what that existing code
+    already expects and tolerates; forcing it to `NO` would instead risk `nextDrawable` blocking the
+    CPU thread indefinitely in that same scenario, actively fighting rather than complementing
+    existing code. `METAL-171`'s deferral (precise-pacing `presentDrawable:atTime:`/completion
+    handlers) reconfirmed correct with no new information — there is still no concrete stutter/tear
+    problem to fix without real hardware to observe one on.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -469,8 +495,7 @@ Phase 10 (`RenderTargetCube`,
 MRT, MSAA, mip, `GetData()`, `METAL-102`–`105`/`108`–`119`); Phase 14 (custom `ShaderEffect`, which
 Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
 `VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
-on Phase 14); Phase 17 (frame pacing — Phase 16's own resize/Retina questions and Phase 18's own
-command-buffer audit are now both answered, see above); `METAL-256` (the real texture-update
+on Phase 14); `METAL-256` (the real texture-update
 CPU/GPU-sync hazard Phase 18's audit found but did not fix) and `METAL-257` (the cross-backend
 missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap Phase 16's research found but deliberately left for a
 cross-backend task, not this Metal-only plan); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases
@@ -519,6 +544,10 @@ iOS/tvOS). Nothing in this list has been touched.
   cross-backend HiDPI gap in shared window-creation code in the process, deliberately left open as
   `METAL-257` since fixing it is out of a Metal-only plan's scope (🟨 landed 2026-07-19 —
   `METAL-162`–`167`).
+- Real `swapInterval` handling: previously stored but completely dead, now actually applied via
+  `layer.displaySyncEnabled` at construction and on every `SetSwapInterval()` call, with the
+  `CAMetalLayer`-has-no-true-half-rate-knob limitation for `PresentInterval.Two` explicitly
+  documented rather than silently approximated (🟨 landed 2026-07-19 — `METAL-168`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -911,11 +940,11 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-168 | `swapInterval` is stored but has zero effect on `Present()` — `CAMetalLayer` has no direct interval knob; map via `layer.displaySyncEnabled` (0→`NO`, 1→`YES`) and document the honest "no true half-rate" caveat for `swapInterval=2` | ⬜ |
-| METAL-169 | `CAMetalLayer.maximumDrawableCount` (double vs. triple buffering) — currently unset (Apple default); decide whether CNA needs explicit control for cross-backend frame-pacing consistency | ⬜ |
-| METAL-170 | Audit `presentsWithTransaction`/`allowsNextDrawableTimeout` relevance — likely leave at defaults, document that this was considered | ⬜ |
-| METAL-171 | Audit whether `presentDrawable:atTime:`/scheduled/completed handlers are needed for precise frame pacing, deferring unless a concrete stutter/tear problem is found on real hardware | ⬜ |
-| METAL-172 | Document vsync/frame-pacing verification as a **physical-Mac-only manual item** (timing-sensitive, not CTest-provable) | ⬜ |
+| METAL-168 | `swapInterval` is stored but has zero effect on `Present()` — `CAMetalLayer` has no direct interval knob; map via `layer.displaySyncEnabled` (0→`NO`, 1→`YES`) and document the honest "no true half-rate" caveat for `swapInterval=2` | 🟨 (fixed: real bug, was a stored-but-dead field, now applied at construction and in `SetSwapInterval()`) |
+| METAL-169 | `CAMetalLayer.maximumDrawableCount` (double vs. triple buffering) — currently unset (Apple default); decide whether CNA needs explicit control for cross-backend frame-pacing consistency | 🟨 (decided: leave at Apple's platform default — see narrative) |
+| METAL-170 | Audit `presentsWithTransaction`/`allowsNextDrawableTimeout` relevance — likely leave at defaults, document that this was considered | 🟨 (audited: both defaults confirmed correct, `allowsNextDrawableTimeout`'s default specifically confirmed to align with, not fight, this file's own minimized/occluded-window handling — see narrative) |
+| METAL-171 | Audit whether `presentDrawable:atTime:`/scheduled/completed handlers are needed for precise frame pacing, deferring unless a concrete stutter/tear problem is found on real hardware | 🟨 (deferral confirmed still correct — no real hardware available to find a concrete problem to fix) |
+| METAL-172 | Document vsync/frame-pacing verification as a **physical-Mac-only manual item** (timing-sensitive, not CTest-provable) | 🟨 |
 
 ## Phase 18 — Resource lifetime / command-buffer synchronization audit (METAL-173 – METAL-181, +METAL-256)
 
