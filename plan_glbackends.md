@@ -191,14 +191,10 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
   qualifiers for `OPENGL33`, `100`+`precision mediump float;` for `WEBGL1` — note GLSL ES 1.00 also
   needs `attribute`/`varying` instead of `in`/`out`, a real body difference, not just a header
   swap: scope this explicitly in `GLB-12`, don't assume it's free).
-- ⬜ **GLB-12** — For `WEBGL1` specifically: GLSL ES 1.00 (`#version 100`) uses `attribute`/
-  `varying`/`texture2D()`/`textureCube()` instead of `in`/`out`/`texture()` — a real syntax
-  difference from the ES 3.00/330-core shader bodies, not header-only. Decide and implement: either
-  (a) keep one shader body written against GLSL ES 1.00-compatible subset syntax for all 4
-  profiles when possible (desktop 330 core and ES 3.00 both still accept `attribute`/`varying` as
-  compatibility... **no they don't**, core profile forbids them) — so realistically WEBGL1 needs
-  its own real header+body preamble per shader (macro-based: `#define in attribute` etc. is a known
-  working pattern, consider it) rather than three-out-of-four sharing.
+- ✅ **GLB-12** — Resolved as part of `GLB-36` (see Phase F below) — implemented a real
+  text-transform (`TransformGlslEs300BodyToEs100()`), not a macro-based `#define in attribute`
+  trick. WEBGL1 gets its own real per-shader body rewrite at first-use time, not shared with the
+  other 3 profiles.
 
 ### Phase C — `OPENGLES` (rename only)
 
@@ -358,12 +354,33 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   example/test (`webgl.md` item 6) — this is what actually proves `GLB-30`-`GLB-34`, not just code
   review. Needs a real `emcmake` build with `-s USE_WEBGL2=0`. **Preset/test code exists and was
   reviewed; not build-verified here (no Emscripten SDK in this sandbox).**
-- ⬜ **GLB-36** — Back in `cnagl`: once `GLB-30`-`GLB-35` land, implement `GLB-12`'s
-  `attribute`/`varying`/`texture2D()` GLSL ES 1.00 shader header+body variant in
-  `EasyGLGraphicsBackend.cpp` for the `WEBGL1` profile. **Prerequisite now satisfied — but this
-  itself needs a design decision first, see §4.**
-- ⬜ **GLB-37** — Full EasyGL-family GTest suite under `-DCNA_GRAPHICS_BACKEND=WEBGL1` via
-  `emcmake`, `docs/webgl1-backend.md`.
+- ✅ **GLB-36** — **Done 2026-07-19 (authorized to start same night the project owner went to
+  sleep — see §4's original open question, now resolved).** Implemented
+  `TransformGlslEs300BodyToEs100()` in `EasyGLGraphicsBackend.cpp`: real per-shader GLSL ES 1.00
+  rewrite (`attribute`/`varying`/`texture2D()`/`textureCube()`/`gl_FragColor`), plus
+  `ExtractVertexAttribLocations()` + `Program::bind_attrib_location()` calls in `CompileAndLink()`
+  and `EasyGLSpriteBatchBackend::InitializeResources()` to replace the `layout(location=N)`
+  qualifiers GLSL ES 1.00 doesn't support — this is exactly the "design decision" §4 flagged
+  (rebinding locations from the C++ side rather than the shader text), now implemented and
+  verified rather than merely decided.
+  **Verified**: a standalone C++ test harness (no GL/Emscripten needed) confirmed the string
+  transform's correctness against real shader text extracted from this file, and a real
+  `emcmake`/`emcc` build of `cna_house3d_demo` under `-DCNA_GRAPHICS_BACKEND=WEBGL1` compiles and
+  links cleanly, running under Node exactly as far as `WEBGL2` already does (same DOM-only
+  limitation, not GL/shader-related). **Not verified**: actual GLSL ES 1.00 driver acceptance
+  (needs a real browser) and `SkinnedEffect`/`SkinnedPbrEffect` under `WEBGL1` (documented,
+  detected-at-runtime gap — `uvec4 aBoneIndices` has no GLSL ES 1.00 equivalent, deliberately not
+  attempted, see the source comment and §4 below for what a real fix would need).
+  **Found and fixed a real, separate bug while verifying this**: `cna_house3d_demo`'s Emscripten
+  link options hardcoded `-sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2` unconditionally — exactly
+  the class of gap the original `GLB-9` was looking for, just in a per-target CMake option instead
+  of the graphics backend's own context-creation code. Fixed and verified (see `cmake/Examples.cmake`
+  commit `d44ed617`).
+- 🟨 **GLB-37** — Full EasyGL-family GTest suite under `-DCNA_GRAPHICS_BACKEND=WEBGL1` via
+  `emcmake`, `docs/webgl1-backend.md`. **Partially done**: `docs/webgl1-backend.md` written; the
+  full GTest suite itself is NOT runnable under Emscripten at all regardless of GL profile
+  (`cmake/Tests/EasyGLTests.cmake` gates `cna_test_easygl_*` targets to `NOT EMSCRIPTEN` — same
+  pre-existing, unrelated scope limit already hit for `WEBGL2`/`CANVAS`).
 - ⬜ **GLB-38** — Once `easy-glrvc`'s `GLB-30`-`GLB-35` changes are reviewed and merged to
   `easy-gl`'s real `main`/default branch, switch `cnagl`'s sibling-repo dependency in
   `cmake/BackendSelection.cmake` back from `../easy-glrvc` to `../easy-gl` (reverts `GLB-7`'s
@@ -379,6 +396,13 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   rebinding vertex-attribute locations from C++ across ~26 programs, unverifiable without a real
   browser/headless-GL): **Decided: start on this next session.** The `emcc` compile step alone
   (even without a way to fully runtime-verify a WebGL1 context) is real signal worth having.
+  **Done, same night** (see Phase F's `GLB-36` status above) — implemented, standalone-verified,
+  and real-`emcc`-build-verified. New follow-up open question this created, not yet asked:
+  `SkinnedEffect`/`SkinnedPbrEffect` need a real `vec4`-encoded-bone-index architecture change
+  (with a matching C++-side `VertexBuffer` upload change for this profile) to work under `WEBGL1`
+  at all — see `docs/webgl1-backend.md`'s "What's not yet done" section for the exact shape of
+  that fix. Worth asking before starting it, since it touches the vertex-format upload path shared
+  with other profiles and needs care not to regress them.
 - `GLB-38` (push/merge `easy-glrvc`'s commits into `easy-gl`'s real default branch so `cnagl` can
   drop the temporary `../easy-glrvc` dependency): **Decided: leave to the project owner — do not
   attempt to merge/push between repos autonomously.**
