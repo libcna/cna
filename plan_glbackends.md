@@ -264,38 +264,44 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 
 ### Phase E — `WEBGL2` (give today's Emscripten/EasyGL path its own identity)
 
-> **Status (2026-07-19): GLB-24 partially done — real, new blocker found and documented, not
-> fixed.** A working Emscripten SDK exists in this sandbox at `~/emsdk` (source
-> `~/emsdk/emsdk_env.sh`, plus manually add `~/emsdk/upstream/emscripten` and the bundled
-> `~/emsdk/node/.../bin` to `PATH` — `emsdk list --installed` reports nothing activated, which is
-> misleading; the toolchain works when invoked directly). `emcmake cmake
-> -DCNA_GRAPHICS_BACKEND=WEBGL2` configures cleanly and `cmake --build --target CNA` compiles the
-> entire core library cleanly. Building the real, already-Emscripten-gated `cna_house3d_demo`
-> target surfaced a genuine link failure: `wasm-ld: undefined symbol: __cpp_exception` from
-> `libmeta-gl.a` (`Functions.cpp.o`, `Context.cpp.o`) — an exception-handling ABI mismatch between
-> `meta-gl-followup-audit`'s compiled objects and the final link step. Isolated with a standalone
-> `em++` exception-handling smoke test (compiles/links fine against this exact `emcc` install), so
-> the toolchain itself is not broken — the mismatch is specific to how `meta-gl-followup-audit`
-> (the sibling repo `easy-glrvc`'s `CMakeLists.txt` was pointed at, uncommitted, instead of the
-> normal `../meta-gl`) compiles for Emscripten. **Not investigated further this session** (needs
-> its own dedicated look at `meta-gl-followup-audit`'s CMake/compiler-flag setup for Emscripten,
-> out of scope for a "linker flags" task) — root cause narrowed but not fixed. `CnaTests` was also
-> attempted under `WEBGL2` and failed with an unrelated `'SDL3/SDL.h' file not found` — but this is
-> not a regression either: the project's own `web` CMake preset already sets `CNA_BUILD_TESTS=OFF`,
-> meaning a test build under Emscripten was never a supported/exercised configuration to begin
-> with, pre-existing this plan entirely.
-- 🟨 **GLB-24** — Get a clean `emcmake`/`emcc` configure+build with
+> **Status (2026-07-19, updated later same night): GLB-24 done and verified; GLB-39 fixed.** A
+> working Emscripten SDK exists in this sandbox at `~/emsdk` (source `~/emsdk/emsdk_env.sh`, plus
+> manually add `~/emsdk/upstream/emscripten` and the bundled `~/emsdk/node/.../bin` to `PATH` —
+> `emsdk list --installed` reports nothing activated, which is misleading; the toolchain works
+> when invoked directly). `emcmake cmake -DCNA_GRAPHICS_BACKEND=WEBGL2` configures cleanly.
+>
+> Building the real, already-Emscripten-gated `cna_house3d_demo` target first surfaced a genuine
+> link failure (`wasm-ld: undefined symbol: __cpp_exception` from `libmeta-gl.a`). **Root-caused
+> and fixed as `GLB-39`, entirely within `cnagl`** (no sibling-repo change needed): CNA's own
+> top-level `CMakeLists.txt` set legacy JS-based `-fexceptions` for Emscripten, while
+> `easy-gl`'s `cmake/EasyGlPlatform.cmake` sets the modern Wasm-EH `-fwasm-exceptions` in its own
+> directory scope (for its standalone Emscripten preset) — directory-scoped CMake compile/link
+> options only propagate downward through `add_subdirectory()`, so `meta-gl`/`easy-gl` objects got
+> compiled for Wasm EH while CNA's own final-link step (defined in CNA's own top-level scope) was
+> still configured for legacy JS EH, producing the ABI mismatch. Matched CNA's own flag to
+> `-fwasm-exceptions` (`CMakeLists.txt`, commit `ec58f383`). **After the fix**:
+> `cna_house3d_demo` under `WEBGL2` links cleanly, producing a real `.wasm`/`.js`/`.html`; running
+> it under Node executes real C++ code through SDL3's window-creation path before hitting the
+> expected `window is not defined` (a genuine browser-only DOM API gap, already documented for the
+> `CANVAS` backend — not a new bug). Checked for regressions: `cna_demo_2d` under `CANVAS` (a
+> previously-verified-working Emscripten configuration) still builds and links cleanly with the
+> new flag.
+>
+> `CnaTests` was also attempted under both `WEBGL2` and `CANVAS` and fails with an unrelated
+> `'SDL3/SDL.h' file not found` in both — but this is not a regression: the project's own `web`
+> CMake preset already sets `CNA_BUILD_TESTS=OFF`, meaning a test build under Emscripten was never
+> a supported/exercised configuration to begin with, pre-existing this plan entirely.
+- ✅ **GLB-24** — Get a clean `emcmake`/`emcc` configure+build with
   `-DCNA_GRAPHICS_BACKEND=WEBGL2` (should need zero source changes beyond Phase A's CMake
   plumbing, since this is today's Emscripten+EasyGL path under a new name).
   Follow the same "compiles under node, not yet browser-pixel-verified" standard the `CANVAS`
   backend already documents (`README.md`'s `CANVAS` bullet) — don't overclaim.
 - ⬜ **GLB-25** — Add a `cmake/Tests/WebGl2Tests.cmake` (or extend `EasyGLTests.cmake`'s guard) so
   CI/CTest can distinguish `WEBGL2` runs from `OPENGLES`/`OPENGL33` runs.
-- ⬜ **GLB-39** — **New, found 2026-07-19.** Fix the `__cpp_exception` undefined-symbol link
-  failure in `meta-gl-followup-audit` under Emscripten (see this Phase's status note) before
-  `GLB-24` can be called done. Likely an exception-handling-model compile-flag mismatch specific to
-  that repo's Emscripten CMake path — needs investigation there, not in `cnagl`.
-- ⬜ **GLB-26** — `docs/webgl2-backend.md`.
+- ✅ **GLB-39** — **New, found and fixed 2026-07-19.** Fixed the `__cpp_exception` undefined-symbol
+  link failure — see this Phase's status note above for the full root cause and fix (CNA's own
+  top-level `CMakeLists.txt`, not `meta-gl-followup-audit` as first suspected).
+- ✅ **GLB-26** — `docs/webgl2-backend.md`.
 
 ### Phase F — `WEBGL1` (new, needs easy-gl fixes first)
 
