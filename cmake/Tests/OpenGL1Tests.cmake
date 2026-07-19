@@ -114,4 +114,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_DualTextureEffect_Doubling COMMAND cna_test_opengl1_dualtextureeffect_doubling
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 11: explicit GraphicsCapability reporting, backed by real evidence
+    # (not just the flag) for every checked value.
+    cna_opengl1_test(cna_test_opengl1_graphics_capability
+                      examples/opengl1_graphics_capability_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_GraphicsCapability COMMAND cna_test_opengl1_graphics_capability
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
