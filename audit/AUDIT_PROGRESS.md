@@ -73,7 +73,20 @@ leftover project name ("WINDOWSPHONESPEEDYBLUPI"); `Entrypoint.hpp` checks a pre
 (`CNA_BACKEND_SDL`) that the build system never actually defines (real macros are `CNA_BACKEND_SDL_RENDERER`/
 `_GPU`) and has zero consumers anywhere in this repository.
 
-Remaining Task #3 shards: `cna-internal-core` (113, largest), `cna-devices` (39), `cna-input` (31).
+`cna-input` (31/31, **AUDITED**) — raw joystick access, haptics (force-feedback), clipboard, sensors, power,
+multi-device enumeration. **High code-quality shard, no confirmed defects** (unlike `cna-root-utilities`):
+every SDL-mirroring enum was independently cross-checked against the real SDL3 headers (via the `planetblupi`
+sibling repo's vendored copy) — `JoystickTypeEXT`, `GamePadButtonLabelEXT`, `HapticEffectTypeEXT`,
+`HapticFeatureEXT` (all 17 bit positions incl. 2 intentional gaps), `TextInputTypeEXT` all verified exact
+matches; `HapticDevice`'s move semantics and SDL tagged-union construction independently verified correct.
+Found and flagged (not yet confirmed as bugs, pending later shards) that `PowerStateEXT`/`SensorTypeEXT`'s
+ordinals do NOT numerically align with real `SDL_PowerState`/`SDL_SensorType` — confirmed this shard's own
+consumer (`Power.cpp`) safely uses an explicit switch, but the `JoystickCapabilitiesEXT::powerState`/
+`Sensors::GetSensorsEXT()` population sites live in not-yet-audited backend classes
+(`SdlInputBridge`/`SystemSensorBackend`) that need the same check when `cna-internal-core`/`cna-devices` are
+reached.
+
+Remaining Task #3 shards: `cna-internal-core` (113, largest), `cna-devices` (39).
 
 **Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
 `EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
@@ -130,18 +143,18 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **828** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **859** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
   backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, backend-bgfx ×34, backend-vulkan ×40, backend-d3d9 ×50,
-  cna-graphics ×7, cna-root-utilities ×15, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67,
+  cna-graphics ×7, cna-root-utilities ×15, cna-input ×31, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67,
   examples-tests-bgfx ×98, examples-tests-vulkan ×70, examples-tests-webgpu ×22, examples-tests-d3d9 ×14,
   examples-tests-sdlgpu ×22, examples-tests-generic ×24)
-- PENDING: **1469**
+- PENDING: **1438**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~36.0% AUDITED so far** (828/2297). **All 16 backend shards fully audited; Task #3 (CNA core) in progress
-(2 of 5 shards done).**
+**~37.4% AUDITED so far** (859/2297). **All 16 backend shards fully audited; Task #3 (CNA core) in progress
+(3 of 5 shards done).**
 
 `backend-bgfx` (34 files) is now fully audited — all 28 `.sc` shaders individually read, plus a scoped-depth
 review of the 695+3443-line main backend header/cpp, the vertex-format-helper header, the renderer-selection
@@ -402,25 +415,24 @@ audits) to confirm whether they share the same pattern.
 
 ## Last completed file
 
-`cna-root-utilities` shard — all 15 files (foundational, always-compiled infrastructure: `CNAException`,
-`CNAHelper` (the `NOXNA` macro), `DesktopOS`, `Entrypoint`, `GraphicsBackendType`, `GraphicsCapability`,
-`LogCategory`, `LogLevel`, `Logger`, `Misc`, `Platform`) fully audited and written up, marked AUDITED. Found 2
-significant, confirmed defects distinct from every graphics-backend-layer finding so far: `Logger::
-ToSDLPriority()` mistags every `Fatal`/`Error`/`Warn` call with `SDL_LOG_PRIORITY_INFO` (foundational,
-always-compiled, project-wide blast radius — the widest of any single bug in this audit); `CNA::Runtime`
-(`Misc.hpp`) is fully declared but 100% unimplemented anywhere in the codebase, with zero consumers. Also
-found `CNAHelper.hpp` is the only file in `include/CNA/` with an old-style include guard bearing an unrelated
-leftover project name, and `Entrypoint.hpp` checks a preprocessor macro the build system never defines and has
-zero consumers itself.
+`cna-input` shard — all 31 files (raw joystick access, haptics/force-feedback, clipboard, sensors, power,
+multi-device enumeration) fully audited and written up, marked AUDITED. High code-quality shard — no confirmed
+defects (unlike `cna-root-utilities`'s Logger bug). Every SDL-mirroring enum independently cross-checked
+against the real SDL3 headers (via the `planetblupi` sibling repo's vendored copy): `JoystickTypeEXT`,
+`GamePadButtonLabelEXT`, `HapticEffectTypeEXT`, `HapticFeatureEXT` (all 17 bit positions), `TextInputTypeEXT`
+all confirmed exact matches; `HapticDevice`'s move semantics and SDL tagged-union construction independently
+verified correct. Flagged (pending confirmation, not yet a confirmed bug) that `PowerStateEXT`/`SensorTypeEXT`
+don't numerically align with real `SDL_PowerState`/`SDL_SensorType` — this shard's own consumer (`Power.cpp`)
+is confirmed safe (explicit switch), but 2 other population sites live in not-yet-audited backend classes.
 
 ## Next exact action
 
-1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_FINDINGS_INDEX.md`, `AUDIT_PROGRESS.md`,
-   the 15 new `.audit.md` reports under `audit/include/CNA/` and `audit/src/CNA/`, and the updated
-   `cna-root-utilities` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only
-   first.
-2. Continue Task #3: `cna-input` (31 files, next-smallest), then `cna-devices` (39), then `cna-internal-core`
-   (113, largest of the 5 Task #3 shards).
+1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_PROGRESS.md`, the 31 new `.audit.md`
+   reports under `audit/include/CNA/Input/` and `audit/src/CNA/Input/`, and the updated `cna-input` manifest
+   shard file) as one logical batch, verifying staged paths are `audit/`-only first.
+2. Continue Task #3: `cna-devices` (39 files, next-smallest — priority: verify the `PowerStateEXT`/
+   `SensorTypeEXT` ordinal-mismatch flag above against `SdlInputBridge`/`SystemSensorBackend`'s own mapping
+   code if those files live here), then `cna-internal-core` (113, largest of the 5 Task #3 shards).
 3. Then Task #4 (Microsoft.Xna areas — start with
    `xna-framework-core` 78, then `xna-graphics` 191 the largest, prioritizing `SpriteFont.cpp`/`SpriteBatch.cpp`
    given the UB finding above, and `BlendState`/`SamplerState`/`RasterizerState`/`DepthStencilState`/
@@ -514,7 +526,8 @@ consolidating what's already known rather than re-deriving it.
 23. `audit: populate Pass 4 cross-cutting defect matrix in AUDIT_GRAPHICS_BACKEND_MATRIX.md`
 24. `audit: review cna-graphics shard (7 files, Task #3 started)`
 25. `audit: review cna-root-utilities shard (15 files) — Logger SDL-priority bug, unimplemented Runtime class`
-26. *(next commit: cna-input shard)*
+26. `audit: review cna-input shard (31 files) — high quality, verified SDL enum parity, no confirmed defects`
+27. *(next commit: cna-devices shard)*
 
 ## Self-check log
 

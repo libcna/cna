@@ -727,3 +727,17 @@ _(pending)_
   the repository either. Any code that instantiates `CNA::Runtime` and calls any of its methods would fail to
   link. Distinct from (and more severe than) the `cna-graphics` NOXNA shard's own "implemented but unconsumed"
   scaffold pattern — this one isn't even implemented.
+- **PENDING VERIFICATION (flagged while auditing `cna-input`, to be confirmed once `cna-internal-core`/
+  `cna-devices` are audited): `PowerStateEXT`'s ordinals do not numerically align with real `SDL_PowerState`'s
+  own ordinals** (SDL: `Error=-1, Unknown=0, OnBattery=1, NoBattery=2, Charging=3, Charged=4` — confirmed
+  against the real SDL3 header via the `planetblupi` sibling repo's vendored copy; `PowerStateEXT`: 0-based
+  sequential, `Error=0, Unknown=1, OnBattery=2, NoBattery=3, Charging=4, Charged=5` — every value offset by
+  +1). `SensorTypeEXT` has a related, narrower gap: its non-negative values DO align with `SDL_SensorType`'s
+  own non-negative values 1:1, but there is no `SensorTypeEXT` entry at all for `SDL_SENSOR_INVALID` (-1). A
+  raw numeric cast between either SDL enum and its CNA counterpart would silently misclassify values (in
+  `PowerState`'s case, every single one). **Confirmed SAFE in `cna-input`'s own consumer**: `Power.cpp`'s
+  `to_power_state_ext()` uses an explicit, exhaustive switch, not a cast. **NOT yet verified**: the actual
+  mapping sites for `JoystickCapabilitiesEXT::powerState` and `Sensors::GetSensorsEXT()`'s own
+  `SDL_SensorType`-to-`SensorTypeEXT` conversion both live in backend classes (`SdlInputBridge`/
+  `SystemSensorBackend`) not yet audited as of this shard (tracked under `cna-internal-core`/`cna-devices`) —
+  check both use an explicit switch, not a raw cast, when those shards are reached.
