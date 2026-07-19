@@ -139,6 +139,68 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_EnvironmentMapEffect COMMAND cna_test_opengl1_environmentmapeffect
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 10: visual golden-image tests, reusing the EXACT same checked-in
+    # reference PNGs EasyGL's own golden-image suite uses (examples/golden/*.png) -- no new
+    # images. Same precedent as Vulkan's own golden-image reuse (VulkanTests.cmake): the shared
+    # PixelTestGame::CompareGoldenImage() helper and every one of these .cpp files is backend-
+    # agnostic (real public Game/GraphicsDevice/Effect/SpriteBatch API only). Deliberately
+    # excluded: PbrEffect/SkinnedEffect/SkinnedPbrEffect (GLSL-shader-only, no fixed-function
+    # equivalent -- plan_opengl1.md's own design rule) and EnvironmentMapEffect (its golden scene
+    # exercises Fresnel/specular, which plan_opengl1.md phase 5 documents as an intentional,
+    # unimplemented fixed-function limitation -- a guaranteed mismatch, not worth a test that can
+    # never pass). WORKING_DIRECTORY is the repo root so each test's relative
+    # "examples/golden/*.png" path resolves correctly regardless of which cmake-build-* directory
+    # this runs from (CMake's default test CWD is the build directory, not the source tree).
+    cna_opengl1_test(cna_test_opengl1_goldenimage_smoke
+                      examples/easygl_goldenimage_smoke_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_GoldenImage_Smoke COMMAND cna_test_opengl1_goldenimage_smoke
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl1_test(cna_test_opengl1_basiceffect_golden
+                      examples/easygl_basiceffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_BasicEffect_Golden COMMAND cna_test_opengl1_basiceffect_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl1_test(cna_test_opengl1_spritebatch_rotation_golden
+                      examples/easygl_spritebatch_rotation_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_SpriteBatch_Rotation_Golden COMMAND cna_test_opengl1_spritebatch_rotation_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl1_test(cna_test_opengl1_texture_filter_linear_golden
+                      examples/easygl_texture_filter_linear_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_TextureFilter_Linear_Golden COMMAND cna_test_opengl1_texture_filter_linear_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl1_test(cna_test_opengl1_blendstate_additive_golden
+                      examples/easygl_blendstate_additive_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_BlendState_Additive_Golden COMMAND cna_test_opengl1_blendstate_additive_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl1_test(cna_test_opengl1_dualtextureeffect_golden
+                      examples/easygl_dualtextureeffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_DualTextureEffect_Golden COMMAND cna_test_opengl1_dualtextureeffect_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl1_test(cna_test_opengl1_rasterizerstate_cullmode_golden
+                      examples/easygl_rasterizerstate_cullmode_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_RasterizerState_CullMode_Golden COMMAND cna_test_opengl1_rasterizerstate_cullmode_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl1_test(cna_test_opengl1_depthstencilstate_write_enable_golden
+                      examples/easygl_depthstencilstate_write_enable_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_DepthStencilState_WriteEnable_Golden COMMAND cna_test_opengl1_depthstencilstate_write_enable_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # AlphaTestEffect's golden scene uses CompareFunction::Greater with alpha=192 clearly above
+    # ReferenceAlpha=128 (not at the boundary) -- within the "clearly separated from the
+    # reference" honest subset OPENGL1's glAlphaFunc(GL_GEQUAL,...) coarse approximation can
+    # actually reproduce (see examples/opengl1_fog_alphatest_test.cpp's own header for the full
+    # rationale on why an exact-boundary/other-CompareFunction case would not be honest to reuse).
+    cna_opengl1_test(cna_test_opengl1_alphatesteffect_golden
+                      examples/easygl_alphatesteffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_AlphaTestEffect_Golden COMMAND cna_test_opengl1_alphatesteffect_golden
+        TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_opengl1.md phase 8: context-loss resource recreation registry (OpenGL1ResourceRegistry/
     # IOpenGL1Recoverable, independent of EasyGL's own ::easygl::ResourceRegistry).
     cna_opengl1_test(cna_test_opengl1_context_loss
