@@ -419,11 +419,22 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   (even without a way to fully runtime-verify a WebGL1 context) is real signal worth having.
   **Done, same night** (see Phase F's `GLB-36` status above) — implemented, standalone-verified,
   and real-`emcc`-build-verified. New follow-up open question this created, not yet asked:
-  `SkinnedEffect`/`SkinnedPbrEffect` need a real `vec4`-encoded-bone-index architecture change
-  (with a matching C++-side `VertexBuffer` upload change for this profile) to work under `WEBGL1`
-  at all — see `docs/webgl1-backend.md`'s "What's not yet done" section for the exact shape of
-  that fix. Worth asking before starting it, since it touches the vertex-format upload path shared
-  with other profiles and needs care not to regress them.
+  `SkinnedEffect`/`SkinnedPbrEffect` need a real `vec4`-encoded-bone-index architecture change to
+  work under `WEBGL1` at all — see `docs/webgl1-backend.md`'s "What's not yet done" section.
+  **Investigated further the same night (not implemented — still asking first, per the commitment
+  just above)**: this turns out to be narrower than first described. The GPU-side vertex bytes for
+  `BLENDINDICES` (`VertexElementFormat::Byte4`) are already stored as plain `UnsignedByte` —
+  `DescribeVertexElementFormat()`'s `isInteger` flag (`EasyGLGraphicsBackend.cpp:2452`, consumed at
+  exactly 2 call sites, lines ~2493/4970) is what currently selects `glVertexAttribIPointer` (true
+  integer read, matching the shader's `uvec4`) vs. `glVertexAttribPointer` (float-converting read).
+  Setting `isInteger=false` for this one case *under `WEBGL1` only* would read the exact same
+  underlying bytes as floats (0–255 range, far more than the ≤72 bone count needs, exactly
+  float-representable) with **zero change to `VertexBuffer`'s upload path** — only the attribute-
+  pointer setup at those 2 call sites needs a `WEBGL1`-only branch, plus the shader needs
+  `attribute vec4 aBoneIndices;` (not `uvec4`) and `int(aBoneIndices.x)`-style casts at its 4
+  `uBones[...]` index expressions (3 shaders, `EnsureSkinnedProgram`/`EnsureSkinnedVertexLitProgram`/
+  `EnsurePbrSkinnedProgram`). Still not attempted — the commitment to ask first stands — but this
+  should make it a much faster go/no-go decision and a smaller diff than originally estimated.
 - `GLB-38` (push/merge `easy-glrvc`'s commits into `easy-gl`'s real default branch so `cnagl` can
   drop the temporary `../easy-glrvc` dependency): **Decided: leave to the project owner — do not
   attempt to merge/push between repos autonomously.**
