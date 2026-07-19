@@ -69,25 +69,25 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`tests-xna-audio`](manifest/tests-xna-audio.md) | 24 | PENDING: 24 / AUDITED: 0 |
+| [`tests-xna-audio`](manifest/tests-xna-audio.md) | 24 | AUDITED: 24 / PENDING: 0 (complete) |
 | [`tests-xna-content`](manifest/tests-xna-content.md) | 30 | PENDING: 30 / AUDITED: 0 |
-| [`tests-xna-framework-core`](manifest/tests-xna-framework-core.md) | 46 | PENDING: 46 / AUDITED: 0 |
-| [`tests-xna-gamerservices`](manifest/tests-xna-gamerservices.md) | 16 | PENDING: 16 / AUDITED: 0 |
+| [`tests-xna-framework-core`](manifest/tests-xna-framework-core.md) | 46 | AUDITED: 46 / PENDING: 0 (complete) |
+| [`tests-xna-gamerservices`](manifest/tests-xna-gamerservices.md) | 16 | AUDITED: 16 / PENDING: 0 (complete) |
 | [`tests-xna-graphics`](manifest/tests-xna-graphics.md) | 64 | PENDING: 64 / AUDITED: 0 |
 | [`tests-xna-input`](manifest/tests-xna-input.md) | 24 | PENDING: 24 / AUDITED: 0 |
 | [`tests-xna-media`](manifest/tests-xna-media.md) | 22 | PENDING: 22 / AUDITED: 0 |
-| [`tests-xna-net`](manifest/tests-xna-net.md) | 9 | PENDING: 9 / AUDITED: 0 |
+| [`tests-xna-net`](manifest/tests-xna-net.md) | 9 | AUDITED: 9 / PENDING: 0 (complete) |
 
 ## Tests — CNA internals / Microsoft.Devices / misc (107 files)
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`tests-cna-core`](manifest/tests-cna-core.md) | 1 | PENDING: 1 / AUDITED: 0 |
-| [`tests-cna-devices`](manifest/tests-cna-devices.md) | 10 | PENDING: 10 / AUDITED: 0 |
-| [`tests-cna-input`](manifest/tests-cna-input.md) | 5 | PENDING: 5 / AUDITED: 0 |
+| [`tests-cna-core`](manifest/tests-cna-core.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
+| [`tests-cna-devices`](manifest/tests-cna-devices.md) | 10 | AUDITED: 10 / PENDING: 0 (complete) |
+| [`tests-cna-input`](manifest/tests-cna-input.md) | 5 | AUDITED: 5 / PENDING: 0 (complete) |
 | [`tests-cna-internal`](manifest/tests-cna-internal.md) | 65 | PENDING: 65 / AUDITED: 0 |
 | [`tests-microsoft-devices`](manifest/tests-microsoft-devices.md) | 25 | PENDING: 0 / AUDITED: 25 |
-| [`tests-misc`](manifest/tests-misc.md) | 1 | PENDING: 1 / AUDITED: 0 |
+| [`tests-misc`](manifest/tests-misc.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 
 ## Tools (first-party tooling) (85 files)
 

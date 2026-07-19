@@ -1454,6 +1454,17 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   (`static_cast<uint32_t>(clamp(x,0,255))` vs. FNA's `(uint)Math.Round(...)`) — a systematic off-by-up-to-1
   error for any non-integer input, not just boundary ties. Contrast: `NormalizedByte2/4`/`NormalizedShort2/4`
   in the same directory correctly use `std::lroundf`.
+  - **Root cause of why this went undetected, found via `tools-fna-reference` shard audit**:
+    `tools/fna-reference/PackedVectorReference.cs`'s `DumpByte4()`/`DumpShort2()`/`DumpShort4()` use
+    exclusively integer test inputs (`255`, `32767`, `-32768`, ...) — unlike all 14 other `Dump*()`
+    functions in the same file, which deliberately include a fractional value (`0.25`/`0.5`) because
+    their formulas are rounding-sensitive. For an exact-integer input, `Round(x) == Truncate(x)`, so
+    CNA's truncating `Pack()` and FNA's real rounding `Pack()` produce byte-identical output — this
+    project's own FNA-vs-CNA comparison harness (Task 479) was structurally incapable of catching this
+    defect, not merely unlucky. The tool itself correctly calls real FNA's own types (not an
+    independent C# reimplementation of the pack formula), so the reference data it does produce is
+    trustworthy — the gap is purely in which test inputs were chosen. See
+    `audit/tools/fna-reference/PackedVectorReference.cs.audit.md` for the full writeup.
 - **`VertexPositionColor.hpp` does not implement `IVertexType` at all** — unlike real FNA's
   `VertexPositionColor : IVertexType` and unlike every other concrete vertex type in this shard.
 - **`GraphicsDevice::Dispose()` disposes owned resources *before* raising `Disposing`**, inverted from FNA's
