@@ -813,6 +813,21 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     logic hiding inside Objective-C++ files specifically *because* the technique had just been
     proven to work, rather than treating it as a one-off.
 
+31. **`METAL-155`'s letterbox/virtual-resolution formula, a fourth real ✅**: `computeLogicalViewport()`'s
+    real arithmetic (the exact function behind `METAL-153`–`159`'s own documented real bugs earlier
+    this session) only reads plain ints/floats and `CnaPresentationMode` (a shared, zero-Objective-C
+    enum) — extracted to `MetalLogicalViewport.hpp`, leaving only the "ask SDL for the real physical
+    window size" step in the `.mm` wrapper. 8 new `CnaTests`, one per `CnaPresentationMode` value
+    plus edge cases, each with hand-computed expected numbers for a concrete scenario (e.g. 800×600
+    virtual content in a 1000×600 physical window: `Letterbox` centers it with `x=100` pillarbox
+    bars, `Overscan` instead crops it with a `y=-75` overflow, `FixedHeightDynamicWidth` derives
+    `logicalWidth=640` from the real physical aspect ratio while filling the window edge-to-edge).
+    Writing the very first test caught a real mistake in the *test's own* assumption, not the
+    function under test: an invalid physical `width` does **not** force `height` to zero too (or
+    vice versa) — each axis clamps to zero independently before the early-return check even runs,
+    a real, previously-undocumented behavior this test now locks in precisely rather than glossing
+    over. All 8 pass on this Linux machine. A fourth genuinely real, fully-earned ✅ tier tonight.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -945,6 +960,14 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   `EasyGLGraphicsBackend`'s own already-tested equivalent switch — all pass on this Linux machine
   (✅ landed 2026-07-19 — `METAL-13`, a third genuinely real, fully-earned tier tonight alongside
   `METAL-34`).
+- `METAL-155`'s letterbox/overscan/stretch/native/fixed-height-dynamic-width formula machine-
+  verified the same way: `MetalLogicalViewport.hpp`, 8 real `CnaTests`/`ctest` tests (one per
+  `CnaPresentationMode`, plus edge cases) with hand-computed expected numbers for concrete
+  pillarbox/overscan-crop/fixed-height scenarios — all pass on this Linux machine. Writing the tests
+  found and locked in a real, previously-undocumented behavior (each physical axis clamps to zero
+  independently, not both together) after an initial wrong test expectation caught it — a fourth
+  genuinely real, fully-earned ✅ tier tonight, alongside `METAL-13`/`34` (✅ landed 2026-07-19 —
+  `METAL-155`'s formula).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -1302,7 +1325,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 |---|---|---|
 | METAL-153 | `TransformWindowToLogical()` — was unimplemented (base default `false`), a real input bug (`SdlInputBridge` depends on this). **Fixed 2026-07-19**: real implementation ported from `SdlGpuGraphicsBackend::TransformWindowToLogical` | 🟨 |
 | METAL-154 | `TransformLogicalToWindow()` — inverse transform used by `Mouse.SetPosition` | 🟨 |
-| METAL-155 | Implement/reuse the shared letterbox/overscan/stretch/native/fixed-height-dynamic-width math (`CnaPresentationMode`) every other 3D-capable backend already shares — check for an existing common helper before re-deriving formulas | 🟨 |
+| METAL-155 | Implement/reuse the shared letterbox/overscan/stretch/native/fixed-height-dynamic-width math (`CnaPresentationMode`) every other 3D-capable backend already shares — check for an existing common helper before re-deriving formulas | 🟨→✅ **the formula itself is now real-build-verified** — extracted to `MetalLogicalViewport.hpp` (same `METAL-34` technique) and covered by 8 real `CnaTests`/`ctest` tests, one per `CnaPresentationMode` value plus edge cases, with hand-computed expected numbers for concrete letterbox/overscan/fixed-height scenarios — all pass on this Linux machine. Writing the tests found the function clamps each physical axis (width/height) to zero independently rather than zeroing both together on any single invalid axis — a real, previously-undocumented behavior, not a bug, now locked in by a dedicated test after an initial wrong test expectation caught it |
 | METAL-156 | Audit `GetViewportSize()`'s actual contract (currently returns virtual size with no scaling math) — confirm this is correct for its specific contract rather than assuming it's broken | 🟨 |
 | METAL-157 | **Real bug, fixed 2026-07-19**: `cna_v2d`'s NDC mapping used raw `drawable.texture.width/height` (physical pixels), completely bypassing virtual resolution/letterboxing. Now derives scale+offset from `computeLogicalViewport()`, hand-verified to degrade to the exact old formula when no virtual resolution is set | 🟨 |
 | METAL-158 | Fix `METAL-157` by deriving the 2D projection from the same letterbox viewport rectangle the 3D path and window-transform functions use | 🟨 |

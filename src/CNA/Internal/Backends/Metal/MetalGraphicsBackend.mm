@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Metal/MetalPipelineKey.hpp"
 #include "CNA/Internal/Backends/Metal/MetalNormalMatrix.hpp"
 #include "CNA/Internal/Backends/Metal/MetalPrimitiveVertexCount.hpp"
+#include "CNA/Internal/Backends/Metal/MetalLogicalViewport.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -1380,31 +1381,16 @@ struct MetalGraphicsBackend::Impl
     // physical window pixels; `logicalWidth`/`logicalHeight` are the virtual-resolution size that
     // rectangle represents (equal to the physical size whenever no virtual resolution is set,
     // which is also this struct's all-zero-input-safe degenerate case).
-    struct LogicalViewport { float x=0, y=0, width=0, height=0, logicalWidth=0, logicalHeight=0; };
+    // plan_metal.md METAL-34-style extraction: the real arithmetic now lives in the plain-C++
+    // MetalLogicalViewport.hpp (no Objective-C, buildable and unit-tested on any platform without
+    // an Apple toolchain) -- kept as a thin same-name alias plus a wrapper here so all existing call
+    // sites in this file are unaffected; this method's only remaining job is asking SDL for the
+    // real physical window size, which genuinely does need a live window.
+    using LogicalViewport = MetalLogicalViewport;
     LogicalViewport computeLogicalViewport() const
     {
-        LogicalViewport vp{};
         int pw=0, ph=0; SDL_GetWindowSizeInPixels(window, &pw, &ph);
-        vp.width = (float)std::max(0, pw); vp.height = (float)std::max(0, ph);
-        vp.logicalWidth = vp.width; vp.logicalHeight = vp.height;
-        if (pw <= 0 || ph <= 0) return vp;
-        const auto mode = (CnaPresentationMode)presentationMode;
-        if (mode == CnaPresentationMode::NativeBackBuffer || virtualW <= 0 || virtualH <= 0) return vp;
-
-        float logicalWidth = (float)virtualW;
-        float logicalHeight = (float)virtualH;
-        if (mode == CnaPresentationMode::FixedHeightDynamicWidth) {
-            logicalWidth = logicalHeight * (float)pw / (float)ph;
-            vp.logicalWidth = logicalWidth; vp.logicalHeight = logicalHeight;
-            return vp;
-        }
-        vp.logicalWidth = logicalWidth; vp.logicalHeight = logicalHeight;
-        if (mode == CnaPresentationMode::Stretch) return vp;
-        const float sx = (float)pw / logicalWidth;
-        const float sy = (float)ph / logicalHeight;
-        const float scale = (mode == CnaPresentationMode::Overscan) ? std::max(sx, sy) : std::min(sx, sy);
-        vp.width = logicalWidth * scale; vp.height = logicalHeight * scale;
-        vp.x = ((float)pw - vp.width) * 0.5f; vp.y = ((float)ph - vp.height) * 0.5f;
+        LogicalViewport vp = ComputeMetalLogicalViewport(pw, ph, (CnaPresentationMode)presentationMode, virtualW, virtualH);
         return vp;
     }
 
