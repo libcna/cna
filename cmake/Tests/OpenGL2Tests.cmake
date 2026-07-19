@@ -31,4 +31,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_3d examples/opengl2_3d_test.cpp)
     cna_register_backend_test(NAME OpenGL2_3D COMMAND cna_test_opengl2_3d
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: RenderTarget2D/FBO proof -- off-screen render, direct readback,
+    # sampled-as-Texture2D via SpriteBatch, and depth-test occlusion inside the FBO.
+    cna_opengl2_test(cna_test_opengl2_rendertarget2d examples/opengl2_rendertarget2d_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_RenderTarget2D COMMAND cna_test_opengl2_rendertarget2d
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

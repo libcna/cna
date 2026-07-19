@@ -31,6 +31,18 @@ namespace CNA::Internal::Backends::OpenGL2
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
+        // NOXNA: backend-internal helper (not part of IGraphicsBackend) mirroring
+        // EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize -- lets Sprite::Draw size its
+        // screen->clip mapping to the bound render target instead of the window/virtual
+        // resolution when one is active.
+        bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
+
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
@@ -83,6 +95,8 @@ namespace CNA::Internal::Backends::OpenGL2
         CnaPresentationMode presentationMode_{};
         unsigned colorProgram_{};
         unsigned texturedProgram_{};
+        int currentRtWidth_{};
+        int currentRtHeight_{};
 
         void ensurePrograms();
         void drawInternal(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,

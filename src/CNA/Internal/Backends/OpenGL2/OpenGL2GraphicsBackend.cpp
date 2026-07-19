@@ -265,6 +265,90 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         };
 
+        // XNA DepthFormat enum ordinals: None=0, Depth16=1, Depth24=2, Depth24Stencil8=3.
+        // Mirrors EasyGLGraphicsBackend's own MapDepthFormat.
+        bool MapDepthFormat(int depthFormat, GLenum& outInternalFormat, GLenum& outAttachment)
+        {
+            switch (depthFormat)
+            {
+                case 1: outInternalFormat = GL_DEPTH_COMPONENT16; outAttachment = GL_DEPTH_ATTACHMENT; return true;
+                case 2: outInternalFormat = GL_DEPTH_COMPONENT24; outAttachment = GL_DEPTH_ATTACHMENT; return true;
+                case 3: outInternalFormat = GL_DEPTH24_STENCIL8; outAttachment = GL_DEPTH_STENCIL_ATTACHMENT; return true;
+                default: return false; // DepthFormat::None = 0
+            }
+        }
+
+        // Single-sample, single-mip-level FBO render target (no MSAA/mipmap generation yet --
+        // plan_opengl2.md follow-up). Owns a color texture (sampled later exactly like Tex, same
+        // GL_LINEAR/GL_CLAMP_TO_EDGE defaults) plus an optional depth/(stencil) renderbuffer.
+        class RenderTarget final : public IRenderTargetBackend
+        {
+        public:
+            GLuint fbo{};
+            GLuint colorTex{};
+            GLuint depthRbo{};
+            int w{};
+            int h{};
+
+            RenderTarget(int width, int height, int depthFormat) : w(width), h(height)
+            {
+                glGenTextures(1, &colorTex);
+                glBindTexture(GL_TEXTURE_2D, colorTex);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+                glGenFramebuffers(1, &fbo);
+                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
+
+                GLenum depthInternalFormat = 0, depthAttachment = 0;
+                if (MapDepthFormat(depthFormat, depthInternalFormat, depthAttachment))
+                {
+                    glGenRenderbuffers(1, &depthRbo);
+                    glBindRenderbuffer(GL_RENDERBUFFER, depthRbo);
+                    glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, w, h);
+                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER, depthRbo);
+                }
+
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            }
+
+            ~RenderTarget() override
+            {
+                if (depthRbo) glDeleteRenderbuffers(1, &depthRbo);
+                if (fbo) glDeleteFramebuffers(1, &fbo);
+                if (colorTex) glDeleteTextures(1, &colorTex);
+            }
+
+            int GetWidth() const override { return w; }
+            int GetHeight() const override { return h; }
+            SDL_Texture* GetNativeTexture() const override { return nullptr; }
+            void BindGL() const override { glBindTexture(GL_TEXTURE_2D, colorTex); }
+            unsigned int GetColorGLHandle() const override { return colorTex; }
+
+            void BindAsRenderTarget() override { glBindFramebuffer(GL_FRAMEBUFFER, fbo); }
+            void UnbindAsRenderTarget() override { glBindFramebuffer(GL_FRAMEBUFFER, 0); }
+
+            // Texture2D::GetData() only reaches here when its own CPU-side pixel shadow is
+            // unavailable (i.e. this is a real RenderTarget2D, not a SetData()-populated
+            // texture) -- glGetTexImage reads the whole level, then the requested sub-rect is
+            // copied out (same row-major layout convention as every other texture in this
+            // backend, verified self-consistent by OpenGL2_2D's own quadrant UV test).
+            void GetData(int /*level*/, int x, int y, int rw, int rh, void* data, int /*dataLength*/) const override
+            {
+                std::vector<uint8_t> full(static_cast<std::size_t>(w) * h * 4);
+                glBindTexture(GL_TEXTURE_2D, colorTex);
+                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
+                auto* dst = static_cast<uint8_t*>(data);
+                for (int row = 0; row < rh; ++row)
+                    std::memcpy(dst + static_cast<std::size_t>(row) * rw * 4,
+                               full.data() + (static_cast<std::size_t>(y + row) * w + x) * 4, rw * 4);
+            }
+        };
+
         class VB final : public IVertexBufferBackend
         {
         public:
@@ -361,13 +445,16 @@ namespace CNA::Internal::Backends::OpenGL2
                      SpriteEffects effects, float layerDepth) override
             {
                 if (!begun_) return;
-                const auto* tex = dynamic_cast<const Tex*>(&texture);
-                if (!tex) return;
 
                 EnsureResources();
 
+                // Task-1078-equivalent fix (see EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize's
+                // own history): a draw into a bound RenderTarget2D must size its screen->clip
+                // mapping to the RT, not the window/virtual resolution -- those only coincide when
+                // the RT happens to match the window size.
                 int viewportWidth = 0, viewportHeight = 0;
-                backend_->GetViewportSize(viewportWidth, viewportHeight);
+                if (!backend_->GetCurrentRenderTarget2DSize(viewportWidth, viewportHeight))
+                    backend_->GetViewportSize(viewportWidth, viewportHeight);
 
                 const float r = color.getRProperty() / 255.0f;
                 const float g = color.getGProperty() / 255.0f;
@@ -420,7 +507,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), reinterpret_cast<void*>(offsetof(SpriteVertex, u)));
 
                 glActiveTexture(GL_TEXTURE0);
-                tex->BindGL();
+                texture.BindGL();
                 glUniform1i(glGetUniformLocation(program_, "uTex"), 0);
                 // GL 2.1 has no separate sampler objects (those are GL 3.3+) -- SamplerState is
                 // applied directly onto the currently-bound texture object's own parameters,
@@ -552,15 +639,58 @@ namespace CNA::Internal::Backends::OpenGL2
     std::unique_ptr<ITextureBackend> OpenGL2GraphicsBackend::CreateTexture(const ImageData& data) { return std::make_unique<Tex>(data); }
     std::unique_ptr<ISpriteBatchBackend> OpenGL2GraphicsBackend::CreateSpriteBatch() { return std::make_unique<Sprite>(this); }
 
+    std::unique_ptr<IRenderTargetBackend> OpenGL2GraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+    {
+        // plan_opengl2.md follow-up: mipMap/multiSampleCount are accepted (matching the
+        // interface signature) but not yet implemented -- single-sample, single-level only.
+        return std::make_unique<RenderTarget>(w, h, depthFormat);
+    }
+
+    void OpenGL2GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt)
+        {
+            rt->BindAsRenderTarget();
+            currentRtWidth_ = rt->GetWidth();
+            currentRtHeight_ = rt->GetHeight();
+        }
+        else
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            currentRtWidth_ = 0;
+            currentRtHeight_ = 0;
+        }
+    }
+
+    bool OpenGL2GraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
+    {
+        if (currentRtHeight_ == 0) return false;
+        width = currentRtWidth_;
+        height = currentRtHeight_;
+        return true;
+    }
+
     void OpenGL2GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
-        int windowWidth = 0, windowHeight = 0;
-        SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
+        // When a RenderTarget2D's FBO is currently bound, its single color attachment is
+        // already the implicit read source (GL_BACK is only valid for the default framebuffer);
+        // mirrors EasyGLGraphicsBackend::ReadBackbuffer's identical currentRtHeight_-gated
+        // behavior. Real RenderTarget2D pixel readback normally goes through
+        // RenderTarget::GetData() instead -- this path exists for parity with that backend.
+        if (currentRtHeight_ == 0)
+            glReadBuffer(GL_BACK);
 
-        glReadBuffer(GL_BACK);
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int windowWidth = 0;
+            SDL_GetWindowSize(window_, &windowWidth, &fbH);
+        }
+
         // OpenGL origin is bottom-left; flip y so the caller gets top-left origin (mirrors
         // EasyGLGraphicsBackend::ReadBackbuffer's identical convention).
-        const int glY = windowHeight - y - h;
+        const int glY = fbH - y - h;
         glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
         const int rowBytes = w * 4;
@@ -820,17 +950,28 @@ namespace CNA::Internal::Backends::OpenGL2
     void OpenGL2GraphicsBackend::SetScissorRect(int x, int y, int w, int h)
     {
         if (w <= 0 || h <= 0) return;
-        int windowWidth = 0, windowHeight = 0;
-        SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
-        glScissor(x, windowHeight - y - h, w, h);
+        // Use the render target's own height for the Y-flip when one is bound (mirrors
+        // ReadBackbuffer's identical fbH pattern); fall back to the window's height for the
+        // default framebuffer.
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int windowWidth = 0;
+            SDL_GetWindowSize(window_, &windowWidth, &fbH);
+        }
+        glScissor(x, fbH - y - h, w, h);
     }
 
     void OpenGL2GraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
         if (w <= 0 || h <= 0) return;
-        int windowWidth = 0, windowHeight = 0;
-        SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
-        glViewport(x, windowHeight - y - h, w, h);
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int windowWidth = 0;
+            SDL_GetWindowSize(window_, &windowWidth, &fbH);
+        }
+        glViewport(x, fbH - y - h, w, h);
         glDepthRange(minDepth, maxDepth);
     }
 

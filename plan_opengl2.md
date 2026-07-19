@@ -84,8 +84,44 @@ Continued past the 2D baseline:
   deliberately NOT covered -- this backend's 3D shaders are still unlit (see Follow-up), so a
   lit-scene pixel assertion would not be meaningful yet. 6/6 PASS.
 
+## Status: RenderTarget2D/FBO support (2026-07-19, session 3)
+
+- **`CreateRenderTarget2D`/`SetRenderTarget2D` implemented**: a single-sample, single-mip-level
+  FBO (color texture + optional depth/`Depth24Stencil8` renderbuffer, mapped from `DepthFormat`
+  the same way `EasyGLGraphicsBackend`'s `MapDepthFormat` does). No MSAA or mipmap generation yet
+  (see Follow-up) -- `CreateRenderTarget2D`'s `mipMap`/`multiSampleCount` params are accepted
+  (matching the interface signature) but currently ignored.
+- **RT-aware Y-flip**: `SetViewport`/`SetScissorRect`/`ReadBackbuffer` previously always flipped
+  against the window's height, which is wrong whenever an FBO smaller/larger than the window is
+  bound. Added `currentRtHeight_` tracking (mirrors `EasyGLGraphicsBackend`'s identical pattern)
+  so all three use the bound render target's own height instead when one is active.
+- **Real bug found and fixed while building the RT test**: `Sprite::Draw` used to
+  `dynamic_cast<const Tex*>(&texture)` and silently no-op if that failed -- meaning
+  `SpriteBatch.Draw()` on a `RenderTarget2D` (a *very* common pattern: render an effect to a
+  target, then blit it to the screen) always drew nothing at all on this backend. `RenderTarget`
+  is a sibling `ITextureBackend` implementation, not a `Tex` subclass, so it always failed that
+  cast. Fixed by using the `ITextureBackend&` parameter directly (`BindGL()` is already virtual
+  on the common interface -- the downcast was never actually necessary).
+- **RT-aware SpriteBatch sizing** (Task-1078-equivalent to `EasyGLGraphicsBackend`'s own fix of
+  the identical bug class): `Sprite::Draw`'s screen->clip mapping used to always divide by the
+  backend's window/virtual size. A `SpriteBatch` draw issued while a differently-sized
+  `RenderTarget2D` is bound would size itself to the *window*, not the target, corrupting
+  anything drawn into an off-screen target sized differently from the window (e.g. a shadow map,
+  a UI composited at a fixed resolution). Added `GetCurrentRenderTarget2DSize()` (a
+  backend-internal, non-`IGraphicsBackend` helper `Sprite` calls through its concrete
+  `OpenGL2GraphicsBackend*` pointer, exactly mirroring how `EasyGLSpriteBatchBackend` reaches its
+  own backend's equivalent method) so `Sprite::Draw` sizes itself to the bound RT when one exists.
+- **New `OpenGL2_RenderTarget2D` CTest**: construction, `RenderTarget2D::GetData()` readback,
+  sampling a just-rendered RT as a plain `Texture2D` via `SpriteBatch` (the bug above), a real
+  depth-test occlusion proof *inside* the FBO's own depth/stencil renderbuffer, and the
+  RT-vs-window sizing fix, all pixel-verified. 6/6 PASS. (One iteration finding along the way,
+  not a backend bug: the depth-occlusion check initially failed because `SpriteBatch.Begin()`
+  earlier in the same test left `GraphicsDevice.DepthStencilState` at its own default of `None` --
+  real, documented XNA/FNA `SpriteBatch` behavior, not an OpenGL2 defect. Fixed by having the test
+  restore `DepthStencilState::Default` before its 3D draws, exactly as a real game must.)
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers three CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers four CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -94,6 +130,8 @@ Continued past the 2D baseline:
     both-flip draws, 120 stable frames. 13/13 PASS.
   - `OpenGL2_3D` -- colored3d/textured3d/colored_textured3d + real depth-test occlusion, all
     pixel-verified. 6/6 PASS.
+  - `OpenGL2_RenderTarget2D` -- FBO construction, `GetData()` readback, RT-as-Texture2D via
+    SpriteBatch, depth occlusion inside the FBO, RT-vs-window sizing. 6/6 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -113,6 +151,7 @@ Continued past the 2D baseline:
 - VBOs and 16/32-bit index buffers.
 - Depth, stencil, blending, culling, scissor, viewport, wireframe and polygon offset basics.
 - `ReadBackbuffer` (pixel readback, enables automated pixel-exact testing).
+- RenderTarget2D/FBO (single-sample, single-mip-level; see Follow-up for MSAA/mipmaps).
 - No EasyGL dependency.
 
 ## Follow-up work
@@ -126,8 +165,12 @@ Continued past the 2D baseline:
 - Full vertex declaration support rather than stride inference.
 - BasicEffect lighting/fog parity and multiple directional lights.
 - AlphaTestEffect and DualTextureEffect.
-- RenderTarget2D/FBO support, MSAA where available, mipmaps and texture sampling states.
-- Cube maps and an EnvironmentMapEffect subset where supported by OpenGL 2.1/extensions.
+- RenderTarget2D: MSAA (`multiSampleCount` is accepted but ignored -- no multisampled
+  renderbuffer + resolve-on-unbind yet, unlike `EasyGLRenderTargetBackend`'s), mipmap generation
+  (`mipMap` is accepted but ignored -- no `glGenerateMipmap` on unbind), and `RenderTargetCube`
+  (only `RenderTarget2D` is implemented; `CreateRenderTargetCube` still returns `nullptr`).
+- Cube maps (plain `TextureCube`, not just render-target cube faces) and an EnvironmentMapEffect
+  subset where supported by OpenGL 2.1/extensions.
 - `ApplySamplerState` (the direct-3D-draw sampler path, as opposed to `SpriteBatch`'s own
   `SetSamplerFilter`/`SetSamplerAddressMode` which are now wired) is still unimplemented --
   `GraphicsDevice.SamplerStates[slot]` has no effect on `DrawPrimitives`/`DrawIndexedPrimitives`.
