@@ -330,10 +330,21 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 ## Phase 6 — EnvironmentMapEffect (METAL-64 – METAL-71)
 
+> **Second real dependency found 2026-07-19** (Phase 11's cube-texture blocker on `METAL-65` is now
+> closed — `MetalTextureCube` landed): reading `EasyGLGraphicsBackend::EnsureEnvMapped3DProgram()`
+> in full shows real XNA `EnvironmentMapEffect.fx` routes through the exact same 3-directional-light
+> `ComputeLights()`/normal-matrix/fog machinery as `BasicEffect`'s own lit path (`litRGB =
+> lightSum*DiffuseColor.rgb + EmissiveColor`, fog applied after) — it is not a simpler,
+> lighting-free reflection-only shader. That lighting/normal-matrix/fog infrastructure is exactly
+> what Phase 3's still-open `METAL-38`–`METAL-50` would build and hasn't yet. Shipping a
+> lighting-free approximation here would silently diverge from XNA's real formula, not just be
+> incomplete — worse than leaving this phase open. **Phase 6 is therefore blocked on Phase 3, not
+> just Phase 11**; do not attempt `METAL-64`/`METAL-66`–`METAL-68` before `METAL-38`–`METAL-47` land.
+
 | ID | Task | Status |
 |---|---|---|
 | METAL-64 | `env_mapped3d.metal` (stride 32) — reflection vector from `eyePositionWorld`/normal/world position, sampling `envMap` as a `texturecube<float>` | ⬜ |
-| METAL-65 | Bind `ITextureCubeBackend`'s underlying cube `id<MTLTexture>` to the shader's `texturecube<float>` argument — **blocked on Phase 11** (no cube-texture creation exists in Metal yet) | ⬜ |
+| METAL-65 | Bind `ITextureCubeBackend`'s underlying cube `id<MTLTexture>` to the shader's `texturecube<float>` argument — **unblocked 2026-07-19**: `MetalTextureCube::native()` exists (`METAL-120`/`METAL-121`) | 🟨 |
 | METAL-66 | Flat env-map blend (`envMapAmount`, constant factor) | ⬜ |
 | METAL-67 | Fresnel-weighted env-map blend (`fresnelEnabled`/`fresnelFactor`), ported from the already-shipped WebGPU/Vulkan formula | ⬜ |
 | METAL-68 | `envMapSpecular` tint and `specularEnabled` real-shader-variant flag (D9-81 finding #4) — same "known, not fixed outside D3D9" bucket as `METAL-54` | ⬜ |
@@ -372,12 +383,27 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 ## Phase 9 — Instancing (METAL-91 – METAL-97)
 
+> **Real dependency found 2026-07-19 (investigated, not implemented)**: reading
+> `EasyGLGraphicsBackend::DrawInstancedPrimitivesEx` line-by-line shows its **non**-custom-effect
+> path (i.e. a stock `BasicEffect`-style draw) binds no per-instance vertex attributes at all and
+> just issues `draw_elements_instanced(..., instanceCount)` — every instance renders at the
+> identical position, since none of CNA's stock shaders read any per-instance offset. Real, useful
+> instancing in this codebase **always** goes through `GpuDrawParams::customEffectBackend` (a
+> custom `Effect` whose own shader reads per-instance data via a `VertexBufferBinding` with
+> `InstanceFrequency>0`, matching FNA's own `InstancedModel.fx`/`instanceTransform:BLENDWEIGHT`
+> pattern). That means `METAL-91`–`METAL-96` below have a **hard prerequisite this task list
+> under-specified**: Phase 14 (custom `ShaderEffect`/MSL contract, not started) and the generic
+> `VertexElement`-driven vertex descriptor (`METAL-26`/`METAL-27`, deliberately deferred in
+> Phase 2). Attempting a Metal-specific instancing design ahead of those would either diverge from
+> the real, established contract or ship a technically-present-but-functionally-inert override —
+> correctly not attempted this pass. Revisit only after Phase 14 lands.
+
 | ID | Task | Status |
 |---|---|---|
 | METAL-91 | `DrawInstancedPrimitivesEx` override — currently unimplemented, inherits the base's unconditional throw | ⬜ |
 | METAL-92 | Per-instance vertex buffer (`GpuDrawParams::instanceVb`) bound at a distinct index with `stepFunction:MTLVertexStepFunctionPerInstance` | ⬜ |
 | METAL-93 | `instanceCount` plumbed into `drawIndexedPrimitives:...instanceCount:`/`drawPrimitives:...instanceCount:` | ⬜ |
-| METAL-94 | Confirm the exact per-instance vertex layout CNA's existing instancing call sites expect, rather than assuming one | ⬜ |
+| METAL-94 | Confirm the exact per-instance vertex layout CNA's existing instancing call sites expect, rather than assuming one — **confirmed 2026-07-19**: it is whatever `VertexElement` list the bound custom `Effect`'s per-instance `VertexBufferBinding` declares, not a fixed layout | ⬜ |
 | METAL-95 | `MetalPipelineKey` (`METAL-22`) must include an "is instanced" bit — instanced vs. non-instanced draws of the same shader variant need distinct vertex descriptors | ⬜ |
 | METAL-96 | `CTest`: `Metal_Instancing` — N instances at N distinct positions, N distinct probe pixels | ⬜ |
 | METAL-97 | GPU-driven/indirect instancing explicitly out of this phase's scope — see Phase 22 | ⬜ |
@@ -413,11 +439,11 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-120 | `CreateTextureCube(size,mipMap,surfaceFormat)` — `MetalTextureCubeBackend : ITextureCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | ⬜ |
-| METAL-121 | `SetData(face,level,x,y,w,h,data,dataLength)` via `replaceRegion:...slice:face mipmapLevel:level` | ⬜ |
+| METAL-120 | `CreateTextureCube(size,mipMap,surfaceFormat)` — `MetalTextureCubeBackend : ITextureCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | 🟨 |
+| METAL-121 | `SetData(face,level,x,y,w,h,data,dataLength)` via `replaceRegion:...slice:face mipmapLevel:level` | 🟨 |
 | METAL-122 | `GetData(face,level,...)` — decide real implementation vs. deferring entirely to Phase 12's blit-based readback | ⬜ |
-| METAL-123 | `CreateTexture3D(w,h,depth,mipMap,surfaceFormat)` — `MetalTexture3DBackend : ITexture3DBackend`, `id<MTLTexture>` with `MTLTextureType3D` | ⬜ |
-| METAL-124 | `SetData(level,x,y,z,w,h,depth,data,dataLength)` via `replaceRegion:` with a full 3D `MTLRegion` | ⬜ |
+| METAL-123 | `CreateTexture3D(w,h,depth,mipMap,surfaceFormat)` — `MetalTexture3DBackend : ITexture3DBackend`, `id<MTLTexture>` with `MTLTextureType3D` | 🟨 |
+| METAL-124 | `SetData(level,x,y,z,w,h,depth,data,dataLength)` via `replaceRegion:` with a full 3D `MTLRegion` | 🟨 |
 | METAL-125 | Mip levels for both cube and 3D textures, driven by `METAL-15`'s format table | ⬜ |
 | METAL-126 | Cross-reference: `METAL-65` (EnvironmentMapEffect) is blocked on this phase — do not attempt Phase 6's cube sampling before `METAL-120` lands | ⬜ |
 | METAL-127 | `CTest`: `Metal_TextureCube` — 6-face `SetData` round-trip + a real render-into-cube-face draw sampling it back | ⬜ |

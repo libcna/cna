@@ -402,6 +402,66 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         int w_, h_; id<MTLTexture> texture_ = nil;
     };
 
+    // plan_metal.md Phase 11 (METAL-120/121): `surfaceFormat` is deliberately ignored and always
+    // RGBA8Unorm, matching EasyGLTextureCubeBackend's own established convention exactly (its
+    // constructor takes the parameter as `int /*surfaceFormat*/` -- confirmed by reading it, not
+    // assumed) -- not a new gap introduced here. `MTLTextureDescriptor
+    // textureCubeDescriptorWithPixelFormat:size:mipmapped:` computes the correct mip level count
+    // itself; unlike EasyGL's GL-based backend, Metal needs no "pre-allocate every mip level with
+    // null data" workaround (glTexSubImage requires a level to already be defined; MTLTexture
+    // allocates all `mipmapLevelCount` levels together at creation time).
+    class MetalTextureCube final : public ITextureCubeBackend
+    {
+    public:
+        MetalTextureCube(id<MTLDevice> dev, int size, bool mipMap)
+        {
+            MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm size:(NSUInteger)size mipmapped:mipMap];
+            d.usage=MTLTextureUsageShaderRead;
+            texture_=[dev newTextureWithDescriptor:d];
+            if(!texture_) throw std::runtime_error("Metal: failed to create cube texture");
+        }
+        ~MetalTextureCube() override { [texture_ release]; }
+        // Face ordinals (0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z) already match Metal's own cube `slice`
+        // ordering directly -- same convention documented on IRenderTargetCubeBackend and already
+        // relied upon, unchanged, by every other backend (confirmed against
+        // EasyGLTextureCubeBackend's own kCubeFaceTargets order).
+        void SetData(int face,int level,int x,int y,int w,int h,const void* data,int /*dataLength*/) override
+        {
+            if(face<0||face>=6) return;
+            MTLRegion r=MTLRegionMake2D((NSUInteger)x,(NSUInteger)y,(NSUInteger)w,(NSUInteger)h);
+            [texture_ replaceRegion:r mipmapLevel:(NSUInteger)level slice:(NSUInteger)face withBytes:data bytesPerRow:(NSUInteger)(w*4) bytesPerImage:0];
+        }
+        id<MTLTexture> native() const { return texture_; }
+    private:
+        id<MTLTexture> texture_=nil;
+    };
+
+    class MetalTexture3D final : public ITexture3DBackend
+    {
+    public:
+        MetalTexture3D(id<MTLDevice> dev, int w,int h,int depth,bool mipMap)
+        {
+            MTLTextureDescriptor* d=[[MTLTextureDescriptor alloc] init];
+            d.textureType=MTLTextureType3D; d.pixelFormat=MTLPixelFormatRGBA8Unorm;
+            d.width=(NSUInteger)w; d.height=(NSUInteger)h; d.depth=(NSUInteger)depth;
+            NSUInteger levels=1;
+            if(mipMap){ int m=std::max({w,h,depth}); while(m>1){ m/=2; ++levels; } }
+            d.mipmapLevelCount=levels;
+            d.usage=MTLTextureUsageShaderRead;
+            texture_=[dev newTextureWithDescriptor:d]; [d release];
+            if(!texture_) throw std::runtime_error("Metal: failed to create 3D texture");
+        }
+        ~MetalTexture3D() override { [texture_ release]; }
+        void SetData(int level,int x,int y,int z,int w,int h,int depth,const void* data,int /*dataLength*/) override
+        {
+            MTLRegion r=MTLRegionMake3D((NSUInteger)x,(NSUInteger)y,(NSUInteger)z,(NSUInteger)w,(NSUInteger)h,(NSUInteger)depth);
+            [texture_ replaceRegion:r mipmapLevel:(NSUInteger)level slice:0 withBytes:data bytesPerRow:(NSUInteger)(w*4) bytesPerImage:(NSUInteger)(w*4*h)];
+        }
+        id<MTLTexture> native() const { return texture_; }
+    private:
+        id<MTLTexture> texture_=nil;
+    };
+
     class MetalVertexBuffer final : public IVertexBufferBackend
     {
     public:
@@ -792,6 +852,8 @@ bool MetalGraphicsBackend::TransformWindowToLogical(float windowX,float windowY,
 bool MetalGraphicsBackend::TransformLogicalToWindow(float logX,float logY,float& windowX,float& windowY) const{return impl_->transformLogicalToWindow(logX,logY,windowX,windowY);}
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
+std::unique_ptr<ITextureCubeBackend> MetalGraphicsBackend::CreateTextureCube(int size,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTextureCube>(impl_->device,size,mipMap);}
+std::unique_ptr<ITexture3DBackend> MetalGraphicsBackend::CreateTexture3D(int w,int h,int depth,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTexture3D>(impl_->device,w,h,depth,mipMap);}
 void MetalGraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalGraphicsBackend::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalGraphicsBackend::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalGraphicsBackend::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalGraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalGraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
 void MetalGraphicsBackend::SetDepthTestEnabled(bool e){impl_->depthEnabled=e;impl_->rebuildDepthState();} void MetalGraphicsBackend::SetBlendEnabled(bool e){impl_->blendEnabled=e;} void MetalGraphicsBackend::SetDepthWriteEnabled(bool e){impl_->depthWrite=e;impl_->rebuildDepthState();}
 void MetalGraphicsBackend::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colorDstBlend,int alphaDstBlend,int colorBlendFunc,int alphaBlendFunc)
