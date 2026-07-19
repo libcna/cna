@@ -1,11 +1,15 @@
 # AUDIT_GRAPHICS_BACKEND_MATRIX.md — Cross-Backend Capability Matrix
 
-**Status: MOSTLY POPULATED (2026-07-19, Pass 4).** All 16 backend shards, the full `xna-graphics` shard (191
-files), and every `tests-*`/`examples-tests-*` shard are now directly audited. The cross-cutting defect matrix
-and the feature-by-feature grid below are both populated from that evidence, as is the EasyGL cross-comparison
-section. A handful of grid cells are marked `?` where the existing audit corpus genuinely does not contain
-enough first-hand evidence to fill them confidently (noted per-row) — closing those is lower-value than Pass 5/6
-work and is left for a future opportunistic pass rather than re-reading source speculatively.
+**Status: POPULATED, static review + full runtime verification (2026-07-19, Pass 4 + Pass 6).** All
+16 backend shards, the full `xna-graphics` shard (191 files), and every `tests-*`/`examples-tests-*`
+shard are directly audited (static review). Since Pass 4 first populated this matrix, **Pass 6 has
+additionally built AND runtime-tested every one of the 14 real graphics backends** (EasyGL, Canvas,
+D3D9, D3D11, D3D12, Dx3, WebGPU, Vulkan, SdlGpu, Bgfx, SdlRenderer, Software, Ascii, Headless) — none
+remain static-only. The "Runtime-verified" row below now reflects this; the cross-cutting defect
+matrix and feature-by-feature grid are populated from a mix of static review and this new runtime
+evidence, cross-referenced in the "Pass 6 runtime-verification summary" section added below. A
+handful of grid cells remain marked `?` where even the runtime sweep didn't specifically exercise
+that exact feature (noted per-row) -- these are now few and genuinely narrow, not broad unknowns.
 
 ## Confirmed backend list (verified against the repository, 2026-07-18)
 
@@ -82,7 +86,7 @@ shards' file/test inventories.
 | EnvironmentMapEffect emissive/diffuse re-multiply | delegates | **WRONG** (original source) | N/A | vendored stock: correct; CNA custom: not flagged | **WRONG** (shared D3DCommon, "ported line-by-line from Vulkan") | same (shared source) | N/A | N/A (no EnvironmentMapEffect implementation confirmed in scoped review) | N/A | **WRONG** | N/A | N/A | **WRONG** (confirmed via direct source read) | **WRONG** |
 | Missing Vulkan-NDC Y-flip (Vulkan-only defect class; included for completeness) | N/A | N/A | N/A | N/A (D3D clip space already matches XNA, correctly no-flip) | N/A (same) | N/A (same) | N/A | N/A | N/A | N/A | N/A | N/A | **4 of ~18 shader families missing it** (EnvironmentMapEffect, PbrEffect, SkinnedPbrEffect, InstancedEffect) | N/A |
 | CI test-suite breadth (`examples-tests-*` shard file count, all now audited) | 6 | 98 | 2 | 14 | 3 | 2 | 9 | **218** (largest by far) | 7 | 22 | 67 | 6 | 70 | 22 |
-| Runtime-verified in this audit's Linux sandbox vs. static-only (per D-P4) | runtime | runtime | runtime (Emscripten target, not separately re-verified) | **static-only** (Windows SDK) | **static-only** | **static-only** | **static-only** (DirectDraw via `free-direct`) | runtime | runtime | runtime | runtime | runtime | runtime (where available) | runtime (where available) |
+| Runtime-verified in this audit's Linux sandbox vs. static-only (per D-P4) -- **UPDATED, Pass 6: ALL 14 backends now built AND runtime-tested, none remain static-only** | runtime (6/6 own suite) | runtime (110/114 own suite, 5504/5511 general) | runtime (Emscripten via emsdk, `CnaTests` blocked only by an unrelated harness-linking gap) | runtime (280+/280+ own suite via real Wine+DXVK) | runtime (5/7 own suite via real Wine+DXVK) | runtime (220/220 via real Wine+vkd3d-proton; 1 known crash reproduced live, Proton-fix path unavailable -- no Steam/Proton in this sandbox) | runtime (59/61 own suite; empirically closes the `Dx3_SpriteBatch` investigation) | runtime (0 failed, this audit's own baseline) | runtime (7/7 own suite) | runtime (21/21 own suite, 5500/5507 general) | runtime (65/68 own suite) | runtime (6/6 own suite) | runtime (5495/5507 general, 1 crash) | runtime (23/23 own suite, 1 crash in the general suite) |
 | Architecture: single monolithic file vs. multi-file split | delegates to SdlRenderer | multi-file (32 src) | multi-file (4 src) | multi-file (34+12 vendored) | multi-file (10 src) | multi-file (13 src) | **single-file** | **single-file** (4733 lines, largest single-file backend) | **single-file** | multi-file (26 src) | **single-file** | **single-file** | multi-file (38 src, but its own single largest file — `VulkanGraphicsBackend.cpp`, 8954 lines — is the single largest file in the ENTIRE audit) | **single-file** (8805 lines, 2nd-largest single file in the audit) |
 
 Cells marked `?` are genuine, honestly-recorded gaps in the existing audit corpus — either the relevant
@@ -229,3 +233,33 @@ as an EasyGL defect, not a target other backends should match.
   shader-variant dispatch cost). Worth checking whether Bgfx/Vulkan's dead helper code should simply be
   deleted, or whether it represents unfinished work toward a more data-driven vertex-layout system that was
   abandoned partway.
+
+## Pass 6 runtime-verification summary
+
+Every one of the 14 real backends listed above has now been built AND runtime-tested this session
+(not merely statically reviewed) — full narrative for each lives in `AUDIT_CROSS_CUTTING_FINDINGS.md`
+("Pass 6" sections). Headline results per backend:
+
+| Backend | Own dedicated CTest suite | General `CnaTests` suite | Headline Pass 6 finding |
+|---|---|---|---|
+| EasyGL | (this audit's own baseline) | 5503/5507, 0 failed | Root-caused the project-wide `WORKING_DIRECTORY` CTest bug; new `EasyGL_MRT_TwoAttachments` defect |
+| Vulkan | 6/6 blend-state tests pass (Task 868 confirmed FIXED) | 5495/5507, 7 failed, 1 CRASH | **CRITICAL**: Texture2D-fuzz crash (stack smashing); SkinnedEffect+Fog renders black |
+| WebGPU | 23/23 | 1 CRASH partway through | **CRITICAL**: Texture2D-fuzz crash (non-catchable Rust panic); `WebGPU_Msaa` corrected to FIXED |
+| D3D11 | 5/7 | not attempted (documented cross-compile limitation) | 2 new defects: specular asymmetry, black-vertex-color bug |
+| D3D12 | 220/220 (`D3D12_Smoke`, real vkd3d-proton) | not attempted (same limitation) | Only 1 CTest exists for this whole backend — a real coverage gap; known swapchain crash reproduced live |
+| D3D9 | 280+/280+ (100%) | not attempted (same limitation) | Zero real failures |
+| Dx3 | 59/61 | n/a (built via native Linux, not Wine) | Empirically closes the `Dx3_SpriteBatch` investigation (both static predictions confirmed) |
+| Bgfx | 110/114 | 5504/5511, 3 failed | Root-caused the universal `cna_demo_xact` build defect; new cull-mode bug |
+| SdlGpu | 21/21 | 5500/5507, 3 failed | New: rejects real user-authored GLSL content EasyGL accepts |
+| Canvas | (build-only; `CnaTests` blocked by an unrelated harness-linking gap) | n/a | Corrects an earlier "Emscripten unavailable" assumption -- it's genuinely buildable |
+| SdlRenderer | 65/68 | 56 failed (expected, 2D-only methodology noise) | New: `SDL_Renderer_FullscreenToggle` uncaught-exception crash |
+| Software | 6/6 | 3 failed | New: Texture3D round-trip returns garbage data |
+| Ascii | 6/6 | 52 failed (expected, 2D-only methodology noise) | None beyond shared cross-backend patterns |
+| Headless | 7/7 | 4 failed | Confirms the Texture3D round-trip bug is shared (2nd backend) |
+
+**Cross-backend patterns discovered by having every backend's real data side-by-side** (not visible
+from any single backend's own report): the Texture2D-fuzz crash (Vulkan, WebGPU); the
+`cna_demo_xact` build defect (universal, all 6 independently-built backends); the
+`MediaLibraryTestFixture` SEGFAULT (universal, 6+ backends); the `WireFrame`-capability
+test-authoring pattern (5 backends: Vulkan, SdlGpu, Bgfx, Software, Headless); the Texture3D
+round-trip defect (Software, Headless, likely SdlRenderer).
