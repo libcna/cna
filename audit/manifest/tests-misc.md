@@ -6,4 +6,4 @@ Files in this shard: **1**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `tests/PackedVectorGolden.md` | PENDING | [PackedVectorGolden.md.audit.md](../tests/PackedVectorGolden.md.audit.md) |
+| 1 | `tests/PackedVectorGolden.md` | AUDITED | [PackedVectorGolden.md.audit.md](../tests/PackedVectorGolden.md.audit.md) |

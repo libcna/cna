@@ -1576,3 +1576,46 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   exceptions, enums, `DevicesShutdownCoordinator`, `SdlSubsystemMutex`, `SdlHapticVibrateBackend`,
   `SdlSensorSubsystem`) is correct, several files notably citing specific archived MSDN page numbers to
   justify NOXNA-extension claims rather than asserting parity without evidence.
+
+## Per-shard notes: `tests-xna-framework-core` (46 files) + `tests-cna-input` (5 files) + `tests-misc` (1 file)
+
+- **HIGH finding: `GameTests.cpp` and `GraphicsDeviceManagerTests.cpp` both have zero real test
+  coverage** (each is a 2-line file with only a comment explaining that `Game`/`GraphicsDeviceManager`
+  require a live SDL window). This leaves the two confirmed production HIGH bugs from the
+  `xna-framework-core` production shard -- `Game::UnloadContent()`'s dead-hook behavior
+  (`include/Microsoft/Xna/Framework/Game.hpp.audit.md`) and `GraphicsDeviceManager`'s device-event-
+  forwarding gap (`GraphicsDeviceManager.hpp.audit.md`) -- completely untested, so neither bug would be
+  caught by CI today. `GameWindowTests.cpp` (147 lines) demonstrates the correct alternative pattern
+  already used elsewhere in this same test directory: attempt a real SDL window and `GTEST_SKIP()` when
+  no display is available, rather than shipping an empty file. Recommend both `GameTests.cpp` and
+  `GraphicsDeviceManagerTests.cpp` be rewritten to follow the `GameWindowTests.cpp` pattern.
+- **MEDIUM finding: `GameCrashTest.cpp` is a dead test file** -- all 24 lines are commented out behind
+  an `#ifdef XNA5` gate referencing `setTargetElapsedTimeProperty(nullptr)`, which appears to reference a
+  stale/different API shape than the current `Game` class exposes. Contributes no coverage and should
+  either be revived against the current API or removed.
+- **No contradiction found (verified, not a defect): `RayTests.cpp`'s "not yet implemented" comment for
+  `BoundingFrustum::Intersects(Ray)` and `BoundingFrustumTests.cpp`'s passing `Intersects(ray)` calls are
+  NOT in conflict.** Direct read of `src/Microsoft/Xna/Framework/BoundingFrustum.cpp` (lines 225-265)
+  confirms the implementation fully handles the `Contains`/`Disjoint` cases (which both test files
+  exercise) and only throws `System::NotImplementedException` for the general boundary-crossing
+  `Intersects` case -- itself a faithful, already-documented match of FNA's own identical limitation.
+  Both test files correctly test only the implemented branches; no staleness or test-authoring bug here.
+- Further confirmed instances of the already-tracked raw-`std::`-exception-instead-of-`System::`
+  -exception-type cross-cutting pattern, this time in test assertions rather than production code
+  (`EXPECT_THROW(..., std::invalid_argument)` etc.): `MatrixTests.cpp` (`CreatePerspective*` validation
+  tests), `BoundingBoxTests.cpp`, `BoundingSphereTests.cpp`, `CurveKeyCollectionTests.cpp`,
+  `CurveTests.cpp`, `GameComponentCollectionTests.cpp`, `GameServiceContainerTests.cpp`,
+  `TitleContainerTests.cpp`.
+- Positive: `ColorTests.cpp`'s `SizeIsLargerThanFourBytesVtablePresent`/
+  `ConstructedFromRawRgbaBytesYieldsCorrectComponents` and `FrameworkDispatcherTests.cpp`'s
+  `UpdateDoesNotDeadlockWhenBufferNeededDisposesTheInstance` are both genuine, well-targeted regression
+  tests tied to real, previously-fixed bugs (a vtable/raw-pointer-cast bug and a dispatcher-deadlock task,
+  respectively) rather than incidental coverage.
+- Positive: `tests/PackedVectorGolden.md`'s golden bit-packing values were independently derived via a
+  separate Python implementation of FNA's packing formulas rather than copied from the C++ implementation
+  under test -- the correct approach to avoid a shared-bug blind spot between test and implementation.
+- `tests-cna-input` (5 files: `ClipboardTests.cpp`, `InputDevicesHotplugTests.cpp`,
+  `InputDevicesTests.cpp`, `PowerTests.cpp`, `SensorsTests.cpp`) -- all clean, consistently using
+  dependency-injected fake backends (`SetSystemDeviceBackendForTests`/`SetSystemPowerBackendForTests`/
+  `SetSystemSensorBackendForTests`) to get deterministic coverage of OS-facing NOXNA singletons without
+  relying on CI having predictable real hardware.
