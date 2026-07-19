@@ -18,6 +18,9 @@
 //   one lit by DirectionalLight0 pointing straight into the surface (N.L=1, near-white) and one
 //   lit by a light pointing away from it (N.L<=0, ambient-only, dim) -- proves per-fragment
 //   Lambertian lighting is real, not a pass-through.
+// Check C2 -- the lighting normal matrix is a real inverse-transpose of World's upper-3x3, not
+//   the raw upper-3x3: under World=Scale(3,1,1) with a 45-degree-tilted normal, the correct
+//   transform gives N.(-L)~=0.95 (near-white); a raw-3x3 bug would give ~=0.32 (dim gray).
 // Check D -- BasicEffect fog (object-space vertex Z, this backend's documented convention --
 //   see plan_opengl2.md): FogStart=-0.8, FogEnd=0.8 (kept within the Identity-projection clip
 //   range [-1,1] so the quad itself is not near/far-clipped). A quad at local Z=-0.8 reads back the fog color
@@ -179,6 +182,37 @@ class OpenGL2EffectsTest : public Game
         dev.SetVertexBuffer(nullptr);
     }
 
+    // Non-uniform-scale World (X*3, Y/Z unchanged) + a 45-degree-tilted normal (1,0,1)/sqrt(2).
+    // The CORRECT inverse-transpose normal matrix shrinks the transformed normal's X component
+    // (undoing the X stretch), tilting it toward +Z and giving N.(-L)=0.9487 for
+    // L=(0,0,-1) -- near-full lit. Using the raw World upper-3x3 instead (the old,
+    // pre-inverse-transpose behavior) tilts the wrong way, toward +X, giving N.(-L)=0.3162 --
+    // a much dimmer, clearly distinguishable result.
+    void DrawLitNonUniformScale(GraphicsDevice& dev)
+    {
+        BasicEffect fx(dev);
+        fx.setLightingEnabledProperty(true);
+        fx.setAmbientLightColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+        fx.DirectionalLight0.setEnabledProperty(true);
+        fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+        fx.DirectionalLight0.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        fx.DirectionalLight0.setSpecularColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+        fx.setTextureEnabledProperty(false);
+        fx.setWorldProperty(Matrix::CreateScale(3.0f, 1.0f, 1.0f));
+        fx.setViewProperty(Matrix::getIdentityProperty());
+        fx.setProjectionProperty(Matrix::getIdentityProperty());
+        fx.Apply();
+
+        const float s = 0.70710678f; // 1/sqrt(2)
+        VertexPositionNormalTexture verts[6];
+        FullScreenQuadNormal(verts, Vector3(s, 0.0f, s));
+        VertexBuffer vb(dev, VertexPositionNormalTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
+        vb.SetData(verts, 0, 6);
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
+    }
+
     void DrawFog(GraphicsDevice& dev, Texture2D& tex, float z)
     {
         BasicEffect fx(dev);
@@ -266,6 +300,18 @@ protected:
                   " unlit=" + ColorStr(unlitResult));
         }
 
+        // Check C2: normal matrix is a real inverse-transpose, not a raw World upper-3x3 --
+        // see DrawLitNonUniformScale's own comment for the expected math.
+        dev.Clear(Color::Black);
+        DrawLitNonUniformScale(dev);
+        const Color nonUniformResult = ReadPixel(160, 120);
+        if (runChecks)
+        {
+            Check(nonUniformResult.getRProperty() > 210,
+                  "BasicEffect lighting under non-uniform World scale uses a real inverse-transpose normal matrix "
+                  "(expected near-white ~242, a raw-3x3 bug would read back ~81): got=" + ColorStr(nonUniformResult));
+        }
+
         // Check D: BasicEffect fog.
         dev.Clear(Color::Black);
         DrawFog(dev, *texOpaque_, -0.8f);
@@ -291,8 +337,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             Check(true, "60 frames of the effects scene render with no exception");
-            std::printf("=== %d/%d PASS ===\n", passCount_, 8);
-            result_ = (passCount_ == 8) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, 9);
+            result_ = (passCount_ == 9) ? 0 : 1;
             Exit();
         }
     }

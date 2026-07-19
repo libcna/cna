@@ -733,10 +733,8 @@ namespace CNA::Internal::Backends::OpenGL2
         // specular (matches EasyGLGraphicsBackend::EnsureLit3DProgram's formula exactly). Always
         // per-pixel regardless of GpuDrawParams::preferPerPixelLighting -- matches this project's
         // own documented, accepted convention (see that field's doc comment: every backend except
-        // D3D9 always renders per-pixel). uNormalMatrix uses the raw World upper-3x3 (no inverse-
-        // transpose) -- correct for translation/rotation/uniform-scale World matrices, which is
-        // every lighting scenario this backend's own tests use; a documented simplification for
-        // non-uniform-scale World matrices (see plan_opengl2.md follow-up).
+        // D3D9 always renders per-pixel). uNormalMatrix is the real inverse-transpose of World's
+        // upper-3x3 (see ComputeNormalMatrix3x3 below), correct under non-uniform scale too.
         const char* litVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
@@ -952,13 +950,16 @@ namespace CNA::Internal::Backends::OpenGL2
 
     namespace
     {
-        // Raw World upper-3x3, column-major -- see ensurePrograms()'s own comment on why this
-        // (not a full inverse-transpose) is an accepted simplification here.
+        // Inverse-transpose of World's upper-3x3, column-major -- the standard normal-transform
+        // matrix, correct under non-uniform scale too (a plain World upper-3x3 only preserves
+        // normals under translation/rotation/uniform-scale). Uses Matrix::Invert/Transpose, both
+        // already part of the public XNA API, so no separate 3x3 inverse routine is needed.
         void ComputeNormalMatrix3x3(const Matrix& world, float out[9])
         {
-            const float rowMajor[9] = {world.M11, world.M12, world.M13,
-                                       world.M21, world.M22, world.M23,
-                                       world.M31, world.M32, world.M33};
+            const Matrix invTranspose = Matrix::Transpose(Matrix::Invert(world));
+            const float rowMajor[9] = {invTranspose.M11, invTranspose.M12, invTranspose.M13,
+                                       invTranspose.M21, invTranspose.M22, invTranspose.M23,
+                                       invTranspose.M31, invTranspose.M32, invTranspose.M33};
             for (int r = 0; r < 3; ++r)
                 for (int c = 0; c < 3; ++c)
                     out[c * 3 + r] = rowMajor[r * 3 + c];
