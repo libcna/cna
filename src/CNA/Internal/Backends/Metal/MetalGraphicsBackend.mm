@@ -8,8 +8,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 namespace CNA::Internal::Backends::Metal
@@ -76,6 +78,41 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             case PT::LineList: return MTLPrimitiveTypeLine;
             case PT::LineStrip: return MTLPrimitiveTypeLineStrip;
             default: return MTLPrimitiveTypeTriangle;
+        }
+    }
+
+    // Microsoft::Xna::Framework::Graphics::TextureFilter ordinals (TextureFilter.hpp):
+    // 0 Linear, 1 Point, 2 Anisotropic, 3 LinearMipPoint, 4 PointMipLinear,
+    // 5 MinLinearMagPointMipLinear, 6 MinLinearMagPointMipPoint,
+    // 7 MinPointMagLinearMipLinear, 8 MinPointMagLinearMipPoint.
+    static MTLSamplerMinMagFilter metalMinFilter(int filter)
+    {
+        switch (filter) {
+            case 1: case 4: case 6: case 8: return MTLSamplerMinMagFilterNearest;
+            default: return MTLSamplerMinMagFilterLinear;
+        }
+    }
+    static MTLSamplerMinMagFilter metalMagFilter(int filter)
+    {
+        switch (filter) {
+            case 1: case 3: case 4: case 5: return MTLSamplerMinMagFilterNearest;
+            default: return MTLSamplerMinMagFilterLinear;
+        }
+    }
+    static MTLSamplerMipFilter metalMipFilter(int filter)
+    {
+        switch (filter) {
+            case 1: case 3: case 6: case 8: return MTLSamplerMipFilterNearest;
+            default: return MTLSamplerMipFilterLinear;
+        }
+    }
+    // Microsoft::Xna::Framework::Graphics::TextureAddressMode ordinals: 0 Wrap, 1 Clamp, 2 Mirror.
+    static MTLSamplerAddressMode metalAddressMode(int mode)
+    {
+        switch (mode) {
+            case 0: return MTLSamplerAddressModeRepeat;
+            case 2: return MTLSamplerAddressModeMirrorRepeat;
+            default: return MTLSamplerAddressModeClampToEdge;
         }
     }
 
@@ -173,6 +210,8 @@ struct MetalGraphicsBackend::Impl
     id<MTLRenderPipelineState> pipe3Color=nil, pipe3Tex20=nil, pipe3ColorTex24=nil, pipe3NormalTex32=nil, pipe2=nil;
     id<MTLDepthStencilState> depthState=nil;
     id<MTLSamplerState> sampler=nil;
+    std::unordered_map<uint32_t, id<MTLSamplerState>> samplerCache;
+    id<MTLSamplerState> samplerSlots[16]={};
     id<MTLCommandBuffer> command=nil;
     id<MTLRenderCommandEncoder> encoder=nil;
     id<CAMetalDrawable> drawable=nil;
@@ -243,6 +282,24 @@ struct MetalGraphicsBackend::Impl
         id<MTLDepthStencilState> s=[device newDepthStencilStateWithDescriptor:d]; [d release]; [depthState release]; depthState=s;
         if(encoder) [encoder setDepthStencilState:depthState];
     }
+
+    // Builds (or reuses) a cached MTLSamplerState for the given raw XNA TextureFilter/
+    // TextureAddressMode/maxAnisotropy combination. Cache is owned by this Impl and released
+    // once, in its destructor -- samplerSlots[] below only holds non-owning references into it.
+    id<MTLSamplerState> samplerFor(int filter,int addressU,int addressV,int maxAnisotropy)
+    {
+        const uint32_t aniso=(uint32_t)std::clamp(maxAnisotropy,1,16);
+        const uint32_t key=(uint32_t)(filter&0xFF) | ((uint32_t)(addressU&0xFF)<<8) | ((uint32_t)(addressV&0xFF)<<16) | (aniso<<24);
+        auto it=samplerCache.find(key);
+        if(it!=samplerCache.end()) return it->second;
+        MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc] init];
+        sd.minFilter=metalMinFilter(filter); sd.magFilter=metalMagFilter(filter); sd.mipFilter=metalMipFilter(filter);
+        sd.sAddressMode=metalAddressMode(addressU); sd.tAddressMode=metalAddressMode(addressV);
+        if(filter==2) sd.maxAnisotropy=aniso;
+        id<MTLSamplerState> s=[device newSamplerStateWithDescriptor:sd]; [sd release];
+        samplerCache.emplace(key,s);
+        return s;
+    }
 };
 
 class MetalSpriteBatch final : public ISpriteBatchBackend
@@ -252,6 +309,7 @@ public:
     void Begin() override { begun_=true; }
     void End() override { begun_=false; }
     void SetSamplerFilter(int f) override { filter_=f; }
+    void SetSamplerAddressMode(int addressU,int addressV) override { addressU_=addressU; addressV_=addressV; }
     void Draw(const ITextureBackend& t,float x,float y) override { Rectangle d((int)x,(int)y,t.GetWidth(),t.GetHeight()); Rectangle s(0,0,t.GetWidth(),t.GetHeight()); Draw(t,d,s,Color::White); }
     void Draw(const ITextureBackend& t,const Rectangle& d,const Rectangle& s,const Color& c) override { Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0); }
     void Draw(const ITextureBackend& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float) override
@@ -270,9 +328,9 @@ public:
         V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};
         struct U{float w,h;} u{(float)p.drawable.texture.width,(float)p.drawable.texture.height};
         [p.encoder setRenderPipelineState:p.pipe2]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
-        [p.encoder setFragmentTexture:mt->native() atIndex:0]; [p.encoder setFragmentSamplerState:p.sampler atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
+        [p.encoder setFragmentTexture:mt->native() atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,1) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
-private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0;
+private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1;
 };
 
 static id<MTLRenderPipelineState> makePipeline(id<MTLDevice> dev,id<MTLLibrary> lib,NSString* vs,NSString* fs,MTLVertexDescriptor* vd)
@@ -302,7 +360,7 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc]init];sd.minFilter=MTLSamplerMinMagFilterLinear;sd.magFilter=MTLSamplerMinMagFilterLinear;sd.sAddressMode=MTLSamplerAddressModeClampToEdge;sd.tAddressMode=MTLSamplerAddressModeClampToEdge;p.sampler=[p.device newSamplerStateWithDescriptor:sd];[sd release];
     p.rebuildDepthState();
 }
-MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();[p.depthTexture release];[p.depthState release];[p.sampler release];[p.pipe2 release];[p.pipe3NormalTex32 release];[p.pipe3ColorTex24 release];[p.pipe3Tex20 release];[p.pipe3Color release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
+MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();[p.depthTexture release];[p.depthState release];[p.sampler release];[p.pipe2 release];[p.pipe3NormalTex32 release];[p.pipe3ColorTex24 release];[p.pipe3Tex20 release];[p.pipe3Color release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
 MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl(){return *impl_;} const MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl()const{return *impl_;}
 void MetalGraphicsBackend::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalGraphicsBackend::Present(){impl_->endFrame();}
 void MetalGraphicsBackend::GetViewportSize(int&w,int&h){int pw=0,ph=0;SDL_GetWindowSizeInPixels(impl_->window,&pw,&ph);w=impl_->virtualW>0?impl_->virtualW:pw;h=impl_->virtualH>0?impl_->virtualH:ph;}
@@ -314,6 +372,7 @@ void MetalGraphicsBackend::SetDepthTestEnabled(bool e){impl_->depthEnabled=e;imp
 void MetalGraphicsBackend::ApplyBlendState(int,int,int,int,int,int){}
 void MetalGraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int,bool,int,int,int,int,int,int,int ref,bool,int,int,int,int){impl_->depthEnabled=de;impl_->depthWrite=dw;impl_->refStencil=ref;impl_->rebuildDepthState();if(impl_->encoder)[impl_->encoder setStencilReferenceValue:ref];}
 void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb){impl_->cull=c==1?MTLCullModeFront:(c==2?MTLCullModeBack:MTLCullModeNone);impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;impl_->scissorEnabled=se;impl_->depthBias=db;impl_->slopeBias=sb;if(impl_->encoder){[impl_->encoder setCullMode:impl_->cull];[impl_->encoder setTriangleFillMode:impl_->fill];[impl_->encoder setDepthBias:db slopeScale:sb clamp:0];}}
+void MetalGraphicsBackend::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy){if(slot<0||slot>=16)return;impl_->samplerSlots[slot]=impl_->samplerFor(filter,addressU,addressV,maxAnisotropy);}
 void MetalGraphicsBackend::SetReferenceStencil(int v){impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}
 void MetalGraphicsBackend::SetScissorRect(int x,int y,int w,int h){impl_->scissor={(NSUInteger)std::max(0,x),(NSUInteger)std::max(0,y),(NSUInteger)std::max(0,w),(NSUInteger)std::max(0,h)};if(impl_->encoder)[impl_->encoder setScissorRect:impl_->scissor];}
 void MetalGraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){impl_->viewport={(double)x,(double)y,(double)w,(double)h,mn,mx};if(impl_->encoder)[impl_->encoder setViewport:impl_->viewport];}
@@ -326,7 +385,7 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
     if(textured){ if(vb.stride()==20) pipeline=p.pipe3Tex20; else if(vb.stride()==24) pipeline=p.pipe3ColorTex24; else if(vb.stride()==32) pipeline=p.pipe3NormalTex32; else throw std::runtime_error("Metal: textured 3D requires stride 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented"); }
     else if(vb.stride()!=16) throw std::runtime_error("Metal: colored 3D currently requires VertexPositionColor stride 16");
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0]; [p.encoder setVertexBytes:&wvp length:sizeof(wvp) atIndex:1]; [p.encoder setDepthStencilState:p.depthState]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
-    if(textured){auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];[p.encoder setFragmentSamplerState:p.sampler atIndex:0];}
+    if(textured){auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];[p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];}
     int n=primitiveVertexCount(pt,pc); if(ib)[p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16 indexBuffer:ib->native() indexBufferOffset:0];else[p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:0 vertexCount:n];
 }
 void MetalGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);if(!vb)throw std::runtime_error("Metal: foreign vertex buffer");drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,nullptr);}
@@ -334,6 +393,21 @@ void MetalGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBacke
 void MetalGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc,const GpuDrawParams&gp){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);if(!vb)throw std::runtime_error("Metal: foreign vertex buffer");drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,&gp);}
 void MetalGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc,const GpuDrawParams&gp){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);auto*ib=dynamic_cast<const MetalIndexBuffer*>(&i);if(!vb||!ib)throw std::runtime_error("Metal: foreign buffer");drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,&gp);}
 void MetalGraphicsBackend::SetStringMarkerEXT(const char* m){impl_->ensureFrame();if(m)[impl_->encoder insertDebugSignpost:[NSString stringWithUTF8String:m]];}
+
+bool MetalGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+{
+    // plan_metal.md Phase 20: IGraphicsBackend's own default is an unconditional `true`, which is
+    // a false positive for these 3 -- CreateOcclusionQuery()/CreateEffectBackend() both still
+    // return nullptr and SetRenderTargets() still only binds rts[0], so a caller that checks this
+    // capability before relying on the feature would otherwise get a wrong answer today. Revert
+    // each case to the inherited default (remove the explicit `false`) as its own phase lands.
+    switch (capability) {
+        case CNA::GraphicsCapability::MultipleRenderTargets: return false; // plan_metal.md METAL-112
+        case CNA::GraphicsCapability::OcclusionQuery:         return false; // plan_metal.md METAL-136
+        case CNA::GraphicsCapability::CustomEffects:          return false; // plan_metal.md METAL-144
+        default: return true;
+    }
+}
 
 #ifdef CNA_BACKEND_METAL
 std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args){return std::make_unique<MetalGraphicsBackend>(args);}

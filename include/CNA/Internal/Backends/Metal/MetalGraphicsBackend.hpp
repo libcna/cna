@@ -45,6 +45,8 @@ namespace CNA::Internal::Backends::Metal
                                     int ccwStencilPass, int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias, float slopeScaleDepthBias) override;
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                               int maxAnisotropy) override;
         void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
@@ -65,6 +67,8 @@ namespace CNA::Internal::Backends::Metal
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
         void SetStringMarkerEXT(const char* marker) override;
+
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         struct Impl;
         Impl& impl();

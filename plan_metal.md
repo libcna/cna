@@ -4,7 +4,59 @@
 
 `METAL` is a native Apple Metal backend. SDL is used only for CNA's existing window lifecycle and
 `SDL_Metal_CreateView` / `SDL_Metal_GetLayer` platform glue. Rendering itself must never be routed
-through SDL_Renderer or SDL_GPU.
+through SDL_Renderer or SDL_GPU. Per `cmake/BackendSelection.cmake`'s own gate message ("METAL
+backend only builds when targeting macOS/iOS/tvOS"), the intended platform scope is all three Apple
+OS families, not macOS alone — see Phase 29 below, which this document's previous revision did not
+mention at all.
+
+**Status legend** (matches this project's established convention in `plan_dx3.md`/`plan_webgpu.md`):
+✅ implemented *and verified against its stated acceptance criteria* (a real CTest passing on the
+macOS CI job or a physical Mac); 🟨 code exists and is believed correct by source-level review, but
+has **not** been build- or runtime-verified — this Linux machine has no Apple toolchain, so nothing
+in this backend can honestly be marked ✅ from here; ⬜ not implemented.
+
+## 2026-07-19 revision — why this document changed
+
+This plan was a 20-bullet sketch (62 lines) with no task IDs, no phases, and no traceability to the
+actual implementation. Meanwhile the real `MetalGraphicsBackend` is 420 lines across one `.hpp` and
+one `.mm` — versus EasyGL's 5,362, D3D11's 4,521, WebGPU's 10,411, SDL_GPU's 9,877, Vulkan's 16,144,
+D3D9's 16,847, and Bgfx's 20,904. Metal implements exactly 5 fixed shader pipelines (colored-16,
+textured-20, colortex-24, normaltex-32, sprite-2d), reads none of `GpuDrawParams`' ~35 effect fields
+beyond `texture0`, and returns `nullptr`/no-ops for render targets, cube/3D textures, occlusion
+queries, custom effects, MRT, and per-slot sampler state. This revision reads the full
+`IGraphicsBackend` contract (1,023 lines, `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`)
+and cross-references EasyGL's actual method inventory (`EasyGLGraphicsBackend::SelectProgram()`,
+`BindDrawParams()`, and its 12 `Ensure*Program()` shader-variant builders) to turn "eventually cover
+CNA graphics as well as EasyGL" into ~255 concrete, individually actionable tasks across 30 phases,
+each citing the exact interface method, `GpuDrawParams` field, or EasyGL/Vulkan/WebGPU reference
+implementation it ports from — not a speculative wishlist.
+
+**On the requested task count**: the request was for as many tasks as the real gap needs, "even if
+1000." ~255 is the actual number of non-redundant, individually verifiable engineering tasks this
+audit found — mechanically padding further (e.g. one row per enum *value* instead of per enum,
+or pre-registering hundreds of not-yet-real `Check X` sub-assertions for code that doesn't exist
+yet) would manufacture false precision, which is exactly the overclaiming failure mode this
+project's own history (`plan_dx3.md`'s multiple correction notices, this repo's `CLAUDE.md`/memory
+of "don't claim plan complete") has repeatedly had to catch and fix. Every phase below is expected
+to grow further Check-letter-level sub-tasks once its code actually lands and needs a CTest written
+against it — exactly how `plan_dx3.md` Phase X4 (tasks DX3-30..39) and `plan_webgpu.md` grew their
+own detail, incrementally, not upfront.
+
+**What actually landed in this revision** (source-complete on this Linux machine, **not yet
+build-verified** — no Apple toolchain here; needs the `metal-macos-ci.yml` job or a physical Mac):
+- `ApplySamplerState(slot, filter, addressU, addressV, maxAnisotropy)` — previously entirely
+  unimplemented (`IGraphicsBackend`'s base no-op). Now backed by a real `MTLSamplerState` cache
+  (`Impl::samplerFor()`, keyed by filter/address/anisotropy) with 16 texture-unit slots, wired into
+  both `drawMetal3D`'s texture-unit-0 fragment binding and `MetalSpriteBatch::Draw()` (which
+  previously had a dead `filter_` field it read but never used, and no `SetSamplerAddressMode`
+  override at all). See Phase 1, `METAL-1`/`METAL-2`.
+- `SupportsCapability(GraphicsCapability)` — previously unimplemented, meaning the inherited
+  `IGraphicsBackend` default (unconditional `true`) was actively lying about 3 capabilities this
+  backend does not yet have: `MultipleRenderTargets` (`SetRenderTargets()` still only binds the
+  first target), `OcclusionQuery` (`CreateOcclusionQuery()` still returns `nullptr`), and
+  `CustomEffects` (`CreateEffectBackend()` still returns `nullptr`). Now overridden to answer `false`
+  for exactly those three and defer to the (correct) default otherwise. See Phase 20,
+  `METAL-192`/`METAL-195`/`METAL-196`/`METAL-197`.
 
 ## Implemented initial foundation
 
@@ -17,45 +69,505 @@ through SDL_Renderer or SDL_GPU.
 - Native `MTLBuffer` vertex and 16/32-bit index buffers.
 - Native RGBA8 `MTLTexture` creation and updates.
 - Runtime-compiled Metal Shading Language library.
-- Colored 3D and basic textured 3D draw paths.
-- Triangle list/strip and line list/strip topology mapping.
-- Basic cull/fill/depth/scissor/viewport/depth-bias state plumbing.
+- Colored 3D and basic textured 3D draw paths (4 fixed vertex-stride pipelines: 16/20/24/32).
+- Triangle list/strip and line list/strip topology mapping (PointList is currently mis-mapped —
+  see `METAL-13`/`METAL-14`).
+- Basic cull/fill/depth/scissor/viewport/depth-bias state plumbing (`ApplyBlendState` is a
+  complete no-op; stencil-op/two-sided-stencil fields are accepted but ignored — see `METAL-6`
+  through `METAL-11`).
 - Native SpriteBatch path with texture sampling, source/destination rectangles, tint, rotation,
-  origin and flip effects.
+  origin and flip effects (no `SetTransformMatrix`, no custom effect, no real per-`BlendState`
+  blending yet — see Phase 19).
+- Per-slot sampler state with filter/address/anisotropy, backed by a real `MTLSamplerState` cache
+  (🟨 landed 2026-07-19, not yet hardware-verified — `METAL-1`/`METAL-2`).
+- Honest `SupportsCapability()` for the 3 capabilities this backend does not yet have (🟨 landed
+  2026-07-19, not yet hardware-verified — `METAL-197`).
 - Metal debug signposts via `insertDebugSignpost`.
 - Dedicated macOS GitHub Actions compile job.
 
-## Required next parity work
+## Required next parity work — now tracked as phased tasks below
 
-The first implementation is intentionally native but is not yet feature-complete with CNA's mature
-Vulkan/WebGPU/SDL_GPU backends. Before calling METAL production-complete, implement and validate:
+The original 20-item sketch is preserved here only as a cross-reference into the detailed phases
+that replace it; do not re-derive scope from this table, use the phases:
 
-1. Correct pipeline-state cache keyed by the full CNA blend/depth-stencil/rasterizer state.
-2. Exact XNA enum-to-Metal mappings for Blend/BlendFunction/CompareFunction/StencilOperation,
-   TextureFilter and TextureAddressMode.
-3. Vertex-descriptor cache driven by CNA `VertexDeclaration`, not fixed stride assumptions.
-4. All BasicEffect shader variants including vertex-color, texture, fog and all lighting modes.
-5. AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect and SkinnedEffect parity.
-6. CNA NOXNA PBR and instancing paths, including normal maps and skinned PBR.
-7. RenderTarget2D, RenderTargetCube, MRT, MSAA resolve and mip generation.
-8. TextureCube and Texture3D including SetData/GetData and mip levels.
-9. Backbuffer, texture and render-target GPU readback via `MTLBlitCommandEncoder`.
-10. Occlusion queries using Metal visibility result buffers.
-11. Custom ShaderEffect support with a defined MSL source contract or a cross-compiler pipeline.
-12. Sampler cache and anisotropic filtering.
-13. Accurate virtual-resolution/letterbox coordinate transforms.
-14. Runtime resize, fullscreen and drawableSize handling including Retina scaling.
-15. Frame pacing/presentation policy for CNA swapInterval semantics.
-16. Resource lifetime and command-buffer synchronization audit.
-17. Argument buffers / bindless-oriented NOXNA path where supported and beneficial.
-18. Indirect command buffers and GPU-driven rendering as optional NOXNA extensions.
-19. MetalFX integration as an optional Apple-only NOXNA upscaling path where available.
-20. Apple GPU counter capture / signpost diagnostics and Xcode GPU Frame Capture documentation.
+| Original item | Now tracked in |
+|---|---|
+| 1. Pipeline-state cache keyed by blend/depth-stencil/rasterizer | Phase 2 |
+| 2. Exact XNA enum → Metal mappings | Phase 1 |
+| 3. Vertex-descriptor cache from `VertexDeclaration` | Phase 2 |
+| 4. All BasicEffect shader variants | Phase 3 |
+| 5. AlphaTestEffect/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect | Phases 4–7 |
+| 6. NOXNA PBR and instancing paths | Phases 8–9 |
+| 7. RenderTarget2D/RenderTargetCube/MRT/MSAA/mip | Phase 10 |
+| 8. TextureCube and Texture3D | Phase 11 |
+| 9. GPU readback | Phase 12 |
+| 10. Occlusion queries | Phase 13 |
+| 11. Custom ShaderEffect / MSL contract | Phase 14 |
+| 12. Sampler cache and anisotropic filtering | Phase 1 — **partially landed**, see above |
+| 13. Virtual-resolution/letterbox transforms | Phase 15 |
+| 14. Runtime resize/fullscreen/Retina | Phase 16 |
+| 15. Frame pacing/presentation policy | Phase 17 |
+| 16. Resource lifetime/command-buffer sync audit | Phase 18 |
+| 17. Argument buffers / bindless NOXNA | Phase 21 |
+| 18. Indirect command buffers / GPU-driven NOXNA | Phase 22 |
+| 19. MetalFX NOXNA upscaling | Phase 23 |
+| 20. GPU counter capture / Xcode Frame Capture docs | Phase 24 |
+| *(new)* SpriteBatch full parity | Phase 19 |
+| *(new)* `SupportsCapability` accuracy | Phase 20 — **partially landed**, see above |
+| *(new)* Testing infrastructure | Phase 25 |
+| *(new)* CI / tooling | Phase 26 |
+| *(new)* Documentation | Phase 27 |
+| *(new)* Cross-backend pixel parity | Phase 28 |
+| *(new)* iOS / tvOS platform scope | Phase 29 |
+| *(new)* Additional NOXNA opportunities found during this audit | Phase 30 |
+
+---
+
+## Phase 1 — Exact enum mappings and state-cache correctness (METAL-1 – METAL-20)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-1 | `ApplySamplerState(slot,filter,addressU,addressV,maxAnisotropy)` + `Impl::samplerFor()` cache (`TextureFilter`→min/mag/mip, `TextureAddressMode`→address mode, `Anisotropic`→`maxAnisotropy`), wired into `drawMetal3D` texture unit 0 | 🟨 |
+| METAL-2 | Wire the same cache into `MetalSpriteBatch::Draw()` via a new `SetSamplerAddressMode()` override (previously `filter_` was set but never read, and address mode had no override at all) | 🟨 |
+| METAL-3 | Extend sampler-slot consultation beyond unit 0 in `drawMetal3D` — needed once DualTextureEffect (Phase 5, unit 1) / EnvironmentMapEffect (Phase 6) / PBR (Phase 8, up to 4 map units) land | ⬜ |
+| METAL-4 | Audit `TextureFilter::Anisotropic` mapping (min/mag/mip = Linear + `maxAnisotropy`) against real Apple GPU behavior — no surprising clamp/driver quirk | ⬜ |
+| METAL-5 | `CullMode`→`MTLCullMode` + `MTLWinding` audit: current code (`c==1?Front:(c==2?Back:None)`) never calls `setFrontFacingWinding:`, relying on Metal's default winding — cross-check against `VulkanGraphicsBackend`'s tested `VkFrontFace`/`VkCullModeFlags` mapping and set winding explicitly instead of assuming a default | ⬜ |
+| METAL-6 | `Blend`/`BlendFunction`→`MTLBlendFactor`/`MTLBlendOperation` full table (Zero/One/SourceColor/InverseSourceColor/SourceAlpha/InverseSourceAlpha/DestinationAlpha/InverseDestinationAlpha/DestinationColor/InverseDestinationColor/SourceAlphaSaturation/BlendFactor/InverseBlendFactor; Add/Subtract/ReverseSubtract/Max/Min) — `ApplyBlendState` is currently a complete no-op | ⬜ |
+| METAL-7 | `CompareFunction`→`MTLCompareFunction` full table (Always/Never/Less/LessEqual/Equal/GreaterEqual/Greater/NotEqual) — `rebuildDepthState()` currently hardcodes only LessEqual/Always, ignoring the real `depthFunc` parameter | ⬜ |
+| METAL-8 | `StencilOperation`→`MTLStencilOperation` full table (Keep/Zero/Replace/Increment/Decrement/IncrementSaturation/DecrementSaturation/Invert) — no stencil-op plumbing exists at all today, only a depth compare function and reference value | ⬜ |
+| METAL-9 | Wire the real front-face stencil test (`stencilEnable`/`stencilFunc`/`stencilPass`/`stencilFail`/`stencilDepthFail`/`stencilMask`/`stencilWriteMask`) into `MTLDepthStencilDescriptor.frontFaceStencil`, currently entirely ignored by `ApplyDepthStencilState` | ⬜ |
+| METAL-10 | Wire two-sided stencil (`twoSidedStencilMode`/`ccwStencilFunc`/`ccwStencilPass`/`ccwStencilFail`/`ccwStencilDepthFail`) into `MTLDepthStencilDescriptor.backFaceStencil` | ⬜ |
+| METAL-11 | `SetBlendFactor(r,g,b,a)` via `[encoder setBlendColor:...]` — currently unimplemented (base no-op) | ⬜ |
+| METAL-12 | `PrimitiveType`→`MTLPrimitiveType`: add the missing `PointList` case (currently falls through `metalPrimitive()`'s default to `Triangle`, silently wrong) | ⬜ |
+| METAL-13 | `primitiveVertexCount()`: fix the `PointList` case (currently falls to default `count*3`; should be `count`) | ⬜ |
+| METAL-14 | `VertexElementFormat`→`MTLVertexFormat` full table (Single/Vector2/Vector3/Vector4/Color/Byte4/Short2/Short4/NormalizedShort2/NormalizedShort4/HalfVector2/HalfVector4) — today only 3 hand-picked fixed vertex descriptors exist, no general element-format mapping | ⬜ |
+| METAL-15 | `SurfaceFormat`→`MTLPixelFormat` table (Color/Bgr565/Bgra5551/Bgra4444/Dxt1/Dxt3/Dxt5/NormalizedByte2/NormalizedByte4/Rgba1010102/Rg32/Rgba64/Alpha8/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable) — every texture is currently hardcoded `RGBA8Unorm` regardless of `ImageData`'s real format | ⬜ |
+| METAL-16 | `DepthFormat`→`MTLPixelFormat` table (None/Depth16/Depth24/Depth24Stencil8) — backbuffer currently always allocates `Depth32Float_Stencil8` regardless of what `PresentationParameters` requested | ⬜ |
+| METAL-17 | Query `MTLDevice.supportsBCTextureCompression` and document the real, device-dependent DXT/BC boundary (no native support on Apple Silicon without emulation; yes on Intel Macs) rather than assuming universal support | ⬜ |
+| METAL-18 | Centralize every mapping above into one shared location so Phase 2's pipeline cache and Phase 10's render-target/format work reuse one source of truth instead of duplicating switch statements | ⬜ |
+| METAL-19 | Guard against silent enum-reordering regressions (a compile-time or `GraphicsBackendCompileDefinitionsTest`-style check that these ordinal assumptions still match the real `.hpp` files) | ⬜ |
+| METAL-20 | `MTLSamplerDescriptor.maxAnisotropy` valid-range audit (clamped 1–16 in `samplerFor()` today) — confirm this matches `TextureFilter`/`SamplerState.MaxAnisotropy`'s real XNA range | ⬜ |
+
+## Phase 2 — Pipeline-state cache and generic `VertexDeclaration`-driven vertex descriptor (METAL-21 – METAL-34)
+
+Metal bakes the shader pair, vertex descriptor, blend equation, and attachment pixel formats into
+`MTLRenderPipelineState` at creation time — unlike depth-stencil/cull/fill/viewport/scissor, which
+are genuinely dynamic encoder state already correctly handled. This phase is the real answer to
+"pipeline-state cache keyed by the full CNA blend/depth-stencil/rasterizer state": only the *baked*
+subset (shader variant, vertex layout, blend, attachment formats) needs a cache; the dynamic subset
+already works and must not be redesigned by mistake.
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-21 | Written classification of which CNA render state is Metal *pipeline* state vs. *encoder* state — drives every task below, must be correct once, not re-derived per task | ⬜ |
+| METAL-22 | `struct MetalPipelineKey` (shader variant + vertex layout hash + blend fields + attachment pixel formats) with hash/equality for `std::unordered_map` | ⬜ |
+| METAL-23 | Replace the 5 fixed named pipeline fields (`pipe3Color`/`pipe3Tex20`/`pipe3ColorTex24`/`pipe3NormalTex32`/`pipe2`) with `std::unordered_map<MetalPipelineKey, id<MTLRenderPipelineState>>` + `getOrCreatePipeline(key)` | ⬜ |
+| METAL-24 | Extend `makePipeline()` to accept full blend-attachment fields driven by `METAL-6`'s table, instead of the currently hardcoded straight-alpha blend baked into every pipeline | ⬜ |
+| METAL-25 | Release-on-destruction for the new pipeline cache (mirrors the sampler-cache destructor pattern added in `METAL-1`) | ⬜ |
+| METAL-26 | `SetVertexDeclaration(const std::vector<VertexElement>&)` override on `MetalVertexBuffer` (the `IVertexBufferBackend` contract already documents this as Task 1080's generic-layout hook) | ⬜ |
+| METAL-27 | Build a generic `MTLVertexDescriptor` from a `VertexElement` list via `METAL-14`'s format table — replaces the 4 hand-written `vd16`/`vd20`/`vd24`/`vd32` descriptors with a path that also covers strides 28/36/40/44/48/52/56/68 once Phases 5–8 need them | ⬜ |
+| METAL-28 | Fallback: when `SetVertexDeclaration` was never called, keep the existing stride-based inference for the 4 strides that already work — no regression | ⬜ |
+| METAL-29 | `selectPipelineKey(stride, elements, GpuDrawParams)` dispatcher replicating `EasyGLGraphicsBackend::SelectProgram()`'s exact precedence (pbr+skinned → pbr → skinned(±vertexlit) → envMapping → dualTexture(stride-24 colored variant) → stride switch 20/24/32(±vertexlit) → default colored) | ⬜ |
+| METAL-30 | Regression-proof: every existing stride-16/20/24/32 path must select byte-identical pipelines before/after the cache rewrite — a Linux-side manual trace against the current 5-pipeline logic, ahead of any macOS build | ⬜ |
+| METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ⬜ |
+| METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ |
+| METAL-33 | Document the expected cache size/no-eviction-needed-for-v1 assumption (mirrors EasyGL's own per-field `Prog3D` bound-variant assumption); flag unbounded-growth as a NOXNA follow-up only if a real pathological case appears | ⬜ |
+| METAL-34 | Extract `MetalPipelineKey`'s hash/equality into an `#ifdef __OBJC__`-free plain-C++ header so it can be exercised by a normal GoogleTest binary **without an Apple toolchain** — the one piece of Phase 2 genuinely build-verifiable on this Linux machine today | ⬜ |
+
+## Phase 3 — BasicEffect full shader parity (METAL-35 – METAL-50)
+
+Reference implementations already shipped and tested: `EasyGLGraphicsBackend::EnsureColored3DProgram`/
+`EnsureTextured3DProgram`/`EnsureColoredTextured3DProgram`/`EnsureLit3DProgram`/
+`EnsureLit3DVertexLitProgram`, and `GpuDrawParams`' fog/lighting/specular fields.
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-35 | `colored3d.metal`: honor `diffuseColor`/`vertexColorEnabled` (fragment shader currently just returns the raw vertex color, ignoring both fields) | ⬜ |
+| METAL-36 | `textured3d.metal`: multiply by `diffuseColor` (currently hardcodes `color=(1,1,1,1)`, i.e. `DiffuseColor` has zero effect) | ⬜ |
+| METAL-37 | `colortex3d.metal`: same `diffuseColor` multiply for the vertex-color+texture combined path | ⬜ |
+| METAL-38 | Per-pixel lit shader (`lit_textured3d.metal`, stride 32): port FNA's `Lighting.fxh`/`ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive) — direct MSL port from `VulkanGraphicsBackend`'s already-shipped GLSL or `EnsureLit3DProgram()`, not new design | ⬜ |
+| METAL-39 | Per-vertex (Gouraud) lit shader (`lit_textured3d_vertexlit.metal`), selected when `lightingEnabled && !preferPerPixelLighting` (XNA's real default, Task 1102) — Metal currently has **no** lighting shader of either kind | ⬜ |
+| METAL-40 | Normal matrix (`inverse(world3x3)`, no shader-side transpose given this codebase's column-major GPU convention) computed CPU-side, cross-verified against `BgfxGraphicsBackend::ComputeNormalMatrix3x3` | ⬜ |
+| METAL-41 | Safe-normalize guard for a disabled/zero-direction light — port the `select()`-based zero-vector guard `WebGPUGraphicsBackend`'s `lit_textured3d.wgsl` needed, MSL equivalent | ⬜ |
+| METAL-42 | Fog: `fogEnabled`/`fogColor`/`fogStart`/`fogEnd` plumbing + eye-space-Z linear blend in every textured/lit fragment variant — zero fog support exists today | ⬜ |
+| METAL-43 | Specular: `specularColor`/`specularPower` Blinn-Phong term using `eyePositionWorld`, applied once at material level | ⬜ |
+| METAL-44 | Emissive: `emissiveColor` additive term after the ambient/light-sum multiply, matching CNA's ambient-folded-into-multiply convention (documented on the field itself) | ⬜ |
+| METAL-45 | Audit whether a `oneLight`-only fast-path shader variant is worth adding (EasyGL/Vulkan precedent check) or whether the general 3-light path is sufficient since disabled lights are already zeroed | ⬜ |
+| METAL-46 | Extend the single `U3D{float4x4 wvp}` uniform to a full `BasicEffectUniforms` struct (world matrix, ambient, 3 lights' dir/diffuse/specular, material diffuse/specular/emissive, specular power, fog, eye position), 16-byte-aligned | ⬜ |
+| METAL-47 | `BindDrawParams()`-equivalent Metal-side function filling `BasicEffectUniforms` from `GpuDrawParams`, field-for-field matching `EasyGLGraphicsBackend::BindDrawParams()` | ⬜ |
+| METAL-48 | `VertexColorEnabled=false` path must ignore the vertex color attribute even when physically present in the buffer — verify against FNA's exact semantics | ⬜ |
+| METAL-49 | Regression tests, one axis at a time: texture on/off, vertex-color on/off, fog on/off, lighting off/vertex/pixel, specular zero/non-zero, emissive zero/non-zero — same coverage `docs/basiceffect-support.md` tracks for other backends | ⬜ |
+| METAL-50 | Add a `Metal` column to `docs/basiceffect-support.md` (currently absent) | ⬜ |
+
+## Phase 4 — AlphaTestEffect (METAL-51 – METAL-57)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-51 | `alpha_test3d.metal` fragment `discard_fragment()` using `alphaTest[4]={refVal,tolerance,passWeight,failWeight}`, porting the exact formula already documented on `GpuDrawParams::alphaTest` and shipped in `VulkanGraphicsBackend`/`WebGPUGraphicsBackend` | ⬜ |
+| METAL-52 | Stride 20 (`VertexPositionTexture`) and stride 24 (`VertexPositionColorTexture`) variants, one shared vertex shader where position+UV suffices (EasyGL/WebGPU precedent) | ⬜ |
+| METAL-53 | Stride 32 (`VertexPositionNormalTexture`) variant — normal attribute unused, no lighting in this effect | ⬜ |
+| METAL-54 | Confirm whether Metal needs the `isEqNe` real-XNA-shader-variant divergence tracking (`plan_dx9.md` D9-81) the way D3D9 does, or stays in the "not fixed outside D3D9" bucket every other backend is already in | ⬜ |
+| METAL-55 | Dispatch: replicate `EasyGLGraphicsBackend::SelectProgram()`'s exact "default `{0,0,1,1}` = always-pass = skip the alpha-test shader" selection signal precisely | ⬜ |
+| METAL-56 | `CTest`: `Metal_AlphaTest` — pass/fail/tolerance-boundary cases | ⬜ |
+| METAL-57 | Add a `Metal` column to `docs/alphatesteffect-support.md` | ⬜ |
+
+## Phase 5 — DualTextureEffect (METAL-58 – METAL-63)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-58 | `dual_texture3d.metal` (stride 20, colorless) — second sampler/texture (`texture1`, unit 1) blended with `texture0` per FNA's `DualTextureEffect.fx` | ⬜ |
+| METAL-59 | `dual_textured_colored3d.metal` (stride 24, vertex-color-aware) — EasyGL Task 889's exact stride-24-needs-its-own-program finding, replicated not merged | ⬜ |
+| METAL-60 | Wire `ApplySamplerState(1,...)` (`METAL-3`) so `texture1` gets its own independent filter/address mode, matching real XNA `DualTextureEffect.Texture2` semantics | ⬜ |
+| METAL-61 | Dispatch: `params.dualTexture` branch checked before the plain stride switch, after `envMapping`, matching EasyGL's exact precedence | ⬜ |
+| METAL-62 | `CTest`: `Metal_DualTexture` — two distinct textures visibly blend, probe-pixel-verified | ⬜ |
+| METAL-63 | Add a `Metal` column to `docs/dualtextureeffect-support.md` | ⬜ |
+
+## Phase 6 — EnvironmentMapEffect (METAL-64 – METAL-71)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-64 | `env_mapped3d.metal` (stride 32) — reflection vector from `eyePositionWorld`/normal/world position, sampling `envMap` as a `texturecube<float>` | ⬜ |
+| METAL-65 | Bind `ITextureCubeBackend`'s underlying cube `id<MTLTexture>` to the shader's `texturecube<float>` argument — **blocked on Phase 11** (no cube-texture creation exists in Metal yet) | ⬜ |
+| METAL-66 | Flat env-map blend (`envMapAmount`, constant factor) | ⬜ |
+| METAL-67 | Fresnel-weighted env-map blend (`fresnelEnabled`/`fresnelFactor`), ported from the already-shipped WebGPU/Vulkan formula | ⬜ |
+| METAL-68 | `envMapSpecular` tint and `specularEnabled` real-shader-variant flag (D9-81 finding #4) — same "known, not fixed outside D3D9" bucket as `METAL-54` | ⬜ |
+| METAL-69 | Dispatch: `params.envMapping` checked before `dualTexture`, matching EasyGL's exact precedence | ⬜ |
+| METAL-70 | `CTest`: `Metal_EnvironmentMap` — flat and Fresnel-weighted variants, reflection-angle-dependent probe pixel | ⬜ |
+| METAL-71 | Add a `Metal` column to `docs/environmentmapeffect-support.md` | ⬜ |
+
+## Phase 7 — SkinnedEffect (METAL-72 – METAL-80)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-72 | Skinned vertex layout: stride 52 (no vertex color) and stride 56 (with vertex color, per `WebGPUGraphicsBackend::GetOrCreatePipelineSkinned3D`'s `hasVertexColor=(stride==56)` precedent) | ⬜ |
+| METAL-73 | `boneTransforms[72*16]`/`boneCount` uniform — 4,608 floats (18KB) **exceeds** `setVertexBytes:`'s 4KB inline limit; must be a real `MTLBuffer`, not the inline path every other uniform in this file currently uses — a concrete, easy-to-get-silently-wrong detail called out explicitly | ⬜ |
+| METAL-74 | `weightsPerVertex` (1/2/4) — real XNA `Skin(vin, boneCount)` only sums the first N pairs (Task 895); the MSL vertex shader must branch on this, not always sum all 4 | ⬜ |
+| METAL-75 | Per-pixel-lit skinned variant (`EnsureSkinnedProgram()` equivalent) | ⬜ |
+| METAL-76 | Per-vertex-lit skinned variant (`EnsureSkinnedVertexLitProgram()` equivalent), same `preferPerPixelLighting` XNA-default logic as BasicEffect (Task 1102b) | ⬜ |
+| METAL-77 | Confirm skinned normals are transformed by each bone's own 3×3, not the single mesh-level normal matrix `METAL-40` computes for unskinned draws | ⬜ |
+| METAL-78 | Dispatch: `params.skinned` checked before `envMapping`/`dualTexture`, combined with `params.pbr` for the skinned-PBR case (Phase 8) | ⬜ |
+| METAL-79 | `CTest`: `Metal_Skinned` — a 2-bone rig with known transforms, probe-vertex-position-dependent pixel check | ⬜ |
+| METAL-80 | Add a `Metal` column to `docs/skinnedeffect-support.md` | ⬜ |
+
+## Phase 8 — NOXNA PBR / SkinnedPbr (METAL-81 – METAL-90)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-81 | `pbr3d.metal` (stride 48, unskinned) — metallic-roughness Cook-Torrance BRDF, ported from `EasyGLGraphicsBackend::EnsurePbrProgram()`/Vulkan's shipped GLSL (`plan_cnj.md` CNB-58, Phase 13A) | ⬜ |
+| METAL-82 | `pbr_skinned3d.metal` (stride 68) — same BRDF, combined with Phase 7's skinned vertex path | ⬜ |
+| METAL-83 | `pbrNormalMap` tangent-space perturbation — requires adding a tangent attribute not present in any current Metal vertex layout | ⬜ |
+| METAL-84 | `pbrMetallicRoughnessMap` (glTF packing: G=roughness, B=metallic) + `pbrMetallicFactor`/`pbrRoughnessFactor` fallback/multiply | ⬜ |
+| METAL-85 | `pbrEmissiveMap` sampling + constant `EmissiveFactor` fallback | ⬜ |
+| METAL-86 | `pbrOcclusionMap` sampling (R channel) darkening term | ⬜ |
+| METAL-87 | Default-white / default-flat-normal fallback textures for unbound PBR maps, mirroring `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()` exactly | ⬜ |
+| METAL-88 | Dispatch: `params.pbr && params.skinned` → PBR-skinned, `params.pbr` alone → PBR-unskinned, both checked before the plain `skinned` branch, matching EasyGL's top-of-function precedence | ⬜ |
+| METAL-89 | `CTest`: `Metal_Pbr`/`Metal_PbrSkinned` — known-material probe-pixel checks (fully metallic vs. dielectric, rough vs. smooth), same fixture as Vulkan/EasyGL's own PBR tests | ⬜ |
+| METAL-90 | Confirm whether a project-wide PBR support doc should exist (out of Metal's own scope) or `plan_cnj.md` remains the single source of truth — note the decision | ⬜ |
+
+## Phase 9 — Instancing (METAL-91 – METAL-97)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-91 | `DrawInstancedPrimitivesEx` override — currently unimplemented, inherits the base's unconditional throw | ⬜ |
+| METAL-92 | Per-instance vertex buffer (`GpuDrawParams::instanceVb`) bound at a distinct index with `stepFunction:MTLVertexStepFunctionPerInstance` | ⬜ |
+| METAL-93 | `instanceCount` plumbed into `drawIndexedPrimitives:...instanceCount:`/`drawPrimitives:...instanceCount:` | ⬜ |
+| METAL-94 | Confirm the exact per-instance vertex layout CNA's existing instancing call sites expect, rather than assuming one | ⬜ |
+| METAL-95 | `MetalPipelineKey` (`METAL-22`) must include an "is instanced" bit — instanced vs. non-instanced draws of the same shader variant need distinct vertex descriptors | ⬜ |
+| METAL-96 | `CTest`: `Metal_Instancing` — N instances at N distinct positions, N distinct probe pixels | ⬜ |
+| METAL-97 | GPU-driven/indirect instancing explicitly out of this phase's scope — see Phase 22 | ⬜ |
+
+## Phase 10 — RenderTarget2D/Cube, MRT, MSAA, mip generation (METAL-98 – METAL-119)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-98 | `CreateRenderTarget2D(w,h,depthFormat,preserveContents,mipMap,multiSampleCount)` — currently returns `nullptr` (base default); confirm the exact current upstream failure mode as a baseline first | ⬜ |
+| METAL-99 | `MetalRenderTargetBackend : IRenderTargetBackend, ITextureBackend` — private `id<MTLTexture>` with `MTLTextureUsageRenderTarget \| MTLTextureUsageShaderRead` | ⬜ |
+| METAL-100 | `BindAsRenderTarget()`/`UnbindAsRenderTarget()` — swap the active `MTLRenderPassDescriptor`'s attachments, ending/starting encoders (Metal render passes are fixed-attachment for their whole encoder lifetime, unlike GL's dynamic FBO rebinding) | ⬜ |
+| METAL-101 | Honor `depthFormat` exactly per target (`METAL-16`'s table) — aim for EasyGL/Bgfx's "honor the exact requested format" tier, not Vulkan's documented "always allocate depth+stencil" simplification (Task 911/877) | ⬜ |
+| METAL-102 | `preserveContents` → `MTLLoadActionDontCare`/`MTLLoadActionLoad` on rebind, matching the shared `GraphicsDevice.cpp` contract every backend already honors identically | ⬜ |
+| METAL-103 | `mipMap` — full mip chain via `MTLBlitCommandEncoder::generateMipmapsForTexture:` on unbind, matching FNA3D's `OPENGL_ResolveTarget` auto-mip semantics (Task 336/878/906 precedent) | ⬜ |
+| METAL-104 | `multiSampleCount` — multisampled attachment resolved via the render pass's own `MTLStoreActionMultisampleResolve` (a cheaper, first-class Metal path vs. GL's separate blit) | ⬜ |
+| METAL-105 | `GetMultiSampleCount()` — real, device-queried clamp via `MTLDevice.supportsTextureSampleCount:`, matching every backend's "report the real clamped value" contract | ⬜ |
+| METAL-106 | `HasRealDepthBuffer(bool)` — confirm the default `= depthFormatWasRequested` is already correct once real depth-format honoring (`METAL-101`) lands | ⬜ |
+| METAL-107 | `SetRenderTarget2D(IRenderTargetBackend*)` — real bind/unbind dispatch, currently a no-op | ⬜ |
+| METAL-108 | `GetColorGLHandle()` — confirm the default `return 0` is correct (GL-specific, N/A on Metal) and no caller assumes nonzero means "has a render target" | ⬜ |
+| METAL-109 | `CreateRenderTargetCube(size,depthFormat,mipMap,multiSampleCount)` — `MetalRenderTargetCubeBackend : IRenderTargetCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | ⬜ |
+| METAL-110 | `BindAsRenderTargetFace(int face)` — per-face `MTLRenderPassDescriptor` color attachment using `slice:face` | ⬜ |
+| METAL-111 | `SetRenderTargetCubeFace(rt,face)` — verify the base default's composition (`rt ? rt->BindAsRenderTargetFace(face) : SetRenderTarget2D(nullptr)`) is already correct once `METAL-110`/`METAL-107` land, before writing a redundant override | ⬜ |
+| METAL-112 | `SetRenderTargets(rts[],count)` — real MRT (up to 8 simultaneous color attachments), replacing the base default's "bind only the first target" | ⬜ |
+| METAL-113 | `MetalPipelineKey` must include the *set* of attachment pixel formats, not just one, once MRT lands | ⬜ |
+| METAL-114 | `CTest`: `Metal_RenderTarget2D` — bind+clear+draw+unbind+readback (depends on Phase 12) | ⬜ |
+| METAL-115 | `CTest`: `Metal_RenderTargetCube` — per-face bind+clear+readback+independence check | ⬜ |
+| METAL-116 | `CTest`: `Metal_RenderTarget_MSAA` — device-clamped MSAA clear+resolve, pixel-verified | ⬜ |
+| METAL-117 | `CTest`: `Metal_RenderTarget_Mip` — auto-mip-on-unbind, sampled at a non-zero mip level | ⬜ |
+| METAL-118 | `CTest`: `Metal_MRT` — 2+ simultaneous targets, independent per-target clear-color proof | ⬜ |
+| METAL-119 | Add a `Metal` column to `docs/rendertarget-support.md` | ⬜ |
+
+## Phase 11 — TextureCube / Texture3D (METAL-120 – METAL-129)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-120 | `CreateTextureCube(size,mipMap,surfaceFormat)` — `MetalTextureCubeBackend : ITextureCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | ⬜ |
+| METAL-121 | `SetData(face,level,x,y,w,h,data,dataLength)` via `replaceRegion:...slice:face mipmapLevel:level` | ⬜ |
+| METAL-122 | `GetData(face,level,...)` — decide real implementation vs. deferring entirely to Phase 12's blit-based readback | ⬜ |
+| METAL-123 | `CreateTexture3D(w,h,depth,mipMap,surfaceFormat)` — `MetalTexture3DBackend : ITexture3DBackend`, `id<MTLTexture>` with `MTLTextureType3D` | ⬜ |
+| METAL-124 | `SetData(level,x,y,z,w,h,depth,data,dataLength)` via `replaceRegion:` with a full 3D `MTLRegion` | ⬜ |
+| METAL-125 | Mip levels for both cube and 3D textures, driven by `METAL-15`'s format table | ⬜ |
+| METAL-126 | Cross-reference: `METAL-65` (EnvironmentMapEffect) is blocked on this phase — do not attempt Phase 6's cube sampling before `METAL-120` lands | ⬜ |
+| METAL-127 | `CTest`: `Metal_TextureCube` — 6-face `SetData` round-trip + a real render-into-cube-face draw sampling it back | ⬜ |
+| METAL-128 | `CTest`: `Metal_Texture3D` — `SetData` round-trip + a minimal `texture3d<float>` sample-back shader | ⬜ |
+| METAL-129 | Add a `Metal` column to `docs/texture3d-texturecube-support.md` | ⬜ |
+
+## Phase 12 — GPU readback (METAL-130 – METAL-135)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-130 | `ReadBackbuffer(x,y,w,h,pixels)` — currently throws (base default); implement via `MTLBlitCommandEncoder` copy into a `MTLResourceStorageModeShared` staging buffer, `memcpy` out after `waitUntilCompleted` | ⬜ |
+| METAL-131 | Render-target/cube/3D-texture `GetData()` overrides sharing one blit-to-staging-buffer helper instead of 4 near-duplicate implementations | ⬜ |
+| METAL-132 | Confirm `x,y` are top-left in *game* (virtual/logical) coordinates per the interface doc — only meaningful once Phase 15's letterbox transform exists; note the dependency explicitly | ⬜ |
+| METAL-133 | Document that `waitUntilCompleted` on readback is an intentional correctness-over-throughput stall, matching every other backend's own readback tradeoff — not something a future perf pass should "fix" into a race | ⬜ |
+| METAL-134 | `CTest`: `Metal_Readback` — clear to a known color, read back, assert exact match (the `Software_Smoke`/`Headless_Smoke`/`Dx3_Smoke` proof pattern) | ⬜ |
+| METAL-135 | Extend `Metal_RenderTarget2D` (`METAL-114`) to actually exercise readback now that it's real | ⬜ |
+
+## Phase 13 — Occlusion queries (METAL-136 – METAL-141)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-136 | `CreateOcclusionQuery()` — currently returns `nullptr`; `MetalOcclusionQueryBackend : IOcclusionQueryBackend` using `MTLVisibilityResultBuffer` + `setVisibilityResultMode:offset:` | ⬜ |
+| METAL-137 | `Begin()`/`End()` — visibility-result-mode toggling and offset management within a shared visibility-result buffer (allocated up front, one per encoder generation) | ⬜ |
+| METAL-138 | `IsComplete()` — tied to command-buffer completion; needs a completion handler or `waitUntilCompleted`-gated flag, not a true async poll | ⬜ |
+| METAL-139 | `PixelCount()` — Metal reports a real `uint64_t` sample-passed **count**, a genuine capability advantage over EasyGL's GLES3 any-samples-passed boolean (noted on `IOcclusionQueryBackend`'s own doc comment) — worth calling out, not just matching parity | ⬜ |
+| METAL-140 | `CTest`: `Metal_OcclusionQuery` — known occluded vs. visible geometry, count comparison | ⬜ |
+| METAL-141 | Add a `Metal` column to `docs/occlusionquery-support.md`, noting the real-pixel-count advantage | ⬜ |
+
+## Phase 14 — Custom ShaderEffect / MSL contract (METAL-142 – METAL-152)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-142 | Design decision: raw MSL source via `CompileProgram(vertSrc,fragSrc)`, mirroring every other backend's existing GLSL/HLSL-source `IEffectBackend` convention | ⬜ |
+| METAL-143 | Evaluate and explicitly accept/reject a cross-compiler alternative (e.g. SPIRV-Cross GLSL/HLSL→MSL transpile, itself Linux-buildable) vs. raw-MSL-only scope — document the decision | ⬜ |
+| METAL-144 | `MetalEffectBackend : IEffectBackend` — `CompileProgram()` via `newLibraryWithSource:options:error:`, mirroring the existing `kMetalShaderSource` runtime-compile pattern | ⬜ |
+| METAL-145 | `Bind()`/`Unbind()` — set/clear the custom pipeline (built via Phase 2's generic cache) as the active shader, restoring built-in dispatch afterward | ⬜ |
+| METAL-146 | `SetUniformFloat/Int/Vec2/Vec3/Vec4/Mat4/FloatArray/Vec2Array` — MSL has no GLSL-style named-uniform reflection; pick a fixed documented buffer-layout contract or `MTLRenderPipelineReflection`-based introspection, and document the choice as this backend's MSL contract | ⬜ |
+| METAL-147 | `BindTexture`/`BindTextureCube`/`BindTexture3D` — 2D case can land immediately; cube/3D depend on Phase 11 | ⬜ |
+| METAL-148 | `customEffectBackend` (`GpuDrawParams`) — when non-null, bypass built-in shader selection and draw with the custom pipeline directly, mirroring EasyGL's Task 1079 contract exactly | ⬜ |
+| METAL-149 | `SpriteBatch.SetCustomEffect(Effect*)` — real override once `MetalEffectBackend` exists (currently base no-op) | ⬜ |
+| METAL-150 | `SupportsCapability(GraphicsCapability::CustomEffects)` flips to `true` once this phase lands — remove the `false` case added in `METAL-197` | ⬜ |
+| METAL-151 | `CTest`: `Metal_CustomEffect` — the same color-inversion custom-shader methodology D3D9/D3D11/D3D12/Vulkan/Bgfx already use | ⬜ |
+| METAL-152 | Document the MSL uniform-contract choice (`METAL-146`) — a new `docs/metal-shader-effect-contract.md`, genuinely Metal-specific with no FNA precedent to copy | ⬜ |
+
+## Phase 15 — Virtual resolution / letterbox / window↔logical transforms (METAL-153 – METAL-161)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-153 | `TransformWindowToLogical()` — currently unimplemented (base default `false`); mouse input on a letterboxed/scaled Metal window maps incorrectly today, a **real, currently-shipping input bug**, not just a graphics gap (`SdlInputBridge` depends on this) | ⬜ |
+| METAL-154 | `TransformLogicalToWindow()` — inverse transform used by `Mouse.SetPosition` | ⬜ |
+| METAL-155 | Implement/reuse the shared letterbox/overscan/stretch/native/fixed-height-dynamic-width math (`CnaPresentationMode`) every other 3D-capable backend already shares — check for an existing common helper before re-deriving formulas | ⬜ |
+| METAL-156 | Audit `GetViewportSize()`'s actual contract (currently returns virtual size with no scaling math) — confirm this is correct for its specific contract rather than assuming it's broken | ⬜ |
+| METAL-157 | **Real, currently-shipping bug**: `cna_v2d`'s NDC mapping uses raw `drawable.texture.width/height` (physical pixels), completely bypassing virtual resolution/letterboxing — sprites at "virtual" coordinates render in the wrong place/scale whenever physical ≠ virtual size | ⬜ |
+| METAL-158 | Fix `METAL-157` by deriving the 2D projection from the same letterbox viewport rectangle the 3D path and window-transform functions use | ⬜ |
+| METAL-159 | `SetPresentationMode(mode)` — currently stores the mode with zero effect (same bug class DX3-16 was caught and downgraded for); must actually branch on it once `METAL-155`/`METAL-158` land | ⬜ |
+| METAL-160 | `CTest`: `Metal_Letterbox` — virtual resolution narrower/wider than the physical window, verify sprite/3D positions match predicted letterbox math | ⬜ |
+| METAL-161 | `CTest`: `Metal_WindowToLogical` — synthetic window-coordinate inputs round-trip through `TransformWindowToLogical`/`TransformLogicalToWindow` | ⬜ |
+
+## Phase 16 — Resize / fullscreen / drawableSize / Retina (METAL-162 – METAL-167)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-162 | `CAMetalLayer.drawableSize`/`contentsScale` explicit management for HiDPI/Retina — currently unmanaged, behavior is whatever `SDL_Metal_GetLayer` defaults to, unverified | ⬜ |
+| METAL-163 | Confirm SDL resize-event plumbing reaches Metal and updates `layer.drawableSize`/depth texture correctly (`ensureFrame()` already recreates the depth texture on a size mismatch — confirm sufficiency) | ⬜ |
+| METAL-164 | Fullscreen toggle — confirm `GraphicsBackendCreateArgs::isFullScreen`/`UpdatePresentationFormatEXT` (currently not overridden) interplay with SDL's own fullscreen window management | ⬜ |
+| METAL-165 | `layer.contentsScale` correctness paired with `drawableSize` per Apple's `CAMetalLayer` guidance | ⬜ |
+| METAL-166 | Document HiDPI/Retina verification as a **physical-Mac-only** item — the macOS CI runner's virtual display cannot prove this | ⬜ |
+| METAL-167 | Update this plan's testing-strategy section once implemented, distinguishing "compiles/runs on CI" from "visually correct on a real Retina Mac" | ⬜ |
+
+## Phase 17 — Frame pacing / presentation policy (METAL-168 – METAL-172)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-168 | `swapInterval` is stored but has zero effect on `Present()` — `CAMetalLayer` has no direct interval knob; map via `layer.displaySyncEnabled` (0→`NO`, 1→`YES`) and document the honest "no true half-rate" caveat for `swapInterval=2` | ⬜ |
+| METAL-169 | `CAMetalLayer.maximumDrawableCount` (double vs. triple buffering) — currently unset (Apple default); decide whether CNA needs explicit control for cross-backend frame-pacing consistency | ⬜ |
+| METAL-170 | Audit `presentsWithTransaction`/`allowsNextDrawableTimeout` relevance — likely leave at defaults, document that this was considered | ⬜ |
+| METAL-171 | Audit whether `presentDrawable:atTime:`/scheduled/completed handlers are needed for precise frame pacing, deferring unless a concrete stutter/tear problem is found on real hardware | ⬜ |
+| METAL-172 | Document vsync/frame-pacing verification as a **physical-Mac-only manual item** (timing-sensitive, not CTest-provable) | ⬜ |
+
+## Phase 18 — Resource lifetime / command-buffer synchronization audit (METAL-173 – METAL-181)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-173 | Definitive answer (from Apple documentation, not assumption) on whether `[buffer_ release]`-then-reallocate in `MetalVertexBuffer::SetData()` is safe while the old buffer is still referenced by an in-flight command buffer from a prior frame — a correctness question, not style | ⬜ |
+| METAL-174 | Same audit for `MetalIndexBuffer::upload()`'s identical pattern | ⬜ |
+| METAL-175 | Same audit for `MetalTexture`'s in-place `replaceRegion:` calls while the texture may be bound to an in-flight command buffer | ⬜ |
+| METAL-176 | Consider (profile-driven, optional) buffer sub-allocation from a ring/pool instead of one `MTLBuffer` per `SetData()` call, for high-frequency `SpriteBatch` uploads | ⬜ |
+| METAL-177 | `SetDataWithOptions`/`SetData16WithOptions`/`SetData32WithOptions` — no override exists today (falls to the base default that ignores the hint); decide whether the current always-reallocate behavior already satisfies both `Discard`/`NoOverwrite` hints' *observable* contract, or whether a real perf-motivated distinction is worth adding | ⬜ |
+| METAL-178 | `SetContextRecoveryEnabled(bool)` — Metal has no OpenGL-style context loss on desktop macOS; confirm this should stay a documented intentional no-op | ⬜ |
+| METAL-179 | `DebugSimulateContextLoss()`/`DebugRestoreContext()` — same reasoning as `METAL-178`, document as an intentional no-op with justification | ⬜ |
+| METAL-180 | Audit whether the current one-command-buffer-per-frame model scales once render-target switches (Phase 10) force ending/starting encoders mid-frame — get this right architecturally before Phase 10 lands, not as a retrofit | ⬜ |
+| METAL-181 | Document the final command-buffer/encoder lifecycle model once `METAL-173`–`METAL-180` resolve — currently only exists as scattered `ensureFrame()`/`endFrame()`/`clear()` logic with no written model, despite being the single most safety-critical part of this backend | ⬜ |
+
+## Phase 19 — SpriteBatch full parity (METAL-182 – METAL-188)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-182 | `SetTransformMatrix(const Matrix&)` — currently unimplemented (base no-op); `cna_v2d` has no matrix uniform at all, so `SpriteBatch.Begin(transformMatrix)` has **zero effect** on Metal today | ⬜ |
+| METAL-183 | Extend `cna_v2d`/`U2D` to carry the transform matrix (check `SdlRenderer`/`Dx3`/`Canvas`'s own `SetTransformMatrix` scope for the expected fidelity) applied on top of the existing viewport-to-NDC math | ⬜ |
+| METAL-184 | Real `ApplyBlendState`-driven 2D blending — `makePipeline()` currently hardcodes straight-alpha regardless of the actual requested `BlendState`; depends on `METAL-6`/`METAL-24` | ⬜ |
+| METAL-185 | `SetSamplerFilter`/`SetSamplerAddressMode` — **already wired**, `METAL-1`/`METAL-2` | 🟨 |
+| METAL-186 | Confirm `FillMode::WireFrame` has no meaning for 2D `SpriteBatch` quads in XNA either (verify-N/A task, not new code) | ⬜ |
+| METAL-187 | `CTest`: `Metal_SpriteBatch` — identity fast path, rotation, scale, flip, source-rect crop, transform matrix, custom effect (Phase 14), all 4 blend presets (`METAL-184`) | ⬜ |
+| METAL-188 | `CTest`: `Metal_Blend` — `Opaque`/`AlphaBlend`/`Additive`/`NonPremultiplied` + a custom `BlendState`, mirroring `Dx3_Blend`'s exact-pixel methodology | ⬜ |
+
+## Phase 20 — `SupportsCapability` accuracy (METAL-189 – METAL-198)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-189 | `GraphicsCapability::ThreeD` — confirm the inherited default `true` is correct (verification task, not new code) | ⬜ |
+| METAL-190 | `GraphicsCapability::DepthStencilBuffer` — same, confirm default `true` is correct | ⬜ |
+| METAL-191 | `GraphicsCapability::MultiSampleAntiAliasing` — should become real/device-queried once Phase 10 lands (`MTLDevice.supportsTextureSampleCount:`), not a blanket `true` | ⬜ |
+| METAL-192 | `GraphicsCapability::MultipleRenderTargets` — **fixed**: was a false-positive blanket `true` (real MRT doesn't exist, Phase 10), now correctly answers `false` until `METAL-112` lands | 🟨 |
+| METAL-193 | `GraphicsCapability::AnisotropicFiltering` — should be `true` now that `METAL-1`'s sampler cache applies `maxAnisotropy`; confirm on real hardware once buildable | ⬜ |
+| METAL-194 | `GraphicsCapability::WireFrame` — confirm the already-correct `FillMode::WireFrame`→`MTLTriangleFillModeLines` mapping makes the default `true` correct | ⬜ |
+| METAL-195 | `GraphicsCapability::OcclusionQuery` — **fixed**: was a false-positive blanket `true` (`CreateOcclusionQuery()` still returns `nullptr`), now correctly answers `false` until Phase 13 lands | 🟨 |
+| METAL-196 | `GraphicsCapability::CustomEffects` — **fixed**: was a false-positive blanket `true` (`CreateEffectBackend()` still returns `nullptr`), now correctly answers `false` until Phase 14 lands | 🟨 |
+| METAL-197 | `SupportsCapability()` override added to `MetalGraphicsBackend`, covering the 3 known-wrong cases above and deferring to the (correct) base default otherwise | 🟨 |
+| METAL-198 | `CTest`: `Metal_Capabilities` — one assertion per `GraphicsCapability`, meant to be extended incrementally as each phase's real behavior lands, not written once and left stale | ⬜ |
+
+## Phase 21 — Argument buffers / bindless NOXNA (METAL-199 – METAL-204)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-199 | Evaluate Metal argument buffers (`MTLArgumentEncoder`) as a NOXNA bindless texture/sampler path for many-material scenes — a genuine Metal-specific opportunity distinct from Vulkan's descriptor indexing | ⬜ |
+| METAL-200 | Scope decision: recommend deferring until Phases 1–20 are real and hardware-verified; document explicitly rather than silently dropping the idea | ⬜ |
+| METAL-201 | If pursued: NOXNA bindless material-index draw path (`GpuDrawParams` extension or a separate NOXNA entry point) | ⬜ |
+| METAL-202 | Argument-buffer-backed texture array for `SpriteBatch` draws sharing one atlas — potential 2D-heavy perf win | ⬜ |
+| METAL-203 | A/B benchmark vs. the existing per-draw bind path, to justify the added complexity before committing | ⬜ |
+| METAL-204 | Document as `NOXNA` per `CNAHelper.hpp`'s macro convention | ⬜ |
+
+## Phase 22 — Indirect command buffers / GPU-driven NOXNA (METAL-205 – METAL-208)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-205 | Evaluate `MTLIndirectCommandBuffer` for GPU-driven instanced/batched draws, following on from Phase 9's CPU-issued instancing | ⬜ |
+| METAL-206 | Scope decision — likely deferred well past v1 parity, same framing as `METAL-200` | ⬜ |
+| METAL-207 | NOXNA API surface design — a new entry point, not a `GpuDrawParams` tweak (architecturally distinct from ordinary instancing) | ⬜ |
+| METAL-208 | Document as `NOXNA`, explicitly gated behind Phase 9 being real and tested first | ⬜ |
+
+## Phase 23 — MetalFX NOXNA upscaling (METAL-209 – METAL-214)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-209 | Evaluate `MTLFXSpatialScaler`/`MTLFXTemporalScaler` as an optional NOXNA upscaling path — Apple-only, no FNA/XNA precedent | ⬜ |
+| METAL-210 | Availability gating — macOS 13+/specific GPU families, must be a runtime-queried optional path, never a hard requirement | ⬜ |
+| METAL-211 | Spatial upscaling integration point as a NOXNA alternative presentation path alongside Phase 15/16's letterbox/stretch modes | ⬜ |
+| METAL-212 | Temporal upscaling — needs motion vectors this pipeline doesn't produce anywhere; scope as "not feasible until a motion-vector G-buffer pass exists," not a shallow API-wiring task | ⬜ |
+| METAL-213 | NOXNA API surface design + docs | ⬜ |
+| METAL-214 | Defer entirely until Phases 1–20 are hardware-verified, same priority framing as `METAL-200`/`METAL-206` | ⬜ |
+
+## Phase 24 — GPU counters / signposts / Xcode frame capture (METAL-215 – METAL-219)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-215 | Extend `SetStringMarkerEXT`'s existing `insertDebugSignpost:` to `pushDebugGroup:`/`popDebugGroup:` around logical draw batches for structured Xcode GPU Frame Capture grouping | ⬜ |
+| METAL-216 | `MTLCounterSampleBuffer` — Apple GPU hardware performance counters for optional NOXNA profiling | ⬜ |
+| METAL-217 | Document the Xcode GPU Frame Capture workflow for this backend (`MTL_CAPTURE_ENABLED`, `MTLCaptureManager`) — a real, physical-Mac-only workflow with no Linux/CI equivalent | ⬜ |
+| METAL-218 | Document `MTL_SHADER_VALIDATION`/`MTL_DEBUG_LAYER` as the macOS-side equivalent of Vulkan's validation layers; enable in the macOS CI job (Phase 26) | ⬜ |
+| METAL-219 | Explicitly note this phase has no meaningful CTest equivalent — interactive/visual tooling, not automatable | ⬜ |
+
+## Phase 25 — Testing infrastructure (METAL-220 – METAL-226)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-220 | Extend `cmake/Tests/MetalTests.cmake` from its current single `Metal_Smoke` registration to every `Metal_*` CTest named throughout this plan, one `cna_register_backend_test()` call per executable, as each phase's implementation actually lands | ⬜ |
+| METAL-221 | Shared Metal test fixture/helper (extends `PixelTestGame.hpp`, already used by `metal_smoke_test.cpp`) with common probe-pixel/readback assertions once Phase 12 lands | ⬜ |
+| METAL-222 | Audit `SDL_VIDEODRIVER`/`DISPLAY` requirements for every new Metal test — get this right from the start rather than repeating `plan_dx3.md`'s own hard-won issue #1 mistake (hardcoded `x11`/real display when a dummy driver would have worked) | ⬜ |
+| METAL-223 | Confirm the real macOS CI runner's display capabilities (GitHub-hosted macOS runners provide a real virtual display, unlike this project's Linux Xvfb sandbox) rather than assuming Linux-style constraints apply | ⬜ |
+| METAL-224 | Confirm whether the `WEBGPU-123`-style cross-backend pixel-parity harness (still open even for WebGPU) can extend to Metal once broad enough — folds into Phase 28 | ⬜ |
+| METAL-225 | Add Metal to whatever full-`CnaTests`-suite regression-count tracking this project already performs per-backend once it has enough tests to matter | ⬜ |
+| METAL-226 | Explicit "N/A, verified" note: a `ThrowNo3D`-style audit (DX3's own Phase X7) does not apply to Metal — it is a 3D-only backend, unlike DX3/SDL_Renderer/Canvas | ⬜ |
+
+## Phase 26 — CI / tooling (METAL-227 – METAL-233)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-227 | Keep `.github/workflows/metal-macos-ci.yml`'s `paths:` trigger list current as new files land (new `.mm`/`.hpp` splits, new example/test `.cpp`, new `docs/*.md`) — a living checklist, revisited at the end of each phase | ⬜ |
+| METAL-228 | Consider a second macOS CI job variant (different macOS version / Apple Silicon vs. Intel runner) once GPU-family differences (e.g. BC compression, `METAL-17`) start mattering | ⬜ |
+| METAL-229 | Add `MTL_SHADER_VALIDATION=1`/`MTL_DEBUG_LAYER=1` to the CI job (ties to `METAL-218`) | ⬜ |
+| METAL-230 | Audit CI build-time budget as the backend grows toward EasyGL's scale — revisit `--parallel 3` once compile times actually grow | ⬜ |
+| METAL-231 | Consider splitting the monolithic `.mm` into multiple translation units once file size approaches EasyGL's ~5,300-line mark (a concrete threshold, not a premature rule) | ⬜ |
+| METAL-232 | Confirm `GraphicsBackendCompileDefinitionsTest` already knows about `CNA_BACKEND_METAL` (DX3's own external review found the equivalent gap for `CNA_BACKEND_DX3`/`D3D11`/`D3D12` until fixed) | ⬜ |
+| METAL-233 | Keep `README.md`'s backend list/build instructions honest about Metal's real current capability boundary as phases land | ⬜ |
+
+## Phase 27 — Documentation (METAL-234 – METAL-238)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-234 | Create `docs/metal-backend.md` (does not exist today, unlike `docs/webgpu-backend.md`/`docs/dx3-backend.md`/`docs/d3d11-backend.md`) — the durable capability-boundary reference CLAUDE.md's WebGPU precedent points to | ⬜ |
+| METAL-235 | Add a `Metal` column to `docs/graphics-backend-feature-matrix.md` only once the feature set is broad enough for a meaningful row-by-row comparison — the doc's own header excludes Headless/Software for the identical reason; do not add prematurely with a column full of ❌ | ⬜ |
+| METAL-236 | Add Metal rows/columns to each relevant per-effect `docs/*-support.md` as its own phase lands (13 files identified: basiceffect/alphatesteffect/dualtextureeffect/environmentmapeffect/skinnedeffect/occlusionquery/rendertarget/texture3d-texturecube/sampler-state/depthstencilstate/rasterizerstate/surface-format/vertex-format-support.md) | ⬜ |
+| METAL-237 | Update `docs/coverage.md`/`docs/xna-4-api-coverage.md` if either tracks per-backend Graphics coverage at a level Metal should appear in | ⬜ |
+| METAL-238 | Hold this plan document itself to the same status-legend/correction-note discipline as `plan_dx3.md`/`plan_webgpu.md` — any future ✅ claim must cite the actual CTest name and check letters that proved it | ⬜ |
+
+## Phase 28 — Cross-backend pixel parity (METAL-239 – METAL-242)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-239 | Once Phases 1–20 are real and hardware-verified, add Metal to whatever cross-backend "same scene, compare pixels" harness exists (`WEBGPU-123` is the closest precedent, itself still open) | ⬜ |
+| METAL-240 | Design as artifact-exchange (each backend's CI job uploads rendered output, a separate step diffs) since Metal can only build/run on macOS CI, not alongside Linux-built backends in one job | ⬜ |
+| METAL-241 | Scope to a small, fixed scene set first, matching `tools/xna-oracle/`'s own checked-in-corpus precedent | ⬜ |
+| METAL-242 | Explicitly out of scope until Phases 1–20 are substantially complete — this is deliberately the final phase | ⬜ |
+
+## Phase 29 — iOS / tvOS platform scope (METAL-243 – METAL-251)
+
+`cmake/BackendSelection.cmake`'s own gate message already claims iOS/tvOS as valid Metal targets
+("METAL backend only builds when targeting macOS/iOS/tvOS"), but nothing in the previous revision of
+this plan, the CI job, or the implementation has ever addressed that claim.
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-243 | Audit whether the claim is aspirational or already true — the current `.mm` uses only generic `SDL_Metal_CreateView`/`CAMetalLayer` calls (no macOS-only API spotted), so it may already be iOS/tvOS-buildable, but `metal-macos-ci.yml` only ever targets `macos-14` | ⬜ |
+| METAL-244 | Add an iOS-targeted CMake/CI configuration as a **build-only** smoke check (no simulator/device execution required) to catch iOS-incompatible API usage early | ⬜ |
+| METAL-245 | tvOS-targeted build, same build-only scope | ⬜ |
+| METAL-246 | Confirm touch input is already fully owned by CNA's existing input/device layer (`plan_input.md`/`plan_cna_devices.md`) and needs no Metal-specific work beyond Phase 15's generic window↔logical transform | ⬜ |
+| METAL-247 | Audit iOS/tvOS `CAMetalLayer` differences from macOS (`UIView`-hosted, not `NSView`-hosted; different `backingScaleFactor`/@2x/@3x conventions) once a real iOS build exists | ⬜ |
+| METAL-248 | Note `MTLGPUFamilyApple*` vs. `MTLGPUFamilyMac*` feature-set differences (tile-based deferred rendering specifics, programmable blending, imageblocks) as an optional-optimization concern for later NOXNA work, not a correctness blocker | ⬜ |
+| METAL-249 | Confirm current App Store/TestFlight review guidelines still allow runtime shader compilation via `newLibraryWithSource:` (the mechanism `kMetalShaderSource` already relies on) on iOS, or plan a precompiled-`.metallib` fallback — a real distribution-risk item, not a code bug | ⬜ |
+| METAL-250 | Document iOS Simulator Metal feature-gap caveats vs. real devices once iOS builds exist, same "physical device for final truth" framing already applied to macOS | ⬜ |
+| METAL-251 | Document the real iOS/tvOS support boundary (build-only vs. run-verified vs. never-attempted) once `METAL-244`/`METAL-245` land — do not let the CMake gate's claim stay unverified indefinitely | ⬜ |
+
+## Phase 30 — Additional NOXNA opportunities found during this audit (METAL-252 – METAL-255)
+
+| ID | Task | Status |
+|---|---|---|
+| METAL-252 | Depth-buffer-as-shader-resource: the current backbuffer/depth texture is `MTLStorageModePrivate` with only `MTLTextureUsageRenderTarget`; add `MTLTextureUsageShaderRead` and a bind path for NOXNA post-process effects (SSAO-style, depth-based fog) that need to read scene depth — no FNA precedent, purely additive | ⬜ |
+| METAL-253 | `MTLComputePipelineState` — a NOXNA compute-shader entry point (particle simulation, a precursor to Phase 22's GPU-driven culling), explicitly optional/deferred | ⬜ |
+| METAL-254 | Audit whether `GraphicsAdapter`/`GraphicsDeviceManager` already has a NOXNA extension point for backend-specific device info (`MTLDevice.name`/`recommendedMaxWorkingSetSize`/`MTLGPUFamily`/`hasUnifiedMemory`), or whether a new accessor is needed | ⬜ |
+| METAL-255 | Multi-GPU (Mac Pro/eGPU) `MTLCopyAllDevices()` enumeration — currently always `MTLCreateSystemDefaultDevice()`; confirm whether XNA's `GraphicsAdapter.Adapters` model already has a cross-backend enumeration contract to plug into, or defer until a concrete multi-GPU need exists | ⬜ |
+
+---
 
 ## Testing strategy
 
 Real Metal execution requires Apple hardware or an Apple GPU exposed to macOS. A normal macOS guest
 under QEMU on a Linux PC does not provide a usable virtual Metal GPU, so it is not a meaningful
-replacement for real hardware testing. Use Linux for source/static checks, GitHub-hosted macOS
-runners for native Apple compilation and basic runtime smoke tests, and at least one physical Mac
-for visual correctness, GPU validation, frame capture, performance and device-specific testing.
+replacement for real hardware testing. This plan uses a 3-tier verification model, applied
+consistently across every phase above:
+
+1. **This Linux machine (Debian 13)** — source-level static work only: enum-mapping tables against
+   the real CNA `.hpp` ordinal definitions, MSL shader text authored against Apple's public,
+   stable Metal Shading Language reference, `IGraphicsBackend`-contract cross-referencing against
+   already-tested EasyGL/Vulkan/WebGPU implementations, CMake/CI/doc changes, and any logic that can
+   be extracted into a plain-C++, Apple-toolchain-free unit (`METAL-34` is the concrete example).
+   Code produced this way is marked 🟨, never ✅ — it has not been compiled here, let alone run.
+2. **GitHub-hosted macOS runners** (`metal-macos-ci.yml`, currently `macos-14`) — real Apple Clang
+   compilation, real `MTLCreateSystemDefaultDevice()` execution, and CTest pixel/behavior assertions
+   this plan's `Metal_*` tests exercise. This is where a 🟨 task becomes a candidate for ✅, gated on
+   the CTest actually passing.
+3. **A physical Mac** — required for anything this plan explicitly flags as **physical-Mac-only**:
+   HiDPI/Retina correctness (`METAL-166`), vsync/frame-pacing feel (`METAL-172`), Xcode GPU Frame
+   Capture/counter workflows (`METAL-217`/`METAL-219`), and any visual-fidelity judgment call a CTest
+   pixel-tolerance check cannot fully substitute for.
+
+No task in this plan may be marked ✅ from tier 1 alone. A task is only ✅ once it has a named,
+passing `Metal_*` CTest (tier 2) or an explicit physical-Mac verification note (tier 3) — matching
+this project's established, hard-won discipline (`plan_dx3.md`'s multiple correction notices for
+exactly this failure mode).
