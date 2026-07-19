@@ -93,14 +93,14 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`tools-audio`](manifest/tools-audio.md) | 6 | PENDING: 6 / AUDITED: 0 |
-| [`tools-avatar-asset-pipeline`](manifest/tools-avatar-asset-pipeline.md) | 2 | PENDING: 2 / AUDITED: 0 |
+| [`tools-audio`](manifest/tools-audio.md) | 6 | AUDITED: 6 / PENDING: 0 (complete) |
+| [`tools-avatar-asset-pipeline`](manifest/tools-avatar-asset-pipeline.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
 | [`tools-avatar-builder`](manifest/tools-avatar-builder.md) | 15 | PENDING: 15 / AUDITED: 0 |
-| [`tools-cna-reference`](manifest/tools-cna-reference.md) | 3 | PENDING: 3 / AUDITED: 0 |
-| [`tools-devices`](manifest/tools-devices.md) | 5 | PENDING: 5 / AUDITED: 0 |
-| [`tools-fna-reference`](manifest/tools-fna-reference.md) | 7 | PENDING: 7 / AUDITED: 0 |
-| [`tools-gltf-to-cnj`](manifest/tools-gltf-to-cnj.md) | 1 | PENDING: 1 / AUDITED: 0 |
-| [`tools-input-parity`](manifest/tools-input-parity.md) | 2 | PENDING: 2 / AUDITED: 0 |
+| [`tools-cna-reference`](manifest/tools-cna-reference.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
+| [`tools-devices`](manifest/tools-devices.md) | 5 | AUDITED: 5 / PENDING: 0 (complete) |
+| [`tools-fna-reference`](manifest/tools-fna-reference.md) | 7 | AUDITED: 7 / PENDING: 0 (complete) |
+| [`tools-gltf-to-cnj`](manifest/tools-gltf-to-cnj.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
+| [`tools-input-parity`](manifest/tools-input-parity.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
 | [`tools-net`](manifest/tools-net.md) | 2 | AUDITED: 2 / PENDING: 0 (complete) |
 | [`tools-xna-oracle`](manifest/tools-xna-oracle.md) | 42 | PENDING: 42 / AUDITED: 0 |
 
