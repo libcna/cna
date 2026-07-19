@@ -9,25 +9,51 @@ Target platforms: Linux and Windows desktop compatibility-profile drivers. The b
 - Independent `CNA_GRAPHICS_BACKEND=OPENGL1` selection and `CNA_BACKEND_OPENGL1` compile definition.
 - SDL `SDL_WINDOW_OPENGL` window integration and direct `SDL_GL_CreateContext`/swap path.
 - Direct legacy OpenGL API usage; zero EasyGL dependency.
-- RGBA8 `Texture2D` creation/update/binding.
+- RGBA8 `Texture2D` creation/update/binding, with automatic mipmap generation
+  (`glGenerateMipmap`/`GL_GENERATE_MIPMAP`/CPU box-filter fallback -- see item 6).
+- `ARB_texture_cube_map` `TextureCube` creation/update, and `EnvironmentMapEffect`'s fixed-function
+  reflection-mapping subset (see item 5).
 - Fixed-function `SpriteBatch` using textured quads, tint, source/destination rectangles, rotation, origin and sprite flipping.
-- CPU-backed vertex/index buffers with 16-bit and 32-bit indices.
+- CPU-backed vertex/index buffers with 16-bit and 32-bit indices (no GL buffer objects at all --
+  `DrawInternal`/`SpriteBatch::Draw` read straight from CPU-side data every draw call via
+  immediate-mode `glVertex3f`/`glTexCoord2f`/`glColor4f`, which also means these two resource
+  types are inherently immune to context loss, nothing to recreate).
 - Non-indexed/indexed 3D primitive rendering for triangle list/strip, line list/strip and points.
 - Known CNA vertex layouts: position+color, position+texture, position+color+texture, position+normal+texture.
 - World/View/Projection through the legacy projection/model-view matrix stacks.
 - Depth testing/writes, stencil, culling, wireframe, scissor, viewport and polygon offset.
-- Basic fixed-function texture mapping, vertex colors, one-light directional lighting, linear fog and coarse alpha testing through `GpuDrawParams`.
+- Fixed-function texture mapping (including the full 9-value XNA `TextureFilter` -> GL min/mag
+  mapping, item 6), vertex colors correctly combined with `BasicEffect`'s material
+  `DiffuseColor`/`EmissiveColor` (item 4), one-light directional lighting with real `GL_EMISSION`
+  material support, linear fog and coarse alpha testing through `GpuDrawParams`.
+- Context-loss resource recreation registry (`OpenGL1ResourceRegistry`/`IOpenGL1Recoverable`,
+  independent of EasyGL's own), wired up for `Texture2D` and `RenderTarget2D` (see item 8).
 
 ## Intentional OpenGL 1.x limitations
 - No GLSL/custom `ShaderEffect` pipeline in the strict OPENGL1 backend.
-- No PBR shaders, programmable per-pixel lighting, GPU skinning, modern environment-map shaders or arbitrary custom vertex declarations.
-- No MRT.
+- No PBR shaders, programmable per-pixel lighting, GPU skinning, modern environment-map shaders (Fresnel
+  edge-weighting/`EnvironmentMapSpecular` -- item 5), or arbitrary custom vertex declarations.
+- No MRT (`SetRenderTargets()` falls back to the shared `IGraphicsBackend` single-target default).
 - No instancing.
 - No native modern occlusion-query guarantee.
-- RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. No MSAA, no mip-chain auto-generation, no RenderTargetCube yet.
+- No `RenderTargetCube` (no `CreateRenderTargetCube()` override).
+- `TextureCube` is not wired into the context-loss registry (item 8) -- `ITextureCubeBackend` has
+  no `ShareCpuPixels()`-equivalent hook the way `ITextureBackend` does; a real context loss leaves
+  cube map content undefined until this is added.
+- RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. No MSAA.
 - `DualTextureEffect` is implemented via `ARB_multitexture`/core (>=1.3), detected at runtime (`OpenGL1Capabilities::multitexture`) with the entry points (`glActiveTexture`/`glMultiTexCoord2f`) loaded through `SDL_GL_GetProcAddress`; a strict 1.1 driver silently falls back to texture unit 0 only (`texture1` ignored, matching every other textured draw).
 - Blend equations beyond additive blending and constant blend color need later extension/version detection.
 - Anisotropic filtering requires `GL_EXT_texture_filter_anisotropic`, detected at runtime (`OpenGL1Capabilities::anisotropicFiltering`, `GraphicsCapability::AnisotropicFiltering`); silently falls back to no anisotropy (clamped to 1.0x) when the driver lacks it.
+- `GraphicsProfile.Reach`/`.HiDef` numeric ceilings (texture/cube/volume size, format whitelist,
+  MRT count) are not enforced -- matches every non-D3D9 CNA backend, per `plan_dx9.md`'s own
+  "Divergence 3" decision (item 12).
+- `ApplySamplerState`'s filter/address-mode `glTexParameteri` calls fire once per draw for every
+  sampler slot *before* the corresponding texture is bound, so they can land on the texture bound
+  from the *previous* draw call rather than the one about to be sampled (self-corrects once a
+  texture is drawn twice in a row with a stable `SamplerState`); the `slot` parameter is also
+  ignored entirely (every slot writes to whichever unit is currently active); `SpriteBatch`'s own
+  `SetSamplerAddressMode()` is stored but never applied. Pre-existing, found while implementing
+  item 6, not yet fixed -- see item 6's own entry below for the full detail.
 
 ## Next implementation phases
 1. ~~Add runtime GL version/extension discovery~~ **Done**: `OpenGL1Capabilities`/`DetectOpenGL1Capabilities()` (`OpenGL1Capabilities.hpp`/`.cpp`) query `GL_VERSION`/`GL_EXTENSIONS` directly (no loader library, no EasyGL dependency) once per context, right after `SDL_GL_MakeCurrent`, and expose version + `framebufferObject`/`multitexture`/`textureCubeMap`/`generateMipmap`/`anisotropicFiltering` flags for phases 2/3/5/6 below to consult. First real consumer wired end-to-end: `GraphicsCapability::AnisotropicFiltering` now reports the real detected value instead of a hardcoded `false`, and `ApplySamplerState()` actually sets `GL_TEXTURE_MAX_ANISOTROPY_EXT` when `TextureFilter::Anisotropic` is requested and the extension is present (verified against the real driver, including over-cap clamping and reset-to-1.0 on a non-anisotropic filter, by `OpenGL1_Anisotropic_GlState`).
