@@ -339,6 +339,22 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `drawMetal3D()`'s per-draw state application) rather than changing any actual mapping — this
     removes the risk permanently without altering current (correct) rendering behavior.
 
+15. **Phase 20 — `SupportsCapability` accuracy review** (`METAL-189`/`190`/`193`/`194` confirmed
+    correct; `METAL-191` found genuinely wrong): re-reading every `GraphicsCapability` entry against
+    this session's now much-more-complete backend surface (rather than re-trusting the answers
+    `METAL-192`/`195`/`196`/`197` established earlier in the night) found one more real false
+    positive of the exact same class: `MultiSampleAntiAliasing` was still answering the inherited
+    `true` default, but `CreateRenderTarget2D()`'s own `multiSampleCount` parameter is silently
+    ignored (see its own long-standing comment citing `METAL-103`/`104`) and the backbuffer itself is
+    never allocated above 1 sample — genuinely no MSAA support exists yet. Fixed the same way as the
+    earlier three cases: an explicit `false` case in `SupportsCapability()`, to be removed once
+    `METAL-104` (multisample resolve) actually lands. `ThreeD`/`DepthStencilBuffer`/
+    `AnisotropicFiltering`/`WireFrame` were each individually re-verified against this session's real
+    code (vertex/index buffers + 3D draws throughout; real `Depth32Float_Stencil8` on both the
+    backbuffer and every `RenderTarget2D`; `METAL-1`'s sampler cache genuinely applies
+    `maxAnisotropy`; `FillMode::WireFrame`→`MTLTriangleFillModeLines` genuinely wired) — all four
+    confirmed correct, no further code change needed for them.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -416,7 +432,10 @@ cross-backend pixel parity, iOS/tvOS). Nothing in this list has been touched.
 - Per-slot sampler state with filter/address/anisotropy, backed by a real `MTLSamplerState` cache
   (🟨 landed 2026-07-19, not yet hardware-verified — `METAL-1`/`METAL-2`).
 - Honest `SupportsCapability()` for the 3 capabilities this backend does not yet have (🟨 landed
-  2026-07-19, not yet hardware-verified — `METAL-197`).
+  2026-07-19, not yet hardware-verified — `METAL-197`), later found to have a 4th real false
+  positive (`MultiSampleAntiAliasing`) on a fresh Phase 20 review pass and fixed the same way — the
+  remaining 4 capabilities' `true` defaults individually re-verified against real code, not just
+  re-trusted (🟨 landed 2026-07-19 — `METAL-189`–`191`/`193`/`194`).
 - Metal debug signposts via `insertDebugSignpost`.
 - Dedicated macOS GitHub Actions compile job.
 
@@ -799,12 +818,12 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-189 | `GraphicsCapability::ThreeD` — confirm the inherited default `true` is correct (verification task, not new code) | ⬜ |
-| METAL-190 | `GraphicsCapability::DepthStencilBuffer` — same, confirm default `true` is correct | ⬜ |
-| METAL-191 | `GraphicsCapability::MultiSampleAntiAliasing` — should become real/device-queried once Phase 10 lands (`MTLDevice.supportsTextureSampleCount:`), not a blanket `true` | ⬜ |
+| METAL-189 | `GraphicsCapability::ThreeD` — confirm the inherited default `true` is correct (verification task, not new code) | 🟨 |
+| METAL-190 | `GraphicsCapability::DepthStencilBuffer` — same, confirm default `true` is correct | 🟨 |
+| METAL-191 | `GraphicsCapability::MultiSampleAntiAliasing` — should become real/device-queried once Phase 10 lands (`MTLDevice.supportsTextureSampleCount:`), not a blanket `true` | 🟨 (found still a false positive on this same review pass — fixed to `false` until `METAL-104` lands) |
 | METAL-192 | `GraphicsCapability::MultipleRenderTargets` — **fixed**: was a false-positive blanket `true` (real MRT doesn't exist, Phase 10), now correctly answers `false` until `METAL-112` lands | 🟨 |
-| METAL-193 | `GraphicsCapability::AnisotropicFiltering` — should be `true` now that `METAL-1`'s sampler cache applies `maxAnisotropy`; confirm on real hardware once buildable | ⬜ |
-| METAL-194 | `GraphicsCapability::WireFrame` — confirm the already-correct `FillMode::WireFrame`→`MTLTriangleFillModeLines` mapping makes the default `true` correct | ⬜ |
+| METAL-193 | `GraphicsCapability::AnisotropicFiltering` — should be `true` now that `METAL-1`'s sampler cache applies `maxAnisotropy`; confirm on real hardware once buildable | 🟨 (source-confirmed; real-hardware confirmation still needs macOS CI) |
+| METAL-194 | `GraphicsCapability::WireFrame` — confirm the already-correct `FillMode::WireFrame`→`MTLTriangleFillModeLines` mapping makes the default `true` correct | 🟨 |
 | METAL-195 | `GraphicsCapability::OcclusionQuery` — **fixed**: was a false-positive blanket `true` (`CreateOcclusionQuery()` still returns `nullptr`), now correctly answers `false` until Phase 13 lands | 🟨 |
 | METAL-196 | `GraphicsCapability::CustomEffects` — **fixed**: was a false-positive blanket `true` (`CreateEffectBackend()` still returns `nullptr`), now correctly answers `false` until Phase 14 lands | 🟨 |
 | METAL-197 | `SupportsCapability()` override added to `MetalGraphicsBackend`, covering the 3 known-wrong cases above and deferring to the (correct) base default otherwise | 🟨 |

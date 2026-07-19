@@ -2070,8 +2070,14 @@ bool MetalGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability
     // (remove the explicit `false`) as its own phase lands. OcclusionQuery flipped to real/true
     // 2026-07-19 (METAL-136-139) now that CreateOcclusionQuery() is real, not a stub.
     switch (capability) {
-        case CNA::GraphicsCapability::MultipleRenderTargets: return false; // plan_metal.md METAL-112
-        case CNA::GraphicsCapability::CustomEffects:          return false; // plan_metal.md METAL-144
+        case CNA::GraphicsCapability::MultipleRenderTargets:     return false; // plan_metal.md METAL-112
+        case CNA::GraphicsCapability::CustomEffects:              return false; // plan_metal.md METAL-144
+        // plan_metal.md METAL-191: CreateRenderTarget2D() silently ignores its multiSampleCount
+        // parameter (METAL-103/104 still open, see the comment right above that function) -- the
+        // backbuffer itself is also never allocated with a sample count above 1. A blanket `true`
+        // here would be the same class of false-positive METAL-192/195/196 already fixed for MRT/
+        // OcclusionQuery/CustomEffects, just not caught until this same pass reviewed Phase 20 fresh.
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing:    return false; // plan_metal.md METAL-104
         default: return true;
     }
 }
