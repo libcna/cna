@@ -1511,3 +1511,61 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   correct pattern is well understood and achievable in this codebase's own demo suite — the `NetworkSession`
   gap looks like a copy-pasted omission across the Net demo family specifically, not a project-wide habit.
   See each demo's own `.audit.md` report (`examples/demo_*/src/*.audit.md`) for the individual instances.
+
+## Per-shard notes: `microsoft-devices`
+
+- **`microsoft-devices` shard note: FNA has zero reference material here too**, the same situation as
+  `xna-net`/`xna-gamerservices` (confirmed via `find` -- no Sensor/Accelerometer/Compass/Gyroscope/Motion/
+  Vibrate files anywhere in the local FNA tree; FNA is desktop-only and never implemented WP7-specific
+  sensor/vibration APIs). All 54 files (`Accelerometer`/`Compass` + shared `SensorBase<T>` infrastructure,
+  `Gyroscope`/`Motion` + backend interfaces/diagnostics, Android-specific backends + `VibrateController` +
+  shared lifecycle primitives) were audited across three parallel passes. This is, by a wide margin, **the
+  most thoroughly self-audited subsystem found in this entire project audit to date**: nearly every
+  non-trivial design decision across all 54 files cites a specific prior task ID tied to a real,
+  previously-found-and-fixed defect from at least two prior "external audit" rounds (dated 2026-07-17/18),
+  several confirmed via actual ThreadSanitizer runs.
+- **MEDIUM finding, confirmed in both `Accelerometer` and `Compass`: `Dispose(bool disposing)` is
+  re-declared `public` in both derived classes, even though the base class (`SensorBase<T>`) correctly
+  declares it `protected`.** This breaks the standard C++/.NET `Dispose(bool)` idiom -- any external caller
+  can call e.g. `accel.Dispose(false)` directly, and each class's own `!disposing` early-return branch marks
+  the object `disposed_ = true` **without** running any real cleanup (no `Stop()`, no instance-count
+  decrement, no SDL-subsystem-hold release for `Accelerometer`; no `control_->owner` nulling for `Compass`).
+  Result: a real, externally-reachable resource leak plus a permanently-broken object (every subsequent call
+  throws `ObjectDisposedException`). See `include/Microsoft/Devices/Sensors/Accelerometer.hpp.audit.md` and
+  `Compass.hpp.audit.md` for the full failure-scenario writeup.
+  **Open follow-up, not yet resolved**: the fork that found this explicitly flagged it for cross-checking in
+  `Gyroscope`/`Motion` (assigned to a sibling fork, on the theory that all four sensor classes are designed
+  in lockstep throughout this subsystem's own comments) -- but the `Gyroscope`/`Motion` fork's own completed
+  audit did not report this pattern being present there, despite a thorough, explicitly-requested
+  thread-safety review. This is either a genuine absence (worth confirming why `Gyroscope`/`Motion` don't
+  share it, given how closely this subsystem otherwise mirrors itself across sensor types) or an
+  undetected instance that a future pass should specifically re-check by re-reading `Gyroscope.hpp`/
+  `Motion.hpp`'s own `Dispose(bool)` access-specifier placement directly.
+- **Positive, independently significant: `SensorBase<T>`'s polling-thread/event-callback design is
+  exceptionally mature** -- every mutable field shared between the game thread and a backend callback
+  thread is correctly mutex-guarded, the lock is consistently released before any event `Raise()` call
+  (avoiding reentrant-handler deadlock), and the `ClaimDisposalOnce()`/`WaitForDisposalToComplete()`/
+  `DisposalTerminalStateGuard` disposal-race design correctly closes both a double-cleanup race and a
+  "losing thread waits forever if the winning thread's cleanup throws" gap.
+- **Positive: this subsystem does NOT share the confirmed `FileDialog`/`MessageBox` mutex-scoping
+  use-after-free bug** (see "Recurring memory/resource risk patterns" above) -- specifically checked given
+  the structural similarity (a swappable backend behind a mutex): `VibrateController::Start`/`Stop`/
+  `getIsSupportedProperty`/`getDeviceNameProperty`/`StartLeftRight` all correctly hold `backendMutex_` for
+  the full duration of the `backend_->...()` call, never releasing the lock before dereferencing.
+- **Positive: `AndroidCompassMath.hpp`/`AndroidMotionMath.hpp`'s coordinate-system math was independently
+  re-derived from first principles (standard Hamilton quaternion convention) and found fully correct** --
+  no sign/axis/transpose-direction error, the same class of bug confirmed elsewhere this session in
+  `EffectParameter`'s Matrix transpose inversion (`xna-graphics` shard). `AndroidMotionMath.hpp`'s own doc
+  comment additionally, honestly flags a genuine, unfixed, out-of-scope observation:
+  `ConvertAndroidPortraitToXnaLandscape()`'s landscape remap is a reflection (determinant -1), which no
+  quaternion can represent -- correctly scoped as outside its own task's mandate rather than silently
+  absorbed or hidden.
+- **Positive: `AndroidSensorBridge.cpp`'s native-JNI-callback boundary (the deepest concurrency code in this
+  shard) was hand-traced end-to-end and found correct** -- `workerThreadId_` captured once under lock (not
+  re-derived from `get_id()`), a single-claimant pattern for concurrent `Stop()` calls, bounded waits with an
+  `abandoned_` fallback for a genuinely wedged native call, and every callback wrapped in `try/catch` to
+  prevent `std::terminate()`.
+- No other MEDIUM+ findings across the shard's remaining 52 files -- everything else (readings, event-args,
+  exceptions, enums, `DevicesShutdownCoordinator`, `SdlSubsystemMutex`, `SdlHapticVibrateBackend`,
+  `SdlSensorSubsystem`) is correct, several files notably citing specific archived MSDN page numbers to
+  justify NOXNA-extension claims rather than asserting parity without evidence.

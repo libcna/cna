@@ -63,7 +63,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 
 | Shard | Files | Status rollup |
 |---|---|---|
-| [`microsoft-devices`](manifest/microsoft-devices.md) | 54 | PENDING: 54 / AUDITED: 0 |
+| [`microsoft-devices`](manifest/microsoft-devices.md) | 54 | AUDITED: 54 / PENDING: 0 (complete) |
 
 ## Tests — Microsoft.Xna.Framework (235 files)
 
