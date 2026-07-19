@@ -355,6 +355,85 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `maxAnisotropy`; `FillMode::WireFrame`→`MTLTriangleFillModeLines` genuinely wired) — all four
     confirmed correct, no further code change needed for them.
 
+16. **Phase 18 — resource-lifetime / command-buffer synchronization audit** (`METAL-173`–`181`
+    answered; one real bug found and fixed; one real gap found and deliberately left open as
+    `METAL-256`):
+    - **`METAL-173`/`174` (`MetalVertexBuffer`/`MetalIndexBuffer`'s reallocate-on-`SetData()`
+      pattern) — safe.** Apple's Metal documentation states a command buffer automatically retains
+      every resource it references for its entire GPU execution lifetime ("Metal automatically
+      tracks resources referenced by a command buffer and keeps them alive until the command buffer
+      has finished executing"). Releasing this code's own strong reference after `SetData()`
+      reallocates does not deallocate a buffer a prior frame's still-in-flight command buffer is
+      reading — Metal's own internal retain keeps it alive until that GPU work genuinely completes.
+      Confirmed safe, no code change needed.
+    - **`METAL-175` (`MetalTexture::UpdatePixels()`/`UpdatePixelsLevel()`'s in-place
+      `replaceRegion:`) — genuinely NOT safe as written.** Unlike buffer reallocation,
+      `replaceRegion:` mutates the *same* `id<MTLTexture>` object's storage in place. Apple's own
+      Metal synchronization guidance is explicit that the app, not Metal, is responsible for not
+      modifying a resource's contents while a not-yet-completed command buffer may still read it —
+      there is no automatic protection for in-place content mutation the way there is for
+      reference-counted object lifetime. A game calling `Texture2D.SetData()` on a texture drawn in
+      a still-GPU-executing prior frame (the ordinary case in any pipelined/multi-frame-in-flight
+      game loop) risks the GPU read observing torn or partially-updated content — a real, currently
+      unmitigated hazard. **Deliberately not fixed this pass**: mirroring the buffer pattern
+      (reallocate a fresh `id<MTLTexture>` per update) is not a safe drop-in fix here, because
+      `UpdatePixels()` only ever rewrites level 0 — a texture with other, separately-uploaded mip
+      levels (via `UpdatePixelsLevel()`) would silently lose that content in the fresh, otherwise-
+      uninitialized replacement texture. A correct fix needs either a per-level blit-copy of every
+      untouched level into the new texture, or an explicit completion-handler/`MTLSharedEvent`-gated
+      update queue — real surgery I should not attempt without a compiler to verify against. Tracked
+      as the new `METAL-256` rather than silently left as part of `METAL-175`'s own now-answered
+      audit question.
+    - **`METAL-176` (buffer sub-allocation ring/pool)** — scope decision recorded: defer until
+      profiling on real hardware shows the current one-`MTLBuffer`-per-`SetData()` pattern is
+      actually a bottleneck; no code written speculatively.
+    - **`METAL-177` (`SetDataWithOptions` hint handling)** — decided the current behavior already
+      satisfies both hints' *observable* contract: `Discard` promises the old contents may be
+      thrown away (a fresh allocation trivially satisfies this — it does not need to preserve
+      anything), and `NoOverwrite` promises the caller will not write to a region still in GPU use
+      (a fresh allocation can never alias a still-in-flight buffer, so this can never be violated
+      either). A real override would only matter for a *performance* difference (recycling a
+      completed buffer instead of allocating fresh), not a correctness one — deferred alongside
+      `METAL-176` for the same profile-driven reason.
+    - **`METAL-178`/`179` (context-loss no-ops)** — confirmed intentional by checking which other
+      backends override these: only `D3D9GraphicsBackend`/`EasyGLGraphicsBackend` do, both genuinely
+      context-loss-prone APIs; Vulkan/D3D11/D3D12/WebGPU/Bgfx/SdlGpu/DX3 all inherit the same no-op
+      Metal now correctly also relies on. No code change needed.
+    - **`METAL-180` (render-target-switch scaling) — a real bug found and fixed.** The original
+      `endActiveEncoding()` unconditionally called `presentDrawable:` whenever ending an encoder with
+      a non-nil `drawable`, with no distinction between a genuine end-of-frame and a mid-frame
+      boundary (a `Clear()` call starting a fresh render pass, or `SetRenderTarget2D()` switching
+      to/from an offscreen target). Every such mid-frame boundary would present whatever partial
+      backbuffer content existed at that moment — visible tearing/flicker — and then null `drawable`,
+      so the *next* backbuffer touch that same frame fetched an entirely new drawable via
+      `nextDrawable`, meaning a single logical frame with N target switches could present and
+      re-acquire a drawable up to N+1 times instead of exactly once. Fixed by giving
+      `endActiveEncoding()` a `bool presentBackbuffer` parameter: `command` is still always committed
+      (a Metal command buffer cannot be resumed once an encoder ends), but only `endFrame()` (called
+      from the real `Present()`) passes `true` — `clear()` and every `MetalRenderTargetBackend`
+      bind/unbind/destructor call site now passes `false`, so `drawable` survives mid-frame
+      boundaries and is presented+released exactly once per game-initiated `Present()` call,
+      matching `GraphicsDevice.Present()`'s real XNA contract regardless of how many render-target
+      switches happened in between. This is exactly the "get this right architecturally before
+      Phase 10 lands, not as a retrofit" this task asked for — found only now, on a dedicated audit
+      pass, despite Phase 10 having already shipped and been self-reviewed once before.
+    - **`METAL-181` (final lifecycle model, written here)**: one `id<MTLCommandQueue>` for the
+      backend's lifetime. Within a single logical frame, zero or more `id<MTLCommandBuffer>`/
+      `id<MTLRenderCommandEncoder>` pairs may be created and ended — a fresh pair is created lazily
+      by `ensureFrame()` whenever none is active, and `endActiveEncoding(bool presentBackbuffer)` is
+      the *only* function allowed to end one (always commits; only presents+releases `drawable` when
+      `presentBackbuffer` is true). Exactly one call site passes `true`: `endFrame()`, itself only
+      reachable from the public `Present()`. Every other encoder-ending call site (`clear()` starting
+      a fresh pass, `MetalRenderTargetBackend::BindAsRenderTarget()`/`UnbindAsRenderTarget()`/its own
+      destructor) passes `false`. The backbuffer's `drawable` is acquired at most once per real frame
+      (lazily, the first time `resolveActiveAttachments()` needs it with no `RenderTarget2D` bound)
+      and persists across any number of mid-frame encoder boundaries until genuinely presented.
+      `ReadBackbuffer()` is the one documented exception: it deliberately forces an early, self-
+      contained end-of-frame (ends encoder, blits, presents, commits, waits, all as one unit) because
+      once a command buffer is committed it cannot be resumed for a later, separate `Present()` — the
+      game's own subsequent `Present()` call becomes a safe no-op via `endFrame()`'s
+      `if (!command) return;` guard rather than a double-present.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -365,11 +444,13 @@ lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownershi
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
 Phase 10 (`RenderTargetCube`,
 MRT, MSAA, mip, `GetData()`, `METAL-102`–`105`/`108`–`119`); Phase 14 (custom `ShaderEffect`, which
-Phase 9 Instancing is itself blocked on); Phase 9 itself (blocked on Phase 14); Phases 16–18 (resize/
-Retina, frame pacing, the resource-lifetime/command-buffer-sync audit — genuinely relevant now that
-render targets exist and can interleave encoder cycles with the backbuffer's); Phases 20–30 in full
-(remaining `SupportsCapability` wiring, all NOXNA extensions, testing infrastructure, CI, docs,
-cross-backend pixel parity, iOS/tvOS). Nothing in this list has been touched.
+Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
+`VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
+on Phase 14); Phases 16–17 (resize/Retina, frame pacing — Phase 18's own audit is now answered, see
+above); `METAL-256` (the real texture-update CPU/GPU-sync hazard Phase 18's audit found but did not
+fix); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases 21–30 in full (all NOXNA extensions,
+testing infrastructure, CI, docs, cross-backend pixel parity, iOS/tvOS). Nothing in this list has
+been touched.
 
 ## Implemented initial foundation
 
@@ -402,6 +483,11 @@ cross-backend pixel parity, iOS/tvOS). Nothing in this list has been touched.
   bugs found and fixed by self-review before commit (a pipeline/attachment pixel-format mismatch,
   a compile error, an incomplete-type compile error, and a silent-wrong-transform bug) (🟨 landed
   2026-07-19 — `METAL-98`–`101`/`106`/`107`; `RenderTargetCube`/MRT/MSAA/mip still open).
+- Command-buffer/encoder lifecycle formally audited and a real premature-`presentDrawable:` bug
+  fixed: mid-frame render-target switches previously presented the still-in-progress backbuffer up
+  to once per switch instead of exactly once per `Present()` (🟨 landed 2026-07-19 — `METAL-173`–
+  `181`; the texture-update CPU/GPU-sync hazard the same audit found is real but deliberately left
+  open as `METAL-256`, see its own note on why a naive fix would lose mip-level content).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -788,19 +874,20 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-171 | Audit whether `presentDrawable:atTime:`/scheduled/completed handlers are needed for precise frame pacing, deferring unless a concrete stutter/tear problem is found on real hardware | ⬜ |
 | METAL-172 | Document vsync/frame-pacing verification as a **physical-Mac-only manual item** (timing-sensitive, not CTest-provable) | ⬜ |
 
-## Phase 18 — Resource lifetime / command-buffer synchronization audit (METAL-173 – METAL-181)
+## Phase 18 — Resource lifetime / command-buffer synchronization audit (METAL-173 – METAL-181, +METAL-256)
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-173 | Definitive answer (from Apple documentation, not assumption) on whether `[buffer_ release]`-then-reallocate in `MetalVertexBuffer::SetData()` is safe while the old buffer is still referenced by an in-flight command buffer from a prior frame — a correctness question, not style | ⬜ |
-| METAL-174 | Same audit for `MetalIndexBuffer::upload()`'s identical pattern | ⬜ |
-| METAL-175 | Same audit for `MetalTexture`'s in-place `replaceRegion:` calls while the texture may be bound to an in-flight command buffer | ⬜ |
-| METAL-176 | Consider (profile-driven, optional) buffer sub-allocation from a ring/pool instead of one `MTLBuffer` per `SetData()` call, for high-frequency `SpriteBatch` uploads | ⬜ |
-| METAL-177 | `SetDataWithOptions`/`SetData16WithOptions`/`SetData32WithOptions` — no override exists today (falls to the base default that ignores the hint); decide whether the current always-reallocate behavior already satisfies both `Discard`/`NoOverwrite` hints' *observable* contract, or whether a real perf-motivated distinction is worth adding | ⬜ |
-| METAL-178 | `SetContextRecoveryEnabled(bool)` — Metal has no OpenGL-style context loss on desktop macOS; confirm this should stay a documented intentional no-op | ⬜ |
-| METAL-179 | `DebugSimulateContextLoss()`/`DebugRestoreContext()` — same reasoning as `METAL-178`, document as an intentional no-op with justification | ⬜ |
-| METAL-180 | Audit whether the current one-command-buffer-per-frame model scales once render-target switches (Phase 10) force ending/starting encoders mid-frame — get this right architecturally before Phase 10 lands, not as a retrofit | ⬜ |
-| METAL-181 | Document the final command-buffer/encoder lifecycle model once `METAL-173`–`METAL-180` resolve — currently only exists as scattered `ensureFrame()`/`endFrame()`/`clear()` logic with no written model, despite being the single most safety-critical part of this backend | ⬜ |
+| METAL-173 | Definitive answer (from Apple documentation, not assumption) on whether `[buffer_ release]`-then-reallocate in `MetalVertexBuffer::SetData()` is safe while the old buffer is still referenced by an in-flight command buffer from a prior frame — a correctness question, not style | 🟨 (answered: safe — see narrative) |
+| METAL-174 | Same audit for `MetalIndexBuffer::upload()`'s identical pattern | 🟨 (answered: safe, same reasoning) |
+| METAL-175 | Same audit for `MetalTexture`'s in-place `replaceRegion:` calls while the texture may be bound to an in-flight command buffer | 🟨 (answered: **genuinely unsafe as written** — a real, currently-unmitigated hazard; follow-up fix tracked separately as `METAL-256`, not fixed in this pass — see narrative for why) |
+| METAL-176 | Consider (profile-driven, optional) buffer sub-allocation from a ring/pool instead of one `MTLBuffer` per `SetData()` call, for high-frequency `SpriteBatch` uploads | 🟨 (scope decision recorded: defer, profile-driven only) |
+| METAL-177 | `SetDataWithOptions`/`SetData16WithOptions`/`SetData32WithOptions` — no override exists today (falls to the base default that ignores the hint); decide whether the current always-reallocate behavior already satisfies both `Discard`/`NoOverwrite` hints' *observable* contract, or whether a real perf-motivated distinction is worth adding | 🟨 (decided: already satisfies both hints observably, no override needed — see narrative) |
+| METAL-178 | `SetContextRecoveryEnabled(bool)` — Metal has no OpenGL-style context loss on desktop macOS; confirm this should stay a documented intentional no-op | 🟨 (confirmed correct, matches Vulkan/D3D11/D3D12/WebGPU/Bgfx/SdlGpu/DX3's own established precedent — only D3D9/EasyGL override it, both genuinely context-loss-prone APIs) |
+| METAL-179 | `DebugSimulateContextLoss()`/`DebugRestoreContext()` — same reasoning as `METAL-178`, document as an intentional no-op with justification | 🟨 (confirmed correct, same precedent) |
+| METAL-180 | Audit whether the current one-command-buffer-per-frame model scales once render-target switches (Phase 10) force ending/starting encoders mid-frame — get this right architecturally before Phase 10 lands, not as a retrofit | 🟨 (found and fixed a real premature-present bug — see narrative) |
+| METAL-181 | Document the final command-buffer/encoder lifecycle model once `METAL-173`–`METAL-180` resolve — currently only exists as scattered `ensureFrame()`/`endFrame()`/`clear()` logic with no written model, despite being the single most safety-critical part of this backend | 🟨 (written below; to be extracted into `docs/metal-backend.md` when `METAL-234` lands) |
+| METAL-256 | *(new, found during this audit)* Fix `MetalTexture::UpdatePixels()`/`UpdatePixelsLevel()`'s in-place `replaceRegion:` CPU/GPU synchronization hazard (`METAL-175`) — genuinely non-trivial: a naive "always reallocate the `id<MTLTexture>`" fix (mirroring the already-safe `MetalVertexBuffer`/`MetalIndexBuffer` pattern) would silently lose any *other*, already-uploaded mip level's content, since a fresh `newTextureWithDescriptor:` texture starts uninitialized and `UpdatePixels()` only ever rewrites level 0 — needs either a per-level blit-copy of untouched levels into the new texture, or an explicit GPU-completion-gated update queue; deliberately not attempted without a compiler to verify against | ⬜ |
 
 ## Phase 19 — SpriteBatch full parity (METAL-182 – METAL-188)
 

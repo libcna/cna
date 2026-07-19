@@ -1117,18 +1117,33 @@ struct MetalGraphicsBackend::Impl
     // already do that).
     bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut);
 
-    // Ends whatever encoder/command-buffer is currently active, presenting only if it really was
-    // the backbuffer (drawable != nil) -- shared by endFrame() and MetalRenderTargetBackend's own
-    // Bind/UnbindAsRenderTarget() (Metal render passes are fixed-attachment for their whole
-    // encoder lifetime, unlike GL's dynamic FBO rebinding, so switching what's being rendered to
-    // always means ending the current pass first).
-    void endActiveEncoding()
+    // Ends whatever encoder/command-buffer is currently active -- shared by endFrame() and
+    // MetalRenderTargetBackend's own Bind/UnbindAsRenderTarget() (Metal render passes are
+    // fixed-attachment for their whole encoder lifetime, unlike GL's dynamic FBO rebinding, so
+    // switching what's being rendered to always means ending the current pass first).
+    //
+    // plan_metal.md METAL-180 (Phase 18 audit): `presentBackbuffer` MUST be false for every call
+    // site except endFrame()/Present() itself. This was a real, previously-shipped bug: the
+    // original version always called `presentDrawable:` here whenever `drawable` was non-nil,
+    // which fires on *every* mid-frame encoder boundary, not just real end-of-frame -- clear()
+    // calling this to start a fresh render pass, or SetRenderTarget2D() switching to/from an
+    // offscreen target mid-frame, would each present whatever partial content was in the backbuffer
+    // drawable at that moment (visible tearing/flicker), then immediately null `drawable` so the
+    // NEXT backbuffer touch that same frame fetched a brand-new drawable via nextDrawable -- meaning
+    // a single logical frame with N target switches could call nextDrawable/present up to N+1
+    // times instead of exactly once. `command` is still always committed here (a Metal command
+    // buffer cannot be resumed once an encoder ends), but the drawable itself now survives across
+    // mid-frame boundaries and is presented+released exactly once, by endFrame() alone -- matching
+    // GraphicsDevice.Present()'s real XNA contract of presenting once per game-initiated Present()
+    // call regardless of how many render-target switches happened in between.
+    void endActiveEncoding(bool presentBackbuffer)
     {
         if (encoder) { [encoder endEncoding]; [encoder release]; encoder=nil; }
         if (command) {
-            if (drawable) [command presentDrawable:drawable];
+            if (presentBackbuffer && drawable) [command presentDrawable:drawable];
             [command commit];
-            [command release]; command=nil; drawable=nil;
+            [command release]; command=nil;
+            if (presentBackbuffer) drawable=nil;
         }
     }
 
@@ -1153,12 +1168,12 @@ struct MetalGraphicsBackend::Impl
     void endFrame()
     {
         if(!command) return;
-        endActiveEncoding();
+        endActiveEncoding(true); // real end-of-frame -- the only call site allowed to present.
     }
 
     void clear(bool color,float r,float g,float b,float a,bool depth,float dv,bool stencil,int sv)
     {
-        endActiveEncoding();
+        endActiveEncoding(false); // mid-frame boundary only -- see endActiveEncoding()'s own METAL-180 note.
         id<MTLTexture> colorTex=nil, depthTex=nil;
         if (!resolveActiveAttachments(colorTex, depthTex)) return;
         command=[queue commandBuffer]; [command retain];
@@ -1480,7 +1495,8 @@ public:
         // first, or just let it go out of scope), end the active encoding BEFORE releasing the
         // underlying textures -- otherwise Impl::encoder/command would be left referencing textures
         // about to be freed, a real use-after-free/dangling-attachment risk, not just untidy state.
-        if (owner_.currentRenderTarget==this) { owner_.endActiveEncoding(); owner_.currentRenderTarget=nullptr; }
+        // false: destruction mid-frame must never present -- see endActiveEncoding()'s METAL-180 note.
+        if (owner_.currentRenderTarget==this) { owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr; }
         [depthTexture_ release]; [colorTexture_ release];
     }
     int GetWidth() const override { return w_; }
@@ -1488,12 +1504,12 @@ public:
     SDL_Texture* GetNativeTexture() const override { return nullptr; }
     void BindAsRenderTarget() override
     {
-        owner_.endActiveEncoding();
+        owner_.endActiveEncoding(false); // mid-frame switch, never presents -- see METAL-180 note.
         owner_.currentRenderTarget=this;
     }
     void UnbindAsRenderTarget() override
     {
-        if (owner_.currentRenderTarget==this) { owner_.endActiveEncoding(); owner_.currentRenderTarget=nullptr; }
+        if (owner_.currentRenderTarget==this) { owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr; }
     }
     id<MTLTexture> colorTexture() const { return colorTexture_; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
