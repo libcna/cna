@@ -735,6 +735,45 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     anywhere, confirming touch input is architecturally independent of the graphics backend layer
     entirely (owned by CNA's shared input/device layer, exactly as this task already hypothesized).
 
+28. **`METAL-34` — the first, and only, genuine ✅ this entire plan earns tonight.** Every other
+    task in this document, however carefully self-reviewed, is honestly 🟨 (source-complete,
+    unverified) because Objective-C++/MSL literally cannot compile without a real Apple toolchain,
+    unavailable on this Linux machine. `METAL-34` is explicitly the one exception the plan itself
+    already called out: `PipelineKind`/`BlendKey`/`PipelineCacheKey`/`PipelineCacheKeyHash` are pure
+    C++ (`uint8_t`, `bool`, an `enum class`, `std::hash`) with zero Objective-C or Apple-framework
+    dependency — they only happened to live inside an `.mm` file because that's where the pipeline
+    cache that uses them lives. Extracted verbatim (no logic changes) into a new
+    `include/CNA/Internal/Backends/Metal/MetalPipelineKey.hpp`, with `MetalGraphicsBackend.mm`
+    including it and aliasing the short names back (`using PipelineKind = MetalPipelineKind;` etc.)
+    so all 43 existing call sites throughout the file — already audited clean by item 26's full-file
+    pass — needed zero changes. Wrote a real `tests/CNA/Internal/Backends/Metal/
+    MetalPipelineKeyTests.cpp` (deliberately **not** gated behind `#if defined(CNA_BACKEND_METAL)`,
+    unlike every other backend's own test files, since gating it would defeat the entire point) with
+    8 tests covering: the default `MetalBlendKey` genuinely matches `BlendState.Opaque`'s real values
+    (`Blend::One=0`/`Blend::Zero=1`/`BlendFunction::Add=0`, checked against the real enum ordinals,
+    not re-trusted from the original comment's own claim); `operator==` correctness for both
+    `MetalBlendKey` and `MetalPipelineCacheKey` (equal only when every field matches, unequal when
+    any single field differs, tested field-by-field); equal keys produce equal hashes (a hard
+    `std::unordered_map` contract requirement, not a nicety); no hash collisions across all 15 real
+    `PipelineKind` values with a shared default blend; and — the property that actually matters in
+    production — a real `std::unordered_map<PipelineCacheKey, ..., PipelineCacheKeyHash>` round trip
+    proving the cache correctly distinguishes every `PipelineKind` from every other, and correctly
+    treats the *same* shader kind bound with *two different* `BlendState`s as two genuinely separate
+    cache entries (exactly what `getOrCreatePipeline()` depends on in production — the wrong outcome
+    here would mean a re-bound `BlendState` silently reusing a pipeline baked with the *previous*
+    draw's blend factors). Initialized the `vendor/googletest` submodule (was never checked out in
+    this session's working tree), configured a real `HEADLESS`-backend build with
+    `-DCNA_BUILD_TESTS=ON`, and built the actual `CnaTests` binary end to end (SDL3/SDL3_mixer built
+    from source as part of the same configure step, ~13 minutes total). **All 8 tests pass, both via
+    direct `CnaTests --gtest_filter=...` invocation and via the officially blessed `ctest -R
+    'MetalBlendKey\|MetalPipelineCacheKey'` path (CTest #83–90, 100% pass, 1.03s total)** — a real,
+    reproducible, CI-equivalent result, not a simulation or a standalone scratch compile (an earlier,
+    faster `g++`-only compile was used first for quick iteration confidence, then superseded by this
+    full, real `CnaTests` integration build as the actual, final verification). The entire rest of
+    this plan remains honestly 🟨 — this single task is the sole genuine exception, and is marked ✅
+    only because it was actually exercised by a real compiler and a real test runner, exactly the
+    bar `METAL-238` sets for any future ✅ claim in this document.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -851,6 +890,10 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   build-only CI job exists. Found the missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap (`METAL-257`)
   also affects iOS/tvOS, not just macOS. Touch input confirmed architecturally independent of the
   graphics backend layer entirely (🟨 landed 2026-07-19 — `METAL-243`/`246`).
+- **The one genuine ✅ this entire plan earns tonight**: `MetalPipelineKey.hpp`, a plain-C++
+  extraction of the pipeline-cache key/hash types with zero Objective-C dependency, real-built and
+  real-tested via the actual `CnaTests` binary and `ctest` on this Linux machine — 8/8 tests, CTest
+  #83–90, 100% pass (✅ landed 2026-07-19 — `METAL-34`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -975,7 +1018,7 @@ already works and must not be redesigned by mistake.
 | METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ⬜ |
 | METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ |
 | METAL-33 | Document the expected cache size/no-eviction-needed-for-v1 assumption (mirrors EasyGL's own per-field `Prog3D` bound-variant assumption); flag unbounded-growth as a NOXNA follow-up only if a real pathological case appears | ⬜ |
-| METAL-34 | Extract `MetalPipelineKey`'s hash/equality into an `#ifdef __OBJC__`-free plain-C++ header so it can be exercised by a normal GoogleTest binary **without an Apple toolchain** — the one piece of Phase 2 genuinely build-verifiable on this Linux machine today | ⬜ |
+| METAL-34 | Extract `MetalPipelineKey`'s hash/equality into an `#ifdef __OBJC__`-free plain-C++ header so it can be exercised by a normal GoogleTest binary **without an Apple toolchain** — the one piece of Phase 2 genuinely build-verifiable on this Linux machine today | ✅ **real, on this Linux machine, 2026-07-19** — 8/8 new tests (`MetalBlendKey.*`/`MetalPipelineCacheKey.*`/`MetalPipelineCacheKeyHash.*`, CTest #83–90) pass under the real `CnaTests` binary (`cmake -DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON`, `cmake --build --target CnaTests`, `ctest -R 'MetalBlendKey\|MetalPipelineCacheKey'`) — the first, and only, task in this entire plan to genuinely earn this tier tonight, matching `METAL-238`'s own "cite the actual CTest name" discipline |
 
 ## Phase 3 — BasicEffect full shader parity (METAL-35 – METAL-50)
 
@@ -1415,8 +1458,12 @@ consistently across every phase above:
    the real CNA `.hpp` ordinal definitions, MSL shader text authored against Apple's public,
    stable Metal Shading Language reference, `IGraphicsBackend`-contract cross-referencing against
    already-tested EasyGL/Vulkan/WebGPU implementations, CMake/CI/doc changes, and any logic that can
-   be extracted into a plain-C++, Apple-toolchain-free unit (`METAL-34` is the concrete example).
-   Code produced this way is marked 🟨, never ✅ — it has not been compiled here, let alone run.
+   be extracted into a plain-C++, Apple-toolchain-free unit. Code produced this way is marked 🟨,
+   never ✅ — it has not been compiled here, let alone run — **with exactly one earned exception**:
+   `METAL-34` was actually extracted, built, and tested via the real `CnaTests` binary and `ctest`
+   on this Linux machine on 2026-07-19 (8/8 tests, CTest #83–90) — the one task in this whole plan
+   that genuinely reached ✅ from tier 1 alone, because unlike every other Metal task its logic has
+   zero Objective-C/Apple-framework dependency to begin with.
 2. **GitHub-hosted macOS runners** (`metal-macos-ci.yml`, currently `macos-14`) — real Apple Clang
    compilation, real `MTLCreateSystemDefaultDevice()` execution, and CTest pixel/behavior assertions
    this plan's `Metal_*` tests exercise. This is where a 🟨 task becomes a candidate for ✅, gated on
