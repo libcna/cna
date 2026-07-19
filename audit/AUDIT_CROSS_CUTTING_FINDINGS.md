@@ -1524,23 +1524,21 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   non-trivial design decision across all 54 files cites a specific prior task ID tied to a real,
   previously-found-and-fixed defect from at least two prior "external audit" rounds (dated 2026-07-17/18),
   several confirmed via actual ThreadSanitizer runs.
-- **MEDIUM finding, confirmed in both `Accelerometer` and `Compass`: `Dispose(bool disposing)` is
-  re-declared `public` in both derived classes, even though the base class (`SensorBase<T>`) correctly
-  declares it `protected`.** This breaks the standard C++/.NET `Dispose(bool)` idiom -- any external caller
-  can call e.g. `accel.Dispose(false)` directly, and each class's own `!disposing` early-return branch marks
-  the object `disposed_ = true` **without** running any real cleanup (no `Stop()`, no instance-count
-  decrement, no SDL-subsystem-hold release for `Accelerometer`; no `control_->owner` nulling for `Compass`).
-  Result: a real, externally-reachable resource leak plus a permanently-broken object (every subsequent call
-  throws `ObjectDisposedException`). See `include/Microsoft/Devices/Sensors/Accelerometer.hpp.audit.md` and
-  `Compass.hpp.audit.md` for the full failure-scenario writeup.
-  **Open follow-up, not yet resolved**: the fork that found this explicitly flagged it for cross-checking in
-  `Gyroscope`/`Motion` (assigned to a sibling fork, on the theory that all four sensor classes are designed
-  in lockstep throughout this subsystem's own comments) -- but the `Gyroscope`/`Motion` fork's own completed
-  audit did not report this pattern being present there, despite a thorough, explicitly-requested
-  thread-safety review. This is either a genuine absence (worth confirming why `Gyroscope`/`Motion` don't
-  share it, given how closely this subsystem otherwise mirrors itself across sensor types) or an
-  undetected instance that a future pass should specifically re-check by re-reading `Gyroscope.hpp`/
-  `Motion.hpp`'s own `Dispose(bool)` access-specifier placement directly.
+- **MEDIUM finding, confirmed in all four sensor classes (`Accelerometer`, `Compass`, `Gyroscope`,
+  `Motion`): `Dispose(bool disposing)` is re-declared `public` in every one of them, even though the base
+  class (`SensorBase<T>`) correctly declares it `protected`.** This breaks the standard C++/.NET
+  `Dispose(bool)` idiom -- any external caller can call e.g. `accel.Dispose(false)` directly, and each
+  class's own `!disposing` early-return branch marks the object `disposed_ = true` **without** running any
+  real cleanup (no `Stop()`, no instance-count decrement, no SDL-subsystem-hold release for
+  `Accelerometer`/`Gyroscope`; no `control_->owner` nulling for `Compass`/`Motion`). Result: a real,
+  externally-reachable resource leak plus a permanently-broken object (every subsequent call throws
+  `ObjectDisposedException`). Originally confirmed in `Accelerometer`/`Compass` by one fork; the
+  `Gyroscope`/`Motion` sibling fork's own completed audit did not flag this pattern despite a thorough
+  thread-safety review, so it was independently re-verified directly (grepping all four headers' `Dispose
+  (bool)` access-specifier placement against the base class's) and confirmed present in all four -- the
+  per-file reports for `Gyroscope.hpp`/`Motion.hpp` have been updated accordingly. See
+  `include/Microsoft/Devices/Sensors/Accelerometer.hpp.audit.md` (and the sibling `Compass`/`Gyroscope`/
+  `Motion` reports) for the full failure-scenario writeup.
 - **Positive, independently significant: `SensorBase<T>`'s polling-thread/event-callback design is
   exceptionally mature** -- every mutable field shared between the game thread and a backend callback
   thread is correctly mutex-guarded, the lock is consistently released before any event `Raise()` call

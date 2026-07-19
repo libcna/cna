@@ -51,8 +51,9 @@ without running `Stop()`, without nulling `control_->owner`, and without decreme
 `instanceCount_`).
 
 ## Cross-File Observations
-Identical finding already reported for `Accelerometer.hpp`/`Accelerometer.cpp`. Not confirmed in
-this pass whether `Gyroscope.hpp`/`Motion.hpp` share it — flagged for cross-check.
+Identical finding already reported for `Accelerometer.hpp`/`Accelerometer.cpp`, and now confirmed
+present in `Gyroscope.hpp`/`Motion.hpp` too (re-checked directly) — all four sensor classes share
+this exact override-visibility gap.
 
 ## Missing or Weak Tests
 Same gap as `Accelerometer.hpp` — a test directly exercising `Dispose(false)`'s public reachability

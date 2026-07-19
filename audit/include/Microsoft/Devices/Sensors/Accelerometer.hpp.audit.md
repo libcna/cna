@@ -71,10 +71,9 @@ permanently-broken object, not a theoretical visibility nitpick.
 `Accelerometer` and `Compass`, matching the base class.
 
 ## Cross-File Observations
-The identical pattern is present in `Compass.hpp` (see that file's own report). Not confirmed in
-this pass whether `Gyroscope.hpp`/`Motion.hpp` (audited by a sibling pass in this same shard) share
-it — worth checking, since all four sensor classes are structurally parallel and very likely
-share this exact override shape.
+The identical pattern is present in `Compass.hpp`, `Gyroscope.hpp`, and `Motion.hpp` (see each
+file's own report) — confirmed directly by re-reading all four headers' `Dispose(bool)` access
+specifier placement: all four sensor classes share this exact override-visibility gap.
 
 ## Missing or Weak Tests
 A test asserting `Dispose(false)` either isn't public API or, if it is, still performs full cleanup
