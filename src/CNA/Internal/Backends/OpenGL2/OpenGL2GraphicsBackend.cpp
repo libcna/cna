@@ -1213,21 +1213,33 @@ namespace CNA::Internal::Backends::OpenGL2
         public:
             GLuint id{};
             int w{}, h{}, d{};
+            int levelCount{1};
 
             Texture3DBackend(int width, int height, int depth, bool mipMap)
                 : w(width), h(height), d(depth)
+                , levelCount(mipMap ? CalculateRenderTargetMipLevels(width, height) : 1)
             {
                 glGenTextures(1, &id);
                 glBindTexture(GL_TEXTURE_3D, id);
-                glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, w, h, d, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                // Task (plan_opengl2.md follow-up, session 8): real FNA3D_Driver_OpenGL.c
+                // OPENGL_CreateTexture3D confirms depth halves per level (SDL_max(depth >> i, 1))
+                // exactly like width/height, even though Texture3D.cpp's own CalculateMipLevels
+                // (matching Texture3D.cs's LevelCount formula) deliberately excludes depth from the
+                // LEVEL COUNT itself -- those are two separate facts, both honored here.
+                for (int level = 0; level < levelCount; ++level)
+                {
+                    glTexImage3D(GL_TEXTURE_3D, level, GL_RGBA,
+                                std::max(1, w >> level), std::max(1, h >> level), std::max(1, d >> level),
+                                0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                }
                 glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                 glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                 glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-                // plan_opengl2.md follow-up: only level 0 is allocated -- mipMap is accepted
-                // (matching CreateTexture3D's interface signature) but not yet generated/stored.
-                (void)mipMap;
+                // Task 924 precedent (Tex/TextureCubeBackend's own identical clamp): otherwise a
+                // mip-requiring TextureFilter treats this as an incomplete mipmap chain.
+                glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, levelCount - 1);
             }
 
             ~Texture3DBackend() override { if (id) glDeleteTextures(1, &id); }
@@ -1242,14 +1254,23 @@ namespace CNA::Internal::Backends::OpenGL2
 
             void GetData(int level, int x, int y, int z, int sw, int sh, int sd, void* data, int /*dataLength*/) const override
             {
-                std::vector<uint8_t> full(static_cast<std::size_t>(w) * h * d * 4);
+                // Task (plan_opengl2.md follow-up, session 8): glGetTexImage returns THIS level's
+                // own (smaller, halved-per-level) dimensions, not level 0's -- both the buffer size
+                // and the row/slice stride math below must use the level's real dimensions, not
+                // w/h/d (which are always level 0's). Exposed by the mip-storage-allocation fix
+                // above: a level>0 read previously always returned zeroed/garbage tail bytes past
+                // the level's real (much smaller) data because the stride assumed level 0's size.
+                const int levelW = std::max(1, w >> level);
+                const int levelH = std::max(1, h >> level);
+                const int levelD = std::max(1, d >> level);
+                std::vector<uint8_t> full(static_cast<std::size_t>(levelW) * levelH * levelD * 4);
                 glBindTexture(GL_TEXTURE_3D, id);
                 glGetTexImage(GL_TEXTURE_3D, level, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
                 auto* dst = static_cast<uint8_t*>(data);
                 for (int slice = 0; slice < sd; ++slice)
                     for (int row = 0; row < sh; ++row)
                         std::memcpy(dst + (static_cast<std::size_t>(slice) * sh + row) * sw * 4,
-                                   full.data() + ((static_cast<std::size_t>(z + slice) * h + (y + row)) * w + x) * 4,
+                                   full.data() + ((static_cast<std::size_t>(z + slice) * levelH + (y + row)) * levelW + x) * 4,
                                    sw * 4);
             }
         };

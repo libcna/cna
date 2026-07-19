@@ -179,4 +179,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_texture2d_anisotropic_singlelevel examples/opengl2_texture2d_anisotropic_singlelevel_test.cpp)
     cna_register_backend_test(NAME OpenGL2_Texture2D_Anisotropic_SingleLevel COMMAND cna_test_opengl2_texture2d_anisotropic_singlelevel
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: real Texture3D mip-level GPU storage proof (Texture3DBackend was
+    # level-0-only; SetData(level>0,...) wrote via glTexSubImage3D into never-allocated storage).
+    cna_opengl2_test(cna_test_opengl2_texture3d_mip examples/opengl2_texture3d_mip_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_Texture3D_Mip COMMAND cna_test_opengl2_texture3d_mip
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
