@@ -11,9 +11,12 @@
 //   - RenderTarget2D: rebuilt as an empty FBO/color-texture/depth-renderbuffer of the same
 //     size/format -- content does NOT survive (a render target's content is GPU-produced, XNA/FNA
 //     RenderTarget2D itself does not guarantee content survives a real device reset either unless
-//     RenderTargetUsage.PreserveContents, which this backend does not implement). This test only
-//     asserts the render target remains USABLE (can still be bound and drawn into) after the
-//     simulated loss, not that its prior content survived.
+//     RenderTargetUsage.PreserveContents, which this backend does not implement). This test keeps
+//     the RT bound as the ACTIVE render target across the simulated loss (the scenario that
+//     matters -- see the check's own comment below) and proves a post-recovery draw into it
+//     actually lands on the RT itself, not silently on the backbuffer: OpenGL1GraphicsBackend
+//     must explicitly re-bind currentRt_'s rebuilt FBO after recovery, since a brand-new GL
+//     context always defaults to the backbuffer regardless of what was bound before the loss.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -30,6 +33,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -94,32 +98,48 @@ protected:
         Check(after.getRProperty() > 200 && after.getBProperty() > 200 && after.getGProperty() < 20,
               "Texture2D: content survives DebugSimulateContextLoss() (recreated from CPU shadow)");
 
-        // ---- RenderTarget2D: must remain usable (bindable/drawable) after loss --------------
+        // ---- RenderTarget2D: must remain the ACTIVE, correctly-bound target across a loss ---
+        // Deliberately keeps the RT bound WHILE the simulated loss happens (not unbound first --
+        // an earlier version of this test unbound before the loss and could not have caught the
+        // real bug below, since the at-risk code path only fires when a render target is still
+        // active at the moment of loss).
         {
             auto rt = std::make_unique<RenderTarget2D>(dev, 8, 8);
             dev.SetRenderTarget(rt.get());
-            dev.Clear(Color(0, 255, 0, 255));
+            dev.Clear(Color(0, 255, 0, 255)); // pre-loss content -- not expected to survive.
+
+            bool survivedLossWhileBound = true;
+            try { dev.GetBackend().DebugSimulateContextLoss(); }
+            catch (...) { survivedLossWhileBound = false; }
+            Check(survivedLossWhileBound,
+                  "RenderTarget2D: DebugSimulateContextLoss() does not throw while the RT is still the active target");
+
+            // The new context defaults to the backbuffer regardless of what was bound before the
+            // loss. If OpenGL1GraphicsBackend doesn't explicitly re-bind the still-current render
+            // target's rebuilt FBO after recovery, this Clear() would silently land on the
+            // backbuffer instead -- leaving the RT's own (freshly rebuilt, empty/black) content
+            // unchanged. Sampling the RT back afterward is what actually discriminates the two
+            // cases, not just "no exception was thrown".
+            dev.Clear(Color(0, 0, 255, 255));
             dev.SetRenderTarget(nullptr);
 
-            dev.GetBackend().DebugSimulateContextLoss();
-
-            // A dangling render-target handle from before the loss must not crash when bound
-            // and drawn into again -- RecreateGLResource() rebuilt an empty, usable FBO.
-            bool survivedBindAndClear = true;
-            try
-            {
-                dev.SetRenderTarget(rt.get());
-                dev.Clear(Color(0, 0, 255, 255));
-                dev.SetRenderTarget(nullptr);
-                sb.Begin();
-                sb.Draw(*rt, Rectangle(0, 0, dev.getViewportProperty().getWidthProperty(),
-                                        dev.getViewportProperty().getHeightProperty()),
-                        Color(255, 255, 255, 255));
-                sb.End();
-            }
-            catch (...) { survivedBindAndClear = false; }
-            Check(survivedBindAndClear,
-                  "RenderTarget2D: remains bindable/usable after DebugSimulateContextLoss() (rebuilt empty)");
+            // Read the RT's own FBO/color texture DIRECTLY (RenderTarget2D::GetData(), which
+            // always glReadPixels off the RT's specific fbo_ regardless of whatever is currently
+            // bound elsewhere) rather than drawing it through SpriteBatch onto the backbuffer and
+            // reading THAT -- the indirect path can't distinguish "the RT itself is blue" from
+            // "the backbuffer already happened to be blue before SpriteBatch drew anything".
+            // A GPU-only (RenderTarget2D) source only supports a full-texture GetData() read
+            // (Texture2D::GetData's own gpuOnlyContent_ fallback requires elementCount==width*
+            // height), so read all 8x8 texels and check the first one -- a solid Clear() makes
+            // every texel identical.
+            std::vector<Color> rtPixels(8 * 8, Color(0, 0, 0, 0));
+            rt->GetData(rtPixels.data(), 0, static_cast<int>(rtPixels.size()));
+            const Color& rtPixel = rtPixels[0];
+            std::printf("render target's own content after post-recovery clear: (%d,%d,%d)\n",
+                        rtPixel.getRProperty(), rtPixel.getGProperty(), rtPixel.getBProperty());
+            Check(rtPixel.getBProperty() > 200 && rtPixel.getRProperty() < 20 && rtPixel.getGProperty() < 20,
+                  "RenderTarget2D: still the active render target after recovery -- the post-recovery Clear() "
+                  "actually landed on the RT itself (blue), not silently on the backbuffer");
         }
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);

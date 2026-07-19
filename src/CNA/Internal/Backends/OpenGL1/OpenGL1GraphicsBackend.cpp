@@ -179,6 +179,14 @@ SDL_GL_MakeCurrent(window_,glContext_);
 caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);
 registry_.NotifyContextRestored();
+// The new context defaults to FBO 0 (the backbuffer) regardless of what was bound before the
+// loss -- if a RenderTarget2D was the active render target at the moment of loss, its rebuilt
+// FBO (just recreated above, via NotifyContextRestored -> OpenGL1RenderTargetBackend::
+// RecreateGLResource) needs to be explicitly re-bound, or every subsequent draw silently lands
+// on the backbuffer instead while SetViewport/SetScissorRect keep computing against the RT's
+// own dimensions (currentRt_ is still non-null) -- a viewport/scissor mismatch on top of the
+// wrong target.
+if(currentRt_)currentRt_->BindAsRenderTarget();
 std::cout<<"CNA: OpenGL1 desktop GL context recreated and all tracked resources restored"<<std::endl;
 }
 void OpenGL1GraphicsBackend::DebugRestoreContext(){DebugSimulateContextLoss();}
