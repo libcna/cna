@@ -130,7 +130,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 |---|---|---|
 | [`examples-common`](manifest/examples-common.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_2d`](manifest/examples-demo_2d.md) | 3 | PENDING: 3 / AUDITED: 0 |
-| [`examples-demo_achievement_showcase`](manifest/examples-demo_achievement_showcase.md) | 3 | PENDING: 3 / AUDITED: 0 |
+| [`examples-demo_achievement_showcase`](manifest/examples-demo_achievement_showcase.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
 | [`examples-demo_avatar`](manifest/examples-demo_avatar.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_avatar_animation_gallery`](manifest/examples-demo_avatar_animation_gallery.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_avatar_appearance_tint_studio`](manifest/examples-demo_avatar_appearance_tint_studio.md) | 3 | PENDING: 3 / AUDITED: 0 |
