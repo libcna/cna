@@ -940,6 +940,25 @@ _(pending)_
   FNA source location, so a future maintainer doesn't mistake faithful-but-surprising behavior for an
   accidental regression and "fix" it in a way that would silently diverge from FNA.
 
+- **`GameWindow::EndScreenDeviceChange` never centers or repositions the window onto the display named
+  by its `screenDeviceName` parameter, and the orientation model substitutes an unconditional
+  window-aspect-ratio heuristic for FNA's real, mobile-gated SDL-display-orientation-event mechanism.**
+  Both confirmed by direct comparison against FNA's actual SDL3 platform implementation (not just its
+  abstract `GameWindow.cs` declaration): `/rv/data/library/github.com/FNA-XNA/FNA/src/FNAPlatform/
+  SDL3_FNAPlatform.cs`, `ApplyWindowChanges` (lines 471-575, with an explicit "Window always gets
+  centered on changes, per XNA behavior" comment at line 535) and `INTERNAL_HandleOrientationChange`/
+  `INTERNAL_ConvertOrientation`/orientation-support gating (lines 237-270, 814-865), plus
+  `FNAWindow.SetSupportedOrientations` (`FNAWindow.cs` lines 159-174), which FNA deliberately makes a
+  no-op on desktop ("we can't support that reliably across multiple mobile platforms... this method is
+  essentially a no-op") where CNA's version performs real cascading-fallback state mutation instead.
+  Neither deviation is disclosed anywhere in `GameWindow.hpp`'s doc comments, and the header's own
+  `@param screenDeviceName` doc (line 158, "The name of the display adapter") describes exactly the
+  placement behavior the implementation omits. Concretely: calling `EndScreenDeviceChange` with a
+  different display's adapter name has no effect on window position in CNA, and simply resizing a
+  desktop game window narrow/tall flips `CurrentOrientation` to `Portrait` with no FNA/XNA counterpart
+  for that behavior. See `include/Microsoft/Xna/Framework/GameWindow.hpp.audit.md` and
+  `src/Microsoft/Xna/Framework/GameWindow.cpp.audit.md`.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
