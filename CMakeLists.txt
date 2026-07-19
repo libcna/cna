@@ -116,6 +116,10 @@ include(cmake/Tests/HeadlessTests.cmake)
 # SDL_VIDEODRIVER/DISPLAY environment -- like HEADLESS, this backend never needs either.
 include(cmake/Tests/SoftwareTests.cmake)
 
+# plan_stub.md: Stub (no-op) graphics backend tests. Deliberately no SDL_VIDEODRIVER/DISPLAY
+# environment -- like HEADLESS/SOFTWARE, this backend never needs either.
+include(cmake/Tests/StubTests.cmake)
+
 # plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) backend test registration.
 include(cmake/Tests/AsciiTests.cmake)
 
