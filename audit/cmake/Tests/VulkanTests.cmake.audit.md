@@ -1,9 +1,10 @@
 # Audit: cmake/Tests/VulkanTests.cmake
 
 ## Metadata
-- Source file: `cmake/Tests/VulkanTests.cmake` (946 lines; ~300 lines read directly across the
-  file's start/middle, remainder sampled — same structural pattern confirmed throughout)
-- Audit status: AUDITED (representative sampling of this large, mechanically repetitive registration file)
+- Source file: `cmake/Tests/VulkanTests.cmake` (947 lines)
+- Audit status: AUDITED (full read, all 947 lines — confirms and extends an earlier pass that
+  directly read only ~300 lines and extrapolated the remainder; the previously-unread middle/tail
+  section (roughly lines 300-947) has now been directly verified, see below for what it adds)
 - Subsystem: `build-cmake-tests` shard
 - File type: CMake module (per-backend CTest registration)
 - XNA/FNA relevance: N/A (build infrastructure — registers the Vulkan backend's CTest suite)
@@ -46,9 +47,14 @@ signature per test — the opposite of silently hiding a red CTest result.
   EasyGLTests.cmake's identical requirement, with an explicit comment cross-referencing why.
 
 ## Detailed Findings
-None new — the Task 868 blend-state gap is already a known, tracked defect; this file's role is
-to document it precisely per-test, which it does correctly and thoroughly across every affected
-registration sampled.
+None, across the full 947-line file. The previously-unread middle/tail section additionally confirms
+Task 870's stencil-testing-never-gates gap is documented with the identical per-test precision as
+Task 868's blend-state gap (Tasks 315-318: `StencilEnable`/`StencilMask`/`StencilOps`/
+`TwoSidedStencilMode` each carry a specific `NOTE:` predicting exact pass/fail per sub-check, e.g.
+"expected to FAIL Check A per Task 870 - stencil testing is completely non-functional on Vulkan").
+The file's final ~200 lines (avatar-rendering tests, MRT/SurfaceFormat verbatim reuse, SpriteBatch/
+SpriteFont/Model verbatim-reuse cohort, and the PBR/SkinnedPbr/SkinnedEffect-VertexColor golden and
+hand-derived tests) are equally well-documented and introduce no new findings.
 
 ## Cross-File Observations
 Extensive, explicitly-labeled verbatim reuse of `examples/easygl_*_test.cpp` sources — a direct,
@@ -66,6 +72,6 @@ entire `build-cmake-tests` shard of documenting a known limitation with enough p
 individual sub-check outcomes — a genuinely higher bar than simply flagging "this test may fail."
 
 ## Final Assessment
-No new findings; confirms and precisely documents the already-known Task 868 Vulkan BlendState
-hardcoding defect across 5+ test registrations, in the same honest-disclosure spirit as
-`WebGpuTests.cmake`'s `WebGPU_Msaa` finding.
+No findings, confirmed across the complete 947-line file. Precisely documents both already-known
+Task 868 (BlendState) and Task 870 (stencil) Vulkan gaps across 9+ test registrations, in the same
+honest-disclosure spirit as `WebGpuTests.cmake`'s `WebGPU_Msaa` finding.

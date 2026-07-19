@@ -1,10 +1,11 @@
 # Audit: cmake/Tests/BgfxTests.cmake
 
 ## Metadata
-- Source file: `cmake/Tests/BgfxTests.cmake` (910 lines; majority read in full, remainder sampled — see note below)
-- Audit status: AUDITED (575/910 lines read directly; remaining ~335 lines are the same
-  repetitive `cna_bgfx_test`+`cna_register_backend_test` pattern confirmed structurally consistent
-  via the read portion — no reason to expect a different pattern in the unread tail)
+- Source file: `cmake/Tests/BgfxTests.cmake` (910 lines)
+- Audit status: AUDITED (full read, all 910 lines — confirms and extends an earlier pass that
+  directly read only the first 575 lines and extrapolated the remainder; the previously-unread tail
+  (lines 576-910) has now been directly verified, see Checklist Results/Cross-File Observations
+  below for what it adds)
 - Subsystem: `build-cmake-tests` shard
 - File type: CMake module (per-backend CTest registration)
 - XNA/FNA relevance: N/A (build infrastructure — registers the Bgfx backend's own CTest suite)
@@ -50,17 +51,29 @@ silent gaps:
   ("pixel-level verification is not available") — a good instance of the project keeping its own
   historical commentary honest as capabilities evolve, rather than leaving contradictory old notes
   in place.
+- Directly verifying the previously-unread tail (lines 576-910) confirms the identical pattern and
+  quality continues throughout: Task 759-764's DepthStencilState/stencil-op test group each
+  precisely explains why the shared EasyGL source needed restructuring (Bgfx's
+  `GetBackBufferData` "first read per rendered frame" limitation, Task 406, versus the shared
+  source's multi-region-per-frame reads); Task 761's comment additionally discloses that
+  `StencilWriteMask` is verified informationally-only since bgfx's own state API has no per-draw
+  stencil write-mask flag at all (confirmed against `bgfx/defines.h`) — a permanent backend
+  limitation honestly distinguished from a bug; Task 815's occlusion-query comment discloses a
+  third instance of the same sandbox-software-renderer limitation class as Task 448/923
+  (`PixelCount()` does not discriminate visible from occluded geometry in this sandbox); and the
+  file's final section (Tasks 926-927, CNB-58/60/67 PBR/SkinnedPbr/SkinnedEffect-VertexColor Bgfx
+  ports) is equally well-documented, closing out this backend's stock-effect coverage.
 
 ## Detailed Findings
-None found in the portion read. Given the file's demonstrated consistency (every one of ~70
-registrations sampled follows the identical pattern with a task-ID citation), no correctness issue
-is expected in the unread tail, though this cannot be asserted with the same certainty as a
-fully-read file.
+None, across the full 910-line file (previously reported only for the first 575 lines; the
+remainder is now directly confirmed to hold the same standard).
 
 ## Cross-File Observations
 Shares numerous test sources with `cmake/Tests/D3D9Tests.cmake`/Vulkan's own registrations (the
 `easygl_*_test.cpp`/backend-agnostic shared sources) — cross-backend reuse is consistently
-documented with an explicit rationale for why reuse was or wasn't possible per test.
+documented with an explicit rationale for why reuse was or wasn't possible per test. The Task
+815/923/448 "confirmed sandbox software-renderer limitation, not a CNA defect" cross-reference
+chain is internally consistent across all three citations, verified via direct read of each.
 
 ## Missing or Weak Tests
 N/A (this file itself is a test-registration list, not a test).
@@ -72,5 +85,4 @@ check) that the failure is environmental rather than a real product defect, and 
 cross-reference this project's own established precedent for that class of finding.
 
 ## Final Assessment
-No findings in the ~63% of the file directly read; consistent quality throughout the sampled
-portion gives high confidence the remainder follows the same pattern.
+No findings, confirmed across the complete 910-line file.
