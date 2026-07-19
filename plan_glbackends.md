@@ -92,21 +92,12 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 
 ### Phase A — CMake plumbing (rename public selection, no behavior change for OPENGLES/WEBGL2)
 
-> **Status (2026-07-19): GLB-1 through GLB-8 done and verified; GLB-9 not started.**
-> `-DCNA_GRAPHICS_BACKEND=OPENGLES`
-> and `=OPENGL33` both configure cleanly against `../easy-glrvc` and print
-> `"CNA: Using <NAME> graphics backend (internal implementation: EasyGL)"`;
-> `cna_backend_graphics_easygl` builds cleanly under `OPENGLES` (confirms the new
-> `#if defined(CNA_GL_PROFILE_...)` context-attribute branch in
-> `EasyGLGraphicsBackend.cpp` compiles and the per-profile compile definition reaches the source
-> file). `-DCNA_GRAPHICS_BACKEND=WEBGL2` on a native (non-Emscripten) configure correctly hits the
-> new `FATAL_ERROR` gate. **Not yet verified:** an actual `emcmake` build for `WEBGL1`/`WEBGL2`
-> (no Emscripten SDK in this sandbox), and `OPENGL33` was only configured, not built — it will
-> fail to *build* until Phase B/D's shader header work lands, since every shader is still
-> hardcoded `#version 300 es` (GLES-only), incompatible with the `SDL_GL_CONTEXT_PROFILE_CORE`
-> context `OPENGL33` now requests. GLB-9's Emscripten linker-flag conditionalization not started
-> (needs a real Emscripten toolchain to verify against).
-> `CMakePresets.json` also updated (`web` preset → `WEBGL2`, sanitizer/`tests` presets → `OPENGLES`).
+> **Status: ALL of GLB-1 through GLB-9 done and verified** (superseded this stale note, which
+> originally said GLB-9 was blocked on "no Emscripten SDK" — that assumption was wrong, see
+> Phase E's status note for the real SDK location and GLB-9's actual resolution). `OPENGLES`,
+> `OPENGL33`, `WEBGL1`, `WEBGL2` all configure and build correctly; see each phase's own status
+> note below for what's verified for each specific profile. `CMakePresets.json` also updated
+> (`web` preset → `WEBGL2`, sanitizer/`tests` presets → `OPENGLES`).
 
 - ✅ **GLB-1** — In `cmake/BackendSelection.cmake`, replace the `EASYGL` entry in
   `CNA_GRAPHICS_BACKEND`'s `STRINGS` property and default-backend logic with `OPENGLES`,
@@ -317,10 +308,12 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 > commit (folded into `easy-glrvc/NEXT.md`) — the "already-verified-true" judgment made about it
 > earlier in this plan's history still stands, it just now lives in `NEXT.md` instead.
 >
-> **GLB-35's Emscripten CMake preset exists** (`CMakePresets.json`'s `emscripten` preset,
-> `tests/smoke/WebGLTests.cpp`) but — same limitation as this plan's own `GLB-9` — **could not be
-> built/run under a real `emcmake` in this sandbox** (no Emscripten SDK available); the preset
-> content was reviewed and looks correct but is unverified against a real Emscripten toolchain.
+> **GLB-35 update, later the same night: now fully verified for real.** The "no Emscripten SDK
+> available" premise above was wrong (see Phase E's status note — a working SDK exists at
+> `~/emsdk`, just not on `PATH` by default). Ran `easy-glrvc`'s own `cmake --preset emscripten` /
+> `cmake --build --preset emscripten` / `ctest --preset emscripten`: both its Emscripten-only test
+> binaries (`easy-gl-context-lifecycle-tests`, `easy-gl-webgl-tests`) build and pass 100% under
+> real Node execution via a real `emcmake`/`emcc` toolchain.
 >
 > **GLB-36/37/38 remain not started** — seed `GLB-36`'s WEBGL1 GLSL ES 1.00 shader work now that
 > its prerequisite (`GLB-30`-`GLB-35`) is confirmed done; see §4 below, this needs a design
@@ -350,10 +343,11 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
 - ✅ **GLB-34** — `easy-gl`: make `Device::initialize()`'s `Feature::VertexArrayObject` requirement
   explicit about depending on `OES_vertex_array_object` on WebGL1/GLES2 contexts (`webgl.md` item
   4), rather than an implicit assumption.
-- 🟨 **GLB-35** — `easy-gl`: add an Emscripten CMake preset + a minimal WebGL1 smoke
+- ✅ **GLB-35** — `easy-gl`: add an Emscripten CMake preset + a minimal WebGL1 smoke
   example/test (`webgl.md` item 6) — this is what actually proves `GLB-30`-`GLB-34`, not just code
-  review. Needs a real `emcmake` build with `-s USE_WEBGL2=0`. **Preset/test code exists and was
-  reviewed; not build-verified here (no Emscripten SDK in this sandbox).**
+  review. **Fully verified**: `cmake --preset emscripten && cmake --build --preset emscripten &&
+  ctest --preset emscripten` — both Emscripten-only test binaries build and pass 100% under real
+  Node execution via a real `emcmake`/`emcc` toolchain.
 - ✅ **GLB-36** — **Done 2026-07-19 (authorized to start same night the project owner went to
   sleep — see §4's original open question, now resolved).** Implemented
   `TransformGlslEs300BodyToEs100()` in `EasyGLGraphicsBackend.cpp`: real per-shader GLSL ES 1.00
