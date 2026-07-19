@@ -1,6 +1,7 @@
 #pragma once
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1Capabilities.hpp"
+#include "CNA/Internal/Backends/OpenGL1/OpenGL1RenderTargetBackend.hpp"
 #include <SDL3/SDL.h>
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +48,7 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  void ReadBackbuffer(int,int,int,int,uint8_t*)override;
  SDL_Window* GetWindowInternal()const override{return window_;} SDL_Renderer* GetRendererInternal()const override{return nullptr;}
  std::unique_ptr<ITextureBackend>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchBackend>CreateSpriteBatch()override;
+ std::unique_ptr<IRenderTargetBackend>CreateRenderTarget2D(int,int,int,bool,bool,int)override;void SetRenderTarget2D(IRenderTargetBackend*)override;
  void ApplyBlendState(int,int,int,int,int,int)override;void ApplyDepthStencilState(bool,bool,int,bool,int,int,int,int,int,int,int,bool,int,int,int,int)override;
  void ApplyRasterizerState(int,int,bool,float,float)override;void ApplySamplerState(int,int,int,int,int)override;void SetBlendFactor(float,float,float,float)override;void SetReferenceStencil(int)override;
  void SetScissorRect(int,int,int,int)override;void SetViewport(int,int,int,int,float,float)override;
@@ -60,7 +62,9 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  bool SupportsCapability(CNA::GraphicsCapability capability)const override;
  int VirtualWidth()const{return virtualWidth_;}int VirtualHeight()const{return virtualHeight_;}
  const OpenGL1Capabilities& Capabilities()const{return caps_;}
+ int EffectiveWidth()const{return currentRt_?currentRt_->GetWidth():virtualWidth_;}
+ int EffectiveHeight()const{return currentRt_?currentRt_->GetHeight():virtualHeight_;}
 private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawInternal(const OpenGL1VertexBufferBackend&,const OpenGL1IndexBufferBackend*,PrimitiveType,int,const GpuDrawParams*);
- SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;
+ SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;IRenderTargetBackend* currentRt_=nullptr;
 };
 }

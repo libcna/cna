@@ -95,4 +95,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_Anisotropic_GlState COMMAND cna_test_opengl1_anisotropic_gl_state
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 2: RenderTarget2D via ARB_framebuffer_object/core FBO. Reused verbatim
+    # from the SDL_Renderer backend's own Task 705 test (backend-agnostic: real public
+    # RenderTarget2D/GraphicsDevice/SpriteBatch API only) -- its corner-marker check is exactly
+    # the round-trip-orientation proof this phase needs (a render target sampled later as a plain
+    # Texture2D must not come out vertically flipped).
+    cna_opengl1_test(cna_test_opengl1_rendertarget2d_sample
+                      examples/sdlrenderer_rendertarget2d_sample_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_RenderTarget2D_Sample COMMAND cna_test_opengl1_rendertarget2d_sample
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
