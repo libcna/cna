@@ -120,6 +120,25 @@ before any status here can honestly change.
   textures at one shared UV (stride 20/24), not FNA's real separate `TexCoord`/`TexCoord2` — traced
   through `WebGPUGraphicsBackend`'s shipped dispatch logic, not assumed from the plan's own earlier
   (now confirmed accurate) description.
+- **Real window↔logical coordinate transforms and the 2D letterbox bug** (`METAL-153`–`METAL-159`,
+  `METAL-182`–`METAL-184`): `TransformWindowToLogical`/`TransformLogicalToWindow` were entirely
+  unimplemented — a real, currently-shipping mouse-input bug on any letterboxed/scaled window, not
+  just a graphics gap. Ported `SdlGpuGraphicsBackend::ComputeLogicalViewport()`'s already-shipped
+  letterbox/overscan/stretch/native/fixed-height-dynamic-width math near-verbatim rather than
+  re-deriving it. Found and fixed a second, independent, previously-invisible bug along the way:
+  the constructor never read `args.presentationMode` at all (silently defaulted to `Letterbox`
+  instead of the real XNA-matching `FixedHeightDynamicWidth` default every other backend's
+  constructor already forwards) — harmless before this pass since nothing consumed the field yet,
+  now load-bearing. Separately, `cna_v2d`'s NDC math used raw physical drawable pixels, completely
+  ignoring virtual resolution — sprites at "virtual" coordinates rendered in the wrong place/scale
+  whenever the physical window size differed from the requested virtual resolution; replaced with a
+  scale+offset uniform derived from the same logical-viewport math, hand-verified algebraically to
+  degrade to the exact old formula when no virtual resolution is set (zero behavior change for
+  every existing draw that isn't using it). `SpriteBatch.SetTransformMatrix` (previously a
+  no-op) is now applied CPU-side as a 2D point transform on the screen-space quad corners. Real
+  per-`BlendState` 2D blending (`METAL-184`) turned out to need no new code at all: `Sprite2D` is
+  just another `PipelineKind` sharing the same `(kind, BlendKey)`-keyed cache every 3D pipeline
+  already uses.
 
 **Explicitly still open / not attempted this pass** (do not assume these are done): `METAL-5`
 (cull-mode/winding correctness — deliberately left untouched, see its own note about a Vulkan
@@ -127,8 +146,10 @@ front/back stencil swap this project already had to empirically discover the har
 a real risk area, not a formality); `METAL-14`–`METAL-20` (VertexElementFormat/SurfaceFormat/
 DepthFormat tables, BC-compression query); the fully generic `VertexElement`-driven descriptor
 builder (`METAL-26`/`METAL-27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/
-`METAL-32`); fog/lighting/specular/emissive (rest of Phase 3); every phase past this point in the
-document (6 onward) — none of it was touched this pass.
+`METAL-32`); fog/lighting/specular/emissive (rest of Phase 3); Phases 6–14 and 16–30 in full
+(instancing, render targets, cube/3D textures, readback, occlusion queries, custom effects,
+skinning, PBR, resize/Retina, frame pacing, resource-lifetime audit, everything NOXNA, testing/CI/
+docs, iOS/tvOS) — none of it was touched this pass.
 
 ## Implemented initial foundation
 
@@ -156,8 +177,13 @@ document (6 onward) — none of it was touched this pass.
   formula) now reach the shader for every textured draw (🟨 landed 2026-07-19 — `METAL-35`–
   `METAL-37`, `METAL-51`–`METAL-61`).
 - Native SpriteBatch path with texture sampling, source/destination rectangles, tint, rotation,
-  origin and flip effects (no `SetTransformMatrix`, no custom effect, no real per-`BlendState` 2D
-  blending yet — see Phase 19).
+  origin, flip effects, **`SetTransformMatrix`, real per-`BlendState` 2D blending, and correct
+  virtual-resolution/letterbox scaling** (no custom effect yet — see Phase 14) (🟨 landed
+  2026-07-19 — `METAL-157`/`METAL-158`, `METAL-182`, `METAL-184`).
+- Real window↔logical coordinate transforms (`TransformWindowToLogical`/`TransformLogicalToWindow`)
+  and real `SetPresentationMode`/letterbox math, previously entirely absent — a real, currently-
+  shipping mouse-input-on-scaled-windows bug, not just a graphics gap (🟨 landed 2026-07-19 —
+  `METAL-153`–`METAL-159`).
 - Per-slot sampler state with filter/address/anisotropy, backed by a real `MTLSamplerState` cache
   (🟨 landed 2026-07-19, not yet hardware-verified — `METAL-1`/`METAL-2`).
 - Honest `SupportsCapability()` for the 3 capabilities this backend does not yet have (🟨 landed
@@ -440,13 +466,13 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-153 | `TransformWindowToLogical()` — currently unimplemented (base default `false`); mouse input on a letterboxed/scaled Metal window maps incorrectly today, a **real, currently-shipping input bug**, not just a graphics gap (`SdlInputBridge` depends on this) | ⬜ |
-| METAL-154 | `TransformLogicalToWindow()` — inverse transform used by `Mouse.SetPosition` | ⬜ |
-| METAL-155 | Implement/reuse the shared letterbox/overscan/stretch/native/fixed-height-dynamic-width math (`CnaPresentationMode`) every other 3D-capable backend already shares — check for an existing common helper before re-deriving formulas | ⬜ |
-| METAL-156 | Audit `GetViewportSize()`'s actual contract (currently returns virtual size with no scaling math) — confirm this is correct for its specific contract rather than assuming it's broken | ⬜ |
-| METAL-157 | **Real, currently-shipping bug**: `cna_v2d`'s NDC mapping uses raw `drawable.texture.width/height` (physical pixels), completely bypassing virtual resolution/letterboxing — sprites at "virtual" coordinates render in the wrong place/scale whenever physical ≠ virtual size | ⬜ |
-| METAL-158 | Fix `METAL-157` by deriving the 2D projection from the same letterbox viewport rectangle the 3D path and window-transform functions use | ⬜ |
-| METAL-159 | `SetPresentationMode(mode)` — currently stores the mode with zero effect (same bug class DX3-16 was caught and downgraded for); must actually branch on it once `METAL-155`/`METAL-158` land | ⬜ |
+| METAL-153 | `TransformWindowToLogical()` — was unimplemented (base default `false`), a real input bug (`SdlInputBridge` depends on this). **Fixed 2026-07-19**: real implementation ported from `SdlGpuGraphicsBackend::TransformWindowToLogical` | 🟨 |
+| METAL-154 | `TransformLogicalToWindow()` — inverse transform used by `Mouse.SetPosition` | 🟨 |
+| METAL-155 | Implement/reuse the shared letterbox/overscan/stretch/native/fixed-height-dynamic-width math (`CnaPresentationMode`) every other 3D-capable backend already shares — check for an existing common helper before re-deriving formulas | 🟨 |
+| METAL-156 | Audit `GetViewportSize()`'s actual contract (currently returns virtual size with no scaling math) — confirm this is correct for its specific contract rather than assuming it's broken | 🟨 |
+| METAL-157 | **Real bug, fixed 2026-07-19**: `cna_v2d`'s NDC mapping used raw `drawable.texture.width/height` (physical pixels), completely bypassing virtual resolution/letterboxing. Now derives scale+offset from `computeLogicalViewport()`, hand-verified to degrade to the exact old formula when no virtual resolution is set | 🟨 |
+| METAL-158 | Fix `METAL-157` by deriving the 2D projection from the same letterbox viewport rectangle the 3D path and window-transform functions use | 🟨 |
+| METAL-159 | `SetPresentationMode(mode)` — was stored with zero effect (same bug class DX3-16 was caught and downgraded for). **Fixed 2026-07-19**: `computeLogicalViewport()` now branches on it. Also found+fixed a related bug: the constructor never read `args.presentationMode` at all (silently defaulted to `Letterbox` instead of XNA's real `FixedHeightDynamicWidth` default — invisible until this task made the field meaningful) | 🟨 |
 | METAL-160 | `CTest`: `Metal_Letterbox` — virtual resolution narrower/wider than the physical window, verify sprite/3D positions match predicted letterbox math | ⬜ |
 | METAL-161 | `CTest`: `Metal_WindowToLogical` — synthetic window-coordinate inputs round-trip through `TransformWindowToLogical`/`TransformLogicalToWindow` | ⬜ |
 
@@ -489,9 +515,9 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-182 | `SetTransformMatrix(const Matrix&)` — currently unimplemented (base no-op); `cna_v2d` has no matrix uniform at all, so `SpriteBatch.Begin(transformMatrix)` has **zero effect** on Metal today | ⬜ |
-| METAL-183 | Extend `cna_v2d`/`U2D` to carry the transform matrix (check `SdlRenderer`/`Dx3`/`Canvas`'s own `SetTransformMatrix` scope for the expected fidelity) applied on top of the existing viewport-to-NDC math | ⬜ |
-| METAL-184 | Real `ApplyBlendState`-driven 2D blending — `makePipeline()` currently hardcodes straight-alpha regardless of the actual requested `BlendState`; depends on `METAL-6`/`METAL-24` | ⬜ |
+| METAL-182 | `SetTransformMatrix(const Matrix&)` — was unimplemented (base no-op). **Fixed 2026-07-19**: applied CPU-side as a 2D point transform on the already-screen-space quad corners (Software's own convention), not threaded through the shader | 🟨 |
+| METAL-183 | Extend `cna_v2d`/`U2D` to carry the transform matrix — **superseded**: `METAL-182`'s CPU-side approach needed no shader uniform change for the matrix itself (`U2D` was still extended, but for the letterbox scale/offset fix, `METAL-157`) | 🟨 |
+| METAL-184 | Real `ApplyBlendState`-driven 2D blending — **closed as a side effect of `METAL-23`/`METAL-24`**: `Sprite2D` is now just another `PipelineKind` in the same `(kind, BlendKey)`-keyed cache every 3D pipeline uses, so it automatically gets real per-`BlendState` blending with no Sprite2D-specific code needed | 🟨 |
 | METAL-185 | `SetSamplerFilter`/`SetSamplerAddressMode` — **already wired**, `METAL-1`/`METAL-2` | 🟨 |
 | METAL-186 | Confirm `FillMode::WireFrame` has no meaning for 2D `SpriteBatch` quads in XNA either (verify-N/A task, not new code) | ⬜ |
 | METAL-187 | `CTest`: `Metal_SpriteBatch` — identity fast path, rotation, scale, flip, source-rect crop, transform matrix, custom effect (Phase 14), all 4 blend presets (`METAL-184`) | ⬜ |

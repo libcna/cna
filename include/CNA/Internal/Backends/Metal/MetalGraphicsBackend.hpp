@@ -20,6 +20,8 @@ namespace CNA::Internal::Backends::Metal
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        bool TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const override;
+        bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;
         SDL_Window* GetWindowInternal() const override;
         SDL_Renderer* GetRendererInternal() const override;
 

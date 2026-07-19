@@ -86,11 +86,16 @@ fragment float4 cna_f3d_dualtex(V3Out in [[stage_in]], texture2d<float> tex0 [[t
 }
 
 struct V2In { float2 position; float2 uv; float4 color; };
-struct U2D { float2 viewport; };
+// plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
+// bypassing virtual-resolution/letterbox scaling -- a real, currently-shipping bug. `scale`/
+// `offset` fold the logical-to-physical-to-NDC chain into one multiply-add; see
+// MetalGraphicsBackend::Impl::computeSpriteTransform() for the derivation, hand-verified to
+// degrade to this struct's exact prior formula when no virtual resolution is set.
+struct U2D { float2 scale; float2 offset; };
 struct V2Out { float4 position [[position]]; float2 uv; float4 color; };
 vertex V2Out cna_v2d(uint vid [[vertex_id]], const device V2In* v [[buffer(0)]], constant U2D& u [[buffer(1)]]) {
     V2In i=v[vid]; V2Out o;
-    float2 ndc=float2(i.position.x/u.viewport.x*2.0-1.0, 1.0-i.position.y/u.viewport.y*2.0);
+    float2 ndc = i.position * u.scale + u.offset;
     o.position=float4(ndc,0.0,1.0); o.uv=i.uv; o.color=i.color; return o;
 }
 fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {
@@ -618,6 +623,89 @@ struct MetalGraphicsBackend::Impl
         samplerCache.emplace(key,s);
         return s;
     }
+
+    // plan_metal.md Phase 15 (METAL-153/155/156/158/159): the shared letterbox/overscan/stretch/
+    // native/fixed-height-dynamic-width viewport math, ported near-verbatim from
+    // SdlGpuGraphicsBackend::ComputeLogicalViewport() (an already-shipped, already-relied-upon
+    // implementation of the exact same CnaPresentationMode contract every backend shares) rather
+    // than re-derived from scratch. `width`/`height`/`x`/`y` are the logical canvas's rectangle in
+    // physical window pixels; `logicalWidth`/`logicalHeight` are the virtual-resolution size that
+    // rectangle represents (equal to the physical size whenever no virtual resolution is set,
+    // which is also this struct's all-zero-input-safe degenerate case).
+    struct LogicalViewport { float x=0, y=0, width=0, height=0, logicalWidth=0, logicalHeight=0; };
+    LogicalViewport computeLogicalViewport() const
+    {
+        LogicalViewport vp{};
+        int pw=0, ph=0; SDL_GetWindowSizeInPixels(window, &pw, &ph);
+        vp.width = (float)std::max(0, pw); vp.height = (float)std::max(0, ph);
+        vp.logicalWidth = vp.width; vp.logicalHeight = vp.height;
+        if (pw <= 0 || ph <= 0) return vp;
+        const auto mode = (CnaPresentationMode)presentationMode;
+        if (mode == CnaPresentationMode::NativeBackBuffer || virtualW <= 0 || virtualH <= 0) return vp;
+
+        float logicalWidth = (float)virtualW;
+        float logicalHeight = (float)virtualH;
+        if (mode == CnaPresentationMode::FixedHeightDynamicWidth) {
+            logicalWidth = logicalHeight * (float)pw / (float)ph;
+            vp.logicalWidth = logicalWidth; vp.logicalHeight = logicalHeight;
+            return vp;
+        }
+        vp.logicalWidth = logicalWidth; vp.logicalHeight = logicalHeight;
+        if (mode == CnaPresentationMode::Stretch) return vp;
+        const float sx = (float)pw / logicalWidth;
+        const float sy = (float)ph / logicalHeight;
+        const float scale = (mode == CnaPresentationMode::Overscan) ? std::max(sx, sy) : std::min(sx, sy);
+        vp.width = logicalWidth * scale; vp.height = logicalHeight * scale;
+        vp.x = ((float)pw - vp.width) * 0.5f; vp.y = ((float)ph - vp.height) * 0.5f;
+        return vp;
+    }
+
+    // plan_metal.md METAL-157/158: previously `cna_v2d` mapped sprite coordinates directly from
+    // raw physical drawable pixels, completely bypassing virtual resolution/letterboxing -- a
+    // real, currently-shipping bug whenever the physical window size differs from the requested
+    // virtual resolution. Algebraically folding computeLogicalViewport()'s rect + the physical
+    // drawable size into one scale+offset pair keeps `cna_v2d` a single multiply-add per vertex;
+    // when no virtual resolution is set this reduces exactly (verified by hand, not just by
+    // inspection) to the original `px/dw*2-1, 1-py/dh*2` formula -- zero behavior change for every
+    // draw that isn't using virtual resolution today.
+    struct Sprite2DTransform { float scaleX=1, scaleY=1, offsetX=0, offsetY=0; };
+    Sprite2DTransform computeSpriteTransform() const
+    {
+        Sprite2DTransform t{};
+        const float dw=(float)drawable.texture.width, dh=(float)drawable.texture.height;
+        if (dw<=0 || dh<=0) return t;
+        LogicalViewport vp = computeLogicalViewport();
+        if (vp.logicalWidth<=0 || vp.logicalHeight<=0) return t;
+        t.scaleX = 2.0f*vp.width/(vp.logicalWidth*dw);
+        t.offsetX = 2.0f*vp.x/dw - 1.0f;
+        t.scaleY = -2.0f*vp.height/(vp.logicalHeight*dh);
+        t.offsetY = 1.0f - 2.0f*vp.y/dh;
+        return t;
+    }
+
+    // plan_metal.md METAL-153/154: real window<->logical coordinate transforms, previously
+    // entirely unimplemented (base `IGraphicsBackend` default returns false) -- SdlInputBridge
+    // depends on this for correct mouse coordinates on any letterboxed/scaled window, per this
+    // method's own doc comment on IGraphicsBackend.hpp. Ported from
+    // SdlGpuGraphicsBackend::TransformWindowToLogical/TransformLogicalToWindow verbatim (same
+    // LogicalViewport shape, same formula) rather than re-derived.
+    bool transformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const
+    {
+        LogicalViewport vp = computeLogicalViewport();
+        if (vp.width == 0.0f || vp.height == 0.0f) return false;
+        logX = (windowX - vp.x) * vp.logicalWidth / vp.width;
+        logY = (windowY - vp.y) * vp.logicalHeight / vp.height;
+        return windowX >= vp.x && windowX < vp.x + vp.width &&
+               windowY >= vp.y && windowY < vp.y + vp.height;
+    }
+    bool transformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const
+    {
+        LogicalViewport vp = computeLogicalViewport();
+        if (vp.logicalWidth == 0.0f || vp.logicalHeight == 0.0f) return false;
+        windowX = vp.x + logX * vp.width / vp.logicalWidth;
+        windowY = vp.y + logY * vp.height / vp.logicalHeight;
+        return true;
+    }
 };
 
 class MetalSpriteBatch final : public ISpriteBatchBackend
@@ -628,6 +716,13 @@ public:
     void End() override { begun_=false; }
     void SetSamplerFilter(int f) override { filter_=f; }
     void SetSamplerAddressMode(int addressU,int addressV) override { addressU_=addressU; addressV_=addressV; }
+    // plan_metal.md METAL-182/183: previously entirely unimplemented (base no-op) -- `cna_v2d` had
+    // no matrix uniform at all, so `SpriteBatch.Begin(transformMatrix)` had zero effect on Metal.
+    // Applied as a 2D point transform (z=0) on the already-screen-space quad corners, matching the
+    // same convention this plan's own research found `SOFTWARE`'s `SetTransformMatrix` already
+    // uses -- CPU-side, not threaded through the vertex shader, so identity (the default) costs
+    // nothing extra and is provably a no-op.
+    void SetTransformMatrix(const Matrix& m) override { transform_=m; }
     void Draw(const ITextureBackend& t,float x,float y) override { Rectangle d((int)x,(int)y,t.GetWidth(),t.GetHeight()); Rectangle s(0,0,t.GetWidth(),t.GetHeight()); Draw(t,d,s,Color::White); }
     void Draw(const ITextureBackend& t,const Rectangle& d,const Rectangle& s,const Color& c) override { Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0); }
     void Draw(const ITextureBackend& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float) override
@@ -642,18 +737,30 @@ public:
         if((int)effects & 1) std::swap(u0,u1); if((int)effects & 2) std::swap(v0,v1);
         const float cr=c.getRProperty()/255.f,cg=c.getGProperty()/255.f,cb=c.getBProperty()/255.f,ca=c.getAProperty()/255.f;
         auto xf=[&](float x,float y){ float px=x-(x0+origin.getXProperty()), py=y-(y0+origin.getYProperty()); float cs=std::cos(rotation),sn=std::sin(rotation); return std::array<float,2>{x0+origin.getXProperty()+px*cs-py*sn,y0+origin.getYProperty()+px*sn+py*cs};};
-        auto a=xf(x0,y0),bb=xf(x1,y0),cc=xf(x1,y1),dd=xf(x0,y1);
+        auto tf=[&](std::array<float,2> q){ float x=q[0],y=q[1]; return std::array<float,2>{x*transform_.M11+y*transform_.M21+transform_.M41, x*transform_.M12+y*transform_.M22+transform_.M42}; };
+        auto a=tf(xf(x0,y0)),bb=tf(xf(x1,y0)),cc=tf(xf(x1,y1)),dd=tf(xf(x0,y1));
         V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};
-        struct U{float w,h;} u{(float)p.drawable.texture.width,(float)p.drawable.texture.height};
+        // plan_metal.md METAL-157/158: was raw physical-drawable-pixel NDC mapping (`{w,h}`),
+        // ignoring virtual resolution/letterboxing entirely -- now the real scale+offset transform.
+        auto st=p.computeSpriteTransform();
+        struct U{float sx,sy,ox,oy;} u{st.scaleX,st.scaleY,st.offsetX,st.offsetY};
         [p.encoder setRenderPipelineState:p.getOrCreatePipeline(PipelineKind::Sprite2D)]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
         [p.encoder setFragmentTexture:mt->native() atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,1) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
-private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1;
+private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty();
 };
 
 MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args):impl_(std::make_unique<Impl>())
 {
     auto& p=*impl_; p.window=args.window; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
+    // plan_metal.md Phase 15: real, previously-invisible bug -- args.presentationMode was never
+    // read at all (Impl::presentationMode's own field default, Letterbox=0, silently won this
+    // instead), even though GraphicsBackendCreateArgs::presentationMode's own doc comment states
+    // its default is FixedHeightDynamicWidth (XNA/Windows-Phone-matching) and SdlGpu/EasyGL's own
+    // constructors both already forward it correctly. Had zero observable effect before this
+    // phase since nothing consumed `presentationMode` yet; matters now that computeLogicalViewport()
+    // does.
+    p.presentationMode=(int)args.presentationMode;
     if(!p.window) throw std::runtime_error("Metal backend requires an SDL_Window");
     p.device=MTLCreateSystemDefaultDevice(); if(!p.device) throw std::runtime_error("Metal: MTLCreateSystemDefaultDevice failed"); [p.device retain];
     p.view=SDL_Metal_CreateView(p.window); if(!p.view) throw std::runtime_error(std::string("Metal: SDL_Metal_CreateView failed: ")+SDL_GetError());
@@ -669,8 +776,20 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
 MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.depthTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
 MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl(){return *impl_;} const MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl()const{return *impl_;}
 void MetalGraphicsBackend::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalGraphicsBackend::Present(){impl_->endFrame();}
-void MetalGraphicsBackend::GetViewportSize(int&w,int&h){int pw=0,ph=0;SDL_GetWindowSizeInPixels(impl_->window,&pw,&ph);w=impl_->virtualW>0?impl_->virtualW:pw;h=impl_->virtualH>0?impl_->virtualH:ph;}
+void MetalGraphicsBackend::GetViewportSize(int&w,int&h){
+    // plan_metal.md METAL-156: now routed through the same computeLogicalViewport() the real
+    // window<->logical transforms use, instead of a separate, simpler ad hoc formula. Verified by
+    // hand to produce byte-identical results to the old `virtualW>0?virtualW:pw` formula for every
+    // mode except FixedHeightDynamicWidth (Letterbox/Overscan/Stretch/NativeBackBuffer all set
+    // vp.logicalWidth/Height to the raw virtualW/virtualH before any aspect-ratio math runs) --
+    // FixedHeightDynamicWidth now correctly derives logical width from the real surface aspect
+    // ratio instead of returning virtualW unconditionally, matching its own documented contract.
+    auto vp=impl_->computeLogicalViewport();
+    w=(int)std::lround(vp.logicalWidth); h=(int)std::lround(vp.logicalHeight);
+}
 void MetalGraphicsBackend::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->virtualH=h;} void MetalGraphicsBackend::SetPresentationMode(int m){impl_->presentationMode=m;} void MetalGraphicsBackend::SetSwapInterval(int i){impl_->swapInterval=i;}
+bool MetalGraphicsBackend::TransformWindowToLogical(float windowX,float windowY,float& logX,float& logY) const{return impl_->transformWindowToLogical(windowX,windowY,logX,logY);}
+bool MetalGraphicsBackend::TransformLogicalToWindow(float logX,float logY,float& windowX,float& windowY) const{return impl_->transformLogicalToWindow(logX,logY,windowX,windowY);}
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
 void MetalGraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalGraphicsBackend::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalGraphicsBackend::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalGraphicsBackend::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalGraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalGraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
