@@ -139,7 +139,23 @@ target_link_libraries(CNA
 # runtime device selection actually chose (the one piece of information no other backend needs to
 # log, since every other backend's API is fixed at build time). Hit for real on the first full
 # build: cna_reference_dump failed with "undefined reference to CNA::Logger::Info".
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU" OR CNA_GRAPHICS_BACKEND STREQUAL "SOKOL" OR CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT")
+#
+# The intentionally 2D-only SDL_RENDERER, ASCII, FREEDIRECT (formerly DX3) and CANVAS backends use
+# the same logger for Unsupported3DGraphicsCallBehavior::WarnAndStub, so they have the same static
+# archive cycle. SOFTWARE inherits IGraphicsBackend's default instanced-draw method, whose
+# permanently-2D guard shares that diagnostic helper (the guard is inactive on SOFTWARE because
+# ThreeD is supported, but the static object still contains the symbol reference).
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "SOKOL"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "DILIGENT"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "ASCII"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "FREEDIRECT"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "CANVAS"
+   OR CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
 

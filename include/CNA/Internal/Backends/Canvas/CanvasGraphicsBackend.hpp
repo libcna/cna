@@ -34,12 +34,9 @@ namespace CNA::Internal::Backends::Canvas
      * bookkeeping (C1), Clear/Present (C2), textures/render targets (C3), SpriteBatch incl.
      * SpriteFont (C4/C6), and blend/sampler state mapping (C5) are all real. The inherently-3D-only
      * pure virtuals (ClearColorAndDepth and friends, vertex/index buffers, DrawColoredPrimitives)
-     * throw via ThrowNo3D(); the rest of the 3D-only surface (Draw*Ex/DrawInstancedPrimitivesEx,
-     * CreateIndexBuffer32, Create{Texture3D,TextureCube,RenderTargetCube,OcclusionQuery,
-     * EffectBackend}) is intentionally left on IGraphicsBackend's own shared defaults, which already
-     * do the right thing here (throw-by-delegation or return nullptr) without needing a Canvas-local
-     * override -- confirmed against SDL_RENDERER's own precedent of not overriding these either
-     * (Phase C7).
+     * preserve their established throw/null behavior by default.
+     * Unsupported3DGraphicsCallBehavior::WarnAndStub turns them into warn-once no-ops and
+     * supplies safe null-object resources.
      */
     class CanvasGraphicsBackend final : public IGraphicsBackend
     {
@@ -86,8 +83,8 @@ namespace CNA::Internal::Backends::Canvas
         // real depth/stencil buffer (same reasoning as IRenderTargetBackend::HasRealDepthBuffer's
         // override, CANVAS-23), same as SDL_RENDERER's own override for the same reason.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        // Every 3D call below unconditionally throws. SupportsCapability() lets callers check
-        // ahead of time instead of relying on the throw -- see CNA::GraphicsCapability.
+        // SupportsCapability() lets callers check ahead of time; the policy controls what
+        // happens if an unsupported call is nevertheless made.
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
         {
             // 2D-only by design: none of the capabilities CNA::GraphicsCapability currently
@@ -107,6 +104,14 @@ namespace CNA::Internal::Backends::Canvas
 
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(
+            int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(
+            int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool mipMap = false,
+            int multiSampleCount = 0) override;
 
         void DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view,
                                    const Matrix& projection, PrimitiveType primitive, int primitiveCount) override;

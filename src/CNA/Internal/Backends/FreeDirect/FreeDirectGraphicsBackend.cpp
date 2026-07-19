@@ -1,4 +1,5 @@
 #include "CNA/Internal/Backends/FreeDirect/FreeDirectGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Common/NoOp3DResources.hpp"
 
 // plan_freedirect.md Design decision 9: <ddraw.h> (and the <windows.h> compatibility shim it pulls in
 // from free-api) is contained to this .cpp only -- see FreeDirectGraphicsBackend.hpp's own comment for
@@ -98,14 +99,6 @@ namespace CNA::Internal::Backends::FreeDirect
                         std::string(diagnostic) + ": replacement surface has no valid storage");
                 }
             }
-        }
-
-        // ---- 3D pipeline: DirectDraw is 2D-only. All 3D calls throw. ----
-        // Callers can check GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD) ahead
-        // of time instead of relying on this throw -- see SupportsCapability() in the header.
-        [[noreturn]] void ThrowNo3D(const char* methodName)
-        {
-            throw std::runtime_error(std::string("FreeDirect (DirectDraw) does not support 3D: ") + methodName);
         }
 
         // ---- Phase X3: shared offscreen-surface helpers, used by both FreeDirectTextureBackend and
@@ -1299,34 +1292,75 @@ namespace CNA::Internal::Backends::FreeDirect
                                                   colorBlendFunc, alphaBlendFunc);
     }
 
-    void FreeDirectGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
-    void FreeDirectGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
-    void FreeDirectGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
-    void FreeDirectGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
-    void FreeDirectGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
-    void FreeDirectGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
-    void FreeDirectGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
-    void FreeDirectGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
-    void FreeDirectGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
+    // ---- 3D: DirectDraw is intentionally 2D-only. ----
+    // Throw remains the default. WarnAndStub logs each method once and returns safely.
+    void FreeDirectGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "ClearColorAndDepth"); }
+    void FreeDirectGraphicsBackend::ClearDepth(float) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "ClearDepth"); }
+    void FreeDirectGraphicsBackend::ClearStencil(int) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "ClearStencil"); }
+    void FreeDirectGraphicsBackend::ClearDepthAndStencil(float, int) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "ClearDepthAndStencil"); }
+    void FreeDirectGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "ClearColorAndStencil"); }
+    void FreeDirectGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "ClearColorDepthAndStencil"); }
+    void FreeDirectGraphicsBackend::SetDepthTestEnabled(bool)  { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "SetDepthTestEnabled"); }
+    void FreeDirectGraphicsBackend::SetBlendEnabled(bool)      { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "SetBlendEnabled"); }
+    void FreeDirectGraphicsBackend::SetDepthWriteEnabled(bool) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "SetDepthWriteEnabled"); }
 
-    std::unique_ptr<IVertexBufferBackend> FreeDirectGraphicsBackend::CreateVertexBuffer(int)
+    std::unique_ptr<IVertexBufferBackend> FreeDirectGraphicsBackend::CreateVertexBuffer(
+        int vertexCapacity)
     {
-        ThrowNo3D("CreateVertexBuffer");
+        HandleUnsupported3DCall("FreeDirect (DirectDraw)", "CreateVertexBuffer");
+        return std::make_unique<NoOpVertexBufferBackend>(vertexCapacity);
     }
 
-    std::unique_ptr<IIndexBufferBackend> FreeDirectGraphicsBackend::CreateIndexBuffer16(int)
+    std::unique_ptr<IIndexBufferBackend> FreeDirectGraphicsBackend::CreateIndexBuffer16(
+        int indexCapacity)
     {
-        ThrowNo3D("CreateIndexBuffer16");
+        HandleUnsupported3DCall("FreeDirect (DirectDraw)", "CreateIndexBuffer16");
+        return std::make_unique<NoOpIndexBufferBackend>(indexCapacity);
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> FreeDirectGraphicsBackend::CreateOcclusionQuery()
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("FreeDirect (DirectDraw)", "CreateOcclusionQuery");
+        return std::make_unique<NoOpOcclusionQueryBackend>();
+    }
+
+    std::unique_ptr<ITexture3DBackend> FreeDirectGraphicsBackend::CreateTexture3D(
+        int width, int height, int depth, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("FreeDirect (DirectDraw)", "CreateTexture3D");
+        return std::make_unique<NoOpTexture3DBackend>(width, height, depth);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> FreeDirectGraphicsBackend::CreateTextureCube(
+        int size, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("FreeDirect (DirectDraw)", "CreateTextureCube");
+        return std::make_unique<NoOpTextureCubeBackend>(size);
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> FreeDirectGraphicsBackend::CreateRenderTargetCube(
+        int size, int, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("FreeDirect (DirectDraw)", "CreateRenderTargetCube");
+        return std::make_unique<NoOpRenderTargetCubeBackend>(size);
     }
 
     void FreeDirectGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                    const Matrix&, const Matrix&, const Matrix&,
-                                                   PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
+                                                   PrimitiveType, int) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "DrawColoredPrimitives"); }
 
     void FreeDirectGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
                                                           const IIndexBufferBackend&,
                                                           const Matrix&, const Matrix&, const Matrix&,
-                                                          PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
+                                                          PrimitiveType, int) { HandleUnsupported3DCall("FreeDirect (DirectDraw)", "DrawIndexedColoredPrimitives"); }
 }
 
 namespace CNA::Internal::Backends

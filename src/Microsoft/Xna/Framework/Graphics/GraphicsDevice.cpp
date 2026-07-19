@@ -2101,6 +2101,18 @@ namespace Microsoft::Xna::Framework::Graphics
         return GetBackend().GetMaxTextureDimension();
     }
 
+    void GraphicsDevice::SetUnsupported3DGraphicsCallBehavior(
+        CNA::Unsupported3DGraphicsCallBehavior behavior)
+    {
+        GetBackend().SetUnsupported3DGraphicsCallBehavior(behavior);
+    }
+
+    CNA::Unsupported3DGraphicsCallBehavior
+    GraphicsDevice::GetUnsupported3DGraphicsCallBehavior() const
+    {
+        return GetBackend().GetUnsupported3DGraphicsCallBehavior();
+    }
+
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;

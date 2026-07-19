@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Canvas/CanvasTextureBackend.hpp"
 #include "CNA/Internal/Backends/Canvas/CanvasRenderTargetBackend.hpp"
 #include "CNA/Internal/Backends/Canvas/CanvasSpriteBatchBackend.hpp"
+#include "CNA/Internal/Backends/Common/NoOp3DResources.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -95,21 +96,6 @@ EM_JS(void, CNA_Canvas2D_UnbindRenderTarget, (), {
 
 namespace CNA::Internal::Backends::Canvas
 {
-    namespace
-    {
-        // Phase C1's NotYetImplemented() placeholder (Clear/Present/CreateTexture/CreateSpriteBatch)
-        // has no remaining callers -- Phases C2-C4 replaced all of them with real implementations.
-        // Only the inherently-3D-only surface still throws (permanent, not a placeholder --
-        // Phase C7 just formalizes/audits this same wiring). Callers can check
-        // GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD) ahead of time instead of
-        // relying on this throw -- see SupportsCapability() in the header.
-        [[noreturn]] void ThrowNo3D(const char* methodName)
-        {
-            throw std::runtime_error(
-                std::string("Canvas (HTML Canvas 2D) does not support 3D: ") + methodName);
-        }
-    }
-
     CanvasGraphicsBackend::CanvasGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                                                   CnaPresentationMode mode)
         : window_(window)
@@ -320,33 +306,74 @@ namespace CNA::Internal::Backends::Canvas
 #endif
     }
 
-    void CanvasGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
-    void CanvasGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
-    void CanvasGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
-    void CanvasGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
-    void CanvasGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
-    void CanvasGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
-    void CanvasGraphicsBackend::SetDepthTestEnabled(bool) { ThrowNo3D("SetDepthTestEnabled"); }
-    void CanvasGraphicsBackend::SetBlendEnabled(bool) { ThrowNo3D("SetBlendEnabled"); }
-    void CanvasGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
+    // ---- 3D: HTML Canvas 2D is intentionally 2D-only. ----
+    // Throw remains the default. WarnAndStub logs each method once and returns safely.
+    void CanvasGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "ClearColorAndDepth"); }
+    void CanvasGraphicsBackend::ClearDepth(float) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "ClearDepth"); }
+    void CanvasGraphicsBackend::ClearStencil(int) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "ClearStencil"); }
+    void CanvasGraphicsBackend::ClearDepthAndStencil(float, int) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "ClearDepthAndStencil"); }
+    void CanvasGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "ClearColorAndStencil"); }
+    void CanvasGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "ClearColorDepthAndStencil"); }
+    void CanvasGraphicsBackend::SetDepthTestEnabled(bool) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "SetDepthTestEnabled"); }
+    void CanvasGraphicsBackend::SetBlendEnabled(bool) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "SetBlendEnabled"); }
+    void CanvasGraphicsBackend::SetDepthWriteEnabled(bool) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "SetDepthWriteEnabled"); }
 
-    std::unique_ptr<IVertexBufferBackend> CanvasGraphicsBackend::CreateVertexBuffer(int)
+    std::unique_ptr<IVertexBufferBackend> CanvasGraphicsBackend::CreateVertexBuffer(
+        int vertexCapacity)
     {
-        ThrowNo3D("CreateVertexBuffer");
+        HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "CreateVertexBuffer");
+        return std::make_unique<NoOpVertexBufferBackend>(vertexCapacity);
     }
 
-    std::unique_ptr<IIndexBufferBackend> CanvasGraphicsBackend::CreateIndexBuffer16(int)
+    std::unique_ptr<IIndexBufferBackend> CanvasGraphicsBackend::CreateIndexBuffer16(
+        int indexCapacity)
     {
-        ThrowNo3D("CreateIndexBuffer16");
+        HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "CreateIndexBuffer16");
+        return std::make_unique<NoOpIndexBufferBackend>(indexCapacity);
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> CanvasGraphicsBackend::CreateOcclusionQuery()
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "CreateOcclusionQuery");
+        return std::make_unique<NoOpOcclusionQueryBackend>();
+    }
+
+    std::unique_ptr<ITexture3DBackend> CanvasGraphicsBackend::CreateTexture3D(
+        int width, int height, int depth, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "CreateTexture3D");
+        return std::make_unique<NoOpTexture3DBackend>(width, height, depth);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> CanvasGraphicsBackend::CreateTextureCube(
+        int size, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "CreateTextureCube");
+        return std::make_unique<NoOpTextureCubeBackend>(size);
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> CanvasGraphicsBackend::CreateRenderTargetCube(
+        int size, int, bool, int)
+    {
+        if (!ShouldStubUnsupported3DResource())
+            return nullptr;
+        HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "CreateRenderTargetCube");
+        return std::make_unique<NoOpRenderTargetCubeBackend>(size);
     }
 
     void CanvasGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                       const Matrix&, const Matrix&, const Matrix&,
-                                                      PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
+                                                      PrimitiveType, int) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "DrawColoredPrimitives"); }
 
     void CanvasGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&,
                                                              const Matrix&, const Matrix&, const Matrix&,
-                                                             PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
+                                                             PrimitiveType, int) { HandleUnsupported3DCall("Canvas (HTML Canvas 2D)", "DrawIndexedColoredPrimitives"); }
 }
 
 namespace CNA::Internal::Backends
