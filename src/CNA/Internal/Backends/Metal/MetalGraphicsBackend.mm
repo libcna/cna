@@ -19,6 +19,15 @@
 
 namespace CNA::Internal::Backends::Metal
 {
+// plan_metal.md METAL-131/122/125: forward-declared at this (non-anonymous-namespace) scope so
+// MetalTextureCube/MetalTexture3D's own GetData() overrides, defined inside the anonymous
+// namespace below, can call it -- its real definition lives later in this file, also at this same
+// scope (outside the anonymous namespace), not inside it, so the forward declaration must live out
+// here too or it would silently become a different, unrelated, unlinkable declaration. Needs only
+// ordinary Metal types, not MetalGraphicsBackend::Impl, so unlike nativeTextureFor()/
+// resolveActiveAttachments() this one has no incomplete-type ordering constraint of its own.
+static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> queue, id<MTLTexture> src, NSUInteger slice, int level, int x, int y, int z, int w, int h, int depth, void* data, int dataLength);
+
 namespace
 {
     static const char* kMetalShaderSource = R"MSL(
@@ -999,14 +1008,22 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     class MetalTextureCube final : public ITextureCubeBackend
     {
     public:
-        MetalTextureCube(id<MTLDevice> dev, int size, bool mipMap)
+        // plan_metal.md METAL-122: `queue` is stored (retained) purely so GetData() below can blit
+        // -- found while implementing RenderTargetCube's own GetData() that TextureCube.cpp's real
+        // code (not just this interface's own doc comment) *always* calls backend_->GetData()
+        // unconditionally, with no CPU-side pixel-shadow shortcut the way Texture2D has; unlike the
+        // 2D case, a plain (non-render-target) cube texture's GetData() genuinely reaches the
+        // backend for every call, so this was a real, previously-shipping gap, not a deliberate
+        // scope match to Texture2D's own precedent.
+        MetalTextureCube(id<MTLDevice> dev, id<MTLCommandQueue> queue, int size, bool mipMap) : dev_(dev), queue_(queue)
         {
+            [dev_ retain]; [queue_ retain];
             MTLTextureDescriptor* d=[MTLTextureDescriptor textureCubeDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm size:(NSUInteger)size mipmapped:mipMap];
             d.usage=MTLTextureUsageShaderRead;
             texture_=[dev newTextureWithDescriptor:d];
             if(!texture_) throw std::runtime_error("Metal: failed to create cube texture");
         }
-        ~MetalTextureCube() override { [texture_ release]; }
+        ~MetalTextureCube() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         // Face ordinals (0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z) already match Metal's own cube `slice`
         // ordering directly -- same convention documented on IRenderTargetCubeBackend and already
         // relied upon, unchanged, by every other backend (confirmed against
@@ -1017,16 +1034,27 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             MTLRegion r=MTLRegionMake2D((NSUInteger)x,(NSUInteger)y,(NSUInteger)w,(NSUInteger)h);
             [texture_ replaceRegion:r mipmapLevel:(NSUInteger)level slice:(NSUInteger)face withBytes:data bytesPerRow:(NSUInteger)(w*4) bytesPerImage:0];
         }
+        void GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
+        {
+            if(face<0||face>=6) return;
+            blitTextureToClientBuffer(dev_, queue_, texture_, (NSUInteger)face, level, x, y, 0, w, h, 1, data, dataLength);
+        }
         id<MTLTexture> native() const { return texture_; }
     private:
+        id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
         id<MTLTexture> texture_=nil;
     };
 
     class MetalTexture3D final : public ITexture3DBackend
     {
     public:
-        MetalTexture3D(id<MTLDevice> dev, int w,int h,int depth,bool mipMap)
+        // plan_metal.md METAL-122 (3D analog): same finding as MetalTextureCube above --
+        // Texture3D.cpp's real code always calls backend_->GetData() unconditionally, no CPU-side
+        // shadow shortcut, so this was a real, previously-shipping gap for any Texture3D, not just
+        // a render-target-only concern.
+        MetalTexture3D(id<MTLDevice> dev, id<MTLCommandQueue> queue, int w,int h,int depth,bool mipMap) : dev_(dev), queue_(queue)
         {
+            [dev_ retain]; [queue_ retain];
             MTLTextureDescriptor* d=[[MTLTextureDescriptor alloc] init];
             d.textureType=MTLTextureType3D; d.pixelFormat=MTLPixelFormatRGBA8Unorm;
             d.width=(NSUInteger)w; d.height=(NSUInteger)h; d.depth=(NSUInteger)depth;
@@ -1037,14 +1065,22 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             texture_=[dev newTextureWithDescriptor:d]; [d release];
             if(!texture_) throw std::runtime_error("Metal: failed to create 3D texture");
         }
-        ~MetalTexture3D() override { [texture_ release]; }
+        ~MetalTexture3D() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         void SetData(int level,int x,int y,int z,int w,int h,int depth,const void* data,int /*dataLength*/) override
         {
             MTLRegion r=MTLRegionMake3D((NSUInteger)x,(NSUInteger)y,(NSUInteger)z,(NSUInteger)w,(NSUInteger)h,(NSUInteger)depth);
             [texture_ replaceRegion:r mipmapLevel:(NSUInteger)level slice:0 withBytes:data bytesPerRow:(NSUInteger)(w*4) bytesPerImage:(NSUInteger)(w*4*h)];
         }
+        // plan_metal.md METAL-125: real per-level readback via the shared blit helper -- slice is
+        // always 0 for a 3D texture (there is no per-slice concept the way a cube's 6 faces have;
+        // `z`/`depth` address the volume directly within slice 0).
+        void GetData(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const override
+        {
+            blitTextureToClientBuffer(dev_, queue_, texture_, 0, level, x, y, z, w, h, depth, data, dataLength);
+        }
         id<MTLTexture> native() const { return texture_; }
     private:
+        id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
         id<MTLTexture> texture_=nil;
     };
 
@@ -1578,34 +1614,45 @@ private:
     std::shared_ptr<std::atomic<bool>> completed_;
 };
 
-// plan_metal.md METAL-131: shared blit-to-staging-buffer readback helper, used by both
-// MetalRenderTargetBackend::GetData() and MetalRenderTargetCubeBackend::GetData() instead of two
-// near-duplicate implementations (matching the task's own "sharing one helper" framing). Uses an
-// independent, freshly-created command buffer rather than reusing owner.command -- correct because
-// callers are responsible for ensuring the source texture's content is actually GPU-complete first
-// (see each GetData() override's own "if still the active render target, end its encoding first"
-// guard, mirroring ReadBackbuffer()'s identical established reasoning) -- Metal command buffers on
-// one queue execute in submission order, so a blit submitted after the writes it depends on have
-// already been committed is guaranteed to see their result.
-static void blitTextureToClientBuffer(MetalGraphicsBackend::Impl& owner, id<MTLTexture> src, NSUInteger slice, int level, int x, int y, int w, int h, void* data, int dataLength)
+// plan_metal.md METAL-131/122/125: shared blit-to-staging-buffer readback helper, used by
+// MetalRenderTargetBackend/MetalRenderTargetCubeBackend/MetalTextureCube/MetalTexture3D's
+// GetData() overrides instead of four near-duplicate implementations (matching the task's own
+// "sharing one helper" framing). Uses an independent, freshly-created command buffer rather than
+// the frame's own in-flight one -- correct because callers are responsible for ensuring the source
+// texture's content is actually GPU-complete first (see each render-target GetData() override's
+// own "if still the active render target, end its encoding first" guard, mirroring
+// ReadBackbuffer()'s identical established reasoning; plain SetData()-populated textures have no
+// such concern since nothing ever renders into them) -- Metal command buffers on one queue execute
+// in submission order, so a blit submitted after the writes it depends on have already been
+// committed is guaranteed to see their result.
+//
+// depth defaults to 1 (an ordinary 2D-region copy: RenderTarget2D, one RenderTargetCube/
+// TextureCube face, or one Texture3D Z-slice at a time is still just a 2D blit region with a fixed
+// z origin). destinationBytesPerImage is explicitly 0 whenever depth<=1 -- Apple's own
+// documentation for this method states it is only meaningful (and only read) for a genuine
+// multi-image copy (depth>1); passing a non-zero-but-otherwise-correct value for a single-image
+// copy risks Metal's debug/validation layer flagging it as unused-but-invalid, so 0 is the
+// unambiguously safe choice here rather than reusing the same byte count as destinationBytesPerRow.
+static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> queue, id<MTLTexture> src, NSUInteger slice, int level, int x, int y, int z, int w, int h, int depth, void* data, int dataLength)
 {
-    if (w<=0 || h<=0) return;
+    if (w<=0 || h<=0 || depth<=0) return;
     const NSUInteger bytesPerRow=(NSUInteger)w*4;
-    const NSUInteger length=bytesPerRow*(NSUInteger)h;
+    const NSUInteger bytesPerImage=bytesPerRow*(NSUInteger)h;
+    const NSUInteger length=bytesPerImage*(NSUInteger)depth;
     if ((int)length > dataLength) throw std::runtime_error("Metal: GetData buffer too small for the requested region");
-    id<MTLBuffer> staging=[owner.device newBufferWithLength:length options:MTLResourceStorageModeShared];
+    id<MTLBuffer> staging=[device newBufferWithLength:length options:MTLResourceStorageModeShared];
     if(!staging) throw std::runtime_error("Metal: GetData failed to allocate staging buffer");
     // Explicitly retained/released like every other command buffer in this file (p.command's own
     // convention), even though a purely local, synchronously-used-and-discarded command buffer would
     // be safe unretained too (autorelease pools only drain at pool-scope boundaries, never mid-call)
     // -- consistency over relying on that more subtle argument.
-    id<MTLCommandBuffer> cmd=[owner.queue commandBuffer]; [cmd retain];
+    id<MTLCommandBuffer> cmd=[queue commandBuffer]; [cmd retain];
     id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
     [blit copyFromTexture:src sourceSlice:slice sourceLevel:(NSUInteger)level
-              sourceOrigin:MTLOriginMake((NSUInteger)x,(NSUInteger)y,0)
-                sourceSize:MTLSizeMake((NSUInteger)w,(NSUInteger)h,1)
+              sourceOrigin:MTLOriginMake((NSUInteger)x,(NSUInteger)y,(NSUInteger)z)
+                sourceSize:MTLSizeMake((NSUInteger)w,(NSUInteger)h,(NSUInteger)depth)
                   toBuffer:staging destinationOffset:0
-    destinationBytesPerRow:bytesPerRow destinationBytesPerImage:length];
+    destinationBytesPerRow:bytesPerRow destinationBytesPerImage:(depth>1?bytesPerImage:0)];
     [blit endEncoding];
     [cmd commit];
     [cmd waitUntilCompleted]; // plan_metal.md METAL-133: same intentional correctness-over-throughput stall as ReadBackbuffer().
@@ -1703,7 +1750,7 @@ public:
     void GetData(int level,int x,int y,int w,int h,void* data,int dataLength) const override
     {
         if (owner_.currentRenderTarget==this) owner_.endActiveEncoding(false);
-        blitTextureToClientBuffer(owner_, colorTexture_, 0, level, x, y, w, h, data, dataLength);
+        blitTextureToClientBuffer(owner_.device, owner_.queue, colorTexture_, 0, level, x, y, 0, w, h, 1, data, dataLength);
     }
     id<MTLTexture> colorTexture() const { return colorTexture_; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
@@ -1781,7 +1828,7 @@ public:
     {
         if (face<0||face>=6) return;
         if (owner_.currentRenderTargetCube==this) owner_.endActiveEncoding(false);
-        blitTextureToClientBuffer(owner_, colorTexture_, (NSUInteger)face, level, x, y, w, h, data, dataLength);
+        blitTextureToClientBuffer(owner_.device, owner_.queue, colorTexture_, (NSUInteger)face, level, x, y, 0, w, h, 1, data, dataLength);
     }
     id<MTLTexture> colorTexture() const { return colorTexture_; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
@@ -1999,7 +2046,7 @@ void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixel
 }
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
-std::unique_ptr<ITextureCubeBackend> MetalGraphicsBackend::CreateTextureCube(int size,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTextureCube>(impl_->device,size,mipMap);}
+std::unique_ptr<ITextureCubeBackend> MetalGraphicsBackend::CreateTextureCube(int size,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap);}
 std::unique_ptr<IOcclusionQueryBackend> MetalGraphicsBackend::CreateOcclusionQuery()
 {
     auto& p=*impl_;
@@ -2007,7 +2054,7 @@ std::unique_ptr<IOcclusionQueryBackend> MetalGraphicsBackend::CreateOcclusionQue
         throw std::runtime_error("Metal: exceeded the maximum number of live OcclusionQuery slots (plan_metal.md METAL-136)");
     return std::make_unique<MetalOcclusionQueryBackend>(p, p.nextQuerySlot++);
 }
-std::unique_ptr<ITexture3DBackend> MetalGraphicsBackend::CreateTexture3D(int w,int h,int depth,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTexture3D>(impl_->device,w,h,depth,mipMap);}
+std::unique_ptr<ITexture3DBackend> MetalGraphicsBackend::CreateTexture3D(int w,int h,int depth,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTexture3D>(impl_->device,impl_->queue,w,h,depth,mipMap);}
 // plan_metal.md METAL-102: preserveContents is deliberately NOT threaded into the backend at all --
 // GraphicsDevice::SetRenderTarget() already implements RenderTargetUsage.DiscardContents entirely
 // at the shared layer (an explicit Clear() call right after binding, see its own real code), and

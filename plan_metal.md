@@ -568,10 +568,10 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     pass that produced the content it's supposed to read, since nothing else orders them relative to
     each other). `RenderTargetCube`'s own override additionally guards on `currentRenderTargetCube
     == this` regardless of *which* face is currently bound, since every face shares one underlying
-    `MTLTexture` object. Plain `MetalTexture3D` deliberately left at the inherited no-op — there is
-    no `RenderTarget3D` type anywhere in XNA, so this isn't a gap, it matches plain `MetalTexture`'s
-    own identical established precedent (`ITextureBackend::GetData()`'s own doc comment: "plain,
-    `SetData()`-populated textures never reach this path").
+    `MTLTexture` object. Plain `MetalTexture3D` left at the inherited no-op *at the time this was
+    written* — reasoned (incorrectly, corrected in item 25 below) to match plain `MetalTexture`'s
+    own precedent for `SetData()`-populated textures never needing `GetData()`; it turns out that
+    precedent is 2D-texture-specific and does not hold for `Texture3D`/`TextureCube`.
 
 22. **Phase 1 remainder — format-table research** (`METAL-15`/`16`/`17`/`18`/`20` answered, several
     found to be based on a false premise; `METAL-14`/`19` genuinely still open): reading
@@ -647,6 +647,33 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     same texture binding) since only the shader pair differs. Both `METAL-39` and `METAL-76` are now
     closed — `BasicEffect` and `SkinnedEffect` both correctly default to per-vertex Gouraud lighting,
     matching real XNA/FNA behavior instead of silently always using per-pixel shading.
+
+25. **`METAL-122`/`125` — real `GetData()` on plain `TextureCube`/`Texture3D`, a genuinely new
+    finding, not scoped from the plan's own original text**: while implementing `RenderTargetCube`'s
+    own `GetData()` (item 21 above), a check of `TextureCube.cpp`'s/`Texture3D.cpp`'s *real* code
+    (not just their interface's doc comments) found neither has a CPU-side pixel-shadow shortcut the
+    way `Texture2D` does (confirmed: `Texture2D::GetData()` skips the backend entirely when
+    `cpuPixels_` already holds the answer; `TextureCube::GetData()`/`Texture3D::GetData()` both
+    unconditionally call `backend_->GetData(...)` every time, no exception). This means my earlier
+    reasoning for `METAL-131` — "plain `MetalTexture3D` deliberately left at the inherited no-op...
+    matches plain `MetalTexture`'s own identical established precedent" — **was wrong**: that
+    precedent only actually holds for the 2D case. Any `TextureCube`/`Texture3D` that was ever
+    `SetData()`-populated (never rendered into) would have silently no-op'd on `GetData()` on Metal,
+    a real, currently-shipping bug, not a deliberate, narrow scope match. Fixed by extending
+    `MetalTextureCube`/`MetalTexture3D` to store a retained `id<MTLCommandQueue>` (threaded through
+    their constructors from `CreateTextureCube()`/`CreateTexture3D()`) and adding real `GetData()`
+    overrides via the same shared `blitTextureToClientBuffer()` helper Phase 12's render-target work
+    already built. While doing this, also **hardened `blitTextureToClientBuffer()` itself** against a
+    real, previously-unverified Metal API risk in the already-committed `METAL-131` code: its
+    `copyFromTexture:...destinationBytesPerImage:` argument was passing the same byte count as
+    `destinationBytesPerRow*height` for every 2D/cube-face copy, but Apple's own documentation for
+    this parameter states it is only meaningful for a genuine multi-image (`depth>1`) copy and should
+    be `0` otherwise — a real, plausible Metal validation-layer risk this session hadn't confirmed
+    either way without a compiler. Generalized the helper to take explicit `z`/`depth` parameters
+    (needed anyway for `Texture3D`'s genuine volume copies) and pass `0` for every `depth<=1` call,
+    which is unambiguously correct regardless of which exact interpretation of the parameter's
+    "ignored vs. validated" behavior is right — retroactively hardening the render-target `GetData()`
+    code from item 21 at the same time, not just the two new call sites.
 
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
@@ -746,6 +773,14 @@ iOS/tvOS). Nothing in this list has been touched.
   already-accepted precedent; the anisotropy clamp is correct for a Metal-specific reason (a fixed
   API ceiling, unlike Vulkan/GL's genuinely device-queried ones) (🟨 landed 2026-07-19 —
   `METAL-15`–`18`/`20`; `METAL-14`/`19` remain genuinely open).
+- Real `GetData()` on plain (non-render-target) `TextureCube`/`Texture3D` — a genuinely new finding,
+  not scoped from this plan's own original text: `TextureCube.cpp`/`Texture3D.cpp`'s real code
+  always calls `backend_->GetData()` unconditionally, unlike `Texture2D`'s own CPU-shadow-first
+  shortcut, so both had a real, currently-shipping no-op-readback bug for any `SetData()`-populated
+  (never rendered-into) cube/3D texture. Also retroactively hardened `blitTextureToClientBuffer()`'s
+  `destinationBytesPerImage` argument against a real, previously-unverified Metal API risk found
+  while generalizing it for `Texture3D`'s genuine volume copies (🟨 landed 2026-07-19 —
+  `METAL-122`/`125`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -1033,10 +1068,10 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 |---|---|---|
 | METAL-120 | `CreateTextureCube(size,mipMap,surfaceFormat)` — `MetalTextureCubeBackend : ITextureCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | 🟨 |
 | METAL-121 | `SetData(face,level,x,y,w,h,data,dataLength)` via `replaceRegion:...slice:face mipmapLevel:level` | 🟨 |
-| METAL-122 | `GetData(face,level,...)` — decide real implementation vs. deferring entirely to Phase 12's blit-based readback | ⬜ |
+| METAL-122 | `GetData(face,level,...)` — decide real implementation vs. deferring entirely to Phase 12's blit-based readback | 🟨 (decided and implemented: real, via the shared `blitTextureToClientBuffer()` helper — found `TextureCube.cpp`'s real code always calls `backend_->GetData()` unconditionally, unlike `Texture2D`'s own CPU-shadow-first shortcut, so this was a genuine, previously-shipping gap for *any* cube texture, not just render targets) |
 | METAL-123 | `CreateTexture3D(w,h,depth,mipMap,surfaceFormat)` — `MetalTexture3DBackend : ITexture3DBackend`, `id<MTLTexture>` with `MTLTextureType3D` | 🟨 |
 | METAL-124 | `SetData(level,x,y,z,w,h,depth,data,dataLength)` via `replaceRegion:` with a full 3D `MTLRegion` | 🟨 |
-| METAL-125 | Mip levels for both cube and 3D textures, driven by `METAL-15`'s format table | ⬜ |
+| METAL-125 | Mip levels for both cube and 3D textures, driven by `METAL-15`'s format table | 🟨 (already satisfied by existing code — `MetalTextureCube`'s `mipmapped:mipMap` and `MetalTexture3D`'s own manual level-count loop both already allocate the full chain; the described `METAL-15` format-table dependency doesn't actually apply, same false premise `METAL-15` itself was found to rest on. Also added real per-level `GetData()` readback for both, `METAL-122`/this task) |
 | METAL-126 | Cross-reference: `METAL-65` (EnvironmentMapEffect) is blocked on this phase — do not attempt Phase 6's cube sampling before `METAL-120` lands | ⬜ |
 | METAL-127 | `CTest`: `Metal_TextureCube` — 6-face `SetData` round-trip + a real render-into-cube-face draw sampling it back | ⬜ |
 | METAL-128 | `CTest`: `Metal_Texture3D` — `SetData` round-trip + a minimal `texture3d<float>` sample-back shader | ⬜ |
@@ -1047,7 +1082,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | ID | Task | Status |
 |---|---|---|
 | METAL-130 | `ReadBackbuffer(x,y,w,h,pixels)` — currently throws (base default); implement via `MTLBlitCommandEncoder` copy into a `MTLResourceStorageModeShared` staging buffer, `memcpy` out after `waitUntilCompleted` | 🟨 |
-| METAL-131 | Render-target/cube/3D-texture `GetData()` overrides sharing one blit-to-staging-buffer helper instead of 4 near-duplicate implementations | 🟨 (`RenderTarget2D`/`RenderTargetCube` done via `blitTextureToClientBuffer()`; plain `MetalTexture3D` deliberately left at the inherited no-op — no `RenderTarget3D` type exists in XNA, matching `MetalTexture`'s own identical precedent for plain, `SetData()`-populated textures) |
+| METAL-131 | Render-target/cube/3D-texture `GetData()` overrides sharing one blit-to-staging-buffer helper instead of 4 near-duplicate implementations | 🟨 (all 4 real, via `blitTextureToClientBuffer()`: `RenderTarget2D`/`RenderTargetCube` here, plain `TextureCube`/`Texture3D` closed later the same session as `METAL-122`/`125` once `Texture2D`'s own CPU-shadow precedent was found NOT to extend to them) |
 | METAL-132 | Confirm `x,y` are top-left in *game* (virtual/logical) coordinates per the interface doc — **checked against the reference 2026-07-19, found a pre-existing cross-backend gap, not just a Metal one**: `EasyGLGraphicsBackend::ReadBackbuffer` also uses `x,y,w,h` directly against the physical framebuffer with no logical→physical letterbox scaling applied (only a Y-flip). Metal's new implementation matches that same behavior exactly (raw physical-drawable coordinates, no scaling) — consistent with the established reference, not a new Metal-specific divergence, but real callers passing genuinely logical coordinates on a letterboxed window would get the wrong region on *either* backend today | 🟨 |
 | METAL-133 | Document that `waitUntilCompleted` on readback is an intentional correctness-over-throughput stall, matching every other backend's own readback tradeoff — not something a future perf pass should "fix" into a race | 🟨 |
 | METAL-134 | `CTest`: `Metal_Readback` — clear to a known color, read back, assert exact match (the `Software_Smoke`/`Headless_Smoke`/`Dx3_Smoke` proof pattern) | ⬜ |
