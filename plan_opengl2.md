@@ -486,8 +486,48 @@ possibilities of OpenGL 2"):
   window, no bars, top/bottom cropped), `OpenGL2_PresentationMode_Stretch` (fills exactly via
   non-uniform scale, no bars, no cropping). 2/2 PASS each.
 
+## Status: PbrEffect / SkinnedPbrEffect (2026-07-19/20, session 7 cont'd)
+
+- **`PbrEffect`/`SkinnedPbrEffect` implemented**: metallic-roughness BRDF, matching
+  `EasyGLGraphicsBackend::EnsurePbrProgram`/`EnsurePbrSkinnedProgram`'s formula exactly -- the
+  glTF 2.0 spec's own reference BRDF (Appendix B.3.2-B.3.4: GGX/Trowbridge-Reitz normal
+  distribution, Smith-Schlick-GGX visibility with direct-lighting `k=(roughness+1)^2/8`, Schlick
+  Fresnel), same per-fragment TBN basis built from an interpolated vertex tangent for tangent-space
+  normal mapping. Added `pbrProgram_`/`pbrSkinnedProgram_` (the skinned variant shares the SAME
+  fragment shader verbatim -- only the vertex shader differs, adding the bone-palette skin
+  transform from `SkinnedEffect`). `mat3(uWorld)` truncation (for the tangent's World-space
+  transform) hit the same GLSL-1.20-vs-1.10 issue `SkinnedEffect`'s skin matrix did -- same manual
+  3x3-extraction workaround.
+  New vertex layout support for `VertexPositionNormalTangentTexture` (stride 48) and its
+  stride-68 skinned variant, added as new attribute location 6 (`aTangent`), following the same
+  "always bind this location globally, harmless no-op for every other program" convention as
+  locations 4/5.
+  **Found and fixed a real, pre-existing gap this surfaced**: `VertexBuffer` had NO typed
+  `SetData`/`GetData` overload at all for either new vertex type (only the generic, non-owning
+  `SetDataRaw(const void*, count, stride)` existed) -- meaning a real game constructing a
+  `PbrEffect`/`SkinnedPbrEffect` mesh via the standard, idiomatic `VertexBuffer::SetData(array,
+  count)` API used by every OTHER vertex type in this codebase would simply fail to compile.
+  Confirmed by hitting the exact same wall the first test-writing attempt did. Fixed by adding the
+  full 8-method set (`SetData(count)`/`SetData(startIndex,elementCount)`/`GetData(count)`/
+  `GetData(startIndex,elementCount)` x2 types) in the SHARED `VertexBuffer.hpp`/`.cpp`, mirroring
+  `VertexPositionNormalTextureSkinned`'s own established "pack into a compact GpuVertex struct,
+  strip the `IVertexType` vtable pointer" pattern exactly (confirmed via `sizeof()`: the public
+  XNA-facing struct is 56/80 bytes due to that vtable pointer + alignment padding, vs. the
+  GPU-compact 48/68 bytes every backend's stride dispatch expects -- the SAME reason every other
+  typed `VertexBuffer::SetData` overload exists in the first place, not something newly invented
+  here). Purely additive (new overloads only) -- every other backend/caller is unaffected.
+  Added five default-fallback textures reused for `PbrEffect`'s always-on sampling (matching the
+  established `EnvironmentMapEffect`/`SkinnedEffect` precedent): `MetallicRoughnessMap`/
+  `EmissiveMap`/`OcclusionMap` default to white ("1.0 when absent", matching
+  `GpuDrawParams::pbrMetallicFactor`'s own doc comment), and a NEW default flat-normal texture
+  ((128,128,255,255), decodes to tangent-space (0,0,1) -- "no perturbation") for `NormalMap`.
+  `OpenGL2_PbrEffect` verifies: per-fragment lighting response; NormalMap perturbation actually
+  changes the lit result; EmissiveFactor is additive and lighting-independent; OcclusionMap
+  darkens the ambient term; all five maps' null fallbacks work without crashing; and
+  `SkinnedPbrEffect`'s bone-palette position skinning combined with the PBR shader. 7/7 PASS.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers eighteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers nineteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -519,6 +559,8 @@ possibilities of OpenGL 2"):
     binding, built-in shader restored after a plain `Begin()`. 3/3 PASS.
   - `OpenGL2_PresentationMode_Letterbox`/`_Overscan`/`_Stretch` -- real physical-viewport scaling
     per mode (bars / full-coverage-cropped / non-uniform-stretch). 2/2 PASS each.
+  - `OpenGL2_PbrEffect` -- metallic-roughness BRDF, tangent-space normal mapping,
+    emissive/occlusion maps, SkinnedPbrEffect bone-palette skinning. 7/7 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -577,11 +619,16 @@ possibilities of OpenGL 2"):
   entry above) via the new `IGraphicsBackend::GetDefaultViewportRect()` method -- every other
   backend is unaffected (its default reproduces their exact prior behavior) unless it chooses to
   override it for its own real letterboxing.
+- PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF, tangent-space normal mapping; see
+  `OpenGL2_PbrEffect` above). Also added the previously-missing `VertexBuffer::SetData`/`GetData`
+  typed overloads for `VertexPositionNormalTangentTexture(Skinned)` (a real, shared gap this
+  surfaced -- see that status entry above), so this is usable through the standard `VertexBuffer`
+  API like every other vertex type, not just via the raw/untyped path.
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
 - Full vertex declaration support rather than stride inference (blocks any vertex format beyond
-  the 5 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
+  the 8 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
   attribute order/extra streams). Investigated: `IVertexBufferBackend::SetData()` only ever
   receives a raw `stride_in_bytes`, never a `VertexDeclaration`/`VertexElement` list -- adding
   real declaration support means widening `IGraphicsBackend`'s shared interface, which every
@@ -591,9 +638,6 @@ possibilities of OpenGL 2"):
   VertexDeclaration ... deferred as a larger cross-backend refactor, not attempted here") --
   deliberately not attempted here either, for the same reason: out of proportion for an
   OpenGL2-scoped task, and risks every other backend for a feature only this backend would gain.
-- PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
-  effort (its own shader family + texture set), likely lower priority than the items above for a
-  "no EasyGL dependency" OpenGL 2.1 backend.
 - Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended
   for Linux desktop builds. This is a REAL, not theoretical, gap: `opengl32.dll` on Windows only
   exports the ~350 GL 1.1 entry points -- everything this backend actually calls beyond GL 1.1

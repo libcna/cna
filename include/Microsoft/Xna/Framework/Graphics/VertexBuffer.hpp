@@ -12,6 +12,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
@@ -256,6 +258,90 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of vertices to read.
          */
         NOXNA void GetData(VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads VertexPositionNormalTangentTexture vertex data to the GPU buffer.
+         *
+         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         *
+         * @param data  Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        NOXNA void SetData(const VertexPositionNormalTangentTexture* data, int count);
+
+        /**
+         * @brief Uploads a slice of VertexPositionNormalTangentTexture vertex data to the GPU buffer.
+         *
+         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         *
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         */
+        NOXNA void SetData(const VertexPositionNormalTangentTexture* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Reads back VertexPositionNormalTangentTexture vertex data previously uploaded via `SetData`.
+         *
+         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         *
+         * @param data  Destination array to receive the vertex data.
+         * @param count Number of vertices to read.
+         */
+        NOXNA void GetData(VertexPositionNormalTangentTexture* data, int count);
+
+        /**
+         * @brief Reads back a slice of VertexPositionNormalTangentTexture vertex data previously uploaded via `SetData`.
+         *
+         * NOXNA overload for PbrEffect's tangent-space vertex type.
+         *
+         * @param data         Destination array to receive the vertex data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of vertices to read.
+         */
+        NOXNA void GetData(VertexPositionNormalTangentTexture* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads VertexPositionNormalTangentTextureSkinned vertex data to the GPU buffer.
+         *
+         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         *
+         * @param data  Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        NOXNA void SetData(const VertexPositionNormalTangentTextureSkinned* data, int count);
+
+        /**
+         * @brief Uploads a slice of VertexPositionNormalTangentTextureSkinned vertex data to the GPU buffer.
+         *
+         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         *
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         */
+        NOXNA void SetData(const VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Reads back VertexPositionNormalTangentTextureSkinned vertex data previously uploaded via `SetData`.
+         *
+         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         *
+         * @param data  Destination array to receive the vertex data.
+         * @param count Number of vertices to read.
+         */
+        NOXNA void GetData(VertexPositionNormalTangentTextureSkinned* data, int count);
+
+        /**
+         * @brief Reads back a slice of VertexPositionNormalTangentTextureSkinned vertex data previously uploaded via `SetData`.
+         *
+         * NOXNA overload for SkinnedPbrEffect's tangent-space, GPU-skinned vertex type.
+         *
+         * @param data         Destination array to receive the vertex data.
+         * @param startIndex   Index of the first element to write in @p data.
+         * @param elementCount Number of vertices to read.
+         */
+        NOXNA void GetData(VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount);
 
         /**
          * @brief Uploads raw vertex data with an explicit per-vertex byte stride.

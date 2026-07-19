@@ -130,6 +130,8 @@ namespace CNA::Internal::Backends::OpenGL2
         unsigned litProgram_{};
         unsigned envMapProgram_{};
         unsigned skinnedProgram_{};
+        unsigned pbrProgram_{};
+        unsigned pbrSkinnedProgram_{};
         IRenderTargetBackend* currentRt_{};
         IRenderTargetCubeBackend* currentRtCube_{};
         int currentRtWidth_{};
@@ -151,10 +153,16 @@ namespace CNA::Internal::Backends::OpenGL2
         // Lazily-created 1x1 white fallbacks for effects that always sample a texture regardless
         // of whether the XNA-level Texture property was actually set (unlike BasicEffect/
         // AlphaTestEffect/DualTextureEffect, which only select a texturing program when texture0
-        // is actually non-null -- see drawInternal()'s dispatch). Used by both
-        // EnvironmentMapEffect (Texture + EnvironmentMap) and SkinnedEffect (Texture).
+        // is actually non-null -- see drawInternal()'s dispatch). Used by
+        // EnvironmentMapEffect (Texture + EnvironmentMap), SkinnedEffect (Texture), and
+        // PbrEffect/SkinnedPbrEffect (Texture + MetallicRoughness/Emissive/OcclusionMap -- all
+        // four are "value 1.0 when absent", matching a flat white texture's sampled value).
         unsigned defaultWhiteTexture2D_{};
         unsigned defaultWhiteTextureCube_{};
+        // Lazily-created 1x1 flat-normal (128,128,255,255 -> decodes to tangent-space (0,0,1),
+        // i.e. "no perturbation") fallback for PbrEffect/SkinnedPbrEffect's NormalMap, which --
+        // unlike the other three PBR maps above -- is not simply "1.0 when absent".
+        unsigned defaultFlatNormalTexture2D_{};
         void ensureDefaultWhiteTextures();
 
         void ensurePrograms();

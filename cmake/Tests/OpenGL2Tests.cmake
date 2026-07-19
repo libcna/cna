@@ -114,4 +114,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_presentationmode_stretch examples/opengl2_presentationmode_stretch_test.cpp)
     cna_register_backend_test(NAME OpenGL2_PresentationMode_Stretch COMMAND cna_test_opengl2_presentationmode_stretch
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: PbrEffect/SkinnedPbrEffect proof -- metallic-roughness BRDF, tangent-space
+    # normal mapping, occlusion/emissive maps, and bone-palette skinning combined with PBR.
+    cna_opengl2_test(cna_test_opengl2_pbreffect examples/opengl2_pbreffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_PbrEffect COMMAND cna_test_opengl2_pbreffect
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

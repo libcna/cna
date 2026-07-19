@@ -50,6 +50,9 @@ namespace CNA::Internal::Backends::OpenGL2
             // Harmless no-op for every other program, same convention as aNormal above.
             glBindAttribLocation(program, 4, "aBoneWeight");
             glBindAttribLocation(program, 5, "aBoneIndices");
+            // PbrEffect/SkinnedPbrEffect-only attribute (VertexPositionNormalTangentTexture(Skinned),
+            // stride 48/68). Harmless no-op for every other program, same convention as above.
+            glBindAttribLocation(program, 6, "aTangent");
             glLinkProgram(program);
             glDeleteShader(vs);
             glDeleteShader(fs);
@@ -378,6 +381,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 glDisableVertexAttribArray(3);
                 glDisableVertexAttribArray(4);
                 glDisableVertexAttribArray(5);
+                glDisableVertexAttribArray(6);
             }
             else if (stride == 20)
             {
@@ -388,6 +392,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 glDisableVertexAttribArray(3);
                 glDisableVertexAttribArray(4);
                 glDisableVertexAttribArray(5);
+                glDisableVertexAttribArray(6);
             }
             else if (stride == 24)
             {
@@ -398,6 +403,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 glDisableVertexAttribArray(3);
                 glDisableVertexAttribArray(4);
                 glDisableVertexAttribArray(5);
+                glDisableVertexAttribArray(6);
             }
             else if (stride == 52 || stride == 56)
             {
@@ -416,6 +422,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(32));
                 glEnableVertexAttribArray(5);
                 glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(48));
+                glDisableVertexAttribArray(6);
                 if (stride == 56)
                 {
                     glEnableVertexAttribArray(1);
@@ -425,6 +432,34 @@ namespace CNA::Internal::Backends::OpenGL2
                 {
                     glDisableVertexAttribArray(1);
                     glVertexAttrib4f(1, 1, 1, 1, 1);
+                }
+            }
+            else if (stride == 48 || stride == 68)
+            {
+                // VertexPositionNormalTangentTexture(Skinned): float3 pos(0) + float3 normal(12) +
+                // float4 tangent(24, xyz + bitangent handedness in w) + float2 uv(40) [+ float4
+                // boneWeight(48) + ubyte4 boneIndices(64) for the stride-68 skinned variant --
+                // matches EasyGLGraphicsBackend's own identical stride-48/68 layout comments].
+                // PbrEffect/SkinnedPbrEffect.
+                glEnableVertexAttribArray(3);
+                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glEnableVertexAttribArray(6);
+                glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(24));
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(40));
+                glDisableVertexAttribArray(1);
+                glVertexAttrib4f(1, 1, 1, 1, 1);
+                if (stride == 68)
+                {
+                    glEnableVertexAttribArray(4);
+                    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(48));
+                    glEnableVertexAttribArray(5);
+                    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(64));
+                }
+                else
+                {
+                    glDisableVertexAttribArray(4);
+                    glDisableVertexAttribArray(5);
                 }
             }
             else if (stride >= 32)
@@ -437,6 +472,7 @@ namespace CNA::Internal::Backends::OpenGL2
                 glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
                 glDisableVertexAttribArray(4);
                 glDisableVertexAttribArray(5);
+                glDisableVertexAttribArray(6);
             }
             else
             {
@@ -1257,8 +1293,11 @@ namespace CNA::Internal::Backends::OpenGL2
         if (litProgram_) glDeleteProgram(litProgram_);
         if (envMapProgram_) glDeleteProgram(envMapProgram_);
         if (skinnedProgram_) glDeleteProgram(skinnedProgram_);
+        if (pbrProgram_) glDeleteProgram(pbrProgram_);
+        if (pbrSkinnedProgram_) glDeleteProgram(pbrSkinnedProgram_);
         if (defaultWhiteTexture2D_) glDeleteTextures(1, &defaultWhiteTexture2D_);
         if (defaultWhiteTextureCube_) glDeleteTextures(1, &defaultWhiteTextureCube_);
+        if (defaultFlatNormalTexture2D_) glDeleteTextures(1, &defaultFlatNormalTexture2D_);
         if (context_) SDL_GL_DestroyContext(context_);
     }
 
@@ -1482,12 +1521,126 @@ namespace CNA::Internal::Backends::OpenGL2
             "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
             "}";
 
+        // PbrEffect/SkinnedPbrEffect: metallic-roughness BRDF, matching
+        // EasyGLGraphicsBackend::EnsurePbrProgram/EnsurePbrSkinnedProgram's formula exactly --
+        // same GGX/Trowbridge-Reitz normal distribution, Smith-Schlick-GGX visibility
+        // (direct-lighting k=(roughness+1)^2/8), and Schlick Fresnel (the glTF 2.0 spec's own
+        // reference BRDF, Appendix B.3.2-B.3.4), same tangent-space normal mapping via a
+        // per-fragment TBN basis. Only the vertex shader differs between the two (skinning vs
+        // not) -- the fragment shader (the actual BRDF) is shared verbatim.
+        const char* pbrFragmentSrc =
+            "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
+            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
+            "uniform sampler2D uTex;uniform sampler2D uNormalMap;uniform sampler2D uMetallicRoughnessMap;"
+            "uniform sampler2D uEmissiveMap;uniform sampler2D uOcclusionMap;"
+            "uniform vec4 uDiffuse;uniform vec3 uAmbientColor;uniform vec3 uEmissiveColor;"
+            "uniform float uMetallicFactor;uniform float uRoughnessFactor;"
+            "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;"
+            "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;"
+            "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;"
+            "uniform vec3 uEyePosition;uniform vec4 uAlphaTest;uniform vec3 uFogColor;"
+            "vec3 PbrLight(vec3 N,vec3 V,vec3 L,vec3 lightColor,vec3 albedo,vec3 F0,float roughness,float metallic){"
+            "vec3 H=normalize(V+L);"
+            "float NdotL=max(dot(N,L),0.0);float NdotV=max(dot(N,V),1e-4);"
+            "float NdotH=max(dot(N,H),0.0);float VdotH=max(dot(V,H),0.0);"
+            "float a2=pow(roughness,4.0);"
+            "float dTerm=(NdotH*NdotH*(a2-1.0)+1.0);"
+            "float D=a2/(3.14159265*dTerm*dTerm+1e-7);"
+            "float k=(roughness+1.0);k=k*k/8.0;"
+            "float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));"
+            "vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);"
+            "vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);"
+            "vec3 diffuseColor=albedo*(1.0-metallic);"
+            "vec3 kd=vec3(1.0)-F;"
+            "return (kd*diffuseColor/3.14159265+specular)*lightColor*NdotL;"
+            "}"
+            "void main(){"
+            "vec4 baseColorTex=texture2D(uTex,vTex);"
+            "vec3 albedo=baseColorTex.rgb*uDiffuse.rgb;"
+            "float alpha=baseColorTex.a*uDiffuse.a;"
+            "vec3 N=normalize(vNormal);"
+            "vec3 T=normalize(vTangent-N*dot(N,vTangent));"
+            "vec3 B=cross(N,T)*vBitangentSign;"
+            "mat3 TBN=mat3(T,B,N);"
+            "vec3 sampledNormal=texture2D(uNormalMap,vTex).rgb*2.0-1.0;"
+            "vec3 finalNormal=normalize(TBN*sampledNormal);"
+            "vec4 mr=texture2D(uMetallicRoughnessMap,vTex);"
+            "float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);"
+            "float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);"
+            "vec3 V=normalize(uEyePosition-vWorldPos);"
+            "vec3 F0=mix(vec3(0.04),albedo,metallic);"
+            "vec3 Lo=vec3(0.0);"
+            "Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);"
+            "Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);"
+            "Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);"
+            "float occlusion=texture2D(uOcclusionMap,vTex).r;"
+            "vec3 ambient=uAmbientColor*albedo*occlusion;"
+            "vec3 emissive=uEmissiveColor*texture2D(uEmissiveMap,vTex).rgb;"
+            "gl_FragColor=vec4(ambient+Lo+emissive,alpha);"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "}";
+
+        const char* pbrVertexSrc =
+            "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
+            "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
+            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
+            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
+            "void main(){"
+            "gl_Position=uWVP*vec4(aPosition,1.0);"
+            "vNormal=uNormalMatrix*aNormal;"
+            // Tangent transforms as a plain direction under the World upper-3x3 (not the
+            // inverse-transpose uNormalMatrix the normal itself uses) -- correct for
+            // uniform-scale World transforms, a documented simplification for non-uniform scale
+            // shared with most real-time engines lacking a full per-tangent inverse-transpose
+            // (matches EasyGLGraphicsBackend's own identical comment/formula). mat3(mat4)
+            // truncation requires GLSL 1.20 (this file targets 1.10 throughout), so built manually
+            // -- same technique already used for SkinnedEffect's skin matrix above.
+            "mat3 world3=mat3(uWorld[0].xyz,uWorld[1].xyz,uWorld[2].xyz);"
+            "vTangent=world3*aTangent.xyz;"
+            "vBitangentSign=aTangent.w;"
+            "vTex=aTexCoord;"
+            "vWorldPos=(uWorld*vec4(aPosition,1.0)).xyz;"
+            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
+            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "}";
+
+        const char* pbrSkinnedVertexSrc =
+            "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
+            "attribute vec4 aBoneWeight;attribute vec4 aBoneIndices;"
+            "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat4 uBones[72];uniform int uWeightsPerVertex;"
+            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "varying vec3 vNormal;varying vec3 vTangent;varying float vBitangentSign;"
+            "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
+            "void main(){"
+            "int i0=int(aBoneIndices.x+0.5);int i1=int(aBoneIndices.y+0.5);"
+            "int i2=int(aBoneIndices.z+0.5);int i3=int(aBoneIndices.w+0.5);"
+            "mat4 skinMat=uBones[i0]*aBoneWeight.x;"
+            "if(uWeightsPerVertex>=2) skinMat+=uBones[i1]*aBoneWeight.y;"
+            "if(uWeightsPerVertex>=4) skinMat+=uBones[i2]*aBoneWeight.z+uBones[i3]*aBoneWeight.w;"
+            "vec4 skinnedPos=skinMat*vec4(aPosition,1.0);"
+            "gl_Position=uWVP*skinnedPos;"
+            "mat3 skinMat3=mat3(skinMat[0].xyz,skinMat[1].xyz,skinMat[2].xyz);"
+            "mat3 world3=mat3(uWorld[0].xyz,uWorld[1].xyz,uWorld[2].xyz);"
+            "vNormal=normalize(world3*(skinMat3*aNormal));"
+            "vTangent=world3*(skinMat3*aTangent.xyz);"
+            "vBitangentSign=aTangent.w;"
+            "vTex=aTexCoord;"
+            "vWorldPos=(uWorld*skinnedPos).xyz;"
+            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
+            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "}";
+
         colorProgram_ = LinkProgram(colorVertexSrc.c_str(), colorFragmentSrc.c_str());
         texturedProgram_ = LinkProgram(texturedVertexSrc.c_str(), texturedFragmentSrc.c_str());
         dualTextureProgram_ = LinkProgram(texturedVertexSrc.c_str(), dualTextureFragmentSrc.c_str());
         litProgram_ = LinkProgram(litVertexSrc, litFragmentSrc);
         envMapProgram_ = LinkProgram(envMapVertexSrc, envMapFragmentSrc);
         skinnedProgram_ = LinkProgram(skinnedVertexSrc, skinnedFragmentSrc);
+        pbrProgram_ = LinkProgram(pbrVertexSrc, pbrFragmentSrc);
+        pbrSkinnedProgram_ = LinkProgram(pbrSkinnedVertexSrc, pbrFragmentSrc);
     }
 
     void OpenGL2GraphicsBackend::ensureDefaultWhiteTextures()
@@ -1508,6 +1661,15 @@ namespace CNA::Internal::Backends::OpenGL2
             glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        // (128,128,255,255) decodes (via the PBR shaders' own `*2.0-1.0`) to tangent-space
+        // (0,0,1) -- "no perturbation", the correct PbrEffect/SkinnedPbrEffect NormalMap default.
+        const uint8_t flatNormal[4] = {128, 128, 255, 255};
+        glGenTextures(1, &defaultFlatNormalTexture2D_);
+        glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture2D_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, flatNormal);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
 
     void OpenGL2GraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1839,13 +2001,15 @@ namespace CNA::Internal::Backends::OpenGL2
             return;
         }
 
-        const bool skinned = params && params->skinned && (vb->stride == 52 || vb->stride == 56);
-        const bool envMapped = params && params->envMapping && !skinned && vb->stride >= 32;
-        const bool lit = params && params->lightingEnabled && !envMapped && !skinned && vb->stride >= 32;
+        const bool pbrSkinned = params && params->pbr && params->skinned && vb->stride == 68;
+        const bool pbr = params && params->pbr && !params->skinned && vb->stride == 48;
+        const bool skinned = params && params->skinned && !params->pbr && (vb->stride == 52 || vb->stride == 56);
+        const bool envMapped = params && params->envMapping && !skinned && !pbr && !pbrSkinned && vb->stride >= 32;
+        const bool lit = params && params->lightingEnabled && !envMapped && !skinned && !pbr && !pbrSkinned && vb->stride >= 32;
         const bool dual = params && params->dualTexture && params->texture1 && vb->stride >= 20;
         const bool textured = params && params->texture0 && vb->stride >= 20;
 
-        const GLuint program = skinned ? skinnedProgram_ : envMapped ? envMapProgram_ : lit ? litProgram_ : dual ? dualTextureProgram_ : textured ? texturedProgram_ : colorProgram_;
+        const GLuint program = pbrSkinned ? pbrSkinnedProgram_ : pbr ? pbrProgram_ : skinned ? skinnedProgram_ : envMapped ? envMapProgram_ : lit ? litProgram_ : dual ? dualTextureProgram_ : textured ? texturedProgram_ : colorProgram_;
         glUseProgram(program);
 
         float wvp[16];
@@ -1868,7 +2032,7 @@ namespace CNA::Internal::Backends::OpenGL2
             glUniform1f(glGetUniformLocation(program, "uFogEnd"), params->fogEnd);
         }
 
-        if (lit || envMapped || skinned)
+        if (lit || envMapped || skinned || pbr || pbrSkinned)
         {
             float worldColMajor[16];
             for (int r = 0; r < 4; ++r)
@@ -1918,6 +2082,22 @@ namespace CNA::Internal::Backends::OpenGL2
                                    GL_FALSE, params->boneTransforms);
                 glUniform1i(glGetUniformLocation(program, "uWeightsPerVertex"), params->weightsPerVertex);
                 glUniform1f(glGetUniformLocation(program, "uVertexColorEnabled"), params->vertexColorEnabled ? 1.0f : 0.0f);
+            }
+
+            // SkinnedPbrEffect shares SkinnedEffect's own bone-palette uniforms (same names,
+            // uploaded unconditionally here rather than duplicating the block above).
+            if (pbrSkinned)
+            {
+                glUniformMatrix4fv(glGetUniformLocation(program, "uBones[0]"), params->boneCount,
+                                   GL_FALSE, params->boneTransforms);
+                glUniform1i(glGetUniformLocation(program, "uWeightsPerVertex"), params->weightsPerVertex);
+            }
+
+            // PbrEffect/SkinnedPbrEffect-only uniforms (silently ignored by every other program).
+            if (pbr || pbrSkinned)
+            {
+                glUniform1f(glGetUniformLocation(program, "uMetallicFactor"), params->pbrMetallicFactor);
+                glUniform1f(glGetUniformLocation(program, "uRoughnessFactor"), params->pbrRoughnessFactor);
             }
         }
 
@@ -1986,6 +2166,45 @@ namespace CNA::Internal::Backends::OpenGL2
             params->texture1->BindGL();
             applySampler(1);
             glUniform1i(glGetUniformLocation(program, "uTex2"), 1);
+            glActiveTexture(GL_TEXTURE0);
+        }
+        // PbrEffect/SkinnedPbrEffect::FillGpuDrawParams() also always sets textureEnabled=true and
+        // pbrFragmentSrc always samples all five textures unconditionally (base color + normal +
+        // metallic-roughness + emissive + occlusion) -- same null-texture fallback reasoning as
+        // envMapped/skinned above, extended to all five maps (MetallicRoughness/Emissive/Occlusion
+        // default to white -- "1.0 when absent", matching FillGpuDrawParams' own doc comment that
+        // Metallic/RoughnessFactor alone become the per-material constant; NormalMap defaults to
+        // flat -- "no perturbation").
+        if (pbr || pbrSkinned)
+        {
+            ensureDefaultWhiteTextures();
+
+            glActiveTexture(GL_TEXTURE0);
+            if (params->texture0) params->texture0->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(0);
+            glUniform1i(glGetUniformLocation(program, "uTex"), 0);
+
+            glActiveTexture(GL_TEXTURE1);
+            if (params->pbrNormalMap) params->pbrNormalMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture2D_);
+            glUniform1i(glGetUniformLocation(program, "uNormalMap"), 1);
+
+            glActiveTexture(GL_TEXTURE2);
+            if (params->pbrMetallicRoughnessMap) params->pbrMetallicRoughnessMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            glUniform1i(glGetUniformLocation(program, "uMetallicRoughnessMap"), 2);
+
+            glActiveTexture(GL_TEXTURE3);
+            if (params->pbrEmissiveMap) params->pbrEmissiveMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            glUniform1i(glGetUniformLocation(program, "uEmissiveMap"), 3);
+
+            glActiveTexture(GL_TEXTURE4);
+            if (params->pbrOcclusionMap) params->pbrOcclusionMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            glUniform1i(glGetUniformLocation(program, "uOcclusionMap"), 4);
+
             glActiveTexture(GL_TEXTURE0);
         }
 

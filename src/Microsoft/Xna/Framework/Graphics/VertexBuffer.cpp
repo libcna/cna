@@ -606,6 +606,167 @@ namespace Microsoft::Xna::Framework::Graphics
         }
     }
 
+    void VertexBuffer::SetData(const VertexPositionNormalTangentTexture* data, int count)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        // VertexPositionNormalTangentTexture has a virtual base (IVertexType). Pack into GPU
+        // layout: float3 position + float3 normal + float4 tangent + float2 texcoord = 48 bytes.
+        struct GpuVertex {
+            float x, y, z;
+            float nx, ny, nz;
+            float tx, ty, tz, tw;
+            float u, v;
+        };
+        static_assert(sizeof(GpuVertex) == 48, "GpuVertex (VPNTangentT) must be 48 bytes");
+
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i) {
+            packed[i].x  = data[i].Position.X;
+            packed[i].y  = data[i].Position.Y;
+            packed[i].z  = data[i].Position.Z;
+            packed[i].nx = data[i].Normal.X;
+            packed[i].ny = data[i].Normal.Y;
+            packed[i].nz = data[i].Normal.Z;
+            packed[i].tx = data[i].Tangent.X;
+            packed[i].ty = data[i].Tangent.Y;
+            packed[i].tz = data[i].Tangent.Z;
+            packed[i].tw = data[i].Tangent.W;
+            packed[i].u  = data[i].TextureCoordinate.X;
+            packed[i].v  = data[i].TextureCoordinate.Y;
+        }
+        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
+
+        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
+        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
+    }
+
+    void VertexBuffer::SetData(const VertexPositionNormalTangentTexture* data, int startIndex, int elementCount)
+    {
+        SetData(data + startIndex, elementCount);
+    }
+
+    void VertexBuffer::GetData(VertexPositionNormalTangentTexture* data, int count)
+    {
+        GetData(data, 0, count);
+    }
+
+    void VertexBuffer::GetData(VertexPositionNormalTangentTexture* data, int startIndex, int elementCount)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        if (bufferUsage_ == BufferUsage::WriteOnly)
+            throw System::NotSupportedException(
+                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
+        struct GpuVertex {
+            float x, y, z;
+            float nx, ny, nz;
+            float tx, ty, tz, tw;
+            float u, v;
+        };
+        static_assert(sizeof(GpuVertex) == 48, "GpuVertex (VPNTangentT) must be 48 bytes");
+        if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
+            > cpuShadow_.size())
+            throw System::ArgumentOutOfRangeException(
+                "elementCount", std::to_string(elementCount),
+                "This parameter must be a valid index within the array.");
+        const auto* packed = reinterpret_cast<const GpuVertex*>(cpuShadow_.data());
+        for (int i = 0; i < elementCount; ++i) {
+            const GpuVertex& v = packed[startIndex + i];
+            data[i] = VertexPositionNormalTangentTexture(
+                Vector3(v.x, v.y, v.z), Vector3(v.nx, v.ny, v.nz),
+                Vector4(v.tx, v.ty, v.tz, v.tw), Vector2(v.u, v.v));
+        }
+    }
+
+    void VertexBuffer::SetData(const VertexPositionNormalTangentTextureSkinned* data, int count)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        // VertexPositionNormalTangentTextureSkinned has a virtual base (IVertexType). Pack into
+        // GPU layout: float3 position + float3 normal + float4 tangent + float2 texcoord +
+        // float4 weights + byte4 indices = 68 bytes.
+        struct GpuVertex {
+            float x, y, z;
+            float nx, ny, nz;
+            float tx, ty, tz, tw;
+            float u, v;
+            float w0, w1, w2, w3;
+            std::uint8_t i0, i1, i2, i3;
+        };
+        static_assert(sizeof(GpuVertex) == 68, "GpuVertex (VPNTangentTSkinned) must be 68 bytes");
+
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i) {
+            packed[i].x  = data[i].Position.X;
+            packed[i].y  = data[i].Position.Y;
+            packed[i].z  = data[i].Position.Z;
+            packed[i].nx = data[i].Normal.X;
+            packed[i].ny = data[i].Normal.Y;
+            packed[i].nz = data[i].Normal.Z;
+            packed[i].tx = data[i].Tangent.X;
+            packed[i].ty = data[i].Tangent.Y;
+            packed[i].tz = data[i].Tangent.Z;
+            packed[i].tw = data[i].Tangent.W;
+            packed[i].u  = data[i].TextureCoordinate.X;
+            packed[i].v  = data[i].TextureCoordinate.Y;
+            packed[i].w0 = data[i].BlendWeight.X;
+            packed[i].w1 = data[i].BlendWeight.Y;
+            packed[i].w2 = data[i].BlendWeight.Z;
+            packed[i].w3 = data[i].BlendWeight.W;
+            packed[i].i0 = data[i].BlendIndices[0];
+            packed[i].i1 = data[i].BlendIndices[1];
+            packed[i].i2 = data[i].BlendIndices[2];
+            packed[i].i3 = data[i].BlendIndices[3];
+        }
+        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
+
+        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
+        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
+    }
+
+    void VertexBuffer::SetData(const VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount)
+    {
+        SetData(data + startIndex, elementCount);
+    }
+
+    void VertexBuffer::GetData(VertexPositionNormalTangentTextureSkinned* data, int count)
+    {
+        GetData(data, 0, count);
+    }
+
+    void VertexBuffer::GetData(VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount)
+    {
+        if (getIsDisposedProperty())
+            throw System::ObjectDisposedException("VertexBuffer");
+        if (bufferUsage_ == BufferUsage::WriteOnly)
+            throw System::NotSupportedException(
+                "Calling GetData on a resource that was created with BufferUsage.WriteOnly is not supported.");
+        struct GpuVertex {
+            float x, y, z;
+            float nx, ny, nz;
+            float tx, ty, tz, tw;
+            float u, v;
+            float w0, w1, w2, w3;
+            std::uint8_t i0, i1, i2, i3;
+        };
+        static_assert(sizeof(GpuVertex) == 68, "GpuVertex (VPNTangentTSkinned) must be 68 bytes");
+        if ((static_cast<std::size_t>(startIndex) + static_cast<std::size_t>(elementCount)) * sizeof(GpuVertex)
+            > cpuShadow_.size())
+            throw System::ArgumentOutOfRangeException(
+                "elementCount", std::to_string(elementCount),
+                "This parameter must be a valid index within the array.");
+        const auto* packed = reinterpret_cast<const GpuVertex*>(cpuShadow_.data());
+        for (int i = 0; i < elementCount; ++i) {
+            const GpuVertex& v = packed[startIndex + i];
+            data[i] = VertexPositionNormalTangentTextureSkinned(
+                Vector3(v.x, v.y, v.z), Vector3(v.nx, v.ny, v.nz),
+                Vector4(v.tx, v.ty, v.tz, v.tw), Vector2(v.u, v.v),
+                Vector4(v.w0, v.w1, v.w2, v.w3),
+                std::array<std::uint8_t, 4>{v.i0, v.i1, v.i2, v.i3});
+        }
+    }
+
     void VertexBuffer::SetDataRaw(const void* data, int count, int stride)
     {
         const std::size_t uploadStride =
