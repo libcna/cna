@@ -139,7 +139,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`examples-demo_avatar_multi_attach_stress`](manifest/examples-demo_avatar_multi_attach_stress.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_avatar_wardrobe_hotswap`](manifest/examples-demo_avatar_wardrobe_hotswap.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_devices`](manifest/examples-demo_devices.md) | 35 | PENDING: 35 / AUDITED: 0 |
-| [`examples-demo_friends_and_gamercard`](manifest/examples-demo_friends_and_gamercard.md) | 3 | PENDING: 3 / AUDITED: 0 |
+| [`examples-demo_friends_and_gamercard`](manifest/examples-demo_friends_and_gamercard.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
 | [`examples-demo_gamer_profile_privileges`](manifest/examples-demo_gamer_profile_privileges.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_gamer_roster_hud`](manifest/examples-demo_gamer_roster_hud.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
 | [`examples-demo_gamerservices_dispatcher_watchdog`](manifest/examples-demo_gamerservices_dispatcher_watchdog.md) | 3 | PENDING: 3 / AUDITED: 0 |
