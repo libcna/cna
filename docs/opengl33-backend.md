@@ -32,13 +32,34 @@ context, GL 3.3.
   `-DCNA_GRAPHICS_BACKEND=OPENGL33`: same 117 pre-existing failures as the `OPENGLES` baseline
   (all in unrelated Media/Content/XNB/Audio/Video subsystems — no ffmpeg-decodable fixtures/real
   media devices in this sandbox), zero new failures, zero Graphics/EasyGL/shader-related failures.
+- ✅ **Full example/pixel-test suite — all 241 `cna_easygl_test`-registered binaries, not a
+  sample** (`plan_glbackends.md` GLB-22, upgraded from an earlier 7-binary sample). Built all 241
+  (`cmake --build --target <all 241 names>`, exit 0) and ran every one of them
+  (`DISPLAY=:99` Xvfb, from the repo root so relative-path golden-image/fixture lookups resolve
+  correctly): **235/241 pass, 0 crash, 6 fail.**
+  - **5 of the 6 failures are pre-existing, confirmed by building and running the exact same 6
+    binaries under `OPENGLES` for direct comparison — they fail identically there too**:
+    `cna_oracle_render_easygl`, `cna_test_avatar_tint_routing` (documented pre-existing bug,
+    `plan_graphics.md` Task 1115 — a real `AvatarRenderer` tint-doubling defect, unrelated to GL
+    profile), `cna_test_easygl_graphicsdevicemanager_vsync`,
+    `cna_test_easygl_graphicsdevice_reference_stencil` (also a documented pre-existing gap,
+    `plan_graphics.md` Task 872), `cna_test_easygl_mrt`.
+  - **1 failure is real and `OPENGL33`-specific, but not a regression in this plan's shader-adapter
+    work**: `cna_test_easygl_shipgame_particle_shader` passes under `OPENGLES` but fails under
+    `OPENGL33` (`[FAIL] Check A/D`, no rendered content — background color only). Root cause:
+    `examples/easygl_shipgame_particle_shader_test.cpp` hardcodes `#version 300 es` directly in a
+    **custom `ShaderEffect`** (raw user-authored GLSL passed straight to
+    `EasyGLEffectBackend::CompileProgram()`, which — by design, matching every other backend —
+    does **not** run shader source through `AdaptGlslEs300ForActiveProfile()`; that adapter only
+    covers this file's own ~26 *stock* effect shaders). `#version 300 es` is not valid syntax for a
+    real desktop GL 3.3 core-profile driver, so the shader fails to compile silently (no
+    `std::cerr` output reached this test's own stdout capture — worth a follow-up to make custom
+    `ShaderEffect` compile failures under `OPENGL33` less silent, not investigated further here).
+    This is the same, already-existing "custom `ShaderEffect` shaders are not portable across GL
+    flavors, the caller owns that" limitation every backend already has — this specific example
+    was simply never exercised against a desktop-core-profile target before `OPENGL33` existed.
 
 ## What's not yet done
-
-- ⬜ **Full example/pixel-test suite** — only 7 of the ~241 `cna_easygl_test`-registered example
-  binaries were built and run under this profile (a deliberate sample across every distinct shader
-  family in `EasyGLGraphicsBackend.cpp`, not exhaustive). The remaining ~234 have not been
-  individually verified under `OPENGL33` (`plan_glbackends.md` GLB-22).
 - ⬜ **CI/CTest identity** — `cmake/Tests/EasyGLTests.cmake`'s guard was widened to cover both
   `OPENGLES` and `OPENGL33` (`plan_glbackends.md` GLB-6), but there is no dedicated
   `OPENGL33`-only CTest label distinguishing it from an `OPENGLES` run.
@@ -50,9 +71,8 @@ context, GL 3.3.
 
 See `plan_glbackends.md` §2's table. In short: `OPENGLES` is today's original `EasyGL` public
 backend renamed (GLES 3.0, unchanged behavior); `WEBGL2` is the same GLES 3.0 path under
-Emscripten; `WEBGL1` (GLES 2.0 / Emscripten) is not yet functional — its shader bodies still need a
-real GLSL ES 1.00 rewrite (`attribute`/`varying`/`texture2D()` instead of `in`/`out`/`texture()`,
-plus dropping `layout(location=N)` qualifiers GLSL ES 1.00 doesn't support), tracked as
-`plan_glbackends.md` GLB-36 and explicitly not attempted yet — it needs an architecture decision
-(how vertex attribute locations get (re)bound without `layout(location=N)`) before implementation,
-not a mechanical shader edit.
+Emscripten; `WEBGL1` (GLES 2.0 / Emscripten) has a real GLSL ES 1.00 shader rewrite implemented and
+verified as far as this sandbox can go (see `docs/webgl1-backend.md`) — its `SkinnedEffect`/
+`SkinnedPbrEffect` shaders don't work yet (a real, documented, separate gap: their `uvec4`
+bone-index vertex attribute has no GLSL ES 1.00 equivalent, needing a real float-encoding
+architecture change, not attempted — `plan_glbackends.md` GLB-36).

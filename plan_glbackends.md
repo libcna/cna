@@ -224,18 +224,18 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 
 ### Phase D — `OPENGL33` (new desktop core-profile backend)
 
-> **Status (2026-07-19): GLB-20/GLB-21 done; GLB-22 only sampled, not the full suite.** The
-> `GLB-11` header-swap mechanism turned out to be exactly what `OPENGL33` needed (no shader in
-> `EasyGLGraphicsBackend.cpp` had a real GLES-only body construct beyond the header two lines —
-> see Phase B's status note for the empirical `highp`/`mediump` finding). 7 shader-exercising
-> examples covering `BasicEffect`/`DualTextureEffect`/`SkinnedEffect`/`SkinnedPbrEffect`/
-> `AlphaTestEffect`/`EnvironmentMapEffect`/`SpriteBatch` all build and pass their real golden
-> pixel-comparisons under `-DCNA_GRAPHICS_BACKEND=OPENGL33` (real Mesa 4.5 core-profile GL,
-> `DISPLAY=:99`). **`GLB-22` is only partially done** — this was 7 of the ~241
-> `cna_easygl_test`-registered binaries (a deliberate sample across every distinct shader family,
-> not exhaustive); building/running the full registered suite under `OPENGL33` was not attempted
-> (would take considerably longer than the sample and this session's time budget didn't cover it)
-> — a real next step, not assumed passing.
+> **Status: GLB-20/GLB-21/GLB-22 all done.** The `GLB-11` header-swap mechanism turned out to be
+> exactly what `OPENGL33` needed (no shader in `EasyGLGraphicsBackend.cpp` had a real GLES-only
+> body construct beyond the header two lines — see Phase B's status note for the empirical
+> `highp`/`mediump` finding). **`GLB-22` upgraded from a 7-binary sample to the full registered
+> suite, all 241 `cna_easygl_test` binaries, built and run for real**: `235/241 pass, 0 crash,
+> 6 fail`. 5 of the 6 failures were confirmed pre-existing (identical failure under `OPENGLES`,
+> including 2 already-documented bugs, `plan_graphics.md` Tasks 1115/872). The 6th
+> (`cna_test_easygl_shipgame_particle_shader`) is real and `OPENGL33`-specific but not a
+> regression in this plan's own shader-adapter work — it's a custom `ShaderEffect` example that
+> hardcodes `#version 300 es` directly, a code path the adapter deliberately does not touch (custom
+> `ShaderEffect` shaders are user-authored and were never portable across GL flavors, for any
+> backend). Full detail in `docs/opengl33-backend.md`.
 - ✅ **GLB-20** — Implement `GLB-11`/`GLB-12`'s header-swap mechanism for the `OPENGL33` profile
   specifically (closest to today's ES path syntactically — likely just `in`/`out`/`texture()` all
   still valid, only `#version`/precision-qualifier differences). Build and smoke-test one simple
@@ -243,9 +243,8 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
   the rest.
 - ✅ **GLB-21** — Work through remaining shaders one by one, fixing any real GLES-only construct
   found in `GLB-10`'s survey.
-- ⬜ **GLB-22** — Run the full EasyGL-family GTest suite under `OPENGL33` and record pass/fail
-  (expect this to be the fastest-converging of the 2 new profiles — desktop GL 3.3 is the most
-  forgiving/mature driver target). **Only sampled so far (7/241 binaries) — see status note above.**
+- ✅ **GLB-22** — Run the full EasyGL-family GTest suite under `OPENGL33` and record pass/fail —
+  **done: 235/241, see status note above and `docs/opengl33-backend.md` for the full breakdown.**
 - ✅ **GLB-23** — `docs/opengl33-backend.md` — new doc, same shape as `docs/webgpu-backend.md`/
   `docs/dx3-backend.md`: what's verified, what's deferred, how it differs from `OPENGLES`.
 
@@ -289,6 +288,17 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
   link failure — see this Phase's status note above for the full root cause and fix (CNA's own
   top-level `CMakeLists.txt`, not `meta-gl-followup-audit` as first suspected).
 - ✅ **GLB-26** — `docs/webgl2-backend.md`.
+- ⬜ **GLB-40** — **New, found 2026-07-19 while running the full `OPENGL33` example suite
+  (`GLB-22`).** `EasyGLEffectBackend::CompileProgram()` (the custom `ShaderEffect` runtime-compile
+  path) silently produces no visible `std::cerr` compile-error output reaching a caller's own
+  stdout capture when a shader fails to compile (reproduced by
+  `cna_test_easygl_shipgame_particle_shader`'s `#version 300 es` source under a real desktop
+  `OPENGL33` core-profile context — the test's own `[FAIL]` output shows no rendered content, with
+  no accompanying shader-compile-error diagnostic surfaced anywhere in the captured output). Worth
+  a small follow-up making custom `ShaderEffect` compile failures more visible/debuggable under
+  `OPENGL33` specifically (not a blocker — same class of "you must write GLSL your target
+  understands" limitation every backend already has for custom shaders — just harder to diagnose
+  than it should be).
 
 ### Phase F — `WEBGL1` (new, needs easy-gl fixes first)
 
