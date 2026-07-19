@@ -992,6 +992,49 @@ _(pending)_
   `EndScreenDeviceChange` never repositioning the window is concretely reachable through normal
   `GraphicsDeviceManager` operation, not a theoretical gap in an unused parameter.
 
+- **`Game::UnloadContent()` is a dead virtual lifecycle hook — declared and given an empty default
+  body exactly like FNA's, but never invoked anywhere by the framework.** FNA's real `Initialize()`
+  (`Game.cs` lines 649-662) subscribes `graphicsDeviceService.DeviceDisposing += (o, e) =>
+  UnloadContent();`, guaranteeing any override gets a chance to release GPU-dependent resources
+  whenever the device is disposing. CNA's `Initialize()` (`Game.cpp` lines 513-529) never performs
+  this subscription (confirmed via a whole-repository grep for `UnloadContent` -- exactly two hits,
+  the declaration and the empty default body, no call site). A game overriding `UnloadContent()` per
+  the documented XNA lifecycle contract will silently never have it called by CNA, under any
+  circumstance. Compounds with the `GraphicsDeviceManager` event-forwarding gap noted above: even a
+  fix to that gap wouldn't help here, since `Game::Initialize()` isn't listening for
+  `DeviceDisposing` at all. See `include/Microsoft/Xna/Framework/Game.hpp.audit.md` and
+  `src/Microsoft/Xna/Framework/Game.cpp.audit.md`.
+
+- **`Game::PollEvents()` omits four real FNA SDL3 event reactions with concrete, observable
+  consequences**, confirmed absent via grep: `SDL_EVENT_WINDOW_MOVED` (FNA detects a
+  cross-display move and calls `GraphicsDevice.Reset()` with the new adapter -- real multi-monitor
+  support CNA lacks), `SDL_EVENT_WINDOW_EXPOSED` (FNA calls `RedrawWindow()` to keep rendering
+  during a blocking resize-drag; CNA has no such call anywhere), `SDL_EVENT_WINDOW_ENTER_FULLSCREEN`/
+  `LEAVE_FULLSCREEN` (FNA syncs `GraphicsDeviceManager.IsFullScreen` back when the OS/window manager
+  toggles fullscreen outside the app's own request; CNA has no such sync path), and
+  `SDL_EVENT_WINDOW_MOUSE_ENTER`/`MOUSE_LEAVE` (FNA toggles the screensaver on mouse enter/leave;
+  CNA disables it unconditionally from an unrelated call site in `Guide.cpp` with no matching
+  toggle). Also confirms the previously-noted orientation-model gap extends to the Game loop level:
+  no `SDL_EVENT_DISPLAY_ORIENTATION` handling exists in `PollEvents()` either. See
+  `src/Microsoft/Xna/Framework/Game.cpp.audit.md`.
+
+- **Recurring pattern, now confirmed 3 independent times within the `xna-framework-core` shard
+  alone: a project-provided, widely-used sharp-runtime exception type is available but a raw
+  `std::` exception is thrown instead, diverging from both FNA's own exception type for the same
+  case and this codebase's own established convention elsewhere.** Instances: (1)
+  `GameComponentCollection::SetItem()` throws `std::logic_error` with a comment claiming
+  `System::NotSupportedException` "isn't available yet" -- it is, and is used by 16 other files; (2)
+  `GraphicsDeviceManager`'s constructor and `registerServices()` throw `std::invalid_argument` for
+  null-game and already-registered guards where FNA throws `ArgumentNullException`/`ArgumentException`
+  respectively, and `System::ArgumentException` is already used elsewhere in this exact directory
+  (`BoundingBox.cpp`); (3) `Game::AssertNotDisposed()` throws `std::runtime_error` where FNA throws
+  `ObjectDisposedException`, and `System::ObjectDisposedException` is already used by 28 other CNA
+  files. None of the three is individually severe, but three independent confirmations within one
+  shard suggests this is worth a project-wide grep pass (raw `std::invalid_argument` /
+  `std::runtime_error` / `std::logic_error` / `std::out_of_range` throws that shadow an
+  already-available, already-used `System::*Exception` counterpart) rather than treating each as an
+  isolated one-off finding.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
