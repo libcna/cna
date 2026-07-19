@@ -238,7 +238,10 @@ _(none recorded yet)_
   ambient/emissive HIGH finding above), and **`EasyGL_GraphicsDevice_ReferenceStencil`** (Pass 6, new: disclosed
   in-comment as "a documented known failure" since Task 319/872, confirmed still genuinely failing and still
   has no `WILL_FAIL` property backing that disclosure). See `AUDIT_CROSS_CUTTING_FINDINGS.md` (CI-masking risk,
-  Pass 6).
+  Pass 6). **Reframed by a Pass 6 systemic check**: `grep -rn "WILL_FAIL" cmake/Tests/*.cmake
+  cmake/UnitTests.cmake` returns zero matches anywhere in the project — these 4 are not independent
+  oversights, this project has simply never adopted CTest's expected-failure mechanism at all, for any
+  backend.
 - **`MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` SEGFAULTs rather than failing cleanly** (Pass 6)
   when the picture-library scan's root result is null/empty — a sibling test in the same fixture fails cleanly
   on the identical condition, so some downstream object-graph-walking code dereferences the null without a
