@@ -37,6 +37,10 @@
 #include <cstring>
 #include <SDL3/SDL.h>
 #include <string>
+#include <sstream>
+#include <set>
+#include <utility>
+#include <cctype>
 #include "Microsoft/Xna/Framework/Color.hpp"
 
 #if defined(__EMSCRIPTEN__)
@@ -306,13 +310,192 @@ namespace CNA::Internal::Backends::EasyGL
     // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
     // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
     // need a second copy of every shader, just a header rewrite performed here at first-use time.
-    //
-    // WEBGL1 (GLSL ES 1.00: attribute/varying/texture2D() instead of in/out/texture(), a real
-    // body difference, not header-only) is NOT handled by this function -- GLB-12/GLB-36 track
-    // that separately and it is intentionally deferred behind the easy-gl WebGL1 fixes (Phase F,
-    // GLB-30-35). Sources are passed through unchanged for WEBGL1 today; they will fail to
-    // compile against a real WebGL1/GLES2 context until GLB-36 lands.
-    static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source)
+    enum class GlShaderStageKind { Vertex, Fragment };
+
+    namespace
+    {
+        // plan_glbackends.md GLB-36 helper: true whole-word replace (identifiers only), used for
+        // rewriting FragColor -> gl_FragColor in fragment shader bodies without touching
+        // substrings inside longer identifiers.
+        std::string ReplaceWholeWord(std::string text, const std::string& word, const std::string& replacement)
+        {
+            size_t pos = 0;
+            while ((pos = text.find(word, pos)) != std::string::npos)
+            {
+                const bool leftOk = (pos == 0) ||
+                    !(std::isalnum(static_cast<unsigned char>(text[pos - 1])) || text[pos - 1] == '_');
+                const size_t after = pos + word.size();
+                const bool rightOk = (after >= text.size()) ||
+                    !(std::isalnum(static_cast<unsigned char>(text[after])) || text[after] == '_');
+                if (leftOk && rightOk)
+                {
+                    text.replace(pos, word.size(), replacement);
+                    pos += replacement.size();
+                }
+                else
+                {
+                    pos += word.size();
+                }
+            }
+            return text;
+        }
+
+        // plan_glbackends.md GLB-36 helper: GLSL ES 1.00 has no unified texture() overload set --
+        // callers must use texture2D()/textureCube() depending on the sampler's declared type.
+        // Scans the ORIGINAL ES 3.00 source for "uniform samplerCube NAME;" declarations first
+        // (the only non-sampler2D case any shader in this file uses, confirmed by a full survey
+        // during GLB-36), then rewrites every texture(NAME, ...) call using that set.
+        std::string RewriteTextureCallsForEs100(std::string line, const std::set<std::string>& cubeSamplerNames)
+        {
+            size_t pos = 0;
+            while ((pos = line.find("texture(", pos)) != std::string::npos)
+            {
+                const size_t argStart = pos + 8;
+                const size_t argEnd = line.find(',', argStart);
+                if (argEnd == std::string::npos) { pos += 8; continue; }
+                std::string samplerName = line.substr(argStart, argEnd - argStart);
+                while (!samplerName.empty() && std::isspace(static_cast<unsigned char>(samplerName.front())))
+                    samplerName.erase(samplerName.begin());
+                while (!samplerName.empty() && std::isspace(static_cast<unsigned char>(samplerName.back())))
+                    samplerName.pop_back();
+                const bool isCube = cubeSamplerNames.count(samplerName) > 0;
+                const std::string replacement = isCube ? "textureCube(" : "texture2D(";
+                line.replace(pos, 8, replacement);
+                pos += replacement.size();
+            }
+            return line;
+        }
+
+        // plan_glbackends.md GLB-36: rewrites a GLSL ES 3.00 shader body to GLSL ES 1.00
+        // (WebGL 1). Real syntax differences handled, confirmed exhaustive by a full survey of
+        // every shader in this file during GLB-36 (no texelFetch/textureSize/derivatives/
+        // gl_FragDepth/flat/#extension/MRT usage anywhere):
+        //   - "layout(location=N) in TYPE NAME;" (vertex attributes) -> "attribute TYPE NAME;"
+        //     (the layout qualifier itself is not valid GLSL ES 1.00 -- the caller is expected to
+        //     have already extracted the (location, name) pairs via ExtractVertexAttribLocations()
+        //     from the ORIGINAL source and rebind them with Program::bind_attrib_location() before
+        //     linking, since ES 1.00 has no way to request a specific location from shader text).
+        //   - "out TYPE NAME;" varyings (vertex) / "in TYPE NAME;" varyings (fragment) ->
+        //     "varying TYPE NAME;" (the same varying keyword serves both directions in ES 1.00).
+        //   - "out vec4 FragColor;" (the single fragment color output every shader in this file
+        //     uses -- no MRT) is dropped entirely and every reference to the identifier
+        //     "FragColor" in the body is replaced with the ES 1.00 built-in "gl_FragColor".
+        //   - "texture(sampler, ...)" -> "texture2D(...)"/"textureCube(...)" depending on the
+        //     sampler's declared type (see RewriteTextureCallsForEs100 above).
+        //   - "#version 300 es" -> "#version 100"; the following "precision ... float;" line is
+        //     kept as-is (valid, and required, GLSL ES 1.00 syntax too).
+        //
+        // NOT handled -- a real, currently-blocking gap, not silently swallowed: vertex attributes
+        // declared as integer types (this file's SkinnedEffect/SkinnedPbrEffect shaders'
+        // "layout(location=N) in uvec4 aBoneIndices;") have no GLSL ES 1.00 equivalent at all --
+        // ES 1.00 vertex attributes must be float/vec2/vec3/vec4/mat2/mat3/mat4. Encoding bone
+        // indices as float attributes (and adjusting the C++-side VertexBuffer upload format to
+        // match, only for this profile) is a real, separate architecture change, out of scope for
+        // this pass -- see the caller-facing note where this is detected and left unconverted.
+        std::string TransformGlslEs300BodyToEs100(const std::string& es300Body, GlShaderStageKind stage)
+        {
+            std::set<std::string> cubeSamplerNames;
+            {
+                const std::string marker = "uniform samplerCube ";
+                size_t pos = 0;
+                while ((pos = es300Body.find(marker, pos)) != std::string::npos)
+                {
+                    const size_t nameStart = pos + marker.size();
+                    const size_t nameEnd = es300Body.find(';', nameStart);
+                    if (nameEnd == std::string::npos) break;
+                    cubeSamplerNames.insert(es300Body.substr(nameStart, nameEnd - nameStart));
+                    pos = nameEnd;
+                }
+            }
+
+            std::istringstream iss(es300Body);
+            std::string line;
+            std::string out;
+            while (std::getline(iss, line))
+            {
+                size_t firstNonSpace = line.find_first_not_of(" \t");
+                const std::string trimmed = (firstNonSpace == std::string::npos)
+                    ? std::string() : line.substr(firstNonSpace);
+
+                if (trimmed.rfind("layout(location", 0) == 0)
+                {
+                    // "layout(location=N) in TYPE NAME;" or "layout(location = N) in TYPE NAME;"
+                    const size_t inPos = trimmed.find(" in ");
+                    if (inPos != std::string::npos)
+                    {
+                        out += "attribute " + trimmed.substr(inPos + 4) + "\n";
+                        continue;
+                    }
+                }
+                if (stage == GlShaderStageKind::Vertex && trimmed.rfind("in ", 0) == 0)
+                {
+                    out += "attribute " + trimmed.substr(3) + "\n";
+                    continue;
+                }
+                if (stage == GlShaderStageKind::Vertex && trimmed.rfind("out ", 0) == 0)
+                {
+                    out += "varying " + trimmed.substr(4) + "\n";
+                    continue;
+                }
+                if (stage == GlShaderStageKind::Fragment && trimmed.rfind("in ", 0) == 0)
+                {
+                    out += "varying " + trimmed.substr(3) + "\n";
+                    continue;
+                }
+                if (stage == GlShaderStageKind::Fragment && trimmed == "out vec4 FragColor;")
+                {
+                    // No declaration needed -- gl_FragColor is an ES 1.00 built-in.
+                    continue;
+                }
+
+                std::string rewritten = RewriteTextureCallsForEs100(line, cubeSamplerNames);
+                if (stage == GlShaderStageKind::Fragment)
+                {
+                    rewritten = ReplaceWholeWord(rewritten, "FragColor", "gl_FragColor");
+                }
+                out += rewritten + "\n";
+            }
+            return out;
+        }
+    }
+
+    // plan_glbackends.md GLB-36: extracts (location, name) pairs from
+    // "layout(location=N) in TYPE NAME;" declarations in the ORIGINAL (unmodified) ES 3.00 vertex
+    // shader source, so the caller can rebind the same numeric locations via
+    // Program::bind_attrib_location() before linking on WEBGL1 (where the layout qualifier itself
+    // is stripped out of the shader text -- see TransformGlslEs300BodyToEs100). This is what lets
+    // every existing VertexArray/VAO attribute-binding call site in this file (all of which use
+    // hardcoded numeric indices matching these same layout(location=N) values) keep working
+    // completely unmodified regardless of which of the 4 GL profiles is active.
+    static std::vector<std::pair<int, std::string>> ExtractVertexAttribLocations(const std::string& es300VertexSource)
+    {
+        std::vector<std::pair<int, std::string>> result;
+        const std::string marker = "layout(location";
+        size_t pos = 0;
+        while ((pos = es300VertexSource.find(marker, pos)) != std::string::npos)
+        {
+            const size_t eq = es300VertexSource.find('=', pos);
+            const size_t closeParen = es300VertexSource.find(')', pos);
+            if (eq == std::string::npos || closeParen == std::string::npos || eq > closeParen) break;
+            const int location = std::stoi(es300VertexSource.substr(eq + 1, closeParen - eq - 1));
+
+            const size_t inPos = es300VertexSource.find(" in ", closeParen);
+            if (inPos == std::string::npos) break;
+            const size_t typeStart = inPos + 4;
+            const size_t typeEnd = es300VertexSource.find(' ', typeStart);
+            if (typeEnd == std::string::npos) break;
+            const size_t nameStart = typeEnd + 1;
+            const size_t nameEnd = es300VertexSource.find(';', nameStart);
+            if (nameEnd == std::string::npos) break;
+            result.emplace_back(location, es300VertexSource.substr(nameStart, nameEnd - nameStart));
+            pos = nameEnd;
+        }
+        return result;
+    }
+
+    // WEBGL1 (GLSL ES 1.00): see TransformGlslEs300BodyToEs100 above for the real syntax
+    // differences handled, and the one known-unconverted gap (integer vertex attributes).
+    static std::string AdaptGlslEs300ForActiveProfile(const char* es300Source, GlShaderStageKind stage)
     {
 #if defined(CNA_GL_PROFILE_OPENGL33)
         std::string src(es300Source);
@@ -339,7 +522,28 @@ namespace CNA::Internal::Backends::EasyGL
             }
         }
         return src;
+#elif defined(CNA_GL_PROFILE_WEBGL1)
+        std::string src(es300Source);
+        const std::string versionLine = "#version 300 es\n";
+        const auto versionPos = src.find(versionLine);
+        if (versionPos == std::string::npos) return src;
+        src.replace(versionPos, versionLine.size(), "#version 100\n");
+        std::string transformed = TransformGlslEs300BodyToEs100(src, stage);
+        // Known, documented, NOT converted gap (see TransformGlslEs300BodyToEs100's own comment):
+        // integer vertex attributes (this file's SkinnedEffect/SkinnedPbrEffect
+        // "uvec4 aBoneIndices") have no GLSL ES 1.00 equivalent. Fail loudly here rather than let
+        // an invalid shader reach the driver with only an opaque compile-error log as the symptom.
+        if (transformed.find("uvec4") != std::string::npos || transformed.find("ivec") != std::string::npos)
+        {
+            std::cerr << "[CNA EasyGL WEBGL1] shader uses an integer vertex attribute type "
+                          "(uvec4/ivecN), which has no GLSL ES 1.00 equivalent -- this shader "
+                          "(likely SkinnedEffect/SkinnedPbrEffect) is not yet supported under "
+                          "WEBGL1 (plan_glbackends.md GLB-36's documented remaining gap)."
+                       << std::endl;
+        }
+        return transformed;
 #else
+        (void)stage;
         return std::string(es300Source);
 #endif
     }
@@ -1695,8 +1899,10 @@ void main()
 }
 )";
 
-        const std::string adaptedVertexSource = AdaptGlslEs300ForActiveProfile(vertexShaderSource);
-        const std::string adaptedFragmentSource = AdaptGlslEs300ForActiveProfile(fragmentShaderSource);
+        const std::string adaptedVertexSource =
+            AdaptGlslEs300ForActiveProfile(vertexShaderSource, GlShaderStageKind::Vertex);
+        const std::string adaptedFragmentSource =
+            AdaptGlslEs300ForActiveProfile(fragmentShaderSource, GlShaderStageKind::Fragment);
 
         ::easygl::Shader vertexShader(::easygl::ShaderType::Vertex);
         vertexShader.create();
@@ -1719,6 +1925,15 @@ void main()
         program_.create();
         program_.attach(vertexShader);
         program_.attach(fragmentShader);
+#if defined(CNA_GL_PROFILE_WEBGL1)
+        // plan_glbackends.md GLB-36: see CompileAndLink's identical comment -- rebind the same
+        // numeric attribute locations the ES 3.00 source's layout(location=N) qualifiers
+        // specified, since WEBGL1's shader text has no layout(location=N) at all.
+        for (const auto& [location, name] : ExtractVertexAttribLocations(vertexShaderSource))
+        {
+            program_.bind_attrib_location(static_cast<unsigned int>(location), name);
+        }
+#endif
         program_.link();
 
         if (!program_.is_linked())
@@ -3880,8 +4095,8 @@ void main()
         void CompileAndLink(::easygl::Program& prog, const char* vsrc, const char* fsrc,
                             const char* label)
         {
-            const std::string adaptedVsrc = AdaptGlslEs300ForActiveProfile(vsrc);
-            const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc);
+            const std::string adaptedVsrc = AdaptGlslEs300ForActiveProfile(vsrc, GlShaderStageKind::Vertex);
+            const std::string adaptedFsrc = AdaptGlslEs300ForActiveProfile(fsrc, GlShaderStageKind::Fragment);
 
             ::easygl::Shader vs(::easygl::ShaderType::Vertex);
             vs.create();
@@ -3898,6 +4113,16 @@ void main()
             prog.create();
             prog.attach(vs);
             prog.attach(fs);
+#if defined(CNA_GL_PROFILE_WEBGL1)
+            // plan_glbackends.md GLB-36: WEBGL1's shader text has no layout(location=N) (GLSL
+            // ES 1.00 doesn't support it) -- rebind the SAME numeric locations here, extracted
+            // from the ORIGINAL ES 3.00 source, so every VertexArray/VAO attribute-binding call
+            // site elsewhere in this file (all hardcoded numeric indices) keeps working unchanged.
+            for (const auto& [location, name] : ExtractVertexAttribLocations(vsrc))
+            {
+                prog.bind_attrib_location(static_cast<unsigned int>(location), name);
+            }
+#endif
             prog.link();
             if (!prog.is_linked())
                 std::cerr << "[CNA EasyGL 3D] " << label << " link failed:\n" << prog.info_log() << "\n";
