@@ -2808,6 +2808,14 @@ namespace CNA::Internal::Backends::OpenGL2
                 const auto* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
                 return extensions && std::strstr(extensions, "GL_EXT_texture_filter_anisotropic") != nullptr;
             }
+            // IGraphicsBackend::SetRenderTargets() is not overridden here -- the shared
+            // base-class default binds only rts[0] via SetRenderTarget2D and silently drops
+            // every other target, so this backend does NOT genuinely support MRT yet (plan_opengl2.md
+            // follow-up work). Must report false: SupportsCapability() exists specifically so
+            // callers can check before relying on a feature instead of discovering a silent partial
+            // failure at draw time.
+            case CNA::GraphicsCapability::MultipleRenderTargets:
+                return false;
             default:
                 return true;
         }
