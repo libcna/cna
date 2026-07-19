@@ -142,4 +142,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_register_backend_test(NAME OpenGL2_SkinnedEffect_Golden COMMAND cna_test_opengl2_skinnedeffect_golden
         TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: genuinely custom VertexDeclaration proof (Task 1080) -- a reordered
+    # attribute layout matching none of this backend's fixed byte-strides, bound generically by
+    # attribute name via BindVertexAttributesForDeclaration(), combined with a custom ShaderEffect.
+    cna_opengl2_test(cna_test_opengl2_customvertexdeclaration examples/opengl2_customvertexdeclaration_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_CustomVertexDeclaration COMMAND cna_test_opengl2_customvertexdeclaration
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

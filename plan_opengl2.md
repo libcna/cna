@@ -599,8 +599,48 @@ possibilities of OpenGL 2"):
   major already-implemented effect family: reflection mapping, unlit texture/vertex-color
   compositing, alpha discard, and skinning+lighting).
 
+## Status: full custom VertexDeclaration support (2026-07-19/20, session 7 cont'd)
+
+- **Full custom `VertexDeclaration` support implemented -- this backend's own follow-up note
+  claiming this "means widening `IGraphicsBackend`'s shared interface" turned out to be WRONG**:
+  re-reading `IVertexBufferBackend` closely (while re-checking the follow-up list before declaring
+  it done) found `SetVertexDeclaration(const std::vector<VertexElement>&)` already exists there
+  (Task 1080, default no-op), called by `VertexBuffer::SetDataRaw()` before every upload -- no
+  interface change was actually needed, only an OpenGL2-side implementation. `EasyGLGraphicsBackend`
+  already has a real one (confirmed by reading it): binds `location = element's own index in the
+  declaration list`, which works there because GLES3 lets ANY shader (built-in or a custom
+  `ShaderEffect`) declare `layout(location=N)` directly in its own source, independent of
+  attribute name.
+  GLSL 1.10/1.20 (this file's target throughout) has no `layout(location=N)` qualifier, so that
+  exact scheme doesn't transfer -- instead, `BindVertexAttributesForDeclaration()` derives a
+  conventional attribute NAME from each element's `VertexElementUsage`/`UsageIndex` (Position->
+  `aPosition`, Normal->`aNormal`, TextureCoordinate->`aTexCoord`(N), Color->`aColor`,
+  BlendWeight->`aBoneWeight`, BlendIndices->`aBoneIndices`, Tangent->`aTangent`, ... -- the SAME
+  names `LinkProgram()` already globally binds to fixed locations 0-6 for every built-in program)
+  and looks up WHERE the currently-bound program (built-in or a custom `ShaderEffect`, reached via
+  a `dynamic_cast<EffectBackend*>` + new `GetProgramHandle()` accessor, same reasoning as
+  `EasyGLSpriteBatchBackend::FlushBatch()`'s own identical downcast) actually put that name via
+  `glGetAttribLocation()` -- an element whose derived name a given program doesn't declare is
+  silently skipped (matches `glGetAttribLocation` returning -1 for an unused attribute, not an
+  error). `VertexElementFormat`'s `Byte4` case reads as an unnormalized unsigned-byte-to-float
+  attribute (not a true integer one -- `glVertexAttribIPointer` is GL 3.0+), same convention
+  already established for `aBoneIndices` throughout this file.
+  Both `drawInternal()` call sites (the built-in-program path and the `customEffectBackend` path)
+  now check `vb->declaration.empty()` first and dispatch to this generic path instead of the
+  fixed-stride one when a real declaration was supplied -- falling back to the pre-existing,
+  unchanged stride dispatch otherwise, so every existing test/scene keeps working exactly as
+  before. Added `glGetAttribLocation` to the Windows entry-point loader (missed in the original
+  pass -- this is the first place in the file that calls it) and re-verified the MinGW-w64
+  cross-compile still succeeds with the addition.
+  `OpenGL2_CustomVertexDeclaration` verifies a deliberately REORDERED layout (Color first, then
+  Position, then TextureCoordinate -- same total 24-byte size as the built-in
+  `VertexPositionColorTexture` stride, a deliberate differentiator: if the declaration path were
+  accidentally bypassed in favour of the old fixed-offset stride-24 dispatch, it would misread the
+  Color bytes as Position floats and produce degenerate/absent geometry instead of a correct
+  quad), combined with a custom `ShaderEffect`, renders correctly. 2/2 PASS on the first real run.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers twenty-three CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers twenty-four CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -637,6 +677,8 @@ possibilities of OpenGL 2"):
   - `OpenGL2_EnvironmentMapEffect_Golden`/`_BasicEffect_Golden`/`_AlphaTestEffect_Golden`/
     `_SkinnedEffect_Golden` -- genuine cross-backend pixel comparisons against EasyGL's own
     checked-in golden PNGs for each identical scene. PASS x4.
+  - `OpenGL2_CustomVertexDeclaration` -- a reordered, non-fixed-stride vertex layout bound
+    generically by attribute name, combined with a custom `ShaderEffect`. 2/2 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -700,23 +742,16 @@ possibilities of OpenGL 2"):
   typed overloads for `VertexPositionNormalTangentTexture(Skinned)` (a real, shared gap this
   surfaced -- see that status entry above), so this is usable through the standard `VertexBuffer`
   API like every other vertex type, not just via the raw/untyped path.
-- Windows GL entry-point loading (`wglGetProcAddress` via `SDL_GL_GetProcAddress`, ~54 functions
+- Windows GL entry-point loading (`wglGetProcAddress` via `SDL_GL_GetProcAddress`, ~55 functions
   beyond GL 1.1); MinGW-w64 cross-compile-verified, not yet Windows-runtime-tested (see the status
   entry above).
+- Full custom `VertexDeclaration` support (attribute-name-driven generic binding via
+  `glGetAttribLocation`, not just the fixed byte-stride table; see `OpenGL2_CustomVertexDeclaration`
+  above) alongside the pre-existing stride-inferred fast path, which every existing test/scene
+  still uses unchanged.
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
-- Full vertex declaration support rather than stride inference (blocks any vertex format beyond
-  the 8 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
-  attribute order/extra streams). Investigated: `IVertexBufferBackend::SetData()` only ever
-  receives a raw `stride_in_bytes`, never a `VertexDeclaration`/`VertexElement` list -- adding
-  real declaration support means widening `IGraphicsBackend`'s shared interface, which every
-  other backend (EasyGL, Vulkan, Bgfx, SdlGpu, WebGPU, D3D9/11/12, DX3, Software, ...) would also
-  need to handle. `EasyGLGraphicsBackend`'s own code already flags this exact tradeoff (its
-  stride-52 comment: "every backend's API boundary currently only receives a raw stride, not a
-  VertexDeclaration ... deferred as a larger cross-backend refactor, not attempted here") --
-  deliberately not attempted here either, for the same reason: out of proportion for an
-  OpenGL2-scoped task, and risks every other backend for a feature only this backend would gain.
 - Windows GL 2.x entry-point loader (see the status entry above) is implemented and
   MinGW-w64 cross-compile-verified (both 32- and 64-bit targets, symbol-table-inspected), but
   still NOT tested on an actual Windows runtime -- `wglGetProcAddress`'s real behavior, actual GL

@@ -34,6 +34,11 @@ namespace CNA::Internal::Backends::OpenGL2
 {
     namespace
     {
+        // Not aliased by IGraphicsBackend.hpp (unlike VertexElement itself) -- only needed
+        // locally, for DescribeVertexElementFormat()/VertexElementAttribName() below.
+        using VertexElementUsage = Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+        using VertexElementFormat = Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+
 #if defined(_WIN32)
         // One function pointer per GL entry point beyond GL 1.1 that this file calls -- see the
         // file-header comment above for why this exists only on _WIN32. Grouped in the same order
@@ -72,6 +77,7 @@ namespace CNA::Internal::Backends::OpenGL2
         PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog = nullptr;
         PFNGLUSEPROGRAMPROC glUseProgram = nullptr;
         PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation = nullptr;
+        PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation = nullptr;
         PFNGLUNIFORM1FPROC glUniform1f = nullptr;
         PFNGLUNIFORM1FVPROC glUniform1fv = nullptr;
         PFNGLUNIFORM1IPROC glUniform1i = nullptr;
@@ -139,6 +145,7 @@ namespace CNA::Internal::Backends::OpenGL2
             CNA_LOAD_GL(glGetProgramInfoLog);
             CNA_LOAD_GL(glUseProgram);
             CNA_LOAD_GL(glGetUniformLocation);
+            CNA_LOAD_GL(glGetAttribLocation);
             CNA_LOAD_GL(glUniform1f);
             CNA_LOAD_GL(glUniform1fv);
             CNA_LOAD_GL(glUniform1i);
@@ -400,6 +407,14 @@ namespace CNA::Internal::Backends::OpenGL2
         public:
             ~EffectBackend() override { if (program_) glDeleteProgram(program_); }
 
+            // NOXNA: lets drawInternal()'s customEffectBackend path (VertexDeclaration-driven
+            // attribute binding, see BindVertexAttributesForDeclaration()) look up this custom
+            // program's own attribute locations, same reasoning as
+            // EasyGLSpriteBatchBackend::FlushBatch()'s own dynamic_cast to its EasyGLEffectBackend
+            // for the identical purpose (reaching the raw program handle through the generic
+            // IEffectBackend interface, which deliberately doesn't expose one itself).
+            [[nodiscard]] GLuint GetProgramHandle() const { return program_; }
+
             bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override
             {
                 try
@@ -632,6 +647,109 @@ namespace CNA::Internal::Backends::OpenGL2
             else
             {
                 throw std::runtime_error("OPENGL2: unsupported vertex stride");
+            }
+        }
+
+        // Task 1080 (this backend's own follow-up item -- see plan_opengl2.md): maps a
+        // VertexElementFormat to the (component count, GL type, normalized) triple
+        // glVertexAttribPointer() needs, mirroring EasyGLGraphicsBackend::
+        // DescribeVertexElementFormat's identical table -- except Byte4, which GL 2.1 cannot read
+        // as a true integer attribute (glVertexAttribIPointer is GL 3.0+, unlike EasyGL's GLES3
+        // path): read as an UNNORMALIZED unsigned-byte-to-float conversion instead (exact for
+        // byte-range values, no precision loss), the same convention already used for
+        // aBoneIndices throughout this file -- a vertex shader that needs true integer semantics
+        // rounds back to int itself (`int(x+0.5)`, as SkinnedEffect's own shader already does).
+        struct VertexAttribFormat { int componentCount; GLenum type; GLboolean normalized; };
+        VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single:           return {1, GL_FLOAT, GL_FALSE};
+                case VertexElementFormat::Vector2:          return {2, GL_FLOAT, GL_FALSE};
+                case VertexElementFormat::Vector3:          return {3, GL_FLOAT, GL_FALSE};
+                case VertexElementFormat::Vector4:          return {4, GL_FLOAT, GL_FALSE};
+                case VertexElementFormat::Color:            return {4, GL_UNSIGNED_BYTE, GL_TRUE};
+                case VertexElementFormat::Byte4:            return {4, GL_UNSIGNED_BYTE, GL_FALSE};
+                case VertexElementFormat::Short2:           return {2, GL_SHORT, GL_FALSE};
+                case VertexElementFormat::Short4:           return {4, GL_SHORT, GL_FALSE};
+                case VertexElementFormat::NormalizedShort2: return {2, GL_SHORT, GL_TRUE};
+                case VertexElementFormat::NormalizedShort4: return {4, GL_SHORT, GL_TRUE};
+                // GL_HALF_FLOAT is core since GL 3.0 (ARB_half_float_vertex on GL 2.1 hardware,
+                // not guaranteed) -- accepted for table completeness/EasyGL parity, but real GL
+                // 2.1-only hardware without that extension would fail to render a declaration
+                // using these two formats specifically. Every other format above is genuinely
+                // GL 2.1-safe (core since 1.1).
+                case VertexElementFormat::HalfVector2:      return {2, GL_HALF_FLOAT, GL_FALSE};
+                case VertexElementFormat::HalfVector4:      return {4, GL_HALF_FLOAT, GL_FALSE};
+            }
+            return {3, GL_FLOAT, GL_FALSE};
+        }
+
+        // Derives a conventional attribute name from a VertexElement's semantic usage, matching
+        // this file's own established naming (aPosition/aNormal/aTexCoord/aColor/aBoneWeight/
+        // aBoneIndices/aTangent -- the same names LinkProgram() globally binds to fixed locations
+        // 0-6 for every built-in program). GLSL 1.10/1.20 (this file's target) has no
+        // `layout(location=N)` qualifier, unlike EasyGL's GLES3 declaration path (which binds
+        // location=element's own index in the list, name-independent) -- so a genuinely custom
+        // vertex layout is matched to a program's attributes by NAME here instead, via
+        // glGetAttribLocation() in BindVertexAttributesForDeclaration() below. A custom
+        // ShaderEffect vertex shader consuming a custom VertexDeclaration MUST use these same
+        // names for the corresponding usage to receive that data at all -- the same
+        // attribute-naming contract EffectBackend's own doc comment already establishes for the
+        // fixed-stride case, now extended to arbitrary declarations too. usageIndex 0 keeps the
+        // bare name; usageIndex>0 (e.g. a second TEXCOORD1 stream) appends the index.
+        std::string VertexElementAttribName(VertexElementUsage usage, int usageIndex)
+        {
+            const char* base = "aUnknown";
+            switch (usage)
+            {
+                case VertexElementUsage::Position:         base = "aPosition"; break;
+                case VertexElementUsage::Color:             base = "aColor"; break;
+                case VertexElementUsage::TextureCoordinate: base = "aTexCoord"; break;
+                case VertexElementUsage::Normal:            base = "aNormal"; break;
+                case VertexElementUsage::Binormal:          base = "aBinormal"; break;
+                case VertexElementUsage::Tangent:           base = "aTangent"; break;
+                case VertexElementUsage::BlendIndices:      base = "aBoneIndices"; break;
+                case VertexElementUsage::BlendWeight:       base = "aBoneWeight"; break;
+                case VertexElementUsage::Depth:             base = "aDepth"; break;
+                case VertexElementUsage::Fog:                base = "aFog"; break;
+                case VertexElementUsage::PointSize:         base = "aPointSize"; break;
+                case VertexElementUsage::Sample:            base = "aSample"; break;
+                case VertexElementUsage::TessellateFactor:  base = "aTessellateFactor"; break;
+            }
+            if (usageIndex == 0) return base;
+            return std::string(base) + std::to_string(usageIndex);
+        }
+
+        // Task 1080: generic, program-attribute-name-driven layout binding for a VertexBuffer
+        // that was given a genuinely custom VertexDeclaration (via VertexBuffer::SetDataRaw() --
+        // see IVertexBufferBackend::SetVertexDeclaration()'s own doc comment), instead of the
+        // fixed byte-stride dispatch BindVertexAttributesForStride() recognizes. Elements whose
+        // derived name the currently-bound program doesn't declare are silently skipped
+        // (glGetAttribLocation returns -1 for an unused/optimized-out attribute -- not an error).
+        void BindVertexAttributesForDeclaration(GLuint program, GLuint vboId, std::size_t stride,
+                                                const std::vector<VertexElement>& declaration)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, vboId);
+            // Every location this backend's built-in programs ever use must start disabled, so a
+            // stale enabled pointer from a PREVIOUS (stride-based or declaration-based) draw can't
+            // leak into this one -- mirrors the same defensiveness BindVertexAttributesForStride()
+            // already applies between its own branches.
+            for (GLuint loc = 0; loc <= 6; ++loc)
+                glDisableVertexAttribArray(loc);
+
+            for (const VertexElement& element : declaration)
+            {
+                const std::string name = VertexElementAttribName(
+                    element.getVertexElementUsageProperty(), element.getUsageIndexProperty());
+                const GLint location = glGetAttribLocation(program, name.c_str());
+                if (location < 0)
+                    continue;
+                const VertexAttribFormat desc = DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                glEnableVertexAttribArray(static_cast<GLuint>(location));
+                glVertexAttribPointer(static_cast<GLuint>(location), desc.componentCount, desc.type, desc.normalized,
+                                      static_cast<GLsizei>(stride),
+                                      reinterpret_cast<void*>(static_cast<std::uintptr_t>(element.getOffsetProperty())));
             }
         }
 
@@ -1090,6 +1208,11 @@ namespace CNA::Internal::Backends::OpenGL2
             GLuint id{};
             int count{};
             std::size_t stride{};
+            // Task 1080 (this backend's own follow-up item, see plan_opengl2.md): non-empty only
+            // when the caller supplied a genuinely custom VertexDeclaration via
+            // VertexBuffer::SetDataRaw() -- see SetVertexDeclaration() below and
+            // BindVertexAttributesForDeclaration()'s own doc comment for how this is consumed.
+            std::vector<VertexElement> declaration;
 
             VB() { glGenBuffers(1, &id); }
             ~VB() override { if (id) glDeleteBuffers(1, &id); }
@@ -1100,6 +1223,11 @@ namespace CNA::Internal::Backends::OpenGL2
                 stride = stride_in_bytes;
                 glBindBuffer(GL_ARRAY_BUFFER, id);
                 glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertex_count * stride_in_bytes), data, GL_DYNAMIC_DRAW);
+            }
+
+            void SetVertexDeclaration(const std::vector<VertexElement>& elements) override
+            {
+                declaration = elements;
             }
 
             int GetVertexCount() const override { return count; }
@@ -2143,7 +2271,22 @@ namespace CNA::Internal::Backends::OpenGL2
             params->customEffectBackend->SetUniformMat4("View", viewCM);
             params->customEffectBackend->SetUniformMat4("Projection", projCM);
 
-            BindVertexAttributesForStride(vb->id, vb->stride);
+            // Task 1080: a VertexBuffer given a genuinely custom VertexDeclaration (via
+            // SetDataRaw()) is bound by attribute NAME (see BindVertexAttributesForDeclaration's
+            // own doc comment) against THIS custom program specifically -- dynamic_cast to reach
+            // its raw program handle through the generic IEffectBackend interface (same reasoning
+            // as EffectBackend::GetProgramHandle()'s own doc comment).
+            if (!vb->declaration.empty())
+            {
+                if (auto* custom = dynamic_cast<EffectBackend*>(params->customEffectBackend))
+                    BindVertexAttributesForDeclaration(custom->GetProgramHandle(), vb->id, vb->stride, vb->declaration);
+                else
+                    BindVertexAttributesForStride(vb->id, vb->stride);
+            }
+            else
+            {
+                BindVertexAttributesForStride(vb->id, vb->stride);
+            }
 
             const int customVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
             if (ib)
@@ -2259,7 +2402,14 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         }
 
-        BindVertexAttributesForStride(vb->id, vb->stride);
+        // Task 1080: a VertexBuffer given a genuinely custom VertexDeclaration (via
+        // SetDataRaw()) is bound by attribute NAME against whichever built-in program was just
+        // selected above, instead of this file's own fixed byte-stride dispatch -- see
+        // BindVertexAttributesForDeclaration's own doc comment.
+        if (!vb->declaration.empty())
+            BindVertexAttributesForDeclaration(program, vb->id, vb->stride, vb->declaration);
+        else
+            BindVertexAttributesForStride(vb->id, vb->stride);
 
         // GL 2.1 has no sampler objects -- ApplySamplerState() caches the requested filter/wrap
         // per slot; apply it here, right after binding the texture that will actually be sampled
