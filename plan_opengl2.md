@@ -687,6 +687,8 @@ possibilities of OpenGL 2"):
     convention). 2/2 PASS.
   - `OpenGL2_Texture2D_Anisotropic_SingleLevel` -- a single-level (non-mipmapped) `Texture2D`
     renders correctly (not solid black) under `TextureFilter::Anisotropic`. 1/1 PASS.
+  - `OpenGL2_Texture3D_Mip` -- real per-level GL storage + GPU readback round-trip across a
+    4x4x4/2x2x2/1x1x1 mip chain. 73/73 texel checks PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -706,7 +708,7 @@ possibilities of OpenGL 2"):
   `SupportsCapability` still uses the blanket "everything supported" default (see the
   already-tracked follow-up item below), not because of any regression introduced here.
 
-## Status: EasyGL capability audit + 5 real gaps fixed (2026-07-20, session 8)
+## Status: EasyGL capability audit + 6 real gaps fixed (2026-07-20, session 8)
 With all 6 explicitly-requested follow-up items from session 7 complete, per the standing
 instruction this session did a systematic audit of `IGraphicsBackend`'s virtual method list against
 which ones OpenGL2 overrides vs. silently relies on the shared base-class default, cross-referenced
@@ -757,8 +759,24 @@ have failed and the after-state passes on the first real run against this sandbo
   `easygl_texture2d_anisotropic_singlelevel_test.cpp`'s scene, proving the common non-mipmapped
   case still renders correctly, not solid black, now that both the MAX_LEVEL clamp and this
   anisotropy wiring are in place) 1/1 PASS.
+- **`Texture3D.SetData(level > 0, ...)` wrote into never-allocated GL storage; `GetData` had a
+  second, separate, pre-existing indexing bug.** `Texture3DBackend`'s constructor only ever
+  allocated level-0 storage (one `glTexImage3D` call) regardless of `mipMap`, and never clamped
+  `GL_TEXTURE_MAX_LEVEL`. Fixed by allocating every level's storage up front (mirroring
+  `TextureCubeBackend`'s own already-correct per-level loop -- re-audited this session and found to
+  have no gap, unlike `Texture2D`/`Texture3D`), confirmed against FNA3D_Driver_OpenGL.c's real
+  `OPENGL_CreateTexture3D` (`SDL_max(depth >> i, 1)`: depth halves per level exactly like
+  width/height, even though `Texture3D.cpp`'s own `CalculateMipLevels(width, height)` deliberately
+  excludes depth from the LEVEL COUNT formula -- two separate facts, both honored). Porting the
+  reference test then exposed a second, independent bug: `Texture3DBackend::GetData`'s
+  `glGetTexImage` readback buffer size and row/slice stride math both used level-0 dimensions
+  (`w`/`h`/`d`) instead of the requested level's real (halved) dimensions -- always wrong for
+  `level > 0`, but unobservable before this fix since `level > 0` storage never existed at all.
+  Fixed alongside. `OpenGL2_Texture3D_Mip` (ports `easygl_texture3d_mip_test.cpp`'s 4x4x4 3-level
+  SetData/GetData round-trip verbatim) failed on mip level 1 texels 4-7 before the `GetData` fix,
+  1/1 PASS after.
 
-All 28 `OpenGL2`-labeled CTests pass after every fix in this round (up from 24 at the start of the
+All 29 `OpenGL2`-labeled CTests pass after every fix in this round (up from 24 at the start of the
 session); each fix landed as its own commit with its own new test, verified against this sandbox's
 real GL driver (not just compiled) before committing.
 
@@ -779,7 +797,8 @@ real GL driver (not just compiled) before committing.
 - Occlusion queries (real `GL_SAMPLES_PASSED` pixel counts).
 - `TextureCube` (`GL_TEXTURE_CUBE_MAP`, see `OpenGL2_TextureCube` above), now sampled by
   `EnvironmentMapEffect` (see below).
-- `Texture3D` (`GL_TEXTURE_3D`, see `OpenGL2_Texture3D` above); level 0 only, no mip chain yet.
+- `Texture3D` (`GL_TEXTURE_3D`, see `OpenGL2_Texture3D` above), including a real per-level mip
+  chain (session 8; see `OpenGL2_Texture3D_Mip` above).
 - `RenderTargetCube` (see `OpenGL2_RenderTargetCube` above); single-sample only, no MSAA. Usable
   as an `EnvironmentMapEffect` source too (`IRenderTargetCubeBackend` extends
   `ITextureCubeBackend`, so a dynamically-rendered reflection is a real, tested code path).
@@ -821,6 +840,8 @@ real GL driver (not just compiled) before committing.
   `OpenGL2_Texture_MipFilter`/`OpenGL2_Texture2D_Anisotropic_SingleLevel` above).
 - `SamplerState.MaxAnisotropy` (real `GL_TEXTURE_MAX_ANISOTROPY_EXT`; see
   `OpenGL2_Texture2D_Anisotropic_SingleLevel` above).
+- Real `Texture3D` mip-level GPU storage (per-level `glTexImage3D` allocation, `GL_TEXTURE_MAX_LEVEL`
+  clamp, and a correct per-level `GetData` readback; see `OpenGL2_Texture3D_Mip` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -870,21 +891,8 @@ real GL driver (not just compiled) before committing.
   `RenderTargetCube`/`EffectBackend`) have no such registry today. This is NOT a small bounded fix
   like anything in session 8 -- it is a full resource-lifecycle redesign touching every backend
   resource type. Scope as its own multi-part task if ever prioritized; do not attempt piecemeal.
-- **`Texture3D` mip-level support (`Texture3DBackend`) remains level-0-only.** Re-audited this
-  session (session 8) after the `Texture2D` mip fix, alongside `TextureCube` (see below, which
-  turned out to already be fine): `Texture3DBackend`'s constructor only ever calls `glTexImage3D`
-  for level 0 and never clamps `GL_TEXTURE_MAX_LEVEL`, and its own header comment already flagged
-  this ("only level 0 is allocated -- mipMap is accepted... but not yet generated/stored"). Real
-  fix needs care beyond a mechanical copy of the `Texture2D` fix: `Texture3D.cpp`'s own
-  `CalculateMipLevels(width, height)` deliberately excludes `depth` from the level-count formula
-  (an established FNA convention, see that file's comment mirroring `Texture3D.cs`'s
-  `LevelCount = mipMap ? CalculateMipLevels(width, height) : 1`), but real GL_TEXTURE_3D mipmap
-  chains still need each level's actual DEPTH dimension to follow the standard halve-to-1 rule for
-  the chain to be GL-spec-complete -- confirming the exact interaction between those two facts
-  (not fully verified from FNA3D's C source this session) is the real risk here, not the
-  mechanical `glTexImage3D`-per-level loop or the `GL_TEXTURE_MAX_LEVEL` clamp themselves. Not
-  attempted tonight because getting a 3D mip dimension subtly wrong is a new, harder-to-notice bug
-  the current "level 0 only" state doesn't have.
+- ~~`Texture3D` mip-level support~~ -- **DONE (session 8, see above)**: real per-level GL storage,
+  `GL_TEXTURE_MAX_LEVEL` clamp, and a fixed `GetData` readback (`OpenGL2_Texture3D_Mip`).
 - **`TextureCube` mip-level support was re-audited this session and found to already be correct** --
   no action needed. Unlike `Texture2D`'s `Tex` class (which only allocated level-0 GL storage,
   requiring the new `UpdatePixelsLevel` override this session), `TextureCubeBackend`'s constructor
