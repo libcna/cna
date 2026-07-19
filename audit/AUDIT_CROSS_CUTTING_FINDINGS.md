@@ -2522,3 +2522,46 @@ all three hit the identical `fatal error: SDL3/SDL.h: No such file or directory`
 calls in `cmake/Harnesses.cmake`, matching the pattern other `AudioMixer.hpp`-consuming targets
 already use.
 
+### Bgfx: build+test complete, 5504/5511 general + 110/114 backend-specific pass; finds the real root cause behind the "already-known, unrelated `cna_demo_xact` failure" every single Pass 6 fork this session has dismissed
+
+**NEW, backend-agnostic build defect, previously never actually root-caused**: `cmake/Examples.cmake`
+registers an unconditional `POST_BUILD` step on `cna_demo_xact` that copies
+`examples/demo_xact/Content` -- **which does not exist anywhere in this repository at all**
+(`examples/demo_xact/` only has a `src/` subdirectory). This fails the copy command and aborts the
+entire top-level `cmake --build` invocation for the WHOLE PROJECT, on every backend, since this
+target is backend-agnostic -- confirmed to have **silently also broken this session's own earlier
+EasyGL build**, unnoticed because that run's `cmake --build ... | tail -60` pipeline reports the
+pipe's exit code (always 0), not the real build's, and `CnaTests` itself doesn't depend on
+`cna_demo_xact` so it still built successfully despite the overall command actually failing. Every
+Pass 6 fork this session correctly identified this as "already known, pre-existing, unrelated" (it
+is not backend-specific), but none had previously traced the exact mechanism -- this is the first
+precise root-cause identification. Suggested fix (report-only): either add a real
+`examples/demo_xact/Content` directory (or confirm `XactFileGen.hpp` already generates this demo's
+XACT content at runtime, making the copy step unnecessary), or guard the `add_custom_command` with
+`if(EXISTS ...)`.
+
+**Test results**: direct-binary `CnaTests` run (5511 tests): 5504 passed, 4 skipped (expected), 3
+failed -- 2 are the already-documented, disclosed Bgfx architectural limitation (no runtime GLSL
+compilation for custom `ShaderEffect`s, per `docs/shader-effect-vs-fx-bytecode.md`) with no
+`WILL_FAIL` annotation, 2 more concrete instances of the systemic WILL_FAIL-never-used finding
+above. The 3rd, `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`, is now **confirmed identical
+on a 3rd backend** (Vulkan, SdlGpu, and now Bgfx all hit the exact same universal-assertion
+test-authoring bug -- the test hardcodes an EasyGL/GLES3-specific wireframe limitation as if it were
+a universal backend truth; Bgfx's desktop OpenGL 2.1 path genuinely supports wireframe fill mode).
+
+Bgfx's own dedicated suite (`ctest -R "^Bgfx_"`): 110/114 pass. 2 already-known failures re-confirmed
+(`Bgfx_SkinnedEffect_WeightsPerVertex`, `Bgfx_RenderTargetCube_DepthFormat`). **NEW, real backend
+defect, well-evidenced**: `Bgfx_RasterizerState_CullMode_Camera` and
+`Bgfx_RasterizerState_CullMode_IndexedBasicEffect` both fail identically -- XNA's real default cull
+mode, `CullCounterClockwiseFace`, fails to cull anything on Bgfx (a CCW-wound triangle that should
+be culled stays visible), while `None` and `CullClockwiseFace` both work correctly in the same two
+tests. Two independent test-file confirmations of the identical failure rules out coincidence.
+**Root-cause hypothesis (not fully proven)**: `ApplyRasterizerState()`'s own comment claims
+`BGFX_STATE_CULL_CW`/`CCW` map directly to raw winding direction, unaffected by `glFrontFace` -- but
+a nearby comment in the same file (Task 763, already-fixed for `bgfx::setStencil`'s front/back
+split) documents that bgfx's own default `glFrontFace` is `GL_CW`, opposite of EasyGL's effective
+convention, and that this DOES affect stencil face-relativity. If cull-mode is similarly
+`glFrontFace`-relative (not the absolute raw-winding direction `ApplyRasterizerState()` assumes),
+this default-cull-mode failure is a natural, unfixed sibling of the already-fixed stencil issue --
+a concrete, actionable lead for a source-level follow-up, not yet conclusively proven.
+
