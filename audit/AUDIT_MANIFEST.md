@@ -109,20 +109,20 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | Shard | Files | Status rollup |
 |---|---|---|
 | [`examples-tests-ascii`](manifest/examples-tests-ascii.md) | 6 | PENDING: 6 / AUDITED: 0 |
-| [`examples-tests-bgfx`](manifest/examples-tests-bgfx.md) | 98 | PENDING: 98 / AUDITED: 0 |
+| [`examples-tests-bgfx`](manifest/examples-tests-bgfx.md) | 98 | PENDING: 0 / AUDITED: 98 (complete) |
 | [`examples-tests-canvas`](manifest/examples-tests-canvas.md) | 2 | PENDING: 2 / AUDITED: 0 |
 | [`examples-tests-d3d11`](manifest/examples-tests-d3d11.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-tests-d3d12`](manifest/examples-tests-d3d12.md) | 2 | PENDING: 2 / AUDITED: 0 |
-| [`examples-tests-d3d9`](manifest/examples-tests-d3d9.md) | 14 | PENDING: 14 / AUDITED: 0 |
+| [`examples-tests-d3d9`](manifest/examples-tests-d3d9.md) | 14 | PENDING: 0 / AUDITED: 14 (complete) |
 | [`examples-tests-dx3`](manifest/examples-tests-dx3.md) | 9 | PENDING: 9 / AUDITED: 0 |
-| [`examples-tests-easygl`](manifest/examples-tests-easygl.md) | 218 | PENDING: 218 / AUDITED: 0 |
-| [`examples-tests-generic`](manifest/examples-tests-generic.md) | 24 | PENDING: 24 / AUDITED: 0 |
+| [`examples-tests-easygl`](manifest/examples-tests-easygl.md) | 218 | PENDING: 0 / AUDITED: 218 (complete) |
+| [`examples-tests-generic`](manifest/examples-tests-generic.md) | 24 | PENDING: 0 / AUDITED: 24 (complete) |
 | [`examples-tests-headless`](manifest/examples-tests-headless.md) | 7 | PENDING: 7 / AUDITED: 0 |
-| [`examples-tests-sdlgpu`](manifest/examples-tests-sdlgpu.md) | 22 | PENDING: 22 / AUDITED: 0 |
-| [`examples-tests-sdlrenderer`](manifest/examples-tests-sdlrenderer.md) | 67 | PENDING: 67 / AUDITED: 0 |
+| [`examples-tests-sdlgpu`](manifest/examples-tests-sdlgpu.md) | 22 | PENDING: 0 / AUDITED: 22 (complete) |
+| [`examples-tests-sdlrenderer`](manifest/examples-tests-sdlrenderer.md) | 67 | PENDING: 0 / AUDITED: 67 (complete) |
 | [`examples-tests-software`](manifest/examples-tests-software.md) | 6 | PENDING: 6 / AUDITED: 0 |
-| [`examples-tests-vulkan`](manifest/examples-tests-vulkan.md) | 70 | PENDING: 70 / AUDITED: 0 |
-| [`examples-tests-webgpu`](manifest/examples-tests-webgpu.md) | 22 | PENDING: 22 / AUDITED: 0 |
+| [`examples-tests-vulkan`](manifest/examples-tests-vulkan.md) | 70 | PENDING: 0 / AUDITED: 70 (complete) |
+| [`examples-tests-webgpu`](manifest/examples-tests-webgpu.md) | 22 | PENDING: 0 / AUDITED: 22 (complete) |
 
 ## Examples — demo applications (110 files)
 
