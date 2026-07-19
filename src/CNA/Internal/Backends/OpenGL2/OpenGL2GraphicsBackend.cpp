@@ -44,6 +44,7 @@ namespace CNA::Internal::Backends::OpenGL2
             glBindAttribLocation(program, 0, "aPosition");
             glBindAttribLocation(program, 1, "aColor");
             glBindAttribLocation(program, 2, "aTexCoord");
+            glBindAttribLocation(program, 3, "aNormal");
             glLinkProgram(program);
             glDeleteShader(vs);
             glDeleteShader(fs);
@@ -587,26 +588,118 @@ namespace CNA::Internal::Backends::OpenGL2
     {
         if (colorProgram_) glDeleteProgram(colorProgram_);
         if (texturedProgram_) glDeleteProgram(texturedProgram_);
+        if (dualTextureProgram_) glDeleteProgram(dualTextureProgram_);
+        if (litProgram_) glDeleteProgram(litProgram_);
         if (context_) SDL_GL_DestroyContext(context_);
+    }
+
+    namespace
+    {
+        // Shared by every fragment shader below: fog blend (object-space vertex Z, matching
+        // EasyGLGraphicsBackend's identical, documented simplification -- see
+        // feedback_easygl_fog_object_space_only in this project's own notes) and, for the
+        // textured variants, the AlphaTestEffect discard formula from GpuDrawParams::alphaTest's
+        // own doc comment. Both default to no-op (uFogEnabled=0, uAlphaTest={0,0,1,1}) so every
+        // program works unchanged for draws that don't use either feature.
+        const char* kFogVertexChunk =
+            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;varying float vFogFactor;";
+        const char* kFogVertexCompute =
+            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
+            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;";
+        const char* kFogFragmentChunk =
+            "varying float vFogFactor;uniform vec3 uFogColor;";
+        const char* kFogFragmentApply = "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);";
+        const char* kAlphaTestFragmentChunk = "uniform vec4 uAlphaTest;";
+        const char* kAlphaTestFragmentApply =
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;";
     }
 
     void OpenGL2GraphicsBackend::ensurePrograms()
     {
-        const char* colorVertexSrc =
-            "attribute vec3 aPosition;attribute vec4 aColor;uniform mat4 uWVP;varying vec4 vColor;"
-            "void main(){gl_Position=uWVP*vec4(aPosition,1.0);vColor=aColor;}";
-        const char* colorFragmentSrc =
-            "varying vec4 vColor;uniform vec4 uDiffuse;"
-            "void main(){gl_FragColor=vColor*uDiffuse;}";
-        const char* texturedVertexSrc =
+        const std::string colorVertexSrc = std::string(
+            "attribute vec3 aPosition;attribute vec4 aColor;uniform mat4 uWVP;varying vec4 vColor;") +
+            kFogVertexChunk +
+            "void main(){gl_Position=uWVP*vec4(aPosition,1.0);vColor=aColor;" + kFogVertexCompute + "}";
+        const std::string colorFragmentSrc = std::string(
+            "varying vec4 vColor;uniform vec4 uDiffuse;") + kFogFragmentChunk +
+            "void main(){gl_FragColor=vColor*uDiffuse;" + kFogFragmentApply + "}";
+
+        const std::string texturedVertexSrc = std::string(
             "attribute vec3 aPosition;attribute vec4 aColor;attribute vec2 aTexCoord;uniform mat4 uWVP;"
-            "varying vec4 vColor;varying vec2 vTex;"
-            "void main(){gl_Position=uWVP*vec4(aPosition,1.0);vColor=aColor;vTex=aTexCoord;}";
-        const char* texturedFragmentSrc =
-            "varying vec4 vColor;varying vec2 vTex;uniform vec4 uDiffuse;uniform sampler2D uTex;"
-            "void main(){gl_FragColor=texture2D(uTex,vTex)*vColor*uDiffuse;}";
-        colorProgram_ = LinkProgram(colorVertexSrc, colorFragmentSrc);
-        texturedProgram_ = LinkProgram(texturedVertexSrc, texturedFragmentSrc);
+            "varying vec4 vColor;varying vec2 vTex;") + kFogVertexChunk +
+            "void main(){gl_Position=uWVP*vec4(aPosition,1.0);vColor=aColor;vTex=aTexCoord;" + kFogVertexCompute + "}";
+        const std::string texturedFragmentSrc = std::string(
+            "varying vec4 vColor;varying vec2 vTex;uniform vec4 uDiffuse;uniform sampler2D uTex;") +
+            kAlphaTestFragmentChunk + kFogFragmentChunk +
+            "void main(){gl_FragColor=texture2D(uTex,vTex)*vColor*uDiffuse;" +
+            kAlphaTestFragmentApply + kFogFragmentApply + "}";
+
+        // DualTextureEffect: two samplers at the SAME texcoord, the classic lightmap technique
+        // (base*2.0 lets a lightmap brighten beyond the base texture, matching
+        // EasyGLGraphicsBackend::EnsureDualTextured3DProgram's identical formula).
+        const std::string dualTextureFragmentSrc = std::string(
+            "varying vec4 vColor;varying vec2 vTex;uniform vec4 uDiffuse;uniform sampler2D uTex;uniform sampler2D uTex2;") +
+            kAlphaTestFragmentChunk + kFogFragmentChunk +
+            "void main(){vec4 base=texture2D(uTex,vTex);base.rgb*=2.0;"
+            "gl_FragColor=base*texture2D(uTex2,vTex)*vColor*uDiffuse;" +
+            kAlphaTestFragmentApply + kFogFragmentApply + "}";
+
+        // BasicEffect lighting: per-pixel Blinn-Phong, 3 directional lights + ambient + emissive +
+        // specular (matches EasyGLGraphicsBackend::EnsureLit3DProgram's formula exactly). Always
+        // per-pixel regardless of GpuDrawParams::preferPerPixelLighting -- matches this project's
+        // own documented, accepted convention (see that field's doc comment: every backend except
+        // D3D9 always renders per-pixel). uNormalMatrix uses the raw World upper-3x3 (no inverse-
+        // transpose) -- correct for translation/rotation/uniform-scale World matrices, which is
+        // every lighting scenario this backend's own tests use; a documented simplification for
+        // non-uniform-scale World matrices (see plan_opengl2.md follow-up).
+        const char* litVertexSrc =
+            "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;"
+            "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
+            "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
+            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;"
+            "void main(){"
+            "gl_Position=uWVP*vec4(aPosition,1.0);"
+            "vNormal=uNormalMatrix*aNormal;"
+            "vTex=aTexCoord;"
+            "vWorldPos=(uWorld*vec4(aPosition,1.0)).xyz;"
+            "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
+            "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
+            "}";
+        const char* litFragmentSrc =
+            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;"
+            "uniform sampler2D uTex;uniform bool uTextureEnabled;uniform vec4 uDiffuse;"
+            "uniform vec3 uAmbientColor;"
+            "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;uniform vec3 uLight0Specular;"
+            "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;uniform vec3 uLight1Specular;"
+            "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;uniform vec3 uLight2Specular;"
+            "uniform vec3 uSpecularColor;uniform float uSpecularPower;"
+            "uniform vec3 uEyePosition;uniform vec3 uEmissiveColor;"
+            "uniform vec4 uAlphaTest;uniform vec3 uFogColor;"
+            "void main(){"
+            "vec3 N=normalize(vNormal);"
+            "vec3 E=normalize(uEyePosition-vWorldPos);"
+            "float dotL0=dot(N,-uLight0Dir);float zeroL0=step(0.0,dotL0);float NdotL0=max(dotL0,0.0);"
+            "float dotL1=dot(N,-uLight1Dir);float zeroL1=step(0.0,dotL1);float NdotL1=max(dotL1,0.0);"
+            "float dotL2=dot(N,-uLight2Dir);float zeroL2=step(0.0,dotL2);float NdotL2=max(dotL2,0.0);"
+            "vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;"
+            "vec3 litRGB=lightSum*uDiffuse.rgb+uEmissiveColor;"
+            "vec3 h0=normalize(E-uLight0Dir);float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);"
+            "vec3 h1=normalize(E-uLight1Dir);float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);"
+            "vec3 h2=normalize(E-uLight2Dir);float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);"
+            "vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;"
+            "vec4 texColor=uTextureEnabled?texture2D(uTex,vTex):vec4(1.0,1.0,1.0,1.0);"
+            "gl_FragColor=texColor*vec4(litRGB,uDiffuse.a);"
+            "gl_FragColor.rgb+=specularRGB*gl_FragColor.a;"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "}";
+
+        colorProgram_ = LinkProgram(colorVertexSrc.c_str(), colorFragmentSrc.c_str());
+        texturedProgram_ = LinkProgram(texturedVertexSrc.c_str(), texturedFragmentSrc.c_str());
+        dualTextureProgram_ = LinkProgram(texturedVertexSrc.c_str(), dualTextureFragmentSrc.c_str());
+        litProgram_ = LinkProgram(litVertexSrc, litFragmentSrc);
     }
 
     void OpenGL2GraphicsBackend::Clear(float r, float g, float b, float a)
@@ -754,6 +847,21 @@ namespace CNA::Internal::Backends::OpenGL2
     std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer16(int) { return std::make_unique<IB>(false); }
     std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer32(int) { return std::make_unique<IB>(true); }
 
+    namespace
+    {
+        // Raw World upper-3x3, column-major -- see ensurePrograms()'s own comment on why this
+        // (not a full inverse-transpose) is an accepted simplification here.
+        void ComputeNormalMatrix3x3(const Matrix& world, float out[9])
+        {
+            const float rowMajor[9] = {world.M11, world.M12, world.M13,
+                                       world.M21, world.M22, world.M23,
+                                       world.M31, world.M32, world.M33};
+            for (int r = 0; r < 3; ++r)
+                for (int c = 0; c < 3; ++c)
+                    out[c * 3 + r] = rowMajor[r * 3 + c];
+        }
+    }
+
     void OpenGL2GraphicsBackend::drawInternal(const IVertexBufferBackend& vbi, const IIndexBufferBackend* ibi,
                                               const Matrix& world, const Matrix& view, const Matrix& projection,
                                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams* params)
@@ -763,8 +871,11 @@ namespace CNA::Internal::Backends::OpenGL2
             throw std::runtime_error("OPENGL2: incompatible vertex buffer");
         const auto* ib = dynamic_cast<const IB*>(ibi);
 
+        const bool lit = params && params->lightingEnabled && vb->stride >= 32;
+        const bool dual = params && params->dualTexture && params->texture1 && vb->stride >= 20;
         const bool textured = params && params->texture0 && vb->stride >= 20;
-        const GLuint program = textured ? texturedProgram_ : colorProgram_;
+
+        const GLuint program = lit ? litProgram_ : dual ? dualTextureProgram_ : textured ? texturedProgram_ : colorProgram_;
         glUseProgram(program);
 
         float wvp[16];
@@ -775,18 +886,66 @@ namespace CNA::Internal::Backends::OpenGL2
         if (params) std::memcpy(diffuse, params->diffuseColor, sizeof(diffuse));
         glUniform4fv(glGetUniformLocation(program, "uDiffuse"), 1, diffuse);
 
+        float alphaTest[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+        if (params) std::memcpy(alphaTest, params->alphaTest, sizeof(alphaTest));
+        glUniform4fv(glGetUniformLocation(program, "uAlphaTest"), 1, alphaTest);
+
+        glUniform1f(glGetUniformLocation(program, "uFogEnabled"), (params && params->fogEnabled) ? 1.0f : 0.0f);
+        if (params)
+        {
+            glUniform3fv(glGetUniformLocation(program, "uFogColor"), 1, params->fogColor);
+            glUniform1f(glGetUniformLocation(program, "uFogStart"), params->fogStart);
+            glUniform1f(glGetUniformLocation(program, "uFogEnd"), params->fogEnd);
+        }
+
+        if (lit)
+        {
+            float worldColMajor[16];
+            for (int r = 0; r < 4; ++r)
+                for (int c = 0; c < 4; ++c)
+                {
+                    const float rowMajor[16] = {world.M11, world.M12, world.M13, world.M14,
+                                                world.M21, world.M22, world.M23, world.M24,
+                                                world.M31, world.M32, world.M33, world.M34,
+                                                world.M41, world.M42, world.M43, world.M44};
+                    worldColMajor[c * 4 + r] = rowMajor[r * 4 + c];
+                }
+            glUniformMatrix4fv(glGetUniformLocation(program, "uWorld"), 1, GL_FALSE, worldColMajor);
+            float normalMat[9];
+            ComputeNormalMatrix3x3(world, normalMat);
+            glUniformMatrix3fv(glGetUniformLocation(program, "uNormalMatrix"), 1, GL_FALSE, normalMat);
+
+            glUniform1i(glGetUniformLocation(program, "uTextureEnabled"), params->textureEnabled ? 1 : 0);
+            glUniform3fv(glGetUniformLocation(program, "uAmbientColor"), 1, params->ambientColor);
+            glUniform3fv(glGetUniformLocation(program, "uLight0Dir"), 1, params->light0Dir);
+            glUniform3fv(glGetUniformLocation(program, "uLight0Diffuse"), 1, params->light0Diffuse);
+            glUniform3fv(glGetUniformLocation(program, "uLight0Specular"), 1, params->light0Specular);
+            glUniform3fv(glGetUniformLocation(program, "uLight1Dir"), 1, params->light1Dir);
+            glUniform3fv(glGetUniformLocation(program, "uLight1Diffuse"), 1, params->light1Diffuse);
+            glUniform3fv(glGetUniformLocation(program, "uLight1Specular"), 1, params->light1Specular);
+            glUniform3fv(glGetUniformLocation(program, "uLight2Dir"), 1, params->light2Dir);
+            glUniform3fv(glGetUniformLocation(program, "uLight2Diffuse"), 1, params->light2Diffuse);
+            glUniform3fv(glGetUniformLocation(program, "uLight2Specular"), 1, params->light2Specular);
+            glUniform3fv(glGetUniformLocation(program, "uSpecularColor"), 1, params->specularColor);
+            glUniform1f(glGetUniformLocation(program, "uSpecularPower"), params->specularPower);
+            glUniform3fv(glGetUniformLocation(program, "uEyePosition"), 1, params->eyePositionWorld);
+            glUniform3fv(glGetUniformLocation(program, "uEmissiveColor"), 1, params->emissiveColor);
+        }
+
         glBindBuffer(GL_ARRAY_BUFFER, vb->id);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), nullptr);
 
-        // Stride-based vertex-layout dispatch (VertexPositionColor=16, VertexPositionTexture=20,
-        // VertexPositionColorTexture=24, VertexPositionNormalTexture>=32 with the normal ignored --
-        // no lighting shader yet, see plan_opengl2.md's follow-up list).
+        // Stride-based vertex-layout dispatch: VertexPositionColor=16, VertexPositionTexture=20,
+        // VertexPositionColorTexture=24, VertexPositionNormalTexture>=32 (normal bound at
+        // location 3, read only by litProgram_ -- harmless for the other programs, which don't
+        // declare an aNormal attribute at all).
         if (vb->stride == 16)
         {
             glEnableVertexAttribArray(1);
             glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
             glDisableVertexAttribArray(2);
+            glDisableVertexAttribArray(3);
         }
         else if (vb->stride == 20)
         {
@@ -794,6 +953,7 @@ namespace CNA::Internal::Backends::OpenGL2
             glVertexAttrib4f(1, 1, 1, 1, 1);
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
+            glDisableVertexAttribArray(3);
         }
         else if (vb->stride == 24)
         {
@@ -801,6 +961,7 @@ namespace CNA::Internal::Backends::OpenGL2
             glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(16));
+            glDisableVertexAttribArray(3);
         }
         else if (vb->stride >= 32)
         {
@@ -808,17 +969,43 @@ namespace CNA::Internal::Backends::OpenGL2
             glVertexAttrib4f(1, 1, 1, 1, 1);
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(24));
+            glEnableVertexAttribArray(3);
+            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
         }
         else
         {
             throw std::runtime_error("OPENGL2: unsupported vertex stride");
         }
 
-        if (textured)
+        // GL 2.1 has no sampler objects -- ApplySamplerState() caches the requested filter/wrap
+        // per slot; apply it here, right after binding the texture that will actually be sampled
+        // (mirrors Sprite::Draw's identical per-draw glTexParameteri approach).
+        auto applySampler = [this](int slot)
+        {
+            const GLint glFilter = ToGLFilter(samplerFilter_[slot]);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, glFilter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, glFilter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(samplerAddressU_[slot]));
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(samplerAddressV_[slot]));
+        };
+
+        // Lit draws with textureEnabled=false (VertexPositionNormalTexture but no BasicEffect
+        // Texture assigned) legitimately have a null texture0 -- litFragmentSrc's uTextureEnabled
+        // branch never samples it in that case, so it is safe (and necessary) to skip the bind.
+        if (params && params->texture0 && (lit || textured || dual))
         {
             glActiveTexture(GL_TEXTURE0);
             params->texture0->BindGL();
+            applySampler(0);
             glUniform1i(glGetUniformLocation(program, "uTex"), 0);
+        }
+        if (dual)
+        {
+            glActiveTexture(GL_TEXTURE1);
+            params->texture1->BindGL();
+            applySampler(1);
+            glUniform1i(glGetUniformLocation(program, "uTex2"), 1);
+            glActiveTexture(GL_TEXTURE0);
         }
 
         const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
@@ -945,6 +1132,17 @@ namespace CNA::Internal::Backends::OpenGL2
         }
 
         scissorTestEnable ? glEnable(GL_SCISSOR_TEST) : glDisable(GL_SCISSOR_TEST);
+    }
+
+    void OpenGL2GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int /*maxAnisotropy*/)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        // GL 2.1 has no sampler objects -- just cache the request; drawInternal() applies it via
+        // glTexParameteri once it knows which texture is actually bound to this slot for the
+        // upcoming draw (mirrors Sprite::Draw's identical per-draw approach for SpriteBatch).
+        samplerFilter_[slot] = filter;
+        samplerAddressU_[slot] = addressU;
+        samplerAddressV_[slot] = addressV;
     }
 
     void OpenGL2GraphicsBackend::SetScissorRect(int x, int y, int w, int h)

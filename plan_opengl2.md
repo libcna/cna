@@ -120,8 +120,50 @@ Continued past the 2D baseline:
   real, documented XNA/FNA `SpriteBatch` behavior, not an OpenGL2 defect. Fixed by having the test
   restore `DepthStencilState::Default` before its 3D draws, exactly as a real game must.)
 
+## Status: ApplySamplerState + AlphaTest/DualTexture/lighting/fog (2026-07-19, session 4)
+
+Working toward EasyGL feature parity (user request: "at least EasyGL's capabilities, within the
+possibilities of OpenGL 2"):
+
+- **`ApplySamplerState` implemented** for direct 3D draws (`GraphicsDevice.SamplerStates[slot]`
+  previously had zero effect on `DrawPrimitives`/`DrawIndexedPrimitives`). GL 2.1 has no sampler
+  objects, so the requested filter/wrap is cached per slot and applied via `glTexParameteri` at
+  the point `drawInternal()` actually binds a texture to that unit -- same approach as
+  `Sprite::Draw`'s pre-existing per-draw sampler application.
+- **AlphaTestEffect**: folded directly into the existing textured/dual-texture/lit fragment
+  shaders (no separate compiled program needed) via the exact discard formula documented on
+  `GpuDrawParams::alphaTest` and independently confirmed against `AlphaTestEffect::
+  FillGpuDrawParams()`'s own comment. Defaults to a no-op (`{0,0,1,1}` = always pass) so every
+  existing textured draw is unaffected when alpha testing isn't in use.
+- **DualTextureEffect**: new `dualTextureProgram_` (two samplers at the same texcoord,
+  `base*2.0` then modulated by the second texture -- the classic lightmap technique, matching
+  `EasyGLGraphicsBackend::EnsureDualTextured3DProgram`'s identical formula).
+- **BasicEffect lighting**: new `litProgram_`, per-pixel Blinn-Phong with 3 directional lights
+  (ambient + diffuse + specular + emissive), selected when `GpuDrawParams::lightingEnabled` and
+  the vertex format carries a normal (`VertexPositionNormalTexture`, stride>=32 -- CNA has no
+  vertex format that pairs a normal with per-vertex color, so lit draws always use the
+  material-level `DiffuseColor`, never a vertex color, matching `EasyGLGraphicsBackend::
+  EnsureLit3DProgram`'s own formula exactly). Always per-pixel regardless of
+  `GpuDrawParams::preferPerPixelLighting` -- matches that field's own documented, accepted
+  project-wide convention (every backend but D3D9 ignores it). `uNormalMatrix` uses the raw World
+  upper-3x3 (no inverse-transpose) -- correct for translation/rotation/uniform-scale World
+  matrices; a documented simplification for non-uniform scale (see Follow-up).
+- **BasicEffect fog**: added to every shader (colored/textured/dual-texture/lit) uniformly, using
+  the exact same object-space-vertex-Z formula as `EasyGLGraphicsBackend` (a known, documented
+  simplification -- see this project's own `feedback_easygl_fog_object_space_only` note --
+  reads raw local vertex Z, not a real eye-space distance; matched here for consistency rather
+  than implemented "more correctly" in isolation).
+- **New `OpenGL2_Effects` CTest**: AlphaTestEffect discard (opaque survives, alpha-32-vs-
+  reference-128 is discarded), DualTextureEffect's `*2.0` lightmap formula (half-intensity base
+  reads back full-intensity, not half), BasicEffect lighting (a light facing the surface reads
+  near-white; one facing away reads dim ambient-only), and BasicEffect fog (a quad at FogStart
+  reads the fog color exactly; one at FogEnd reads its own unfogged color exactly). All
+  pixel-verified. 8/8 PASS. (Iteration finding, not a backend bug: the first fog attempt used
+  Z=-5/Z=5 with an Identity projection, which put the geometry outside the clip-space [-1,1]
+  range and got near/far-clipped entirely -- fixed by keeping FogStart/FogEnd/Z within that range.)
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers four CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers five CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -132,6 +174,8 @@ Continued past the 2D baseline:
     pixel-verified. 6/6 PASS.
   - `OpenGL2_RenderTarget2D` -- FBO construction, `GetData()` readback, RT-as-Texture2D via
     SpriteBatch, depth occlusion inside the FBO, RT-vs-window sizing. 6/6 PASS.
+  - `OpenGL2_Effects` -- AlphaTestEffect, DualTextureEffect, BasicEffect lighting and fog, all
+    pixel-verified. 8/8 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -149,12 +193,18 @@ Continued past the 2D baseline:
 - Basic colored/textured 3D using World/View/Projection matrices (stride-inferred vertex layout;
   pixel-verified, see `OpenGL2_3D` above).
 - VBOs and 16/32-bit index buffers.
-- Depth, stencil, blending, culling, scissor, viewport, wireframe and polygon offset basics.
+- Depth, stencil (including two-sided), blending, culling, scissor, viewport, wireframe and
+  polygon offset, all with real XNA enum -> GL mappings (`Blend`/`BlendFunction`/
+  `CompareFunction`/`StencilOperation`).
+- `ApplySamplerState` (direct 3D draws) and `SpriteBatch`'s own `SetSamplerFilter`/
+  `SetSamplerAddressMode` -- both wired to real `glTexParameteri` calls.
 - `ReadBackbuffer` (pixel readback, enables automated pixel-exact testing).
 - RenderTarget2D/FBO (single-sample, single-mip-level; see Follow-up for MSAA/mipmaps).
+- AlphaTestEffect, DualTextureEffect, and BasicEffect lighting (3 directional lights, ambient,
+  specular, emissive) + fog (see `OpenGL2_Effects` above).
 - No EasyGL dependency.
 
-## Follow-up work
+## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
 - `GetViewportSize()`/`SetViewport()` do not implement `CnaPresentationMode` scaling
   (Letterbox/Overscan/Stretch/FixedHeightDynamicWidth): the virtual resolution is used verbatim
   as the GL viewport size regardless of the actual window's aspect ratio, so a *resizable* window
@@ -162,18 +212,33 @@ Continued past the 2D baseline:
   correctly (EasyGL's `getLogicalSize()` is the reference behavior to match). Not a problem for a
   fixed-size window matching its requested resolution (the common case, and what both CTests and
   `examples/demo_2d` use).
-- Full vertex declaration support rather than stride inference.
-- BasicEffect lighting/fog parity and multiple directional lights.
-- AlphaTestEffect and DualTextureEffect.
+- Full vertex declaration support rather than stride inference (blocks any vertex format beyond
+  the 4 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
+  attribute order/extra streams).
+- `uNormalMatrix` in the lit shader uses the raw World upper-3x3 rather than a real
+  inverse-transpose -- wrong normals under non-uniform-scale World matrices specifically
+  (uniform scale, rotation, and translation are all unaffected).
+- SkinnedEffect (bone palette skinning) -- EasyGL has this; would need a new vertex format
+  (blend indices/weights) and a skinned variant of the lit shader.
+- PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
+  effort (its own shader family + texture set), likely lower priority than the items above for a
+  "no EasyGL dependency" OpenGL 2.1 backend.
 - RenderTarget2D: MSAA (`multiSampleCount` is accepted but ignored -- no multisampled
   renderbuffer + resolve-on-unbind yet, unlike `EasyGLRenderTargetBackend`'s), mipmap generation
   (`mipMap` is accepted but ignored -- no `glGenerateMipmap` on unbind), and `RenderTargetCube`
   (only `RenderTarget2D` is implemented; `CreateRenderTargetCube` still returns `nullptr`).
 - Cube maps (plain `TextureCube`, not just render-target cube faces) and an EnvironmentMapEffect
-  subset where supported by OpenGL 2.1/extensions.
-- `ApplySamplerState` (the direct-3D-draw sampler path, as opposed to `SpriteBatch`'s own
-  `SetSamplerFilter`/`SetSamplerAddressMode` which are now wired) is still unimplemented --
-  `GraphicsDevice.SamplerStates[slot]` has no effect on `DrawPrimitives`/`DrawIndexedPrimitives`.
-- Robust extension/capability detection.
+  subset where supported by OpenGL 2.1/extensions (`ARB_texture_cube_map` is core since GL 1.3,
+  so this is realistic on this backend, unlike PBR).
+- `Texture3D` -- `CreateTexture3D` still returns `nullptr` (default). `GL_EXT_texture3D` is
+  widely available on GL 2.1 hardware; feasible.
+- Occlusion queries -- `CreateOcclusionQuery` still returns `nullptr` (default).
+  `ARB_occlusion_query` is core since GL 1.5, feasible.
+- Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
+  `nullptr` (default). Would let games write their own OpenGL2 shaders through CNA's `Effect`
+  API, mirroring `EasyGLEffectBackend`.
+- Robust extension/capability detection (`SupportsCapability` still uses `IGraphicsBackend`'s
+  blanket "everything is supported" default -- no real `GraphicsCapability` gating for anything
+  above, e.g. reporting cube-map/3D-texture/occlusion-query support accurately once implemented).
 - Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended for Linux desktop builds.
 - Visual parity tests against other backends (golden-image comparison).

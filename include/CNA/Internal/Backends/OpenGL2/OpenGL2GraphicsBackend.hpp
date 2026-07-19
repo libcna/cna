@@ -81,6 +81,7 @@ namespace CNA::Internal::Backends::OpenGL2
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
 
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
@@ -95,8 +96,17 @@ namespace CNA::Internal::Backends::OpenGL2
         CnaPresentationMode presentationMode_{};
         unsigned colorProgram_{};
         unsigned texturedProgram_{};
+        unsigned dualTextureProgram_{};
+        unsigned litProgram_{};
         int currentRtWidth_{};
         int currentRtHeight_{};
+        // Per-slot cached SamplerState (GL 2.1 has no sampler objects -- state is applied via
+        // glTexParameteri on whichever texture drawInternal() actually binds to that unit, at
+        // bind time, not here). Defaults match SamplerStateCollection's own SamplerState::LinearWrap.
+        static constexpr int kMaxSamplerSlots = 16;
+        int samplerFilter_[kMaxSamplerSlots] = {};
+        int samplerAddressU_[kMaxSamplerSlots] = {};
+        int samplerAddressV_[kMaxSamplerSlots] = {};
 
         void ensurePrograms();
         void drawInternal(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
