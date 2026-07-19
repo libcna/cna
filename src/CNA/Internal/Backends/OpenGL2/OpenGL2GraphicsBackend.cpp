@@ -279,38 +279,98 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         }
 
-        // Single-sample, single-mip-level FBO render target (no MSAA/mipmap generation yet --
-        // plan_opengl2.md follow-up). Owns a color texture (sampled later exactly like Tex, same
+        int CalculateRenderTargetMipLevels(int w, int h)
+        {
+            int levels = 1;
+            int size = std::max(w, h);
+            while (size > 1) { size /= 2; ++levels; }
+            return levels;
+        }
+
+        // FBO render target: a color texture (sampled later exactly like Tex, same
         // GL_LINEAR/GL_CLAMP_TO_EDGE defaults) plus an optional depth/(stencil) renderbuffer.
+        // Optionally multisampled (renders into a separate MSAA color+depth renderbuffer pair,
+        // resolved into colorTex via glBlitFramebuffer on unbind) and/or mipmapped (colorTex's
+        // full mip chain is pre-allocated, then regenerated from level 0 on unbind) -- mirrors
+        // EasyGLRenderTargetBackend's identical resolve-then-mipmap order (FNA3D's own
+        // OPENGL_ResolveTarget behavior).
         class RenderTarget final : public IRenderTargetBackend
         {
         public:
             GLuint fbo{};
             GLuint colorTex{};
             GLuint depthRbo{};
+            GLuint msaaColorRbo{};
+            GLuint msaaDepthRbo{};
+            GLuint resolveFbo{};
             int w{};
             int h{};
+            int levelCount{1};
+            int multiSampleCount{};
 
-            RenderTarget(int width, int height, int depthFormat) : w(width), h(height)
+            RenderTarget(int width, int height, int depthFormat, bool mipMap, int requestedSamples)
+                : w(width), h(height), levelCount(mipMap ? CalculateRenderTargetMipLevels(width, height) : 1),
+                  multiSampleCount(requestedSamples)
             {
+                if (multiSampleCount > 0)
+                {
+                    GLint maxSamples = 0;
+                    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+                    if (maxSamples > 0 && multiSampleCount > maxSamples)
+                        multiSampleCount = maxSamples;
+                }
+
                 glGenTextures(1, &colorTex);
                 glBindTexture(GL_TEXTURE_2D, colorTex);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                // Pre-allocate GPU storage for every mip level (not just level 0): the chain is
+                // regenerated from level 0 via glGenerateMipmap() on unbind, and levels 1+ need
+                // defined storage before that write target is GL-complete.
+                {
+                    int levelW = w, levelH = h;
+                    for (int level = 0; level < levelCount; ++level)
+                    {
+                        glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, levelW, levelH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                        levelW = std::max(1, levelW / 2);
+                        levelH = std::max(1, levelH / 2);
+                    }
+                }
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, levelCount - 1);
 
                 glGenFramebuffers(1, &fbo);
                 glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
+
+                if (multiSampleCount > 0)
+                {
+                    // Render into a multisampled color renderbuffer; colorTex is only ever the
+                    // single-sample resolve target, written by UnbindAsRenderTarget()'s blit.
+                    glGenRenderbuffers(1, &msaaColorRbo);
+                    glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRbo);
+                    glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount, GL_RGBA8, w, h);
+                    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msaaColorRbo);
+
+                    glGenFramebuffers(1, &resolveFbo);
+                    glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo);
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
+                    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                }
+                else
+                {
+                    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
+                }
 
                 GLenum depthInternalFormat = 0, depthAttachment = 0;
                 if (MapDepthFormat(depthFormat, depthInternalFormat, depthAttachment))
                 {
                     glGenRenderbuffers(1, &depthRbo);
                     glBindRenderbuffer(GL_RENDERBUFFER, depthRbo);
-                    glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, w, h);
+                    if (multiSampleCount > 0)
+                        glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount, depthInternalFormat, w, h);
+                    else
+                        glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, w, h);
                     glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER, depthRbo);
                 }
 
@@ -320,6 +380,8 @@ namespace CNA::Internal::Backends::OpenGL2
             ~RenderTarget() override
             {
                 if (depthRbo) glDeleteRenderbuffers(1, &depthRbo);
+                if (msaaColorRbo) glDeleteRenderbuffers(1, &msaaColorRbo);
+                if (resolveFbo) glDeleteFramebuffers(1, &resolveFbo);
                 if (fbo) glDeleteFramebuffers(1, &fbo);
                 if (colorTex) glDeleteTextures(1, &colorTex);
             }
@@ -329,24 +391,46 @@ namespace CNA::Internal::Backends::OpenGL2
             SDL_Texture* GetNativeTexture() const override { return nullptr; }
             void BindGL() const override { glBindTexture(GL_TEXTURE_2D, colorTex); }
             unsigned int GetColorGLHandle() const override { return colorTex; }
+            int GetMultiSampleCount() const override { return multiSampleCount; }
 
             void BindAsRenderTarget() override { glBindFramebuffer(GL_FRAMEBUFFER, fbo); }
-            void UnbindAsRenderTarget() override { glBindFramebuffer(GL_FRAMEBUFFER, 0); }
+
+            void UnbindAsRenderTarget() override
+            {
+                if (multiSampleCount > 0)
+                {
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo);
+                    // A multisample-resolving blit (source sample count > 0, destination = 0)
+                    // averages every sample per destination pixel regardless of the filter
+                    // argument -- GL_NEAREST is used here because GL_LINEAR is invalid for this
+                    // exact source/destination sample-count combination on strict implementations.
+                    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                }
+                if (levelCount > 1)
+                {
+                    glBindTexture(GL_TEXTURE_2D, colorTex);
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                }
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            }
 
             // Texture2D::GetData() only reaches here when its own CPU-side pixel shadow is
             // unavailable (i.e. this is a real RenderTarget2D, not a SetData()-populated
             // texture) -- glGetTexImage reads the whole level, then the requested sub-rect is
             // copied out (same row-major layout convention as every other texture in this
             // backend, verified self-consistent by OpenGL2_2D's own quadrant UV test).
-            void GetData(int /*level*/, int x, int y, int rw, int rh, void* data, int /*dataLength*/) const override
+            void GetData(int level, int x, int y, int rw, int rh, void* data, int /*dataLength*/) const override
             {
-                std::vector<uint8_t> full(static_cast<std::size_t>(w) * h * 4);
+                int levelW = w, levelH = h;
+                for (int i = 0; i < level; ++i) { levelW = std::max(1, levelW / 2); levelH = std::max(1, levelH / 2); }
+                std::vector<uint8_t> full(static_cast<std::size_t>(levelW) * levelH * 4);
                 glBindTexture(GL_TEXTURE_2D, colorTex);
-                glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
+                glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
                 auto* dst = static_cast<uint8_t*>(data);
                 for (int row = 0; row < rh; ++row)
                     std::memcpy(dst + static_cast<std::size_t>(row) * rw * 4,
-                               full.data() + (static_cast<std::size_t>(y + row) * w + x) * 4, rw * 4);
+                               full.data() + (static_cast<std::size_t>(y + row) * levelW + x) * 4, rw * 4);
             }
         };
 
@@ -745,15 +829,21 @@ namespace CNA::Internal::Backends::OpenGL2
     std::unique_ptr<ISpriteBatchBackend> OpenGL2GraphicsBackend::CreateSpriteBatch() { return std::make_unique<Sprite>(this); }
 
     std::unique_ptr<IRenderTargetBackend> OpenGL2GraphicsBackend::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        // plan_opengl2.md follow-up: mipMap/multiSampleCount are accepted (matching the
-        // interface signature) but not yet implemented -- single-sample, single-level only.
-        return std::make_unique<RenderTarget>(w, h, depthFormat);
+        return std::make_unique<RenderTarget>(w, h, depthFormat, mipMap, multiSampleCount);
     }
 
     void OpenGL2GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
+        // Must run the OUTGOING target's own UnbindAsRenderTarget() first -- that is where
+        // RenderTarget resolves its MSAA renderbuffer into colorTex and regenerates its mip
+        // chain (mirrors FNA3D's OPENGL_ResolveTarget, invoked when a target stops being the
+        // active render target). Skipping this left both features silently inert: colorTex kept
+        // whatever empty storage glTexImage2D(..., nullptr) initially gave it.
+        if (currentRt_)
+            currentRt_->UnbindAsRenderTarget();
+
         if (rt)
         {
             rt->BindAsRenderTarget();
@@ -766,6 +856,7 @@ namespace CNA::Internal::Backends::OpenGL2
             currentRtWidth_ = 0;
             currentRtHeight_ = 0;
         }
+        currentRt_ = rt;
     }
 
     bool OpenGL2GraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const

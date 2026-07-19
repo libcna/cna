@@ -98,6 +98,7 @@ namespace CNA::Internal::Backends::OpenGL2
         unsigned texturedProgram_{};
         unsigned dualTextureProgram_{};
         unsigned litProgram_{};
+        IRenderTargetBackend* currentRt_{};
         int currentRtWidth_{};
         int currentRtHeight_{};
         // Per-slot cached SamplerState (GL 2.1 has no sampler objects -- state is applied via

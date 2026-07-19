@@ -183,6 +183,36 @@ possibilities of OpenGL 2"):
   visible after readback -- proving the real GL viewport was re-issued, not just C++-side
   bookkeeping. 4/4 PASS.
 
+## Status: RenderTarget2D MSAA + mipmap generation (2026-07-19, session 5)
+
+- **MSAA render targets**: a multisample color renderbuffer (`glRenderbufferStorageMultisample`,
+  clamped to `GL_MAX_SAMPLES`) plus a separate single-sample resolve FBO, resolved via
+  `glBlitFramebuffer` when the target stops being bound -- mirrors
+  `EasyGLRenderTargetBackend`'s identical multisample-renderbuffer + resolve-FBO shape. The
+  depth/stencil renderbuffer (when requested) is multisampled too, attached to the same MSAA FBO.
+- **Mipmap generation**: `mipMap=true` pre-allocates the full mip chain (empty, all levels) at
+  construction, then `glGenerateMipmap()` regenerates it from the just-rendered level 0 when the
+  target is unbound -- same resolve-then-mipmap order as `EasyGLRenderTargetBackend`'s own
+  `UnbindAsRenderTarget()` (matches FNA3D's `OPENGL_ResolveTarget` behavior).
+- **Real bug found while testing this**: `SetRenderTarget2D(nullptr)` previously just bound the
+  default framebuffer directly -- it never called the OUTGOING target's own
+  `UnbindAsRenderTarget()` first, so the MSAA resolve blit and mip regeneration above were
+  entirely dead code in practice (only ever reachable via the RT's own destructor path, which
+  doesn't call it either). Fixed by tracking the currently-bound `IRenderTargetBackend*` and
+  unbinding it properly before switching targets.
+- **Second real bug found while testing this** (in the new CTest itself, not the backend): the
+  first MSAA differential check used a diagonal-split triangle with the wrong winding order,
+  which this backend's default `RasterizerState.CullCounterClockwise` silently backface-culled in
+  *both* the MSAA and single-sample targets -- an all-background render, which the single-sample
+  assertion ("is the pixel a flat, unblended color") didn't catch since a pure background color is
+  trivially "flat" too. A separate full-coverage quad draw (already proven correct elsewhere)
+  confirmed MSAA rendering itself worked before the triangle's winding was the culprit; fixed the
+  test's vertex order to match this project's established CW convention.
+- **`OpenGL2_RenderTarget2D` extended** with a mipmap check (level-1 mip matches the level-0
+  drawn color) and an MSAA check (a hard diagonal edge resolves to a genuine blended color, e.g.
+  `(128,0,128)` for a red/blue split, vs. a flat, unblended color on the equivalent single-sample
+  target). 9/9 PASS.
+
 ### Verified working
 - `cmake/Tests/OpenGL2Tests.cmake` registers six CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
@@ -194,7 +224,8 @@ possibilities of OpenGL 2"):
   - `OpenGL2_3D` -- colored3d/textured3d/colored_textured3d + real depth-test occlusion, all
     pixel-verified. 6/6 PASS.
   - `OpenGL2_RenderTarget2D` -- FBO construction, `GetData()` readback, RT-as-Texture2D via
-    SpriteBatch, depth occlusion inside the FBO, RT-vs-window sizing. 6/6 PASS.
+    SpriteBatch, depth occlusion inside the FBO, RT-vs-window sizing, mipmap generation, MSAA
+    resolve. 9/9 PASS.
   - `OpenGL2_Effects` -- AlphaTestEffect, DualTextureEffect, BasicEffect lighting and fog, all
     pixel-verified. 8/8 PASS.
   - `OpenGL2_Presentation` -- FixedHeightDynamicWidth adapts to a real window resize. 4/4 PASS.
@@ -221,7 +252,7 @@ possibilities of OpenGL 2"):
 - `ApplySamplerState` (direct 3D draws) and `SpriteBatch`'s own `SetSamplerFilter`/
   `SetSamplerAddressMode` -- both wired to real `glTexParameteri` calls.
 - `ReadBackbuffer` (pixel readback, enables automated pixel-exact testing).
-- RenderTarget2D/FBO (single-sample, single-mip-level; see Follow-up for MSAA/mipmaps).
+- RenderTarget2D/FBO, including MSAA (resolve-on-unbind) and mipmap generation.
 - AlphaTestEffect, DualTextureEffect, and BasicEffect lighting (3 directional lights, ambient,
   specular, emissive) + fog (see `OpenGL2_Effects` above).
 - No EasyGL dependency.
@@ -242,10 +273,8 @@ possibilities of OpenGL 2"):
 - PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
   effort (its own shader family + texture set), likely lower priority than the items above for a
   "no EasyGL dependency" OpenGL 2.1 backend.
-- RenderTarget2D: MSAA (`multiSampleCount` is accepted but ignored -- no multisampled
-  renderbuffer + resolve-on-unbind yet, unlike `EasyGLRenderTargetBackend`'s), mipmap generation
-  (`mipMap` is accepted but ignored -- no `glGenerateMipmap` on unbind), and `RenderTargetCube`
-  (only `RenderTarget2D` is implemented; `CreateRenderTargetCube` still returns `nullptr`).
+- `RenderTargetCube` -- only `RenderTarget2D` is implemented; `CreateRenderTargetCube` still
+  returns `nullptr` (default).
 - Cube maps (plain `TextureCube`, not just render-target cube faces) and an EnvironmentMapEffect
   subset where supported by OpenGL 2.1/extensions (`ARB_texture_cube_map` is core since GL 1.3,
   so this is realistic on this backend, unlike PBR).

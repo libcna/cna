@@ -14,7 +14,17 @@
 //   order, read back via GetData() (proves the RT's own depth/stencil renderbuffer is real).
 // Check E -- a SpriteBatch draw made WHILE a differently-sized RT is bound fills that RT's own
 //   dimensions, not the window's (the Task-1078-equivalent fix: GetCurrentRenderTarget2DSize()).
-// Check F -- 60 frames of the whole scene render with no exception.
+// Check F -- mipmap generation: a mipMap=true RT's level-1 (half-size) mip, read back via
+//   RenderTarget2D::GetData(1, ...), matches the solid color drawn into level 0 -- only possible
+//   if glGenerateMipmap() actually ran on unbind (an un-generated level 1 would still hold
+//   whatever CreateResources()'s empty glTexImage2D(level=1, ..., nullptr) left it as, not the
+//   drawn color).
+// Check G -- MSAA: the same hard-edged diagonal-split scene rendered into a multisampled RT vs a
+//   single-sample RT. At the exact center pixel (where the diagonal edge crosses), the
+//   single-sample result must equal one of the two flat colors exactly (no blending possible
+//   without multisampling); the MSAA result must NOT equal either flat color exactly (a real
+//   resolve blend) -- proves glRenderbufferStorageMultisample + the resolve blit are both real.
+// Check H -- 60 frames of the whole scene render with no exception.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -68,11 +78,11 @@ namespace
              + "," + std::to_string(c.getBProperty()) + ")";
     }
 
-    Color ReadRTPixel(RenderTarget2D& rt, int x, int y)
+    Color ReadRTPixel(RenderTarget2D& rt, int x, int y, int level = 0)
     {
         Color px(0, 0, 0, 0);
         const Rectangle rect(x, y, 1, 1);
-        rt.GetData(0, &rect, &px, 0, 1);
+        rt.GetData(level, &rect, &px, 0, 1);
         return px;
     }
 }
@@ -84,6 +94,9 @@ class OpenGL2RenderTarget2DTest : public Game
     std::unique_ptr<RenderTarget2D> rtColor_;
     std::unique_ptr<RenderTarget2D> rtDepth_;
     std::unique_ptr<RenderTarget2D> rtOddSize_;
+    std::unique_ptr<RenderTarget2D> rtMipmap_;
+    std::unique_ptr<RenderTarget2D> rtMsaa_;
+    std::unique_ptr<RenderTarget2D> rtNoMsaa_;
 
     int frame_ = 0;
     int passCount_ = 0;
@@ -123,6 +136,35 @@ class OpenGL2RenderTarget2DTest : public Game
         dev.SetVertexBuffer(nullptr);
     }
 
+    // A single triangle covering the main-diagonal half of the target (vertices at the
+    // bottom-left, top-right, and top-left clip-space corners), leaving the rest showing
+    // whatever the target was Clear()'d to. The hypotenuse passes exactly through the target's
+    // center pixel.
+    void DrawDiagonalTriangle(GraphicsDevice& dev, const Color& color)
+    {
+        BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;
+        fx.setWorldProperty(Matrix::getIdentityProperty());
+        fx.setViewProperty(Matrix::getIdentityProperty());
+        fx.setProjectionProperty(Matrix::getIdentityProperty());
+        fx.Apply();
+
+        // CW winding (matches DrawFullscreenColorQuad's own established convention -- visible
+        // under this project's default RasterizerState.CullCounterClockwise with Identity
+        // view/projection). The original CCW ordering here was silently backface-culled in both
+        // the MSAA and single-sample RTs, which the single-sample check didn't catch (an
+        // all-background result is trivially "flat, unblended" too) -- a test bug, not a
+        // backend one.
+        const VertexPositionColor verts[3] = {
+            {Vector3(-1.0f, -1.0f, 0.0f), color}, {Vector3(-1.0f, 1.0f, 0.0f), color}, {Vector3(1.0f, 1.0f, 0.0f), color},
+        };
+        VertexBuffer vb(dev, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
+        vb.SetData(verts, 0, 3);
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        dev.SetVertexBuffer(nullptr);
+    }
+
 protected:
     void LoadContent() override
     {
@@ -138,6 +180,13 @@ protected:
                                                      DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::DiscardContents);
         rtOddSize_ = std::make_unique<RenderTarget2D>(dev, 50, 30, false, SurfaceFormat::Color,
                                                        DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+
+        rtMipmap_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, true, SurfaceFormat::Color,
+                                                      DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtMsaa_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                    DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
+        rtNoMsaa_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                      DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
     }
 
     void RunScene(bool runChecks)
@@ -199,6 +248,54 @@ protected:
             Check(Matches(corner, Color(0, 200, 255, 255), 10),
                   "SpriteBatch draw while a differently-sized RT is bound fills the RT, not the window: got=" + ColorStr(corner));
         }
+
+        // Check F: mipmap generation -- level 1 must hold the same solid color drawn into level 0.
+        dev.SetRenderTarget(rtMipmap_.get());
+        dev.Clear(Color::Black);
+        DrawFullscreenColorQuad(dev, 0.0f, Color(0, 200, 255, 255));
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        if (runChecks)
+        {
+            const Color mip1 = ReadRTPixel(*rtMipmap_, kRTSize / 4, kRTSize / 4, /*level=*/1);
+            Check(Matches(mip1, Color(0, 200, 255, 255), 15),
+                  "mipMap=true RT's level-1 mip matches the level-0 color (glGenerateMipmap ran): got=" + ColorStr(mip1));
+        }
+
+        // Check G: MSAA -- same hard diagonal-split scene into a multisampled vs. single-sample RT.
+        // Sample several pixels straddling the diagonal rather than just one: exactly which pixel
+        // has genuinely mixed sample coverage depends on the driver's MSAA sample-point pattern,
+        // not just geometry, so a single fixed pixel risks a false negative.
+        const int kProbeCoords[3] = {kRTSize / 2 - 1, kRTSize / 2, kRTSize / 2 + 1};
+
+        dev.SetRenderTarget(rtNoMsaa_.get());
+        dev.Clear(Color::Blue);
+        DrawDiagonalTriangle(dev, Color::Red);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        bool noMsaaAllFlat = true;
+        for (int c : kProbeCoords)
+        {
+            const Color px = ReadRTPixel(*rtNoMsaa_, c, c);
+            if (!Matches(px, Color::Red, 5) && !Matches(px, Color::Blue, 5)) noMsaaAllFlat = false;
+        }
+
+        dev.SetRenderTarget(rtMsaa_.get());
+        dev.Clear(Color::Blue);
+        DrawDiagonalTriangle(dev, Color::Red);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        bool msaaAnyBlended = false;
+        Color msaaSample(0, 0, 0, 0);
+        for (int c : kProbeCoords)
+        {
+            const Color px = ReadRTPixel(*rtMsaa_, c, c);
+            if (!Matches(px, Color::Red, 5) && !Matches(px, Color::Blue, 5)) { msaaAnyBlended = true; msaaSample = px; }
+        }
+        if (runChecks)
+        {
+            Check(noMsaaAllFlat, "single-sample RT: diagonal-edge pixels are flat, unblended colors (no MSAA resolve to blend them)");
+            Check(msaaAnyBlended,
+                  "MSAA RT (4x): at least one diagonal-edge pixel is a real resolve blend, not a flat color: got=" + ColorStr(msaaSample) +
+                  " (GetMultiSampleCount()=" + std::to_string(rtMsaa_->getMultiSampleCountProperty()) + ")");
+        }
     }
 
     void Draw(const GameTime&) override
@@ -209,8 +306,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             Check(true, "60 frames of the RenderTarget2D scene render with no exception");
-            std::printf("=== %d/%d PASS ===\n", passCount_, 6);
-            result_ = (passCount_ == 6) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, 9);
+            result_ = (passCount_ == 9) ? 0 : 1;
             Exit();
         }
     }
