@@ -402,6 +402,40 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     return c;
 }
 
+// NOXNA SkinnedPbrEffect (plan_metal.md METAL-82): combines cna_skin_common's real GPU-skinning
+// blend (position+normal+tangent all transformed by the same per-vertex weighted bone matrix sum,
+// mat3(skinMat) directly -- no separate inverse-transpose normal-matrix step, matching
+// SkinnedEffect's own established precedent, not PBR's unskinned inverse-transpose path) with
+// cna_f3d_pbr's existing fragment shader unchanged -- both emit/consume the same VPbrOut, so no new
+// fragment shader is needed, only a new vertex shader producing that same interpolant struct.
+struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 skinParams; }; // skinParams.x = weightsPerVertex
+struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; };
+vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant SkinnedPbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
+    VPbrOut o;
+    int weightsPerVertex = int(t.skinParams.x);
+    float4x4 skinMat = bones[in.boneIndices.x] * in.boneWeights.x;
+    if (weightsPerVertex >= 2) skinMat += bones[in.boneIndices.y] * in.boneWeights.y;
+    if (weightsPerVertex >= 4) skinMat += bones[in.boneIndices.z] * in.boneWeights.z + bones[in.boneIndices.w] * in.boneWeights.w;
+    float4 skinnedPos = skinMat * float4(in.position, 1.0);
+    o.position = t.wvp * skinnedPos;
+    float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    float3 skinnedNormal = skinMat3 * in.normal;
+    float skinnedNormalLen = length(skinnedNormal);
+    o.normal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    // Not renormalized here (matches the unskinned cna_v3d_pbr's own o.tangent = world3*tangent.xyz,
+    // which is also left unnormalized) -- cna_f3d_pbr's Gram-Schmidt orthogonalization against the
+    // interpolated normal already renormalizes it per-pixel regardless.
+    o.tangent = skinMat3 * in.tangent.xyz;
+    o.bitangentSign = in.tangent.w;
+    o.uv = in.uv;
+    o.worldPos = (t.world * skinnedPos).xyz;
+    float fogStart = pu.fogStartEnd.x, fogEnd = pu.fogStartEnd.y;
+    o.fogFactor = (pu.fogColorEnabled.w > 0.5)
+        ? ((abs(fogEnd - fogStart) < 1e-6) ? 0.0 : clamp((in.position.z + fogEnd) / (fogEnd - fogStart), 0.0, 1.0))
+        : 1.0;
+    return o;
+}
+
 struct V2In { float2 position; float2 uv; float4 color; };
 // plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
 // bypassing virtual-resolution/letterbox scaling -- a real, currently-shipping bug. `scale`/
@@ -572,7 +606,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     enum class PipelineKind : uint8_t
     {
         Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, EnvMap32,
-        Skinned52, Skinned56, Pbr48, Sprite2D
+        Skinned52, Skinned56, Pbr48, SkinnedPbr68, Sprite2D
     };
 
     // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
@@ -672,6 +706,18 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 vd.attributes[4].format=MTLVertexFormatUChar4; vd.attributes[4].offset=48; vd.attributes[4].bufferIndex=0;
                 vd.attributes[5].format=MTLVertexFormatUChar4Normalized; vd.attributes[5].offset=52; vd.attributes[5].bufferIndex=0;
                 vd.layouts[0].stride=56;
+                return vd;
+            // plan_metal.md METAL-82: SkinnedPbrEffect layout -- position(12)+normal(12)+
+            // tangent(16, real float4 as in the unskinned PBR case)+uv(8)+boneWeights(16)+
+            // boneIndices(4, UNNORMALIZED UChar4 as in the stride-52/56 skinned case) = 68.
+            case 68:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.attributes[2].format=MTLVertexFormatFloat4; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
+                vd.attributes[3].format=MTLVertexFormatFloat2; vd.attributes[3].offset=40; vd.attributes[3].bufferIndex=0;
+                vd.attributes[4].format=MTLVertexFormatFloat4; vd.attributes[4].offset=48; vd.attributes[4].bufferIndex=0;
+                vd.attributes[5].format=MTLVertexFormatUChar4; vd.attributes[5].offset=64; vd.attributes[5].bufferIndex=0;
+                vd.layouts[0].stride=68;
                 return vd;
             default:
                 throw std::runtime_error("Metal: unsupported vertex stride until generic VertexDeclaration pipeline cache is implemented (plan_metal.md METAL-27)");
@@ -809,6 +855,10 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         float alphaTest[4];
         float fogColorEnabled[4], fogStartEnd[4];
     };
+
+    // Plain C++ mirror of kMetalShaderSource's `SkinnedPbrTransform` (reuses `PbrUniforms` as-is --
+    // the fragment-side uniforms are identical between skinned and unskinned PBR).
+    struct SkinnedPbrTransform { float wvp[16]; float world[16]; float skinParams[4]; };
 
     class MetalTexture final : public ITextureBackend
     {
@@ -1180,6 +1230,7 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::Skinned52:        vs=@"cna_v3d_skinned";       fs=@"cna_f3d_skinned"; stride=52; break;
             case PipelineKind::Skinned56:        vs=@"cna_v3d_skinned_color"; fs=@"cna_f3d_skinned"; stride=56; break;
             case PipelineKind::Pbr48:            vs=@"cna_v3d_pbr";           fs=@"cna_f3d_pbr";     stride=48; break;
+            case PipelineKind::SkinnedPbr68:      vs=@"cna_v3d_skinned_pbr";  fs=@"cna_f3d_pbr";      stride=68; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
         }
         id<MTLVertexDescriptor> vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
@@ -1687,7 +1738,10 @@ static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* 
     const bool envMapping = params && params->envMapping;
     const bool dual = params && params->dualTexture;
     if (pbr) {
-        if (skinned) throw std::runtime_error("Metal: SkinnedPbrEffect not yet implemented (plan_metal.md Phase 8, METAL-82)");
+        if (skinned) {
+            if (stride != 68) throw std::runtime_error("Metal: SkinnedPbrEffect requires stride 68 (position+normal+tangent+uv+boneWeights+boneIndices)");
+            return PipelineKind::SkinnedPbr68;
+        }
         if (stride != 48) throw std::runtime_error("Metal: PbrEffect requires stride 48 (position+normal+tangent+uv)");
         return PipelineKind::Pbr48;
     }
@@ -1827,6 +1881,20 @@ static void fillPbrUniforms(PbrTransform& t, PbrUniforms& pu, const Mat4& wvp, c
     pu.fogStartEnd[0]=params.fogStart; pu.fogStartEnd[1]=params.fogEnd; pu.fogStartEnd[2]=0; pu.fogStartEnd[3]=0;
 }
 
+// plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform
+// (fragment-side) fields are identical to fillPbrUniforms' -- only the transform struct differs
+// (adds skinParams, matching fillSkinnedUniforms' own t.skinParams handling), so this delegates the
+// uniform fill to fillPbrUniforms via a throwaway PbrTransform and copies just the shared fields
+// across, rather than duplicating every uniform assignment a third time.
+static void fillSkinnedPbrUniforms(SkinnedPbrTransform& t, PbrUniforms& pu, const Mat4& wvp, const GpuDrawParams& params)
+{
+    PbrTransform unusedT{};
+    fillPbrUniforms(unusedT, pu, wvp, params);
+    std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
+    std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
+    t.skinParams[0]=(float)params.weightsPerVertex; t.skinParams[1]=t.skinParams[2]=t.skinParams[3]=0;
+}
+
 static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
     p.ensureFrame(); Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
@@ -1897,6 +1965,33 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         // gap elsewhere in this file, PBR's 4 optional maps are given real, always-correct
         // fallbacks, since the constant-cost 1x1-texture-per-unbound-map approach is cheap and
         // there is no equivalent "correct default" for the 2D case's leave-it-alone convention.
+        id<MTLTexture> tex0=nativeTextureFor(params->texture0);
+        id<MTLTexture> normalMap=nativeTextureFor(params->pbrNormalMap);
+        id<MTLTexture> mrMap=nativeTextureFor(params->pbrMetallicRoughnessMap);
+        id<MTLTexture> emissiveMap=nativeTextureFor(params->pbrEmissiveMap);
+        id<MTLTexture> occlusionMap=nativeTextureFor(params->pbrOcclusionMap);
+        id<MTLSamplerState> smp=(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler);
+        [p.encoder setFragmentTexture:(tex0?tex0:p.defaultWhiteTexture) atIndex:0];
+        [p.encoder setFragmentSamplerState:smp atIndex:0];
+        [p.encoder setFragmentTexture:(normalMap?normalMap:p.defaultFlatNormalTexture) atIndex:1];
+        [p.encoder setFragmentSamplerState:smp atIndex:1];
+        [p.encoder setFragmentTexture:(mrMap?mrMap:p.defaultWhiteTexture) atIndex:2];
+        [p.encoder setFragmentSamplerState:smp atIndex:2];
+        [p.encoder setFragmentTexture:(emissiveMap?emissiveMap:p.defaultWhiteTexture) atIndex:3];
+        [p.encoder setFragmentSamplerState:smp atIndex:3];
+        [p.encoder setFragmentTexture:(occlusionMap?occlusionMap:p.defaultWhiteTexture) atIndex:4];
+        [p.encoder setFragmentSamplerState:smp atIndex:4];
+    } else if (kind == PipelineKind::SkinnedPbr68) {
+        // plan_metal.md METAL-82: real SkinnedPbrEffect path -- same bone-buffer handling as
+        // Skinned52/56, same 5-texture PBR-map binding as Pbr48.
+        SkinnedPbrTransform t{}; PbrUniforms pu{};
+        fillSkinnedPbrUniforms(t, pu, wvp, *params);
+        [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
+        [p.encoder setVertexBytes:&pu length:sizeof(pu) atIndex:2];
+        [p.encoder setFragmentBytes:&pu length:sizeof(pu) atIndex:2];
+        id<MTLBuffer> bonesBuf = [p.device newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16 options:MTLResourceStorageModeShared];
+        [p.encoder setVertexBuffer:bonesBuf offset:0 atIndex:3];
+        [bonesBuf release];
         id<MTLTexture> tex0=nativeTextureFor(params->texture0);
         id<MTLTexture> normalMap=nativeTextureFor(params->pbrNormalMap);
         id<MTLTexture> mrMap=nativeTextureFor(params->pbrMetallicRoughnessMap);

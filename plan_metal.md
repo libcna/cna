@@ -302,10 +302,25 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     between the MSL struct, the C++ mirror struct, and `fillPbrUniforms()`; texture-unit indices
     cross-checked between the MSL fragment-shader parameter list and the dispatch-site
     `setFragmentTexture:atIndex:` calls; the stride-48 vertex descriptor cross-checked against
-    `VPbrIn`'s attribute layout) — no bugs found this time, unlike the RenderTarget2D phase. Not
-    done: `SkinnedPbrEffect` (`METAL-82`, stride 68 — throws instead of rendering), `CTest` probe-
-    pixel coverage (`METAL-89`, no compiler available here), and the `METAL-90` doc-ownership
-    decision (deferred, not urgent).
+    `VPbrIn`'s attribute layout) — no bugs found this time, unlike the RenderTarget2D phase.
+
+13. **Phase 8 follow-up — `SkinnedPbrEffect`** (`METAL-82` closed same session, right after the
+    unskinned path landed): stride-68 vertex layout (position+normal+tangent+uv+boneWeights+
+    boneIndices), combining `cna_skin_common`'s real per-vertex weighted-bone-matrix blend (position,
+    normal, **and now tangent** all transformed by the same `skinMat`/`mat3(skinMat)` — no separate
+    inverse-transpose normal-matrix step, matching `SkinnedEffect`'s own established precedent, not
+    unskinned PBR's inverse-transpose path) with the *unmodified* unskinned-PBR fragment shader
+    (`cna_f3d_pbr`) — both vertex shaders emit the same `VPbrOut` interpolant struct, so no second
+    fragment shader was needed. `selectPipelineKind()`'s `pbr && skinned` branch now returns a real
+    `PipelineKind::SkinnedPbr68` (stride-checked) instead of throwing; the not-yet-implemented throw
+    now only fires on a genuine stride mismatch. `fillSkinnedPbrUniforms()` delegates its identical
+    fragment-uniform fields to `fillPbrUniforms()` (via a throwaway `PbrTransform`) rather than
+    duplicating ~15 field assignments a third time, then fills its own `wvp`/`world`/`skinParams`
+    separately — same 72-bone `MTLBuffer` upload pattern as Phase 7's `Skinned52`/`56`. Self-reviewed
+    the same way as item 12 (struct field order, texture-unit indices, vertex-descriptor offsets, and
+    the exhaustive `switch(kind)` in `getOrCreatePipeline()` all cross-checked) — no bugs found. Not
+    done: `CTest` probe-pixel coverage (`METAL-89`, no compiler available here) and the `METAL-90`
+    doc-ownership decision (deferred, not urgent) — both now the only open items in Phase 8.
 
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
@@ -315,10 +330,9 @@ Vulkan front/back stencil swap this project already had to empirically discover 
 real risk area, not a formality); `METAL-14`–`20` (VertexElementFormat/SurfaceFormat/DepthFormat
 tables, BC-compression query); the fully generic `VertexElement`-driven descriptor builder
 (`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
-lit variant (`METAL-39`/`76`); Phase 8's `SkinnedPbrEffect` (`METAL-82`, stride 68 — `params->pbr &&
-params->skinned` throws a clear "not implemented" error rather than silently misrendering; unskinned
-`PbrEffect` itself landed this session) and its `CTest` coverage/doc-ownership tasks (`METAL-89`/`90`);
-the rest of Phase 10 (`RenderTargetCube`,
+lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
+`90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
+Phase 10 (`RenderTargetCube`,
 MRT, MSAA, mip, `GetData()`, `METAL-102`–`105`/`108`–`119`); Phase 14 (custom `ShaderEffect`, which
 Phase 9 Instancing is itself blocked on); Phase 9 itself (blocked on Phase 14); Phases 16–18 (resize/
 Retina, frame pacing, the resource-lifetime/command-buffer-sync audit — genuinely relevant now that
@@ -357,9 +371,11 @@ cross-backend pixel parity, iOS/tvOS). Nothing in this list has been touched.
   bugs found and fixed by self-review before commit (a pipeline/attachment pixel-format mismatch,
   a compile error, an incomplete-type compile error, and a silent-wrong-transform bug) (🟨 landed
   2026-07-19 — `METAL-98`–`101`/`106`/`107`; `RenderTargetCube`/MRT/MSAA/mip still open).
-- Real, unskinned `PbrEffect` (glTF 2.0 metallic-roughness Cook-Torrance BRDF, tangent-space normal
-  mapping, all 4 optional PBR maps with safe default-texture fallbacks) (🟨 landed 2026-07-19 —
-  `METAL-81`/`83`–`87`; `SkinnedPbrEffect` `METAL-82` still open, throws instead of misrendering).
+- Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
+  tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
+  `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
+  same 72-bone GPU-skinning blend Phase 7's `SkinnedEffect` uses) (🟨 landed 2026-07-19 —
+  `METAL-81`–`88`; only `CTest` coverage `METAL-89` and the `METAL-90` doc decision remain open).
 - Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
   real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
 - Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
@@ -565,13 +581,13 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | ID | Task | Status |
 |---|---|---|
 | METAL-81 | `pbr3d.metal` (stride 48, unskinned) — metallic-roughness Cook-Torrance BRDF, ported from `EasyGLGraphicsBackend::EnsurePbrProgram()`/Vulkan's shipped GLSL (`plan_cnj.md` CNB-58, Phase 13A) | 🟨 |
-| METAL-82 | `pbr_skinned3d.metal` (stride 68) — same BRDF, combined with Phase 7's skinned vertex path | ⬜ |
+| METAL-82 | `pbr_skinned3d.metal` (stride 68) — same BRDF, combined with Phase 7's skinned vertex path | 🟨 |
 | METAL-83 | `pbrNormalMap` tangent-space perturbation — requires adding a tangent attribute not present in any current Metal vertex layout | 🟨 |
 | METAL-84 | `pbrMetallicRoughnessMap` (glTF packing: G=roughness, B=metallic) + `pbrMetallicFactor`/`pbrRoughnessFactor` fallback/multiply | 🟨 |
 | METAL-85 | `pbrEmissiveMap` sampling + constant `EmissiveFactor` fallback | 🟨 |
 | METAL-86 | `pbrOcclusionMap` sampling (R channel) darkening term | 🟨 |
 | METAL-87 | Default-white / default-flat-normal fallback textures for unbound PBR maps, mirroring `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()` exactly | 🟨 |
-| METAL-88 | Dispatch: `params.pbr && params.skinned` → PBR-skinned, `params.pbr` alone → PBR-unskinned, both checked before the plain `skinned` branch, matching EasyGL's top-of-function precedence | 🟨 (precedence only — `pbr&&skinned` throws a clear "not yet implemented" instead of rendering, since METAL-82 is still open) |
+| METAL-88 | Dispatch: `params.pbr && params.skinned` → PBR-skinned, `params.pbr` alone → PBR-unskinned, both checked before the plain `skinned` branch, matching EasyGL's top-of-function precedence | 🟨 |
 | METAL-89 | `CTest`: `Metal_Pbr`/`Metal_PbrSkinned` — known-material probe-pixel checks (fully metallic vs. dielectric, rough vs. smooth), same fixture as Vulkan/EasyGL's own PBR tests | ⬜ |
 | METAL-90 | Confirm whether a project-wide PBR support doc should exist (out of Metal's own scope) or `plan_cnj.md` remains the single source of truth — note the decision | ⬜ |
 
