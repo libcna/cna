@@ -154,6 +154,11 @@ namespace CNA::Internal::Backends::Stub
         {
         }
 
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        {
+            return false;
+        }
+
     private:
         int virtualWidth_;
         int virtualHeight_;
