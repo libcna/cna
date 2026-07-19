@@ -242,8 +242,18 @@ possibilities of OpenGL 2"):
   all 6 landing on the same target), and a `mipMap=true` cube's level-0 round-trip still works.
   3/3 PASS.
 
+## Status: Texture3D (2026-07-19, session 6 cont'd)
+
+- **`Texture3D` implemented**: `GL_TEXTURE_3D` (core desktop GL since 1.2, no extension needed --
+  unlike `GLES`). `OpenGL2_Texture3D` verifies a full-volume `SetData()`/`GetData()` round-trip
+  (a distinct solid color per depth slice, proving the Z dimension is real and slices don't
+  overwrite each other) and a sub-volume round-trip at a non-zero `(x,y,z)` offset. Only level 0
+  is allocated -- `mipMap` is accepted (matching `CreateTexture3D`'s interface signature) but not
+  yet generated/stored, consistent with `TextureCube`'s own already-implemented mip chain being
+  the more complete precedent to eventually extend this to. 3/3 PASS.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers eight CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers nine CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -260,6 +270,7 @@ possibilities of OpenGL 2"):
   - `OpenGL2_Presentation` -- FixedHeightDynamicWidth adapts to a real window resize. 4/4 PASS.
   - `OpenGL2_OcclusionQuery` -- exact GL_SAMPLES_PASSED pixel counts, visible and fully occluded. 4/4 PASS.
   - `OpenGL2_TextureCube` -- SetData/GetData round-trip for all 6 faces + mipmap construction. 3/3 PASS.
+  - `OpenGL2_Texture3D` -- SetData/GetData round-trip across depth slices + sub-volume offset. 3/3 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -286,6 +297,7 @@ possibilities of OpenGL 2"):
 - Occlusion queries (real `GL_SAMPLES_PASSED` pixel counts).
 - `TextureCube` (`GL_TEXTURE_CUBE_MAP`, see `OpenGL2_TextureCube` above); not yet sampled by any
   stock effect (`EnvironmentMapEffect` remains a follow-up item).
+- `Texture3D` (`GL_TEXTURE_3D`, see `OpenGL2_Texture3D` above); level 0 only, no mip chain yet.
 - RenderTarget2D/FBO, including MSAA (resolve-on-unbind) and mipmap generation.
 - AlphaTestEffect, DualTextureEffect, and BasicEffect lighting (3 directional lights, ambient,
   specular, emissive) + fog (see `OpenGL2_Effects` above).
@@ -309,8 +321,6 @@ possibilities of OpenGL 2"):
 - EnvironmentMapEffect subset (now that plain `TextureCube` exists, this is the remaining piece --
   a reflection-mapping shader sampling `samplerCube`, plus `RenderTargetCube` above for
   render-to-cube-map scenarios).
-- `Texture3D` -- `CreateTexture3D` still returns `nullptr` (default). `GL_EXT_texture3D` is
-  widely available on GL 2.1 hardware; feasible.
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
   `nullptr` (default). Would let games write their own OpenGL2 shaders through CNA's `Effect`
   API, mirroring `EasyGLEffectBackend`.

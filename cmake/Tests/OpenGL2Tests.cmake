@@ -57,4 +57,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_texturecube examples/opengl2_texturecube_test.cpp)
     cna_register_backend_test(NAME OpenGL2_TextureCube COMMAND cna_test_opengl2_texturecube
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: Texture3D (GL_TEXTURE_3D) SetData/GetData round-trip proof.
+    cna_opengl2_test(cna_test_opengl2_texture3d examples/opengl2_texture3d_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_Texture3D COMMAND cna_test_opengl2_texture3d
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

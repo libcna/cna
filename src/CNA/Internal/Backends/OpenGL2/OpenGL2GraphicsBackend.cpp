@@ -523,6 +523,54 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         };
 
+        // GL_TEXTURE_3D + glTexImage3D/glTexSubImage3D are core desktop GL since 1.2 (no
+        // extension needed, unlike GLES).
+        class Texture3DBackend final : public ITexture3DBackend
+        {
+        public:
+            GLuint id{};
+            int w{}, h{}, d{};
+
+            Texture3DBackend(int width, int height, int depth, bool mipMap)
+                : w(width), h(height), d(depth)
+            {
+                glGenTextures(1, &id);
+                glBindTexture(GL_TEXTURE_3D, id);
+                glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, w, h, d, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+                // plan_opengl2.md follow-up: only level 0 is allocated -- mipMap is accepted
+                // (matching CreateTexture3D's interface signature) but not yet generated/stored.
+                (void)mipMap;
+            }
+
+            ~Texture3DBackend() override { if (id) glDeleteTextures(1, &id); }
+
+            void BindGL() const override { glBindTexture(GL_TEXTURE_3D, id); }
+
+            void SetData(int level, int x, int y, int z, int sw, int sh, int sd, const void* data, int /*dataLength*/) override
+            {
+                glBindTexture(GL_TEXTURE_3D, id);
+                glTexSubImage3D(GL_TEXTURE_3D, level, x, y, z, sw, sh, sd, GL_RGBA, GL_UNSIGNED_BYTE, data);
+            }
+
+            void GetData(int level, int x, int y, int z, int sw, int sh, int sd, void* data, int /*dataLength*/) const override
+            {
+                std::vector<uint8_t> full(static_cast<std::size_t>(w) * h * d * 4);
+                glBindTexture(GL_TEXTURE_3D, id);
+                glGetTexImage(GL_TEXTURE_3D, level, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
+                auto* dst = static_cast<uint8_t*>(data);
+                for (int slice = 0; slice < sd; ++slice)
+                    for (int row = 0; row < sh; ++row)
+                        std::memcpy(dst + (static_cast<std::size_t>(slice) * sh + row) * sw * 4,
+                                   full.data() + ((static_cast<std::size_t>(z + slice) * h + (y + row)) * w + x) * 4,
+                                   sw * 4);
+            }
+        };
+
         class VB final : public IVertexBufferBackend
         {
         public:
@@ -919,6 +967,11 @@ namespace CNA::Internal::Backends::OpenGL2
     std::unique_ptr<ITextureCubeBackend> OpenGL2GraphicsBackend::CreateTextureCube(int size, bool mipMap, int /*surfaceFormat*/)
     {
         return std::make_unique<TextureCubeBackend>(size, mipMap);
+    }
+
+    std::unique_ptr<ITexture3DBackend> OpenGL2GraphicsBackend::CreateTexture3D(int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+    {
+        return std::make_unique<Texture3DBackend>(w, h, depth, mipMap);
     }
 
     std::unique_ptr<IRenderTargetBackend> OpenGL2GraphicsBackend::CreateRenderTarget2D(
