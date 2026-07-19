@@ -1067,6 +1067,34 @@ _(pending)_
   itself). Now confirmed in two independent subsystems -- worth a project-wide grep for `.hpp`/`.cpp`
   pairs with disagreeing SPDX headers as part of Pass 5.
 
+- **`ContentReader::ReadExternalReference<T>()`'s documented "rejected outright" containment
+  guarantee has a real, concrete absolute-path bypass -- the third confirmed instance this session
+  of the same `std::filesystem::path`-concatenation pitfall** (`base / rhs` silently discards `base`
+  whenever `rhs.is_absolute()`, on top of the already-known `..`-traversal gap). `ResolveRelativeAssetPath()`
+  (`ContentReader.cpp` lines 25-49) only rejects a resolved path that is exactly `".."` or begins
+  with `"../"` -- an absolute-path external reference (e.g. `/etc/passwd`) in a crafted
+  `.xnb`/`.cnj` file's `Texture2D`/`TextureCube` reference sails through unchanged, and
+  `ContentManager::BuildAssetPath()` doesn't re-contain it either downstream. Unlike the
+  `StorageContainer` findings above, this is NOT FNA-faithful -- FNA's own `ReadExternalReference`
+  has no containment check at all, so CNA's check is a disclosed addition that happens to be
+  incomplete, directly contradicting its own doc comment. Combined with `StorageDevice::DeleteContainer()`'s
+  HIGH finding above, this makes three independent confirmations of the identical C++-specific
+  pitfall across two subsystems (`xna-storage`, `xna-content`) this session -- recommend a
+  project-wide grep for `fs::path(...) / <caller-supplied string>` call sites lacking a preceding
+  `is_absolute()` rejection, as a dedicated item in Pass 5. See
+  `include/Microsoft/Xna/Framework/Content/ContentReader.hpp.audit.md` and
+  `src/Microsoft/Xna/Framework/Content/ContentReader.cpp.audit.md`.
+
+- **`ContentLoadException` derives from `std::runtime_error` instead of this project's established
+  `System::Exception` (used by 7+ other direct-`Exception`-derived XNA exception types), and is
+  missing the default (parameterless) constructor FNA's real three-constructor class has.** The
+  base-class choice has a concrete consequence: the message+inner constructor flattens the inner
+  exception into `.what()` text (.NET `ToString()`-style "---> " concatenation) but cannot preserve
+  the actual inner exception object, unlike `System::Exception`'s real `getInnerExceptionProperty()`
+  -- a capability this exact codebase already correctly implements elsewhere in the same session
+  (`StorageDeviceNotConnectedException`). See
+  `include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp.audit.md`.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
