@@ -849,6 +849,18 @@ _(pending)_
   (18+ cited `plan_media.md` findings) yet doesn't address this specific case. See
   `src/CNA/Internal/Media/VideoDecoder.cpp.audit.md`.
 
+- **HIGH: `TextureCubeContentTypeReader.cpp` is missing the byte-count-vs-pixel-count validation both of
+  its sibling readers (`Texture2DContentTypeReader.cpp`, `Texture3DContentTypeReader.cpp`) correctly have**
+  -- found while auditing `cna-internal-core`'s Xnb subsystem. For an uncompressed `SurfaceFormat::Color`
+  face/level, the file's own claimed `byteCount` (fully attacker-controlled, independent of `faceSize`) is
+  used as-is to size `bytes`, then indexed via unchecked `std::vector::operator[]` in the pixel-unpacking
+  loop with no `bytes.size() != pixelCount*4` guard beforehand -- a crafted `.xnb` TextureCube asset with an
+  undersized declared byte count triggers a genuine out-of-bounds heap read (crash risk, or heap-memory
+  disclosure via pixels uploaded to the GPU). The compressed DXT path is unaffected (`DxtUtil`'s own
+  established bounds checks guarantee a fixed decompressed size or a clean throw). A clear porting/
+  refactoring omission, not an intentional scope difference — comparing the three sibling readers side by
+  side makes the gap obvious. See `src/CNA/Internal/Xnb/TextureCubeContentTypeReader.cpp.audit.md`.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
