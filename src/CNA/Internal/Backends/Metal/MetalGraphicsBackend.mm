@@ -57,9 +57,6 @@ vertex V3Out cna_v3d_tex(V3TexIn in [[stage_in]], constant U3D& u [[buffer(1)]])
 vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
     V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=in.color; o.uv=in.uv; return o;
 }
-vertex V3Out cna_v3d_normaltex(V3NormalTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
-    V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; return o;
-}
 // Returns discard-tested output alpha via `outA`; callers that don't need a second sample (the
 // non-textured colored path) just pass the already-known alpha straight through.
 inline bool cna_alpha_test_fails(float a, float4 at) {

@@ -675,6 +675,35 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     "ignored vs. validated" behavior is right — retroactively hardening the render-target `GetData()`
     code from item 21 at the same time, not just the two new call sites.
 
+26. **Full-file structural consistency audit** (a dedicated pass acting as the "compiler" this
+    session has never had access to): after roughly a dozen substantial, interlocking changes to
+    this file across the night — each individually self-reviewed at the time — a separate, focused
+    pass re-read the entire 2500+-line file start to finish and specifically cross-checked: every
+    `PipelineKind` enum value has exactly one case in `getOrCreatePipeline()`'s exhaustive switch
+    (no missing, no duplicate); every `vs=@"..."`/`fs=@"..."` MSL function name referenced by string
+    actually exists in `kMetalShaderSource` (a typo here would fail at Metal shader-library lookup
+    *at runtime*, not compile time, so extra load-bearing to catch by inspection); every C++ uniform
+    mirror struct (`LitUniforms`/`SkinnedUniforms`/`PbrUniforms`/etc.) has identical field order and
+    count against its MSL counterpart; every `buffer(N)`/`texture(N)`/`sampler(N)` index used at a
+    `drawMetal3D` call site matches what the corresponding MSL function actually declares; every
+    `[[attribute(N)]]` in each `VXxxIn` struct matches `vertexDescriptorForStride()`'s offset/format
+    for that stride, across all 8 strides now in use; manual retain/release balance (this file is
+    not ARC) for every object, with particular attention to this session's newest additions
+    (`MetalTextureCube`/`MetalTexture3D`'s new `dev_`/`queue_` members, `blitTextureToClientBuffer`'s
+    local objects, both bone-buffer allocations); and no leftover call site still using
+    `blitTextureToClientBuffer`'s old `Impl&`-based signature after it was refactored to take
+    `id<MTLDevice>`/`id<MTLCommandQueue>` directly. **Result: no compile/link/runtime-structural
+    bugs found** — the first fully clean audit pass of the night, after the RenderTarget2D phase's
+    own self-review had found 4 real bugs and several later phases each found one more. One harmless
+    piece of dead code was found and removed: `cna_v3d_normaltex`, a leftover unlit stride-32 vertex
+    shader from before this session's own Phase 3 work made `LitTex32` handle every stride-32 draw
+    unconditionally (its own earlier narrative note: "the separate unlit `NormalTex32` pipeline this
+    file had until tonight was actually the wrong design") — never referenced by name anywhere in the
+    C++ dispatch code since, confirmed by grep before removal. This is real, if partial, evidence
+    toward `METAL-19`'s own goal (a guard against silent structural regressions) — not a substitute
+    for the compile-time/CTest check that task still asks for, but real confirmation this session's
+    accumulated changes are at least internally consistent with each other.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
