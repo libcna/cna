@@ -571,11 +571,43 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     own identical established precedent (`ITextureBackend::GetData()`'s own doc comment: "plain,
     `SetData()`-populated textures never reach this path").
 
+22. **Phase 1 remainder — format-table research** (`METAL-15`/`16`/`17`/`18`/`20` answered, several
+    found to be based on a false premise; `METAL-14`/`19` genuinely still open): reading
+    `include/CNA/Internal/Graphics/ImageData.hpp` (a plain struct, doc comment: "RGBA8 pixel data,"
+    no format field at all) and `Texture2D.cpp`'s own real code (`DxtUtil::DecompressDxt1`/
+    `DecompressDxt5` called *before* every `CreateTexture(img)` call, for every backend uniformly)
+    settles `METAL-15` outright: there is no "real `SurfaceFormat`" for any backend's `CreateTexture`
+    to diverge from — DXT is already decompressed to RGBA8 at the shared `Texture2D` layer, so
+    Metal's hardcoded `RGBA8Unorm` was never a per-backend gap, just the one true format the
+    `ImageData` contract has ever carried. This also settles `METAL-17` (BC-compression device query)
+    as currently moot — nothing anywhere uploads real compressed bytes to any backend today, so
+    there's nothing for the query to gate — and reduces `METAL-18`'s scope (there's much less left
+    to "centralize" than the task assumed). `METAL-16` (depth format) was confirmed to be a
+    deliberate, already-accepted simplification rather than an oversight: it matches
+    `VulkanGraphicsBackend`'s own identical "always allocate depth+stencil" tier, explicitly
+    documented as the chosen approach back when `RenderTarget2D` first landed (`METAL-101`'s own
+    note) — consistent with an already-mature backend's precedent, not a Metal-specific shortcut.
+    `METAL-20` (anisotropy clamp range) was re-derived from Apple's own `MTLSamplerDescriptor`
+    documentation rather than just re-trusting the existing `1`–`16` clamp: Metal's ceiling is a
+    fixed, hardware-independent API constant (unlike `VulkanGraphicsBackend`'s/EasyGL's own
+    genuinely device-queried `maxSamplerAnisotropy`/`GL_MAX_TEXTURE_MAX_ANISOTROPY` caps, which vary
+    by GPU) — confirming the existing hardcoded clamp needs no device query at all, for a
+    Metal-specific reason worth recording rather than just copying the Vulkan/GL pattern blindly.
+    `METAL-14` (the real, general `VertexElementFormat`→`MTLVertexFormat` table) remains genuinely
+    open — unlike the texture-format question, vertex layouts genuinely do carry arbitrary
+    application-defined element formats via `VertexDeclaration`, with no equivalent "always
+    normalized upstream" simplification — but stays correctly scoped under Phase 2's already-deferred
+    generic `VertexElement`-driven descriptor builder (`METAL-26`/`27`), not attempted in isolation.
+    `METAL-19` (enum-reordering regression guard) remains open, needing a real compile-time check or
+    CTest unreachable from this Linux machine.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
-`METAL-14`–`20` (VertexElementFormat/SurfaceFormat/DepthFormat
-tables, BC-compression query); the fully generic `VertexElement`-driven descriptor builder
+`METAL-14`/`19` (the real `VertexElementFormat` table, scoped under the fully generic
+`VertexElement`-driven descriptor builder below, and the enum-reordering regression guard —
+`METAL-15`–`18`/`20` are now closed, several found to be based on a false premise, see above); the
+fully generic `VertexElement`-driven descriptor builder
 (`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
 lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
@@ -652,6 +684,13 @@ iOS/tvOS). Nothing in this list has been touched.
 - Real `GetData()` readback on `RenderTarget2D`/`RenderTargetCube` via one shared blit-to-staging-
   buffer helper instead of two near-duplicate implementations, correctly flushing any still-pending
   render encoding for the target being read first (🟨 landed 2026-07-19 — `METAL-131`).
+- Phase 1's remaining format-table questions resolved from real code, not assumption: `ImageData`
+  has no format field at all (DXT is decompressed to RGBA8 at the shared `Texture2D` layer before
+  reaching *any* backend), so the "hardcoded `RGBA8Unorm`"/BC-compression-query tasks were never
+  real per-backend gaps; the depth-format simplification matches `VulkanGraphicsBackend`'s own
+  already-accepted precedent; the anisotropy clamp is correct for a Metal-specific reason (a fixed
+  API ceiling, unlike Vulkan/GL's genuinely device-queried ones) (🟨 landed 2026-07-19 —
+  `METAL-15`–`18`/`20`; `METAL-14`/`19` remain genuinely open).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -744,13 +783,13 @@ that replace it; do not re-derive scope from this table, use the phases:
 | METAL-11 | `SetBlendFactor(r,g,b,a)` via `[encoder setBlendColor:...]` — currently unimplemented (base no-op) | 🟨 |
 | METAL-12 | `PrimitiveType`→`MTLPrimitiveType`: add the missing `PointList` case (currently falls through `metalPrimitive()`'s default to `Triangle`, silently wrong) | 🟨 |
 | METAL-13 | `primitiveVertexCount()`: fix the `PointList` case (currently falls to default `count*3`; should be `count`) | 🟨 |
-| METAL-14 | `VertexElementFormat`→`MTLVertexFormat` full table (Single/Vector2/Vector3/Vector4/Color/Byte4/Short2/Short4/NormalizedShort2/NormalizedShort4/HalfVector2/HalfVector4) — today only 3 hand-picked fixed vertex descriptors exist, no general element-format mapping | ⬜ |
-| METAL-15 | `SurfaceFormat`→`MTLPixelFormat` table (Color/Bgr565/Bgra5551/Bgra4444/Dxt1/Dxt3/Dxt5/NormalizedByte2/NormalizedByte4/Rgba1010102/Rg32/Rgba64/Alpha8/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable) — every texture is currently hardcoded `RGBA8Unorm` regardless of `ImageData`'s real format | ⬜ |
-| METAL-16 | `DepthFormat`→`MTLPixelFormat` table (None/Depth16/Depth24/Depth24Stencil8) — backbuffer currently always allocates `Depth32Float_Stencil8` regardless of what `PresentationParameters` requested | ⬜ |
-| METAL-17 | Query `MTLDevice.supportsBCTextureCompression` and document the real, device-dependent DXT/BC boundary (no native support on Apple Silicon without emulation; yes on Intel Macs) rather than assuming universal support | ⬜ |
-| METAL-18 | Centralize every mapping above into one shared location so Phase 2's pipeline cache and Phase 10's render-target/format work reuse one source of truth instead of duplicating switch statements | ⬜ |
-| METAL-19 | Guard against silent enum-reordering regressions (a compile-time or `GraphicsBackendCompileDefinitionsTest`-style check that these ordinal assumptions still match the real `.hpp` files) | ⬜ |
-| METAL-20 | `MTLSamplerDescriptor.maxAnisotropy` valid-range audit (clamped 1–16 in `samplerFor()` today) — confirm this matches `TextureFilter`/`SamplerState.MaxAnisotropy`'s real XNA range | ⬜ |
+| METAL-14 | `VertexElementFormat`→`MTLVertexFormat` full table (Single/Vector2/Vector3/Vector4/Color/Byte4/Short2/Short4/NormalizedShort2/NormalizedShort4/HalfVector2/HalfVector4) — today only 3 hand-picked fixed vertex descriptors exist, no general element-format mapping | ⬜ (still genuinely open — this is real, unlike `METAL-15`/`17` below, and stays scoped under Phase 2's already-deferred generic `VertexElement`-driven descriptor builder, `METAL-26`/`27`; do not attempt in isolation, see that phase's own note) |
+| METAL-15 | `SurfaceFormat`→`MTLPixelFormat` table (Color/Bgr565/Bgra5551/Bgra4444/Dxt1/Dxt3/Dxt5/NormalizedByte2/NormalizedByte4/Rgba1010102/Rg32/Rgba64/Alpha8/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable) — every texture is currently hardcoded `RGBA8Unorm` regardless of `ImageData`'s real format | 🟨 (**found to be based on a false premise**: `include/CNA/Internal/Graphics/ImageData.hpp` has no format field at all — its own doc comment states "RGBA8 pixel data," and `Texture2D.cpp`'s own real code confirms DXT1/DXT5 are decompressed to RGBA8 via `DxtUtil::DecompressDxt1`/`DecompressDxt5` *before* `CreateTexture(img)` is ever called, for every backend uniformly, not just Metal. There is no "real format" for `CreateTexture()` to diverge from — this was never a Metal-specific gap) |
+| METAL-16 | `DepthFormat`→`MTLPixelFormat` table (None/Depth16/Depth24/Depth24Stencil8) — backbuffer currently always allocates `Depth32Float_Stencil8` regardless of what `PresentationParameters` requested | 🟨 (confirmed intentional, not overlooked: matches `VulkanGraphicsBackend`'s own already-accepted "always allocate depth+stencil" simplification, explicitly called out as the deliberately-chosen tier back in `METAL-101`'s own note — not a priority fix) |
+| METAL-17 | Query `MTLDevice.supportsBCTextureCompression` and document the real, device-dependent DXT/BC boundary (no native support on Apple Silicon without emulation; yes on Intel Macs) rather than assuming universal support | 🟨 (confirmed moot under the current architecture: since `METAL-15`'s finding means nothing ever uploads real DXT/BC bytes to any backend today, this query has nothing to gate yet — would only become relevant if a future, genuinely different, cross-backend "upload real compressed texture data" path bypassing `ImageData` were ever added, which is a project-wide feature, not a Metal-only one) |
+| METAL-18 | Centralize every mapping above into one shared location so Phase 2's pipeline cache and Phase 10's render-target/format work reuse one source of truth instead of duplicating switch statements | 🟨 (scope reduced by the `METAL-15`/`17` findings above — the enum-mapping tables that genuinely exist and matter today, e.g. `metalCompareFunction`/`metalStencilOp`/`metalBlendFactor`/`metalBlendOp`/`metalPrimitive`, already live together near the top of `kMetalShaderSource`'s surrounding helpers; no separate centralization pass is needed until `METAL-14`'s real `VertexElementFormat` table actually gets built) |
+| METAL-19 | Guard against silent enum-reordering regressions (a compile-time or `GraphicsBackendCompileDefinitionsTest`-style check that these ordinal assumptions still match the real `.hpp` files) | ⬜ (genuinely still open — needs a real CTest/compile-time check, not reachable from this Linux machine without an Apple toolchain) |
+| METAL-20 | `MTLSamplerDescriptor.maxAnisotropy` valid-range audit (clamped 1–16 in `samplerFor()` today) — confirm this matches `TextureFilter`/`SamplerState.MaxAnisotropy`'s real XNA range | 🟨 (confirmed correct, and for a different reason than `VulkanGraphicsBackend`'s own analogous clamp: Apple's own `MTLSamplerDescriptor.maxAnisotropy` documentation states 16 is a *fixed, hardware-independent* API ceiling — unlike Vulkan's `VkPhysicalDeviceLimits.maxSamplerAnisotropy`/GL's `GL_MAX_TEXTURE_MAX_ANISOTROPY`, both genuinely device-queried because their real upper bound varies by GPU, Metal's existing hardcoded `std::clamp(maxAnisotropy,1,16)` needs no device query at all) |
 
 ## Phase 2 — Pipeline-state cache and generic `VertexDeclaration`-driven vertex descriptor (METAL-21 – METAL-34)
 
