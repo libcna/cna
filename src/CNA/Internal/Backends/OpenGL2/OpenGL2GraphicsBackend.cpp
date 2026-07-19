@@ -712,12 +712,24 @@ namespace CNA::Internal::Backends::OpenGL2
 
     void OpenGL2GraphicsBackend::GetViewportSize(int& width, int& height)
     {
-        SDL_GetWindowSize(window_, &width, &height);
-        if (virtualWidth_ > 0 && virtualHeight_ > 0)
+        // Matches EasyGLGraphicsBackend::getLogicalSize exactly: with the default
+        // FixedHeightDynamicWidth presentation mode, the virtual HEIGHT stays fixed but the
+        // logical WIDTH is derived from the window's actual aspect ratio, so a resized-wider
+        // window reveals more horizontal content instead of stretching/letterboxing. Every other
+        // mode (Letterbox/Overscan/Stretch/NativeBackBuffer) falls back to the virtual size
+        // verbatim -- EasyGL itself does not differentiate those either.
+        if (virtualHeight_ <= 0)
         {
-            width = virtualWidth_;
-            height = virtualHeight_;
+            SDL_GetWindowSize(window_, &width, &height);
+            return;
         }
+        int physW = 0, physH = 0;
+        SDL_GetWindowSize(window_, &physW, &physH);
+        height = virtualHeight_;
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
+            width = static_cast<int>(static_cast<double>(physW) * virtualHeight_ / physH + 0.5);
+        else
+            width = virtualWidth_ > 0 ? virtualWidth_ : physW;
     }
 
     void OpenGL2GraphicsBackend::SetVirtualResolution(int width, int height)
@@ -1175,11 +1187,17 @@ namespace CNA::Internal::Backends::OpenGL2
 
     bool OpenGL2GraphicsBackend::TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const
     {
+        // A pure uniform scale (height-derived, no offset) is exact for the default
+        // FixedHeightDynamicWidth presentation mode: the logical viewport fills the whole
+        // window with no letterbox bars (matches EasyGLGraphicsBackend::TransformWindowToLogical's
+        // identical formula/reasoning -- see its own comment for why a separate X scale from a
+        // fixed virtualWidth_ would be wrong once the logical width adapts to the window's aspect).
         int windowWidth = 0, windowHeight = 0;
         SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
-        if (virtualWidth_ <= 0 || virtualHeight_ <= 0 || windowWidth <= 0 || windowHeight <= 0) return false;
-        logX = windowX * virtualWidth_ / windowWidth;
-        logY = windowY * virtualHeight_ / windowHeight;
+        if (virtualHeight_ <= 0 || windowHeight <= 0) return false;
+        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(windowHeight);
+        logX = windowX * scale;
+        logY = windowY * scale;
         return true;
     }
 
@@ -1187,9 +1205,11 @@ namespace CNA::Internal::Backends::OpenGL2
     {
         int windowWidth = 0, windowHeight = 0;
         SDL_GetWindowSize(window_, &windowWidth, &windowHeight);
-        if (virtualWidth_ <= 0 || virtualHeight_ <= 0) return false;
-        windowX = logX * windowWidth / virtualWidth_;
-        windowY = logY * windowHeight / virtualHeight_;
+        (void)windowWidth;
+        if (virtualHeight_ <= 0 || windowHeight <= 0) return false;
+        const float invScale = static_cast<float>(windowHeight) / static_cast<float>(virtualHeight_);
+        windowX = logX * invScale;
+        windowY = logY * invScale;
         return true;
     }
 }

@@ -162,8 +162,29 @@ possibilities of OpenGL 2"):
   Z=-5/Z=5 with an Identity projection, which put the geometry outside the clip-space [-1,1]
   range and got near/far-clipped entirely -- fixed by keeping FogStart/FogEnd/Z within that range.)
 
+## Status: FixedHeightDynamicWidth presentation-mode scaling (2026-07-19, session 4 cont'd)
+
+- **`GetViewportSize()` now implements `CnaPresentationMode::FixedHeightDynamicWidth`** (the
+  default mode): the virtual height stays fixed but the logical width is derived from the
+  window's live aspect ratio, exactly matching `EasyGLGraphicsBackend::getLogicalSize()`'s own
+  formula. Previously the virtual resolution was used verbatim regardless of window size, so a
+  resized window never revealed more content or adapted at all. Every other mode (Letterbox/
+  Overscan/Stretch/NativeBackBuffer) still falls back to the virtual size verbatim -- EasyGL's
+  own `GetViewportSize` doesn't differentiate those either, so this isn't a new gap relative to
+  it.
+- **`TransformWindowToLogical`/`TransformLogicalToWindow` fixed to match**: these previously used
+  a separate X scale derived from the fixed `virtualWidth_`, which became inconsistent with the
+  now-adaptive logical width. Switched to a pure height-derived uniform scale (no offset), same
+  formula and reasoning as `EasyGLGraphicsBackend`'s identical methods -- exact for
+  FixedHeightDynamicWidth specifically, since that mode has no letterbox bars needing an offset.
+- **New `OpenGL2_Presentation` CTest**: resizes the real SDL window from 320x240 to 640x240 via
+  `SDL_SetWindowSize`/`SDL_SyncWindow` mid-run and verifies `GetViewportSize()` adapts to 640x240
+  (not the original 320x240), and that a `SpriteBatch` draw near the new right edge is actually
+  visible after readback -- proving the real GL viewport was re-issued, not just C++-side
+  bookkeeping. 4/4 PASS.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers five CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers six CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -176,6 +197,7 @@ possibilities of OpenGL 2"):
     SpriteBatch, depth occlusion inside the FBO, RT-vs-window sizing. 6/6 PASS.
   - `OpenGL2_Effects` -- AlphaTestEffect, DualTextureEffect, BasicEffect lighting and fog, all
     pixel-verified. 8/8 PASS.
+  - `OpenGL2_Presentation` -- FixedHeightDynamicWidth adapts to a real window resize. 4/4 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -205,13 +227,10 @@ possibilities of OpenGL 2"):
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
-- `GetViewportSize()`/`SetViewport()` do not implement `CnaPresentationMode` scaling
-  (Letterbox/Overscan/Stretch/FixedHeightDynamicWidth): the virtual resolution is used verbatim
-  as the GL viewport size regardless of the actual window's aspect ratio, so a *resizable* window
-  whose live size diverges from the game's requested back-buffer size will not letterbox/scale
-  correctly (EasyGL's `getLogicalSize()` is the reference behavior to match). Not a problem for a
-  fixed-size window matching its requested resolution (the common case, and what both CTests and
-  `examples/demo_2d` use).
+- `CnaPresentationMode::Letterbox`/`Overscan`/`Stretch` still fall back to the virtual size
+  verbatim rather than real letterbox-bar/crop/non-uniform-stretch scaling -- matches EasyGL's
+  own current behavior (not a new OpenGL2-specific gap), but neither backend actually implements
+  those three modes' real semantics yet.
 - Full vertex declaration support rather than stride inference (blocks any vertex format beyond
   the 4 already recognized by stride, e.g. a custom `VertexDeclaration` with a different
   attribute order/extra streams).

@@ -42,4 +42,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_effects examples/opengl2_effects_test.cpp)
     cna_register_backend_test(NAME OpenGL2_Effects COMMAND cna_test_opengl2_effects
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: FixedHeightDynamicWidth presentation-mode resize proof.
+    cna_opengl2_test(cna_test_opengl2_presentation examples/opengl2_presentation_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_Presentation COMMAND cna_test_opengl2_presentation
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
