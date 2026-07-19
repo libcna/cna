@@ -89,7 +89,7 @@ namespace CNA::Internal::Backends::EasyGL
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
-        void BindGL() const override;
+        void BindGL(int unit) const override;
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
@@ -145,7 +145,7 @@ namespace CNA::Internal::Backends::EasyGL
         int GetWidth()  const override { return width_; }
         int GetHeight() const override { return height_; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
-        void BindGL() const override;
+        void BindGL(int unit) const override;
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
@@ -224,7 +224,7 @@ namespace CNA::Internal::Backends::EasyGL
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
 
         // ITextureCubeBackend — bind and upload to the shared cube texture.
-        void BindGL() const override;
+        void BindGL(int unit) const override;
         /**
          * @brief Uploads CPU pixels into a rendered cube face's mip level.
          *
@@ -328,8 +328,8 @@ namespace CNA::Internal::Backends::EasyGL
                                    int w, int h, int depth,
                                    void* data, int dataLength) const override;
 
-        /// Binds this volume texture to the currently active GL texture unit.
-        void BindGL() const override;
+        /// Binds this volume texture to the requested GL texture unit.
+        void BindGL(int unit) const override;
 
     private:
         ::easygl::Texture tex_;
@@ -361,8 +361,8 @@ namespace CNA::Internal::Backends::EasyGL
         [[nodiscard]] bool GetData(int face, int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /// Binds this cube map to the currently active GL texture unit.
-        void BindGL() const override;
+        /// Binds this cube map to the requested GL texture unit.
+        void BindGL(int unit) const override;
 
     private:
         ::easygl::Texture tex_;

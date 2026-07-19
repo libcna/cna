@@ -264,8 +264,8 @@ namespace CNA::Internal::Backends
             (void)data; (void)dataLength;
             return false;
         }
-        /// Binds this cube map to the currently active GL texture unit. No-op on non-GL backends.
-        virtual void BindGL() const {}
+        /// Binds this cube map to the requested GL texture unit. No-op on non-GL backends.
+        virtual void BindGL(int unit = 0) const {}
         /// Shares a reference to the CPU pixel buffer owned by TextureCube::cpuPixels_[face] for
         /// one cube face's level 0. Mirrors ITextureBackend::ShareCpuPixels()'s own purpose
         /// exactly (OpenGL-style backend context-loss restoration) -- default no-op; only OPENGL1
@@ -341,8 +341,8 @@ namespace CNA::Internal::Backends
             (void)data; (void)dataLength;
             return false;
         }
-        /// Binds this volume texture to the currently active GL texture unit. No-op on non-GL backends.
-        virtual void BindGL() const {}
+        /// Binds this volume texture to the requested GL texture unit. No-op on non-GL backends.
+        virtual void BindGL(int unit = 0) const {}
         /// SKIA-149: width/height/depth in voxels, mirroring `ITextureCubeBackend::GetSizeEXT`'s
         /// rationale exactly -- `BindTexture3D` receives only this raw backend pointer. Defaults to
         /// all zero ("unknown/unsupported"), harmless for every backend that does not implement
@@ -376,8 +376,8 @@ namespace CNA::Internal::Backends
          * complete GetData for every valid rectangle of that level without fabricating bytes.
          */
         [[nodiscard]] virtual bool HasDefinedMipLevel(int /*level*/) const noexcept { return false; }
-        /// Binds the underlying GL texture handle (no-op on non-GL backends).
-        virtual void BindGL() const {}
+        /// Binds the underlying GL texture handle to the requested unit (no-op on non-GL backends).
+        virtual void BindGL(int unit = 0) const {}
         /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_.
         /// The backend stores this reference for OpenGL context-loss restoration instead
         /// of keeping its own duplicate copy of the pixel data.

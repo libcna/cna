@@ -38,7 +38,7 @@ namespace CNA::Internal::Backends::SdlRenderer
         int GetHeight() const override { return height; }
         SDL_Texture* GetNativeTexture() const override { return texture; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
-        void BindGL() const override {}
+        void BindGL(int /*unit*/) const override {}
 
         /**
          * @brief Reads this target's rendered pixels back as tightly packed RGBA8 rows.

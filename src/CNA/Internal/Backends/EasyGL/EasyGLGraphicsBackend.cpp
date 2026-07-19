@@ -305,6 +305,12 @@ namespace CNA::Internal::Backends::EasyGL
     static constexpr int kTexLinear       = static_cast<int>(::metagl::TextureMagFilter::Linear);
     static constexpr int kTexClampToEdge  = static_cast<int>(::metagl::TextureWrapMode::ClampToEdge);
 
+    static ::easygl::TextureUnit ToTextureUnit(int unit)
+    {
+        return static_cast<::easygl::TextureUnit>(
+            static_cast<GLenum>(::easygl::TextureUnit::Texture0) + unit);
+    }
+
     // Mirrors Texture3D.cpp's CalculateMipLevels(w,h) — depth does not participate in the level
     // count, matching FNA's Texture3D constructor, but each level's own GPU storage still halves
     // in all 3 dimensions (standard volume-mip behavior).
@@ -342,12 +348,12 @@ namespace CNA::Internal::Backends::EasyGL
         // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp. The MinFilter written
         // below is overridden by whatever sampler object ApplySamplerState binds to this unit, so
         // the level range is what has to make the texture complete.
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MaxLevel,
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::MaxLevel,
                            levelCount_ - 1);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MinFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::MagFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
-        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::Texture3D, ::easygl::TextureParameterSetter::WrapT, kTexClampToEdge);
     }
 
     // REMED-GFX-135: glTexSubImage2D/3D have no return value, so GL's error queue is the only
@@ -388,9 +394,9 @@ namespace CNA::Internal::Backends::EasyGL
         return GlUploadSucceeded();
     }
 
-    void EasyGLTexture3DBackend::BindGL() const
+    void EasyGLTexture3DBackend::BindGL(int unit) const
     {
-        tex_.bind(::easygl::TextureTarget::Texture3D);
+        tex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::Texture3D);
     }
 
     // --- EasyGLTextureCubeBackend ---
@@ -439,12 +445,12 @@ namespace CNA::Internal::Backends::EasyGL
         }
         // REMED-GFX-174: see EasyGLRenderTargetBackend's identical clamp -- a cube sampled through
         // EnvironmentMapEffect's slot-1 sampler faces exactly the same completeness rule.
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MaxLevel,
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MaxLevel,
                            levelCount_ - 1);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MinFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::MagFilter, kTexLinear);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapS, kTexClampToEdge);
-        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::metagl::TextureParameter::WrapT, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MinFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::MagFilter, kTexLinear);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::WrapS, kTexClampToEdge);
+        tex_.set_parameter(::easygl::TextureTarget::TextureCubeMap, ::easygl::TextureParameterSetter::WrapT, kTexClampToEdge);
     }
 
     bool EasyGLTexture3DBackend::GetData(int level, int x, int y, int z,
@@ -487,9 +493,9 @@ namespace CNA::Internal::Backends::EasyGL
         return complete;
     }
 
-    void EasyGLTextureCubeBackend::BindGL() const
+    void EasyGLTextureCubeBackend::BindGL(int unit) const
     {
-        tex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        tex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::TextureCubeMap);
     }
 
     bool EasyGLTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
@@ -647,10 +653,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLEffectBackend::BindTexture(int unit, ITextureBackend* texture)
     {
         if (!texture) return;
-        const auto textureUnit = static_cast<::metagl::TextureUnit>(
-            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
-        ::metagl::glActiveTexture(textureUnit);
-        texture->BindGL();
+        texture->BindGL(unit);
         TraceBoundTextureUnit("bind-texture-3d", unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
 
@@ -682,10 +685,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLEffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
     {
         if (!texture) return;
-        const auto textureUnit = static_cast<::metagl::TextureUnit>(
-            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
-        ::metagl::glActiveTexture(textureUnit);
-        texture->BindGL();
+        texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
@@ -695,10 +695,7 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLEffectBackend::BindTexture3D(int unit, ITexture3DBackend* texture)
     {
         if (!texture) return;
-        const auto textureUnit = static_cast<::metagl::TextureUnit>(
-            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
-        ::metagl::glActiveTexture(textureUnit);
-        texture->BindGL();
+        texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
@@ -765,7 +762,7 @@ namespace CNA::Internal::Backends::EasyGL
         // requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete mipmap chain
         // (GL's own default max level is 1000) and renders solid black, even for an ordinary
         // single-level (mipLevels_==1) texture that never uploads any level beyond 0.
-        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
         if (registry_) registry_->add(this);
     }
@@ -823,13 +820,13 @@ namespace CNA::Internal::Backends::EasyGL
         AllocateDeclaredLevels();
         // Task 924: the fresh GL texture object defaults GL_TEXTURE_MAX_LEVEL back to 1000 --
         // reapply the same clamp the constructor set, matching this texture's real level count.
-        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::metagl::TextureParameter::MaxLevel,
+        texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
     }
 
-    void EasyGLTextureBackend::BindGL() const
+    void EasyGLTextureBackend::BindGL(int unit) const
     {
-        texture.bind(::easygl::TextureTarget::Texture2D);
+        texture.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::Texture2D);
     }
 
     void EasyGLTextureBackend::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
@@ -1017,16 +1014,16 @@ namespace CNA::Internal::Backends::EasyGL
         // applied; it is no longer, and never really was, the completeness guard its old comment
         // claimed ("the RT has no mipmaps so a mip filter would be incomplete -- use LINEAR").
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::MinFilter,
+                                ::easygl::TextureParameterSetter::MinFilter,
                                 static_cast<int>(::metagl::TextureMagFilter::Linear));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::MagFilter,
+                                ::easygl::TextureParameterSetter::MagFilter,
                                 static_cast<int>(::metagl::TextureMagFilter::Linear));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::WrapS,
+                                ::easygl::TextureParameterSetter::WrapS,
                                 static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
         colorTex_.set_parameter(::easygl::TextureTarget::Texture2D,
-                                ::metagl::TextureParameter::WrapT,
+                                ::easygl::TextureParameterSetter::WrapT,
                                 static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
         // Clamp to GL_MAX_SAMPLES so glRenderbufferStorageMultisample never errors, mirroring
@@ -1248,9 +1245,9 @@ namespace CNA::Internal::Backends::EasyGL
         }
     }
 
-    void EasyGLRenderTargetBackend::BindGL() const
+    void EasyGLRenderTargetBackend::BindGL(int unit) const
     {
-        colorTex_.bind(::easygl::TextureTarget::Texture2D);
+        colorTex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::Texture2D);
     }
 
     unsigned int EasyGLRenderTargetBackend::GetColorGLHandle() const
@@ -1361,16 +1358,16 @@ namespace CNA::Internal::Backends::EasyGL
                                ::metagl::TextureParameter::MaxLevel,
                                levelCount_ - 1);
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::MinFilter,
+                               ::easygl::TextureParameterSetter::MinFilter,
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::MagFilter,
+                               ::easygl::TextureParameterSetter::MagFilter,
                                static_cast<int>(::metagl::TextureMagFilter::Linear));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::WrapS,
+                               ::easygl::TextureParameterSetter::WrapS,
                                static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
         cubeTex_.set_parameter(::easygl::TextureTarget::TextureCubeMap,
-                               ::metagl::TextureParameter::WrapT,
+                               ::easygl::TextureParameterSetter::WrapT,
                                static_cast<int>(::metagl::TextureWrapMode::ClampToEdge));
 
         // Clamp to GL_MAX_SAMPLES, same as EasyGLRenderTargetBackend.
@@ -1495,9 +1492,9 @@ namespace CNA::Internal::Backends::EasyGL
         return cubeTex_.native_handle();
     }
 
-    void EasyGLRenderTargetCubeBackend::BindGL() const
+    void EasyGLRenderTargetCubeBackend::BindGL(int unit) const
     {
-        cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
+        cubeTex_.active_bind(ToTextureUnit(unit), ::easygl::TextureTarget::TextureCubeMap);
     }
 
     bool EasyGLRenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
@@ -5537,11 +5534,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
         {
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_envmap, 1);
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.envMap)
-                params.envMap->BindGL();
+                params.envMap->BindGL(1);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture1,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
@@ -5551,11 +5548,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_texture2, 1);
             rtFlipV[1] = SampledRowOrderIsBottomUp(params.texture1) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.texture1)
-                params.texture1->BindGL();
+                params.texture1->BindGL(1);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture1,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
@@ -5568,11 +5565,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultFlatNormalTexture();
             p.prog.set_uniform(p.loc_pbr_normalmap, 1);
             rtFlipV[1] = SampledRowOrderIsBottomUp(params.pbrNormalMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
             if (params.pbrNormalMap)
-                params.pbrNormalMap->BindGL();
+                params.pbrNormalMap->BindGL(1);
             else
-                default_flat_normal_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_flat_normal_texture_.active_bind(::easygl::TextureUnit::Texture1,
+                                                         ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_mr >= 0)
@@ -5580,11 +5577,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_mr, 2);
             rtFlipV[2] = SampledRowOrderIsBottomUp(params.pbrMetallicRoughnessMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture2);
             if (params.pbrMetallicRoughnessMap)
-                params.pbrMetallicRoughnessMap->BindGL();
+                params.pbrMetallicRoughnessMap->BindGL(2);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture2,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_emissivemap >= 0)
@@ -5592,11 +5589,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_emissivemap, 3);
             rtFlipV[3] = SampledRowOrderIsBottomUp(params.pbrEmissiveMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture3);
             if (params.pbrEmissiveMap)
-                params.pbrEmissiveMap->BindGL();
+                params.pbrEmissiveMap->BindGL(3);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture3,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_occlusionmap >= 0)
@@ -5604,11 +5601,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
             EnsureDefaultWhiteTexture();
             p.prog.set_uniform(p.loc_pbr_occlusionmap, 4);
             rtFlipV[4] = SampledRowOrderIsBottomUp(params.pbrOcclusionMap) ? 1.0f : 0.0f;
-            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture4);
             if (params.pbrOcclusionMap)
-                params.pbrOcclusionMap->BindGL();
+                params.pbrOcclusionMap->BindGL(4);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture4,
+                                                   ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
         if (p.loc_pbr_metallic >= 0)
@@ -5623,9 +5620,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_texture, 0);
             rtFlipV[0] = SampledRowOrderIsBottomUp(params.texture0) ? 1.0f : 0.0f;
             if (params.texture0)
-                params.texture0->BindGL();
+                params.texture0->BindGL(0);
             else
-                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture0,
+                                                   ::easygl::TextureTarget::Texture2D);
             TraceBoundTextureUnit("stock3d-texture0", 0);
         }
 
