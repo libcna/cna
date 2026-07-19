@@ -106,7 +106,7 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE;
 
-#ifdef CNA_BACKEND_EASYGL
+#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_OPENGL1)
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
