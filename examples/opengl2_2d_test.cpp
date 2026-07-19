@@ -18,10 +18,18 @@
 //   background must read back near (255,64,0): src*1 + dst*(1-a) = (255,0,0)*1 + (0,128,0)*0.498.
 //   Using the wrong (Blend::SourceAlpha / Blend::InverseSourceAlpha) factors instead would read
 //   back near (128,64,0) instead, a clear R-channel differential.
-// Check E -- rotation + both-flip SpriteBatch draws complete with no exception (an uncaught
+// Check E -- SpriteBatch.Begin(..., transformMatrix)'s camera/scroll transform is actually
+//   applied: a sprite drawn at a fixed destination rect under a pure-translation transform reads
+//   back at the TRANSLATED screen position, not its untransformed one.
+// Check F -- SetSamplerAddressMode: a source rect extending past the texture bounds (U in [0,2])
+//   over a Red|Green half-and-half texture reads back Red under PointWrap (wraps back into the
+//   Red half) vs Green under PointClamp (clamps to the rightmost/Green texel) -- a differential
+//   that only passes if the address mode SpriteBatch.Begin() requests is actually reaching GL,
+//   not just silently accepted and ignored.
+// Check G -- rotation + both-flip SpriteBatch draws complete with no exception (an uncaught
 //   exception fails this whole test via a non-zero exit, matching this project's existing
 //   convention for "no crash" checks -- see e.g. sdlgpu_2d_test.cpp).
-// Check F -- kTotalFrames of the full scene render with no exception.
+// Check H -- kTotalFrames of the full scene render with no exception.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -29,11 +37,14 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include "CNA/Internal/Backends/OpenGL2/OpenGL2GraphicsBackend.hpp"
@@ -86,6 +97,22 @@ namespace
             }
         return pixels;
     }
+
+    // 4x4 RGBA8: left half (columns 0-1) Red, right half (columns 2-3) Green.
+    std::vector<std::uint8_t> MakeHalvesTexturePixels()
+    {
+        std::vector<std::uint8_t> pixels(4 * 4 * 4, 0);
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 4; ++x)
+            {
+                const std::size_t o = (static_cast<std::size_t>(y) * 4 + x) * 4;
+                if (x < 2) { pixels[o + 0] = 255; pixels[o + 1] = 0; }
+                else       { pixels[o + 0] = 0;   pixels[o + 1] = 255; }
+                pixels[o + 2] = 0;
+                pixels[o + 3] = 255;
+            }
+        return pixels;
+    }
 }
 
 class OpenGL2TwoDTest : public Game
@@ -95,6 +122,7 @@ class OpenGL2TwoDTest : public Game
     std::unique_ptr<Texture2D> texQuadrant_;
     std::unique_ptr<Texture2D> texRedOpaque_;
     std::unique_ptr<Texture2D> texRedHalfAlpha_;
+    std::unique_ptr<Texture2D> texHalves_;
 
     int frame_ = 0;
     int passCount_ = 0;
@@ -156,7 +184,46 @@ class OpenGL2TwoDTest : public Game
                   "BlendState::AlphaBlend (One, InverseSourceAlpha) factors applied: got=" + ColorStr(blended));
         }
 
-        // Check E: rotation + both-flip draws -- no pixel assertion, only "does not throw"
+        // Check E: SpriteBatch.Begin(..., transformMatrix) camera/scroll transform.
+        dev.Clear(Color::Black);
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr, nullptr,
+                            nullptr, Matrix::CreateTranslation(60.0f, 0.0f, 0.0f));
+        spriteBatch_->Draw(*texRedOpaque_, Rectangle(10, 10, 10, 10), Rectangle(0, 0, 1, 1), Color::White);
+        spriteBatch_->End();
+        if (runChecks)
+        {
+            const Color translated = ReadPixel(75, 15);
+            const Color untranslated = ReadPixel(15, 15);
+            Check(Matches(translated, Color::Red, 5),
+                  "transformMatrix translation moves the sprite to the transformed position: got=" + ColorStr(translated));
+            Check(Matches(untranslated, Color::Black, 5),
+                  "transformMatrix translation leaves the untransformed position empty: got=" + ColorStr(untranslated));
+        }
+
+        // Check F: SetSamplerAddressMode -- Wrap vs Clamp differential over a Red|Green texture,
+        // sampled with a source rect extending to U=2 (past the texture's own [0,1) range).
+        SamplerState pointWrap = SamplerState::PointWrap;
+        dev.Clear(Color::Black);
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &pointWrap, nullptr, nullptr);
+        spriteBatch_->Draw(*texHalves_, Rectangle(0, 0, 64, 64), Rectangle(0, 0, 8, 4), Color::White);
+        spriteBatch_->End();
+        const Color wrapResult = ReadPixel(40, 32);
+
+        SamplerState pointClamp = SamplerState::PointClamp;
+        dev.Clear(Color::Black);
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &pointClamp, nullptr, nullptr);
+        spriteBatch_->Draw(*texHalves_, Rectangle(0, 0, 64, 64), Rectangle(0, 0, 8, 4), Color::White);
+        spriteBatch_->End();
+        const Color clampResult = ReadPixel(40, 32);
+        if (runChecks)
+        {
+            Check(Matches(wrapResult, Color::Red, 10),
+                  "SetSamplerAddressMode(PointWrap): U=1.25 wraps to 0.25 -> Red half: got=" + ColorStr(wrapResult));
+            Check(Matches(clampResult, Color(0, 255, 0, 255), 10),
+                  "SetSamplerAddressMode(PointClamp): U=1.25 clamps to 1.0 -> Green half: got=" + ColorStr(clampResult));
+        }
+
+        // Check G: rotation + both-flip draws -- no pixel assertion, only "does not throw"
         // (an uncaught exception here fails the whole test via a non-zero process exit).
         dev.Clear(Color::Black);
         spriteBatch_->Begin();
@@ -186,6 +253,7 @@ protected:
             Texture2D::CreateFromPixels(dev, 1, 1, std::vector<std::uint8_t>{255, 0, 0, 255}));
         texRedHalfAlpha_ = std::make_unique<Texture2D>(
             Texture2D::CreateFromPixels(dev, 1, 1, std::vector<std::uint8_t>{255, 0, 0, 128}));
+        texHalves_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(dev, 4, 4, MakeHalvesTexturePixels()));
     }
 
     void Draw(const GameTime&) override
@@ -196,8 +264,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             Check(true, "120 frames of the SpriteBatch scene render with no exception");
-            std::printf("=== %d/%d PASS ===\n", passCount_, 9);
-            result_ = (passCount_ == 9) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, 13);
+            result_ = (passCount_ == 13) ? 0 : 1;
             Exit();
         }
     }

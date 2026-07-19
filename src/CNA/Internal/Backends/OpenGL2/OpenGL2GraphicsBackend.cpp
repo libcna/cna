@@ -125,6 +125,73 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         }
 
+        // XNA CompareFunction enum ordinals: Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
+        // GreaterEqual=5, Greater=6, NotEqual=7. Mirrors EasyGLGraphicsBackend's
+        // ToEasyGLCompareFunc mapping.
+        GLenum ToGLCompareFunc(int xnaCompare)
+        {
+            switch (xnaCompare)
+            {
+                case 1: return GL_NEVER;
+                case 2: return GL_LESS;
+                case 3: return GL_LEQUAL;
+                case 4: return GL_EQUAL;
+                case 5: return GL_GEQUAL;
+                case 6: return GL_GREATER;
+                case 7: return GL_NOTEQUAL;
+                default: return GL_ALWAYS; // CompareFunction::Always = 0
+            }
+        }
+
+        // XNA StencilOperation enum ordinals: Keep=0, Zero=1, Replace=2, Increment=3,
+        // Decrement=4, IncrementSaturation=5, DecrementSaturation=6, Invert=7. Increment/Decrement
+        // wrap on overflow (GL_*_WRAP); IncrementSaturation/DecrementSaturation clamp instead
+        // (plain GL_INCR/GL_DECR) -- mirrors EasyGLGraphicsBackend's ToEasyGLStencilOp mapping.
+        GLenum ToGLStencilOp(int xnaOp)
+        {
+            switch (xnaOp)
+            {
+                case 1: return GL_ZERO;
+                case 2: return GL_REPLACE;
+                case 3: return GL_INCR_WRAP;
+                case 4: return GL_DECR_WRAP;
+                case 5: return GL_INCR;
+                case 6: return GL_DECR;
+                case 7: return GL_INVERT;
+                default: return GL_KEEP; // StencilOperation::Keep = 0
+            }
+        }
+
+        // XNA TextureFilter enum ordinals: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3,
+        // PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
+        // MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8. This backend has no mipmaps
+        // (single-level textures only) and no separate min/mag GL sampler control worth adding
+        // for that reason -- mirrors SdlGraphicsBackend::SetSamplerFilter's own reasoning: since
+        // SpriteBatch draws are near-universally magnification-dominant, the MAGNIFICATION
+        // ("Mag"/first-listed) component is what visibly matters, so it alone selects GL_LINEAR
+        // vs GL_NEAREST (applied to both TEXTURE_MIN_FILTER and TEXTURE_MAG_FILTER, since without
+        // mipmaps there is no separate minification LOD behavior to preserve).
+        GLint ToGLFilter(int xnaFilter)
+        {
+            switch (xnaFilter)
+            {
+                case 0: case 2: case 3: case 7: case 8: return GL_LINEAR;
+                default: return GL_NEAREST; // Point=1, PointMipLinear=4, MinLinearMagPointMipLinear=5,
+                                            // MinLinearMagPointMipPoint=6
+            }
+        }
+
+        // XNA TextureAddressMode enum ordinals: Wrap=0, Clamp=1, Mirror=2.
+        GLint ToGLWrapMode(int xnaAddressMode)
+        {
+            switch (xnaAddressMode)
+            {
+                case 1: return GL_CLAMP_TO_EDGE;
+                case 2: return GL_MIRRORED_REPEAT;
+                default: return GL_REPEAT; // TextureAddressMode::Wrap = 0
+            }
+        }
+
         void MultiplyRowMajor(const Matrix& a, const Matrix& b, float out[16])
         {
             const float A[16] = {a.M11, a.M12, a.M13, a.M14, a.M21, a.M22, a.M23, a.M24,
@@ -268,6 +335,13 @@ namespace CNA::Internal::Backends::OpenGL2
 
             void Begin() override { begun_ = true; }
             void End() override { begun_ = false; }
+            void SetTransformMatrix(const Matrix& m) override { transform_ = m; }
+            void SetSamplerFilter(int textureFilter) override { filter_ = textureFilter; }
+            void SetSamplerAddressMode(int addressU, int addressV) override
+            {
+                addressU_ = addressU;
+                addressV_ = addressV;
+            }
 
             void Draw(const ITextureBackend& texture, float x, float y) override
             {
@@ -323,7 +397,14 @@ namespace CNA::Internal::Backends::OpenGL2
                 {
                     const float px = localCorners[i][0] * cosR - localCorners[i][1] * sinR + destination.X + origin.X;
                     const float py = localCorners[i][0] * sinR + localCorners[i][1] * cosR + destination.Y + origin.Y;
-                    corners[i] = {(px / viewportWidth) * 2.0f - 1.0f, 1.0f - (py / viewportHeight) * 2.0f, layerDepth,
+                    // SpriteBatch.Begin(transformMatrix, ...)'s camera/scroll transform is applied
+                    // in screen space, BEFORE the screen->clip ortho mapping below -- row-vector
+                    // convention (v * transform_), matching EasyGLSpriteBatchBackend's own
+                    // `transform_ * orthoM` combined-matrix order (only the XY affine part matters;
+                    // SpriteBatch's transform is always 2D).
+                    const float tx = px * transform_.M11 + py * transform_.M21 + transform_.M41;
+                    const float ty = px * transform_.M12 + py * transform_.M22 + transform_.M42;
+                    corners[i] = {(tx / viewportWidth) * 2.0f - 1.0f, 1.0f - (ty / viewportHeight) * 2.0f, layerDepth,
                                   r, g, b, a, uv[i][0], uv[i][1]};
                 }
                 const SpriteVertex quad[6] = {corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]};
@@ -341,6 +422,16 @@ namespace CNA::Internal::Backends::OpenGL2
                 glActiveTexture(GL_TEXTURE0);
                 tex->BindGL();
                 glUniform1i(glGetUniformLocation(program_, "uTex"), 0);
+                // GL 2.1 has no separate sampler objects (those are GL 3.3+) -- SamplerState is
+                // applied directly onto the currently-bound texture object's own parameters,
+                // exactly like Tex's own constructor defaults. Mutating it per-draw is the
+                // standard legacy-GL approach and matches this backend's single-texture-unit,
+                // no-sampler-cache design.
+                const GLint glFilter = ToGLFilter(filter_);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, glFilter);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, glFilter);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(addressU_));
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(addressV_));
 
                 // Blending itself is NOT touched here -- GraphicsDevice::setBlendStateProperty()
                 // (driven by SpriteBatch::Begin()'s BlendState argument, BlendState::AlphaBlend by
@@ -370,6 +461,10 @@ namespace CNA::Internal::Backends::OpenGL2
             bool begun_ = false;
             GLuint program_ = 0;
             GLuint vbo_ = 0;
+            Matrix transform_ = Matrix::getIdentityProperty();
+            int filter_ = 0;   // TextureFilter::Linear
+            int addressU_ = 1; // TextureAddressMode::Clamp (matches SamplerState::LinearClamp,
+            int addressV_ = 1; // the default SpriteBatch.Begin() falls back to)
         };
     }
 
@@ -650,20 +745,48 @@ namespace CNA::Internal::Backends::OpenGL2
         glBlendEquationSeparate(ToGLBlendEquation(colorBlendFunc), ToGLBlendEquation(alphaBlendFunc));
     }
 
-    void OpenGL2GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int /*depthFunc*/,
-                                                         bool stencilEnable, int /*stencilFunc*/,
-                                                         int /*stencilPass*/, int /*stencilFail*/, int /*stencilDepthFail*/,
-                                                         int /*stencilMask*/, int /*stencilWriteMask*/, int /*referenceStencil*/,
-                                                         bool /*twoSidedStencilMode*/,
-                                                         int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
-                                                         int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    void OpenGL2GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                                         bool stencilEnable, int stencilFunc,
+                                                         int stencilPass, int stencilFail, int stencilDepthFail,
+                                                         int stencilMask, int stencilWriteMask, int referenceStencil,
+                                                         bool twoSidedStencilMode,
+                                                         int ccwStencilFunc, int ccwStencilPass,
+                                                         int ccwStencilFail, int ccwStencilDepthFail)
     {
-        // plan_opengl2.md follow-up: only enable/write-mask are wired so far -- the compare
-        // function and stencil-op enum mappings are not yet translated to GL (Task: "Complete
-        // XNA BlendState/DepthStencilState/RasterizerState enum mappings").
         SetDepthTestEnabled(depthEnable);
         SetDepthWriteEnabled(depthWriteEnable);
+        if (depthEnable)
+            glDepthFunc(ToGLCompareFunc(depthFunc));
+
         stencilEnable ? glEnable(GL_STENCIL_TEST) : glDisable(GL_STENCIL_TEST);
+        if (!stencilEnable) return;
+
+        const GLenum glSFail = ToGLStencilOp(stencilFail);
+        const GLenum glDFail = ToGLStencilOp(stencilDepthFail);
+        const GLenum glPass  = ToGLStencilOp(stencilPass);
+
+        // Mirrors EasyGLGraphicsBackend::ApplyDepthStencilState's own GL_FRONT/GL_BACK
+        // assignment: the primary Stencil*/ReferenceStencil fields go to GL_FRONT, the
+        // CcwStencil* fields (XNA's "the other side" of two-sided stencil) go to GL_BACK.
+        if (twoSidedStencilMode)
+        {
+            glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(stencilFunc),
+                                  referenceStencil, static_cast<GLuint>(stencilMask));
+            glStencilOpSeparate(GL_FRONT, glSFail, glDFail, glPass);
+            glStencilMaskSeparate(GL_FRONT, static_cast<GLuint>(stencilWriteMask));
+
+            glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(ccwStencilFunc),
+                                  referenceStencil, static_cast<GLuint>(stencilMask));
+            glStencilOpSeparate(GL_BACK, ToGLStencilOp(ccwStencilFail),
+                                ToGLStencilOp(ccwStencilDepthFail), ToGLStencilOp(ccwStencilPass));
+            glStencilMaskSeparate(GL_BACK, static_cast<GLuint>(stencilWriteMask));
+        }
+        else
+        {
+            glStencilFunc(ToGLCompareFunc(stencilFunc), referenceStencil, static_cast<GLuint>(stencilMask));
+            glStencilOp(glSFail, glDFail, glPass);
+            glStencilMask(static_cast<GLuint>(stencilWriteMask));
+        }
     }
 
     void OpenGL2GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
