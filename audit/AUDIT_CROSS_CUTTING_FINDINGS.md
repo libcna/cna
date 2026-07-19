@@ -1114,6 +1114,24 @@ _(pending)_
   for the one new finding, and the shard's other `.audit.md` reports for the full list of confirmed
   prior fixes cited by file.
 
+- **`xna-input` shard note: an exceptionally strong, consistent track record.** All 44 files
+  (`Microsoft.Xna.Framework.Input` and `.Touch`) were reviewed. Several exhaustive/automated
+  spot-checks against FNA found zero discrepancies: `Buttons` (all 32 bit values, hex-for-hex),
+  `Keys` (all 160 key names+values, via an automated diff), `GamePadDPad`/`GamePadThumbSticks`/
+  `GamePadTriggers`'s dead-zone and clamp formulas (verified against FNA's real `GamePad.cs`/
+  `GamePadThumbSticks.cs`/`GamePadTriggers.cs` line-for-line), and `TouchLocation`'s
+  `TryGetPreviousLocation`/`Equals`/`GetHashCode`/`ToString`. The only findings are two
+  functionally-inconsequential, LOW-severity documentation-framing notes: `GamePadState`'s and
+  `MouseState`'s `GetHashCode()` implementation comments read as if preserving an original FNA
+  formula ("avoids signed-overflow UB... INPUT-BUILD-006"), but FNA's real `GetHashCode()` for
+  both types is simply `base.GetHashCode()` (an opaque CLR default with no portable equivalent) --
+  the custom formulas here are necessary CNA inventions, not preserved ports, though they correctly
+  satisfy `GetHashCode()`'s actual contract (Equals-consistency). Contrast with `GamePadDPad`/
+  `GamePadThumbSticks`/`GamePadTriggers`/`KeyboardState`/`TouchLocation` in the same shard, which
+  all have genuine, portable FNA formulas correctly preserved via the same overflow-safe rewrite
+  pattern. See `include/Microsoft/Xna/Framework/Input/GamePadState.hpp.audit.md` and
+  `include/Microsoft/Xna/Framework/Input/MouseState.hpp.audit.md`.
+
 ## Licensing/header-convention inconsistencies
 
 - **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
