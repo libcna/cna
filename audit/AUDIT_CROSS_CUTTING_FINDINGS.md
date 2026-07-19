@@ -1785,3 +1785,119 @@ engineering documentation: a child bone's local rotation composes with its paren
 require an opposite sign depending on whether the parent has already moved -- explicitly flagged as
 something to re-verify empirically per call site rather than assumed to generalize to unaudited
 bone pairs (e.g. `UpperLeg`/`LowerLeg`).
+
+## Standing investigation resolved: `Dx3_SpriteBatch` 2/10-failing checks
+
+Two independent forks auditing `examples/dx3_spritebatch_test.cpp` (`examples-tests-dx3` shard)
+both confirm, via static analysis (this audit-only pass had no DX3/Wine build environment to
+re-run the actual binary), the two halves of this project's own persistent-memory-tracked
+investigation are of genuinely different natures and should be triaged separately:
+
+- **Check D (zero-alpha blend) -- CONFIRMED test-authoring bug, not a DX3 backend defect.** The
+  fixture constructs a **non-premultiplied** `Color(255, 0, 0, 0)` texel and asserts the
+  destination is left completely untouched after drawing under `BlendState::AlphaBlend`. Real
+  XNA/FNA's `AlphaBlend` preset uses **premultiplied**-alpha blend factors
+  (`ColorSourceBlend = One`, `ColorDestinationBlend = InverseSourceAlpha`) -- one fork hand-derived
+  the actual resulting formula and got `(255, 6, 7)`, not the asserted `(5, 6, 7)` "destination
+  untouched." A faithful DX3 implementation of the real blend equation would legitimately fail
+  this check while being behaviorally correct. Fix: construct the fixture with a genuinely
+  premultiplied `Color(0, 0, 0, 0)` texel instead (or explicitly document straight-alpha semantics
+  as an intentional CNA deviation, if that's ever the actual intent).
+- **Check G (180° rotation about center) -- independently re-derived and confirmed sound; a
+  failure here means a real DX3 backend defect, not a test bug.** Both forks independently
+  re-derived XNA's real origin-scaled corner-rotation formula from scratch and it exactly matches
+  the test's own math and pixel assertions (`ReadPixel` bottom-right = Red, top-left = Yellow for
+  a point-reflection about the sprite's center). If this check fails in CI, look for a real pivot/
+  origin-scaling or rotation-sign defect in DX3's own drawing path.
+
+This resolves the open question from `[[project_dx3_spritebatch_test_failure]]` (persistent
+memory): Check G is likely a real rotation-math bug, Check D is likely a test-authoring bug around
+premultiplied-alpha semantics -- both hypotheses independently confirmed correct by static
+analysis, not merely repeated.
+
+## Test blind spot: identity-matrix fog tests can't distinguish object-space from view-space fog (D3D11/D3D12)
+
+`examples/d3d11_smoke_test.cpp`/`examples/d3d12_smoke_test.cpp`'s fog checks set
+`World = View = Projection = Identity` throughout, which makes object-space and view-space vertex
+Z coordinates numerically identical -- these tests cannot distinguish a correct view-space fog
+implementation from the already-confirmed EasyGL bug where fog reads a raw object-space vertex
+attribute (see the standing `[[feedback_easygl_fog_object_space_only]]` memory: "fog shader reads
+raw local vertex Z, ignores World/View entirely"). D3D12's own test is an explicit, stated reuse of
+D3D11's fixture, so it inherits the identical blind spot rather than independently re-deriving it.
+This doesn't confirm D3D11/D3D12 share EasyGL's fog bug -- it confirms the test suite has no way to
+tell either way, for either backend.
+
+## `docs/` shard: staleness findings from cross-checking against this session's own confirmed production findings
+
+Three parallel forks audited all 72 `docs/*.md` files, adapting the report structure to check
+whether each doc's claims still match the current, actual code/backend/test state this session has
+already independently confirmed. Selected findings (full detail lives under each
+`audit/docs/<file>.md.audit.md`):
+
+- **MEDIUM** -- `docs/coverage.md` claims ".xnb binary support entirely absent," directly
+  contradicted by this session's own confirmed real, substantial `.xnb` reader pipeline
+  (`SoundEffectContentTypeReader.cpp` and 10+ sibling readers, all AUDITED clean in
+  `tests-cna-internal`/`xna-content` this session).
+- **MEDIUM** -- `docs/d3d9-backend.md` and `docs/cnatests-mingw-setenv-proposal.md` directly
+  contradict each other under the *same* task ID (`D9-123`) on whether `CnaTests` builds under
+  D3D9 -- the setenv-proposal doc's detailed implementation record is far more credible;
+  `d3d9-backend.md`'s bullet is almost certainly a stale holdover.
+- **MEDIUM** -- `docs/cna_audio_deep_audit_2026-07-17.md` is a genuinely rigorous independent audit
+  (confirmed via git log to have triggered 80+ `AUD-XX` remediation commits) but carries no status
+  banner noting its flagship P0 finding (XNB format narrowness) is now fixed -- contradicted
+  directly by this session's own clean audit of the current `SoundEffectContentTypeReader.cpp`.
+- **MEDIUM** -- `docs/dx3-backend.md` claims SpriteBatch "fully verified," contradicted by the
+  `Dx3_SpriteBatch` 2/10-failing-checks investigation above (a real rotation-math bug + a
+  test-authoring bug) -- stale.
+- **MEDIUM** -- `docs/easygl_bugs.md`'s fog-bug row claims fog is computed "after the WVP
+  transform (clip-space Z)"; direct source read shows the current shader uses `aPos.z`, a raw
+  object-space vertex attribute, with an adjacent comment explicitly saying "object-space" --
+  contradicts the doc's own characterization, exactly the kind of drift its own 2026-07-11
+  staleness banner already anticipated.
+- **MEDIUM** -- `docs/gdm-coverage.md`'s event table shows all `GraphicsDeviceManager` events
+  "supported" but never mentions the confirmed HIGH finding (this session's own
+  `GraphicsDeviceManager.cpp` audit, `xna-graphics` shard) that it never forwards `GraphicsDevice`'s
+  own backend-triggered lifecycle events.
+- **MEDIUM** -- `docs/graphics-resource-lifetime.md` and `docs/graphicsresource-fna-audit.md`
+  directly contradict each other on whether a `GraphicsDevice` resource-tracking list exists (one
+  says yes with detail, the other says "Gap 1: no list exists") -- resolved in favor of the latter
+  being stale.
+- **LOW** -- `docs/devices-api-coverage.md`'s "Cross-cutting members" table doesn't flag the
+  confirmed `Dispose(bool)` public-vs-protected mismatch across all 4 `Microsoft::Devices::Sensors`
+  classes (`microsoft-devices` shard).
+- **LOW** -- `docs/graphicsdevice-fna-audit.md` (dated 2026-06-26) independently re-verified via
+  direct grep against current source: all 7 "missing NOXNA tag" claims and 3 "missing API" claims
+  are still accurate today -- the best-aged doc in the batch, flagged only for one easy-to-miss
+  inconsistency (`Indices()`/`Indices(const IndexBuffer*)` live inside the NOXNA-helpers section but
+  aren't themselves NOXNA-tagged).
+- **LOW** -- `docs/README.md` predates several newer docs, most notably the audio deep-audit.
+
+Standouts for quality (no findings, exemplary self-correction discipline): `docs/d3d12-backend.md`,
+`docs/basiceffect-support.md`, `docs/input-fna-fidelity.md` (540 lines, includes a rare case of
+*correctly declining* to replicate a bug present in FNA itself), `docs/input-public-api-frozen.md`
+(compile-time-enforced, cannot drift undetected), `docs/graphics-backend-feature-matrix.md`
+(visibly self-correcting, the most trustworthy status doc in the shard).
+
+**Pattern for this section**: this project's own status/coverage docs are, overwhelmingly, honest
+and carefully written at the time they're authored -- nearly every finding above is the doc simply
+not being revisited after the underlying code/finding changed, the identical
+"documentation-rot, not fabrication" pattern already flagged for `cmake/Tests/*.cmake` header
+comments and the `examples-tests-easygl` batch elsewhere in this document.
+
+## `examples-demo_devices` shard: vendored-Android-Java scope question resolved
+
+11 `org/libsdl/app/*.java` files (SDL3's standard Android Activity/HID-device/audio-manager Java
+glue) live under `examples/demo_devices/android/.../app/src/main/java/org/libsdl/app/` -- not under
+`third_party/**`/`vendor/**` -- so per `AUDIT_SCOPE.md`'s own classification rule 2, they were
+correctly scoped as AUDIT-eligible rather than `third-party-vendored` EXEMPT, even though their
+content is, in fact, unmodified upstream SDL3 Android glue (confirmed via `grep -il
+"openeggbert|devicesdemo|CNA"` across all 11 files: zero matches). Audited with an appropriately
+lighter-touch structural pass given this. No findings.
+
+## Additional test-coverage/robustness gap: `headless_resource_backends_test.cpp`
+
+Checks A/B (`TextureCube`/`Texture3D` round-trip) are unconditional `check(true, ...)` calls with no
+`try`/`catch`, unlike every other check in this file's own shard -- a real regression in either path
+would crash the test process outright instead of reporting a clean `FAIL`. LOW; matches the general
+"a test's own robustness against the very regression it's meant to catch" class of finding already
+noted for other shards this session.
