@@ -2565,3 +2565,42 @@ convention, and that this DOES affect stencil face-relativity. If cull-mode is s
 this default-cull-mode failure is a natural, unfixed sibling of the already-fixed stencil issue --
 a concrete, actionable lead for a source-level follow-up, not yet conclusively proven.
 
+### D3D12: genuinely runtime-verified via real vkd3d-proton, not static-only; 220/220 checks pass; confirms the known swapchain crash is still current; finds a real testing-coverage gap
+
+Built via MinGW cross-compile + Wine, exercised through both a direct
+`scripts/run-wine-vkd3d.sh` invocation and the official `ctest -L D3D12` registration. **vkd3d-proton
+genuinely engaged** (log line `vkd3d-proton - applicationVersion: 3.1.0`, not a silent fallback).
+`D3D12_Smoke`'s 220 checks all pass, and the test itself is exceptionally rigorous -- real,
+exact byte-level GPU readback across NPOT texture alignment, mip-targeted upload/readback, all 4
+`DepthFormat` values, stencil-plane clear+readback with depth-test-gated proof of distinct values
+(not a fixed default), full mip-chain regeneration on both `RenderTarget2D` and `RenderTargetCube`
+including a non-zero cube face, MSAA creation+resolve with exact color readback, a genuinely
+windowless `HeadlessEXT` device construction, pixel-exact `SpriteBatch.DrawString` glyph placement,
+`Model::Draw()`'s full bone-transform pipeline, a non-zero-root-bone-index Model proof, exact
+`Texture2D.SaveAsPng`/`FromStream` round-trip, and a runtime-compiled custom HLSL `ShaderEffect`.
+
+**NEW, real testing-coverage gap**: `cmake/Tests/D3D12Tests.cmake` registers exactly ONE CTest for
+this entire backend (`D3D12_Smoke`) -- meaning this audit's two most significant D3D12 HIGH findings
+from static review (Stencil/Scissor/DepthBias completely non-functional; `OcclusionQuery`
+multi-draw-overwrite) have **no dedicated test at all** to empirically confirm or refute at runtime.
+`D3D12_Smoke`'s own stencil/depth checks only exercise the direct clear-value path, not
+`DepthStencilState`/`RasterizerState`'s own settable properties, so they don't actually reach the
+bug being described. This is a real gap distinct from the bugs themselves -- two of this backend's
+most consequential findings are currently unverifiable by this project's own test suite, one way or
+the other.
+
+**Known swapchain-creation crash confirmed still-current, not historical**: reproduced live via the
+standard `run-wine-vkd3d.sh` (system-Wine) path -- the process crashes with a Wine backtrace exactly
+as `examples/d3d12_swapchain_diag.cpp`'s own header comment already documents (a dxgi.dll ABI
+mismatch under system Wine, deliberately not registered as a CTest to avoid permanent noise).
+**Could not exercise the documented working fix path** (`scripts/run-proton-vkd3d.sh`, a genuine
+`S_OK` swapchain result per this project's own 2026-07-14 record) because no Steam/Proton
+installation exists in this sandbox -- a genuine environmental limitation of this specific
+environment, explicitly marked as unavailable rather than silently skipped, not a defect in the
+script itself (already confirmed correct in its own audit report).
+
+Incidental, unrelated build finding: `cna_xnb_audio_metadata_dump.exe` (a `tools/` utility, not
+D3D12-specific) fails to link under this MinGW cross-compile configuration with an undefined
+reference to `Video::Video`'s constructor/vtable -- `Video.cpp`'s translation unit apparently isn't
+linked into this specific tool target under `CNA_BUILD_EXAMPLES=OFF`. Did not block `D3D12_Smoke`.
+
