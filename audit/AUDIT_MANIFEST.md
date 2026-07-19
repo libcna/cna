@@ -144,19 +144,19 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`examples-demo_gamer_roster_hud`](manifest/examples-demo_gamer_roster_hud.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_gamerservices_dispatcher_watchdog`](manifest/examples-demo_gamerservices_dispatcher_watchdog.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_gamerservices_signin_presence`](manifest/examples-demo_gamerservices_signin_presence.md) | 3 | PENDING: 3 / AUDITED: 0 |
-| [`examples-demo_guide_overlay_console`](manifest/examples-demo_guide_overlay_console.md) | 1 | PENDING: 1 / AUDITED: 0 |
+| [`examples-demo_guide_overlay_console`](manifest/examples-demo_guide_overlay_console.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 | [`examples-demo_input`](manifest/examples-demo_input.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_leaderboard_viewer`](manifest/examples-demo_leaderboard_viewer.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_net_avatar_sync`](manifest/examples-demo_net_avatar_sync.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_net_client_server_arena`](manifest/examples-demo_net_client_server_arena.md) | 3 | PENDING: 3 / AUDITED: 0 |
-| [`examples-demo_packet_roundtrip`](manifest/examples-demo_packet_roundtrip.md) | 1 | PENDING: 1 / AUDITED: 0 |
-| [`examples-demo_qos_probe`](manifest/examples-demo_qos_probe.md) | 1 | PENDING: 1 / AUDITED: 0 |
+| [`examples-demo_packet_roundtrip`](manifest/examples-demo_packet_roundtrip.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
+| [`examples-demo_qos_probe`](manifest/examples-demo_qos_probe.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 | [`examples-demo_session_browser`](manifest/examples-demo_session_browser.md) | 3 | PENDING: 3 / AUDITED: 0 |
-| [`examples-demo_session_lifecycle_events`](manifest/examples-demo_session_lifecycle_events.md) | 1 | PENDING: 1 / AUDITED: 0 |
+| [`examples-demo_session_lifecycle_events`](manifest/examples-demo_session_lifecycle_events.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 | [`examples-demo_simulated_network_conditions`](manifest/examples-demo_simulated_network_conditions.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_sound`](manifest/examples-demo_sound.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_xact`](manifest/examples-demo_xact.md) | 4 | PENDING: 4 / AUDITED: 0 |
-| [`examples-input_smoke`](manifest/examples-input_smoke.md) | 1 | PENDING: 1 / AUDITED: 0 |
+| [`examples-input_smoke`](manifest/examples-input_smoke.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 
 ## Documentation (docs/*.md) (72 files)
 

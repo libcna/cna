@@ -6,4 +6,4 @@ Files in this shard: **1**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/input_smoke/InputSmoke.cpp` | PENDING | [InputSmoke.cpp.audit.md](../examples/input_smoke/InputSmoke.cpp.audit.md) |
+| 1 | `examples/input_smoke/InputSmoke.cpp` | AUDITED | [InputSmoke.cpp.audit.md](../examples/input_smoke/InputSmoke.cpp.audit.md) |

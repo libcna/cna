@@ -6,4 +6,4 @@ Files in this shard: **1**
 
 | # | Path | Status | Audit Report |
 |---|------|--------|---------------|
-| 1 | `examples/demo_guide_overlay_console/src/Main.cpp` | PENDING | [Main.cpp.audit.md](../examples/demo_guide_overlay_console/src/Main.cpp.audit.md) |
+| 1 | `examples/demo_guide_overlay_console/src/Main.cpp` | AUDITED | [Main.cpp.audit.md](../examples/demo_guide_overlay_console/src/Main.cpp.audit.md) |
