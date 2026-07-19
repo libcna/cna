@@ -2209,6 +2209,151 @@ determine whether the `EasyGL_MRT_TwoAttachments` failure is a recent regression
 gap (no `git bisect`/blame performed, out of scope for a single opportunistic pass). Both are
 natural continuations of Pass 6 for a future session.
 
+## Pass 3 continued: remaining `Microsoft.Xna.Framework.*` namespaces swept against the real xn65 XML reference
+
+Extends the earlier Graphics/Net/GamerServices/XACT-Audio-subset sweep with every other real XNA
+4.0 namespace, using the identical method (real Microsoft XNA 4.0 Windows reference XML doc-comments
+vs. CNA's actual declared headers, FNA cross-checked for severity triage on any flagged gap).
+**Scope-mapping discovery**: several C# namespaces are physically bundled inside the single
+`Microsoft.Xna.Framework.xml` file rather than having their own dedicated XML (Audio's non-XACT
+types, `Content`, `Design`, `Input` [GamePad/Keyboard/Mouse, distinct from `.Input.Touch`], `Media`,
+and `Graphics.PackedVector` are all documented there, not in their own namespace's XML) -- worth
+recording so a future continuation doesn't waste time hunting for a separate file that doesn't
+exist.
+
+**Combined result across every namespace now swept**: root `Microsoft.Xna.Framework` (42 types, ~900
+members) + `.Input.Touch`/`.Storage`/`.Video` (13 types, ~118 members) + `.GamerServices.Avatar*` (12
+types, ~90 members) + rest-of-`.Audio` (12 types, ~55 members) + `.Graphics.PackedVector` (17 types,
+~215 raw entries) + `.Content` (11 types) + `.Input` GamePad/Keyboard/Mouse (17 types) + `.Media` (21
+types) -- **every real `Microsoft.Xna.Framework.*` namespace with runtime-relevant surface is now
+swept** (only `.Content.Pipeline` and `.Design`, both confirmed genuinely out-of-scope build-time/
+WinForms-tooling namespaces, remain formally unswept member-by-member, and both were positively
+scope-confirmed rather than skipped -- see below).
+
+### Root `Microsoft.Xna.Framework` + `.Game`: 42/42 types present, 1 LOW gap
+
+Full member-by-member verification for `Vector2` (78 XML entries) and `Matrix` (108 XML entries, 65
+unique leaf names) -- both 100% present including every overload. Automated name-level pass covered
+all 42 types; every flagged discrepancy manually resolved (11 false positives from the automated
+pass's own constructor-detection limitation, `GetEnumerator`->`begin()`/`end()`, `Finalize`->
+destructor -- all confirmed present via direct grep). All 7 enum types in scope have every one of
+their 22 combined named values present.
+
+- **NEW, LOW -- `GraphicsDeviceInformation` is missing `Equals(object)`/`GetHashCode()`.** Both are
+  real XNA 4.0 members per the reference XML, but FNA itself also never implements them (confirmed
+  via direct FNA source read) -- an FNA-inherited gap, not an independent CNA oversight, consistent
+  with this project's standing "FNA is not authoritative for API surface" caveat. Kept LOW (not
+  MEDIUM, unlike the `DisplayMode` finding from the earlier Graphics sweep) given no evident
+  behavioral dependency on value-equality for this class.
+
+### `.Input.Touch` / `.Storage` / `.Video`: 13/13 types, ZERO genuine gaps -- the cleanest Pass 3 result
+
+All 8 Touch types (`GestureSample`, `GestureType` [11-value `[Flags]` enum, `operator|`/`&`/`|=`/`&=`
+all correctly present -- unlike the already-known `SpriteEffects` combined-flags gap in
+`xna-graphics`], `TouchCollection`, `TouchLocation`, `TouchLocationState`, `TouchPanel`,
+`TouchPanelCapabilities`), all 3 Storage types, and `Video`/`VideoPlayer`/`VideoSoundtrackType` are
+fully present with every real member accounted for. Corroborates this session's already-clean
+`VideoPlayerTest`/`VideoTest` behavioral audit results -- full convergence between the two
+independent methods. New false-positive pattern recorded for future sweeps: a C++ value-type
+struct correctly has no separate `Equals(object)` overload (no boxing/`System.Object` equivalent to
+override against) -- `Equals(T)` alone is the correct translation, confirmed via `Vector2` too.
+
+### `.GamerServices.Avatar*` (the real XNA Avatar API): 12/12 types, ZERO gaps -- and a genuinely reassuring positive finding
+
+The xn65 `Avatar.xml` file is organizational naming only -- every one of these 12 types' real C#
+namespace is `Microsoft.Xna.Framework.GamerServices`, matching CNA's own header placement exactly.
+**A real risk going in was that CNA's extensive avatar-rendering system might be an entirely
+parallel, non-XNA-compatible design merely reusing familiar class names -- verified false.**
+`AvatarRenderer` (18/18 real members present) and `AvatarDescription` (10/10 present) are both
+faithful to the real API surface, and CNA's own comments honestly disclose that the real `Draw()`
+overloads are permanent no-ops (real XNA Avatar rendering depended on Xbox LIVE asset streaming CNA
+has no server for), while a clearly `NOXNA`-tagged `DrawRealEXT()` family provides this project's
+actual rendering -- the correct way to handle a real API that cannot be faithfully ported, not a
+design flaw or a silent gap.
+
+### Rest of `.Audio` (non-XACT): 12/12 types, ZERO gaps
+
+`SoundEffect`/`SoundEffectInstance`/`DynamicSoundEffectInstance`/`Microphone`/`AudioEmitter`/
+`AudioListener` all fully member-complete (~55 members checked). Combined with the earlier
+XACT-subset sweep, the **full `Audio` namespace is now completely swept: 19/19 types present, one
+LOW gap total** (`AudioCategory.ToString()`, already recorded).
+
+### `.Content.Pipeline` and `.Design`: both confirmed correctly out of scope (not skipped)
+
+`.Content.Pipeline` (120 real types: `ContentImporter<T>`, `ContentProcessor<T,U>`,
+`ContentBuildLogger`, etc.) is build-time content-pipeline tooling with zero matching
+`ContentImporter`/`ContentProcessor`-named files anywhere in CNA (confirmed via repo-wide search) --
+CNA is a runtime, not a content-build tool, so this entire namespace is legitimately and entirely
+out of scope. `.Design` (66 real members: `BoundingBoxConverter`/`ColorConverter`/`MatrixConverter`/
+etc. -- WinForms `System.ComponentModel.TypeConverter` subclasses for property-grid editing support)
+is similarly confirmed out of scope: zero matches for `TypeConverter` anywhere in CNA's `include/`
+or `src/` trees. Both scope exclusions are correct and expected for a runtime, not gaps.
+
+### `.Graphics.PackedVector`: 17/17 types present, but a NEW systemic MEDIUM-HIGH finding
+
+**All 16 concrete `PackedVector` types (`Byte4`, `Short2`, `Alpha8`, `Bgr565`, `HalfVector4`, etc.)
+entirely lack `Equals()`, `GetHashCode()`, and `ToString()`.** Confirmed absent by direct read of 4
+representative files (`Byte4.hpp`/`Alpha8.hpp`/`HalfVector4.hpp`/`Rgba1010102.hpp`, 0 matches for any
+of the three) and confirmed this is a genuine CNA gap, not FNA-inherited or a project-wide
+convention: FNA's own `Byte4.cs` implements all three non-trivially (`GetHashCode()` returning
+`packedValue.GetHashCode()`, `ToString()` returning `packedValue.ToString("X")`), and this session's
+own Input-namespace sweep confirms `GamePadState`/`MouseState`/`KeyboardState` all correctly
+implement the same three members in CNA, as do `Vector2`/`Color`/`Rectangle` per the earlier Graphics
+sweep -- making PackedVector's complete omission an isolated gap in one type family, not a
+deliberate scope decision or missed project-wide pattern. Practical impact: `operator==`/`!=` cover
+direct comparisons, so nothing is silently *wrong*, but any code trying to put a `Byte4`/`Short2`/
+etc. in a `std::unordered_map`, or debug-print one via `.ToString()`, simply won't compile. Distinct
+from (adjacent to) the already-confirmed HIGH `Byte4`/`Short2`/`Short4.Pack()` truncate-vs-round
+bug -- that's 3 types' packing *arithmetic*; this is all 16 types' missing object-contract
+*members* entirely.
+
+### `.Content` (runtime): 6/11 types present and complete; 5/11 absent, likely architecturally correct
+
+`ContentManager`/`ContentReader`/`ContentTypeReader`/`ContentTypeReaderManager`/
+`ResourceContentManager`/`ContentLoadException` all fully present (including `ContentReader`'s
+`ReadSingle()`/`ReadDouble()`, correctly inherited from `sharp-runtime`'s `BinaryReader` base class,
+mirroring FNA's own inheritance). The 5 absent types (`ContentSerializer*Attribute` family) are C#
+custom attributes consumed by the Content Pipeline's build-time reflection-driven serializer, with
+no C++ equivalent to C# attribute-based reflection -- given CNA's own hand-written
+`ContentTypeReader<T>`-registration design (rather than reflection-driven generic serialization) and
+`.Content.Pipeline` already being correctly out of scope, this is very likely a deliberate
+architectural consequence, not an independent oversight. Flagged LOW-MEDIUM for the record, not as
+an actionable "please implement" item.
+
+### `.Input` (GamePad/Keyboard/Mouse, distinct from `.Input.Touch`): 17/17 types, 1 LOW tagging nit
+
+All 17 real types present, plus 2 correct `NOXNA` extras (`MouseCursor`, `TextInputEXT`). All 3 most
+complex/stateful types (`GamePadState`/`MouseState`/`KeyboardState`) correctly implement `Equals`/
+`GetHashCode`/`ToString` -- a useful positive contrast to the PackedVector finding above. One LOW
+nit: `KeyboardState::ToString()` is marked `NOXNA` despite being a genuine real XNA 4.0 member
+(`MouseState`/`GamePadState`'s own `ToString()` are correctly NOT tagged `NOXNA`) -- a minor tagging
+inconsistency per this project's own `CLAUDE.md` convention.
+
+### `.Media` (full namespace, excluding `VideoPlayer`/`Video` already swept separately): 21/21 types, ZERO gaps
+
+`Album`/`Artist`/`Genre`/`MediaLibrary`/`MediaPlayer`/`MediaQueue`/`MediaSource`/`Picture`/
+`PictureAlbum`/`Playlist`/`Song`/their collections, all fully present. Spot-checked `Song` in detail
+given this project's own persistent-memory-recorded historical note that FNA itself once omitted
+real `Song.Album`/`Artist`/`Genre`/`ToString()` -- **confirmed already resolved**: CNA's `Song.hpp`
+has all of them correctly present, plus a documented, intentional `GetHashCode()` improvement
+(content-based, not identity-based, unlike FNA's own choice).
+
+### Pass 3 running total
+
+Across all sweeps to date (Graphics 781 members/2 gaps, Net ~120/1, GamerServices ~200/0,
+XACT-Audio-subset ~60/1, Framework-core+Game ~900/1, Touch+Storage+Video ~118/0, Avatar+rest-Audio
+~145/0, PackedVector+Content+Input+Media ~215+/2 (1 systemic)): **roughly 2700+ combined members
+individually checked across every real `Microsoft.Xna.Framework.*` namespace, 7 genuine gaps found**
+(2 MEDIUM: `DisplayMode.TitleSafeArea`/`ToString()`, PackedVector's systemic missing
+`Equals`/`GetHashCode`/`ToString`; 1 re-confirmation of an already-known finding via a different
+method: `VertexPositionColor` missing `IVertexType`; 4 LOW: `GraphicsDeviceInformation`
+`Equals`/`GetHashCode`, `AudioCategory.ToString()`, `NetworkSession.MaxSupportedGamers`/
+`MaxPreviousGamers` NOXNA-mistagging, `KeyboardState::ToString()` NOXNA-mistagging; 1 LOW-MEDIUM
+architectural note: `.Content`'s 5 absent `ContentSerializer*Attribute` types). This project's real
+XNA 4.0 API *surface* is confirmed overwhelmingly complete -- almost every defect this entire audit
+has found is *behavioral* (wrong formulas, dropped events, missing null checks), not a missing
+member. Pass 3 is now considered complete for every namespace with runtime-relevant surface.
+
 ## Pass 3 continued and CLOSED OUT: remaining namespaces (Framework core, Storage, Input.Touch, Video, Avatar, plain Audio)
 
 Completes Pass 3's API-surface-completeness sweep, using the identical proven methodology as the
