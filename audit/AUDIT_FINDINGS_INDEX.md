@@ -1,8 +1,11 @@
 # AUDIT_FINDINGS_INDEX.md
 
-**Status: SKELETON — populated incrementally as per-file audits surface findings worth surfacing globally (not
-every `INFO`-level note needs an index entry; use judgment — this index is for anything `MEDIUM`+ severity, or
-`LOW` if it recurs across many files).**
+**Status: POPULATED (updated 2026-07-19).** The "By severity" section below was filled in incrementally as
+per-file audits surfaced findings worth surfacing globally (not every `INFO`-level note gets an index entry —
+this index is for anything `MEDIUM`+ severity, or `LOW` if it recurs across many files). The "By subsystem" and
+"By category" sections were mechanically rebuilt from that same severity table in this update — same findings,
+regrouped for two different questions ("what's wrong with backend X" vs. "how many findings are architecture
+bugs vs. shader-math bugs"), not new content.
 
 Recommendations recorded here are for future prioritization only — **no implementation work is performed as part
 of this audit** (see `CLAUDE.md`/audit prompt "No-development rule").
@@ -281,7 +284,106 @@ _(none recorded yet)_
   for this index, lives under `audit/examples/easygl_*.audit.md`.
 
 ## By subsystem
-_(index rebuilt from the severity table above once populated)_
+
+Same findings as "By severity" above, regrouped by which backend/subsystem owns the fix. A finding shared by
+multiple backend-groups (e.g. the skinned-normal-transform sweep) is listed once per group it affects.
+
+- **SdlGpu**: fog completely unimplemented (HIGH); constructor resource-leak on any of 10 sequential
+  pipeline-creation calls throwing (MEDIUM); SkinnedEffect world-space-normal-transform omission (HIGH, part of
+  the 6-backend-group sweep); EnvironmentMapEffect emissive-remultiply (HIGH, part of the 4-backend sweep).
+- **D3D12**: `StencilState`/`ScissorTestEnable`/`DepthBias`/`SlopeScaleDepthBias` completely non-functional
+  (HIGH); `OcclusionQuery` multi-draw-per-Begin/End only captures the last draw (HIGH); fog formula backwards,
+  shared `D3DCommon` source, all 15 fog shaders (HIGH); SkinnedEffect world-space-normal-transform omission
+  (HIGH); SkinnedEffect `EmissiveColor` dropped for skinned draws, shared `D3DCommon` (HIGH).
+- **D3D11**: fog formula backwards, shared `D3DCommon` source (HIGH, same instance as D3D12); SkinnedEffect
+  world-space-normal-transform omission (HIGH, shared source); SkinnedEffect `EmissiveColor` dropped for skinned
+  draws (HIGH, shared source); EnvironmentMapEffect emissive-remultiply (HIGH, shared source). Positive: does
+  NOT share Vulkan's `EnvironmentMapEffect` Y-flip bug; correct MRT-finalization fix (DX-143).
+- **Vulkan**: `SpriteBatch.Begin(transformMatrix)` silently dropped, only affected backend (HIGH); missing-Y-flip
+  across 4 effect families — EnvironmentMapEffect, PbrEffect, SkinnedPbrEffect, InstancedEffect (HIGH);
+  `SkinnedEffect::FillGpuDrawParams()` never sets `ambientColor`, shaders never consume `emissiveColor` (HIGH);
+  fog formula backwards, original source of the bug (HIGH); SkinnedEffect world-space-normal-transform omission,
+  original source (HIGH); EnvironmentMapEffect emissive-remultiply (HIGH); scissor silently non-functional
+  whenever a render target is bound, undisclosed (HIGH, found this pass); `BasicEffect::VertexColorEnabled` bare
+  public field (MEDIUM); dead-code `VulkanVertexFormatHelper.hpp` (LOW-ish architecture note).
+- **Bgfx**: `EnsureViewState()`'s `Clear*()` unconditionally clears color+depth+stencil regardless of requested
+  `ClearOptions` (HIGH-ish, per its own test report); SkinnedEffect world-space-normal-transform omission, one of
+  the 6 confirmed backend-groups (HIGH); EnvironmentMapEffect emissive-remultiply, original source (HIGH); fog
+  formula backwards (HIGH); 2 known-failing CTests with no `WILL_FAIL` (`Bgfx_RenderTargetCube_DepthFormat`,
+  `Bgfx_SkinnedEffect_WeightsPerVertex`, MEDIUM); `BasicEffect::VertexColorEnabled` bare public field (MEDIUM,
+  same cross-backend finding as Vulkan); dead-code `BgfxVertexFormatHelper.hpp`/its own test never exercising the
+  real code path (LOW-ish). Positive: the most complete Stencil+Scissor+DepthBias implementation of any backend.
+- **EasyGL**: constructor failure after `RegisterForWindow()` leaves a dangling window-registry entry — **the
+  most severe confirmed finding in this audit** (HIGH); SkinnedEffect world-space-normal-transform omission,
+  originating instance for the WebGPU-porting chain (HIGH); `SkinnedPbrEffect` raw-World-instead-of-inverse-
+  transpose variant (MEDIUM); `DrawUserPrimitives(void*, VertexDeclaration&)` never propagates the declaration to
+  the backend (finding recorded against a test, XNA-facing root cause); MSAA test cannot actually verify MSAA
+  (documentation/test-authoring); dynamic-buffer-stress test's index-buffer half never exercises what it claims
+  to; several stale "known bug" doc comments contradicted by later fixes (recurring LOW pattern, 218-file shard).
+- **WebGPU**: SkinnedEffect world-space-normal-transform omission, explicitly a line-for-line EasyGL port (HIGH);
+  EnvironmentMapEffect emissive-remultiply (HIGH); `SpriteBatch`'s clip-space mapping always backbuffer-relative,
+  never render-target-relative (HIGH). Positive: model-example constructor exception safety (the standard this
+  audit judged every other `RegisterForWindow`-calling backend against).
+- **D3D9**: custom (non-vendored) `PbrSkinned3D.hlsl` shares the skinned-normal-transform bug, 4th confirmed
+  instance (HIGH); "object-space-only fog" in 3 custom shaders — a different bug from the Task-1111 mirrored
+  formula (HIGH-ish, new pattern). Positive: vendored stock effects are real, byte-verified Microsoft bytecode
+  and immune to every shader-level bug above by construction; the most architecturally complete
+  Stencil+Scissor+DepthBias implementation of any backend (native render states, no emulation needed).
+- **SdlRenderer**: 2 tests with stale expected-throw assertions superseded by a real, intentional production fix
+  (commit `90f5db2c`, MEDIUM); `SpriteFont`'s flip-lookup tables sized 3 not FNA's 4, OOB-read risk on an
+  out-of-range `SpriteEffects` cast (MEDIUM). Positive: exceptionally well-documented bug-fix history (8+ "Task
+  NNN finding" comments), correct 2D/3D boundary enforcement.
+- **Headless**: `HeadlessStatistics::primitiveCount` undercounts instanced draws by `instanceCount` (MEDIUM).
+- **Software**: `DepthBufferWriteEnable`/`SetDepthWriteEnabled` have no effect (MEDIUM); `DepthBufferFunction`
+  hardcoded to LessEqual, ignoring the other 6 `CompareFunction` values (MEDIUM). Positive: correct
+  perspective-correct interpolation and Sutherland-Hodgman near-plane clipping, a genuine from-scratch rasterizer.
+- **Dx3**: `SetVirtualResolution` resize failure destroys working surfaces before confirming the replacement,
+  leaving the backend permanently unusable (MEDIUM). Positive: correct blend-math (including the two
+  ostensibly-suspicious `srcAlpha²` terms independently re-derived and confirmed correct), correct constructor
+  exception safety.
+- **Ascii / Canvas**: no MEDIUM+ findings recorded (Ascii: LOW blend-state-leak-after-Present risk; Canvas: LOW
+  uninitialized-buffer risk in an Emscripten-only file's non-Emscripten fallback path). Both confirmed clean of
+  the `RegisterForWindow` constructor-ordering bug.
+- **`cna-devices`** (not a graphics backend): `FileDialog.cpp`/`MessageBox.cpp` share a use-after-free window via
+  a swappable-global-backend pattern (HIGH).
+- **CNA core infrastructure** (not a graphics backend): `CNA::Logger::ToSDLPriority()` mistags every
+  `Fatal`/`Error`/`Warn` log call as `SDL_LOG_PRIORITY_INFO` — foundational, always-compiled, project-wide (HIGH).
+- **`Microsoft::Xna::Framework::Graphics`** (XNA-facing shared layer, affects every backend uniformly):
+  `SpriteFont::MeasureString`/`SpriteBatch::DrawString` unchecked `unordered_map::end()` dereference (HIGH);
+  `SpriteBatch::Begin()` sets `begun_=true` before fallible backend calls, permanently stuck state on throw
+  (MEDIUM-ish); `GraphicsDevice::SetRenderTargets` mutates tracked state before the backend call can throw
+  (MEDIUM-ish, same shape as the SpriteBatch finding).
 
 ## By category
-_(correctness / FNA-parity / architecture / performance / memory / portability / testing — rebuilt once populated)_
+
+- **FNA-parity / shader-math correctness** (the largest category by finding count): fog formula backwards
+  (Bgfx/Vulkan/D3D11/D3D12), fog completely absent (SdlGpu), object-space-only fog (D3D9 custom shaders),
+  SkinnedEffect world-space-normal-transform omission (6 backend-groups, exhaustive sweep), SkinnedEffect
+  raw-World-not-inverse-transpose variant (6 confirmed instances), SkinnedEffect Ambient/Emissive dropped
+  (Vulkan, D3D11/D3D12), EnvironmentMapEffect emissive-remultiply (Bgfx/WebGPU/Vulkan/SdlGpu), Vulkan missing-
+  Y-flip (4 effect families), Software's hardcoded depth-write/depth-function.
+- **Memory safety / resource lifecycle**: EasyGL `RegisterForWindow`-before-fallible-step dangling pointer
+  (the audit's single most severe finding), SdlGpu's unwrapped-constructor resource leak, `cna-devices`
+  `FileDialog`/`MessageBox` use-after-free, Dx3's destroy-before-replace resize failure.
+- **State-mutation-before-fallible-call** (a recurring shape, 3 independent instances): `SpriteBatch::Begin()`,
+  `GraphicsDevice::SetRenderTargets`, and (a variant) D3D11's now-fixed MRT-finalization bug (DX-143) — the
+  first two remain open, the third was found already fixed, a genuine positive counter-example of the same
+  risk pattern being correctly handled.
+- **Backend-specific logic bugs (non-shader)**: Vulkan `SpriteBatch.SetTransformMatrix()` no-op, Vulkan scissor
+  silently inert when a render target is bound, D3D12 Stencil/Scissor/DepthBias non-functional, D3D12
+  `OcclusionQuery` multi-draw overwrite, Headless `primitiveCount` instancing undercount, WebGPU
+  backbuffer-relative-only `SpriteBatch` clip-space mapping.
+- **Foundational/infrastructure**: `CNA::Logger::ToSDLPriority()` mistagging every non-`DEBUG`/`TRACE`/
+  `EXPERIMENT` log level — the one finding in this list that isn't graphics-backend- or Devices-specific.
+- **Architecture / dead code**: `BgfxVertexFormatHelper.hpp`/`VulkanVertexFormatHelper.hpp` (correct logic, zero
+  production call sites, and in Bgfx's case, its own test never exercises the real path either);
+  `BasicEffect::VertexColorEnabled` as a bare public field (violates this project's own C# property convention).
+- **Testing / CI hygiene**: 3+ currently-failing CTests with no `WILL_FAIL`/skip annotation
+  (`EasyGL_AvatarRenderer_TintRouting`, `Bgfx_RenderTargetCube_DepthFormat`, `Bgfx_SkinnedEffect_WeightsPerVertex`)
+  — a real CI-masking risk, not just noise; 2 SdlRenderer tests with stale expected-throw assertions after an
+  intentional production behavior change; a recurring documentation-rot pattern (stale "known bug" comments in
+  the EasyGL 218-file shard describing defects already fixed); tests that assert only metadata/capacity instead
+  of actual data content; weak enum-value coverage (`CompareFunction` tested for only 5 of 8 values).
+- **Robustness / undefined behavior reachable via public API**: `SpriteFont::MeasureString`/`SpriteBatch::
+  DrawString`'s unchecked `unordered_map::end()` dereference; `SpriteFont`'s undersized flip-lookup table
+  (3 entries, not FNA's 4) risking an out-of-bounds `constexpr`-array read for an out-of-range enum cast.
