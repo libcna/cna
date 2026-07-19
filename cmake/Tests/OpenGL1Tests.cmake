@@ -121,4 +121,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_GraphicsCapability COMMAND cna_test_opengl1_graphics_capability
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md phase 4: fixed-function texture environment/combine mappings, closing the
+    # gap DrawInternal's stride==16/24 vertex-color paths had (vertex color used alone, ignoring
+    # BasicEffect's material DiffuseColor/EmissiveColor entirely). Reused verbatim from EasyGL's
+    # own Task 370 capstone test (backend-agnostic) -- asserts the exact multiplicative formula
+    # TextureColor x VertexColor x (DiffuseColor+EmissiveColor) across 4 independent texels.
+    cna_opengl1_test(cna_test_opengl1_basiceffect_combined
+                      examples/easygl_basiceffect_combined_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_BasicEffect_Combined COMMAND cna_test_opengl1_basiceffect_combined
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
