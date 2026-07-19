@@ -2106,6 +2106,25 @@ test.
 `add_test()`-registered golden-image tests in `cmake/Tests/EasyGLTests.cmake`/`VulkanTests.cmake`
 (already audited, confirmed correct) for the identical reason.
 
+**Independently confirmed by a second, separately-dispatched pass at this same investigation**:
+running `./cmake-build-debug/CnaTests` directly (no `ctest` involved at all, CWD = repo root) gives
+**5503 PASSED / 4 SKIPPED (the hardware-dependent Accelerometer/Gyroscope cases below, expected) / 0
+FAILED out of 5507** -- a completely clean run, consistent with this project's own historical memory
+of a clean `4911 tests / 0 failed` result from an earlier session on a different branch. This
+crisply confirms the `ctest`-reported 96%/229-failed number is entirely a CTest-invocation artifact:
+the same binary, same tests, same fixture files, 100% clean when CWD is right. That second pass also
+found, via `grep -rn "WILL_FAIL" cmake/Tests/*.cmake cmake/UnitTests.cmake`, that **this project has
+never used CTest's `WILL_FAIL` mechanism anywhere, for any backend** -- the only related mechanism
+in use is `SKIP_REGULAR_EXPRESSION` (WebGPU's own environment-conditional MSAA test, a genuine
+environment-based skip, not an expected-failure marker). This means every "currently failing, no
+`WILL_FAIL` annotation" finding in this audit (`EasyGL_AvatarRenderer_TintRouting`,
+`Bgfx_RenderTargetCube_DepthFormat`, `Bgfx_SkinnedEffect_WeightsPerVertex`,
+`EasyGL_GraphicsDevice_ReferenceStencil`, `EasyGL_MRT_TwoAttachments`) is not five independent
+oversights -- the project has simply never adopted this CTest feature at all, for any of its
+several-dozen already-known-and-disclosed-in-source limitations project-wide. Adopting `WILL_FAIL`
+(or an equivalent convention) as a project-wide practice would be a higher-leverage fix than
+annotating each already-found instance one at a time.
+
 ### Derived finding, MEDIUM severity: `MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent` SEGFAULTs rather than failing cleanly
 
 A genuinely separate robustness gap, currently only reachable because of the `WORKING_DIRECTORY`
