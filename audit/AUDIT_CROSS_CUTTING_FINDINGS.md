@@ -811,3 +811,51 @@ _(pending)_
   both enums across the entire codebase is now confirmed to correctly avoid the ordinal-mismatch trap** — a
   clean resolution, not a defect. `SDL_SENSOR_INVALID`/unrecognized values correctly fall through to
   `SensorTypeEXT::Unknown` via the switch's `default` case, not undefined behavior.
+- **HIGH: `ENetBackend.cpp`'s `HandleReceive()` dispatches host-only broadcast messages
+  (`ServerWelcome`/`GamerJoinBroadcast`/`GamerLeaveBroadcast`/`StateChangeBroadcast`) with no check that the
+  sending peer is this session's authoritative host** -- found while auditing `cna-internal-core`'s Net
+  subsystem. `peer` is passed to `HandleClientHello`/`HandleConnect`/`HandleDisconnect`/`HandleAppData` but
+  NOT to the four broadcast-only handlers, so any connected `ENetPeer` (i.e. any client, using a
+  modified/custom ENet client speaking this fully-inferable wire format -- no MITM or spoofing needed) can
+  forge these directly to the host: kick arbitrary other gamers via a forged `GamerLeaveBroadcastMessage`,
+  inject fake gamers into the host's own roster via a forged `GamerJoinBroadcastMessage`/`ServerWelcomeMessage`
+  (the latter also corrupts the host's own local wire-id assignment), or force an arbitrary
+  `NetworkEventType::StateChange` via a forged `StateChangeBroadcastMessage`. This is orthogonal to the
+  subsystem's own extensive, separately-tracked `audit_net.md` remediation history (a dozen-plus prior fixes,
+  all addressing lifecycle/bookkeeping correctness under honest-client conditions) -- none of that work
+  covered an adversarial/modified-client threat model. See `src/CNA/Internal/Net/ENetBackend.cpp.audit.md`
+  for the full trace and fix shape. Related, lower-severity: `HandleClientHello` has no per-peer resend
+  guard, allowing unbounded fake-gamer injection via repeated `ClientHello` sends from one peer.
+- **HIGH (32-bit `size_t` targets only): `AudioTagParser.cpp`'s ID3v2.3 and FLAC-picture-block length
+  validation uses `pos + len > bound`-style bounds checks vulnerable to unsigned-integer-overflow wraparound**
+  -- found while auditing `cna-internal-core`'s Media subsystem. Safe on all 64-bit desktop builds (the
+  primary target), but a maliciously crafted `.mp3`/`.flac` file in the user's Music library could trigger a
+  genuine out-of-bounds heap read on a 32-bit `size_t` build (e.g. Android armeabi-v7a). Contrast with
+  `XactParser.cpp` (same shard), which was explicitly hardened against this exact overflow class per a cited
+  external audit (AUDIO-PARSER-001) -- the two files show different levels of hardening maturity against the
+  identical vulnerability class. See `src/CNA/Internal/Media/AudioTagParser.cpp.audit.md`.
+- **MEDIUM: `PlaylistParser.cpp` performs no path-containment check on `.m3u`/`.m3u8` playlist entries** --
+  found while auditing `cna-internal-core`'s Media subsystem. Accepts absolute paths and `..`-escaping
+  relative paths as-is (standard M3U behavior, not unique to this codebase), but inconsistent with this same
+  shard's own established untrusted-path defenses (`CnjSourceFile.hpp`'s root-containment check,
+  `SavedPictureStore.cpp`'s single-filename-segment sanitization) -- a hostile playlist file could make the
+  engine open/decode an arbitrary existing file elsewhere on the filesystem. See
+  `src/CNA/Internal/Media/PlaylistParser.cpp.audit.md`.
+- **MEDIUM: `VideoDecoder.cpp`'s `ConvertFrameToRGBA()`/YUV-conversion helpers index a decoded frame using
+  stale cached `width_`/`height_` rather than the frame's own dimensions** -- found while auditing
+  `cna-internal-core`'s Media subsystem. A potential OOB read if a video stream changes resolution mid-decode
+  (low likelihood for this project's authored-cutscene use case, but currently unguarded). Notable because
+  this file otherwise has the densest prior-review-fix documentation of any file in the whole audit
+  (18+ cited `plan_media.md` findings) yet doesn't address this specific case. See
+  `src/CNA/Internal/Media/VideoDecoder.cpp.audit.md`.
+
+## Licensing/header-convention inconsistencies
+
+- **The entire `CNA::Internal::Net` subsystem (`ENetLibrary`, `ENetHostHandle`, `ENetDiscoveryService`,
+  `NetDiscoveryProtocol`, `NetPacketCodec`, `ENetBackend` -- 12 files) uses `// SPDX-License-Identifier: MIT`
+  plus an explicit `// Copyright (c) Robert Vokac and contributors` line**, diverging from every other
+  CNA-original NOXNA file audited elsewhere (`Json.hpp`, the Media subsystem, `GltfImportCore`,
+  `PbrMaterial.hpp`, etc.), all of which use only `// SPDX-License-Identifier: MS-PL` with no separate
+  copyright line. `include/CNA/Misc.hpp` (also audited, `cna-root-utilities` shard) has no SPDX header at
+  all -- a third variant. May be intentional (ENet itself is MIT-licensed), but is currently an unrecorded
+  inconsistency across three different conventions in the codebase's own NOXNA code.
