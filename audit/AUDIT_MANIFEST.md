@@ -146,7 +146,7 @@ truth; a full resync of this table across all 105 shards is deferred to Pass 7 (
 | [`examples-demo_gamerservices_signin_presence`](manifest/examples-demo_gamerservices_signin_presence.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_guide_overlay_console`](manifest/examples-demo_guide_overlay_console.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
 | [`examples-demo_input`](manifest/examples-demo_input.md) | 3 | PENDING: 3 / AUDITED: 0 |
-| [`examples-demo_leaderboard_viewer`](manifest/examples-demo_leaderboard_viewer.md) | 3 | PENDING: 3 / AUDITED: 0 |
+| [`examples-demo_leaderboard_viewer`](manifest/examples-demo_leaderboard_viewer.md) | 3 | AUDITED: 3 / PENDING: 0 (complete) |
 | [`examples-demo_net_avatar_sync`](manifest/examples-demo_net_avatar_sync.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_net_client_server_arena`](manifest/examples-demo_net_client_server_arena.md) | 3 | PENDING: 3 / AUDITED: 0 |
 | [`examples-demo_packet_roundtrip`](manifest/examples-demo_packet_roundtrip.md) | 1 | AUDITED: 1 / PENDING: 0 (complete) |
