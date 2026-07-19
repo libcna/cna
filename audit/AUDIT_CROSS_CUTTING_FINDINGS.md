@@ -253,6 +253,17 @@ _(pending — revisit once more backends are audited)_
   scope. **`SystemTray`/`Camera` do NOT share this bug** — both use per-instance constructor-injected backends
   (no global swappable state), a structurally different and safer design for the same "inject a fake for
   testing" goal.
+- **Related, LOWER-severity pattern found while auditing `cna-internal-core`'s `CNA::Internal::Input`
+  subsystem: every `System*Backend`/`Sdl*Backend` seam (8 confirmed instances — `SystemDeviceBackend`,
+  `SystemKeyboardBackend`, `SystemMouseBackend`, `SystemPowerBackend`, `SystemSensorBackend`,
+  `SdlGamepadBackend`, `SdlHapticBackend`, `SdlJoystickBackend`) uses a plain, entirely unsynchronized
+  global raw-pointer swap for its own test-injection hook** (`g_currentBackend = backend ? backend :
+  &g_realBackend;`, no mutex at all). This is a distinct pattern from the `FileDialog`/`MessageBox` bug
+  above, and arguably lower-risk in practice: there is no mutex creating a false sense of protection —
+  the code is honestly, visibly unsynchronized by inspection, consistent with the documented intent (a
+  test-setup-only call, never expected to race a real read). Not flagged as a defect on its own, but
+  recorded because it's the same *shape* of "global swappable test backend" as the confirmed bug above,
+  just missing the ingredient (a broken-but-present mutex) that makes that one actively dangerous.
 
 ## Recurring performance risk patterns
 
@@ -790,8 +801,13 @@ _(pending)_
   `to_power_state_ext()` uses an explicit, exhaustive switch, not a cast. **UPDATE — 2nd confirmation while
   auditing `cna-devices`: `CNA::Devices::PowerInfo.cpp`'s own `ConvertSdlPowerState()` independently uses the
   identical safe pattern** (an explicit, exhaustive switch, byte-for-byte the same shape as `Input::Power.cpp`'s
-  own function) — both of this codebase's 2 independent `PowerState` implementations get this right. **NOT yet
-  verified**: the actual mapping sites for `JoystickCapabilitiesEXT::powerState` and `Sensors::
-  GetSensorsEXT()`'s own `SDL_SensorType`-to-`SensorTypeEXT` conversion both live in backend classes
-  (`SdlInputBridge`/`SystemSensorBackend`) not yet audited as of this update (tracked under
-  `cna-internal-core`) — check both use an explicit switch, not a raw cast, when that shard is reached.
+  own function) — both of this codebase's 2 independent `PowerState` implementations get this right.
+  **RESOLVED, fully confirmed SAFE while auditing `cna-internal-core`**: `SdlInputBridge.cpp`'s
+  `sdl_power_state_to_ext()` (populating `JoystickCapabilitiesEXT::powerState`) and
+  `SystemSensorBackend.cpp`'s `sdl_sensor_type_to_ext()` (populating `Sensors::GetSensorsEXT()`'s results)
+  BOTH independently use explicit, exhaustive switches — no raw cast anywhere. This is the 3rd confirmed-safe
+  `PowerState` conversion site (after `Input::Power.cpp`, `Devices::PowerInfo.cpp`) and the 2nd confirmed-safe
+  `SensorType` conversion site (the only one — `Sensors.cpp` itself just delegates). **Every mapping site for
+  both enums across the entire codebase is now confirmed to correctly avoid the ordinal-mismatch trap** — a
+  clean resolution, not a defect. `SDL_SENSOR_INVALID`/unrecognized values correctly fall through to
+  `SensorTypeEXT::Unknown` via the switch's `default` case, not undefined behavior.

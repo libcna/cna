@@ -102,7 +102,20 @@ management throughout (`SdlCameraBackend`'s row-padding-safe frame copy, `SdlFil
 reserve-before-pointer async-callback safety, `SdlTrayBackend`'s correct destruction ordering) — and the best
 test coverage of any CNA-core shard so far (every major public class has a dedicated test file).
 
-Remaining Task #3 shards: `cna-internal-core` (113, the last one).
+`cna-internal-core` (34/113 done, IN PROGRESS) — the last, largest Task #3 shard. Covered so far:
+`CNA::Internal::Input` (all 22 files — resolved the `PowerStateEXT`/`SensorTypeEXT` ordinal-mismatch flag as
+fully SAFE across every population site; found a misplaced/orphaned Doxygen comment on
+`SdlInputBridge::GetKeyFromScancode()`; confirmed a related-but-lower-severity unsynchronized
+global-pointer test-swap pattern across 8 `System*Backend`/`Sdl*Backend` seams, distinct from the
+`FileDialog`/`MessageBox` mutex bug), `Utf8Decode.hpp`, `CNA::Internal::Graphics` (`ImageData`/`ImageLoader`/
+`DxtUtil` — `DxtUtil.cpp`'s DXT1/3/5 decompression independently verified bit-for-bit correct against the
+reference algorithm, with genuinely defensive upfront bounds-checking), and `CNA::Internal::Audio`'s
+`WavWrapper`/`AudioMixer`/`XactTypes.hpp`/`XactParser.cpp` (`AudioMixer.cpp`'s thread-safety and atomic
+memory-ordering independently verified correct with 2 real historical crash fixes; `XactParser.cpp` is one
+of the most rigorously security-hardened files found in this entire audit — externally audited and
+fuzz-tested pointer-arithmetic-UB, allocation-bomb, and ASan-confirmed heap-overflow fixes all verified
+genuinely implemented). Remaining in this shard: `GamerServices` (2), `GltfImport` (2), `CnjEnvelope`/
+`CnjSourceFile` (2), `Json.hpp` (1), `Media` (20), `Net` (14), `Xnb` (40).
 
 **Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
 `EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
@@ -159,18 +172,18 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **898** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **932** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
   backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, backend-bgfx ×34, backend-vulkan ×40, backend-d3d9 ×50,
-  cna-graphics ×7, cna-root-utilities ×15, cna-input ×31, cna-devices ×39, examples-tests-easygl ×218,
-  examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70, examples-tests-webgpu ×22,
-  examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22, examples-tests-generic ×24)
-- PENDING: **1399**
-- IN_PROGRESS: **0** manifest-tracked
+  cna-graphics ×7, cna-root-utilities ×15, cna-input ×31, cna-devices ×39, cna-internal-core ×34 (partial, 34/113),
+  examples-tests-easygl ×218, examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70,
+  examples-tests-webgpu ×22, examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22, examples-tests-generic ×24)
+- PENDING: **1365**
+- IN_PROGRESS: **1** manifest-tracked (`cna-internal-core`, 79 files remaining)
 - BLOCKED: **0**
 
-**~39.1% AUDITED so far** (898/2297). **All 16 backend shards fully audited; Task #3 (CNA core) in progress
-(4 of 5 shards done).**
+**~40.6% AUDITED so far** (932/2297). **All 16 backend shards fully audited; Task #3 (CNA core) in progress
+(4 of 5 shards done, 5th shard `cna-internal-core` 34/113 done).**
 
 `backend-bgfx` (34 files) is now fully audited — all 28 `.sc` shaders individually read, plus a scoped-depth
 review of the 695+3443-line main backend header/cpp, the vertex-format-helper header, the renderer-selection
