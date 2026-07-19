@@ -697,16 +697,17 @@ possibilities of OpenGL 2"):
   except `cna_demo_xact`, which fails only at its Content-copy POST_BUILD step because
   `examples/demo_xact/Content/` does not exist in this checkout at all (never committed to git) --
   pre-existing, unrelated to this backend or this branch.
-- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5521
-  cases) has 224 pre-existing failures, none caused by this backend: ~220 are missing local test
-  fixture files (media/audio/video/XNB content assets absent from this checkout, e.g.
-  `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`) that fail
-  identically regardless of graphics backend, and
-  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` is a pre-existing EasyGL-specific
-  assumption baked into that test file's own header comment ("this test target only ever builds
-  against a fully 3D-capable backend (EasyGL by default on Linux)") -- it fails because OpenGL2's
-  `SupportsCapability` still uses the blanket "everything supported" default (see the
-  already-tracked follow-up item below), not because of any regression introduced here.
+- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5539 cases
+  as of session 8) has 226 pre-existing/expected failures, none an actual regression: ~220 are
+  missing local test fixture files (media/audio/video/XNB content assets absent from this
+  checkout, e.g. `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`)
+  that fail identically regardless of graphics backend, and 2 (`GraphicsDeviceCapabilityTest.
+  DoesNotSupportWireFrame`/`.SupportsMultipleRenderTargets`) are that same shared test file's own
+  documented EasyGL-only assumption ("this test target only ever builds against a fully
+  3D-capable backend (EasyGL by default on Linux)") -- `SupportsMultipleRenderTargets` newly joined
+  this category in session 8 specifically BECAUSE `SupportsCapability(MultipleRenderTargets)` was
+  fixed to truthfully report `false` on OpenGL2 (see above); this is the correct, expected
+  consequence of that fix, not a regression it introduced.
 
 ## Status: EasyGL capability audit + 6 real gaps fixed (2026-07-20, session 8)
 With all 6 explicitly-requested follow-up items from session 7 complete, per the standing
