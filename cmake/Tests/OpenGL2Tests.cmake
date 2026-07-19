@@ -86,4 +86,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_graphics_capability examples/opengl2_graphics_capability_test.cpp)
     cna_register_backend_test(NAME OpenGL2_GraphicsCapability COMMAND cna_test_opengl2_graphics_capability
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: ShaderEffect (CreateEffectBackend) proof -- runtime-compiled custom GLSL,
+    # World/View/Projection wiring, uniform-by-name binding, and texture-unit binding.
+    cna_opengl2_test(cna_test_opengl2_shadereffect examples/opengl2_shadereffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_ShaderEffect COMMAND cna_test_opengl2_shadereffect
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

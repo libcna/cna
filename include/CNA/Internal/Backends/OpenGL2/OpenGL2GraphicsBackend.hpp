@@ -32,6 +32,7 @@ namespace CNA::Internal::Backends::OpenGL2
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc, const std::string& fragSrc) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,

@@ -228,6 +228,221 @@ namespace CNA::Internal::Backends::OpenGL2
                     out[c * 4 + r] = wvp[r * 4 + c];
         }
 
+        // ShaderEffect backend: a user-authored, runtime-compiled GLSL program (Task
+        // CreateEffectBackend / plan_opengl2.md follow-up). Reuses LinkProgram() -- so a custom
+        // vertex shader binds to the SAME fixed attribute locations as every built-in program
+        // here (0=aPosition, 1=aColor, 2=aTexCoord, 3=aNormal, 4=aBoneWeight, 5=aBoneIndices) --
+        // required because GLSL 1.10/1.20 (this file's target) has no `layout(location=N)`
+        // qualifier, unlike EasyGLEffectBackend's GLES3 shaders, which bind locations directly in
+        // the GLSL source instead of via glBindAttribLocation. A custom shader MUST use those
+        // exact attribute names to receive vertex data at all.
+        class EffectBackend final : public IEffectBackend
+        {
+        public:
+            ~EffectBackend() override { if (program_) glDeleteProgram(program_); }
+
+            bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override
+            {
+                try
+                {
+                    program_ = LinkProgram(vertSrc.c_str(), fragSrc.c_str());
+                    compileError_.clear();
+                    return true;
+                }
+                catch (const std::exception& e)
+                {
+                    program_ = 0;
+                    compileError_ = e.what();
+                    return false;
+                }
+            }
+
+            void Bind() override { if (program_) glUseProgram(program_); }
+            void Unbind() override { glUseProgram(0); }
+            [[nodiscard]] bool IsValid() const override { return program_ != 0; }
+            [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+
+            // GL 2.1 has no glProgramUniform* (DSA -- ARB_separate_shader_objects is GL 4.1+),
+            // so glUniform* always targets whichever program is CURRENTLY bound via glUseProgram,
+            // not the program object glGetUniformLocation was queried against. A caller is free
+            // to call SetUniformXxx() before ever calling Apply()/Bind() (real usage: XNA/FNA
+            // EffectParameter setters are commonly called in any order relative to Apply()), so
+            // each setter here re-binds its own program first rather than assuming it is already
+            // current -- otherwise the uniform would silently land on whatever OTHER program (a
+            // built-in one, or a different ShaderEffect) happened to be bound at that moment.
+            void SetUniformFloat(const char* name, float value) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniform1f(glGetUniformLocation(program_, name), value);
+            }
+            void SetUniformInt(const char* name, int value) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniform1i(glGetUniformLocation(program_, name), value);
+            }
+            void SetUniformVec2(const char* name, float x, float y) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniform2f(glGetUniformLocation(program_, name), x, y);
+            }
+            void SetUniformVec3(const char* name, float x, float y, float z) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniform3f(glGetUniformLocation(program_, name), x, y, z);
+            }
+            void SetUniformVec4(const char* name, float x, float y, float z, float w) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniform4f(glGetUniformLocation(program_, name), x, y, z, w);
+            }
+            void SetUniformMat4(const char* name, const float* matrix) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniformMatrix4fv(glGetUniformLocation(program_, name), 1, GL_FALSE, matrix);
+            }
+            void SetUniformFloatArray(const char* name, const float* values, int count) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniform1fv(glGetUniformLocation(program_, name), count, values);
+            }
+            void SetUniformVec2Array(const char* name, const float* values, int count) override
+            {
+                if (!program_) return;
+                glUseProgram(program_);
+                glUniform2fv(glGetUniformLocation(program_, name), count, values);
+            }
+            // Matches IEffectBackend::BindTexture's own doc comment: binds the texture object to
+            // the given unit only -- does NOT set any sampler uniform (the caller's own
+            // SetUniformInt("uSamplerName", unit) call wires that up), same contract as
+            // EasyGLEffectBackend's identical BindTexture/BindTextureCube/BindTexture3D.
+            void BindTexture(int unit, ITextureBackend* texture) override
+            {
+                if (!texture) return;
+                glActiveTexture(GL_TEXTURE0 + unit);
+                texture->BindGL();
+                glActiveTexture(GL_TEXTURE0);
+            }
+            void BindTextureCube(int unit, ITextureCubeBackend* texture) override
+            {
+                if (!texture) return;
+                glActiveTexture(GL_TEXTURE0 + unit);
+                texture->BindGL();
+                glActiveTexture(GL_TEXTURE0);
+            }
+            void BindTexture3D(int unit, ITexture3DBackend* texture) override
+            {
+                if (!texture) return;
+                glActiveTexture(GL_TEXTURE0 + unit);
+                texture->BindGL();
+                glActiveTexture(GL_TEXTURE0);
+            }
+
+        private:
+            GLuint program_{};
+            std::string compileError_;
+        };
+
+        // Binds `vboId`'s buffer and sets up all vertex attribute pointers (including position,
+        // location 0) for the given stride -- shared by drawInternal()'s normal built-in-effect
+        // path and its customEffectBackend early-return path, since a custom ShaderEffect draws
+        // through the exact same vertex data / attribute-location convention as every built-in
+        // program (see EffectBackend's own doc comment above).
+        void BindVertexAttributesForStride(GLuint vboId, std::size_t stride)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, vboId);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), nullptr);
+
+            // Stride-based vertex-layout dispatch: VertexPositionColor=16, VertexPositionTexture=20,
+            // VertexPositionColorTexture=24, VertexPositionNormalTextureSkinned=52/56 (checked before
+            // the >=32 catch-all below, since 52/56 also satisfy >=32), VertexPositionNormalTexture
+            // (any other size >=32; normal bound at location 3, read only by litProgram_/
+            // envMapProgram_ -- harmless for the other programs, which don't declare an aNormal
+            // attribute at all). Locations 4/5 (aBoneWeight/aBoneIndices) are skinned-only and must be
+            // explicitly disabled in every other branch, or a previous skinned draw's now-stale
+            // pointers would remain enabled (harmless to non-skinned programs, which don't declare
+            // those attributes, but left disabled for cleanliness/defensiveness).
+            if (stride == 16)
+            {
+                glEnableVertexAttribArray(1);
+                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glDisableVertexAttribArray(2);
+                glDisableVertexAttribArray(3);
+                glDisableVertexAttribArray(4);
+                glDisableVertexAttribArray(5);
+            }
+            else if (stride == 20)
+            {
+                glDisableVertexAttribArray(1);
+                glVertexAttrib4f(1, 1, 1, 1, 1);
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glDisableVertexAttribArray(3);
+                glDisableVertexAttribArray(4);
+                glDisableVertexAttribArray(5);
+            }
+            else if (stride == 24)
+            {
+                glEnableVertexAttribArray(1);
+                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(16));
+                glDisableVertexAttribArray(3);
+                glDisableVertexAttribArray(4);
+                glDisableVertexAttribArray(5);
+            }
+            else if (stride == 52 || stride == 56)
+            {
+                // VertexPositionNormalTextureSkinned: float3 pos(0) + float3 normal(12) +
+                // float2 uv(24) + float4 boneWeight(32) + ubyte4 boneIndices(48) [+ ubyte4 color(52)
+                // for the stride-56 variant -- matches EasyGLGraphicsBackend's own stride-56 comment:
+                // "the stride-52 layout with a per-vertex Color appended at the end (offset 52)
+                // rather than inserted mid-layout"]. Bone indices are read as unnormalized
+                // GL_UNSIGNED_BYTE (converted to float 0..255 exactly, no precision loss), NOT
+                // normalized to [0,1] -- the vertex shader casts them back to int bone-array indices.
+                glEnableVertexAttribArray(3);
+                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(24));
+                glEnableVertexAttribArray(4);
+                glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(32));
+                glEnableVertexAttribArray(5);
+                glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(48));
+                if (stride == 56)
+                {
+                    glEnableVertexAttribArray(1);
+                    glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(52));
+                }
+                else
+                {
+                    glDisableVertexAttribArray(1);
+                    glVertexAttrib4f(1, 1, 1, 1, 1);
+                }
+            }
+            else if (stride >= 32)
+            {
+                glDisableVertexAttribArray(1);
+                glVertexAttrib4f(1, 1, 1, 1, 1);
+                glEnableVertexAttribArray(2);
+                glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(24));
+                glEnableVertexAttribArray(3);
+                glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(12));
+                glDisableVertexAttribArray(4);
+                glDisableVertexAttribArray(5);
+            }
+            else
+            {
+                throw std::runtime_error("OPENGL2: unsupported vertex stride");
+            }
+        }
+
         class Tex final : public ITextureBackend
         {
         public:
@@ -1225,6 +1440,14 @@ namespace CNA::Internal::Backends::OpenGL2
         return std::make_unique<Texture3DBackend>(w, h, depth, mipMap);
     }
 
+    std::unique_ptr<IEffectBackend> OpenGL2GraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<EffectBackend>();
+        backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
+    }
+
     std::unique_ptr<IRenderTargetBackend> OpenGL2GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
@@ -1411,6 +1634,39 @@ namespace CNA::Internal::Backends::OpenGL2
             throw std::runtime_error("OPENGL2: incompatible vertex buffer");
         const auto* ib = dynamic_cast<const IB*>(ibi);
 
+        // Task CreateEffectBackend (plan_opengl2.md): a user-authored ShaderEffect entirely
+        // bypasses every built-in program/uniform above -- bind it directly, upload the XNA-HLSL-
+        // style "World"/"Projection"/"View" semantic names a custom shader is expected to declare
+        // (matches EasyGLGraphicsBackend::BindCustomEffectMatrices's identical uniform names), and
+        // draw using the same stride-based vertex layout every built-in program uses (see
+        // EffectBackend's own doc comment for why the attribute NAMES matter here, unlike EasyGL).
+        if (params && params->customEffectBackend)
+        {
+            params->customEffectBackend->Bind();
+            float worldCM[16], viewCM[16], projCM[16];
+            world.ToColumnMajor(worldCM);
+            view.ToColumnMajor(viewCM);
+            projection.ToColumnMajor(projCM);
+            params->customEffectBackend->SetUniformMat4("World", worldCM);
+            params->customEffectBackend->SetUniformMat4("View", viewCM);
+            params->customEffectBackend->SetUniformMat4("Projection", projCM);
+
+            BindVertexAttributesForStride(vb->id, vb->stride);
+
+            const int customVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            if (ib)
+            {
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
+                glDrawElements(ToGLPrimitiveMode(primitive), customVertexCount,
+                               ib->thirtyTwoBit ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
+            }
+            else
+            {
+                glDrawArrays(ToGLPrimitiveMode(primitive), 0, customVertexCount);
+            }
+            return;
+        }
+
         const bool skinned = params && params->skinned && (vb->stride == 52 || vb->stride == 56);
         const bool envMapped = params && params->envMapping && !skinned && vb->stride >= 32;
         const bool lit = params && params->lightingEnabled && !envMapped && !skinned && vb->stride >= 32;
@@ -1493,91 +1749,7 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         }
 
-        glBindBuffer(GL_ARRAY_BUFFER, vb->id);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), nullptr);
-
-        // Stride-based vertex-layout dispatch: VertexPositionColor=16, VertexPositionTexture=20,
-        // VertexPositionColorTexture=24, VertexPositionNormalTextureSkinned=52/56 (checked before
-        // the >=32 catch-all below, since 52/56 also satisfy >=32), VertexPositionNormalTexture
-        // (any other size >=32; normal bound at location 3, read only by litProgram_/
-        // envMapProgram_ -- harmless for the other programs, which don't declare an aNormal
-        // attribute at all). Locations 4/5 (aBoneWeight/aBoneIndices) are skinned-only and must be
-        // explicitly disabled in every other branch, or a previous skinned draw's now-stale
-        // pointers would remain enabled (harmless to non-skinned programs, which don't declare
-        // those attributes, but left disabled for cleanliness/defensiveness).
-        if (vb->stride == 16)
-        {
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
-            glDisableVertexAttribArray(2);
-            glDisableVertexAttribArray(3);
-            glDisableVertexAttribArray(4);
-            glDisableVertexAttribArray(5);
-        }
-        else if (vb->stride == 20)
-        {
-            glDisableVertexAttribArray(1);
-            glVertexAttrib4f(1, 1, 1, 1, 1);
-            glEnableVertexAttribArray(2);
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
-            glDisableVertexAttribArray(3);
-            glDisableVertexAttribArray(4);
-            glDisableVertexAttribArray(5);
-        }
-        else if (vb->stride == 24)
-        {
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
-            glEnableVertexAttribArray(2);
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(16));
-            glDisableVertexAttribArray(3);
-            glDisableVertexAttribArray(4);
-            glDisableVertexAttribArray(5);
-        }
-        else if (vb->stride == 52 || vb->stride == 56)
-        {
-            // VertexPositionNormalTextureSkinned: float3 pos(0) + float3 normal(12) +
-            // float2 uv(24) + float4 boneWeight(32) + ubyte4 boneIndices(48) [+ ubyte4 color(52)
-            // for the stride-56 variant -- matches EasyGLGraphicsBackend's own stride-56 comment:
-            // "the stride-52 layout with a per-vertex Color appended at the end (offset 52)
-            // rather than inserted mid-layout"]. Bone indices are read as unnormalized
-            // GL_UNSIGNED_BYTE (converted to float 0..255 exactly, no precision loss), NOT
-            // normalized to [0,1] -- the vertex shader casts them back to int bone-array indices.
-            glEnableVertexAttribArray(3);
-            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
-            glEnableVertexAttribArray(2);
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(24));
-            glEnableVertexAttribArray(4);
-            glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(32));
-            glEnableVertexAttribArray(5);
-            glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(48));
-            if (vb->stride == 56)
-            {
-                glEnableVertexAttribArray(1);
-                glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(52));
-            }
-            else
-            {
-                glDisableVertexAttribArray(1);
-                glVertexAttrib4f(1, 1, 1, 1, 1);
-            }
-        }
-        else if (vb->stride >= 32)
-        {
-            glDisableVertexAttribArray(1);
-            glVertexAttrib4f(1, 1, 1, 1, 1);
-            glEnableVertexAttribArray(2);
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(24));
-            glEnableVertexAttribArray(3);
-            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(vb->stride), reinterpret_cast<void*>(12));
-            glDisableVertexAttribArray(4);
-            glDisableVertexAttribArray(5);
-        }
-        else
-        {
-            throw std::runtime_error("OPENGL2: unsupported vertex stride");
-        }
+        BindVertexAttributesForStride(vb->id, vb->stride);
 
         // GL 2.1 has no sampler objects -- ApplySamplerState() caches the requested filter/wrap
         // per slot; apply it here, right after binding the texture that will actually be sampled

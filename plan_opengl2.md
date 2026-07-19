@@ -369,8 +369,44 @@ possibilities of OpenGL 2"):
   positive-capability set including `WireFrame=true`, and that the two device-dependent queries
   don't throw. 8/8 PASS.
 
+## Status: ShaderEffect / CreateEffectBackend (2026-07-19, session 6 cont'd)
+
+- **Custom `ShaderEffect` support implemented**: `CreateEffectBackend()` previously returned
+  `nullptr` (default), so `ShaderEffect` silently had no backend at all. Added `EffectBackend`
+  (an `IEffectBackend` implementation) that compiles a user's runtime GLSL source via the same
+  `LinkProgram()` helper every built-in program uses -- which means a custom vertex shader binds
+  to the SAME fixed attribute locations as everything else in this file (0=`aPosition`,
+  1=`aColor`, 2=`aTexCoord`, 3=`aNormal`, 4=`aBoneWeight`, 5=`aBoneIndices`). This is a real,
+  necessary divergence from `EasyGLEffectBackend`'s contract: GLSL 1.10/1.20 (this file's target)
+  has no `layout(location=N)` qualifier, so unlike EasyGL's GLES3 custom shaders (which bind
+  locations directly in their own source), an OpenGL2 custom shader MUST use those exact
+  attribute names to receive vertex data -- documented in `EffectBackend`'s own doc comment.
+  `drawInternal()` now checks `GpuDrawParams::customEffectBackend` first, before any built-in
+  program selection: binds the custom program, uploads `World`/`View`/`Projection` under those
+  exact XNA-HLSL-style uniform names (matching
+  `EasyGLGraphicsBackend::BindCustomEffectMatrices`'s identical names), and draws through the same
+  vertex layout every built-in program uses. The stride-based vertex-attribute-binding block
+  (previously duplicated inline) was extracted into a shared `BindVertexAttributesForStride()`
+  free function so both paths stay byte-identical by construction.
+  Found and fixed a real bug during testing, not a test-authoring error: GL 2.1 has no
+  `glProgramUniform*` (DSA is GL 4.1+), so plain `glUniform*` always targets whichever program is
+  CURRENTLY bound via `glUseProgram`, not the program object `glGetUniformLocation` was queried
+  against. The initial `SetUniformXxx()` implementations called `glUniform*` without first
+  re-binding their own program, so a uniform set before the effect's first `Apply()`/`Bind()`
+  call silently landed on whatever OTHER program happened to be current -- reproduced exactly by
+  the first CTest run (a `uTint` set before any draw read back as pure black, since GLSL's
+  default-zero uniform value multiplied the vertex color to zero). Fixed by having every
+  `SetUniformXxx()` call `glUseProgram(program_)` first.
+  `OpenGL2_ShaderEffect` verifies: valid/invalid compilation (`IsEffectValid()`/
+  `GetCompileError()`); `World`/`View`/`Projection` wiring plus vertex-color pass-through;
+  `SetUniformVec4()` actually reaching the shader (a tint uniform provably halves the output);
+  and `SetTexture()`/`BindTexture()` actually reaching the shader (a custom shader samples a
+  solid-color texture and reads back that exact color). 6/6 PASS.
+  `SpriteBatch::SetCustomEffect()` (the 2D sprite-batch custom-shader path) remains unimplemented
+  in this backend -- out of scope here, tracked as a follow-up below.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers thirteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers fourteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -396,6 +432,8 @@ possibilities of OpenGL 2"):
     per-fragment lighting, default-white sampler fallback. 7/7 PASS.
   - `OpenGL2_GraphicsCapability` -- real `SupportsCapability` values (`WireFrame=true`,
     device-dependent queries don't throw). 8/8 PASS.
+  - `OpenGL2_ShaderEffect` -- custom runtime-compiled GLSL: valid/invalid compilation,
+    World/View/Projection wiring, uniform-by-name binding, texture-unit binding. 6/6 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -445,6 +483,8 @@ possibilities of OpenGL 2"):
   `OpenGL2_SkinnedEffect` above).
 - Real `SupportsCapability` values for `WireFrame`/`MultiSampleAntiAliasing`/
   `AnisotropicFiltering` (see `OpenGL2_GraphicsCapability` above).
+- Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL, direct 3D draws only;
+  see `OpenGL2_ShaderEffect` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -458,8 +498,9 @@ possibilities of OpenGL 2"):
 - PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- EasyGL has this; a large, separate
   effort (its own shader family + texture set), likely lower priority than the items above for a
   "no EasyGL dependency" OpenGL 2.1 backend.
-- Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
-  `nullptr` (default). Would let games write their own OpenGL2 shaders through CNA's `Effect`
-  API, mirroring `EasyGLEffectBackend`.
+- `SpriteBatch::SetCustomEffect()` (2D sprite-batch custom-shader path) -- `Sprite` still ignores
+  it entirely (default no-op); only the direct 3D draw path
+  (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`) consumes `GpuDrawParams::customEffectBackend` so
+  far (see `OpenGL2_ShaderEffect` above).
 - Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended for Linux desktop builds.
 - Visual parity tests against other backends (golden-image comparison).
