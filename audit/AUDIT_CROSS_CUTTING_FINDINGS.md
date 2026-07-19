@@ -228,7 +228,31 @@ _(pending — revisit once more backends are audited)_
 
 ## Recurring memory/resource risk patterns
 
-_(pending)_
+- **CONFIRMED, 2 instances: `FileDialog.cpp` and `MessageBox.cpp` (both in `cna-devices`) share an identical
+  mutex-scoping mistake that creates a real use-after-free window.** Both files implement the exact same
+  "swappable global backend, for test injection" pattern via a private `GetBackend()` helper:
+  ```cpp
+  IFileDialogBackend* GetBackend() {
+      std::lock_guard<std::mutex> lock(BackendMutex());
+      return BackendStorage().get();   // <-- lock released HERE, raw pointer returned
+  }
+  ```
+  Every public entry point then calls `GetBackend()->ShowOpenFile(...)` (or `->Show(...)`/`->ShowSimple(...)`
+  for `MessageBox`) — the mutex is released the instant `GetBackend()` returns, **before** the returned raw
+  pointer is actually dereferenced and used. If `SetBackendForTesting()` runs on another thread between the
+  pointer's retrieval and its use, the old backend object (owned by a `unique_ptr` that `SetBackendForTesting()`
+  just reassigned, destroying the previous object) is deleted while the first thread is still calling through
+  the now-dangling pointer — a genuine use-after-free, not just a theoretical data race. The mutex correctly
+  protects the `unique_ptr`'s own read/write, but not the pointee's lifetime across the subsequent virtual
+  call. Both classes' own doc comments frame `SetBackendForTesting()` as test-only, single-threaded-setup
+  usage (mitigating real-world likelihood), but the synchronization as written does not actually guarantee
+  that usage pattern — a test suite that runs cases in parallel (or any future concurrent production use)
+  could trigger it. The fix shape (not applied, per this audit's no-development rule) would be either holding
+  the lock for the duration of the actual backend call, or making `BackendStorage()` a `shared_ptr` and
+  returning/holding a local copy across the call so the object's lifetime is extended past the lock's own
+  scope. **`SystemTray`/`Camera` do NOT share this bug** — both use per-instance constructor-injected backends
+  (no global swappable state), a structurally different and safer design for the same "inject a fake for
+  testing" goal.
 
 ## Recurring performance risk patterns
 
@@ -609,6 +633,33 @@ _(pending)_
   true` used directly as a bare field). Worth a priority check when the `xna-graphics` shard reaches `BasicEffect`
   for whether this is the only such lapse.
 
+## Duplicate NOXNA-extension API surfaces across CNA::Input and CNA::Devices
+
+- **NEW, found while auditing `cna-devices`: `CNA::Input` (gated implicitly, always compiled) and
+  `CNA::Devices` (gated behind the separate `CNA_DEVICES` CMake option, default OFF, independent of
+  `CNA_NOXNA`) contain two entirely independent, redundant implementations of the same features, wrapping
+  the identical underlying SDL3 calls.** Confirmed for **Clipboard**: `CNA::Input::Clipboard`
+  (`GetTextEXT()`/`SetTextEXT()`/`HasTextEXT()`, the `EXT`-suffix NOXNA convention) and
+  `CNA::Devices::Clipboard` (`getTextProperty()`/`setTextProperty()`/`getHasTextProperty()`, this project's
+  own documented C# property convention) both wrap `SDL_GetClipboardText`/`SDL_SetClipboardText`/
+  `SDL_HasClipboardText` independently — both individually correct (both correctly `SDL_free()` the
+  heap-allocated `SDL_GetClipboardText()` result), but genuinely duplicated: a bug fix or behavior change
+  applied to one has no reason to also reach the other, and a project enabling `CNA_DEVICES` ends up with 2
+  clipboard APIs with different naming conventions and a minor behavioral difference (`Devices::
+  setTextProperty` returns `SDL_SetClipboardText`'s own success/failure `bool`; `Input::SetTextEXT` is `void`
+  and discards it). **Confirmed for Power/PowerState too**: `CNA::Input::PowerStateEXT`/`Power` and
+  `CNA::Devices::PowerState`/`PowerInfo` are likewise 2 independent wrappers around the same
+  `SDL_GetPowerInfo()` — both, independently, correctly use an explicit switch (not a risky raw cast) to
+  convert `SDL_PowerState`'s own ordinals (which do NOT numerically align with either CNA enum's own
+  0-based-sequential ordinals — see the already-recorded ordinal-mismatch finding) — so both are individually
+  safe, but again duplicated with 2 near-identical enum definitions and 2 near-identical conversion
+  functions. Worth checking whether `Camera`/`Sensors`/`Haptics`/`Joysticks`/`InputDevices` have a similar
+  latent duplicate anywhere else in the codebase (not found so far — `cna-input`'s own 31 files had no
+  `Camera`/`DisplayInfo`/`FileDialog`/`Locale`/`MessageBox`/`SystemTray`/`UrlLauncher`/`SystemInfo`
+  equivalents, so those `cna-devices`-only features are NOT duplicated). This looks like 2 separate NOXNA
+  extension efforts (perhaps at different times, by different conventions) that grew the same 2 features
+  independently rather than sharing one implementation behind two thin naming-convention facades.
+
 ## Recurring testing gaps
 
 - **Documentation rot: header comments describing "known bugs"/"current limitations"/expected-throw assertions
@@ -736,8 +787,11 @@ _(pending)_
   own non-negative values 1:1, but there is no `SensorTypeEXT` entry at all for `SDL_SENSOR_INVALID` (-1). A
   raw numeric cast between either SDL enum and its CNA counterpart would silently misclassify values (in
   `PowerState`'s case, every single one). **Confirmed SAFE in `cna-input`'s own consumer**: `Power.cpp`'s
-  `to_power_state_ext()` uses an explicit, exhaustive switch, not a cast. **NOT yet verified**: the actual
-  mapping sites for `JoystickCapabilitiesEXT::powerState` and `Sensors::GetSensorsEXT()`'s own
-  `SDL_SensorType`-to-`SensorTypeEXT` conversion both live in backend classes (`SdlInputBridge`/
-  `SystemSensorBackend`) not yet audited as of this shard (tracked under `cna-internal-core`/`cna-devices`) —
-  check both use an explicit switch, not a raw cast, when those shards are reached.
+  `to_power_state_ext()` uses an explicit, exhaustive switch, not a cast. **UPDATE — 2nd confirmation while
+  auditing `cna-devices`: `CNA::Devices::PowerInfo.cpp`'s own `ConvertSdlPowerState()` independently uses the
+  identical safe pattern** (an explicit, exhaustive switch, byte-for-byte the same shape as `Input::Power.cpp`'s
+  own function) — both of this codebase's 2 independent `PowerState` implementations get this right. **NOT yet
+  verified**: the actual mapping sites for `JoystickCapabilitiesEXT::powerState` and `Sensors::
+  GetSensorsEXT()`'s own `SDL_SensorType`-to-`SensorTypeEXT` conversion both live in backend classes
+  (`SdlInputBridge`/`SystemSensorBackend`) not yet audited as of this update (tracked under
+  `cna-internal-core`) — check both use an explicit switch, not a raw cast, when that shard is reached.

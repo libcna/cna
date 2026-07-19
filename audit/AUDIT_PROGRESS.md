@@ -86,7 +86,23 @@ consumer (`Power.cpp`) safely uses an explicit switch, but the `JoystickCapabili
 (`SdlInputBridge`/`SystemSensorBackend`) that need the same check when `cna-internal-core`/`cna-devices` are
 reached.
 
-Remaining Task #3 shards: `cna-internal-core` (113, largest), `cna-devices` (39).
+`cna-devices` (39/39, **AUDITED**) — camera, file dialogs, message boxes, system tray, locale, power, system
+info, URL launching, display info, clipboard. **Found 1 new HIGH-severity, cross-cutting concurrency defect,
+confirmed in 2 files**: `FileDialog.cpp` and `MessageBox.cpp` both implement a swappable-global-backend
+pattern where `GetBackend()` releases its mutex before returning a raw pointer, which callers then
+dereference unprotected — a genuine use-after-free window if `SetBackendForTesting()` races a dialog call.
+`SystemTray`/`Camera` avoid this via per-instance constructor injection instead. **Also confirmed a
+significant architectural finding**: `CNA::Devices::Clipboard`/`PowerState`/`PowerInfo` are fully independent,
+redundant duplicates of `CNA::Input::Clipboard`/`PowerStateEXT`/`Power` (already audited in `cna-input`) —
+2 parallel NOXNA-extension efforts growing the same features independently under 2 different CMake options
+(`CNA_DEVICES` vs. always-compiled). Both `PowerState`-consuming files (`Input::Power.cpp` and
+`Devices::PowerInfo.cpp`) independently confirmed to safely use explicit switches for the SDL_PowerState
+ordinal-mismatch conversion. Otherwise excellent code quality — careful SDL resource/callback lifetime
+management throughout (`SdlCameraBackend`'s row-padding-safe frame copy, `SdlFileDialogBackend`'s
+reserve-before-pointer async-callback safety, `SdlTrayBackend`'s correct destruction ordering) — and the best
+test coverage of any CNA-core shard so far (every major public class has a dedicated test file).
+
+Remaining Task #3 shards: `cna-internal-core` (113, the last one).
 
 **Cross-cutting `RegisterForWindow` constructor-ordering check is now COMPLETE across all 4 callers**: only
 `EasyGL` has the dangling-window-registry-entry bug (that report's F1); `WebGPU`/`Canvas`/`SdlGpu` all correctly
@@ -143,18 +159,18 @@ regenerate from `AUDIT_MANIFEST.md`'s shard files, which list every path per sha
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **859** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
+- AUDITED so far: **898** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer(backend) ×2,
   backend-dx3 ×2, backend-easygl ×2, backend-webgpu ×2, backend-ascii ×6, backend-canvas ×8, backend-d3dcommon ×46,
   backend-d3d11 ×20, backend-d3d12 ×26, backend-sdlgpu ×27, backend-bgfx ×34, backend-vulkan ×40, backend-d3d9 ×50,
-  cna-graphics ×7, cna-root-utilities ×15, cna-input ×31, examples-tests-easygl ×218, examples-tests-sdlrenderer ×67,
-  examples-tests-bgfx ×98, examples-tests-vulkan ×70, examples-tests-webgpu ×22, examples-tests-d3d9 ×14,
-  examples-tests-sdlgpu ×22, examples-tests-generic ×24)
-- PENDING: **1438**
+  cna-graphics ×7, cna-root-utilities ×15, cna-input ×31, cna-devices ×39, examples-tests-easygl ×218,
+  examples-tests-sdlrenderer ×67, examples-tests-bgfx ×98, examples-tests-vulkan ×70, examples-tests-webgpu ×22,
+  examples-tests-d3d9 ×14, examples-tests-sdlgpu ×22, examples-tests-generic ×24)
+- PENDING: **1399**
 - IN_PROGRESS: **0** manifest-tracked
 - BLOCKED: **0**
 
-**~37.4% AUDITED so far** (859/2297). **All 16 backend shards fully audited; Task #3 (CNA core) in progress
-(3 of 5 shards done).**
+**~39.1% AUDITED so far** (898/2297). **All 16 backend shards fully audited; Task #3 (CNA core) in progress
+(4 of 5 shards done).**
 
 `backend-bgfx` (34 files) is now fully audited — all 28 `.sc` shaders individually read, plus a scoped-depth
 review of the 695+3443-line main backend header/cpp, the vertex-format-helper header, the renderer-selection
@@ -415,24 +431,23 @@ audits) to confirm whether they share the same pattern.
 
 ## Last completed file
 
-`cna-input` shard — all 31 files (raw joystick access, haptics/force-feedback, clipboard, sensors, power,
-multi-device enumeration) fully audited and written up, marked AUDITED. High code-quality shard — no confirmed
-defects (unlike `cna-root-utilities`'s Logger bug). Every SDL-mirroring enum independently cross-checked
-against the real SDL3 headers (via the `planetblupi` sibling repo's vendored copy): `JoystickTypeEXT`,
-`GamePadButtonLabelEXT`, `HapticEffectTypeEXT`, `HapticFeatureEXT` (all 17 bit positions), `TextInputTypeEXT`
-all confirmed exact matches; `HapticDevice`'s move semantics and SDL tagged-union construction independently
-verified correct. Flagged (pending confirmation, not yet a confirmed bug) that `PowerStateEXT`/`SensorTypeEXT`
-don't numerically align with real `SDL_PowerState`/`SDL_SensorType` — this shard's own consumer (`Power.cpp`)
-is confirmed safe (explicit switch), but 2 other population sites live in not-yet-audited backend classes.
+`cna-devices` shard — all 39 files (camera, file dialogs, message boxes, system tray, locale, power, system
+info, URL launching, display info, clipboard) fully audited and written up, marked AUDITED. Found a new
+HIGH-severity, cross-cutting concurrency defect confirmed in 2 files (`FileDialog.cpp`/`MessageBox.cpp`'s
+shared use-after-free-window in their swappable-global-backend mutex pattern), and a significant architectural
+finding (2 fully independent, redundant NOXNA-extension implementations of Clipboard and Power/PowerState
+across `CNA::Input` and `CNA::Devices`). Otherwise excellent code quality with the best test coverage of any
+CNA-core shard so far.
 
 ## Next exact action
 
-1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_PROGRESS.md`, the 31 new `.audit.md`
-   reports under `audit/include/CNA/Input/` and `audit/src/CNA/Input/`, and the updated `cna-input` manifest
-   shard file) as one logical batch, verifying staged paths are `audit/`-only first.
-2. Continue Task #3: `cna-devices` (39 files, next-smallest — priority: verify the `PowerStateEXT`/
-   `SensorTypeEXT` ordinal-mismatch flag above against `SdlInputBridge`/`SystemSensorBackend`'s own mapping
-   code if those files live here), then `cna-internal-core` (113, largest of the 5 Task #3 shards).
+1. **Commit this update** (`AUDIT_CROSS_CUTTING_FINDINGS.md`, `AUDIT_FINDINGS_INDEX.md`, `AUDIT_PROGRESS.md`,
+   the 39 new `.audit.md` reports under `audit/include/CNA/Devices/` and `audit/src/CNA/Devices/`, and the
+   updated `cna-devices` manifest shard file) as one logical batch, verifying staged paths are `audit/`-only
+   first.
+2. Continue Task #3 with its final shard: `cna-internal-core` (113 files, the largest of the 5 — priority:
+   verify the `SensorTypeEXT`/`JoystickCapabilitiesEXT::powerState` ordinal-mismatch flag against
+   `SdlInputBridge`/`SystemSensorBackend`'s own mapping code, likely located in this shard).
 3. Then Task #4 (Microsoft.Xna areas — start with
    `xna-framework-core` 78, then `xna-graphics` 191 the largest, prioritizing `SpriteFont.cpp`/`SpriteBatch.cpp`
    given the UB finding above, and `BlendState`/`SamplerState`/`RasterizerState`/`DepthStencilState`/
@@ -527,7 +542,8 @@ consolidating what's already known rather than re-deriving it.
 24. `audit: review cna-graphics shard (7 files, Task #3 started)`
 25. `audit: review cna-root-utilities shard (15 files) — Logger SDL-priority bug, unimplemented Runtime class`
 26. `audit: review cna-input shard (31 files) — high quality, verified SDL enum parity, no confirmed defects`
-27. *(next commit: cna-devices shard)*
+27. `audit: review cna-devices shard (39 files) — use-after-free-window bug, duplicate NOXNA API surfaces`
+28. *(next commit: cna-internal-core shard, the last Task #3 shard)*
 
 ## Self-check log
 

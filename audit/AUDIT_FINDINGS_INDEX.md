@@ -46,6 +46,11 @@ _(none recorded yet)_
   `skinned3d.vert.glsl` line 59 does flip, with its own comment confirming it's deliberate. Net effect: 4 of
   Vulkan's effect-shader families (env-map, PBR, skinned-PBR, instanced) render vertically mirrored versus XNA/FNA
   and versus every other effect type in the same Vulkan-rendered scene. See `AUDIT_CROSS_CUTTING_FINDINGS.md`.
+- **`FileDialog.cpp` and `MessageBox.cpp` (`cna-devices`) share a use-after-free window**: both implement a
+  swappable-global-backend pattern where `GetBackend()` releases its mutex before returning a raw pointer,
+  which callers then dereference unprotected — if `SetBackendForTesting()` runs concurrently, the pointer can
+  dangle. `SystemTray`/`Camera` avoid this via per-instance constructor-injected backends instead. See
+  `AUDIT_CROSS_CUTTING_FINDINGS.md`.
 - **`CNA::Logger::ToSDLPriority()` (`src/CNA/Logger.cpp`) mistags every `Fatal`/`Error`/`Warn` log call with
   `SDL_LOG_PRIORITY_INFO`** — the switch's cases for these 3 levels (plus `INFO`, which lands correctly by
   coincidence) are commented out with a literal `//todo` marker; only `DEBUG`/`TRACE`/`EXPERIMENT` have real
