@@ -45,6 +45,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -2296,6 +2297,12 @@ namespace Microsoft::Xna::Framework::Graphics
         if (backend_ != nullptr)
         {
             backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+            if (!backendStartupNameLogged_)
+            {
+                std::cout << "CNA: graphics backend: "
+                          << CNA::getCurrentGraphicsBackendName() << std::endl;
+                backendStartupNameLogged_ = true;
+            }
         }
     }
 

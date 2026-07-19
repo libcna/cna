@@ -1105,6 +1105,7 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_Window* window_;
         bool ownsWindow_;
         std::unique_ptr<CNA::Internal::Backends::IGraphicsBackend> backend_;
+        bool backendStartupNameLogged_ = false;
         Viewport viewport_;
         const VertexBuffer* currentVertexBuffer_;
         const IndexBuffer* currentIndexBuffer_;
