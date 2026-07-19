@@ -553,6 +553,24 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     session) — a bound `RenderTargetCube` face hits the exact same message-to-nil-`drawable` hazard
     and was not yet covered; extended the guard to check both.
 
+21. **Phase 12 continued — real `GetData()` on `RenderTarget2D`/`RenderTargetCube`** (`METAL-131`):
+    a shared `blitTextureToClientBuffer()` helper (blit into an `MTLResourceStorageModeShared`
+    staging buffer, `waitUntilCompleted`, `memcpy` out) replaces the inherited no-op default for
+    both render-target classes, instead of writing two near-duplicate blit implementations — exactly
+    what the task itself asked for. Uses its own fresh, independent command buffer rather than
+    reusing `owner.command`, which is correct specifically *because* each `GetData()` override first
+    checks whether the target being read is still the currently-active render target and, if so,
+    calls `endActiveEncoding(false)` to force its pending command buffer to actually execute before
+    the read — the identical reasoning `ReadBackbuffer()` already established for the same hazard
+    (an independent command buffer's blit could otherwise run before the still-uncommitted render
+    pass that produced the content it's supposed to read, since nothing else orders them relative to
+    each other). `RenderTargetCube`'s own override additionally guards on `currentRenderTargetCube
+    == this` regardless of *which* face is currently bound, since every face shares one underlying
+    `MTLTexture` object. Plain `MetalTexture3D` deliberately left at the inherited no-op — there is
+    no `RenderTarget3D` type anywhere in XNA, so this isn't a gap, it matches plain `MetalTexture`'s
+    own identical established precedent (`ITextureBackend::GetData()`'s own doc comment: "plain,
+    `SetData()`-populated textures never reach this path").
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -561,9 +579,9 @@ tables, BC-compression query); the fully generic `VertexElement`-driven descript
 (`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); the per-vertex
 lit variant (`METAL-39`/`76`); Phase 8's remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
-Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, `GetData()` `METAL-131`, all `CTest`s
-`METAL-114`–`118`, docs `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/
-`108` and `RenderTargetCube` `METAL-109`–`111` are now closed, see above); Phase 14 (custom
+Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
+`METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108`, `RenderTargetCube`
+`METAL-109`–`111`, and `GetData()` `METAL-131` are now closed, see above); Phase 14 (custom
 `ShaderEffect`, which
 Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
 `VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
@@ -631,6 +649,9 @@ iOS/tvOS). Nothing in this list has been touched.
   would never regenerate when switching directly between two render targets) and a `ReadBackbuffer()`
   guard gap, both in the same pass that made them observable (🟨 landed 2026-07-19 —
   `METAL-109`–`111`).
+- Real `GetData()` readback on `RenderTarget2D`/`RenderTargetCube` via one shared blit-to-staging-
+  buffer helper instead of two near-duplicate implementations, correctly flushing any still-pending
+  render encoding for the target being read first (🟨 landed 2026-07-19 — `METAL-131`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -932,7 +953,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | ID | Task | Status |
 |---|---|---|
 | METAL-130 | `ReadBackbuffer(x,y,w,h,pixels)` — currently throws (base default); implement via `MTLBlitCommandEncoder` copy into a `MTLResourceStorageModeShared` staging buffer, `memcpy` out after `waitUntilCompleted` | 🟨 |
-| METAL-131 | Render-target/cube/3D-texture `GetData()` overrides sharing one blit-to-staging-buffer helper instead of 4 near-duplicate implementations | ⬜ |
+| METAL-131 | Render-target/cube/3D-texture `GetData()` overrides sharing one blit-to-staging-buffer helper instead of 4 near-duplicate implementations | 🟨 (`RenderTarget2D`/`RenderTargetCube` done via `blitTextureToClientBuffer()`; plain `MetalTexture3D` deliberately left at the inherited no-op — no `RenderTarget3D` type exists in XNA, matching `MetalTexture`'s own identical precedent for plain, `SetData()`-populated textures) |
 | METAL-132 | Confirm `x,y` are top-left in *game* (virtual/logical) coordinates per the interface doc — **checked against the reference 2026-07-19, found a pre-existing cross-backend gap, not just a Metal one**: `EasyGLGraphicsBackend::ReadBackbuffer` also uses `x,y,w,h` directly against the physical framebuffer with no logical→physical letterbox scaling applied (only a Y-flip). Metal's new implementation matches that same behavior exactly (raw physical-drawable coordinates, no scaling) — consistent with the established reference, not a new Metal-specific divergence, but real callers passing genuinely logical coordinates on a letterboxed window would get the wrong region on *either* backend today | 🟨 |
 | METAL-133 | Document that `waitUntilCompleted` on readback is an intentional correctness-over-throughput stall, matching every other backend's own readback tradeoff — not something a future perf pass should "fix" into a race | 🟨 |
 | METAL-134 | `CTest`: `Metal_Readback` — clear to a known color, read back, assert exact match (the `Software_Smoke`/`Headless_Smoke`/`Dx3_Smoke` proof pattern) | ⬜ |

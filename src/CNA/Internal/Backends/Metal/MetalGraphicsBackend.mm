@@ -1477,12 +1477,47 @@ private:
     std::shared_ptr<std::atomic<bool>> completed_;
 };
 
+// plan_metal.md METAL-131: shared blit-to-staging-buffer readback helper, used by both
+// MetalRenderTargetBackend::GetData() and MetalRenderTargetCubeBackend::GetData() instead of two
+// near-duplicate implementations (matching the task's own "sharing one helper" framing). Uses an
+// independent, freshly-created command buffer rather than reusing owner.command -- correct because
+// callers are responsible for ensuring the source texture's content is actually GPU-complete first
+// (see each GetData() override's own "if still the active render target, end its encoding first"
+// guard, mirroring ReadBackbuffer()'s identical established reasoning) -- Metal command buffers on
+// one queue execute in submission order, so a blit submitted after the writes it depends on have
+// already been committed is guaranteed to see their result.
+static void blitTextureToClientBuffer(MetalGraphicsBackend::Impl& owner, id<MTLTexture> src, NSUInteger slice, int level, int x, int y, int w, int h, void* data, int dataLength)
+{
+    if (w<=0 || h<=0) return;
+    const NSUInteger bytesPerRow=(NSUInteger)w*4;
+    const NSUInteger length=bytesPerRow*(NSUInteger)h;
+    if ((int)length > dataLength) throw std::runtime_error("Metal: GetData buffer too small for the requested region");
+    id<MTLBuffer> staging=[owner.device newBufferWithLength:length options:MTLResourceStorageModeShared];
+    if(!staging) throw std::runtime_error("Metal: GetData failed to allocate staging buffer");
+    // Explicitly retained/released like every other command buffer in this file (p.command's own
+    // convention), even though a purely local, synchronously-used-and-discarded command buffer would
+    // be safe unretained too (autorelease pools only drain at pool-scope boundaries, never mid-call)
+    // -- consistency over relying on that more subtle argument.
+    id<MTLCommandBuffer> cmd=[owner.queue commandBuffer]; [cmd retain];
+    id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
+    [blit copyFromTexture:src sourceSlice:slice sourceLevel:(NSUInteger)level
+              sourceOrigin:MTLOriginMake((NSUInteger)x,(NSUInteger)y,0)
+                sourceSize:MTLSizeMake((NSUInteger)w,(NSUInteger)h,1)
+                  toBuffer:staging destinationOffset:0
+    destinationBytesPerRow:bytesPerRow destinationBytesPerImage:length];
+    [blit endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted]; // plan_metal.md METAL-133: same intentional correctness-over-throughput stall as ReadBackbuffer().
+    std::memcpy(data,[staging contents],length);
+    [staging release];
+    [cmd release];
+}
+
 // plan_metal.md Phase 10 (METAL-99/101/106): RenderTarget2D backend. Deliberately NOT yet
-// implementing MSAA/mip (METAL-103/104, mipMap/multiSampleCount are silently ignored, matching
-// the interface's own established "backends that cannot honor a preference silently clamp"
-// convention, not a hard requirement) or preserveContents-driven DontCare-on-rebind
-// (METAL-102, always uses Load -- correct, just not the optimization); GetData() is intentionally
-// left at ITextureBackend's own no-op default (METAL-131, a real, tracked, still-open gap).
+// implementing MSAA/mip (METAL-104, multiSampleCount is silently ignored, matching the interface's
+// own established "backends that cannot honor a preference silently clamp" convention, not a hard
+// requirement) or preserveContents-driven DontCare-on-rebind (METAL-102, always uses Load --
+// correct, just not the optimization, see CreateRenderTarget2D's own note on why this is by design).
 //
 // Lifetime assumption, shared with MetalOcclusionQueryBackend and SdlGpuRenderTargetBackend's own
 // identical owner_-back-pointer pattern (not a risk unique to this class): holds a plain reference
@@ -1558,6 +1593,17 @@ public:
             owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr;
         }
     }
+    // plan_metal.md METAL-131: real readback via the shared blit helper, replacing ITextureBackend's
+    // inherited no-op default. If this target is still the currently active render target, its
+    // pending command buffer is forced to actually execute first -- same reasoning as
+    // ReadBackbuffer()'s own established "end the current encoder before blitting" pattern (a fresh,
+    // independent command buffer's blit could otherwise run before the still-uncommitted render pass
+    // that wrote this content, reading stale/undefined data instead of what was just rendered).
+    void GetData(int level,int x,int y,int w,int h,void* data,int dataLength) const override
+    {
+        if (owner_.currentRenderTarget==this) owner_.endActiveEncoding(false);
+        blitTextureToClientBuffer(owner_, colorTexture_, 0, level, x, y, w, h, data, dataLength);
+    }
     id<MTLTexture> colorTexture() const { return colorTexture_; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
 private:
@@ -1625,6 +1671,16 @@ public:
             owner_.endActiveEncoding(false);
             owner_.currentRenderTargetCube=nullptr;
         }
+    }
+    // plan_metal.md METAL-131 (cube analog): same shared-helper readback and same "flush pending
+    // encoding first if still active" guard as MetalRenderTargetBackend::GetData() -- checked
+    // against currentRenderTargetCube==this regardless of which face, since every face shares the
+    // same underlying MTLTexture object and command-buffer ordering concern.
+    void GetData(int face,int level,int x,int y,int w,int h,void* data,int dataLength) const override
+    {
+        if (face<0||face>=6) return;
+        if (owner_.currentRenderTargetCube==this) owner_.endActiveEncoding(false);
+        blitTextureToClientBuffer(owner_, colorTexture_, (NSUInteger)face, level, x, y, w, h, data, dataLength);
     }
     id<MTLTexture> colorTexture() const { return colorTexture_; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
