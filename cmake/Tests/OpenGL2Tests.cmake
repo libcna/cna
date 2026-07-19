@@ -149,4 +149,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_customvertexdeclaration examples/opengl2_customvertexdeclaration_test.cpp)
     cna_register_backend_test(NAME OpenGL2_CustomVertexDeclaration COMMAND cna_test_opengl2_customvertexdeclaration
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: BlendState.BlendFactor propagation proof (IGraphicsBackend::SetBlendFactor
+    # was never overridden -> glBlendColor() was never called -> the GL constant-color register
+    # stayed at (0,0,0,0) regardless of BlendState.BlendFactor).
+    cna_opengl2_test(cna_test_opengl2_blendstate_blendfactor examples/opengl2_blendstate_blendfactor_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_BlendState_BlendFactor COMMAND cna_test_opengl2_blendstate_blendfactor
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

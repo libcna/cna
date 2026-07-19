@@ -81,6 +81,7 @@ namespace CNA::Internal::Backends::OpenGL2
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc,
                                     int stencilPass, int stencilFail, int stencilDepthFail,

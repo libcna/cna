@@ -47,6 +47,7 @@ namespace CNA::Internal::Backends::OpenGL2
         PFNGLACTIVETEXTUREPROC glActiveTexture = nullptr;
         PFNGLBLENDFUNCSEPARATEPROC glBlendFuncSeparate = nullptr;
         PFNGLBLENDEQUATIONSEPARATEPROC glBlendEquationSeparate = nullptr;
+        PFNGLBLENDCOLORPROC glBlendColor = nullptr;
         PFNGLSTENCILFUNCSEPARATEPROC glStencilFuncSeparate = nullptr;
         PFNGLSTENCILOPSEPARATEPROC glStencilOpSeparate = nullptr;
         PFNGLSTENCILMASKSEPARATEPROC glStencilMaskSeparate = nullptr;
@@ -115,6 +116,7 @@ namespace CNA::Internal::Backends::OpenGL2
             CNA_LOAD_GL(glActiveTexture);
             CNA_LOAD_GL(glBlendFuncSeparate);
             CNA_LOAD_GL(glBlendEquationSeparate);
+            CNA_LOAD_GL(glBlendColor);
             CNA_LOAD_GL(glStencilFuncSeparate);
             CNA_LOAD_GL(glStencilOpSeparate);
             CNA_LOAD_GL(glStencilMaskSeparate);
@@ -2568,6 +2570,14 @@ namespace CNA::Internal::Backends::OpenGL2
         glBlendFuncSeparate(ToGLBlendFactor(colorSrcBlend), ToGLBlendFactor(colorDstBlend),
                             ToGLBlendFactor(alphaSrcBlend), ToGLBlendFactor(alphaDstBlend));
         glBlendEquationSeparate(ToGLBlendEquation(colorBlendFunc), ToGLBlendEquation(alphaBlendFunc));
+    }
+
+    void OpenGL2GraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        // Backs BlendState.BlendFactor for the Blend::BlendFactor/InverseBlendFactor blend
+        // factors (ToGLBlendFactor maps those to GL_CONSTANT_COLOR/GL_ONE_MINUS_CONSTANT_COLOR
+        // above) -- glBlendColor is the GL-side constant-color register those factors read.
+        glBlendColor(r, g, b, a);
     }
 
     void OpenGL2GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
