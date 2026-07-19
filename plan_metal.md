@@ -58,6 +58,78 @@ build-verified** — no Apple toolchain here; needs the `metal-macos-ci.yml` job
   for exactly those three and defer to the (correct) default otherwise. See Phase 20,
   `METAL-192`/`METAL-195`/`METAL-196`/`METAL-197`.
 
+## 2026-07-19 (continued, autonomous overnight session) — Phase 1/2/4/5 real progress
+
+The project owner asked for autonomous continuation overnight, explicitly accepting that no
+Apple/macOS toolchain is available on this Linux machine to build/verify with — so, per this
+document's own status-legend rules, **everything below is still 🟨** (source-complete, reasoned
+carefully against the exact XNA ordinal values in this repo's own `.hpp` files and cross-referenced
+line-for-line against EasyGL's/Vulkan's already-shipped, already-tested equivalent mapping
+functions — never guessed), not ✅. All of it needs the `metal-macos-ci.yml` job or a physical Mac
+before any status here can honestly change.
+
+**Landed this pass:**
+- **Real enum mappings** (`METAL-6`–`METAL-13`): `metalCompareFunction`/`metalStencilOp`/
+  `metalBlendFactor`/`metalBlendOp`, each cross-checked against `VulkanGraphicsBackend`'s and
+  `EasyGLGraphicsBackend`'s own already-tested `ToVk*`/`ToEasyGL*` mapping functions (not
+  independently guessed) — including confirming XNA's `StencilOperation.Increment` wraps while
+  `IncrementSaturation` clamps, and that `Blend.BlendFactor`/`InverseBlendFactor` get no special
+  RGB-vs-Alpha-channel treatment (matching an established, deliberate simplification all 3 other
+  backends already share, not a gap unique to Metal). Also fixed `PrimitiveType.PointListEXT`
+  (ordinal 4), previously silently mismapped to `Triangle`/`count*3` in both `metalPrimitive()` and
+  `primitiveVertexCount()`.
+- **Real depth/stencil state** (`METAL-7`/`METAL-9`/`METAL-10`): `ApplyDepthStencilState` now wires
+  all 16 of its parameters — previously only `depthEnable`/`depthWriteEnable`/`referenceStencil`
+  had any effect, with `depthFunc` hardcoded to `LessEqual` and all 8 stencil-op/mask/two-sided
+  fields silently dropped. Front-face stencil carries XNA's normal fields; back-face carries the
+  `CounterClockwise*` fields when `TwoSidedStencilMode` is set, else mirrors front — **deliberately
+  NOT applying `VulkanGraphicsBackend::FillDepthStencilState`'s own empirically-found front/back
+  swap**, since that swap was a documented compensation for Vulkan's own NDC Y-flip (absent from
+  Metal's vertex shaders in this codebase) — but this reasoning has explicitly **not** been verified
+  on real Metal hardware and is flagged as such in-code, not asserted as fact.
+- **Real per-`BlendState` pipeline selection** (`METAL-6`/`METAL-24`, a simplified first pass at
+  the Phase 2 pipeline-state cache, `METAL-22`/`METAL-23`/`METAL-25`): `ApplyBlendState` was a
+  complete no-op before this pass — every pipeline hardcoded the same straight-alpha blend
+  regardless of the game's actual requested `BlendState`. The 5 fixed named pipeline fields
+  (`pipe3Color` etc.) are replaced with a `PipelineKind` enum (one entry per concrete shader+
+  vertex-layout combination, deliberately **not** yet the fully generic `VertexElement`-hashed key
+  `METAL-27` describes — a lower-risk design to get right without a compiler, explicitly scoped
+  down from the original Phase 2 task text) plus a cache keyed by `(PipelineKind, BlendKey)`,
+  built lazily on first use. `SetBlendFactor` (previously entirely unimplemented, not even declared
+  in the header) now wires `setBlendColorRed:green:blue:alpha:`. Found and fixed a real,
+  independent pre-existing bug along the way: `clear()`'s fresh-encoder path never reapplied
+  cull/fill/depth-bias/stencil-reference (only `ensureFrame()`'s did) — both now share one
+  `applyTrackedEncoderState()`.
+- **`DiffuseColor`/`VertexColorEnabled`/`AlphaTest` actually reach the shader** (`METAL-35`–
+  `METAL-37`, `METAL-51`–`METAL-55`): previously **zero** `GpuDrawParams` fields beyond `texture0`
+  affected rendering at all. A new `UMaterialParams` uniform (mirrored byte-for-byte between the
+  MSL shader source and a plain C++ struct — 3 consecutive `float4`s, deliberately avoiding any
+  `float3` member to sidestep MSL `constant`-address-space padding rules entirely) now carries
+  `diffuseColor`/`alphaTest`/`vertexColorEnabled` into every unlit fragment shader. AlphaTestEffect
+  needed **no separate pipeline at all**: with `alphaTest`'s documented default (`{0,0,1,1}`)
+  the discard check is provably a no-op, so it was folded unconditionally into the existing
+  textured fragment shaders — the same design choice `EasyGLGraphicsBackend::
+  EnsureDualTextured3DProgram()`'s own fragment source already makes (confirmed by reading it,
+  not assumed).
+- **DualTextureEffect** (`METAL-58`–`METAL-61`): a real `cna_f3d_dualtex` fragment shader, ported
+  from FNA's actual `DualTextureEffect.fx` `PSDualTexture` (`/rv/data/library/github.com/FNA-XNA/
+  FNA/src/Graphics/Effect/StockEffects/HLSL/DualTextureEffect.fx`) — including the real `color.rgb
+  *= 2` lightmap-style doubling factor on the *first* texture only (already found, fixed, and
+  pixel-verified on EasyGL/Vulkan/Bgfx per `docs/dualtextureeffect-support.md` Task 383, ported
+  here rather than re-derived). Confirmed CNA's cross-backend convention deliberately samples both
+  textures at one shared UV (stride 20/24), not FNA's real separate `TexCoord`/`TexCoord2` — traced
+  through `WebGPUGraphicsBackend`'s shipped dispatch logic, not assumed from the plan's own earlier
+  (now confirmed accurate) description.
+
+**Explicitly still open / not attempted this pass** (do not assume these are done): `METAL-5`
+(cull-mode/winding correctness — deliberately left untouched, see its own note about a Vulkan
+front/back stencil swap this project already had to empirically discover the hard way, i.e. this is
+a real risk area, not a formality); `METAL-14`–`METAL-20` (VertexElementFormat/SurfaceFormat/
+DepthFormat tables, BC-compression query); the fully generic `VertexElement`-driven descriptor
+builder (`METAL-26`/`METAL-27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/
+`METAL-32`); fog/lighting/specular/emissive (rest of Phase 3); every phase past this point in the
+document (6 onward) — none of it was touched this pass.
+
 ## Implemented initial foundation
 
 - Compile-time backend selection: `CNA_GRAPHICS_BACKEND=METAL` and `CNA_BACKEND_METAL`.
@@ -69,14 +141,22 @@ build-verified** — no Apple toolchain here; needs the `metal-macos-ci.yml` job
 - Native `MTLBuffer` vertex and 16/32-bit index buffers.
 - Native RGBA8 `MTLTexture` creation and updates.
 - Runtime-compiled Metal Shading Language library.
-- Colored 3D and basic textured 3D draw paths (4 fixed vertex-stride pipelines: 16/20/24/32).
-- Triangle list/strip and line list/strip topology mapping (PointList is currently mis-mapped —
-  see `METAL-13`/`METAL-14`).
-- Basic cull/fill/depth/scissor/viewport/depth-bias state plumbing (`ApplyBlendState` is a
-  complete no-op; stencil-op/two-sided-stencil fields are accepted but ignored — see `METAL-6`
-  through `METAL-11`).
+- Colored/textured 3D draw paths, now dispatched through a `PipelineKind`-keyed lazy pipeline
+  cache (7 variants: colored-16, textured-20, colortex-24, normaltex-32, dualtex-20,
+  dualtex-colored-24, sprite-2d) instead of 5 eagerly-built fixed fields (🟨 landed 2026-07-19 —
+  `METAL-22`/`METAL-23`/`METAL-25`).
+- Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
+  real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
+- Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
+  blend-color/per-`BlendState` blending** state plumbing, all XNA-enum-to-Metal mappings
+  cross-checked against EasyGL's/Vulkan's own already-tested equivalents (🟨 landed 2026-07-19 —
+  `METAL-6` through `METAL-13`, `METAL-24`).
+- `DiffuseColor`/`VertexColorEnabled`/`AlphaTest` (AlphaTestEffect, needing no separate pipeline —
+  see the 2026-07-19 section above) and `DualTextureEffect` (real FNA-verified `*2` doubling
+  formula) now reach the shader for every textured draw (🟨 landed 2026-07-19 — `METAL-35`–
+  `METAL-37`, `METAL-51`–`METAL-61`).
 - Native SpriteBatch path with texture sampling, source/destination rectangles, tint, rotation,
-  origin and flip effects (no `SetTransformMatrix`, no custom effect, no real per-`BlendState`
+  origin and flip effects (no `SetTransformMatrix`, no custom effect, no real per-`BlendState` 2D
   blending yet — see Phase 19).
 - Per-slot sampler state with filter/address/anisotropy, backed by a real `MTLSamplerState` cache
   (🟨 landed 2026-07-19, not yet hardware-verified — `METAL-1`/`METAL-2`).
@@ -132,14 +212,14 @@ that replace it; do not re-derive scope from this table, use the phases:
 | METAL-3 | Extend sampler-slot consultation beyond unit 0 in `drawMetal3D` — needed once DualTextureEffect (Phase 5, unit 1) / EnvironmentMapEffect (Phase 6) / PBR (Phase 8, up to 4 map units) land | ⬜ |
 | METAL-4 | Audit `TextureFilter::Anisotropic` mapping (min/mag/mip = Linear + `maxAnisotropy`) against real Apple GPU behavior — no surprising clamp/driver quirk | ⬜ |
 | METAL-5 | `CullMode`→`MTLCullMode` + `MTLWinding` audit: current code (`c==1?Front:(c==2?Back:None)`) never calls `setFrontFacingWinding:`, relying on Metal's default winding — cross-check against `VulkanGraphicsBackend`'s tested `VkFrontFace`/`VkCullModeFlags` mapping and set winding explicitly instead of assuming a default | ⬜ |
-| METAL-6 | `Blend`/`BlendFunction`→`MTLBlendFactor`/`MTLBlendOperation` full table (Zero/One/SourceColor/InverseSourceColor/SourceAlpha/InverseSourceAlpha/DestinationAlpha/InverseDestinationAlpha/DestinationColor/InverseDestinationColor/SourceAlphaSaturation/BlendFactor/InverseBlendFactor; Add/Subtract/ReverseSubtract/Max/Min) — `ApplyBlendState` is currently a complete no-op | ⬜ |
-| METAL-7 | `CompareFunction`→`MTLCompareFunction` full table (Always/Never/Less/LessEqual/Equal/GreaterEqual/Greater/NotEqual) — `rebuildDepthState()` currently hardcodes only LessEqual/Always, ignoring the real `depthFunc` parameter | ⬜ |
-| METAL-8 | `StencilOperation`→`MTLStencilOperation` full table (Keep/Zero/Replace/Increment/Decrement/IncrementSaturation/DecrementSaturation/Invert) — no stencil-op plumbing exists at all today, only a depth compare function and reference value | ⬜ |
-| METAL-9 | Wire the real front-face stencil test (`stencilEnable`/`stencilFunc`/`stencilPass`/`stencilFail`/`stencilDepthFail`/`stencilMask`/`stencilWriteMask`) into `MTLDepthStencilDescriptor.frontFaceStencil`, currently entirely ignored by `ApplyDepthStencilState` | ⬜ |
-| METAL-10 | Wire two-sided stencil (`twoSidedStencilMode`/`ccwStencilFunc`/`ccwStencilPass`/`ccwStencilFail`/`ccwStencilDepthFail`) into `MTLDepthStencilDescriptor.backFaceStencil` | ⬜ |
-| METAL-11 | `SetBlendFactor(r,g,b,a)` via `[encoder setBlendColor:...]` — currently unimplemented (base no-op) | ⬜ |
-| METAL-12 | `PrimitiveType`→`MTLPrimitiveType`: add the missing `PointList` case (currently falls through `metalPrimitive()`'s default to `Triangle`, silently wrong) | ⬜ |
-| METAL-13 | `primitiveVertexCount()`: fix the `PointList` case (currently falls to default `count*3`; should be `count`) | ⬜ |
+| METAL-6 | `Blend`/`BlendFunction`→`MTLBlendFactor`/`MTLBlendOperation` full table (Zero/One/SourceColor/InverseSourceColor/SourceAlpha/InverseSourceAlpha/DestinationAlpha/InverseDestinationAlpha/DestinationColor/InverseDestinationColor/SourceAlphaSaturation/BlendFactor/InverseBlendFactor; Add/Subtract/ReverseSubtract/Max/Min) — `ApplyBlendState` is currently a complete no-op | 🟨 |
+| METAL-7 | `CompareFunction`→`MTLCompareFunction` full table (Always/Never/Less/LessEqual/Equal/GreaterEqual/Greater/NotEqual) — `rebuildDepthState()` currently hardcodes only LessEqual/Always, ignoring the real `depthFunc` parameter | 🟨 |
+| METAL-8 | `StencilOperation`→`MTLStencilOperation` full table (Keep/Zero/Replace/Increment/Decrement/IncrementSaturation/DecrementSaturation/Invert) — no stencil-op plumbing exists at all today, only a depth compare function and reference value | 🟨 |
+| METAL-9 | Wire the real front-face stencil test (`stencilEnable`/`stencilFunc`/`stencilPass`/`stencilFail`/`stencilDepthFail`/`stencilMask`/`stencilWriteMask`) into `MTLDepthStencilDescriptor.frontFaceStencil`, currently entirely ignored by `ApplyDepthStencilState` | 🟨 |
+| METAL-10 | Wire two-sided stencil (`twoSidedStencilMode`/`ccwStencilFunc`/`ccwStencilPass`/`ccwStencilFail`/`ccwStencilDepthFail`) into `MTLDepthStencilDescriptor.backFaceStencil` | 🟨 |
+| METAL-11 | `SetBlendFactor(r,g,b,a)` via `[encoder setBlendColor:...]` — currently unimplemented (base no-op) | 🟨 |
+| METAL-12 | `PrimitiveType`→`MTLPrimitiveType`: add the missing `PointList` case (currently falls through `metalPrimitive()`'s default to `Triangle`, silently wrong) | 🟨 |
+| METAL-13 | `primitiveVertexCount()`: fix the `PointList` case (currently falls to default `count*3`; should be `count`) | 🟨 |
 | METAL-14 | `VertexElementFormat`→`MTLVertexFormat` full table (Single/Vector2/Vector3/Vector4/Color/Byte4/Short2/Short4/NormalizedShort2/NormalizedShort4/HalfVector2/HalfVector4) — today only 3 hand-picked fixed vertex descriptors exist, no general element-format mapping | ⬜ |
 | METAL-15 | `SurfaceFormat`→`MTLPixelFormat` table (Color/Bgr565/Bgra5551/Bgra4444/Dxt1/Dxt3/Dxt5/NormalizedByte2/NormalizedByte4/Rgba1010102/Rg32/Rgba64/Alpha8/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable) — every texture is currently hardcoded `RGBA8Unorm` regardless of `ImageData`'s real format | ⬜ |
 | METAL-16 | `DepthFormat`→`MTLPixelFormat` table (None/Depth16/Depth24/Depth24Stencil8) — backbuffer currently always allocates `Depth32Float_Stencil8` regardless of what `PresentationParameters` requested | ⬜ |
@@ -160,14 +240,14 @@ already works and must not be redesigned by mistake.
 | ID | Task | Status |
 |---|---|---|
 | METAL-21 | Written classification of which CNA render state is Metal *pipeline* state vs. *encoder* state — drives every task below, must be correct once, not re-derived per task | ⬜ |
-| METAL-22 | `struct MetalPipelineKey` (shader variant + vertex layout hash + blend fields + attachment pixel formats) with hash/equality for `std::unordered_map` | ⬜ |
-| METAL-23 | Replace the 5 fixed named pipeline fields (`pipe3Color`/`pipe3Tex20`/`pipe3ColorTex24`/`pipe3NormalTex32`/`pipe2`) with `std::unordered_map<MetalPipelineKey, id<MTLRenderPipelineState>>` + `getOrCreatePipeline(key)` | ⬜ |
-| METAL-24 | Extend `makePipeline()` to accept full blend-attachment fields driven by `METAL-6`'s table, instead of the currently hardcoded straight-alpha blend baked into every pipeline | ⬜ |
-| METAL-25 | Release-on-destruction for the new pipeline cache (mirrors the sampler-cache destructor pattern added in `METAL-1`) | ⬜ |
+| METAL-22 | `struct MetalPipelineKey` (shader variant + vertex layout hash + blend fields + attachment pixel formats) with hash/equality for `std::unordered_map` | 🟨 |
+| METAL-23 | Replace the 5 fixed named pipeline fields (`pipe3Color`/`pipe3Tex20`/`pipe3ColorTex24`/`pipe3NormalTex32`/`pipe2`) with `std::unordered_map<MetalPipelineKey, id<MTLRenderPipelineState>>` + `getOrCreatePipeline(key)` | 🟨 |
+| METAL-24 | Extend `makePipeline()` to accept full blend-attachment fields driven by `METAL-6`'s table, instead of the currently hardcoded straight-alpha blend baked into every pipeline | 🟨 |
+| METAL-25 | Release-on-destruction for the new pipeline cache (mirrors the sampler-cache destructor pattern added in `METAL-1`) | 🟨 |
 | METAL-26 | `SetVertexDeclaration(const std::vector<VertexElement>&)` override on `MetalVertexBuffer` (the `IVertexBufferBackend` contract already documents this as Task 1080's generic-layout hook) | ⬜ |
 | METAL-27 | Build a generic `MTLVertexDescriptor` from a `VertexElement` list via `METAL-14`'s format table — replaces the 4 hand-written `vd16`/`vd20`/`vd24`/`vd32` descriptors with a path that also covers strides 28/36/40/44/48/52/56/68 once Phases 5–8 need them | ⬜ |
 | METAL-28 | Fallback: when `SetVertexDeclaration` was never called, keep the existing stride-based inference for the 4 strides that already work — no regression | ⬜ |
-| METAL-29 | `selectPipelineKey(stride, elements, GpuDrawParams)` dispatcher replicating `EasyGLGraphicsBackend::SelectProgram()`'s exact precedence (pbr+skinned → pbr → skinned(±vertexlit) → envMapping → dualTexture(stride-24 colored variant) → stride switch 20/24/32(±vertexlit) → default colored) | ⬜ |
+| METAL-29 | `selectPipelineKey(stride, elements, GpuDrawParams)` dispatcher replicating `EasyGLGraphicsBackend::SelectProgram()`'s exact precedence (pbr+skinned → pbr → skinned(±vertexlit) → envMapping → dualTexture(stride-24 colored variant) → stride switch 20/24/32(±vertexlit) → default colored) | 🟨 |
 | METAL-30 | Regression-proof: every existing stride-16/20/24/32 path must select byte-identical pipelines before/after the cache rewrite — a Linux-side manual trace against the current 5-pipeline logic, ahead of any macOS build | ⬜ |
 | METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ⬜ |
 | METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ |
@@ -182,9 +262,9 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-35 | `colored3d.metal`: honor `diffuseColor`/`vertexColorEnabled` (fragment shader currently just returns the raw vertex color, ignoring both fields) | ⬜ |
-| METAL-36 | `textured3d.metal`: multiply by `diffuseColor` (currently hardcodes `color=(1,1,1,1)`, i.e. `DiffuseColor` has zero effect) | ⬜ |
-| METAL-37 | `colortex3d.metal`: same `diffuseColor` multiply for the vertex-color+texture combined path | ⬜ |
+| METAL-35 | `colored3d.metal`: honor `diffuseColor`/`vertexColorEnabled` (fragment shader currently just returns the raw vertex color, ignoring both fields) | 🟨 |
+| METAL-36 | `textured3d.metal`: multiply by `diffuseColor` (currently hardcodes `color=(1,1,1,1)`, i.e. `DiffuseColor` has zero effect) | 🟨 |
+| METAL-37 | `colortex3d.metal`: same `diffuseColor` multiply for the vertex-color+texture combined path | 🟨 |
 | METAL-38 | Per-pixel lit shader (`lit_textured3d.metal`, stride 32): port FNA's `Lighting.fxh`/`ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive) — direct MSL port from `VulkanGraphicsBackend`'s already-shipped GLSL or `EnsureLit3DProgram()`, not new design | ⬜ |
 | METAL-39 | Per-vertex (Gouraud) lit shader (`lit_textured3d_vertexlit.metal`), selected when `lightingEnabled && !preferPerPixelLighting` (XNA's real default, Task 1102) — Metal currently has **no** lighting shader of either kind | ⬜ |
 | METAL-40 | Normal matrix (`inverse(world3x3)`, no shader-side transpose given this codebase's column-major GPU convention) computed CPU-side, cross-verified against `BgfxGraphicsBackend::ComputeNormalMatrix3x3` | ⬜ |
@@ -203,11 +283,11 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-51 | `alpha_test3d.metal` fragment `discard_fragment()` using `alphaTest[4]={refVal,tolerance,passWeight,failWeight}`, porting the exact formula already documented on `GpuDrawParams::alphaTest` and shipped in `VulkanGraphicsBackend`/`WebGPUGraphicsBackend` | ⬜ |
-| METAL-52 | Stride 20 (`VertexPositionTexture`) and stride 24 (`VertexPositionColorTexture`) variants, one shared vertex shader where position+UV suffices (EasyGL/WebGPU precedent) | ⬜ |
-| METAL-53 | Stride 32 (`VertexPositionNormalTexture`) variant — normal attribute unused, no lighting in this effect | ⬜ |
+| METAL-51 | `alpha_test3d.metal` fragment `discard_fragment()` using `alphaTest[4]={refVal,tolerance,passWeight,failWeight}`, porting the exact formula already documented on `GpuDrawParams::alphaTest` and shipped in `VulkanGraphicsBackend`/`WebGPUGraphicsBackend` | 🟨 |
+| METAL-52 | Stride 20 (`VertexPositionTexture`) and stride 24 (`VertexPositionColorTexture`) variants, one shared vertex shader where position+UV suffices (EasyGL/WebGPU precedent) | 🟨 |
+| METAL-53 | Stride 32 (`VertexPositionNormalTexture`) variant — normal attribute unused, no lighting in this effect | 🟨 |
 | METAL-54 | Confirm whether Metal needs the `isEqNe` real-XNA-shader-variant divergence tracking (`plan_dx9.md` D9-81) the way D3D9 does, or stays in the "not fixed outside D3D9" bucket every other backend is already in | ⬜ |
-| METAL-55 | Dispatch: replicate `EasyGLGraphicsBackend::SelectProgram()`'s exact "default `{0,0,1,1}` = always-pass = skip the alpha-test shader" selection signal precisely | ⬜ |
+| METAL-55 | Dispatch: replicate `EasyGLGraphicsBackend::SelectProgram()`'s exact "default `{0,0,1,1}` = always-pass = skip the alpha-test shader" selection signal precisely | 🟨 |
 | METAL-56 | `CTest`: `Metal_AlphaTest` — pass/fail/tolerance-boundary cases | ⬜ |
 | METAL-57 | Add a `Metal` column to `docs/alphatesteffect-support.md` | ⬜ |
 
@@ -215,10 +295,10 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-58 | `dual_texture3d.metal` (stride 20, colorless) — second sampler/texture (`texture1`, unit 1) blended with `texture0` per FNA's `DualTextureEffect.fx` | ⬜ |
-| METAL-59 | `dual_textured_colored3d.metal` (stride 24, vertex-color-aware) — EasyGL Task 889's exact stride-24-needs-its-own-program finding, replicated not merged | ⬜ |
-| METAL-60 | Wire `ApplySamplerState(1,...)` (`METAL-3`) so `texture1` gets its own independent filter/address mode, matching real XNA `DualTextureEffect.Texture2` semantics | ⬜ |
-| METAL-61 | Dispatch: `params.dualTexture` branch checked before the plain stride switch, after `envMapping`, matching EasyGL's exact precedence | ⬜ |
+| METAL-58 | `dual_texture3d.metal` (stride 20, colorless) — second sampler/texture (`texture1`, unit 1) blended with `texture0` per FNA's `DualTextureEffect.fx` | 🟨 |
+| METAL-59 | `dual_textured_colored3d.metal` (stride 24, vertex-color-aware) — EasyGL Task 889's exact stride-24-needs-its-own-program finding, replicated not merged | 🟨 |
+| METAL-60 | Wire `ApplySamplerState(1,...)` (`METAL-3`) so `texture1` gets its own independent filter/address mode, matching real XNA `DualTextureEffect.Texture2` semantics | 🟨 |
+| METAL-61 | Dispatch: `params.dualTexture` branch checked before the plain stride switch, after `envMapping`, matching EasyGL's exact precedence | 🟨 |
 | METAL-62 | `CTest`: `Metal_DualTexture` — two distinct textures visibly blend, probe-pixel-verified | ⬜ |
 | METAL-63 | Add a `Metal` column to `docs/dualtextureeffect-support.md` | ⬜ |
 

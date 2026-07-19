@@ -47,6 +47,7 @@ namespace CNA::Internal::Backends::Metal
                                   float depthBias, float slopeScaleDepthBias) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
         void SetReferenceStencil(int value) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;

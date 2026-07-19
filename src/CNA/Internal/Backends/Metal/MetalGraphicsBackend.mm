@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -23,6 +24,14 @@ namespace
 using namespace metal;
 
 struct U3D { float4x4 wvp; };
+// plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest/DualTexture
+// material uniforms, shared by every unlit-textured fragment variant below. alphaTest defaults
+// to {0,0,1,1} (CNA's documented "always pass" convention -- tolerance=0 forces the `a<refVal`
+// branch, which is always false since alpha is never negative, so failWeight is selected but
+// `1.0 < 0.0` is false and nothing discards) so folding this check into every fragment shader
+// unconditionally is provably a no-op for draws that never touch AlphaTestEffect, exactly
+// mirroring EasyGLGraphicsBackend::EnsureDualTextured3DProgram()'s own fsrc, which does the same.
+struct UMaterialParams { float4 diffuseColor; float4 alphaTest; float4 flags; }; // flags.x = vertexColorEnabled (0/1)
 struct V3Out { float4 position [[position]]; float4 color; float2 uv; };
 struct V3ColorIn { float3 position [[attribute(0)]]; float4 color [[attribute(1)]]; };
 struct V3TexIn { float3 position [[attribute(0)]]; float2 uv [[attribute(1)]]; };
@@ -40,9 +49,40 @@ vertex V3Out cna_v3d_colortex(V3ColorTexIn in [[stage_in]], constant U3D& u [[bu
 vertex V3Out cna_v3d_normaltex(V3NormalTexIn in [[stage_in]], constant U3D& u [[buffer(1)]]) {
     V3Out o; o.position=u.wvp*float4(in.position,1.0); o.color=float4(1.0); o.uv=in.uv; return o;
 }
-fragment float4 cna_f3d_color(V3Out in [[stage_in]]) { return in.color; }
-fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]]) {
-    return tex.sample(smp, in.uv) * in.color;
+// Returns discard-tested output alpha via `outA`; callers that don't need a second sample (the
+// non-textured colored path) just pass the already-known alpha straight through.
+inline bool cna_alpha_test_fails(float a, float4 at) {
+    bool pass = (at.y > 0.0) ? (abs(a - at.x) < at.y) : (a < at.x);
+    float w = pass ? at.z : at.w;
+    return w < 0.0;
+}
+fragment float4 cna_f3d_color(V3Out in [[stage_in]], constant UMaterialParams& m [[buffer(2)]]) {
+    float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
+    float4 c = vcolor * m.diffuseColor;
+    if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
+    return c;
+}
+fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant UMaterialParams& m [[buffer(2)]]) {
+    float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
+    float4 c = tex.sample(smp, in.uv) * vcolor * m.diffuseColor;
+    if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
+    return c;
+}
+// DualTextureEffect (plan_metal.md METAL-58/59): ported from FNA's real DualTextureEffect.fx
+// PSDualTexture -- `color.rgb *= 2; color *= overlay * diffuse;` (a lightmap-style RGB-doubling
+// factor on the FIRST texture only, alpha untouched) -- already found, fixed, and pixel-verified
+// on EasyGL/Vulkan/Bgfx (docs/dualtextureeffect-support.md Task 383). CNA's cross-backend
+// convention (confirmed against WebGPUGraphicsBackend's shipped dual-texture dispatch) samples
+// both textures at the SAME shared UV (stride 20/24), not FNA's real separate TexCoord/TexCoord2
+// -- an intentional, already-established simplification this shader matches for consistency
+// with every other CNA backend rather than reintroducing a second UV set nothing else here uses.
+fragment float4 cna_f3d_dualtex(V3Out in [[stage_in]], texture2d<float> tex0 [[texture(0)]], sampler smp0 [[sampler(0)]], texture2d<float> tex1 [[texture(1)]], sampler smp1 [[sampler(1)]], constant UMaterialParams& m [[buffer(2)]]) {
+    float4 vcolor = (m.flags.x > 0.5) ? in.color : float4(1.0);
+    float4 base = tex0.sample(smp0, in.uv);
+    base.rgb *= 2.0;
+    float4 c = base * tex1.sample(smp1, in.uv) * vcolor * m.diffuseColor;
+    if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
+    return c;
 }
 
 struct V2In { float2 position; float2 uv; float4 color; };
@@ -66,6 +106,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             case PT::TriangleStrip: return count + 2;
             case PT::LineList: return count * 2;
             case PT::LineStrip: return count + 1;
+            case PT::PointListEXT: return count; // plan_metal.md METAL-13: was falling to the *3 default
             default: return count * 3;
         }
     }
@@ -77,7 +118,84 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             case PT::TriangleStrip: return MTLPrimitiveTypeTriangleStrip;
             case PT::LineList: return MTLPrimitiveTypeLine;
             case PT::LineStrip: return MTLPrimitiveTypeLineStrip;
+            case PT::PointListEXT: return MTLPrimitiveTypePoint; // plan_metal.md METAL-12: was falling to Triangle
             default: return MTLPrimitiveTypeTriangle;
+        }
+    }
+
+    // XNA CompareFunction ordinals -> MTLCompareFunction (mirrors EasyGL's ToEasyGLCompareFunc /
+    // Vulkan's ToVkCompareOp exactly): Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
+    // GreaterEqual=5, Greater=6, NotEqual=7.
+    static MTLCompareFunction metalCompareFunction(int cmp)
+    {
+        switch (cmp) {
+            case 1: return MTLCompareFunctionNever;
+            case 2: return MTLCompareFunctionLess;
+            case 3: return MTLCompareFunctionLessEqual;
+            case 4: return MTLCompareFunctionEqual;
+            case 5: return MTLCompareFunctionGreaterEqual;
+            case 6: return MTLCompareFunctionGreater;
+            case 7: return MTLCompareFunctionNotEqual;
+            default: return MTLCompareFunctionAlways; // CompareFunction::Always = 0
+        }
+    }
+
+    // XNA StencilOperation ordinals -> MTLStencilOperation (mirrors EasyGL/Vulkan's
+    // ToVkStencilOp exactly): Keep=0, Zero=1, Replace=2, Increment=3, Decrement=4,
+    // IncrementSaturation=5, DecrementSaturation=6, Invert=7. XNA's Increment/Decrement wrap
+    // (D3DSTENCILOP_INCR/DECR); the *Saturation variants clamp (D3DSTENCILOP_INCRSAT/DECRSAT) --
+    // confirmed against Vulkan's already-tested VulkanGraphicsBackend::ToVkStencilOp.
+    static MTLStencilOperation metalStencilOp(int op)
+    {
+        switch (op) {
+            case 1: return MTLStencilOperationZero;
+            case 2: return MTLStencilOperationReplace;
+            case 3: return MTLStencilOperationIncrementWrap;
+            case 4: return MTLStencilOperationDecrementWrap;
+            case 5: return MTLStencilOperationIncrementClamp;
+            case 6: return MTLStencilOperationDecrementClamp;
+            case 7: return MTLStencilOperationInvert;
+            default: return MTLStencilOperationKeep; // StencilOperation::Keep = 0
+        }
+    }
+
+    // XNA Blend ordinals -> MTLBlendFactor (mirrors EasyGL's ToEasyGLBlendFactor / Vulkan's
+    // ToVkBlendFactor exactly, including their identical no-RGB/Alpha-channel-distinction choice
+    // for BlendFactor/InverseBlendFactor -- SourceColor/DestinationColor/BlendFactor as an
+    // *Alpha*-slot factor is not a combination real D3D9/XNA content legally produces, and every
+    // established CNA backend already made this same simplifying choice, not just this one):
+    // One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5,
+    // DestinationColor=6, InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9,
+    // BlendFactor=10, InverseBlendFactor=11, SourceAlphaSaturation=12.
+    static MTLBlendFactor metalBlendFactor(int xnaBlend)
+    {
+        switch (xnaBlend) {
+            case  1: return MTLBlendFactorZero;
+            case  2: return MTLBlendFactorSourceColor;
+            case  3: return MTLBlendFactorOneMinusSourceColor;
+            case  4: return MTLBlendFactorSourceAlpha;
+            case  5: return MTLBlendFactorOneMinusSourceAlpha;
+            case  6: return MTLBlendFactorDestinationColor;
+            case  7: return MTLBlendFactorOneMinusDestinationColor;
+            case  8: return MTLBlendFactorDestinationAlpha;
+            case  9: return MTLBlendFactorOneMinusDestinationAlpha;
+            case 10: return MTLBlendFactorBlendColor;
+            case 11: return MTLBlendFactorOneMinusBlendColor;
+            case 12: return MTLBlendFactorSourceAlphaSaturated;
+            default: return MTLBlendFactorOne; // Blend::One = 0
+        }
+    }
+
+    // XNA BlendFunction ordinals -> MTLBlendOperation (mirrors EasyGL's ToEasyGLBlendEquation /
+    // Vulkan's ToVkBlendOp): Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4.
+    static MTLBlendOperation metalBlendOp(int xnaBlendFunc)
+    {
+        switch (xnaBlendFunc) {
+            case 1: return MTLBlendOperationSubtract;
+            case 2: return MTLBlendOperationReverseSubtract;
+            case 3: return MTLBlendOperationMax;
+            case 4: return MTLBlendOperationMin;
+            default: return MTLBlendOperationAdd; // BlendFunction::Add = 0
         }
     }
 
@@ -115,6 +233,119 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             default: return MTLSamplerAddressModeClampToEdge;
         }
     }
+
+    // plan_metal.md Phase 2 (simplified for a first, hardware-unverified pass -- a fully generic
+    // VertexDeclaration-driven descriptor builder, METAL-27, stays open; this is a fixed-variant
+    // enum, one entry per concrete shader+vertex-layout combination this file actually emits,
+    // exactly mirroring the "one Prog3D per Ensure*Program()" shape EasyGLGraphicsBackend already
+    // uses -- lower risk to get right without a compiler than inventing a hashed-VertexElement-list
+    // key blind).
+    enum class PipelineKind : uint8_t
+    {
+        Colored16, Textured20, ColorTex24, NormalTex32, DualTex20, DualTex24Colored, Sprite2D
+    };
+
+    // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
+    // cull/fill, which are genuine dynamic encoder state already handled elsewhere in this file)
+    // -- so a real per-BlendState pipeline cache needs blend as part of its key. Defaults below
+    // match Blend::One=0/Blend::Zero=1/BlendFunction::Add=0 for both channels, i.e. BlendState.
+    // Opaque's own real values -- the correct answer for "no ApplyBlendState call happened yet"
+    // (matches GraphicsDevice's own real XNA default BlendState).
+    struct BlendKey
+    {
+        uint8_t colorSrc=0, colorDst=1, alphaSrc=0, alphaDst=1, colorFunc=0, alphaFunc=0;
+        bool enabled=false;
+        bool operator==(const BlendKey& o) const
+        {
+            return colorSrc==o.colorSrc && colorDst==o.colorDst && alphaSrc==o.alphaSrc &&
+                   alphaDst==o.alphaDst && colorFunc==o.colorFunc && alphaFunc==o.alphaFunc &&
+                   enabled==o.enabled;
+        }
+    };
+    struct PipelineCacheKey
+    {
+        PipelineKind kind; BlendKey blend;
+        bool operator==(const PipelineCacheKey& o) const { return kind==o.kind && blend==o.blend; }
+    };
+    struct PipelineCacheKeyHash
+    {
+        std::size_t operator()(const PipelineCacheKey& k) const
+        {
+            uint64_t h = (uint64_t)k.kind
+                | ((uint64_t)k.blend.colorSrc  << 8)
+                | ((uint64_t)k.blend.colorDst  << 16)
+                | ((uint64_t)k.blend.alphaSrc  << 24)
+                | ((uint64_t)k.blend.alphaDst  << 32)
+                | ((uint64_t)k.blend.colorFunc << 40)
+                | ((uint64_t)k.blend.alphaFunc << 48)
+                | ((uint64_t)(k.blend.enabled ? 1 : 0) << 56);
+            return std::hash<uint64_t>()(h);
+        }
+    };
+
+    // Builds the MTLVertexDescriptor for one of the 4 fixed byte-strides this backend currently
+    // recognizes -- byte-for-byte identical to the 4 descriptors the original constructor built
+    // eagerly (vd16/vd20/vd24/vd32), just refactored so the now-lazy pipeline cache can build one
+    // on demand instead of every stride having to exist up front.
+    static MTLVertexDescriptor* vertexDescriptorForStride(std::size_t stride)
+    {
+        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        switch (stride) {
+            case 16:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatUChar4Normalized; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.layouts[0].stride=16;
+                return vd;
+            case 20:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatFloat2; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.layouts[0].stride=20;
+                return vd;
+            case 24:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatUChar4Normalized; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=16; vd.attributes[2].bufferIndex=0;
+                vd.layouts[0].stride=24;
+                return vd;
+            case 32:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0; vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
+                vd.layouts[0].stride=32;
+                return vd;
+            default:
+                throw std::runtime_error("Metal: unsupported vertex stride until generic VertexDeclaration pipeline cache is implemented (plan_metal.md METAL-27)");
+        }
+    }
+
+    // plan_metal.md METAL-6/24: real per-BlendState blend factors/operation, replacing the
+    // previous hardcoded-into-every-pipeline straight-alpha blend. When !blend.enabled, blending
+    // is left off entirely (matches BlendState.Opaque's real observable behavior).
+    static id<MTLRenderPipelineState> makePipeline(id<MTLDevice> dev, id<MTLLibrary> lib,
+                                                    NSString* vs, NSString* fs,
+                                                    MTLVertexDescriptor* vd, const BlendKey& blend)
+    {
+        MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
+        d.vertexFunction=[lib newFunctionWithName:vs]; d.fragmentFunction=[lib newFunctionWithName:fs]; d.vertexDescriptor=vd;
+        d.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm; d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
+        d.colorAttachments[0].blendingEnabled = blend.enabled ? YES : NO;
+        if (blend.enabled) {
+            d.colorAttachments[0].sourceRGBBlendFactor=metalBlendFactor(blend.colorSrc);
+            d.colorAttachments[0].destinationRGBBlendFactor=metalBlendFactor(blend.colorDst);
+            d.colorAttachments[0].rgbBlendOperation=metalBlendOp(blend.colorFunc);
+            d.colorAttachments[0].sourceAlphaBlendFactor=metalBlendFactor(blend.alphaSrc);
+            d.colorAttachments[0].destinationAlphaBlendFactor=metalBlendFactor(blend.alphaDst);
+            d.colorAttachments[0].alphaBlendOperation=metalBlendOp(blend.alphaFunc);
+        }
+        NSError* err=nil; id<MTLRenderPipelineState> p=[dev newRenderPipelineStateWithDescriptor:d error:&err]; [d.vertexFunction release]; [d.fragmentFunction release]; [d release];
+        if(!p) throw std::runtime_error(std::string("Metal pipeline compile failed: ")+([[err localizedDescription] UTF8String]?:"unknown")); return p;
+    }
+
+    // Plain C++ mirror of kMetalShaderSource's `struct UMaterialParams { float4 diffuseColor;
+    // float4 alphaTest; float4 flags; };` -- three consecutive float4s, 48 bytes, no padding
+    // ambiguity either side (unlike a float3-containing struct, which would need manual padding
+    // to match MSL's `constant` address-space layout rules).
+    struct UMaterialParams { float diffuseColor[4]; float alphaTest[4]; float flags[4]; };
 
     struct Mat4 { float m[16]; };
     static Mat4 multiply(const Mat4& a, const Mat4& b)
@@ -207,7 +438,7 @@ struct MetalGraphicsBackend::Impl
     id<MTLDevice> device=nil;
     id<MTLCommandQueue> queue=nil;
     id<MTLLibrary> library=nil;
-    id<MTLRenderPipelineState> pipe3Color=nil, pipe3Tex20=nil, pipe3ColorTex24=nil, pipe3NormalTex32=nil, pipe2=nil;
+    std::unordered_map<PipelineCacheKey, id<MTLRenderPipelineState>, PipelineCacheKeyHash> pipelineCache;
     id<MTLDepthStencilState> depthState=nil;
     id<MTLSamplerState> sampler=nil;
     std::unordered_map<uint32_t, id<MTLSamplerState>> samplerCache;
@@ -224,6 +455,31 @@ struct MetalGraphicsBackend::Impl
     MTLCullMode cull=MTLCullModeNone;
     MTLTriangleFillMode fill=MTLTriangleFillModeFill;
     float depthBias=0,slopeBias=0;
+    BlendKey currentBlend; // real per-BlendState pipeline selection key, see ApplyBlendState() below
+    // plan_metal.md METAL-7/9/10: real DepthStencilState fields, defaults matching
+    // DepthStencilState::DepthStencilState()'s own real values exactly (DepthStencilState.cpp).
+    int depthFunc=3;               // CompareFunction::LessEqual -- DepthStencilState.Default's own value
+    bool stencilEnabled=false;
+    int stencilFunc=0, stencilPass=0, stencilFail=0, stencilDepthFail=0; // Always=0 / Keep=0
+    int stencilMask=0x7FFFFFFF, stencilWriteMask=0x7FFFFFFF;
+    bool twoSidedStencil=false;
+    int ccwStencilFunc=0, ccwStencilPass=0, ccwStencilFail=0, ccwStencilDepthFail=0;
+    float blendColor[4]={1,1,1,1}; // BlendState.BlendFactor default == Color.White
+
+    // Re-applies every piece of encoder-scoped dynamic state this backend tracks. Metal has no
+    // persistent-across-encoders state at all (unlike, say, retained GL context state) -- a fresh
+    // MTLRenderCommandEncoder starts with undefined cull/fill/bias/stencil-ref/blend-color, so
+    // ensureFrame()/clear() must both call this every time they create one. Previously ensureFrame()
+    // inlined a partial version of this (missing stencil reference and blend color entirely) and
+    // clear() didn't reapply cull/fill/depthBias/stencil-reference at all -- a real, pre-existing
+    // inconsistency between the two encoder-creation paths, fixed here by sharing one function.
+    void applyTrackedEncoderState()
+    {
+        [encoder setViewport:viewport]; [encoder setCullMode:cull]; [encoder setTriangleFillMode:fill];
+        [encoder setDepthBias:depthBias slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
+        [encoder setStencilReferenceValue:(uint32_t)refStencil];
+        [encoder setBlendColorRed:blendColor[0] green:blendColor[1] blue:blendColor[2] alpha:blendColor[3]];
+    }
 
     void ensureFrame()
     {
@@ -245,8 +501,7 @@ struct MetalGraphicsBackend::Impl
         rp.stencilAttachment.texture=depthTexture; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
         encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
         viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
-        [encoder setViewport:viewport]; [encoder setCullMode:cull]; [encoder setTriangleFillMode:fill];
-        [encoder setDepthBias:depthBias slopeScale:slopeBias clamp:0]; [encoder setDepthStencilState:depthState];
+        applyTrackedEncoderState();
     }
 
     void endFrame()
@@ -271,16 +526,79 @@ struct MetalGraphicsBackend::Impl
         rp.depthAttachment.texture=depthTexture; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
         rp.stencilAttachment.texture=depthTexture; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
         encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
-        viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h}; [encoder setViewport:viewport]; [encoder setDepthStencilState:depthState];
+        viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
+        applyTrackedEncoderState();
     }
 
     void rebuildDepthState()
     {
         MTLDepthStencilDescriptor* d=[[MTLDepthStencilDescriptor alloc] init];
-        d.depthCompareFunction=depthEnabled?MTLCompareFunctionLessEqual:MTLCompareFunctionAlways;
+        d.depthCompareFunction = depthEnabled ? metalCompareFunction(depthFunc) : MTLCompareFunctionAlways;
         d.depthWriteEnabled=depthWrite;
+        // plan_metal.md METAL-9/10: real front/back stencil test, replacing the previous
+        // reference-value-only plumbing. Front face carries XNA's "normal" stencil fields; back
+        // face carries the CounterClockwise fields when TwoSidedStencilMode is set, else mirrors
+        // front exactly -- matches FNA's own real behavior (CCW fields are simply ignored when
+        // TwoSidedStencilMode=false, not reset to any default) and EasyGLGraphicsBackend's
+        // identical fallback-to-front pattern. UNLIKE VulkanGraphicsBackend::FillDepthStencilState
+        // (see its own long comment), this front/back assignment is NOT swapped -- Metal has no
+        // Vulkan-style NDC Y-flip in this codebase's vertex shaders (Vulkan's own swap was an
+        // empirically-found compensation for that Y-flip's winding interaction, root-caused to
+        // Vulkan specifically, not a general rule) -- but this has NOT been empirically verified
+        // on real Metal hardware and must be treated as unproven until it is (plan_metal.md
+        // Testing strategy tier 2/3).
+        if (stencilEnabled) {
+            MTLStencilDescriptor* front=[[MTLStencilDescriptor alloc] init];
+            front.stencilCompareFunction = metalCompareFunction(stencilFunc);
+            front.stencilFailureOperation = metalStencilOp(stencilFail);
+            front.depthFailureOperation = metalStencilOp(stencilDepthFail);
+            front.depthStencilPassOperation = metalStencilOp(stencilPass);
+            front.readMask = (uint32_t)stencilMask;
+            front.writeMask = (uint32_t)stencilWriteMask;
+            d.frontFaceStencil = front;
+            if (twoSidedStencil) {
+                MTLStencilDescriptor* back=[[MTLStencilDescriptor alloc] init];
+                back.stencilCompareFunction = metalCompareFunction(ccwStencilFunc);
+                back.stencilFailureOperation = metalStencilOp(ccwStencilFail);
+                back.depthFailureOperation = metalStencilOp(ccwStencilDepthFail);
+                back.depthStencilPassOperation = metalStencilOp(ccwStencilPass);
+                back.readMask = (uint32_t)stencilMask;
+                back.writeMask = (uint32_t)stencilWriteMask;
+                d.backFaceStencil = back;
+                [back release];
+            } else {
+                d.backFaceStencil = front;
+            }
+            [front release];
+        }
+        // else: leave frontFaceStencil/backFaceStencil nil (MTLDepthStencilDescriptor's default),
+        // which Metal treats as "stencil test always passes, no writes" -- correct for
+        // DepthStencilState.StencilEnable=false.
         id<MTLDepthStencilState> s=[device newDepthStencilStateWithDescriptor:d]; [d release]; [depthState release]; depthState=s;
         if(encoder) [encoder setDepthStencilState:depthState];
+    }
+
+    // plan_metal.md METAL-23/29: replaces the 5 eagerly-built named pipeline fields with a
+    // lazily-populated cache keyed by (shader/vertex-layout variant, current blend state).
+    id<MTLRenderPipelineState> getOrCreatePipeline(PipelineKind kind)
+    {
+        PipelineCacheKey key{kind, currentBlend};
+        auto it = pipelineCache.find(key);
+        if (it != pipelineCache.end()) return it->second;
+        NSString* vs=nil; NSString* fs=nil; std::size_t stride=0;
+        switch (kind) {
+            case PipelineKind::Colored16:        vs=@"cna_v3d_color";    fs=@"cna_f3d_color";   stride=16; break;
+            case PipelineKind::Textured20:       vs=@"cna_v3d_tex";      fs=@"cna_f3d_texture"; stride=20; break;
+            case PipelineKind::ColorTex24:       vs=@"cna_v3d_colortex"; fs=@"cna_f3d_texture"; stride=24; break;
+            case PipelineKind::NormalTex32:      vs=@"cna_v3d_normaltex";fs=@"cna_f3d_texture"; stride=32; break;
+            case PipelineKind::DualTex20:        vs=@"cna_v3d_tex";      fs=@"cna_f3d_dualtex"; stride=20; break;
+            case PipelineKind::DualTex24Colored: vs=@"cna_v3d_colortex"; fs=@"cna_f3d_dualtex"; stride=24; break;
+            case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
+        }
+        id<MTLVertexDescriptor> vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
+        id<MTLRenderPipelineState> pipe = makePipeline(device, library, vs, fs, vd, currentBlend);
+        pipelineCache.emplace(key, pipe);
+        return pipe;
     }
 
     // Builds (or reuses) a cached MTLSamplerState for the given raw XNA TextureFilter/
@@ -327,20 +645,11 @@ public:
         auto a=xf(x0,y0),bb=xf(x1,y0),cc=xf(x1,y1),dd=xf(x0,y1);
         V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};
         struct U{float w,h;} u{(float)p.drawable.texture.width,(float)p.drawable.texture.height};
-        [p.encoder setRenderPipelineState:p.pipe2]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
+        [p.encoder setRenderPipelineState:p.getOrCreatePipeline(PipelineKind::Sprite2D)]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
         [p.encoder setFragmentTexture:mt->native() atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,1) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
 private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1;
 };
-
-static id<MTLRenderPipelineState> makePipeline(id<MTLDevice> dev,id<MTLLibrary> lib,NSString* vs,NSString* fs,MTLVertexDescriptor* vd)
-{
-    MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init]; d.vertexFunction=[lib newFunctionWithName:vs]; d.fragmentFunction=[lib newFunctionWithName:fs]; d.vertexDescriptor=vd;
-    d.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm; d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
-    d.colorAttachments[0].blendingEnabled=YES; d.colorAttachments[0].sourceRGBBlendFactor=MTLBlendFactorSourceAlpha; d.colorAttachments[0].destinationRGBBlendFactor=MTLBlendFactorOneMinusSourceAlpha; d.colorAttachments[0].sourceAlphaBlendFactor=MTLBlendFactorOne; d.colorAttachments[0].destinationAlphaBlendFactor=MTLBlendFactorOneMinusSourceAlpha;
-    NSError* err=nil; id<MTLRenderPipelineState> p=[dev newRenderPipelineStateWithDescriptor:d error:&err]; [d.vertexFunction release]; [d.fragmentFunction release]; [d release];
-    if(!p) throw std::runtime_error(std::string("Metal pipeline compile failed: ")+([[err localizedDescription] UTF8String]?:"unknown")); return p;
-}
 
 MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args):impl_(std::make_unique<Impl>())
 {
@@ -352,15 +661,12 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     p.queue=[p.device newCommandQueue];
     NSError* err=nil; NSString* src=[NSString stringWithUTF8String:kMetalShaderSource]; p.library=[p.device newLibraryWithSource:src options:nil error:&err];
     if(!p.library) throw std::runtime_error(std::string("Metal shader compile failed: ")+([[err localizedDescription] UTF8String]?:"unknown"));
-    MTLVertexDescriptor* vd16=[MTLVertexDescriptor vertexDescriptor]; vd16.attributes[0].format=MTLVertexFormatFloat3;vd16.attributes[0].offset=0;vd16.attributes[0].bufferIndex=0;vd16.attributes[1].format=MTLVertexFormatUChar4Normalized;vd16.attributes[1].offset=12;vd16.attributes[1].bufferIndex=0;vd16.layouts[0].stride=16;
-    MTLVertexDescriptor* vd20=[MTLVertexDescriptor vertexDescriptor]; vd20.attributes[0].format=MTLVertexFormatFloat3;vd20.attributes[0].offset=0;vd20.attributes[0].bufferIndex=0;vd20.attributes[1].format=MTLVertexFormatFloat2;vd20.attributes[1].offset=12;vd20.attributes[1].bufferIndex=0;vd20.layouts[0].stride=20;
-    MTLVertexDescriptor* vd24=[MTLVertexDescriptor vertexDescriptor]; vd24.attributes[0].format=MTLVertexFormatFloat3;vd24.attributes[0].offset=0;vd24.attributes[0].bufferIndex=0;vd24.attributes[1].format=MTLVertexFormatUChar4Normalized;vd24.attributes[1].offset=12;vd24.attributes[1].bufferIndex=0;vd24.attributes[2].format=MTLVertexFormatFloat2;vd24.attributes[2].offset=16;vd24.attributes[2].bufferIndex=0;vd24.layouts[0].stride=24;
-    MTLVertexDescriptor* vd32=[MTLVertexDescriptor vertexDescriptor]; vd32.attributes[0].format=MTLVertexFormatFloat3;vd32.attributes[0].offset=0;vd32.attributes[0].bufferIndex=0;vd32.attributes[1].format=MTLVertexFormatFloat3;vd32.attributes[1].offset=12;vd32.attributes[1].bufferIndex=0;vd32.attributes[2].format=MTLVertexFormatFloat2;vd32.attributes[2].offset=24;vd32.attributes[2].bufferIndex=0;vd32.layouts[0].stride=32;
-    p.pipe3Color=makePipeline(p.device,p.library,@"cna_v3d_color",@"cna_f3d_color",vd16); p.pipe3Tex20=makePipeline(p.device,p.library,@"cna_v3d_tex",@"cna_f3d_texture",vd20); p.pipe3ColorTex24=makePipeline(p.device,p.library,@"cna_v3d_colortex",@"cna_f3d_texture",vd24); p.pipe3NormalTex32=makePipeline(p.device,p.library,@"cna_v3d_normaltex",@"cna_f3d_texture",vd32); p.pipe2=makePipeline(p.device,p.library,@"cna_v2d",@"cna_f2d",nil);
+    // plan_metal.md METAL-23: pipelines are no longer built eagerly here -- getOrCreatePipeline()
+    // lazily builds+caches each (PipelineKind, BlendKey) combination on first use instead.
     MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc]init];sd.minFilter=MTLSamplerMinMagFilterLinear;sd.magFilter=MTLSamplerMinMagFilterLinear;sd.sAddressMode=MTLSamplerAddressModeClampToEdge;sd.tAddressMode=MTLSamplerAddressModeClampToEdge;p.sampler=[p.device newSamplerStateWithDescriptor:sd];[sd release];
     p.rebuildDepthState();
 }
-MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();[p.depthTexture release];[p.depthState release];[p.sampler release];[p.pipe2 release];[p.pipe3NormalTex32 release];[p.pipe3ColorTex24 release];[p.pipe3Tex20 release];[p.pipe3Color release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
+MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.depthTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
 MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl(){return *impl_;} const MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl()const{return *impl_;}
 void MetalGraphicsBackend::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalGraphicsBackend::Present(){impl_->endFrame();}
 void MetalGraphicsBackend::GetViewportSize(int&w,int&h){int pw=0,ph=0;SDL_GetWindowSizeInPixels(impl_->window,&pw,&ph);w=impl_->virtualW>0?impl_->virtualW:pw;h=impl_->virtualH>0?impl_->virtualH:ph;}
@@ -369,23 +675,116 @@ SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;
 std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
 void MetalGraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalGraphicsBackend::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalGraphicsBackend::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalGraphicsBackend::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalGraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalGraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
 void MetalGraphicsBackend::SetDepthTestEnabled(bool e){impl_->depthEnabled=e;impl_->rebuildDepthState();} void MetalGraphicsBackend::SetBlendEnabled(bool e){impl_->blendEnabled=e;} void MetalGraphicsBackend::SetDepthWriteEnabled(bool e){impl_->depthWrite=e;impl_->rebuildDepthState();}
-void MetalGraphicsBackend::ApplyBlendState(int,int,int,int,int,int){}
-void MetalGraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int,bool,int,int,int,int,int,int,int ref,bool,int,int,int,int){impl_->depthEnabled=de;impl_->depthWrite=dw;impl_->refStencil=ref;impl_->rebuildDepthState();if(impl_->encoder)[impl_->encoder setStencilReferenceValue:ref];}
+void MetalGraphicsBackend::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colorDstBlend,int alphaDstBlend,int colorBlendFunc,int alphaBlendFunc)
+{
+    // plan_metal.md METAL-6/24: real per-BlendState pipeline selection, replacing the previous
+    // complete no-op (every pipeline was hardcoded to a fixed straight-alpha blend regardless of
+    // the actual requested BlendState). `enabled` derivation mirrors
+    // EasyGLGraphicsBackend::ApplyBlendState's identical Blend::One/Blend::Zero Opaque-preset
+    // check exactly (Blend::One=0, Blend::Zero=1).
+    auto& p=*impl_;
+    p.currentBlend.colorSrc=(uint8_t)colorSrcBlend; p.currentBlend.colorDst=(uint8_t)colorDstBlend;
+    p.currentBlend.alphaSrc=(uint8_t)alphaSrcBlend; p.currentBlend.alphaDst=(uint8_t)alphaDstBlend;
+    p.currentBlend.colorFunc=(uint8_t)colorBlendFunc; p.currentBlend.alphaFunc=(uint8_t)alphaBlendFunc;
+    p.currentBlend.enabled = !(colorSrcBlend==0 && colorDstBlend==1 && alphaSrcBlend==0 && alphaDstBlend==1);
+}
+void MetalGraphicsBackend::ApplyDepthStencilState(bool depthEnable,bool depthWriteEnable,int depthFunc,
+                                                   bool stencilEnable,int stencilFunc,int stencilPass,int stencilFail,int stencilDepthFail,
+                                                   int stencilMask,int stencilWriteMask,int referenceStencil,
+                                                   bool twoSidedStencilMode,int ccwStencilFunc,int ccwStencilPass,int ccwStencilFail,int ccwStencilDepthFail)
+{
+    // plan_metal.md METAL-7/9/10: real depthFunc + full front/back stencil-op wiring, replacing
+    // the previous depthEnable/depthWrite/referenceStencil-only plumbing (depthFunc and all 8
+    // stencil-op/mask/twoSided fields were silently ignored before this).
+    auto& p=*impl_;
+    p.depthEnabled=depthEnable; p.depthWrite=depthWriteEnable; p.depthFunc=depthFunc;
+    p.stencilEnabled=stencilEnable; p.stencilFunc=stencilFunc; p.stencilPass=stencilPass;
+    p.stencilFail=stencilFail; p.stencilDepthFail=stencilDepthFail;
+    p.stencilMask=stencilMask; p.stencilWriteMask=stencilWriteMask;
+    p.twoSidedStencil=twoSidedStencilMode; p.ccwStencilFunc=ccwStencilFunc; p.ccwStencilPass=ccwStencilPass;
+    p.ccwStencilFail=ccwStencilFail; p.ccwStencilDepthFail=ccwStencilDepthFail;
+    p.refStencil=referenceStencil;
+    p.rebuildDepthState();
+    if(p.encoder)[p.encoder setStencilReferenceValue:referenceStencil];
+}
 void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb){impl_->cull=c==1?MTLCullModeFront:(c==2?MTLCullModeBack:MTLCullModeNone);impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;impl_->scissorEnabled=se;impl_->depthBias=db;impl_->slopeBias=sb;if(impl_->encoder){[impl_->encoder setCullMode:impl_->cull];[impl_->encoder setTriangleFillMode:impl_->fill];[impl_->encoder setDepthBias:db slopeScale:sb clamp:0];}}
 void MetalGraphicsBackend::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy){if(slot<0||slot>=16)return;impl_->samplerSlots[slot]=impl_->samplerFor(filter,addressU,addressV,maxAnisotropy);}
+void MetalGraphicsBackend::SetBlendFactor(float r,float g,float b,float a){impl_->blendColor[0]=r;impl_->blendColor[1]=g;impl_->blendColor[2]=b;impl_->blendColor[3]=a;if(impl_->encoder)[impl_->encoder setBlendColorRed:r green:g blue:b alpha:a];}
 void MetalGraphicsBackend::SetReferenceStencil(int v){impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}
 void MetalGraphicsBackend::SetScissorRect(int x,int y,int w,int h){impl_->scissor={(NSUInteger)std::max(0,x),(NSUInteger)std::max(0,y),(NSUInteger)std::max(0,w),(NSUInteger)std::max(0,h)};if(impl_->encoder)[impl_->encoder setScissorRect:impl_->scissor];}
 void MetalGraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){impl_->viewport={(double)x,(double)y,(double)w,(double)h,mn,mx};if(impl_->encoder)[impl_->encoder setViewport:impl_->viewport];}
 std::unique_ptr<IVertexBufferBackend> MetalGraphicsBackend::CreateVertexBuffer(int c){return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
 
+// plan_metal.md METAL-29/55/61: dispatch precedence deliberately mirrors
+// EasyGLGraphicsBackend::SelectProgram()'s own top-of-function order (dualTexture checked before
+// the plain stride switch) -- envMapping/skinned/pbr are still ahead of this in EasyGL's real
+// precedence and are simply not reachable yet on Metal (their GpuDrawParams flags fall through to
+// this function unconsumed until Phases 6-8 land), not a knowingly-wrong ordering.
+static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* params)
+{
+    const bool textured = params && params->texture0;
+    const bool dual = params && params->dualTexture;
+    if (dual) {
+        if (!textured) throw std::runtime_error("Metal: DualTextureEffect requires Texture to be set");
+        if (stride == 24) return PipelineKind::DualTex24Colored;
+        if (stride == 20) return PipelineKind::DualTex20;
+        throw std::runtime_error("Metal: DualTextureEffect requires stride 20 or 24");
+    }
+    if (textured) {
+        switch (stride) {
+            case 20: return PipelineKind::Textured20;
+            case 24: return PipelineKind::ColorTex24;
+            case 32: return PipelineKind::NormalTex32;
+            default: throw std::runtime_error("Metal: textured 3D requires stride 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented");
+        }
+    }
+    if (stride != 16) throw std::runtime_error("Metal: colored 3D currently requires VertexPositionColor stride 16");
+    return PipelineKind::Colored16;
+}
+
 static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
     p.ensureFrame(); Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
-    bool textured=params && params->texture0; id<MTLRenderPipelineState> pipeline=p.pipe3Color;
-    if(textured){ if(vb.stride()==20) pipeline=p.pipe3Tex20; else if(vb.stride()==24) pipeline=p.pipe3ColorTex24; else if(vb.stride()==32) pipeline=p.pipe3NormalTex32; else throw std::runtime_error("Metal: textured 3D requires stride 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented"); }
-    else if(vb.stride()!=16) throw std::runtime_error("Metal: colored 3D currently requires VertexPositionColor stride 16");
+    const bool textured = params && params->texture0;
+    const bool dual = params && params->dualTexture;
+    const PipelineKind kind = selectPipelineKind(vb.stride(), params);
+    id<MTLRenderPipelineState> pipeline = p.getOrCreatePipeline(kind);
+
+    // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now actually
+    // reach the shader (previously silently ignored for every draw). Defaults below exactly
+    // reproduce this function's own prior hardcoded behavior for the non-Ex (params==nullptr)
+    // path: diffuseColor=white, alphaTest=always-pass, vertexColorEnabled=true.
+    UMaterialParams mp;
+    if (params) {
+        mp.diffuseColor[0]=params->diffuseColor[0]; mp.diffuseColor[1]=params->diffuseColor[1];
+        mp.diffuseColor[2]=params->diffuseColor[2]; mp.diffuseColor[3]=params->diffuseColor[3];
+        mp.alphaTest[0]=params->alphaTest[0]; mp.alphaTest[1]=params->alphaTest[1];
+        mp.alphaTest[2]=params->alphaTest[2]; mp.alphaTest[3]=params->alphaTest[3];
+        mp.flags[0]=params->vertexColorEnabled?1.0f:0.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
+    } else {
+        mp.diffuseColor[0]=mp.diffuseColor[1]=mp.diffuseColor[2]=mp.diffuseColor[3]=1.0f;
+        mp.alphaTest[0]=0.0f; mp.alphaTest[1]=0.0f; mp.alphaTest[2]=1.0f; mp.alphaTest[3]=1.0f;
+        mp.flags[0]=1.0f; mp.flags[1]=mp.flags[2]=mp.flags[3]=0.0f;
+    }
+
     [p.encoder setRenderPipelineState:pipeline]; [p.encoder setVertexBuffer:vb.native() offset:0 atIndex:0]; [p.encoder setVertexBytes:&wvp length:sizeof(wvp) atIndex:1]; [p.encoder setDepthStencilState:p.depthState]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
-    if(textured){auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];[p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];}
+    [p.encoder setFragmentBytes:&mp length:sizeof(mp) atIndex:2];
+    if(textured){
+        auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);
+        if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
+        if(dual){
+            // plan_metal.md: EasyGL/Vulkan/Bgfx fall back to a 1x1 opaque white texture when
+            // Texture2 is left null (docs/dualtextureeffect-support.md Task 386/387); Metal does
+            // not yet have that fallback mechanism (a real, tracked follow-up gap, not silently
+            // dropped), so a null Texture2 here leaves texture unit 1 holding whatever a prior
+            // draw last bound there -- matches this same function's own pre-existing texture0
+            // null-handling pattern exactly, not a new class of gap introduced by DualTexture.
+            auto* mt1=dynamic_cast<const MetalTexture*>(params->texture1);
+            if(mt1)[p.encoder setFragmentTexture:mt1->native() atIndex:1];
+            [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
+        }
+    }
     int n=primitiveVertexCount(pt,pc); if(ib)[p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16 indexBuffer:ib->native() indexBufferOffset:0];else[p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:0 vertexCount:n];
 }
 void MetalGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);if(!vb)throw std::runtime_error("Metal: foreign vertex buffer");drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,nullptr);}
