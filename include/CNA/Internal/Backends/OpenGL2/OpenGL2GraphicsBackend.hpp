@@ -95,6 +95,8 @@ namespace CNA::Internal::Backends::OpenGL2
         bool TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const override;
 
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
     private:
         SDL_Window* window_{};
         SDL_GLContext context_{};

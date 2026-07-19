@@ -1837,6 +1837,32 @@ namespace CNA::Internal::Backends::OpenGL2
         windowY = logY * invScale;
         return true;
     }
+
+    bool OpenGL2GraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            // Unlike EasyGL/GLES3 (which has no wireframe fill mode at all -- see its own
+            // SupportsCapability), desktop GL 2.1's compatibility profile genuinely supports
+            // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE), already wired in
+            // ApplyRasterizerState() above.
+            case CNA::GraphicsCapability::WireFrame:
+                return true;
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            {
+                GLint maxSamples = 0;
+                glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+                return maxSamples > 1;
+            }
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+            {
+                const auto* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+                return extensions && std::strstr(extensions, "GL_EXT_texture_filter_anisotropic") != nullptr;
+            }
+            default:
+                return true;
+        }
+    }
 }
 
 namespace CNA::Internal::Backends

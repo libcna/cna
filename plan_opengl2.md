@@ -336,8 +336,41 @@ possibilities of OpenGL 2"):
   before running -- both matched on the first real run); per-fragment lighting; and the
   null-Texture fallback. 7/7 PASS on the first run.
 
+## Status: SupportsCapability real values (2026-07-19, session 6 cont'd)
+
+- **`SupportsCapability` implemented**: previously used `IGraphicsBackend`'s blanket
+  "everything supported" default. Now reports real, backend-specific values for the 3 capabilities
+  that genuinely vary (matching `EasyGLGraphicsBackend`/`VulkanGraphicsBackend`'s own established
+  per-capability pattern, not a speculative addition):
+  - `WireFrame`: **`true`**, unlike EasyGL/GLES3 (which has no wireframe fill mode at all) --
+    desktop GL 2.1's compatibility profile genuinely supports
+    `glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)`, already wired in `ApplyRasterizerState()`
+    (verified, not just assumed, before writing this override).
+  - `MultiSampleAntiAliasing`: queries `GL_MAX_SAMPLES` (`>1` -- real device/driver-dependent
+    check, same technique EasyGL uses for its own equivalent GLES3 query).
+  - `AnisotropicFiltering`: queries `GL_EXTENSIONS` for `GL_EXT_texture_filter_anisotropic` (GL
+    2.1 predates `glGetStringi`-based extension enumeration, so this uses the classic
+    space-separated single-string search).
+  - Every other capability (`ThreeD`, `DepthStencilBuffer`, `MultipleRenderTargets`,
+    `OcclusionQuery`, `CustomEffects`) keeps the default `true`, matching EasyGL's own defaults for
+    those (this backend genuinely has real, tested support for each -- see the `OpenGL2_*` CTests
+    above).
+  This also fixes the one non-fixture-related failure the generic `CnaTests` gtest target had
+  under this backend: `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` is (per its own
+  header comment) an EasyGL-specific assumption baked into that shared test file, not something
+  meant to hold for every backend -- OpenGL2 correctly returns `true` there now, same as it always
+  should have per the blanket default, and the shared gtest correctly still reports it as a
+  mismatch for the reason stated in its own file (out of scope to change that shared,
+  intentionally-backend-specific test).
+  New `opengl2_graphics_capability_test.cpp` (twin of
+  `dx3_graphics_capability_test.cpp`/`sdlrenderer_graphics_capability_test.cpp`/
+  `canvas_graphics_capability_test.cpp`'s per-backend dedicated pattern, since OpenGL2 -- like
+  Vulkan -- doesn't fit the generic gtest target's EasyGL-specific assumptions): asserts the real
+  positive-capability set including `WireFrame=true`, and that the two device-dependent queries
+  don't throw. 8/8 PASS.
+
 ### Verified working
-- `cmake/Tests/OpenGL2Tests.cmake` registers twelve CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
+- `cmake/Tests/OpenGL2Tests.cmake` registers thirteen CTests (Xvfb, `SDL_VIDEODRIVER=x11`):
   - `OpenGL2_Smoke` -- window/GL-context lifecycle, VertexBuffer/16-bit/32-bit IndexBuffer
     round-trips, 60 frames of Clear+Present. 7/7 PASS.
   - `OpenGL2_2D` -- real `Texture2D` + `SpriteBatch`, pixel-verified via `ReadBackbuffer`:
@@ -361,6 +394,8 @@ possibilities of OpenGL 2"):
     sampler fallback. 5/5 PASS.
   - `OpenGL2_SkinnedEffect` -- bone-palette position/normal skinning, `WeightsPerVertex` gating,
     per-fragment lighting, default-white sampler fallback. 7/7 PASS.
+  - `OpenGL2_GraphicsCapability` -- real `SupportsCapability` values (`WireFrame=true`,
+    device-dependent queries don't throw). 8/8 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -408,6 +443,8 @@ possibilities of OpenGL 2"):
   `OpenGL2_EnvironmentMapEffect` above).
 - SkinnedEffect (bone-palette vertex skinning, `WeightsPerVertex` gating; see
   `OpenGL2_SkinnedEffect` above).
+- Real `SupportsCapability` values for `WireFrame`/`MultiSampleAntiAliasing`/
+  `AnisotropicFiltering` (see `OpenGL2_GraphicsCapability` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -424,8 +461,5 @@ possibilities of OpenGL 2"):
 - Custom `ShaderEffect`/`CreateEffectBackend` (runtime-compiled user GLSL) -- still returns
   `nullptr` (default). Would let games write their own OpenGL2 shaders through CNA's `Effect`
   API, mirroring `EasyGLEffectBackend`.
-- Robust extension/capability detection (`SupportsCapability` still uses `IGraphicsBackend`'s
-  blanket "everything is supported" default -- no real `GraphicsCapability` gating for anything
-  above, e.g. reporting cube-map/3D-texture/occlusion-query support accurately once implemented).
 - Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended for Linux desktop builds.
 - Visual parity tests against other backends (golden-image comparison).
