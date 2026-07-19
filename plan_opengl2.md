@@ -501,6 +501,17 @@ possibilities of OpenGL 2"):
 - `SpriteBatch::SetCustomEffect()` (2D sprite-batch custom-shader path) -- `Sprite` still ignores
   it entirely (default no-op); only the direct 3D draw path
   (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`) consumes `GpuDrawParams::customEffectBackend` so
-  far (see `OpenGL2_ShaderEffect` above).
+  far (see `OpenGL2_ShaderEffect` above). Investigated during this session and deliberately NOT
+  attempted: this backend's `Sprite::Draw()` pre-transforms every vertex to clip space ON THE CPU
+  (screen coords -> NDC via `viewportWidth`/`viewportHeight` division, with `transform_` applied
+  before that) and its built-in shader is just `gl_Position=vec4(aPosition,1.0)` -- no projection
+  matrix uniform at all. `EasyGLSpriteBatchBackend::SetCustomEffect`'s established contract (see
+  its `FlushBatch()`) instead uploads a real orthographic `projection` uniform and expects the
+  vertex shader to apply it, which requires uploading RAW screen-space positions, not
+  pre-transformed clip-space ones. Supporting `SetCustomEffect()` here properly (matching that
+  same contract, so a custom sprite shader ported from EasyGL "just works") means restructuring
+  `Sprite::Draw()`'s vertex generation away from CPU-side clip-space pre-transform -- a real
+  refactor of the currently 13/13-passing `OpenGL2_2D` code path, not a small addition; deferred
+  rather than risking that already-verified subsystem for a lower-priority feature.
 - Windows GL 2.x entry-point loader validation; current direct prototypes are primarily intended for Linux desktop builds.
 - Visual parity tests against other backends (golden-image comparison).
