@@ -1588,6 +1588,30 @@ previously-tracked defect fixes (Task 11.1-11.5, 11.21) were independently confi
   `SdlSensorSubsystem`) is correct, several files notably citing specific archived MSDN page numbers to
   justify NOXNA-extension claims rather than asserting parity without evidence.
 
+## Positive pattern: `cmake/Tests/*.cmake` consistently discloses known backend limitations rather than hiding them
+
+- **`build-cmake-tests` shard (14 files, all audited): a recurring, strong positive pattern across
+  multiple backends** of registering a test that is known to fail (or partially fail) against a
+  specific, already-tracked defect, with the CMake registration's own comment stating precisely
+  which check fails and why, rather than quietly excluding the test or deleting it:
+  - `WebGpuTests.cmake`'s `WebGPU_Msaa` (WEBGPU-58): left registered and failing on purpose — "3 of
+    6 checks in this test currently FAIL because genuine multisample-resolved rendering does not
+    yet work end-to-end," directly consistent with CLAUDE.md's own instruction not to overclaim
+    WebGPU parity.
+  - `VulkanTests.cmake` Tasks 305-309 (Task 868, `ApplyBlendState` hardcoding a single blend
+    equation): five consecutive registrations each carry a specific per-check pass/fail prediction
+    ("expect Check A (Subtract) to fail per Task 868 — Vulkan always hardcodes
+    `VK_BLEND_OP_ADD`"), a notably precise level of documented known-limitation disclosure.
+  - `BgfxTests.cmake` Task 923 (BlendState alpha-factor independence) and Task 879 (RenderTarget2D
+    MSAA): both empirically prove a failure is an environment/sandbox limitation (confirmed via
+    3 independent probes; confirmed by the same test passing cleanly under bgfx's Vulkan renderer)
+    rather than a real CNA defect, following this project's own established precedent for that
+    class of finding (Task 448's occlusion query).
+  - `Dx3Tests.cmake` confirms the already-known `Dx3_SpriteBatch` test (2/10 checks failing per this
+    session's own prior finding) is a genuine, live CTest registration, not silently excluded.
+  This is a genuinely strong project-wide discipline worth preserving: known gaps stay visible as
+  red CTest results with a documented reason, rather than being hidden.
+
 ## Repo-hygiene finding: root `.gitignore`'s `build*` pattern silently ignores this audit's own manifest files
 
 - **MEDIUM, discovered while committing the `build-cmake`/`build-cmake-tests` manifest shard
