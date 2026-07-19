@@ -222,6 +222,93 @@ fragment float4 cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[t
     return c;
 }
 
+// SkinnedEffect (plan_metal.md METAL-72-80), ported line-for-line from
+// EasyGLGraphicsBackend::EnsureSkinnedProgram()'s real GLSL. Vertex layout: position(12)+
+// normal(12)+uv(8)+boneWeights(16, real float4, not packed/normalized)+boneIndices(4, packed
+// UChar4, unnormalized -- read as an integer type in-shader, not auto-converted to float like a
+// Normalized format would be) = 52 bytes; +color(4, packed UChar4Normalized) = 56 -- confirmed
+// against WebGPUGraphicsBackend::GetOrCreatePipelineSkinned3D's own `hasVertexColor=(stride==56)`.
+// Real, load-bearing finding from reading the reference shader closely: unlike BasicEffect's lit
+// path, the skinned vertex shader does NOT apply a separate world-space inverse-transpose normal
+// matrix at all -- the normal is only ever transformed by `mat3(skinMat)` (the bone blend's own
+// upper-left 3x3), then normalized, and used as-is. Ported that way here, not "corrected" to also
+// apply a world normal matrix -- CNA's own established skinned behavior, confirmed not assumed.
+struct SkinnedTransform { float4x4 wvp; float4x4 world; float4 skinParams; }; // skinParams.x = weightsPerVertex
+struct SkinnedUniforms {
+    float4 diffuseColor, emissiveColor;
+    float4 light0Dir, light0Diffuse, light0Specular;
+    float4 light1Dir, light1Diffuse, light1Specular;
+    float4 light2Dir, light2Diffuse, light2Specular;
+    float4 specularColorPower; // xyz=SpecularColor, w=SpecularPower
+    float4 eyePosition;
+    float4 alphaTest;
+    float4 fogColorEnabled;    // xyz=FogColor, w=FogEnabled
+    float4 fogStartEnd;        // x=FogStart, y=FogEnd
+    float4 vertexColorEnabled; // x = 0/1
+};
+struct VSkinnedIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]]; };
+struct VSkinnedColorIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float2 uv [[attribute(2)]]; float4 boneWeights [[attribute(3)]]; uchar4 boneIndices [[attribute(4)]]; float4 color [[attribute(5)]]; };
+struct VSkinnedOut { float4 position [[position]]; float3 normal; float2 uv; float3 worldPos; float fogFactor; float4 color; };
+inline VSkinnedOut cna_skin_common(float3 position, float3 normal, float2 uv, float4 boneWeights, uchar4 boneIndices, float4 vcolor,
+                                    constant SkinnedTransform& t, constant float4x4* bones,
+                                    float fogStart, float fogEnd, float fogEnabled) {
+    VSkinnedOut o;
+    int weightsPerVertex = int(t.skinParams.x);
+    // Task 895: real XNA Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
+    // weight/index pairs.
+    float4x4 skinMat = bones[boneIndices.x] * boneWeights.x;
+    if (weightsPerVertex >= 2) skinMat += bones[boneIndices.y] * boneWeights.y;
+    if (weightsPerVertex >= 4) skinMat += bones[boneIndices.z] * boneWeights.z + bones[boneIndices.w] * boneWeights.w;
+    float4 skinnedPos = skinMat * float4(position, 1.0);
+    o.position = t.wvp * skinnedPos;
+    // Safe-normalize guard (ported, not invented): a vertex blended near-evenly between two bones
+    // whose relative rotation is near 180 degrees can make the linearly-blended skinMat's
+    // rotational part nearly cancel for a given normal, collapsing its transformed length toward
+    // zero; normalize() of a near-zero vector is unstable (can yield NaN). Falls back to the
+    // untransformed bind-pose normal for just that vertex.
+    float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    float3 skinnedNormal = skinMat3 * normal;
+    float skinnedNormalLen = length(skinnedNormal);
+    o.normal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : normal;
+    o.uv = uv;
+    o.worldPos = (t.world * skinnedPos).xyz;
+    o.color = vcolor;
+    o.fogFactor = (fogEnabled > 0.5)
+        ? ((abs(fogEnd - fogStart) < 1e-6) ? 0.0 : clamp((position.z + fogEnd) / (fogEnd - fogStart), 0.0, 1.0))
+        : 1.0;
+    return o;
+}
+vertex VSkinnedOut cna_v3d_skinned(VSkinnedIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
+    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, float4(1.0), t, bones, su.fogStartEnd.x, su.fogStartEnd.y, su.fogColorEnabled.w);
+}
+vertex VSkinnedOut cna_v3d_skinned_color(VSkinnedColorIn in [[stage_in]], constant SkinnedTransform& t [[buffer(1)]], constant SkinnedUniforms& su [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
+    return cna_skin_common(in.position, in.normal, in.uv, in.boneWeights, in.boneIndices, in.color, t, bones, su.fogStartEnd.x, su.fogStartEnd.y, su.fogColorEnabled.w);
+}
+fragment float4 cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]], constant SkinnedUniforms& su [[buffer(2)]]) {
+    float3 N = normalize(in.normal);
+    float3 E = normalize(su.eyePosition.xyz - in.worldPos);
+    float dotL0 = dot(N, -su.light0Dir.xyz); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+    float dotL1 = dot(N, -su.light1Dir.xyz); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+    float dotL2 = dot(N, -su.light2Dir.xyz); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+    float3 lightSum = su.light0Diffuse.xyz*NdotL0 + su.light1Diffuse.xyz*NdotL1 + su.light2Diffuse.xyz*NdotL2;
+    float3 litRGB = lightSum * su.diffuseColor.xyz + su.emissiveColor.xyz;
+    float3 h0 = normalize(E - su.light0Dir.xyz); float spec0 = pow(max(dot(h0,N),0.0)*zeroL0, su.specularColorPower.w);
+    float3 h1 = normalize(E - su.light1Dir.xyz); float spec1 = pow(max(dot(h1,N),0.0)*zeroL1, su.specularColorPower.w);
+    float3 h2 = normalize(E - su.light2Dir.xyz); float spec2 = pow(max(dot(h2,N),0.0)*zeroL2, su.specularColorPower.w);
+    float3 specularRGB = (spec0*su.light0Specular.xyz + spec1*su.light1Specular.xyz + spec2*su.light2Specular.xyz) * su.specularColorPower.xyz;
+    float4 texColor = tex.sample(smp, in.uv);
+    float4 vc = (su.vertexColorEnabled.x > 0.5) ? in.color : float4(1.0);
+    float4 c = float4(litRGB * texColor.rgb, su.diffuseColor.w * texColor.a * vc.a);
+    c.rgb += specularRGB * c.a;
+    // Vertex color modulates the whole combined diffuse+specular output, not just diffuse -- after
+    // the specular add so VertexColorEnabled=true with a black vertex color genuinely zeroes the
+    // pixel (matches EasyGL's own real ordering, not an arbitrary choice).
+    c.rgb *= vc.rgb;
+    if (cna_alpha_test_fails(c.a, su.alphaTest)) discard_fragment();
+    c.rgb = mix(su.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    return c;
+}
+
 struct V2In { float2 position; float2 uv; float4 color; };
 // plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
 // bypassing virtual-resolution/letterbox scaling -- a real, currently-shipping bug. `scale`/
@@ -391,7 +478,8 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // verified by reading that exact branch, not assumed).
     enum class PipelineKind : uint8_t
     {
-        Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, EnvMap32, Sprite2D
+        Colored16, Textured20, ColorTex24, LitTex32, DualTex20, DualTex24Colored, EnvMap32,
+        Skinned52, Skinned56, Sprite2D
     };
 
     // Metal bakes blend factors/operations into MTLRenderPipelineState (unlike depth/stencil/
@@ -461,6 +549,27 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
                 vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
                 vd.layouts[0].stride=32;
+                return vd;
+            // plan_metal.md METAL-72: SkinnedEffect layout -- position(12)+normal(12)+uv(8)+
+            // boneWeights(16, real float4)+boneIndices(4, packed UChar4, UNNORMALIZED -- read as
+            // an integer type in-shader, not MTLVertexFormatUChar4Normalized's auto-float-convert)
+            // = 52; +color(4, packed UChar4Normalized) = 56.
+            case 52:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
+                vd.attributes[3].format=MTLVertexFormatFloat4; vd.attributes[3].offset=32; vd.attributes[3].bufferIndex=0;
+                vd.attributes[4].format=MTLVertexFormatUChar4; vd.attributes[4].offset=48; vd.attributes[4].bufferIndex=0;
+                vd.layouts[0].stride=52;
+                return vd;
+            case 56:
+                vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
+                vd.attributes[1].format=MTLVertexFormatFloat3; vd.attributes[1].offset=12; vd.attributes[1].bufferIndex=0;
+                vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
+                vd.attributes[3].format=MTLVertexFormatFloat4; vd.attributes[3].offset=32; vd.attributes[3].bufferIndex=0;
+                vd.attributes[4].format=MTLVertexFormatUChar4; vd.attributes[4].offset=48; vd.attributes[4].bufferIndex=0;
+                vd.attributes[5].format=MTLVertexFormatUChar4Normalized; vd.attributes[5].offset=52; vd.attributes[5].bufferIndex=0;
+                vd.layouts[0].stride=56;
                 return vd;
             default:
                 throw std::runtime_error("Metal: unsupported vertex stride until generic VertexDeclaration pipeline cache is implemented (plan_metal.md METAL-27)");
@@ -567,6 +676,21 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         float light2Dir[4], light2Diffuse[4];
         float envMapSpecular[4], eyePosition[4], envParams[4], alphaTest[4];
         float fogColorEnabled[4], fogStartEnd[4];
+    };
+
+    // Plain C++ mirrors of kMetalShaderSource's `SkinnedTransform`/`SkinnedUniforms` -- see that
+    // struct's own comment for the "no separate world-normal-matrix step" finding.
+    struct SkinnedTransform { float wvp[16]; float world[16]; float skinParams[4]; };
+    struct SkinnedUniforms {
+        float diffuseColor[4], emissiveColor[4];
+        float light0Dir[4], light0Diffuse[4], light0Specular[4];
+        float light1Dir[4], light1Diffuse[4], light1Specular[4];
+        float light2Dir[4], light2Diffuse[4], light2Specular[4];
+        float specularColorPower[4];
+        float eyePosition[4];
+        float alphaTest[4];
+        float fogColorEnabled[4], fogStartEnd[4];
+        float vertexColorEnabled[4];
     };
 
     class MetalTexture final : public ITextureBackend
@@ -856,6 +980,8 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::DualTex20:        vs=@"cna_v3d_tex";      fs=@"cna_f3d_dualtex"; stride=20; break;
             case PipelineKind::DualTex24Colored: vs=@"cna_v3d_colortex"; fs=@"cna_f3d_dualtex"; stride=24; break;
             case PipelineKind::EnvMap32:         vs=@"cna_v3d_envmap";   fs=@"cna_f3d_envmap";  stride=32; break;
+            case PipelineKind::Skinned52:        vs=@"cna_v3d_skinned";       fs=@"cna_f3d_skinned"; stride=52; break;
+            case PipelineKind::Skinned56:        vs=@"cna_v3d_skinned_color"; fs=@"cna_f3d_skinned"; stride=56; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
         }
         id<MTLVertexDescriptor> vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
@@ -1094,16 +1220,25 @@ void MetalGraphicsBackend::SetScissorRect(int x,int y,int w,int h){impl_->scisso
 void MetalGraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){impl_->viewport={(double)x,(double)y,(double)w,(double)h,mn,mx};if(impl_->encoder)[impl_->encoder setViewport:impl_->viewport];}
 std::unique_ptr<IVertexBufferBackend> MetalGraphicsBackend::CreateVertexBuffer(int c){return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferBackend> MetalGraphicsBackend::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
 
-// plan_metal.md METAL-29/55/61/69: dispatch precedence deliberately mirrors
-// EasyGLGraphicsBackend::SelectProgram()'s own top-of-function order (envMapping checked before
-// dualTexture, both before the plain stride switch) -- skinned/pbr are still ahead of this in
-// EasyGL's real precedence and are simply not reachable yet on Metal (their GpuDrawParams flags
-// fall through to this function unconsumed until Phases 7-8 land), not a knowingly-wrong ordering.
+// plan_metal.md METAL-29/55/61/69/78: dispatch precedence deliberately mirrors
+// EasyGLGraphicsBackend::SelectProgram()'s own top-of-function order (pbr+skinned -> pbr ->
+// skinned -> envMapping -> dualTexture -> plain stride switch). `pbr` throws a clear, honest
+// "not implemented" error rather than silently falling through to a non-PBR shader -- Phase 8
+// hasn't landed, and rendering the wrong (unlit-relative-to-PBR) result silently would be worse
+// than an exception.
 static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* params)
 {
     const bool textured = params && params->texture0;
+    const bool pbr = params && params->pbr;
+    const bool skinned = params && params->skinned;
     const bool envMapping = params && params->envMapping;
     const bool dual = params && params->dualTexture;
+    if (pbr) throw std::runtime_error("Metal: PbrEffect/SkinnedPbrEffect not yet implemented (plan_metal.md Phase 8)");
+    if (skinned) {
+        if (stride == 56) return PipelineKind::Skinned56;
+        if (stride == 52) return PipelineKind::Skinned52;
+        throw std::runtime_error("Metal: SkinnedEffect requires stride 52 or 56");
+    }
     if (envMapping) {
         if (stride != 32) throw std::runtime_error("Metal: EnvironmentMapEffect requires VertexPositionNormalTexture (stride 32)");
         return PipelineKind::EnvMap32;
@@ -1181,6 +1316,36 @@ static void fillEnvUniforms(EnvTransform& t, EnvUniforms& eu, const Mat4& wvp, c
     eu.fogStartEnd[0]=params.fogStart; eu.fogStartEnd[1]=params.fogEnd; eu.fogStartEnd[2]=0; eu.fogStartEnd[3]=0;
 }
 
+// plan_metal.md METAL-73/74/76-78: fills SkinnedTransform/SkinnedUniforms, field-for-field
+// matching EasyGLGraphicsBackend::BindDrawParams()'s real SkinnedEffect-specific mapping. Note:
+// unlike fillLitUniforms/fillEnvUniforms, this deliberately does NOT call computeNormalMatrixCols
+// -- the skinned shader has no world-normal-matrix step at all (see cna_skin_common's own
+// comment), so SkinnedTransform has no normalCol0/1/2 fields to fill.
+static void fillSkinnedUniforms(SkinnedTransform& t, SkinnedUniforms& su, const Mat4& wvp, const GpuDrawParams& params)
+{
+    std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
+    std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
+    t.skinParams[0]=(float)params.weightsPerVertex; t.skinParams[1]=t.skinParams[2]=t.skinParams[3]=0;
+
+    std::memcpy(su.diffuseColor, params.diffuseColor, sizeof(su.diffuseColor));
+    su.emissiveColor[0]=params.emissiveColor[0]; su.emissiveColor[1]=params.emissiveColor[1]; su.emissiveColor[2]=params.emissiveColor[2]; su.emissiveColor[3]=0;
+    su.light0Dir[0]=params.light0Dir[0]; su.light0Dir[1]=params.light0Dir[1]; su.light0Dir[2]=params.light0Dir[2]; su.light0Dir[3]=0;
+    su.light0Diffuse[0]=params.light0Diffuse[0]; su.light0Diffuse[1]=params.light0Diffuse[1]; su.light0Diffuse[2]=params.light0Diffuse[2]; su.light0Diffuse[3]=0;
+    su.light0Specular[0]=params.light0Specular[0]; su.light0Specular[1]=params.light0Specular[1]; su.light0Specular[2]=params.light0Specular[2]; su.light0Specular[3]=0;
+    su.light1Dir[0]=params.light1Dir[0]; su.light1Dir[1]=params.light1Dir[1]; su.light1Dir[2]=params.light1Dir[2]; su.light1Dir[3]=0;
+    su.light1Diffuse[0]=params.light1Diffuse[0]; su.light1Diffuse[1]=params.light1Diffuse[1]; su.light1Diffuse[2]=params.light1Diffuse[2]; su.light1Diffuse[3]=0;
+    su.light1Specular[0]=params.light1Specular[0]; su.light1Specular[1]=params.light1Specular[1]; su.light1Specular[2]=params.light1Specular[2]; su.light1Specular[3]=0;
+    su.light2Dir[0]=params.light2Dir[0]; su.light2Dir[1]=params.light2Dir[1]; su.light2Dir[2]=params.light2Dir[2]; su.light2Dir[3]=0;
+    su.light2Diffuse[0]=params.light2Diffuse[0]; su.light2Diffuse[1]=params.light2Diffuse[1]; su.light2Diffuse[2]=params.light2Diffuse[2]; su.light2Diffuse[3]=0;
+    su.light2Specular[0]=params.light2Specular[0]; su.light2Specular[1]=params.light2Specular[1]; su.light2Specular[2]=params.light2Specular[2]; su.light2Specular[3]=0;
+    su.specularColorPower[0]=params.specularColor[0]; su.specularColorPower[1]=params.specularColor[1]; su.specularColorPower[2]=params.specularColor[2]; su.specularColorPower[3]=params.specularPower;
+    su.eyePosition[0]=params.eyePositionWorld[0]; su.eyePosition[1]=params.eyePositionWorld[1]; su.eyePosition[2]=params.eyePositionWorld[2]; su.eyePosition[3]=0;
+    std::memcpy(su.alphaTest, params.alphaTest, sizeof(su.alphaTest));
+    su.fogColorEnabled[0]=params.fogColor[0]; su.fogColorEnabled[1]=params.fogColor[1]; su.fogColorEnabled[2]=params.fogColor[2]; su.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
+    su.fogStartEnd[0]=params.fogStart; su.fogStartEnd[1]=params.fogEnd; su.fogStartEnd[2]=0; su.fogStartEnd[3]=0;
+    su.vertexColorEnabled[0]=params.vertexColorEnabled?1.0f:0.0f; su.vertexColorEnabled[1]=su.vertexColorEnabled[2]=su.vertexColorEnabled[3]=0;
+}
+
 static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& vb,const MetalIndexBuffer* ib,const Matrix&w,const Matrix&v,const Matrix&pr,PrimitiveType pt,int pc,const GpuDrawParams* params)
 {
     p.ensureFrame(); Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)));
@@ -1217,6 +1382,27 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         auto* mc=dynamic_cast<const MetalTextureCube*>(params->envMap);
         if(mc)[p.encoder setFragmentTexture:mc->native() atIndex:1];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
+    } else if (kind == PipelineKind::Skinned52 || kind == PipelineKind::Skinned56) {
+        // plan_metal.md METAL-72-80: real skinned lit/fog/specular/emissive path.
+        SkinnedTransform t{}; SkinnedUniforms su{};
+        fillSkinnedUniforms(t, su, wvp, *params);
+        [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
+        [p.encoder setVertexBytes:&su length:sizeof(su) atIndex:2];
+        [p.encoder setFragmentBytes:&su length:sizeof(su) atIndex:2];
+        // plan_metal.md METAL-73: 72 bones x 4x4 = 4608 floats (18KB) exceeds setVertexBytes:'s
+        // 4KB inline limit -- must be a real MTLBuffer, unlike every other uniform in this file.
+        // Reallocated fresh each draw (newBufferWithBytes:), matching MetalVertexBuffer::SetData's
+        // own established "always reallocate, never mutate in place" pattern (same
+        // command-buffer-resource-lifetime assumption already relied on throughout this file, not
+        // a new risk category -- see plan_metal.md Phase 18's own still-open resource-lifetime
+        // audit). GpuDrawParams::boneTransforms is already column-major (its own doc comment),
+        // matching worldColMajor's convention, so no per-bone transpose is needed before upload.
+        id<MTLBuffer> bonesBuf = [p.device newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16 options:MTLResourceStorageModeShared];
+        [p.encoder setVertexBuffer:bonesBuf offset:0 atIndex:3];
+        [bonesBuf release];
+        auto* mt=dynamic_cast<const MetalTexture*>(params->texture0);
+        if(mt)[p.encoder setFragmentTexture:mt->native() atIndex:0];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
     } else {
         // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
         // actually reach the shader (previously silently ignored for every draw). Defaults below

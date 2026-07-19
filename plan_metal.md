@@ -189,6 +189,21 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
   (D9-81 finding #4) stays in the same accepted "not fixed outside D3D9" bucket as AlphaTestEffect's
   `isEqNe` — `envMapSpecular`'s tint itself is real and wired, just not the discrete
   shader-variant-selection flag.
+- **`SkinnedEffect`** (`METAL-72`–`75`/`77`/`78`): ported `EnsureSkinnedProgram()`'s real GLSL
+  line-for-line, including the safe-normalize NaN guard for a near-180°-relative-bone-rotation
+  blend (falls back to the bind-pose normal for that one vertex rather than propagating NaN) and
+  the `WeightsPerVertex` (1/2/4) branching (Task 895: real XNA `Skin()` only sums that many
+  weight/index pairs). The 72-bone transform array (4,608 floats / 18KB) genuinely exceeds
+  `setVertexBytes:`'s 4KB inline limit — the one uniform in this whole file that *must* be a real
+  `MTLBuffer`, reallocated fresh each draw via `newBufferWithBytes:`, matching
+  `MetalVertexBuffer::SetData`'s own already-established "always reallocate" pattern (not a new
+  resource-lifetime risk category). Real, load-bearing finding from reading the reference shader
+  closely: skinned draws apply **no** world-space normal-matrix step at all — only the bone blend's
+  own `mat3(skinMat)` — so `SkinnedTransform` correctly carries no normal-matrix columns, unlike
+  `LitTransform`/`EnvTransform`. `params->pbr` now throws a clear, honest "not yet implemented"
+  error instead of silently falling through to a non-PBR shader when both `pbr` and `skinned` are
+  set (Phase 8 hasn't landed). **Not ported**: the per-vertex (Gouraud) lit variant (`METAL-76`),
+  same already-accepted divergence as `METAL-39`.
 
 **Explicitly still open / not attempted this pass** (do not assume these are done): `METAL-5`
 (cull-mode/winding correctness — deliberately left untouched, see its own note about a Vulkan
@@ -220,6 +235,9 @@ docs, iOS/tvOS) — none of it was touched this pass.
 - `TextureCube`/`Texture3D` backends, and a real `EnvironmentMapEffect` (world-space cube-map
   reflection, flat + Fresnel-weighted blend, lit+fogged) built on top of them (🟨 landed
   2026-07-19 — `METAL-64`/`66`–`69`/`120`/`121`/`123`/`124`).
+- Real `SkinnedEffect` (72-bone GPU skinning via a real `MTLBuffer`, `WeightsPerVertex` branching,
+  a NaN-safety guard for near-180°-relative-bone-rotation blends, lit/fog/specular/emissive) (🟨
+  landed 2026-07-19 — `METAL-72`–`75`/`77`/`78`).
 - Triangle list/strip, line list/strip, and point-list topology mapping, all verified against the
   real `PrimitiveType` ordinals (🟨 `PointListEXT` fix landed 2026-07-19 — `METAL-12`/`METAL-13`).
 - Real cull/fill/depth-bias/viewport/scissor **and now depth-func/front+back-stencil/blend-factor/
@@ -410,13 +428,13 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-72 | Skinned vertex layout: stride 52 (no vertex color) and stride 56 (with vertex color, per `WebGPUGraphicsBackend::GetOrCreatePipelineSkinned3D`'s `hasVertexColor=(stride==56)` precedent) | ⬜ |
-| METAL-73 | `boneTransforms[72*16]`/`boneCount` uniform — 4,608 floats (18KB) **exceeds** `setVertexBytes:`'s 4KB inline limit; must be a real `MTLBuffer`, not the inline path every other uniform in this file currently uses — a concrete, easy-to-get-silently-wrong detail called out explicitly | ⬜ |
-| METAL-74 | `weightsPerVertex` (1/2/4) — real XNA `Skin(vin, boneCount)` only sums the first N pairs (Task 895); the MSL vertex shader must branch on this, not always sum all 4 | ⬜ |
-| METAL-75 | Per-pixel-lit skinned variant (`EnsureSkinnedProgram()` equivalent) | ⬜ |
+| METAL-72 | Skinned vertex layout: stride 52 (no vertex color) and stride 56 (with vertex color, per `WebGPUGraphicsBackend::GetOrCreatePipelineSkinned3D`'s `hasVertexColor=(stride==56)` precedent) | 🟨 |
+| METAL-73 | `boneTransforms[72*16]`/`boneCount` uniform — 4,608 floats (18KB) **exceeds** `setVertexBytes:`'s 4KB inline limit; must be a real `MTLBuffer`, not the inline path every other uniform in this file currently uses — a concrete, easy-to-get-silently-wrong detail called out explicitly | 🟨 |
+| METAL-74 | `weightsPerVertex` (1/2/4) — real XNA `Skin(vin, boneCount)` only sums the first N pairs (Task 895); the MSL vertex shader must branch on this, not always sum all 4 | 🟨 |
+| METAL-75 | Per-pixel-lit skinned variant (`EnsureSkinnedProgram()` equivalent) | 🟨 |
 | METAL-76 | Per-vertex-lit skinned variant (`EnsureSkinnedVertexLitProgram()` equivalent), same `preferPerPixelLighting` XNA-default logic as BasicEffect (Task 1102b) | ⬜ |
-| METAL-77 | Confirm skinned normals are transformed by each bone's own 3×3, not the single mesh-level normal matrix `METAL-40` computes for unskinned draws | ⬜ |
-| METAL-78 | Dispatch: `params.skinned` checked before `envMapping`/`dualTexture`, combined with `params.pbr` for the skinned-PBR case (Phase 8) | ⬜ |
+| METAL-77 | Confirm skinned normals are transformed by each bone's own 3×3, not the single mesh-level normal matrix `METAL-40` computes for unskinned draws — **confirmed 2026-07-19, more precisely than originally worded**: the reference shader applies *no* world-space normal-matrix step at all for skinned draws (only `mat3(skinMat)`, the bone blend's own upper-left 3x3), so `SkinnedTransform` correctly carries no `normalCol0/1/2` fields at all, unlike `LitTransform`/`EnvTransform` | 🟨 |
+| METAL-78 | Dispatch: `params.skinned` checked before `envMapping`/`dualTexture`, combined with `params.pbr` for the skinned-PBR case (Phase 8) | 🟨 |
 | METAL-79 | `CTest`: `Metal_Skinned` — a 2-bone rig with known transforms, probe-vertex-position-dependent pixel check | ⬜ |
 | METAL-80 | Add a `Metal` column to `docs/skinnedeffect-support.md` | ⬜ |
 
