@@ -246,4 +246,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_register_backend_test(NAME OpenGL2_SkinnedEffect_VertexColor_Golden COMMAND cna_test_opengl2_skinnedeffect_vertexcolor_golden
         TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_spritebatch_scale examples/opengl2_spritebatch_scale_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SpriteBatch_Scale COMMAND cna_test_opengl2_spritebatch_scale
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_spritebatch_sourcerect examples/opengl2_spritebatch_sourcerect_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SpriteBatch_SourceRect COMMAND cna_test_opengl2_spritebatch_sourcerect
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_sprite_effects examples/opengl2_sprite_effects_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SpriteEffects COMMAND cna_test_opengl2_sprite_effects
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_spritebatch_layerdepth examples/opengl2_spritebatch_layerdepth_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SpriteBatch_LayerDepth COMMAND cna_test_opengl2_spritebatch_layerdepth
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_spritebatch_blendstate_leak examples/opengl2_spritebatch_blendstate_leak_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SpriteBatch_BlendStateLeak COMMAND cna_test_opengl2_spritebatch_blendstate_leak
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

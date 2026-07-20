@@ -708,6 +708,11 @@ possibilities of OpenGL 2"):
     completing the cross-backend visual-parity sweep. Found and fixed 2 real bugs along the way
     (`vertexStart`/`startIndex` ignored in draw calls; `ComputeSpriteScreenCorners()` double-counted
     `origin` after rotation) -- see the status section above. All PASS.
+  - `OpenGL2_SpriteBatch_Scale`/`_SourceRect`/`_LayerDepth`/`_BlendStateLeak`/`OpenGL2_SpriteEffects`
+    -- probe further `SpriteBatch.Draw` overloads/behaviors not covered by the golden-image sweep
+    (position+scale overload, `sourceRectangle` cropping, `SpriteEffects` flips,
+    `SpriteSortMode.FrontToBack` draw-order-determines-visibility, `BlendState` NOT being clobbered
+    by `SpriteBatch.Begin()`) -- all already correct, no further bugs found. All PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -1076,6 +1081,23 @@ sweep (5551 cases): 227 failures, consistent with the established ~225 baseline 
 a targeted `ctest -R "SpriteBatch|DrawPrimitives|DrawUserPrimitives"` re-run (covering every other
 test that exercises either fixed code path, including `OpenGL2_SpriteBatchCustomEffect`'s own use
 of the same `ComputeSpriteScreenCorners()`) both confirm no new regression.
+
+Given the rotation+origin bug was found by testing a `SpriteBatch` code path this backend hadn't
+pixel-verified before, continued porting more of `examples/easygl_spritebatch_*.cpp`/
+`easygl_sprite_effects_test.cpp` (none golden-image, all plain pixel-check tests) to specifically
+probe other not-yet-exercised `SpriteBatch.Draw` overloads/behaviors: the position+scale overload
+(scalar AND non-uniform `Vector2` scale), `sourceRectangle` cropping,
+`SpriteEffects.FlipHorizontally`/`FlipVertically`, `SpriteSortMode.FrontToBack` layerDepth-driven
+draw order actually determining overlap visibility (deliberately submitted out of order to
+discriminate real depth-sorting from raw submission order), and `SpriteBatch.Begin()` NOT clobbering
+`GraphicsDevice.BlendState` with a hardcoded blend (a following 3D draw must inherit whatever
+BlendState `SpriteBatch.Begin()` left behind, matching FNA's own lasting-side-effect behavior). All
+5 passed on the first run -- these particular `SpriteBatch` code paths were already correct; the
+sweep was a genuine (not rhetorical) check, not an assumption. `OpenGL2_SpriteBatch_Scale`/
+`_SourceRect`/`_LayerDepth`/`_BlendStateLeak`/`OpenGL2_SpriteEffects` all PASS. Full `OpenGL2` suite:
+46/46 PASS (up from 41). Full unfiltered `CnaTests` sweep (5556 cases): 224 failures, within the
+same established baseline; `GraphicsDeviceCapabilityTest` re-run again confirms only
+`DoesNotSupportWireFrame` remains failed.
 
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
