@@ -36,10 +36,10 @@ disproved finding is a real result and should be recorded with the same rigor as
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
 | P0 | 11 | 8 | 0 | 0 | 3 |
-| P1 | 21 | 0 | 0 | 0 | 21 |
+| P1 | 21 | 1 | 0 | 0 | 20 |
 | P2 | 44 | 1 | 0 | 0 | 43 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **9** | **0** | **0** | **95** |
+| **Total** | **104** | **10** | **0** | **0** | **94** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -570,10 +570,81 @@ stress run.
 
 | ID | Status | Owner | Branch | Notes |
 |---|---|---|---|---|
-| REMED-BUILD-004 | NOT STARTED | | | After BUILD-001. Budget triage time for the first full run. |
+| REMED-BUILD-004 | DONE | | feature/audit | New `.github/workflows/general-tests-ci.yml` — see detail below. |
 | REMED-BUILD-008 | NOT STARTED | | | **Blocks GFX-014 and GFX-015.** |
 | REMED-TEST-002 | NOT STARTED | | | **Blocks CORE-006 and CORE-007.** Follow `GameWindowTests.cpp`'s pattern. |
 | REMED-TEST-004 | NOT STARTED | | | Write each test **before** its production fix, so it fails first. |
+
+### REMED-BUILD-004 detail — general-tests-ci.yml
+
+**Root cause confirmed exactly as described:** all three existing workflows (`d3d-windows-ci.yml`,
+`devices-tests.yml`, `input-ci.yml`) select a label/`--gtest_filter` scoped to their own subsystem;
+none ever runs `ctest` unfiltered. Re-read all three in full — no change needed to any of them; this
+task adds a fourth, new workflow rather than modifying the existing three (their own scoping is
+correct for their own purpose).
+
+**New file:** `.github/workflows/general-tests-ci.yml` — runs the full unfiltered `CnaTests` suite
+(no `-L`, no `--gtest_filter`) on EasyGL, the documented Linux default backend
+(`cmake/BackendSelection.cmake`). Deliberately EasyGL-only for now, per the task's own "decide
+explicitly which backend(s)" requirement — the other 13 backends remain future work, each already
+covered (or not) by its own narrower CI path.
+
+**Xvfb design (load-bearing detail):** `CNA_TEST_DISPLAY` is baked into each display-creating test's
+`ENVIRONMENT` property at **CMake configure time** (`CMakeLists.txt:47`, defaults to `:0`) — a bare
+`xvfb-run -a ctest ...` wrapper (`input-ci.yml`'s own pattern) would NOT work here, because the
+baked `DISPLAY=${CNA_TEST_DISPLAY}` environment property overrides whatever `xvfb-run` exports for
+the wrapped process, and `input-ci.yml`'s own `-L input` selection happens not to include any test
+that bakes it. The unfiltered general suite does (EasyGL/SdlGpu/Ascii real-window tests), so this
+job instead starts a real `Xvfb :99` in its own step (persists for the whole job, unlike
+`xvfb-run`'s per-command teardown), waits for it via `xdpyinfo`, then configures with
+`-DCNA_TEST_DISPLAY=:99` so the baked property and the ambient `$DISPLAY` agree.
+
+**Serial (`ctest`, no `-j`) is deliberate, not an oversight:** confirmed by reproducing it live —
+a `-j4` run of the full local baseline (see below) surfaced `ENetDiscoveryServiceTest.*` (×2) and
+`DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` failing, none of which
+reproduce in isolation (`DynamicSoundEffectInstanceTest` case: 10/10 pass with `--gtest_repeat=10`
+run alone) — this matches `REMED-NET-001`'s own already-documented "`ctest -j4` transient failures
+are pre-existing test-infrastructure flakiness" finding (real-UDP-port cross-process contention) and
+extends it to a previously-undocumented case (real-time audio buffer-starvation timing under heavy
+parallel CPU load). Recorded as `REMED-TEST-008` below (new, not fixed — CI-flakiness finding, not a
+production defect). Running the new job's `ctest` serially avoids both classes of flake entirely
+rather than allowlisting them.
+
+**Failure classification step:** rather than excluding any test from running (which the task's own
+principles explicitly warn against — "avoid filters that silently exclude critical suites"), a final
+step parses CTest's own `Testing/Temporary/LastTestsFailed.log` and fails the **job** only on a test
+name outside a small, explicitly-commented, ID-tracked allowlist (the 4 known pre-existing EasyGL/
+external-suite failures — see the workflow file's own header comment for exactly which and why).
+This is a deliberately temporary stand-in for real `WILL_FAIL` annotations (`REMED-BUILD-003`, not
+done — out of Wave 1 scope, and its own dependency note says a test whose bug is being actively
+fixed must never be so annotated, which rules out doing even a narrow slice of it prematurely here).
+Every test still runs; only the interpretation changes; the step is designed to be deleted once
+`REMED-BUILD-003` lands.
+
+**Verification:**
+- Full local baseline established (`ctest --test-dir cmake-build-debug --output-on-failure -j4`,
+  real `DISPLAY=:0` session, matching this sandbox's existing build): **5798 registered, 5790
+  passed, 4 skipped, 8 failed** (168.55 sec via cached objects). The 8: the 4 already-tracked
+  EasyGL/external-suite failures + `EasyGL_RealWindowResize` (timeout — `REMED-BUILD-010`, expected
+  on this sandbox's real compositor `DISPLAY=:0`, and expected **not** to reproduce under the new
+  job's isolated `Xvfb :99`, per `REMED-BUILD-010`'s own prior finding: "under `DISPLAY=:99` (Xvfb,
+  headless) it completes in well under a second with 4/4 PASS") + 3 `-j4`-only flakes (2 already
+  documented under `REMED-NET-001`, 1 newly discovered — `REMED-TEST-008`).
+- Classification script logic verified directly with 3 synthetic `LastTestsFailed.log` inputs before
+  being placed in the workflow: only-known-failures → exit 0; one genuinely new name → exit 1 with
+  that name printed; no failures at all (file absent) → exit 0. This is the "a deliberately-broken
+  test causes the new job to fail" verification criterion, demonstrated without needing an actual
+  GitHub Actions run (not available from this sandbox).
+- `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` re-run in isolation,
+  `--gtest_repeat=10`: 10/10 PASS, confirming it is `-j4`-load-only flakiness, not a real regression.
+- New workflow YAML parsed successfully with `python3 -c "import yaml; yaml.safe_load(...)"` (no
+  `actionlint`/live GitHub Actions runner available in this sandbox; this is the practical ceiling
+  for verifying a new workflow file without pushing it).
+
+**Completion criteria met:** CI (once this workflow runs on GitHub Actions) executes the unfiltered
+default suite on EasyGL and gates on it (fails on any name outside the tracked allowlist).
+**Verification criteria met:** classification script demonstrated to fail the job on a synthetic
+new/unexpected failure name, and to pass when only tracked names are present.
 
 ## Waves 2-5 — remaining tasks
 
@@ -679,6 +750,7 @@ existing task.
 | REMED-CONTENT-007 | `VideoContentTypeReader.cpp`/`SongContentTypeReader.cpp` each duplicate a `ResolveRelativeFilePath()` helper with **zero** containment check (not even the partial one `ContentReader.cpp` had before this task) — a `Video`/`Song` `.xnb`'s own embedded filename field can be absolute or `..`-escaping and is joined onto the content root unchecked | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; same root cause, same fix shape — reuse `CNA::Internal::IsDisallowedAbsolutePath`/the `ResolveRelativeAssetPath` pattern) |
 | REMED-CONTENT-008 | `ContentManager.cpp` joins 8 `.cnj`/JSON-manifest-supplied path fields (`dataField->stringValue` for `Texture3D`; `vertRel`/`fragRel` for `ShaderEffect`; `clipFileField->stringValue` for `AnimationClip`; `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile` for skinned-model morph/animation data) onto the content root with no containment check — same `fs::path::operator/` pitfall as the 3 sites `-002` fixed, at file-supplied (not caller-supplied) untrusted strings | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; notably, this is the *same* `.cnj`-manifest subsystem that already has one field, `sourceFile`, correctly hardened via `CnjSourceFile.hpp` — these 8 fields were simply never given the same treatment) |
 | REMED-NET-008 | A "client"-role `NetworkSession`'s own incidental listening `ENetHost` (bound on every non-Emscripten `ConnectToHost()` call, so a peer can be promoted to host later via migration without rebinding — see `ENetHostHandle`'s own doc comment) still accepts and fully processes `ClientHello` from *any* third party that connects to it, not just its real host — `HandleClientHello` has no "am I actually supposed to be hosting anyone" check. A rogue peer can connect directly to a client's own bound port (`ENetBackend::GetBoundPort()` is non-zero for a client-role session too) and get a real `ServerWelcomeMessage` snapshotting that peer's own roster, plus get added as a real `NetworkGamer`/fire a real `GamerJoined` event on that peer's session — despite that peer never intending to host anyone | MEDIUM | P2 | REMED-NET-001 (host-authority audit sweep) | NOT STARTED — recorded, not fixed (distinct root cause from NET-001: `ClientHello` is not one of the four host-authoritative broadcast types NET-001 covers; this is a missing role-check on the *accept* side of a client-scoped session, not a missing sender-authority check on a broadcast-only message. Confirmed real via manual reasoning about `ConnectToHost`'s own non-Emscripten `StartHosting()` call and `HandleClientHello`'s unconditional accept — not separately reproduced with a new test, since fixing/proving it is out of this task's scope; the closest existing coverage is `ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer`, new in this task, which proves the same rogue-third-party-on-a-client-socket attack surface is real for the four NET-001 message types specifically) |
+| REMED-TEST-008 | `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails under a full unfiltered `ctest -j4` run but passes 10/10 in isolation (`--gtest_filter` + `--gtest_repeat=10`) — a real-time audio buffer-starvation-count assertion is timing-sensitive under heavy 4-way parallel CPU load on this sandbox. Extends `REMED-NET-001`'s already-documented `ctest -j4` transient-failure finding (previously only `ENetDiscoveryServiceTest.*` ×4 and 2 `TwoProcessLoopbackTest`/`NetworkSessionTest` cases, all network-port contention) to a second, previously-undocumented flakiness class (audio timing, not networking) | LOW | P3 | REMED-BUILD-004 (establishing a full local `ctest -j4` baseline before designing the new CI job) | NOT STARTED — recorded, not fixed (test-reliability finding, not a production defect; `REMED-BUILD-004`'s own new CI job runs `ctest` serially specifically to avoid this and the already-known network-port class, rather than allowlisting either) |
 
 #### REMED-BUILD-010 detail
 
@@ -718,6 +790,7 @@ Owner decisions required by the plan, plus any scope calls made during implement
 | _(none yet)_ | `REMED-GFX-035` | Which GLSL dialect is the contract? | pending |
 | _(none yet)_ | `REMED-CORE-011` | Implement `CNA::Runtime` or delete it? | pending |
 | _(none yet)_ | `REMED-BUILD-007` | Is `CNA::Internal::Net`'s MIT licensing deliberate? | pending |
+| 2026-07-20 | `REMED-BUILD-010`, `REMED-BUILD-011` | **Deferred to Wave 2, not pulled into Wave 1.** Both are genuinely real, already-recorded findings (Wave 0/`REMED-DEVICES-001` respectively), but both are **P2** and neither `MASTER_REMEDIATION_PLAN.md` nor `REMEDIATION_DEPENDENCIES.md` lists either as blocking any Wave 1 task — the dependency file's own Wave 1 description names exactly four BUILD_TEST_CI starters (`REMED-BUILD-004`, `REMED-BUILD-008`, `REMED-TEST-002`, `REMED-TEST-004`, all P1), and neither BUILD-010 nor BUILD-011 appears in the "Hard dependencies" table as a blocker for anything. Per this task's own explicit instruction ("Do not assume either belongs to Wave 1 until you verify the plan and dependencies" / "Do not pull later-wave tasks forward without justification"), both remain `NOT STARTED`, scheduled at their assigned P2 priority in Waves 2-5. | Claude (autonomous remediation session, user-directed) |
 | 2026-07-20 | `REMED-BUILD-002` | **Yes — the copy step is obsolete, deleted outright (not guarded, not backfilled with a real `Content/` dir).** Investigated `examples/demo_xact/src/XactFileGen.hpp` + `XactDemo.cpp`: `XactDemo::LoadContent()` calls `GenerateXactFiles("Content/Audio")`, which itself calls `std::filesystem::create_directories(audioDir)` and then `XactFileGen::SaveFile()`s a freshly synthesized `Waves.xwb`/`Demo.xgs`/`Sounds.xsb` (sine-wave PCM + minimal XGS/XWB/XSB binaries matching `XactParser.cpp`'s expected layout) directly into that runtime-relative directory — no pre-existing `.xwb`/`.xgs`/`.xsb` asset is ever read from disk. `examples/demo_xact/` contains only `src/` (confirmed: no `Content/` anywhere in the repo, matching the audit finding). The POST_BUILD `copy_directory` in `cmake/Examples.cmake` therefore copied a directory that never existed and could never usefully exist — deleting it is strictly correct, not a stopgap. | Claude (autonomous remediation session, user-directed) |
 
 ## Findings that did not reproduce
