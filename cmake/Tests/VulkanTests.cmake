@@ -48,6 +48,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_Orientation_RenderTarget COMMAND cna_test_vulkan_orientation_rendertarget
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-006: SkinnedEffect world-space normal transform under non-identity World
+        # (rotation, non-uniform scale, and both) — the cases every existing skinned test,
+        # all of which use World = Identity, structurally cannot detect.
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_world_normal
+                        examples/vulkan_skinnedeffect_world_normal_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_WorldNormal COMMAND cna_test_vulkan_skinnedeffect_world_normal
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 124: DrawInstancedPrimitives — 3 instances at different X positions
         cna_vulkan_test(cna_test_vulkan_instanced
                         examples/vulkan_instanced_test.cpp)
