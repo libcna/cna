@@ -580,6 +580,32 @@ namespace CNA::Internal::Backends::EasyGL
 #endif
     }
 
+#if defined(CNA_GL_PROFILE_OPENGL33)
+    namespace
+    {
+        // plan_glbackends.md GLB-40: desktop GL core profile -- unlike GLES/WebGL, which always
+        // honor a vertex shader's gl_PointSize output automatically for GL_POINTS primitives --
+        // requires this capability explicitly enabled, or gl_PointSize is silently ignored and
+        // every point renders at the fixed 1.0-pixel default size. Found investigating why
+        // easygl_shipgame_particle_shader_test (a GL_POINTS/gl_PointSize/gl_PointCoord particle
+        // shader) rendered nothing under OPENGL33 while passing under OPENGLES/WEBGL2 -- NOT a
+        // shader compile failure (Mesa's desktop compiler accepts "#version 300 es" leniently
+        // even under a core-profile context, confirmed empirically), a real missing GL state
+        // toggle. Not exposed by meta-gl's typed Capability enum (GLES/WebGL have no equivalent
+        // constant at all, so meta-gl never needed to expose it), so loaded and called directly
+        // via a runtime function pointer, matching this project's own "no static libGL linkage"
+        // convention (meta-gl itself loads every GL entry point the same way).
+        void EnableVertexProgramPointSize()
+        {
+            using GlEnableFn = void (*)(unsigned int);
+            static const auto glEnableFn =
+                reinterpret_cast<GlEnableFn>(SDL_GL_GetProcAddress("glEnable"));
+            constexpr unsigned int kGlVertexProgramPointSize = 0x8642;
+            if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);
+        }
+    }
+#endif
+
     // --- EasyGLTexture3DBackend ---
 
     static constexpr int kTexLinear       = static_cast<int>(::metagl::TextureMagFilter::Linear);
@@ -2339,6 +2365,9 @@ void main()
         }
 
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        EnableVertexProgramPointSize();
+#endif
         std::cout << "EasyGLGraphicsBackend initialized with OpenGL "
             << device.capabilities().context_info().version_string << std::endl;
 
@@ -2547,6 +2576,9 @@ void main()
 
         // 3. Reload GL function pointers and increment context generation.
         device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+#if defined(CNA_GL_PROFILE_OPENGL33)
+        EnableVertexProgramPointSize();
+#endif
 
         // 4. Notify listeners that context is restored. ResourceRegistry calls
         //    recreate_gl_resource() on every tracked resource (shaders, textures, buffers, VAOs).
