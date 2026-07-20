@@ -1673,6 +1673,37 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     real, observed CI signal, and the first one located inside `cnametal`'s own test sources rather
     than its CMake plumbing or `sharp-runtime`.
 
+65. **THE FIRST FULLY GREEN `metal-macos-ci.yml` RUN — real Apple hardware, real Metal device, real
+    tests, 100% passing**: run `29762732685` (manually triggered via `workflow_dispatch` after item
+    64's fix landed on a commit whose paths didn't match this workflow's push filter — `tests/**`
+    isn't watched, by design, so a targeted manual dispatch was used instead of further widening the
+    filter to something that broad) completed with every step green. Pulled the full job log (`gh api
+    .../actions/jobs/88421128360/logs`) and confirmed real evidence, not just the absence of a red X:
+    `ctest` reports **`100% tests passed, 0 tests failed out of 86`**, including `Test #5589:
+    Metal_Smoke ... Passed 1.99 sec` — the actual `MTLCreateSystemDefaultDevice()`/window/present
+    smoke test, genuinely executing on real Apple Silicon GPU hardware for the very first time in
+    this entire plan's history, not a plain-C++ extraction — plus the separate
+    `GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected` sanity check (`1/1
+    Passed`). The 86 total covers `Metal_Smoke` together with every one of the 55 previously-
+    plain-C++-extracted-and-Linux-tested unit groups (enum mapping, vertex descriptor plan, sampler
+    filter, pipeline-cache key/hash, normal-matrix, `primitiveVertexCount`, letterbox/viewport, WVP
+    matrix helpers, `selectPipelineKind()`, `fillXUniforms()`) now additionally confirmed to still
+    pass when compiled by real Apple Clang instead of GCC.
+
+    This closes out the fourteen-fix chain items 42–64 opened: from the very first `submodules: true`
+    gap through six `sharp-runtime` portability fixes, two genuine `MetalGraphicsBackend.mm` bugs (the
+    `id<MTLVertexDescriptor>` protocol/class mixup and the `Rectangle`/`Vector2` property-vs-field
+    mixup), the Apple-linker `--start-group` incompatibility, an FFmpeg `pkg-config` linking gap, the
+    `CreateGraphicsBackend` namespace-depth bug, a missing `demo_xact` Content directory, a missing
+    `SDL3::SDL3` harness link, and a `<csignal>` gap — every single one now proven resolved together,
+    not just individually plausible. Seventeen real, observed, back-to-back CI signals in one
+    session, ending on the first genuinely positive one. This is the first point in this whole plan
+    where marking a Metal-specific task ✅ under this plan's own tier-2 discipline (a named, passing
+    `Metal_*` CTest on real Apple hardware) is actually possible — `METAL-34` earned that status from
+    tier-1 alone back on 2026-07-19 as the sole documented exception; every other 🟨 task whose logic
+    is covered by one of these 55 extracted units can now be reconsidered for ✅ on this same evidence
+    in a follow-up pass, rather than staying provisionally tagged from Linux-only compilation.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
