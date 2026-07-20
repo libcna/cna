@@ -99,6 +99,20 @@ namespace CNA::Internal::Xnb
                 // Color is not a raw 4-byte POD (it has a vtable) -- see Texture2DReader's own
                 // class docs for why raw RGBA bytes must be unpacked into real Color values.
                 const int32_t pixelCount = faceSize * faceSize;
+                // REMED-CONTENT-003: the compressed branch above always produces exactly
+                // pixelCount*4 bytes by construction; only the uncompressed Color branch can still
+                // disagree here, if the file's own declared byteCount doesn't actually match
+                // faceSize (a truncated/adversarial file) -- catch that before indexing into bytes
+                // below. Ported verbatim from Texture2DReader::Read's identical check.
+                if (bytes.size() != static_cast<std::size_t>(pixelCount) * 4)
+                {
+                    throw ContentLoadException(
+                        "TextureCubeReader: face " + std::to_string(face) + " level " +
+                        std::to_string(level) + " byte count (" + std::to_string(bytes.size()) +
+                        ") does not match " + std::to_string(faceSize) + "x" + std::to_string(faceSize) +
+                        "'s required " + std::to_string(static_cast<std::size_t>(pixelCount) * 4) +
+                        " bytes.");
+                }
                 std::vector<Color> colors;
                 colors.reserve(static_cast<std::size_t>(pixelCount));
                 for (int32_t i = 0; i < pixelCount; ++i)

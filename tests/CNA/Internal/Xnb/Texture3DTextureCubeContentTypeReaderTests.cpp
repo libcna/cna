@@ -159,6 +159,38 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConst
     }
 }
 
+// REMED-CONTENT-003: TextureCubeReader was the one sibling among the three XNB texture readers
+// missing this check -- a crafted declared byteCount undersized relative to faceSize*faceSize*4
+// previously reached the unchecked pixel-unpacking loop, an out-of-bounds heap read. Ported
+// verbatim from Texture2DReader's own identical, already-tested check.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderRejectsByteCountMismatchedWithSize)
+{
+    constexpr int32_t size = 2;
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+    writer.Write(size);
+    writer.Write(static_cast<int32_t>(1)); // levels
+    writer.Write(static_cast<int32_t>(4)); // byteCount for face 0 level 0 -- should be 2*2*4=16, not 4
+    writer.Write(static_cast<uint8_t>(0));
+    writer.Write(static_cast<uint8_t>(0));
+    writer.Write(static_cast<uint8_t>(0));
+    writer.Write(static_cast<uint8_t>(0));
+    writer.Flush();
+    const auto buf = ms.ToArray();
+    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+    System::IO::MemoryStream body(
+        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
+    ContentReader reader(&cm, &body, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.TextureCubeReader");
+    ASSERT_NE(typeReader, nullptr);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsUnsupportedSurfaceFormat)
 {
     System::IO::MemoryStream ms;

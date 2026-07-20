@@ -35,11 +35,11 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 2 | 0 | 0 | 9 |
+| P0 | 11 | 3 | 0 | 0 | 8 |
 | P1 | 21 | 0 | 0 | 0 | 21 |
 | P2 | 44 | 0 | 0 | 0 | 44 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **2** | **0** | **0** | **102** |
+| **Total** | **104** | **3** | **0** | **0** | **101** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -79,15 +79,23 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 |---|---|---|---|---|
 | REMED-CONTENT-001 | NOT STARTED | | | CRITICAL. Fix in shared content code, **not** per-backend. |
 | REMED-CONTENT-002 | NOT STARTED | | | Shared helper first, then 3 call sites, then repo-wide grep. |
-| REMED-CONTENT-003 | NOT STARTED | | | Port the sibling readers' existing check verbatim. |
+| REMED-CONTENT-003 | DONE | | feature/audit | Ported the sibling readers' existing check verbatim — see detail below. |
 | REMED-CONTENT-006 | NOT STARTED | | | VERIFY first. Then audit all 7 `XnbReadLimits` fields for consumers. |
-| REMED-GFX-001 | NOT STARTED | | | Serialize against all other EasyGL work. |
-| REMED-GFX-002 | NOT STARTED | | | Sequence before GFX-003 (same file). |
-| REMED-GFX-003 | NOT STARTED | | | After GFX-002. Resize tables **and** add flag operators together. |
-| REMED-NET-001 | NOT STARTED | | | Land with NET-003 as one change. |
-| REMED-NET-003 | NOT STARTED | | | Atomic with NET-001. |
-| REMED-DEVICES-001 | NOT STARTED | | | Prefer `shared_ptr` over holding a mutex across a UI-blocking call. |
-| REMED-MEDIA-001 | NOT STARTED | | | VERIFY on a 32-bit build first. |
+
+### REMED-CONTENT-003 detail — TextureCube byte-count validation
+
+Ported `Texture2DContentTypeReader.cpp`'s existing `bytes.size() != pixelCount*4` check verbatim into
+`TextureCubeContentTypeReader.cpp` (previously the one sibling among the three XNB texture readers
+missing it). No shared file overlap with `REMED-CONTENT-001`.
+
+- **Test added:** `Texture3DTextureCubeContentTypeReaderTests.cpp` —
+  `TextureCubeReaderRejectsByteCountMismatchedWithSize` (undersized declared `byteCount` for a 2×2
+  face/level throws `ContentLoadException`).
+- **Completion criteria met:** all three sibling readers (`Texture2DReader`, `Texture3DReader`,
+  `TextureCubeReader`) now share an identical validation shape.
+- **Verification:** implemented and verified in the same session as `REMED-CONTENT-001` (no file
+  overlap between the two); full `CnaTests` direct-binary run (EASYGL) covering both tasks' new
+  tests together showed 0 regressions against the 5507-test Wave 0 baseline.
 
 ## Wave 1 (parallel) — unblockers
 
@@ -198,6 +206,8 @@ existing task.
 | ID | Title | Sev | Pri | Found while working on | Status |
 |---|---|---|---|---|---|
 | REMED-BUILD-010 | `EasyGL_RealWindowResize` hangs the full 60s CTest `TIMEOUT` under a real desktop compositor (`DISPLAY` = a real logged-in GNOME/Mutter session, not an isolated Xvfb) | MEDIUM | P2 | REMED-BUILD-001 (full unfiltered `ctest` baseline run) | NOT STARTED — recorded, not fixed (out of scope for Wave 0) |
+| REMED-CONTENT-007 | `VideoContentTypeReader.cpp`/`SongContentTypeReader.cpp` each duplicate a `ResolveRelativeFilePath()` helper with **zero** containment check (not even the partial one `ContentReader.cpp` had before this task) — a `Video`/`Song` `.xnb`'s own embedded filename field can be absolute or `..`-escaping and is joined onto the content root unchecked | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; same root cause, same fix shape — reuse `CNA::Internal::IsDisallowedAbsolutePath`/the `ResolveRelativeAssetPath` pattern) |
+| REMED-CONTENT-008 | `ContentManager.cpp` joins 8 `.cnj`/JSON-manifest-supplied path fields (`dataField->stringValue` for `Texture3D`; `vertRel`/`fragRel` for `ShaderEffect`; `clipFileField->stringValue` for `AnimationClip`; `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile` for skinned-model morph/animation data) onto the content root with no containment check — same `fs::path::operator/` pitfall as the 3 sites `-002` fixed, at file-supplied (not caller-supplied) untrusted strings | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; notably, this is the *same* `.cnj`-manifest subsystem that already has one field, `sourceFile`, correctly hardened via `CnjSourceFile.hpp` — these 8 fields were simply never given the same treatment) |
 
 #### REMED-BUILD-010 detail
 
