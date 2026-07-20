@@ -4,6 +4,7 @@
 #include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
+#include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
@@ -362,8 +363,61 @@ namespace CNA::Internal::Net
             pending.erase(removedBegin, pending.end());
         }
 
+        // REMED-NET-001: ServerWelcome/GamerJoinBroadcast/GamerLeaveBroadcast/StateChangeBroadcast
+        // are, by this protocol's own design, sent only by the session's authoritative host to its
+        // connected clients. The only peer connection that is ever the authoritative host from this
+        // SessionState's own point of view is state.HostPeer (set exclusively by ConnectToHost/
+        // AttemptHostMigration, when this side is acting as a client of someone else). A host's own
+        // HostPeer is always null (a host never connects out to anyone), so this correctly rejects
+        // these four message types unconditionally on the host side too - a host should never
+        // receive host-authoritative messages from one of its own connecting clients at all.
+        bool IsFromAuthoritativeHost(const SessionState& state, ENetPeer* peer)
+        {
+            return state.HostPeer != nullptr && peer == state.HostPeer;
+        }
+
+        // REMED-NET-001: any connected peer - a modified/malicious client needing no MITM, just a
+        // custom ENet client speaking this fully-inferable wire format - could otherwise forge a
+        // host-only broadcast message directly to the host (or to a fellow client's own incidental
+        // listening socket, since even a "client" role peer owns a real accepting ENetHost here -
+        // see ConnectToHost's own comment) to kick arbitrary gamers, inject fake gamers, corrupt
+        // wire-id assignment, or force an arbitrary session-state transition. Logged as a first-class
+        // protocol event (not a silent drop) and the offending peer is disconnected, matching this
+        // file's own established "malformed/hostile input gets the peer disconnected" convention
+        // (see HandleClientHello's Playing/AllowJoinInProgress rejection just below).
+        void RejectUnauthorizedHostOnlyMessage(SessionState& state, ENetPeer* peer, const char* messageTypeName)
+        {
+            CNA::Logger::Warn(
+                std::string("[ENetBackend] Rejected host-only ") + messageTypeName
+                    + " from a non-host peer (forged or misbehaving client) - disconnecting the peer.",
+                CNA::LogCategory::APPLICATION
+            );
+            state.Host.Disconnect(peer, 0);
+        }
+
         void HandleClientHello(NetworkSession* session, SessionState& state, ENetPeer* peer, const ClientHelloMessage& hello)
         {
+            // REMED-NET-003: a peer that already completed its handshake (already present in
+            // PeerWireIds, unconditionally populated at the end of a first successful ClientHello
+            // below) resending ClientHello would `new` a fresh batch of NetworkGamer objects every
+            // time - unbounded roster growth from a single connected peer. A genuine reconnect
+            // always arrives on a brand-new ENetPeer (a fresh CONNECT event - ENet never reuses a
+            // live peer object across two separate connections), so keying this guard on peer
+            // identity cannot reject a legitimate reconnect. AddLocalGamer (the real public API for
+            // adding a split-screen local gamer after the initial handshake) never re-sends
+            // ClientHello either - it only updates this session's own local bookkeeping - so this
+            // also cannot reject that legitimate flow.
+            if (state.PeerWireIds.contains(peer))
+            {
+                CNA::Logger::Warn(
+                    "[ENetBackend] Rejected duplicate ClientHello from an already-handshaked peer - "
+                    "disconnecting the peer.",
+                    CNA::LogCategory::APPLICATION
+                );
+                state.Host.Disconnect(peer, 0);
+                return;
+            }
+
             // Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of
             // sessionState_/AllowJoinInProgress - a host with AllowJoinInProgress == false still
             // silently accepted new players mid-Playing state. Reject by disconnecting the peer
@@ -945,15 +999,36 @@ namespace CNA::Internal::Net
                         HandleClientHello(session, state, peer, NetPacketCodec::DecodeClientHello(data));
                         break;
                     case MessageTag::ServerWelcome:
+                        // REMED-NET-001: host-only message - see IsFromAuthoritativeHost's own comment.
+                        if (!IsFromAuthoritativeHost(state, peer))
+                        {
+                            RejectUnauthorizedHostOnlyMessage(state, peer, "ServerWelcome");
+                            break;
+                        }
                         HandleServerWelcome(session, state, NetPacketCodec::DecodeServerWelcome(data));
                         break;
                     case MessageTag::GamerJoinBroadcast:
+                        if (!IsFromAuthoritativeHost(state, peer))
+                        {
+                            RejectUnauthorizedHostOnlyMessage(state, peer, "GamerJoinBroadcast");
+                            break;
+                        }
                         HandleGamerJoinBroadcast(session, state, NetPacketCodec::DecodeGamerJoinBroadcast(data));
                         break;
                     case MessageTag::GamerLeaveBroadcast:
+                        if (!IsFromAuthoritativeHost(state, peer))
+                        {
+                            RejectUnauthorizedHostOnlyMessage(state, peer, "GamerLeaveBroadcast");
+                            break;
+                        }
                         HandleGamerLeaveBroadcast(session, state, NetPacketCodec::DecodeGamerLeaveBroadcast(data));
                         break;
                     case MessageTag::StateChangeBroadcast:
+                        if (!IsFromAuthoritativeHost(state, peer))
+                        {
+                            RejectUnauthorizedHostOnlyMessage(state, peer, "StateChangeBroadcast");
+                            break;
+                        }
                         HandleStateChangeBroadcast(session, state, NetPacketCodec::DecodeStateChangeBroadcast(data));
                         break;
                     case MessageTag::AppData:
