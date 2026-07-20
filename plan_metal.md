@@ -1510,6 +1510,59 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     rather than something this fix silently papered over — flagged here rather than solved
     speculatively for a combination nothing currently tests. Twelfth real, observed CI signal.
 
+59. **Real thirteenth CI signal — `-lavcodec` etc. resolve on Linux only by accident of a shared
+    default search path, and `pkg_check_modules()`'s own `_LIBRARY_DIRS` output was sitting unused**:
+    with item 58's linker-group fix landed (verified via `gh api
+    /repos/openeggbert/cna/actions/jobs/<id>/logs`, which is now the established way to pull a full
+    job log in this sandbox — `gh run view --log`/`--log-failed` both returned empty output for
+    reasons that were not tracked down further, but the raw REST endpoint works reliably), the same
+    two link steps failed differently: `ld: library 'avcodec' not found`. `cmake/CnaLibrary.cmake`'s
+    `CNA_FFMPEG_AVAILABLE` block only ever consumed `pkg_check_modules()`'s `_LIBRARIES` (bare names,
+    e.g. `avcodec`, that become `-lavcodec`) and `_INCLUDE_DIRS` — never `_LIBRARY_DIRS`, i.e. no
+    `-L` flag ever reached the linker. This happened to work on every Linux CI/dev build so far only
+    because distro `libavcodec.so` lives under `/usr/lib/x86_64-linux-gnu`, already on the linker's
+    default search path — never a deliberately-correct link line. Homebrew's `ffmpeg` (installed by
+    this same workflow's own "Install FFmpeg (Homebrew)" step, added earlier this session) installs
+    under a non-default prefix (`/opt/homebrew` on the Apple Silicon `macos-14` runner), so `-lavcodec`
+    alone can't resolve there. Fixed by adding a `target_link_directories(CNA PRIVATE
+    ${LIBAVCODEC_LIBRARY_DIRS} ${LIBAVFORMAT_LIBRARY_DIRS} ${LIBAVUTIL_LIBRARY_DIRS}
+    ${LIBSWRESAMPLE_LIBRARY_DIRS})` block right next to the existing include-dirs block — the exact
+    library-dir output `pkg_check_modules()` had already computed and left unused. Verified
+    zero-regression with a real local Linux rebuild of `cna_demo_2d` (clean build, links
+    successfully, same as before — Linux's default search path made the missing `-L` invisible, not
+    load-bearing, so adding it changes nothing there). Thirteenth real, observed CI signal.
+
+60. **Item 59's `target_link_directories(CNA PRIVATE ...)` fix did not actually work — same "library
+    'avcodec' not found" error, next CI run, same commit's fix included**: rather than assume the fix
+    needed more time or a cache-clean rebuild, re-pulled the job log the same way (`gh api
+    .../actions/jobs/<id>/logs`) and confirmed byte-for-byte the identical `ld: library 'avcodec' not
+    found` on the identical two link steps. This raised real doubt about whether CMake's
+    `target_link_directories(<target> PRIVATE ...)` reliably propagates a *static* library's private
+    `-L` search directories into a final executable's link command in the CMake version this runner
+    uses — a question this Linux sandbox could not actually settle empirically, because
+    `pkg-config --libs-only-L libavcodec` returns **empty** here (this distro's ffmpeg already lives
+    on the linker's default search path, so pkg-config itself omits `-L`), meaning item 59's local
+    "zero-regression" rebuild never actually exercised a non-empty `-L` flag going through that
+    PRIVATE-scope propagation path at all — it only proved the *absence* of a flag didn't break
+    anything, not that CMake would have correctly propagated the flag had one been present.
+
+    Rather than keep guessing at scope-propagation semantics unverifiable from this machine, switched
+    to `pkg_check_modules(... REQUIRED IMPORTED_TARGET libavcodec)` (and the same for
+    `libavformat`/`libavutil`/`libswresample`) — the CMake-blessed mechanism that bundles a
+    dependency's include dirs, link dirs, and libraries into a single real `PkgConfig::<NAME>`
+    `INTERFACE` target, exactly the same pattern this file already uses successfully for
+    `SDL3::SDL3`/`Vulkan::Vulkan`/`WebGPU::WebGPU`. Replaced the three separate `target_link_
+    libraries()`/`target_include_directories()`/`target_link_directories()` calls with one
+    `target_link_libraries(CNA PRIVATE PkgConfig::LIBAVCODEC PkgConfig::LIBAVFORMAT
+    PkgConfig::LIBAVUTIL PkgConfig::LIBSWRESAMPLE)` — `INTERFACE_LINK_DIRECTORIES`/`INTERFACE_
+    INCLUDE_DIRECTORIES` on a genuine imported target are propagated through CMake's ordinary,
+    unambiguous target-dependency graph, unlike raw directory-property variables whose propagation
+    through a private static-lib link chain this session could not independently confirm. Verified
+    zero-regression with a real local Linux rebuild of `cna_demo_2d` (clean configure + build, links
+    successfully). Whether this actually resolves the Apple-side failure is still unconfirmed pending
+    the next CI run — flagged honestly rather than assumed, since item 59's identical-looking "verified
+    locally" claim already turned out not to predict the real Apple-linker outcome once.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

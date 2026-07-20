@@ -12,10 +12,15 @@ endif()
 
 if(CNA_FFMPEG_AVAILABLE)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBAVCODEC  REQUIRED libavcodec)
-    pkg_check_modules(LIBAVFORMAT REQUIRED libavformat)
-    pkg_check_modules(LIBAVUTIL   REQUIRED libavutil)
-    pkg_check_modules(LIBSWRESAMPLE REQUIRED libswresample)
+    # IMPORTED_TARGET (not raw _LIBRARIES/_INCLUDE_DIRS variables) so include dirs, -L search
+    # dirs, and libraries all propagate correctly as INTERFACE properties of a real CMake target
+    # -- the same pattern this project already uses for SDL3::SDL3/Vulkan::Vulkan below. This
+    # matters in practice: Homebrew's ffmpeg on macOS lives under a non-default prefix
+    # (/opt/homebrew), unlike Linux distro packages under /usr/lib/<triplet>.
+    pkg_check_modules(LIBAVCODEC  REQUIRED IMPORTED_TARGET libavcodec)
+    pkg_check_modules(LIBAVFORMAT REQUIRED IMPORTED_TARGET libavformat)
+    pkg_check_modules(LIBAVUTIL   REQUIRED IMPORTED_TARGET libavutil)
+    pkg_check_modules(LIBSWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
 endif()
 
 # --- Draco (KHR_draco_mesh_compression mesh decoding, plan_cnj.md CNB-91, Phase 14F) — optional,
@@ -196,17 +201,15 @@ if(ANDROID)
 endif()
 
 if(CNA_FFMPEG_AVAILABLE)
+    # PkgConfig::<prefix> IMPORTED targets (see the pkg_check_modules() calls above) carry their
+    # own INTERFACE include dirs, link dirs, and libraries together, so this is the only
+    # target_link_libraries() call needed -- no separate target_include_directories()/
+    # target_link_directories() call, unlike raw _LIBRARIES/_INCLUDE_DIRS variables.
     target_link_libraries(CNA PRIVATE
-        ${LIBAVCODEC_LIBRARIES}
-        ${LIBAVFORMAT_LIBRARIES}
-        ${LIBAVUTIL_LIBRARIES}
-        ${LIBSWRESAMPLE_LIBRARIES}
-    )
-    target_include_directories(CNA PRIVATE
-        ${LIBAVCODEC_INCLUDE_DIRS}
-        ${LIBAVFORMAT_INCLUDE_DIRS}
-        ${LIBAVUTIL_INCLUDE_DIRS}
-        ${LIBSWRESAMPLE_INCLUDE_DIRS}
+        PkgConfig::LIBAVCODEC
+        PkgConfig::LIBAVFORMAT
+        PkgConfig::LIBAVUTIL
+        PkgConfig::LIBSWRESAMPLE
     )
 endif()
 
