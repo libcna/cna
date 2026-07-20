@@ -848,6 +848,27 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     the very first run. Ran the full Metal-tagged `ctest` subset again afterward (38 tests across all
     5 extracted headers) to confirm zero regressions: 100% pass.
 
+33. **`selectPipelineKind()` — a sixth real ✅, and the single highest-value extraction of the
+    night**: this is the actual shader-variant dispatch decision every 3D draw call goes through —
+    arguably the single most safety-critical function in the whole backend, since a bug here silently
+    routes a draw to the *wrong* MSL shader pair (wrong lighting model, wrong vertex layout
+    interpretation) rather than crashing, exactly the class of bug that is hardest to notice by
+    inspection alone. It only reads `GpuDrawParams` (plain C++, zero Objective-C dependency) and a
+    stride, so — like the previous five — it was extracted verbatim into `MetalSelectPipelineKind.hpp`
+    with `MetalGraphicsBackend.mm` reduced to a one-line same-signature wrapper, all existing call
+    sites unaffected. 15 new `CnaTests` cover every real branch (colored/textured/dualTexture/
+    envMapping/skinned/pbr/skinnedPbr, every stride gate and every invalid-stride throw) **and,
+    deliberately, the precedence order itself** — matching `EasyGLGraphicsBackend::SelectProgram()`'s
+    own real precedence (`pbr(+skinned) > skinned > envMapping > dualTexture > textured > colored`) —
+    by setting *multiple* flags simultaneously and asserting only the higher-precedence kind is ever
+    selected (e.g. `pbr && skinned && envMapping && dualTexture` all `true` at once must still select
+    `SkinnedPbr68`, not silently fall through to a lower-precedence branch). All 15 passed on the very
+    first run, CTest #115–129, no bugs found in either the extraction or the tests this time. Ran the
+    full Metal-tagged `ctest` subset again afterward (53 tests across all 6 extracted headers) to
+    confirm zero regressions: 100% pass. A sixth genuinely real, fully-earned ✅ tier tonight — same
+    discipline as the WVP matrix helpers: foundational dispatch infrastructure, not tied to one single
+    pre-existing `METAL-N` task ID.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -995,6 +1016,12 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   independently-implemented, already-in-production arithmetic rather than only hand-derived expected
   values — a fifth genuinely real, fully-earned ✅ tier tonight (🟨→✅, no single dedicated `METAL-N`
   task ID, foundational infrastructure underneath Phase 1's own WVP computation).
+- `selectPipelineKind()`, the shader-variant dispatch decision every 3D draw call goes through,
+  machine-verified via `MetalSelectPipelineKind.hpp` and 15 real `CnaTests`/`ctest` tests (CTest
+  #115–129) covering every branch, every stride gate, and — deliberately — the full precedence order
+  between `pbr`/`skinned`/`envMapping`/`dualTexture`/`textured`/`colored` by setting multiple flags at
+  once and asserting only the highest-precedence kind wins — a sixth genuinely real, fully-earned ✅
+  tier tonight (🟨→✅, no single dedicated `METAL-N` task ID, foundational dispatch infrastructure).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the

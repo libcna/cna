@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/Metal/MetalPrimitiveVertexCount.hpp"
 #include "CNA/Internal/Backends/Metal/MetalLogicalViewport.hpp"
 #include "CNA/Internal/Backends/Metal/MetalMat4.hpp"
+#include "CNA/Internal/Backends/Metal/MetalSelectPipelineKind.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -2052,60 +2053,13 @@ std::unique_ptr<IVertexBufferBackend> MetalGraphicsBackend::CreateVertexBuffer(i
 // throws a clear, honest "not implemented" error rather than silently falling through to a
 // non-skinned PBR shader -- that combination hasn't landed, and rendering the wrong (unskinned)
 // result silently would be worse than an exception.
+// plan_metal.md METAL-34-style extraction: this dispatch logic's real body now lives in the
+// plain-C++ MetalSelectPipelineKind.hpp (no Objective-C, buildable and unit-tested on any platform
+// without an Apple toolchain) -- kept as a thin same-signature wrapper here so the existing call
+// site in drawMetal3D() is unaffected.
 static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* params)
 {
-    const bool textured = params && params->texture0;
-    const bool pbr = params && params->pbr;
-    const bool skinned = params && params->skinned;
-    const bool envMapping = params && params->envMapping;
-    const bool dual = params && params->dualTexture;
-    if (pbr) {
-        if (skinned) {
-            if (stride != 68) throw std::runtime_error("Metal: SkinnedPbrEffect requires stride 68 (position+normal+tangent+uv+boneWeights+boneIndices)");
-            return PipelineKind::SkinnedPbr68;
-        }
-        if (stride != 48) throw std::runtime_error("Metal: PbrEffect requires stride 48 (position+normal+tangent+uv)");
-        return PipelineKind::Pbr48;
-    }
-    if (skinned) {
-        // plan_metal.md METAL-76: same real XNA precedence as METAL-39's BasicEffect case
-        // (matching EasyGLGraphicsBackend::SelectProgram()'s own identical skinned branch) --
-        // per-vertex-lit only when lighting is actually on and per-pixel wasn't explicitly
-        // requested; with lighting disabled both shaders degenerate identically, so the existing
-        // per-pixel pipeline stays selected there too.
-        const bool vertexLit = params && params->lightingEnabled && !params->preferPerPixelLighting;
-        if (stride == 56) return vertexLit ? PipelineKind::Skinned56VertexLit : PipelineKind::Skinned56;
-        if (stride == 52) return vertexLit ? PipelineKind::Skinned52VertexLit : PipelineKind::Skinned52;
-        throw std::runtime_error("Metal: SkinnedEffect requires stride 52 or 56");
-    }
-    if (envMapping) {
-        if (stride != 32) throw std::runtime_error("Metal: EnvironmentMapEffect requires VertexPositionNormalTexture (stride 32)");
-        return PipelineKind::EnvMap32;
-    }
-    if (dual) {
-        if (!textured) throw std::runtime_error("Metal: DualTextureEffect requires Texture to be set");
-        if (stride == 24) return PipelineKind::DualTex24Colored;
-        if (stride == 20) return PipelineKind::DualTex20;
-        throw std::runtime_error("Metal: DualTextureEffect requires stride 20 or 24");
-    }
-    if (textured) {
-        switch (stride) {
-            case 20: return PipelineKind::Textured20;
-            case 24: return PipelineKind::ColorTex24;
-            case 32:
-                // plan_metal.md METAL-39: real XNA BasicEffect precedence (matches
-                // EasyGLGraphicsBackend::SelectProgram()'s own stride-32 case exactly) -- with
-                // lighting disabled, both shaders degenerate to the identical trivial
-                // ambient=(1,1,1) case, so the per-pixel-lit pipeline stays selected there rather
-                // than forcing an unnecessary extra PipelineKind/pipeline-cache entry.
-                if (params && params->lightingEnabled && !params->preferPerPixelLighting)
-                    return PipelineKind::LitTex32VertexLit;
-                return PipelineKind::LitTex32;
-            default: throw std::runtime_error("Metal: textured 3D requires stride 20, 24, or 32 until generic VertexDeclaration pipeline cache is implemented");
-        }
-    }
-    if (stride != 16) throw std::runtime_error("Metal: colored 3D currently requires VertexPositionColor stride 16");
-    return PipelineKind::Colored16;
+    return SelectMetalPipelineKind(stride, params);
 }
 
 // plan_metal.md METAL-38-47: fills LitTransform/LitUniforms from GpuDrawParams, field-for-field
