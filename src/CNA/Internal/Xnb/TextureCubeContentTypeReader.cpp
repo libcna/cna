@@ -6,6 +6,7 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Xnb/XnbArithmetic.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -48,14 +49,15 @@ namespace CNA::Internal::Xnb
         const int32_t levels = input.ReadInt32();
 
         // Reject an adversarial/corrupt size before any allocation is attempted -- see
-        // Texture2DReader's own note for why both the positivity and the int64_t-widened-product
-        // checks are needed (plan_xnb.md XNB-43).
+        // Texture2DReader's own note for why both the positivity check and CheckedMultiplyOrThrow()
+        // (rather than raw int64_t multiplication, which can itself overflow -- REMED-CONTENT-009)
+        // are needed (plan_xnb.md XNB-43).
         if (size <= 0)
         {
             throw ContentLoadException("TextureCubeReader: invalid size.");
         }
         input.CheckDecodedByteSize(
-            static_cast<int64_t>(size) * static_cast<int64_t>(size) * 4, "TextureCubeReader");
+            CheckedMultiplyOrThrow({size, size, 4}, "TextureCubeReader"), "TextureCubeReader");
 
         // Always decompress DXT to Color -- see Texture2DReader's own class docs for why.
         const SurfaceFormat uploadFormat = IsCompressed(surfaceFormat) ? SurfaceFormat::Color : surfaceFormat;

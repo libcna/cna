@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Xnb/XnbArithmetic.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -48,14 +50,17 @@ namespace CNA::Internal::Xnb
         const int32_t levelCount = input.ReadInt32();
 
         // Reject an adversarial/corrupt width/height/depth before any allocation is attempted --
-        // see Texture2DReader's own note for why both the individual-positivity and the
-        // int64_t-widened-product checks are both needed (plan_xnb.md XNB-43).
+        // see Texture2DReader's own note for why both the individual-positivity check and
+        // CheckedMultiplyOrThrow() (rather than raw int64_t multiplication, which can itself
+        // overflow -- REMED-CONTENT-009) are both needed (plan_xnb.md XNB-43). This product has
+        // one more factor than Texture2DReader's own (width*height*depth*4 vs width*height*4), so
+        // it is if anything more overflow-prone, not less.
         if (width <= 0 || height <= 0 || depth <= 0)
         {
             throw ContentLoadException("Texture3DReader: invalid width/height/depth.");
         }
         input.CheckDecodedByteSize(
-            static_cast<int64_t>(width) * static_cast<int64_t>(height) * static_cast<int64_t>(depth) * 4,
+            CheckedMultiplyOrThrow({width, height, depth, 4}, "Texture3DReader"),
             "Texture3DReader");
 
         // Always decompress DXT to Color -- see Texture2DReader's own class docs for why.
@@ -114,7 +119,20 @@ namespace CNA::Internal::Xnb
 
             // Color is not a raw 4-byte POD (it has a vtable) -- see Texture2DReader's own class
             // docs for why raw RGBA bytes must be unpacked into real Color values one at a time.
-            const int32_t voxelCount = width * height * depth;
+            // Found during REMED-CONTENT-009's root-cause sweep: a raw `width * height * depth`
+            // int32_t product here is its own overflow risk, independent of the CheckDecodedByteSize
+            // call above (that call's own input is now overflow-safe, but this is a *separate*
+            // multiplication of the same three factors). Using CheckedMultiplyOrThrow() and then
+            // verifying the result still fits in int32_t makes this line safe on its own terms,
+            // rather than relying on a reader tracing back to prove the earlier check subsumes it.
+            const int64_t voxelCount64 = CheckedMultiplyOrThrow({width, height, depth}, "Texture3DReader");
+            if (voxelCount64 > std::numeric_limits<int32_t>::max())
+            {
+                throw ContentLoadException(
+                    "Texture3DReader: voxel count (" + std::to_string(voxelCount64) +
+                    ") exceeds the maximum representable value.");
+            }
+            const auto voxelCount = static_cast<int32_t>(voxelCount64);
             // The compressed branch above always produces exactly voxelCount*4 bytes by
             // construction; only the uncompressed Color branch can still disagree here, if the
             // file's own declared byteCount doesn't actually match width/height/depth (a

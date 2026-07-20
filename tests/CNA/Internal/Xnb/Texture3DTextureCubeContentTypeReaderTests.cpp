@@ -191,6 +191,129 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderRejectsByteCo
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
+// REMED-CONTENT-009: Texture3DReader's own decoded-byte-size check has one more factor than
+// Texture2DReader's (width*height*depth*4 vs width*height*4), found to share the identical
+// signed-int64-overflow UB shape during that task's root-cause sweep. This is the exact adversarial
+// shape confirmed by UBSan pre-fix.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderAbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+    writer.Write(static_cast<int32_t>(0x7FFFFFFF)); // width -- adversarially huge
+    writer.Write(static_cast<int32_t>(0x7FFFFFFF)); // height -- adversarially huge
+    writer.Write(static_cast<int32_t>(0x7FFFFFFF)); // depth -- adversarially huge
+    writer.Write(static_cast<int32_t>(1));           // levelCount
+    writer.Flush();
+    const auto buf = ms.ToArray();
+    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+    System::IO::MemoryStream body(
+        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
+    ContentReader reader(&cm, &body, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
+    ASSERT_NE(typeReader, nullptr);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderZeroWidthThrowsContentLoadException)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+    writer.Write(static_cast<int32_t>(0)); // width -- zero, not just negative
+    writer.Write(static_cast<int32_t>(4));
+    writer.Write(static_cast<int32_t>(4));
+    writer.Write(static_cast<int32_t>(1));
+    writer.Flush();
+    const auto buf = ms.ToArray();
+    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+    System::IO::MemoryStream body(
+        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
+    ContentReader reader(&cm, &body, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
+    ASSERT_NE(typeReader, nullptr);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderZeroDepthThrowsContentLoadException)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+    writer.Write(static_cast<int32_t>(4));
+    writer.Write(static_cast<int32_t>(4));
+    writer.Write(static_cast<int32_t>(0)); // depth -- zero, not just negative
+    writer.Write(static_cast<int32_t>(1));
+    writer.Flush();
+    const auto buf = ms.ToArray();
+    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+    System::IO::MemoryStream body(
+        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
+    ContentReader reader(&cm, &body, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
+    ASSERT_NE(typeReader, nullptr);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
+// REMED-CONTENT-009: TextureCubeReader's own decoded-byte-size check (size*size*4) shares the
+// identical signed-int64-overflow UB shape as Texture2DReader's -- confirmed during that task's
+// root-cause sweep.
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderAbsurdlyLargeSizeThrowsContentLoadExceptionNotBadAlloc)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+    writer.Write(static_cast<int32_t>(0x7FFFFFFF)); // size -- adversarially huge
+    writer.Write(static_cast<int32_t>(1));           // levels
+    writer.Flush();
+    const auto buf = ms.ToArray();
+    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+    System::IO::MemoryStream body(
+        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
+    ContentReader reader(&cm, &body, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.TextureCubeReader");
+    ASSERT_NE(typeReader, nullptr);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderZeroSizeThrowsContentLoadException)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::Color));
+    writer.Write(static_cast<int32_t>(0)); // size -- zero, not just negative
+    writer.Write(static_cast<int32_t>(1)); // levels
+    writer.Flush();
+    const auto buf = ms.ToArray();
+    const std::string fields(reinterpret_cast<const char*>(buf.data()), buf.size());
+
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+    System::IO::MemoryStream body(
+        reinterpret_cast<const uint8_t*>(fields.data()), static_cast<int32_t>(fields.size()));
+    ContentReader reader(&cm, &body, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.TextureCubeReader");
+    ASSERT_NE(typeReader, nullptr);
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderRejectsUnsupportedSurfaceFormat)
 {
     System::IO::MemoryStream ms;

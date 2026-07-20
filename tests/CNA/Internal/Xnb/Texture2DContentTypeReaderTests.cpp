@@ -120,6 +120,52 @@ TEST_F(Texture2DContentTypeReaderTest, NegativeWidthThrowsContentLoadException)
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
+TEST_F(Texture2DContentTypeReaderTest, ZeroWidthThrowsContentLoadException)
+{
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write((int32_t)0);  // SurfaceFormat.Color
+    writer.Write((int32_t)0);  // width -- zero, not just negative
+    writer.Write((int32_t)4);  // height
+    writer.Write((int32_t)1);  // levelCount
+    writer.Flush();
+    auto buf = ms.ToArray();
+
+    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
+    ContentReader reader(&cm, &ms2, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
+    ASSERT_NE(typeReader, nullptr);
+
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
+TEST_F(Texture2DContentTypeReaderTest, ZeroHeightThrowsContentLoadException)
+{
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write((int32_t)0);  // SurfaceFormat.Color
+    writer.Write((int32_t)4);  // width
+    writer.Write((int32_t)0);  // height -- zero, not just negative
+    writer.Write((int32_t)1);  // levelCount
+    writer.Flush();
+    auto buf = ms.ToArray();
+
+    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
+    ContentReader reader(&cm, &ms2, "test", 5, 'w');
+
+    auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture2DReader");
+    ASSERT_NE(typeReader, nullptr);
+
+    EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
 TEST_F(Texture2DContentTypeReaderTest, AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc)
 {
     ContentManager cm;

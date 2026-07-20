@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Xnb/XnbArithmetic.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -78,15 +79,19 @@ namespace CNA::Internal::Xnb
 
         // Reject an adversarial/corrupt width/height before any allocation is attempted -- both
         // must be positive individually (two negatives would otherwise multiply to a
-        // small-looking positive product and slip past the byte-size check below), and the
-        // decoded-byte-size product is computed in int64_t so it can't itself silently wrap back
-        // into range (plan_xnb.md XNB-43).
+        // small-looking positive product and slip past the byte-size check below). The
+        // decoded-byte-size product is computed via CheckedMultiplyOrThrow(), not raw int64_t
+        // multiplication (plan_xnb.md XNB-43) -- widening to int64_t alone is not sufficient: two
+        // dimensions near INT32_MAX multiply to a value still representable in int64_t, but the
+        // subsequent "* 4" can itself overflow int64_t, which is undefined behavior (confirmed by
+        // UBSan, REMED-CONTENT-009). CheckedMultiplyOrThrow() rejects that case as a clean
+        // exception before the overflow occurs.
         if (width <= 0 || height <= 0)
         {
             throw ContentLoadException("Texture2DReader: invalid width/height.");
         }
         input.CheckDecodedByteSize(
-            static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4, "Texture2DReader");
+            CheckedMultiplyOrThrow({width, height, 4}, "Texture2DReader"), "Texture2DReader");
 
         // Always decompress DXT to Color -- see this reader's class docs for why (XNB-24's
         // fuller per-backend capability query is deferred, not required for correctness).
