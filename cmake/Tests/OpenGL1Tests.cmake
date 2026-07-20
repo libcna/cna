@@ -253,4 +253,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_Specular COMMAND cna_test_opengl1_specular
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 16 (EasyGL parity): TextureAddressMode.Mirror.
+    cna_opengl1_test(cna_test_opengl1_textureaddressmode_mirror
+                      examples/opengl1_textureaddressmode_mirror_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_TextureAddressMode_Mirror COMMAND cna_test_opengl1_textureaddressmode_mirror
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

@@ -116,8 +116,26 @@ shader, no modern-only extension) and were simply never implemented yet:
     (`R=0`, specular silently dropped even with the light's own specular color still configured);
     restoring reconfirms `R=236`. Full `ctest -R "OpenGL1_"` regression sweep: 31/31 passed after
     this change.
-16. Add `TextureAddressMode.Mirror` via `GL_MIRRORED_REPEAT` (core GL 1.4) -- currently silently
-    treated as `Clamp` in both the 3D path and `SpriteBatch::Draw`.
+16. ~~Add `TextureAddressMode.Mirror` via `GL_MIRRORED_REPEAT` (core GL 1.4) -- currently silently
+    treated as `Clamp` in both the 3D path and `SpriteBatch::Draw`.~~
+    **Done**: new shared `WrapMode(int)` helper maps XNA's raw `TextureAddressMode` ordinals
+    (`Wrap=0`→`GL_REPEAT`, `Mirror=2`→`GL_MIRRORED_REPEAT`, else→`GL_CLAMP_TO_EDGE`), replacing the
+    old binary `==0?GL_REPEAT:GL_CLAMP_TO_EDGE` at both call sites (`ApplySamplerFilterAndWrap`,
+    the 3D path; `OpenGL1SpriteBatchBackend::Draw`). No capability gate needed --
+    `GL_MIRRORED_REPEAT` is core GL 1.4 (2002), unconditionally available the same way
+    `GL_CLAMP_TO_EDGE` (core 1.2) already is here. New test
+    `OpenGL1_TextureAddressMode_Mirror` (`examples/opengl1_textureaddressmode_mirror_test.cpp`)
+    samples a 2x1 red/blue texture across `U=0..2` (two repeats) with `AddressU=Mirror` and
+    `TextureFilter.Point` (crisp texel reads). The three wrap modes are only distinguishable in
+    the second repeat: `U=1.25` reads blue under both the correct `Mirror` behavior AND the
+    pre-existing `Clamp` bug (coincidental, given this texel layout), but `U=1.75` reads red only
+    under genuine `Mirror` -- blue under both `Clamp` (bug) and plain `Wrap`. Matched the predicted
+    values exactly on the first attempt (`U=0.25` red, `U=0.75` blue, `U=1.25` blue, `U=1.75` red).
+    Mutation-tested: reverting `WrapMode` to the old binary mapping reproduces the predicted
+    failure (`U=1.75` reads blue instead of red, while `U=1.25` still coincidentally passes,
+    confirming `U=1.75` is genuinely the load-bearing check and not `U=1.25`); restoring
+    reconfirms all 4 points. Full `ctest -R "OpenGL1_"` regression sweep: 32/32 passed after this
+    change.
 17. Add constant blend color via `glBlendColor`/`GL_CONSTANT_COLOR` (core GL 1.4/`EXT_blend_color`)
     -- `SetBlendFactor()` is a no-op and `Blend.BlendFactor`/`InverseBlendFactor` currently map to
     `GL_ONE`/`GL_ZERO` instead, meaning this isn't a degraded case, it's a silently WRONG color.
