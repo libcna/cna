@@ -1007,6 +1007,25 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     addition, the very fix just made would never actually be exercised by the CI job meant to
     exercise it.
 
+41. **README accuracy pass (`METAL-233`) plus two quick, confident audits (`METAL-226`/`231`)**:
+    `README.md`'s per-backend description list (11 bullets, `SDL_RENDERER` through `DX3`) and its
+    `CNA_GRAPHICS_BACKEND` build-time selection list both had **zero mentions of Metal anywhere** —
+    not a stale entry, a complete absence, meaning a new contributor reading only the README would
+    not know this backend exists at all. Added `METAL` to the selection list (marked
+    "Apple platforms only, experimental") and a new description bullet after `DX3`'s, deliberately
+    matching the honesty bar `WEBGPU`'s own bullet already sets ("Experimental... not yet a 3D-parity
+    replacement...") but going further given Metal's own materially different state: leads with the
+    same "never compiled, linked, or run anywhere" caveat `docs/metal-backend.md` opens with, cites
+    the real 55-test/7-header verified-on-Linux subset by name, and points to both
+    `docs/metal-backend.md` and `plan_metal.md` rather than re-deriving detail inline. While in
+    Phase 25/26 checking for more `METAL-232`-shaped concrete gaps: `METAL-226` confirmed N/A (Metal
+    is a real 3D backend, so the `ThrowNo3D`-style audit `DX3`/`SDL_RENDERER`/`CANVAS`/`ASCII` each
+    needed for their 2D-only 3D-throws simply doesn't apply); `METAL-231` checked with real numbers
+    — `MetalGraphicsBackend.mm` is 2,248 lines against `EasyGLGraphicsBackend.cpp`'s 4,733, well
+    under half the stated ~5,300-line split threshold, genuinely not yet needed. `METAL-224`/`225`/
+    `230` remain explicitly deferred: each has its own "once X grows/lands" gate in its own task
+    description that genuinely hasn't been reached yet, not skipped without reason.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1659,7 +1678,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-223 | Confirm the real macOS CI runner's display capabilities (GitHub-hosted macOS runners provide a real virtual display, unlike this project's Linux Xvfb sandbox) rather than assuming Linux-style constraints apply | 🟨 confirmed by the same reasoning as `METAL-222` — GitHub's `macos-14` runners provide a real display session (documented runner capability), which is exactly what `Metal_Smoke`'s no-override registration already assumes and needs |
 | METAL-224 | Confirm whether the `WEBGPU-123`-style cross-backend pixel-parity harness (still open even for WebGPU) can extend to Metal once broad enough — folds into Phase 28 | ⬜ |
 | METAL-225 | Add Metal to whatever full-`CnaTests`-suite regression-count tracking this project already performs per-backend once it has enough tests to matter | ⬜ |
-| METAL-226 | Explicit "N/A, verified" note: a `ThrowNo3D`-style audit (DX3's own Phase X7) does not apply to Metal — it is a 3D-only backend, unlike DX3/SDL_Renderer/Canvas | ⬜ |
+| METAL-226 | Explicit "N/A, verified" note: a `ThrowNo3D`-style audit (DX3's own Phase X7) does not apply to Metal — it is a 3D-only backend, unlike DX3/SDL_Renderer/Canvas | ✅ **N/A, confirmed** — Metal is a real 3D backend (`BasicEffect`/`SkinnedEffect`/`PbrEffect`/render targets/etc.), unlike DX3/`SDL_RENDERER`/`CANVAS`/`ASCII` which are all intentionally 2D-only and need a `ThrowNo3D` audit for their 3D entry points; Metal's 3D entry points are meant to work, not throw, so this audit class doesn't apply |
 
 ## Phase 26 — CI / tooling (METAL-227 – METAL-233)
 
@@ -1669,9 +1688,9 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-228 | Consider a second macOS CI job variant (different macOS version / Apple Silicon vs. Intel runner) once GPU-family differences (e.g. BC compression, `METAL-17`) start mattering | ⬜ |
 | METAL-229 | Add `MTL_SHADER_VALIDATION=1`/`MTL_DEBUG_LAYER=1` to the CI job (ties to `METAL-218`) | ✅ added 2026-07-20 to `metal-macos-ci.yml`'s "Run Metal tests" step — unverified whether it actually fires without a real CI run, but the mechanism itself (Apple's own documented env var contract) needs no further code |
 | METAL-230 | Audit CI build-time budget as the backend grows toward EasyGL's scale — revisit `--parallel 3` once compile times actually grow | ⬜ |
-| METAL-231 | Consider splitting the monolithic `.mm` into multiple translation units once file size approaches EasyGL's ~5,300-line mark (a concrete threshold, not a premature rule) | ⬜ |
+| METAL-231 | Consider splitting the monolithic `.mm` into multiple translation units once file size approaches EasyGL's ~5,300-line mark (a concrete threshold, not a premature rule) | 🟨 checked 2026-07-20: `MetalGraphicsBackend.mm` is 2,248 lines vs. `EasyGLGraphicsBackend.cpp`'s 4,733 — well under half the stated threshold, so genuinely not yet needed. Revisit when the file approaches ~5,300 lines, not before |
 | METAL-232 | Confirm `GraphicsBackendCompileDefinitionsTest` already knows about `CNA_BACKEND_METAL` (DX3's own external review found the equivalent gap for `CNA_BACKEND_DX3`/`D3D11`/`D3D12` until fixed) | ✅ **real gap found and fixed 2026-07-20** — see narrative item 40 |
-| METAL-233 | Keep `README.md`'s backend list/build instructions honest about Metal's real current capability boundary as phases land | ⬜ |
+| METAL-233 | Keep `README.md`'s backend list/build instructions honest about Metal's real current capability boundary as phases land | ✅ added 2026-07-20 — Metal was entirely absent from README (not even in the `CNA_GRAPHICS_BACKEND` selection list), see narrative item 41 |
 
 ## Phase 27 — Documentation (METAL-234 – METAL-238)
 
