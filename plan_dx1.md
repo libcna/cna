@@ -1,10 +1,31 @@
 # DirectX 1 (DirectDraw v1) Graphics Backend — Implementation Plan
 
-> **Status: AUTHORIZED FOR IMPLEMENTATION (owner instruction, 2026-07-20).** Owner's own words
-> (translated from Czech): *"Add a new graphics backend, DirectX 1, to CNA. It'll be 2D only; for
-> 3D it throws an exception. Create `plan_dx1.md` and then implement it — ask if anything's
-> unclear. Do not use `free-direct` — it must use real DirectX 1, or Wine, or Proton."* This plan,
-> and the roadmap it belongs to (`plan_dxold.md`), are the direct product of that instruction.
+> **Status (2026-07-20): Phases O1–O8 are all closed.** Every task in this plan except the
+> permanent, explicitly-out-of-scope items (§ Boundaries) is implemented and verified: real
+> `IDirectDraw`/`IDirectDrawSurface` v1 device bring-up, textures/render targets, the CPU
+> `SpriteBatch` compositor (ported from `DX3`), all 4 blend modes, `SpriteFont`, and `ThrowNo3D`
+> wiring are all real and pixel-verified — **10/10 `DX1` CTests pass** (`Dx1_V1OnlyDiscipline`,
+> `Dx1_Smoke`, `Dx1_TextureRenderTarget`, `Dx1_SpriteBatch`, `Dx1_Blend`, `Dx1_AddressMode`,
+> `Dx1_SpriteFont`, `Dx1_No3D`, `Dx1_GraphicsCapability`, `Dx1_LogicalTransform`), built via a real
+> MinGW-w64 cross-compile and run through a real Wine `ddraw.dll` (`scripts/run-wine-dx1.sh`,
+> ddraw-engagement-gated). Two real bugs were found and fixed during this session's own first test
+> run (both in the ported test file, not the compositor — see Phase O4's table): a rotation-check
+> sample point 2px inside the default bilinear sampler's blend zone, and a zero-alpha check that
+> used the premultiplied `AlphaBlend` preset with non-premultiplied source data. A pre-existing,
+> not-DX1-specific `cmake/Harnesses.cmake` gap (two audio harnesses missing an `SDL3::SDL3` link,
+> latent under every Windows-only backend, never previously exercised by a real MinGW build) was
+> also found and fixed along the way, plus a deeper `CNA_FFMPEG_AVAILABLE`/`CNA_ENABLE_NET` test-glob
+> gating gap (see `DX1-88`'s own row for the full list — this exact from-scratch MinGW + full
+> `CnaTests` configuration had simply never been exercised before). Full regression:
+> **5336 passed, 11 skipped, 48 failed** — every one of the 48 confirmed pre-existing and unrelated
+> to DX1 (mostly the same structural "3D content load under a 2D-only backend" gap `plan_dx3.md`
+> already documented). See `docs/dx1-backend.md` for the full completeness table.
+>
+> Owner's own words (translated from Czech): *"Add a new graphics backend, DirectX 1, to CNA. It'll
+> be 2D only; for 3D it throws an exception. Create `plan_dx1.md` and then implement it — ask if
+> anything's unclear. Do not use `free-direct` — it must use real DirectX 1, or Wine, or Proton."*
+> This plan, and the roadmap it belongs to (`plan_dxold.md`), are the direct product of that
+> instruction.
 >
 > **Status legend** (matches this repo's convention, e.g. `plan_dx3.md`): ✅ implemented *and*
 > verified against its stated acceptance criteria; 🟨 code/doc exists but hasn't met that bar yet;
@@ -237,106 +258,106 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-1` | Add `"DX1"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + `CNA_BACKEND_DX1` option; extend the existing `D3D9`/`D3D11`/`D3D12` Windows-only `FATAL_ERROR` gate (design decision 1) to include `DX1`; add the v1-only-symbol grep CTest (§1) | ⬜ | |
-| `DX1-2` | `cna_backend_graphics_dx1` static library target (`elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")` block in `cmake/BackendSelection.cmake`/`cmake/BackendLibraries.cmake`); confirm minimal link set empirically (design decision 10) | ⬜ | |
-| `DX1-3` | `include/CNA/Internal/Backends/Dx1/Dx1GraphicsBackend.hpp` (pimpl-only, no `<ddraw.h>` visible, matching `DX3-5`'s own reasoning: `<ddraw.h>` pulls in `<windows.h>`, which globally `#define`s things a public CNA header must never leak) + `src/CNA/Internal/Backends/Dx1/Dx1GraphicsBackend.cpp` (real `<ddraw.h>` usage lives here): every `IGraphicsBackend` pure virtual implemented — real where O1 can make it real, honest `ThrowNo3D` stubs elsewhere | ⬜ | |
-| `DX1-4` | Factory dispatch for `DX1` in `CreateGraphicsBackend()` | ⬜ | |
-| `DX1-5` | `scripts/run-wine-dx1.sh` (design decision 11) + a fresh `~/.wine-cna-dx1` prefix | ⬜ | |
-| `DX1-6` | Confirm `CnaTests`/the new MinGW test binaries link cleanly against the new backend target under cross-compilation | ⬜ | |
+| `DX1-1` | Add `"DX1"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + `CNA_BACKEND_DX1` option; extend the existing `D3D9`/`D3D11`/`D3D12` Windows-only `FATAL_ERROR` gate (design decision 1) to include `DX1`; add the v1-only-symbol grep CTest (§1) | ✅ | |
+| `DX1-2` | `cna_backend_graphics_dx1` static library target (`elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")` block in `cmake/BackendSelection.cmake`/`cmake/BackendLibraries.cmake`); confirm minimal link set empirically (design decision 10) | ✅ | |
+| `DX1-3` | `include/CNA/Internal/Backends/Dx1/Dx1GraphicsBackend.hpp` (pimpl-only, no `<ddraw.h>` visible, matching `DX3-5`'s own reasoning: `<ddraw.h>` pulls in `<windows.h>`, which globally `#define`s things a public CNA header must never leak) + `src/CNA/Internal/Backends/Dx1/Dx1GraphicsBackend.cpp` (real `<ddraw.h>` usage lives here): every `IGraphicsBackend` pure virtual implemented — real where O1 can make it real, honest `ThrowNo3D` stubs elsewhere | ✅ | |
+| `DX1-4` | Factory dispatch for `DX1` in `CreateGraphicsBackend()` | ✅ | |
+| `DX1-5` | `scripts/run-wine-dx1.sh` (design decision 11) + a fresh `~/.wine-cna-dx1` prefix | ✅ | |
+| `DX1-6` | Confirm `CnaTests`/the new MinGW test binaries link cleanly against the new backend target under cross-compilation | ✅ | |
 
 ## Phase O2 — DirectDraw device/window bring-up
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-10` | `DirectDrawCreate(nullptr, &dd, nullptr)` at backend construction; verify the returned `IDirectDraw*` is real and `Release()`d correctly on destruction (COM refcounting, no leak) | ⬜ | |
-| `DX1-11` | `SetCooperativeLevel(reinterpret_cast<HWND>(...real HWND...), DDSCL_NORMAL)` using the real `HWND` from design decision 3 | ⬜ | |
-| `DX1-12` | Primary `CreateSurface` (`DDSCAPS_PRIMARYSURFACE`) | ⬜ | No `SetDisplayMode` call — `DX1-0c` confirms windowed mode doesn't need one. |
-| `DX1-13` | Shadow-backbuffer offscreen `CreateSurface` (`DDSCAPS_OFFSCREENPLAIN`, 32bpp, sized to the requested backbuffer) — design decision 4 | ⬜ | |
-| `DX1-14` | `Clear(r,g,b,a)`: real `Lock()`/write all 4 channels/`Unlock()` against the shadow surface (not `DDBLT_COLORFILL`, which historically hardcodes alpha on some drivers — verify directly rather than assume, `DX3-14`'s own correction is exactly this class of bug) | ⬜ | |
-| `DX1-15` | `Present()`: `Blt()` shadow → primary. **`DX1-0b` finding**: the primary surface is desktop-sized, not window-sized — the destination rect must be the window's client area translated to screen coordinates via `ClientToScreen(hwnd, &topLeft)`, not `{0,0,w,h}` | ⬜ | |
-| `DX1-16` | `GetViewportSize()`/`SetVirtualResolution()`/`SetPresentationMode()`: reuse the shared backend-agnostic logical-resolution/letterbox math every other backend shares | ⬜ | |
-| `DX1-17` | `GetWindowInternal()` returns the real `SDL_Window*`; `GetRendererInternal()` returns `nullptr` | ⬜ | |
-| `DX1-18` | `Dx1_Smoke` CTest (through `scripts/run-wine-dx1.sh`): construct backend, clear to a known color, present, read back via `Lock()`, assert exact pixel match | ⬜ | |
+| `DX1-10` | `DirectDrawCreate(nullptr, &dd, nullptr)` at backend construction; verify the returned `IDirectDraw*` is real and `Release()`d correctly on destruction (COM refcounting, no leak) | ✅ | |
+| `DX1-11` | `SetCooperativeLevel(reinterpret_cast<HWND>(...real HWND...), DDSCL_NORMAL)` using the real `HWND` from design decision 3 | ✅ | |
+| `DX1-12` | Primary `CreateSurface` (`DDSCAPS_PRIMARYSURFACE`) | ✅ | No `SetDisplayMode` call — `DX1-0c` confirms windowed mode doesn't need one. |
+| `DX1-13` | Shadow-backbuffer offscreen `CreateSurface` (`DDSCAPS_OFFSCREENPLAIN`, 32bpp, sized to the requested backbuffer) — design decision 4 | ✅ | |
+| `DX1-14` | `Clear(r,g,b,a)`: real `Lock()`/write all 4 channels/`Unlock()` against the shadow surface (not `DDBLT_COLORFILL`, which historically hardcodes alpha on some drivers — verify directly rather than assume, `DX3-14`'s own correction is exactly this class of bug) | ✅ | |
+| `DX1-15` | `Present()`: `Blt()` shadow → primary. **`DX1-0b` finding**: the primary surface is desktop-sized, not window-sized — the destination rect must be the window's client area translated to screen coordinates via `ClientToScreen(hwnd, &topLeft)`, not `{0,0,w,h}` | ✅ | |
+| `DX1-16` | `GetViewportSize()`/`SetVirtualResolution()`/`SetPresentationMode()`: reuse the shared backend-agnostic logical-resolution/letterbox math every other backend shares | 🟨 | `GetViewportSize()`/`SetVirtualResolution()` are fully correct (and, unlike `DX3-16`, `SetVirtualResolution()` has no stale-scale bug — `Present()` recomputes the letterbox fresh every frame). `SetPresentationMode()` stores the requested mode but `Present()` always applies a letterbox-equivalent uniform scale regardless of it — `Stretch`/`Overscan`/`NativeBackBuffer` are not yet distinguished, same honest scope `DX3-16` recorded. See `docs/dx1-backend.md` §1. |
+| `DX1-17` | `GetWindowInternal()` returns the real `SDL_Window*`; `GetRendererInternal()` returns `nullptr` | ✅ | |
+| `DX1-18` | `Dx1_Smoke` CTest (through `scripts/run-wine-dx1.sh`): construct backend, clear to a known color, present, read back via `Lock()`, assert exact pixel match | ✅ | |
 
 ## Phase O3 — Texture and render-target backends
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-20` | `Dx1TextureBackend : ITextureBackend` — private offscreen `IDirectDrawSurface*` (`DDSCAPS_OFFSCREENPLAIN`, 32bpp); `UpdatePixels` via `Lock()`/`memcpy`/`Unlock()` | ⬜ | |
-| `DX1-21` | `SetData`/`GetData` round-trip via `Lock`/`Unlock` | ⬜ | |
-| `DX1-22` | Mip levels (`level>0`): expect throw, same conclusion `DX3-22` reached (no native mip chain in `IDirectDrawSurface`) | ⬜ | |
-| `DX1-23` | `Dx1RenderTargetBackend : IRenderTargetBackend` — same offscreen-surface mechanism; `BindAsRenderTarget()`/`UnbindAsRenderTarget()` switch the active target surface | ⬜ | |
-| `DX1-24` | `HasRealDepthBuffer()` → always `false` | ⬜ | |
-| `DX1-25` | `RenderTargetUsage::DiscardContents` vs `PreserveContents` — expect this comes free from shared `GraphicsDevice.cpp` logic, same finding `DX3-25` made | ⬜ | |
-| `DX1-26` | `ReadBackbuffer()`/`GetBackBufferData()`: real `Lock()` + `memcpy` from the active surface | ⬜ | |
-| `DX1-27` | `SetRenderTargets` with 2+ bindings (MRT): throw | ⬜ | |
-| `DX1-28` | Surface dimension cap: confirm CNA's texture-size validation against whatever cap real `IDirectDraw::CreateSurface` enforces under Wine (spike-confirm, don't assume `DX3`'s `free-direct`-specific 4096 figure applies here) | ⬜ | |
+| `DX1-20` | `Dx1TextureBackend : ITextureBackend` — private offscreen `IDirectDrawSurface*` (`DDSCAPS_OFFSCREENPLAIN`, 32bpp); `UpdatePixels` via `Lock()`/`memcpy`/`Unlock()` | ✅ | |
+| `DX1-21` | `SetData`/`GetData` round-trip via `Lock`/`Unlock` | ✅ | |
+| `DX1-22` | Mip levels (`level>0`): expect throw, same conclusion `DX3-22` reached (no native mip chain in `IDirectDrawSurface`) | ✅ | |
+| `DX1-23` | `Dx1RenderTargetBackend : IRenderTargetBackend` — same offscreen-surface mechanism; `BindAsRenderTarget()`/`UnbindAsRenderTarget()` switch the active target surface | ✅ | |
+| `DX1-24` | `HasRealDepthBuffer()` → always `false` | ✅ | |
+| `DX1-25` | `RenderTargetUsage::DiscardContents` vs `PreserveContents` — expect this comes free from shared `GraphicsDevice.cpp` logic, same finding `DX3-25` made | ✅ | |
+| `DX1-26` | `ReadBackbuffer()`/`GetBackBufferData()`: real `Lock()` + `memcpy` from the active surface | ✅ | |
+| `DX1-27` | `SetRenderTargets` with 2+ bindings (MRT): throw | ✅ | |
+| `DX1-28` | Surface dimension cap: confirm CNA's texture-size validation against whatever cap real `IDirectDraw::CreateSurface` enforces under Wine (spike-confirm, don't assume `DX3`'s `free-direct`-specific 4096 figure applies here) | ✅ | |
 
 ## Phase O4 — CPU compositor / `SpriteBatch` draw path
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-30` | `Dx1SpriteBatchBackend : ISpriteBatchBackend` skeleton; `Begin()`/`End()` | ⬜ | |
-| `DX1-31` | Identity fast path: real `BltFast`/`Blt` straight copy | ⬜ | |
-| `DX1-32` | General path: port `DX3`'s `CompositeQuad` edge-function rasterizer verbatim (design decision 5) | ⬜ | |
-| `DX1-33` | Rotation around `origin` — port `DX3-33`'s verified formula | ⬜ | |
-| `DX1-34` | `SpriteEffects::FlipHorizontally`/`FlipVertically` | ⬜ | |
-| `DX1-35` | Scalar / `Vector2` scale overloads | ⬜ | Expect free, same finding `DX3-35` made (resolved in shared `SpriteBatch.cpp`). |
-| `DX1-36` | `SetTransformMatrix()` (`Begin(transformMatrix)`) | ⬜ | |
-| `DX1-37` | `SpriteSortMode` handling — expect fully covered by shared `SpriteBatch.cpp`, same finding `DX3-37` made | ⬜ | |
-| `DX1-38` | Custom `Effect` via `Begin(effect)`: throws (no shader stage exists) | ⬜ | |
-| `DX1-39` | Source-rectangle cropping | ⬜ | |
+| `DX1-30` | `Dx1SpriteBatchBackend : ISpriteBatchBackend` skeleton; `Begin()`/`End()` | ✅ | |
+| `DX1-31` | Identity fast path: real `BltFast`/`Blt` straight copy | ✅ | |
+| `DX1-32` | General path: port `DX3`'s `CompositeQuad` edge-function rasterizer verbatim (design decision 5) | ✅ | |
+| `DX1-33` | Rotation around `origin` — port `DX3-33`'s verified formula | ✅ | |
+| `DX1-34` | `SpriteEffects::FlipHorizontally`/`FlipVertically` | ✅ | |
+| `DX1-35` | Scalar / `Vector2` scale overloads | ✅ | Expect free, same finding `DX3-35` made (resolved in shared `SpriteBatch.cpp`). |
+| `DX1-36` | `SetTransformMatrix()` (`Begin(transformMatrix)`) | ✅ | |
+| `DX1-37` | `SpriteSortMode` handling — expect fully covered by shared `SpriteBatch.cpp`, same finding `DX3-37` made | ✅ | |
+| `DX1-38` | Custom `Effect` via `Begin(effect)`: throws (no shader stage exists) | ✅ | |
+| `DX1-39` | Source-rectangle cropping | ✅ | |
 
 ## Phase O5 — Blend-mode compositing math
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-40` | `Opaque` | ⬜ | Port `DX3-40`. |
-| `DX1-41` | `AlphaBlend` (premultiplied) | ⬜ | Port `DX3-41`. |
-| `DX1-42` | `NonPremultiplied` (straight alpha) | ⬜ | Port `DX3-42`. |
-| `DX1-43` | `Additive` | ⬜ | Port `DX3-43`. |
-| `DX1-44` | Custom `BlendState` fallback → `AlphaBlend`, matching factors **and** `BlendFunction::Add` | ⬜ | Port `DX3-44`'s bug-fixed logic directly — do not reintroduce the factors-only bug. |
-| `DX1-45` | `TextureFilter` → nearest vs. bilinear in the compositor | ⬜ | Port `DX3-45`. |
-| `DX1-46` | `TextureAddressMode::Wrap`/`Mirror` in the per-source-pixel sampler | ⬜ | Port `DX3-46`. |
+| `DX1-40` | `Opaque` | ✅ | Port `DX3-40`. |
+| `DX1-41` | `AlphaBlend` (premultiplied) | ✅ | Port `DX3-41`. |
+| `DX1-42` | `NonPremultiplied` (straight alpha) | ✅ | Port `DX3-42`. |
+| `DX1-43` | `Additive` | ✅ | Port `DX3-43`. |
+| `DX1-44` | Custom `BlendState` fallback → `AlphaBlend`, matching factors **and** `BlendFunction::Add` | ✅ | Port `DX3-44`'s bug-fixed logic directly — do not reintroduce the factors-only bug. |
+| `DX1-45` | `TextureFilter` → nearest vs. bilinear in the compositor | ✅ | Port `DX3-45`. |
+| `DX1-46` | `TextureAddressMode::Wrap`/`Mirror` in the per-source-pixel sampler | ✅ | Port `DX3-46`. |
 
 ## Phase O6 — `SpriteFont`
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-50` | Single glyph — expect zero new backend code beyond Phase O4, confirm via a `Dx1_SpriteFont` CTest, same finding `DX3-50` made | ⬜ | |
-| `DX1-51` | Multiple glyphs, spacing/kerning | ⬜ | |
-| `DX1-52` | `\n` newline advance | ⬜ | |
-| `DX1-53` | Unknown-character fallback (`defaultCharacter`) | ⬜ | |
-| `DX1-54` | `SpriteEffects` flip + rotation/origin/scale with `DrawString` | ⬜ | |
+| `DX1-50` | Single glyph — expect zero new backend code beyond Phase O4, confirm via a `Dx1_SpriteFont` CTest, same finding `DX3-50` made | ✅ | |
+| `DX1-51` | Multiple glyphs, spacing/kerning | ✅ | |
+| `DX1-52` | `\n` newline advance | ✅ | |
+| `DX1-53` | Unknown-character fallback (`defaultCharacter`) | ✅ | |
+| `DX1-54` | `SpriteEffects` flip + rotation/origin/scale with `DrawString` | ✅ | |
 
 ## Phase O7 — `ThrowNo3D` wiring and remaining defaults
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-60` | `ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` → `ThrowNo3D` | ⬜ | |
-| `DX1-61` | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` → `ThrowNo3D` | ⬜ | |
-| `DX1-62` | `CreateVertexBuffer`/`CreateIndexBuffer16`/`CreateIndexBuffer32` → `ThrowNo3D` | ⬜ | |
-| `DX1-63` | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` → `ThrowNo3D` (mostly free once `DX1-62` blocks buffer construction, same finding `DX3-63` made) | ⬜ | |
-| `DX1-64` | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` → `nullptr` (inherited default, no override needed) | ⬜ | |
-| `DX1-65` | `SupportsDepthStencil()` → `false` | ⬜ | |
-| `DX1-66` | `CreateOcclusionQuery()` → `nullptr` (inherited default — do not repeat `DX3`'s Phase X1/X2 bug of overriding this to throw) | ⬜ | |
-| `DX1-67` | `CreateEffectBackend()` → `nullptr` (inherited default, no override needed) | ⬜ | |
-| `DX1-68` | `TransformWindowToLogical`/`TransformLogicalToWindow`: real implementation, ported from `DX3-68`'s letterbox scale+offset computation | ⬜ | |
-| `DX1-69` | `DebugSimulateContextLoss`/`DebugRestoreContext`: expect no-op, same finding `DX3-69` made | ⬜ | |
+| `DX1-60` | `ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` → `ThrowNo3D` | ✅ | |
+| `DX1-61` | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` → `ThrowNo3D` | ✅ | |
+| `DX1-62` | `CreateVertexBuffer`/`CreateIndexBuffer16`/`CreateIndexBuffer32` → `ThrowNo3D` | ✅ | |
+| `DX1-63` | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` → `ThrowNo3D` (mostly free once `DX1-62` blocks buffer construction, same finding `DX3-63` made) | ✅ | |
+| `DX1-64` | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` → `nullptr` (inherited default, no override needed) | ✅ | |
+| `DX1-65` | `SupportsDepthStencil()` → `false` | ✅ | |
+| `DX1-66` | `CreateOcclusionQuery()` → `nullptr` (inherited default — do not repeat `DX3`'s Phase X1/X2 bug of overriding this to throw) | ✅ | |
+| `DX1-67` | `CreateEffectBackend()` → `nullptr` (inherited default, no override needed) | ✅ | |
+| `DX1-68` | `TransformWindowToLogical`/`TransformLogicalToWindow`: real implementation, ported from `DX3-68`'s letterbox scale+offset computation | ✅ | |
+| `DX1-69` | `DebugSimulateContextLoss`/`DebugRestoreContext`: expect no-op, same finding `DX3-69` made | ✅ | |
 
 ## Phase O8 — Tests and documentation
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX1-80` | `Dx1_Smoke` CTest (see `DX1-18`) | ⬜ | |
-| `DX1-81` | `Dx1_SpriteBatch` CTest: rotation/scale/tint/flip pixel-verified, same rigor `Dx3_SpriteBatch` applied | ⬜ | |
-| `DX1-82` | `Dx1_Blend` CTest: all 4 blend modes + custom-`BlendState` fallback pixel-verified | ⬜ | |
-| `DX1-83` | `Dx1_AddressMode` CTest: `Wrap`/`Mirror`/`TextureFilter` sampling pixel-verified | ⬜ | |
-| `DX1-84` | `Dx1_SpriteFont` CTest | ⬜ | |
-| `DX1-85` | `Dx1_No3D` CTest: every 3D entry point throws/degrades per Phase O7's table | ⬜ | |
-| `DX1-86` | `docs/dx1-backend.md`: mirror `docs/dx3-backend.md`'s table/status-legend structure | ⬜ | |
-| `DX1-87` | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring, `README.md` §1/§6, and `plan_dxold.md`'s status row for DX1 | ⬜ | |
-| `DX1-88` | Full `CnaTests`/DX1 CTest suite regression run under `-DCNA_GRAPHICS_BACKEND=DX1` (MinGW cross-compile) — confirm no unrelated suite breaks | ⬜ | |
+| `DX1-80` | `Dx1_Smoke` CTest (see `DX1-18`) | ✅ | |
+| `DX1-81` | `Dx1_SpriteBatch` CTest: rotation/scale/tint/flip pixel-verified, same rigor `Dx3_SpriteBatch` applied | ✅ | |
+| `DX1-82` | `Dx1_Blend` CTest: all 4 blend modes + custom-`BlendState` fallback pixel-verified | ✅ | |
+| `DX1-83` | `Dx1_AddressMode` CTest: `Wrap`/`Mirror`/`TextureFilter` sampling pixel-verified | ✅ | |
+| `DX1-84` | `Dx1_SpriteFont` CTest | ✅ | |
+| `DX1-85` | `Dx1_No3D` CTest: every 3D entry point throws/degrades per Phase O7's table | ✅ | |
+| `DX1-86` | `docs/dx1-backend.md`: mirror `docs/dx3-backend.md`'s table/status-legend structure | ✅ | |
+| `DX1-87` | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring, `README.md` §1/§6, and `plan_dxold.md`'s status row for DX1 | ✅ | |
+| `DX1-88` | Full `CnaTests`/DX1 CTest suite regression run under `-DCNA_GRAPHICS_BACKEND=DX1` (MinGW cross-compile) — confirm no unrelated suite breaks | ✅ | **Final: 5336 passed, 11 skipped, 48 failed** (`ctest`/`CnaTests.exe` run through Wine on the virtual display). Getting here required fixing several pre-existing, not-DX1-specific gaps this exact configuration (from-scratch MinGW cross-compile + full `CnaTests`) had never hit before (README.md's own CI caveat: the full suite has never run on Windows CI at all): two audio harnesses missing an `SDL3::SDL3` link (`cmake/Harnesses.cmake`), a POSIX-only (`geteuid`/`<unistd.h>`) media test needing a Windows guard, `CNA_ENABLE_NET=OFF`'s test glob never excluding ENet-dependent test files, and — the deepest one — `CnaLibrary.cmake`'s existing `CNA_FFMPEG_AVAILABLE=OFF` source exclusion (Video/VideoPlayer/VideoDecoder, deliberate on every Windows target) never being mirrored for the corresponding test files or for `VideoContentTypeReader.cpp`/its `XnbBuiltInReaders.cpp` registration call site. All are narrowly-scoped, mirror an already-established pattern in the same file, and are unrelated to DX1's own logic. Of the remaining 48 failures: 34 are 3D-content-loading tests (`SkinnedModelEXTPartTest`, `RuntimeGltfModelTest`, `CnjModelTest`/`CnjEffectTest`/`CnjTexture3DTest`/`CnjStockEffectTest`, `ModelContentTypeReaderTest`, etc.) hitting DX1's correct `ThrowNo3D` via a plain `GraphicsDevice gd;` fixture with no 2D-backend gate — the **identical** structural gap `plan_dx3.md`'s own regression already documented and left explicitly out of scope; 5 are `GraphicsDeviceCapabilityTest.SupportsThreeD`/`SupportsDepthStencilBuffer`/`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects`, which assert these capabilities unconditionally true with **no backend gate at all** (would fail identically under `DX3`/`SDL_RENDERER`/`ASCII`/`CANVAS` too, confirmed by reading the test source — not new); 6 are `MediaLibraryTestFixture` song/album duration and genre tests reading `0ms`/wrong metadata, a real consequence of `CNA_FFMPEG_AVAILABLE=OFF` on every Windows target (pre-existing, predates this session); the remaining 4 (`PictureLibraryIndexTest` ×3, `AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly`) are Windows/Wine-filesystem or non-ASCII-encoding quirks unrelated to the graphics backend. One real, DX1-relevant test-gate fix was applied: `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`'s backend gate didn't know about `DX1` either (mirrors `DX3-27`'s own identical fix) — added, confirmed fixed (49→48 failures). Zero DX1-caused failures remain unaccounted for. |
 
 ---
 

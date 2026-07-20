@@ -166,6 +166,11 @@ include(cmake/Tests/D3D9Tests.cmake)
 # display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
 include(cmake/Tests/SdlGpuTests.cmake)
 
+# plan_dx1.md: DX1 (real DirectDraw v1, no ../free-direct) CTest registration, mirroring D3D9's
+# own cna_d3d9_test/cna_d3d9_ctest_command shape (Windows-only, MinGW cross-compile + Wine
+# wrapper) rather than DX3's native-Linux shape, since DX1 genuinely needs real ddraw.h.
+include(cmake/Tests/Dx1Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

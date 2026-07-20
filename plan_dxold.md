@@ -30,7 +30,7 @@ backend code is authorized, mirroring `plan_dx9.md`'s `D9-0` discipline.
 
 | # | Version | Year | Graphics API surface | 3D policy | CMake backend name | Plan doc | Status |
 |---|---|---|---|---|---|---|---|
-| 1 | **DX1** | 1995 | DirectDraw v1 only (`IDirectDraw`/`IDirectDrawSurface`/`DDSURFACEDESC`) — no Direct3D exists yet | throw (no code path exists at all) | `DX1` | `plan_dx1.md` | 🟡 in progress (this session) |
+| 1 | **DX1** | 1995 | DirectDraw v1 only (`IDirectDraw`/`IDirectDrawSurface`/`DDSURFACEDESC`) — no Direct3D exists yet | throw (no code path exists at all) | `DX1` | `plan_dx1.md` | ✅ done (2026-07-20) — 10/10 CTests passing, see `docs/dx1-backend.md` |
 | 2 | **DX2** | 1996 | DirectDraw v1 (unchanged) + first Direct3D, **execute buffers** (`IDirect3D`/`IDirect3DDevice`/`IDirect3DExecuteBuffer`), single texture, no `DrawPrimitive` | 2D real; 3D optional/best-effort later (own decision when opened) — v1 scope is 2D-only + `ThrowNo3D`, matching DX1 | `DX2` | `plan_dx2.md` (not yet written) | ⬜ not started |
 | 3 | **DX3 (real)** | 1996 | DirectDraw v2 (`IDirectDraw2`, adds refresh-rate to `SetDisplayMode`) + execute-buffer Direct3D, matured | throw for v1 (2D-only baseline), same optional-3D question as DX2 | `DX3` (⚠ reassigned — see rename note) | `plan_dx3_real.md` (not yet written) | ⬜ not started — blocked on the `FREE_DIRECT` rename below |
 | 4 | *(DX4)* | — | never released | — | — | — | n/a |
