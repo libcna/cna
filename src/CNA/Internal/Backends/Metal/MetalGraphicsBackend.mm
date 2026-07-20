@@ -2315,8 +2315,12 @@ bool MetalGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability
     }
 }
 
+}
+
+namespace CNA::Internal::Backends
+{
 #ifdef CNA_BACKEND_METAL
-std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args){return std::make_unique<MetalGraphicsBackend>(args);}
+std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args){return std::make_unique<Metal::MetalGraphicsBackend>(args);}
 #endif
 }
 #else

@@ -1563,6 +1563,45 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     the next CI run — flagged honestly rather than assumed, since item 59's identical-looking "verified
     locally" claim already turned out not to predict the real Apple-linker outcome once.
 
+61. **Real fourteenth CI signal — item 60's fix DID work (the `avcodec` error is gone), and the next
+    CI run exposed the first genuine Metal-source bug this whole plan's static review passes never
+    caught: `CreateGraphicsBackend` was defined one namespace level too deep, so it silently compiled
+    as an unrelated, unlinkable symbol**: with FFmpeg resolved, both `cna_demo_2d`/`cna_demo_sound`
+    failed differently again — `Undefined symbols for architecture arm64: "CNA::Internal::Backends::
+    CreateGraphicsBackend(...)", referenced from: GraphicsDevice::createBackend() in libCNA.a`. Before
+    assuming this was yet another linker-flag/grouping issue (item 58's territory), checked whether
+    the symbol was actually correctly defined at all — grepped every backend's own
+    `CreateGraphicsBackend` definition and compared namespace structure against a working reference
+    (`EasyGLGraphicsBackend.cpp`, which passes real Linux CI today). EasyGL's convention: close its
+    own `namespace CNA::Internal::Backends::EasyGL { ... }` block, then **reopen** a fresh `namespace
+    CNA::Internal::Backends { ... }` specifically to define `CreateGraphicsBackend` at the correct,
+    shallower scope the header (`IGraphicsBackend.hpp`) actually declares it in — referencing the
+    concrete class via its qualified name (`EasyGL::EasyGLGraphicsBackend`). `MetalGraphicsBackend.mm`
+    never did this: its entire implementation lives inside `namespace CNA::Internal::Backends::Metal`
+    (opened at file scope, `#ifdef __APPLE__`-gated), and `CreateGraphicsBackend` was defined *inside*
+    that same block, one level too deep — legal C++ (an unrelated, fully-valid free function
+    `CNA::Internal::Backends::Metal::CreateGraphicsBackend` compiles cleanly, calling
+    `MetalGraphicsBackend` via ordinary nested-namespace lookup), but never satisfying the actual
+    symbol `GraphicsDevice.cpp`'s `using CNA::Internal::Backends::CreateGraphicsBackend;` needs — an
+    entirely silent compile-time success with a real link-time failure, and the exact class of defect
+    this whole plan's static review passes structurally cannot catch (grep/read-based review sees a
+    correctly-named, correctly-signed function and has no reason to suspect the wrong enclosing
+    namespace) — only a genuine link step, on real Apple hardware/toolchain, for the very first time
+    this session, surfaced it.
+
+    Fixed to match `EasyGLGraphicsBackend.cpp`'s exact convention: close `namespace CNA::Internal::
+    Backends::Metal` before the factory function, reopen `namespace CNA::Internal::Backends` for just
+    `CreateGraphicsBackend`, and qualify the constructed type as `Metal::MetalGraphicsBackend`. Cannot
+    be build-verified from this Linux sandbox at all — Objective-C++ (`.mm`) requires Apple's Clang
+    frontend and Metal/QuartzCore/Foundation frameworks, none of which exist here, unlike every prior
+    fix in this session, which was at least Linux-buildable even when Apple-only in its final effect.
+    Verified only via careful manual namespace-scope tracing (confirmed brace balance unchanged,
+    322/322 before and after) and by direct comparison against `EasyGLGraphicsBackend.cpp`'s
+    already-CI-proven pattern. This is explicitly the least-verified fix of the whole session —
+    flagged honestly, not claimed as done — and the next CI run is the only real answer on whether it
+    resolves the link, or whether more Metal-source bugs of this same "compiles clean, links wrong"
+    class remain undiscovered elsewhere in this 2300+ line file. Fourteenth real, observed CI signal.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
