@@ -2312,9 +2312,9 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-DOCS-003 | P3 | NOT STARTED | | | |
 | REMED-GFX-004 | P1 | NOT STARTED | | | |
 | REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4 | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass** — see "Wave 3 — GRAPHICS shader campaign" below). Bgfx + D3DCommon (D3D11/D3D12) slices PENDING (bytecode regen blocked in this sandbox: no shaderc/fxc/dxc binary). Cross-backend fog conformance test still to build. |
-| REMED-GFX-006 | P1 | NOT STARTED | | | |
+| REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9 | feature/audit | **Vulkan slice DONE** — all 5 skinned vertex shaders now compose `transpose(inverse(mat3(world)))` (Variant A ×4 + Variant B ×1 in pbr3d_skinned). New non-identity-World harness 1/4 → 4/4, matching FNA analytic values to the byte. Shader-only (world already in UBO). EasyGL/WebGPU/SdlGpu/Bgfx/D3D9/D3DCommon slices PENDING (bytecode regen blocked). See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-007 | P1 | IN PROGRESS | 31668819 | feature/audit | **Vulkan slice DONE** — env_map3d.frag emissive now added unscaled (`lightSum*Diffuse + Emissive`); test-driven discriminating case added (non-white Diffuse). 8/8 Vulkan env-map tests pass, zero regressions. Bgfx/WebGPU/SdlGpu/D3DCommon slices PENDING (bytecode regen blocked). See "Wave 3 — GRAPHICS shader campaign". |
-| REMED-GFX-008 | P1 | NOT STARTED | | | |
+| REMED-GFX-008 | P1 | DEFERRED (this session) | | | Vulkan root cause re-confirmed at source (skinned frag reads always-zero `pc.ambientColor`; `SkinnedEffect::FillGpuDrawParams` never writes `p.ambientColor` and pre-folds ambient into `p.emissiveColor`, which the skinned UBOs have no slot for). **Deferred, not blocked by tooling:** the FNA-correct formula double-lights `Vulkan_AvatarRenderer_TintRouting`, which drives ambient(1,1,1) AND a full head-on light and passes only because this bug cancels the double-count. Re-baselining it needs AvatarRenderer lighting recalibration — an avatar-subsystem change outside this campaign's clean scope. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-009 | P1 | NOT STARTED | | | |
 | REMED-GFX-010 | P2 | NOT STARTED | | | |
 | REMED-GFX-011 | P1 | **DONE (Vulkan — the only affected backend)** | c9e96813, 633a2e17 | feature/audit | Flip added to all 4 families; both false justifying comments deleted; SPIR-V regenerated and verified (exactly 4 of 35 arrays changed). Orientation harness 0/4 → 4/4 on backbuffer AND render target. Zero regressions. See "Wave 3 — GRAPHICS shader campaign". |
@@ -2757,3 +2757,78 @@ GFX-011 — it is separable, and bundling it would have turned a 4-shader root-c
 **Suggested approach.** Do not rewrite all 47 at once. The cheap, high-value version is to extend
 each test's existing assertion set with one off-centre sample as that family's next shader task
 touches it, and to prefer asymmetric geometry in any newly-written Vulkan pixel test.
+
+---
+
+### REMED-GFX-006 — Vulkan skinned world-space normal transform — **Vulkan slice DONE and VERIFIED** (commits `dafa085d`, `acf200c9`)
+
+**Root cause (Vulkan slice).** FNA lights a skinned normal as
+`normalize(mul(mul(normal,(float3x3)skinning), WorldInverseTranspose))` — `SkinnedEffect.fx`'s
+`Skin()` applies the bone 3×3, then `Lighting.fxh`'s `ComputeCommonVSOutputWithLighting` applies
+`WorldInverseTranspose`. Vulkan's five skinned vertex shaders dropped the outer world factor:
+- **Variant A** (world matrix absent entirely) in `skinned3d`, `skinned3d_color`,
+  `skinned3d_vertexlit`, `skinned3d_vertexlit_color` — each `normalize(mat3(skinMat) * aNormal)`.
+- **Variant B** (raw `World`, not inverse-transpose) in `pbr3d_skinned` — `mat3(pbr.world)`, with a
+  comment defending it as fidelity to EasyGL's identical defect, while this backend's own unskinned
+  `pbr3d.vert.glsl` already used the inverse transpose.
+
+**Fix.** All five now apply `transpose(inverse(mat3(world)))` as the outer normal factor. The world
+matrix was already present in each shader's UBO (`fog.world` / `pbr.world`), so this is
+**shader-only** — no C++ or UBO-layout change. `pbr3d_skinned`'s tangent stays on raw `World`
+(tangents transform as directions, not normals — glTF convention, unchanged).
+
+**Test harness.** `vulkan_skinnedeffect_world_normal_test.cpp`. Identity bind pose (so
+`mat3(skinMat)=I`, isolating the world factor), a single directional light with `-Direction=(0,1,0)`,
+zero ambient/emissive/specular — a pure N·L readout. The vertex normal is an in-plane direction
+(not the face normal) so a Z-rotation changes the world normal without moving the camera-facing,
+centre-covering quad; a failure is therefore a lighting difference, never a coverage artifact. Four
+cases with analytically-derived, CPU-cross-checked expectations: identity (control), rotationZ(90),
+non-uniform scale(2,1,1), and both. The scale case distinguishes the correct inverse-transpose
+(228) from a naive raw-World "fix" (114) and from the un-worlded normal (180), so it rejects
+Variant B as well as Variant A.
+
+**Pre-fix vs post-fix.** 1/4 → 4/4. Pre-fix values matched the Variant-A prediction exactly
+(rotationZ→0 vs 255, scale→180 vs 228, rot×scale→180 vs 114); post-fix every case matches the FNA
+analytic value **to the byte** (0 / 255 / 228 / 114). The 228 (not 114) confirms the inverse
+transpose specifically.
+
+**SPIR-V regeneration.** Semantic diff of all 35 arrays: exactly the 5 intended shaders changed
+(`kSkinned3dVertSpv`, `kSkinned3dColorVertSpv`, `kSkinned3dVertexLitVertSpv`,
+`kSkinned3dVertexLitColorVertSpv`, `kPbr3dSkinnedVertSpv`), the other 30 byte-identical.
+
+**Regression / validation.** Full suite **5766 tests, 4 failures — all confirmed pre-existing**
+(the same `CnjEffectTest`, `CnjStockEffectTest`, `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`,
+`Vulkan_DepthBias`). Every existing identity-World skinned test still passes, as expected (the new
+factor is the identity there). Validation layer (`VK_LAYER_KHRONOS_validation`) clean.
+
+**Remaining GFX-006 scope.** EasyGL, WebGPU, SdlGpu, Bgfx, D3D9, D3DCommon carry the same Variant A/B
+defect (audit-confirmed at source); their bytecode regen is blocked in this sandbox. GFX-006 stays
+IN PROGRESS.
+
+### REMED-GFX-008 — Vulkan skinned Ambient/Emissive — **DEFERRED this session** (verification entangled with avatar recalibration)
+
+**Root cause re-confirmed at source (Vulkan).** The skinned fragment shaders compute
+`litRGB = (pc.ambientColor + lightSum) * diffuseColor`, reading `pc.ambientColor` from
+`FillExtPushConst`'s `pc[20..22]`. But `SkinnedEffect::FillGpuDrawParams` (`SkinnedEffect.cpp:320`)
+**never writes `p.ambientColor`** (it defaults to 0) and instead pre-folds ambient into
+`p.emissiveColor` = `(emissive + ambient*diffuse)*alpha` — byte-for-byte FNA's
+`SetMaterialColor()`. The skinned UBOs have **no emissive slot** at all. So for skinned draws
+`pc.ambientColor` is always 0 and emissive is never consumed — both `AmbientLightColor` and
+`EmissiveColor` are silent no-ops, exactly as the audit states.
+
+**Why deferred rather than fixed.** The correct FNA formula is `litRGB = lightSum*diffuse + emissive`
+(with the pre-folded emissive). `Vulkan_AvatarRenderer_TintRouting` drives `AmbientLightColor(1,1,1)`
+**and** a full head-on directional light `(0,0,-1)` on a `+Z`-facing quad (N·L≈1), then asserts the
+output equals the raw tint. Working through it: the FNA-correct formula yields
+`lightSum*diffuse + emissive ≈ 1·diffuse + 1·diffuse = 2·diffuse` — roughly double the tint, which
+**breaks the test**. It passes today only because the missing ambient/emissive cancels that
+double-count back to `1·diffuse`. This is the "passes by coincidence" the plan flags. Re-baselining
+the test to the doubled value would merely encode over-driven numbers; the genuinely-correct fix
+requires **recalibrating AvatarRenderer's lighting inputs** (it should not drive both full ambient
+and a full light if the shader consumes both correctly) — an avatar-subsystem change outside this
+shader campaign's clean scope, which the campaign's own rules say not to opportunistically expand
+into. The Vulkan fix is otherwise ready (add an emissive slot to `skinnedFogUboData` + point the 4
+frag shaders at it), but it **cannot be rigorously verified** without that recalibration, so it is
+deferred rather than landed unverified. Recommend scheduling GFX-008 jointly with an
+AvatarRenderer-lighting-calibration task (owner: GRAPHICS + avatar), per the plan's "handle both
+together."
