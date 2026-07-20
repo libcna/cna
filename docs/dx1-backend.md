@@ -90,6 +90,39 @@ full red channel legitimately bled through regardless of alpha, correct XNA beha
 compositor bug. Fixed by switching the check to `BlendState::NonPremultiplied` (straight alpha),
 the preset a zero-alpha source pixel actually needs to leave the destination untouched.
 
+**Two more real bugs found post-ship, by actually running `examples/demo_2d` live (not just the
+CTest suite) and reported directly by the project owner:**
+
+- **Pixel channel order swap** (a texture that is really yellow rendered as blue/cyan on real
+  screen output). `CreateOffscreenSurface` never specified an explicit `DDPIXELFORMAT`, so real
+  Wine `ddraw.dll` defaulted every offscreen surface's byte layout to the current display mode's
+  own native format — confirmed to be `(B,G,R,X)` byte order in this environment, not the
+  `(R,G,B,A)` order every pixel helper in `Dx1GraphicsBackend.cpp` assumed (matching every other
+  CNA backend's `ImageData::pixels` convention). Every CTest still passed regardless (both sides of
+  a round-trip through this backend's *own* surfaces stayed internally consistent), but a real
+  `Blt()` between two differently-formatted surfaces performs genuine color conversion, so pixel
+  data written assuming `(R,G,B,A)` came out with red and blue swapped once actually displayed. A
+  first fix attempt (explicitly requesting a `DDPF_RGB` format with masks matching `(R,G,B,A)`) was
+  itself wrong: real Wine `ddraw.dll` rejected it with `DDERR_INVALIDPIXELFORMAT`, confirmed
+  empirically — this environment's surface creation only supports specific native formats. Fixed by
+  never assuming a fixed byte order: `DetectChannelLayout` queries the real negotiated
+  `DDPIXELFORMAT` from the first surface created and every raw pixel read/write
+  (`WriteSurfacePixels`/`ReadSurfacePixels`/`FillSurfaceColor`/`SampleTexel`/`CompositeQuad`) is
+  remapped through those real byte offsets instead of a hardcoded `(R,G,B,A)` position.
+- **Visible stutter** with the demo's 50–100 independently-rotating sprites. Every single
+  `SpriteBatch.Draw()` call did its own `Lock()`/`Unlock()` round-trip on both the shared
+  destination surface and the (usually shared) source texture — each a real COM call Wine has to
+  translate. Fixed via `LockedSurfaceCache`: the lock is acquired once and reused across a whole
+  run of consecutive general-path draws, released only when a real `Blt`/`BltFast` call needs the
+  surface unlocked (the identity fast path) or at `End()`. Separately found along the way: this
+  session's own build directory had `CMAKE_BUILD_TYPE` empty (no compiler optimization at all,
+  effectively `-O0`) for every prior build — reconfigured with `-DCMAKE_BUILD_TYPE=Release`. This
+  does not affect correctness (every CTest pixel assertion is optimization-independent), but it
+  means every performance impression before this point understated the backend's real performance —
+  always build in Release for a real perf judgment of a CPU-rasterizing backend like this one.
+
+All 10 `DX1` CTests re-verified passing after both fixes.
+
 ## 4. Blend-mode compositing math (Phase O5)
 
 | Feature | Status | Notes |

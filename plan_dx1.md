@@ -21,6 +21,33 @@
 > to DX1 (mostly the same structural "3D content load under a 2D-only backend" gap `plan_dx3.md`
 > already documented). See `docs/dx1-backend.md` for the full completeness table.
 >
+> **Post-ship: two more real bugs found by actually running `examples/demo_2d` live (not just the
+> CTest suite) and fixed the same day, both reported directly by the project owner:**
+> 1. **Pixel channel order swap (a yellow texture rendered blue/cyan).** `CreateOffscreenSurface`
+>    never specified an explicit `DDPIXELFORMAT`, so real Wine `ddraw.dll` defaulted every offscreen
+>    surface's byte layout to the current display mode's own native format — confirmed to be
+>    `(B,G,R,X)` byte order in this environment, not the `(R,G,B,A)` order every pixel-manipulation
+>    helper in this file assumed. A first fix attempt (explicitly requesting a `DDPF_RGB` format with
+>    `(R,G,B,A)`-matching masks) was itself wrong — real Wine `ddraw.dll` rejected it with
+>    `DDERR_INVALIDPIXELFORMAT` (confirmed empirically). The real fix: never assume a fixed byte
+>    order at all — query the actual negotiated `DDPIXELFORMAT` from the first surface created
+>    (`DetectChannelLayout`) and remap every raw pixel read/write through those real offsets. Correct
+>    regardless of which native format a given Wine version/environment negotiates, and no format
+>    request is ever rejected since none is made.
+> 2. **Visible stutter with the demo's 50–100 independently-rotating sprites.** Every single
+>    `SpriteBatch.Draw()` call was doing its own `Lock()`/`Unlock()` round-trip on both the shared
+>    destination surface and the (usually shared) source texture — each a real COM call Wine has to
+>    translate. Fixed via `LockedSurfaceCache`: the lock is acquired once and reused across a whole
+>    run of consecutive general-path draws, released only when a real `Blt`/`BltFast` call needs the
+>    surface unlocked or at `End()`. Also found along the way: this session's own `cmake-build-dx1`
+>    had `CMAKE_BUILD_TYPE` empty (zero compiler optimization, effectively `-O0`) for every prior
+>    build and test run — reconfigured with `-DCMAKE_BUILD_TYPE=Release` (`-O3`). This does not
+>    invalidate any correctness result (CTest pixel assertions are optimization-independent), but
+>    every performance impression prior to this point understated real performance; **always build
+>    this backend (and its demo) in Release for any perf judgment.**
+>
+> All 10 `DX1` CTests re-verified passing after both fixes.
+>
 > Owner's own words (translated from Czech): *"Add a new graphics backend, DirectX 1, to CNA. It'll
 > be 2D only; for 3D it throws an exception. Create `plan_dx1.md` and then implement it — ask if
 > anything's unclear. Do not use `free-direct` — it must use real DirectX 1, or Wine, or Proton."*
