@@ -87,6 +87,7 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 | `REMED-GFX-009` | SdlGpu fog entirely unimplemented | HIGH | GRAPHICS | NO |
 | `REMED-GFX-011` | Vulkan Y-flip missing in 4 effect families | HIGH | GRAPHICS | NO |
 | `REMED-GFX-012` | Vulkan `SpriteBatch` transform dropped | HIGH | GRAPHICS | YES |
+| `REMED-GFX-058` | Vulkan test shard centre-pixel-only (47 of 71) — structurally blind to mirrors | MEDIUM | GRAPHICS | YES |
 | `REMED-GFX-013` | Vulkan scissor inert when RT bound | HIGH | GRAPHICS | COND |
 | `REMED-GFX-016` | EasyGL MRT second attachment never drawn | HIGH | GRAPHICS | NO |
 | `REMED-GFX-017` | Bgfx default cull mode culls nothing | HIGH | GRAPHICS | YES |

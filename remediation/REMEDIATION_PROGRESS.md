@@ -2317,7 +2317,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-008 | P1 | NOT STARTED | | | |
 | REMED-GFX-009 | P1 | NOT STARTED | | | |
 | REMED-GFX-010 | P2 | NOT STARTED | | | |
-| REMED-GFX-011 | P1 | NOT STARTED | | | |
+| REMED-GFX-011 | P1 | **DONE (Vulkan — the only affected backend)** | c9e96813, 633a2e17 | feature/audit | Flip added to all 4 families; both false justifying comments deleted; SPIR-V regenerated and verified (exactly 4 of 35 arrays changed). Orientation harness 0/4 → 4/4 on backbuffer AND render target. Zero regressions. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-012 | P1 | NOT STARTED | | | |
 | REMED-GFX-013 | P1 | NOT STARTED | | | |
 | REMED-GFX-014 | P1 | NOT STARTED | | | |
@@ -2636,3 +2636,124 @@ same blind spot that hid the bug). Adding correct orientation tests (careful abo
 +y-down NDC vs readback pixel rows) is new infra best built as its own focused step, not rushed. The
 existing symmetric env-map/pbr tests will still pass after the flip (a vertical flip doesn't move a
 symmetric full-screen quad's center pixel), so they cannot serve as the regression guard either.
+
+---
+
+### REMED-GFX-011 — Vulkan NDC Y-flip — **DONE and VERIFIED** (commits `c9e96813`, `633a2e17`)
+
+**Root cause.** Vulkan's NDC has Y inverted relative to OpenGL, and the C++ side supplies no
+correction: the viewport is always positive-height (`VulkanGraphicsBackend.cpp:6779-6788` and the
+two swapchain sites), and `DrawPrimitivesEx`'s `wvp` / `FillInstancedPushConst`'s `vp` pass the
+matrix through untouched. The flip is therefore a per-shader convention. **14 of 18 3D vertex
+shaders applied it; 4 did not.**
+
+**Affected shader families (confirmed exhaustively, not assumed).** A full read of all 19
+`.vert.glsl` files partitions them as: 14 flipping (10 via `pos.y = -pos.y` before assignment —
+`colored3d`, `colored3d_legacy`, `textured3d`, `colored_textured3d`, `dual_texture3d`,
+`dual_texture_colored3d`, `lit_textured3d`, `lit_textured3d_vertexlit`, `alpha_test3d`,
+`alpha_test_colored3d`; 4 via `gl_Position.y = -gl_Position.y` — `skinned3d`, `skinned3d_color`,
+`skinned3d_vertexlit`, `skinned3d_vertexlit_color`), **4 not flipping — the defect** (`env_map3d`,
+`pbr3d`, `pbr3d_skinned`, `instanced3d`), and `sprite2d`, which computes NDC directly from pixel
+space and is a verified non-bug. 14 + 4 + 1 = 19, so the sweep is complete. The plan's list of four
+was confirmed exact — no additional families share the root cause.
+
+**The two justifying comments were both false.** `pbr3d.vert.glsl` and `pbr3d_skinned.vert.glsl`
+each rested on the claim that `skinned3d.vert.glsl` never Y-flips. It does, at line 59. Both were
+deleted rather than reworded, per the plan: leaving them would invite a future maintainer to
+"re-fix" the flip back out.
+
+**Coordinate-pipeline analysis.** CPU builds World/View/Projection in XNA convention → the stock
+effect uploads the composed matrix unmodified → the shader must map XNA's +Y-up clip space onto
+Vulkan's +Y-down NDC → the viewport is positive-height, so nothing downstream compensates.
+Render targets and the backbuffer share this convention (verified empirically, below). SpriteBatch
+is separate and correct on its own terms. No affected path becomes double-flipped — proven by the
+object landing on the *correct* quadrant post-fix rather than returning to where it started.
+
+**Test-harness design.** The pre-existing tests for these families draw a centred, symmetric,
+full-screen quad and sample the centre pixel — a vertical mirror moves nothing they look at, which
+is exactly why the bug survived. The new harness uses a quad confined to the **+X/+Y quadrant**
+(asymmetric on *both* axes) and samples **all four quadrant centres**, so correct / vertically
+mirrored / horizontally mirrored / both are separately diagnosable, and a double flip is caught as
+a vertical mirror. Three tests:
+- `vulkan_orientation_calibration_test.cpp` — the **oracle**. Pins "XNA +Y is up" and
+  "`GetBackBufferData` row 0 is top" against `colored3d`, whose flip was never in question, so the
+  other tests assert a *calibrated* convention rather than an assumed one.
+- `vulkan_orientation_effects_test.cpp` — backbuffer orientation, per family.
+- `vulkan_orientation_rendertarget_test.cpp` — the same four through a `RenderTarget2D`, calibrated
+  against `colored3d` via an identical SpriteBatch blit so SpriteBatch's own NDC convention cancels
+  out of the comparison. Covers a fix that could be right on the backbuffer and double-flipped on
+  an RT. (The Vulkan backend implements no `GetTextureData`, so direct `GetData` on an RT reads an
+  unpopulated CPU shadow — the blit path is what every other Vulkan RT test uses.)
+
+**Pre-fix failure evidence.** Against the unmodified shaders, all four families rendered
+**BOTTOM-RIGHT** on both the backbuffer and the render target, against a `colored3d` reference of
+TOP-RIGHT — an unambiguous vertical mirror. Backbuffer 0/4, RT 0/4, calibration oracle PASS.
+
+**Post-fix result.** Backbuffer **4/4**, RT **4/4**, calibration oracle still PASS. The object moves
+BR → TR with *identical pixel values* (`env_map3d` 255,255,255; `pbr3d` and `pbr3d_skinned`
+232,232,232; `instanced3d` 255,255,255) — the geometry relocated and nothing else changed, which is
+the signature of a correct single flip rather than a double flip or a lighting side-effect.
+
+**SPIR-V regeneration verification.** `compile_shaders.py` (libshaderc) was first run with **no
+source change** and reproduced `spirv_shaders.hpp` byte-for-byte (identical MD5, empty `git diff`),
+establishing reproducibility before relying on it. After the fix, a semantic diff of all 35 embedded
+arrays showed exactly the 4 intended vertex shaders changed — `kEnvMap3dVertSpv` 701→718,
+`kInstanced3dVertSpv` 348→369, `kPbr3dSkinnedVertSpv` 1262→1279, `kPbr3dVertSpv` 760→777 words, each
+growth consistent with a negate+store — and the other **31 arrays byte-identical**. No regeneration
+drift.
+
+**Backbuffer / render-target coverage.** Both paths covered and both pass; the RT path was
+additionally proven to *fail* pre-fix, so it is a real guard and not a vacuous one.
+
+**Vulkan validation layers.** `VK_LAYER_KHRONOS_validation` run over all three orientation tests;
+layer load confirmed via `VK_LOADER_DEBUG=layer`. **Zero errors, zero warnings.**
+
+**Regression results.** Full suite: **5764 tests**. Post-fix failures: 4 graphics
+(`CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`, `Vulkan_DepthBias`) — **all four confirmed
+pre-existing** by a stashed-shader baseline run, not regressions. Assorted ENet/NetworkSession
+failures vary run to run under `ctest -j4` contention and pass in isolation across 3 consecutive
+runs; unrelated to graphics.
+
+**One real regression was found and fixed, not papered over.** `Vulkan_EnvironmentMapEffect_Fog`
+passed pre-fix and failed post-fix (all three checks black). Cause: the flip also corrects the
+**winding** of these families. `frontFace` is uniformly `VK_FRONT_FACE_CLOCKWISE` across every
+pipeline — a convention calibrated to the 14 shaders that flip — so the 4 were inconsistent in
+culling as well as orientation. That test was the **only one of the ten** Vulkan
+EnvironmentMapEffect tests not setting `CullNone`, justified by a comment asserting that Vulkan's
+default cull state is effectively no-culling and that no sibling test sets it. **Both claims were
+false** (all nine others do set it); the quad survived only because `env_map3d` wasn't flipping.
+This is the same species as `REMED-GFX-052`. `CullNone` added, comment corrected. This is a
+genuine consequence of the fix, and its resolution is inseparable from `REMED-GFX-011`.
+
+**New finding recorded — `REMED-GFX-058`** (test methodology, GRAPHICS lane, not fixed here):
+a sweep of the whole Vulkan shard found **47 of 71 tests sample only the centre pixel**, the exact
+blind spot that hid this bug. GFX-011 closes it for the four families it owns; the remaining ~43
+are a systemic gap too large to fold into this task without unrelated scope expansion.
+
+#### New finding: `REMED-GFX-058` — 47 of 71 Vulkan tests assert on the centre pixel only
+
+| ID | One-line | Severity | Suggested priority |
+|---|---|---|---|
+| `REMED-GFX-058` | Vulkan test shard is structurally blind to mirrors/translations: 47 of 71 tests sample only the centre pixel | MEDIUM (test methodology, not a runtime defect) | P2 — GRAPHICS lane; do opportunistically alongside each family's next shader task |
+
+**Evidence.** Programmatic sweep of `examples/vulkan_*_test.cpp` classifying every 1×1
+`GetBackBufferData` sample site: **47 files sample exclusively at `(W/2, H/2)`**, 24 have at least
+one off-centre assertion (5 of those 24 are the three tests added by `REMED-GFX-011` plus the RT and
+scissor tests), 2 do no 1×1 backbuffer read.
+
+**Why it matters.** A centre-pixel assertion on a centred symmetric quad cannot detect a vertical
+mirror, a horizontal mirror, or any translation — it is the exact blind spot that let
+`REMED-GFX-011` survive every one of its families' existing tests, and the same class of blind spot
+noted in the plan as "the general blind spot behind several findings". These 47 tests are weaker
+guards than their names suggest.
+
+**Scope note.** `REMED-GFX-011` closes this for the four families it owns (`env_map3d`, `pbr3d`,
+`pbr3d_skinned`, `instanced3d`) via the new orientation harness. Retrofitting off-centre assertions
+across the remaining ~43 files is a systemic test-quality task, deliberately **not** folded into
+GFX-011 — it is separable, and bundling it would have turned a 4-shader root-cause fix into a
+47-file test rewrite. Recorded here rather than actioned, per the campaign's scope discipline.
+
+**Suggested approach.** Do not rewrite all 47 at once. The cheap, high-value version is to extend
+each test's existing assertion set with one off-centre sample as that family's next shader task
+touches it, and to prefer asymmetric geometry in any newly-written Vulkan pixel test.
