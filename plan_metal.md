@@ -1854,6 +1854,103 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     session's first-ever real Metal pixel tests — the next CI run will show whether both are now
     actually fixed, or whether a third layer remains. Nineteenth real, observed CI signal.
 
+70. **Real twentieth CI signal — item 69's frame-lifecycle fix DID resolve the "reads two different
+    stale swapchain images" symptom (every sample now reads back the exact same value across all 8
+    reads for the first time), but that single consistent value is still just the literal `Clear`
+    color, not any shaded quad — pointing at a third, still-unconfirmed issue, most likely a
+    logical-viewport-vs-physical-drawable coordinate mismatch, not yet fixed pending real evidence**:
+    re-pulled the log; `vertexStart`/`ReadBackbuffer` are confirmed working (no more alternating
+    green/black — every one of the 8 `ExpectPixel`/`CompareGoldenImage` reads across both tests now
+    reads the identical `(0,255,0,255)`, this test's own literal `device.Clear(Color(0,255,0,255))`
+    color, meaning nothing painted at that coordinate in the one real rendered frame, not "reading a
+    different frame each time" anymore). Traced two independent code paths for "how big is the
+    screen": `MetalGraphicsBackend::GetViewportSize()` → `computeLogicalViewport()` →
+    `SDL_GetWindowSizeInPixels()` (genuinely physical-pixel-accurate, HiDPI-aware), versus
+    `GraphicsDevice::getViewportProperty()`, which reads `viewport_`, itself set by either
+    `UpdateViewportFromWindow()` (which *does* call `backend_->GetViewportSize()` first, so *should*
+    agree) or, for virtual-resolution games only, `PresentationParameters`'s independent 800×480
+    default (irrelevant here — `PixelTestGame` never calls `SetVirtualResolution`). Grepped the whole
+    file for any HiDPI/`backingScaleFactor`/`contentsScale` handling in the 3D draw path itself
+    (`drawMetal3D`'s `wvp`/viewport setup) and found **none** — the raw NDC-to-viewport mapping in
+    `ensureFrame()` (`viewport={0,0,(double)w,(double)h,...}` from `colorTex.width/height`, the real
+    physical drawable) has no letterbox/scale adjustment at all, unlike the 2D `SpriteBatch` path's
+    own explicit `computeSpriteTransform()`. Whether `UpdateViewportFromWindow()` genuinely runs
+    early enough, with a value that actually matches the real physical drawable Metal itself reports,
+    could not be conclusively resolved by reading alone — the code path exists to make them agree,
+    but nothing here proves it fires before this test's first frame on this exact CI runner, and
+    Apple Silicon macOS runners are a well-known category of environment where a virtual/headless
+    display can report a non-1.0 `backingScaleFactor` even off-screen.
+    Rather than attempt a third speculative full fix after two wrong-symptom-shaped guesses already
+    burned CI cycles, added a **temporary, clearly-marked diagnostic only** — `NSLog` in
+    `ReadBackbuffer()` printing the requested `x/y/w/h` (which encode the test's own assumed
+    viewport width, since `sampleAx=W*1/8` etc. are recoverable by back-multiplying) against the
+    real `drawable.texture.width/height` — plus the `#import <Foundation/Foundation.h>` `NSLog`
+    itself needs (not previously imported in this file; confirmed no other call site already
+    provided it). This is explicitly **not** a fix — it exists to let the next CI run's log prove or
+    disprove the HiDPI/coordinate-mismatch hypothesis with real numbers instead of guessing a third
+    time. If the two width readings disagree, the real fix is either scaling the 3D draw path's NDC-
+    to-viewport mapping to the logical/letterbox rectangle (matching `SpriteBatch`'s own established
+    pattern) or making `ReadBackbuffer`'s callers pass already-physical coordinates consistently —
+    which one is correct depends entirely on what the numbers show. Twentieth real, observed CI
+    signal — the first of this whole chain that is deliberately an evidence-gathering step, not an
+    attempted fix, after two consecutive "looked right, wasn't the (whole) problem" outcomes.
+
+71. **Real twenty-first CI signal — item 70's diagnostic definitively ruled out the coordinate/HiDPI
+    hypothesis**: the `ReadBackbuffer` diagnostic's own log lines proved the real drawable is exactly
+    `800x480`, and the test's own requested `x` values (100/300/500/700) are exactly `800*⅛`/`⅜`/`⅝`/
+    `⅞` — a perfect match, zero scale discrepancy. Since even quad A's own sample point (`x=100,
+    y=240`, dead center of quad A's `[0,200]×[0,480]` screen footprint under the test's Identity
+    View/Projection) still reads pure `Clear` green, and quad A's draw is the *one* case that would
+    have rendered correctly even under item 68's original `vertexStart:0` bug (quad A's real offset
+    genuinely is `0`) — this proves the remaining problem is on the draw/pipeline side, not
+    coordinates, and is not explained by either of the two bugs already fixed. Checked several
+    further candidates by reading (pipeline-creation error handling — already throws on `nil`, so a
+    silent failure is ruled out; `RasterizerState::CullNone` — matches the encoder's own
+    already-`MTLCullModeNone` default, ruled out; `SetDepthTestEnabled(false)` — resolves to
+    `MTLCompareFunctionAlways`, ruled out) without finding a smoking gun by inspection alone. Added a
+    second, more targeted diagnostic rather than committing to a fourth guess: `NSLog` at the top of
+    `drawMetal3D` printing the selected `PipelineKind`, vertex stride, `primitiveCount`, and the
+    actual tracked `viewport`/`cull`/`fill`/`scissor` state being applied to the encoder, plus a
+    second line at the real `drawPrimitives:vertexStart:vertexCount:` call site printing the exact
+    `vertexStart`/`vertexCount` reaching the Metal API. Still not a fix — the next CI run's log will
+    show, with real numbers, whether `Pbr48` is genuinely being selected and what state is actually
+    active at draw time, narrowing the remaining hypothesis space concretely instead of guessing
+    further. Twenty-first real, observed CI signal.
+
+72. **Real twenty-second CI signal — item 71's second diagnostic confirmed every remaining structural
+    hypothesis is also correct, exhausting what this Linux sandbox can determine by reading alone;
+    `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden`'s root cause is paused here, undetermined,
+    rather than guessed at a fourth time**: the log confirmed `kind=12`/`kind=13`, which — counting
+    `MetalPipelineKind`'s declaration order by hand — are exactly `Pbr48`/`SkinnedPbr68`, the correct
+    selections; `vertexStart=0/6/12/18` across the 4 draws, exactly matching the test's intent (and
+    confirming item 68's fix is genuinely working); `vertexCount=6` throughout, correct. With pipeline
+    selection, viewport, cull, fill, scissor, and vertex offsets all independently confirmed correct
+    by real data, continued reading (not diagnostics — this part didn't need another CI round-trip)
+    to check every remaining structural candidate: `vertexDescriptorForStride(48)`'s attribute
+    offsets/formats match `PbrGpuVertex`'s real field layout byte-for-byte; the MSL `VPbrIn`/
+    `VSkinnedPbrIn` structs' `[[attribute(N)]]` indices match those descriptor slots exactly; the
+    CAMetalLayer's `pixelFormat` (`MTLPixelFormatBGRA8Unorm`) matches the pipeline descriptor's
+    declared color attachment format exactly; and — the most promising lead, `cna_f3d_pbr`'s
+    `discard_fragment()` alpha-test gate — traced `GpuDrawParams::alphaTest`'s real default
+    (`{0,0,1,1}`), `PbrEffect::FillGpuDrawParams()` (confirmed it never touches `alphaTest` at all,
+    leaving the safe default), and `cna_alpha_test_fails()`'s actual boolean logic by hand: with
+    `at.z`/`at.w` both `1.0` (the default), the discard condition (`w<0.0`) is unreachable regardless
+    of the computed alpha value — ruling this out definitively, not just "looks fine".
+    Every hypothesis this session could generate and check from source alone is now checked and
+    ruled out. What remains genuinely requires either a physical Mac with Xcode's GPU Frame Debugger
+    (to directly inspect what the GPU actually received/executed, rather than inferring it from log
+    lines before/after the opaque `drawPrimitives:` call), or a further round of much more invasive
+    diagnostics (e.g., a trivial single-triangle/no-offset/no-lighting reduction of this exact test,
+    isolating whether the problem is PBR-specific or a more fundamental "any real 3D draw + same-
+    process readback" gap Metal_Smoke's own trivial clear-only loop never exercised). Given the
+    session has already delivered two real, confirmed, valuable correctness fixes from this exact
+    investigation (item 68's `vertexStart`/`startIndex`/`baseVertex` fix and item 69's `ReadBackbuffer`
+    frame-lifecycle fix — both independently useful regardless of this specific test's fate, and both
+    already verified not to have regressed the other 86 passing tests), this narrative pauses the PBR-
+    golden-test investigation here rather than continuing to spend CI cycles on a fourth, less-
+    grounded guess. Twenty-second real, observed CI signal — the point this session's own "read the
+    code, don't guess" discipline correctly says to stop and ask, not push further blind.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
