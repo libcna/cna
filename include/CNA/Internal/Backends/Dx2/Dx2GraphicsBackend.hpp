@@ -113,39 +113,72 @@ namespace CNA::Internal::Backends::Dx2
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         // Phase O5 (design decision 6): detects which of the 4 BlendState presets (or a custom
         // combination) the raw factors match; gates the SpriteBatch identity fast path (Opaque
-        // only) and selects CompositeQuad's per-formula blend math.
+        // only) and selects CompositeQuad's per-formula blend math. Phase O6 additionally applies
+        // the real D3DRENDERSTATE_SRCBLEND/DESTBLEND/ALPHABLENDENABLE render states for 3D draws
+        // (D3D v1/v2 has no separate alpha blend-factor/op pair -- alphaSrcBlend/alphaDstBlend/
+        // colorBlendFunc/alphaBlendFunc are accepted and ignored, decision 7's pattern).
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
 
-        // ---- 3D pipeline: device/viewport/Z-buffer bring-up (Phase O3) is real; the draw path
-        // itself (Phase O4/O5 -- VertexBuffer/IndexBuffer, DrawColoredPrimitives/DrawPrimitivesEx)
-        // is NOT yet implemented. Unlike DX1 (which throws PERMANENTLY -- DirectX 1 shipped no
-        // Direct3D at all, so there is genuinely no COM interface reachable from a real
-        // DirectX-1-era header pairing to even call), DX2 (1996) is the first DirectX release with
-        // real Direct3D, and this backend's own plan commits to real 3D via
-        // IDirect3D2/IDirect3DDevice2::DrawPrimitive (not execute buffers -- proven non-functional
-        // in this environment, see plan_dx2.md's status note). Every 3D entry point below still
-        // temporarily throws/degrades exactly as DX1's do until Phase O4/O5 lands (Clear*
-        // depth/color entry points are the exception -- real as of Phase O3, see below) -- not a
-        // permanent boundary the way it is for DX1. ----
-        // @note Status: STUB for the draw path (Phase O3 only). Every draw/buffer entry point still
-        // throws std::runtime_error (CreateOcclusionQuery/CreateEffectBackend/CreateTexture3D/
-        // CreateTextureCube/CreateRenderTargetCube deliberately don't override the shared
-        // nullptr-returning defaults at all -- matching DX1/DX3-66's own corrected pattern).
-        // SupportsCapability() lets callers check ahead of time instead of relying on the throw.
+        // Phase O6 (design decision 10): real per-draw 3D state application, replacing the shared
+        // no-op defaults. ApplyDepthStencilState honors depth (enable/write/func) only -- stencil
+        // parameters are accepted and ignored (no real stencil buffer exists at this DirectX era,
+        // decision 7). ApplyRasterizerState honors cullMode/fillMode; scissorTestEnable/depthBias/
+        // slopeScaleDepthBias are accepted and ignored (no scissor test or depth-bias render state
+        // exists in d3dtypes.h at this era -- confirmed by inspection). ApplySamplerState only
+        // acts on slot 0 (D3D v1/v2 has exactly one texture stage) and honors filter/addressU/
+        // maxAnisotropy; addressV is accepted and ignored (D3DRENDERSTATE_TEXTUREADDRESS is a
+        // single combined U+V mode, no separate per-axis render states exist).
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                               int maxAnisotropy) override;
+
+        // ---- 3D pipeline: real, built on IDirect3D2/IDirect3DDevice2::DrawPrimitive (not execute
+        // buffers -- proven non-functional in this environment, see plan_dx2.md's status note).
+        // Device/viewport/Z-buffer bring-up (Phase O3), VertexBuffer/IndexBuffer storage (Phase
+        // O5), the CPU transform/clip -> D3DTLVERTEX draw path (Phase O4), and per-draw state
+        // application (Phase O6) are all real and pixel-verified. Unlike DX1 (which throws
+        // PERMANENTLY -- DirectX 1 shipped no Direct3D at all, so there is genuinely no COM
+        // interface reachable from a real DirectX-1-era header pairing to even call), this is a
+        // working 3D pipeline, not a stub. What remains out of scope is documented per-method
+        // below and in plan_dx2.md's own Boundaries section (lighting/fog/multitexture/envMap/
+        // skinning accepted-and-ignored; stencil/MRT/instancing/occlusion-query/volume-and-cube
+        // textures/custom-effects either accepted-and-ignored or genuinely unavailable at this
+        // DirectX era, not "not yet implemented"). ----
         [[nodiscard]] bool SupportsDepthStencil() const override { return true; }
-        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
-            // Phase O3 status quo: the 3D DEVICE (viewport/Z-buffer/Clear*) is real, but the 3D
-            // PIPELINE as CNA::GraphicsCapability::ThreeD defines it (vertex/index buffers, 3D draw
-            // calls, depth/stencil clears AND state -- IGraphicsCapability.hpp's own bundled
-            // definition) is not usable yet: CreateVertexBuffer/DrawColoredPrimitives etc. still
-            // throw until Phase O4/O5 lands. Every CNA::GraphicsCapability value therefore still
-            // reports false here (SupportsDepthStencil() above is a narrower, differently-scoped
-            // query -- specifically about whether Clear(ClearOptions) can route to this backend's
-            // now-real ClearColorAndDepth/ClearDepth/etc, which it now genuinely can).
-            return false;
+            // Phase O6 completes the bundle CNA::GraphicsCapability::ThreeD's own doc comment
+            // defines it as (vertex/index buffers, 3D draw calls, depth/stencil clears AND state)
+            // -- all real as of this phase, so ThreeD now reports true. DepthStencilBuffer also
+            // reports true (a real, if depth-only, buffer exists -- SupportsDepthStencil() already
+            // says so). MultiSampleAntiAliasing/MultipleRenderTargets/OcclusionQuery/CustomEffects
+            // report false -- genuinely unavailable at this DirectX era (plan_dx2.md's Boundaries
+            // section). AnisotropicFiltering/WireFrame ALSO report false, but for a different,
+            // narrower reason: ApplySamplerState/ApplyRasterizerState do set the corresponding
+            // real render states (D3DRENDERSTATE_ANISOTROPY/D3DFILL_WIREFRAME both exist and are
+            // accepted), but neither was spike-verified to produce genuinely distinct rendering
+            // output on this environment's software RGB device (only solid-fill triangles were
+            // ever pixel-verified) -- reporting true would be an unverified claim, not a
+            // "doesn't exist" one; revisit if a future task actually verifies the visual result.
+            using CNA::GraphicsCapability;
+            switch (capability)
+            {
+                case GraphicsCapability::ThreeD:
+                case GraphicsCapability::DepthStencilBuffer:
+                    return true;
+                default:
+                    return false;
+            }
         }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

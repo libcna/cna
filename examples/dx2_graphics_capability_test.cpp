@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports false
-// for every currently-enumerated capability -- CNA::GraphicsCapability::ThreeD's own documented
-// definition bundles vertex/index buffers, 3D draw calls, AND depth/stencil clears/state as one
-// flag (see Dx2GraphicsBackend.hpp's own comment), so it stays false even though real geometry
-// drawing is now genuinely implemented (Phase O4/O5, plan_dx2.md) -- state APPLICATION
-// (SetDepthTestEnabled/ApplyRasterizerState/etc, Phase O6) is not. This test also confirms calling
-// the still-unimplemented state-toggle methods anyway still throws (SupportsCapability() is a way
-// to check ahead of time, not a way to make the underlying call itself succeed). Twin of
-// sdlrenderer_graphics_capability_test.cpp/canvas_graphics_capability_test.cpp.
+// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports DX2's
+// final Phase O6 capability set. Unlike an earlier version of this test (mirroring a 2D-only
+// backend's capability test, matching DX1/SDL_RENDERER/CANVAS), DX2's 3D pipeline is now
+// genuinely real end-to-end (Phase O3-O6, plan_dx2.md) -- ThreeD and DepthStencilBuffer both
+// report true. What remains false is either genuinely unavailable at this DirectX era (MSAA/MRT/
+// occlusion query/custom effects) or real-but-unverified-visually (WireFrame/AnisotropicFiltering
+// -- see Dx2GraphicsBackend.hpp's own SupportsCapability() comment for why those two are
+// deliberately conservative rather than a "doesn't exist" claim).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -16,12 +15,15 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
+#include "CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.hpp"
+
 #include <cstdio>
 #include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::GraphicsCapability;
+using CNA::Internal::Backends::IRenderTargetBackend;
 
 class Dx2GraphicsCapabilityTest : public Game
 {
@@ -50,24 +52,30 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
+        auto& backend = static_cast<CNA::Internal::Backends::Dx2::Dx2GraphicsBackend&>(dev.GetBackend());
 
-        check(!dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD not supported");
-        check(!dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer not supported");
+        // Phase O6 completes the real 3D pipeline -- both report true now.
+        check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
+        check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
+
+        // Genuinely unavailable at this DirectX era.
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing not supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets not supported");
-        check(!dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering not supported");
-        check(!dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame not supported");
         check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery not supported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported");
 
-        // SupportsCapability() is a check, not an enforcement mechanism -- calling the actual 3D
-        // state-toggle methods anyway still throws exactly as before this feature existed. Unlike
-        // an earlier version of this test, constructing a VertexBuffer is deliberately NOT checked
-        // here anymore -- Phase O5 made vertex/index buffer construction genuinely real.
-        check(Throws([&] { dev.SetDepthTestEnabled(true); }),
-              "SetDepthTestEnabled still throws when called without checking first");
-        check(Throws([&] { dev.SetBlendEnabled(true); }),
-              "SetBlendEnabled still throws when called without checking first");
+        // Real render states exist and are accepted (D3DRENDERSTATE_ANISOTROPY/D3DFILL_WIREFRAME),
+        // but neither was spike-verified to produce distinct rendering output here -- reported
+        // conservatively as unsupported rather than an unverified claim.
+        check(!dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering not supported (unverified, not absent)");
+        check(!dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame not supported (unverified, not absent)");
+
+        // SupportsCapability() is a check, not an enforcement mechanism -- calling a method for a
+        // genuinely-unsupported capability anyway still throws. MultipleRenderTargets (checked
+        // above) is real DX2 boundary: DirectDraw has exactly one active render target.
+        IRenderTargetBackend* twoTargets[2] = {nullptr, nullptr};
+        check(Throws([&] { backend.SetRenderTargets(twoTargets, 2); }),
+              "SetRenderTargets(count=2) still throws (no MRT support)");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();

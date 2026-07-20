@@ -2,12 +2,12 @@
 // plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX2's real Direct3D v2 device bring-up --
 // IDirect3D2/IDirect3DDevice2/IDirect3DViewport2 creation against the shadow-backbuffer surface,
 // a real attached 16-bit Z-buffer, and the newly-real ClearColorAndDepth/ClearDepth/etc entry
-// points. VertexBuffer/IndexBuffer storage (Phase O5) and the 3D draw path itself
-// (DrawColoredPrimitives/DrawPrimitivesEx, Phase O4) are both real as of this session -- pixel-
-// verified 3D rendering is covered by dx2_colored_primitives_test.cpp/dx2_ztest_test.cpp/etc, not
-// this file. Only STATE APPLICATION (SetDepthTestEnabled/ApplyRasterizerState/etc, Phase O6)
-// remains unimplemented -- Check D below confirms it still throws, documenting the exact phase
-// boundary rather than silently over-claiming.
+// points. VertexBuffer/IndexBuffer storage (Phase O5), the 3D draw path itself
+// (DrawColoredPrimitives/DrawPrimitivesEx, Phase O4), and state application (SetDepthTestEnabled/
+// ApplyRasterizerState/etc, Phase O6) are all real now -- pixel-verified 3D rendering is covered
+// by dx2_colored_primitives_test.cpp/dx2_ztest_test.cpp/etc, not this file. Check D below only
+// confirms the simple state-toggle methods don't throw anymore (a smoke-level check) -- Dx2_ZTest
+// already covers real depth-test behavior in depth.
 //
 // Check A -- backend.SupportsDepthStencil() reports true (device bring-up succeeded; DX1 always
 //   reports false here).
@@ -19,8 +19,8 @@
 // Check C -- ClearColorDepthAndStencil (via GraphicsDevice::Clear(ClearOptions, color, depth,
 //   stencil) with all three flags) does not throw and clears color correctly -- stencil is
 //   accepted and silently ignored (design decision 7), not thrown.
-// Check D -- SetDepthTestEnabled still throws std::runtime_error: state APPLICATION is Phase O6,
-//   not yet implemented, even though device bring-up/drawing (Phase O3/O4/O5) now all succeed.
+// Check D -- SetDepthTestEnabled/SetDepthWriteEnabled no longer throw (Phase O6 state application
+//   is real) -- a smoke-level check; Dx2_ZTest covers real depth-test pixel behavior.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -111,13 +111,20 @@ protected:
                   "Clear(Target|DepthBuffer|Stencil) does not throw and clears color correctly");
         }
 
-        // Check D: state APPLICATION is still Phase O6 -- SetDepthTestEnabled must still throw,
-        // proving this test isn't over-claiming beyond what Phase O3/O4/O5 actually deliver.
+        // Check D: state application (Phase O6) is real -- these no longer throw.
         {
             bool threw = false;
-            try { backend.SetDepthTestEnabled(true); }
-            catch (const std::exception&) { threw = true; }
-            check(threw, "SetDepthTestEnabled still throws (Phase O6 state application not yet implemented)");
+            try
+            {
+                backend.SetDepthTestEnabled(true);
+                backend.SetDepthWriteEnabled(true);
+            }
+            catch (const std::exception& e)
+            {
+                threw = true;
+                std::printf("SetDepthTestEnabled/SetDepthWriteEnabled threw: %s\n", e.what());
+            }
+            check(!threw, "SetDepthTestEnabled/SetDepthWriteEnabled do not throw (Phase O6 state application is real)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, 4);

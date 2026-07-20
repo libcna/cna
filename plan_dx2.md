@@ -1,15 +1,16 @@
 # DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
-> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phases O1 (CMake skeleton),
-> O2 (2D layer, verbatim port from `DX1`), O3 (Direct3D v2 device bring-up), O5
-> (`VertexBuffer`/`IndexBuffer` backends), and O4 (CPU transform/clip pipeline + real
-> `DrawPrimitive`/`DrawIndexedPrimitive` submission) are all done — **real, pixel-verified 3D
-> rendering through the actual Direct3D v2 device works end-to-end**: solid and interpolated
-> triangle color, indexed draws (16- and 32-bit), order-independent depth-test occlusion, real
-> texture sampling, and near-plane clipping. 16/16 `DX2`-labeled CTests passing, independently
-> re-verified. Phase O6 (state mapping — `ApplyRasterizerState`/`ApplyDepthStencilState`/
-> `ApplyBlendState`/`ApplySamplerState`) starts next; Phase O4 shipped safe interim device-level
-> defaults for cull mode and depth state in the meantime (see `DX2-37`'s own note).**
+> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phases O1-O6 are all done** —
+> CMake skeleton, 2D layer (verbatim port from `DX1`), Direct3D v2 device bring-up,
+> `VertexBuffer`/`IndexBuffer` backends, the CPU transform/clip pipeline + real
+> `DrawPrimitive`/`DrawIndexedPrimitive` submission, and full per-draw state mapping
+> (`ApplyRasterizerState`/`ApplyDepthStencilState`/`ApplyBlendState`/`ApplySamplerState`) are all
+> real and pixel-verified. **`SupportsCapability(GraphicsCapability::ThreeD)` now reports `true`**
+> — the full 3D pipeline that flag bundles (buffers, draws, depth/stencil clears, and state) is
+> genuinely complete. 16/16 `DX2`-labeled CTests pass, independently re-verified. Remaining:
+> Phase O7 (the few `IGraphicsBackend` entry points genuinely unavailable at this DirectX era —
+> occlusion query, volume/cube textures, custom effects, instancing) and Phase O8 (docs + full
+> `CnaTests` regression).
 >
 > Owner's own words (translated from Czech): *"Now please implement DirectX 2, and it should be
 > able to do 3D as well (within what's possible)."* Unlike `DX1` (2D-only by construction — DX1
@@ -343,11 +344,11 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-50` | `ApplyDepthStencilState` → `D3DRENDERSTATE_ZENABLE`/`ZFUNC`/`ZWRITEENABLE` (stencil ops themselves: not supported until DX6 per the analysis doc — `stencilEnable=true` is accepted-and-ignored, matching decision 7's "accept and ignore" pattern, not a throw) | ⬜ | |
-| `DX2-51` | `ApplyRasterizerState` → `D3DRENDERSTATE_CULLMODE`/`FILLMODE` | ⬜ | |
-| `DX2-52` | `ApplyBlendState` → texture/vertex alpha via `D3DRENDERSTATE_ALPHABLENDENABLE`/`SRCBLEND`/`DESTBLEND` (map CNA's `Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` presets to the nearest real D3D2 blend-factor pair; document any lossy mapping) | ⬜ | |
-| `DX2-53` | `ApplySamplerState` → `D3DRENDERSTATE_TEXTUREADDRESS`/`TEXTUREMAG`/`MINFILTER` texture-stage states | ⬜ | |
-| `DX2-54` | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` (the simpler boolean entry points `DX1` throws on) wired to the same render states as `DX2-50`/`52` | ⬜ | |
+| `DX2-50` | `ApplyDepthStencilState` → `D3DRENDERSTATE_ZENABLE`/`ZFUNC`/`ZWRITEENABLE` (stencil ops themselves: not supported until DX6 per the analysis doc — `stencilEnable=true` is accepted-and-ignored, matching decision 7's "accept and ignore" pattern, not a throw) | ✅ | Confirmed by inspection: `D3DRENDERSTATE_SRCBLENDALPHA`/`BLENDOP`/scissor/depth-bias render states genuinely don't exist in `d3dtypes.h` at this era (not assumed). |
+| `DX2-51` | `ApplyRasterizerState` → `D3DRENDERSTATE_CULLMODE`/`FILLMODE` | ✅ | `scissorTestEnable`/`depthBias`/`slopeScaleDepthBias` accepted-and-ignored (no such render state exists). |
+| `DX2-52` | `ApplyBlendState` → texture/vertex alpha via `D3DRENDERSTATE_ALPHABLENDENABLE`/`SRCBLEND`/`DESTBLEND` (map CNA's `Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` presets to the nearest real D3D2 blend-factor pair; document any lossy mapping) | ✅ | **Lossy mapping documented**: D3D v1/v2 has no separate alpha blend-factor/op pair at all — `alphaSrcBlend`/`alphaDstBlend`/`colorBlendFunc`/`alphaBlendFunc` are accepted-and-ignored; only `colorSrcBlend`/`colorDstBlend` map to real state. |
+| `DX2-53` | `ApplySamplerState` → `D3DRENDERSTATE_TEXTUREADDRESS`/`TEXTUREMAG`/`MINFILTER` texture-stage states | ✅ | **Lossy mapping documented**: only `slot==0` honored (D3D v1/v2 has exactly one texture stage); `addressV` accepted-and-ignored (`D3DRENDERSTATE_TEXTUREADDRESS` is a single combined U+V mode, no per-axis state exists). `maxAnisotropy` maps to the real `D3DRENDERSTATE_ANISOTROPY` state (confirmed present, "<= d3d6" per its own header comment). Found and fixed a real, non-stale test regression while wiring this: `Dx2_Texture3D` started failing because real bilinear+wrap filtering (XNA's true default) now genuinely blends at UV edges, unlike the previous no-op default — fixed by having the test explicitly request `SamplerState.PointClamp` (the test's actual intent — "does sampling read the right texel" — not wrap/bilinear edge behavior). |
+| `DX2-54` | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` (the simpler boolean entry points `DX1` throws on) wired to the same render states as `DX2-50`/`52` | ✅ | `SetBlendEnabled` is a deliberate no-op, matching D3D9's/D3D11's/D3D12's own identical reasoning (a bare "enable blending" has no defined factors in XNA; real config always arrives via `ApplyBlendState`, which already unconditionally enables blending). `SupportsCapability(ThreeD)`/`SupportsCapability(DepthStencilBuffer)` now report `true` — the full bundle those flags define is genuinely complete as of this phase. 16/16 `DX2`-labeled CTests pass, independently re-verified (including 2 tests updated for the new, no-longer-throwing behavior — `Dx2_GraphicsCapability`, `Dx2_Device3DSmoke`). |
 
 ## Phase O7 — Remaining `IGraphicsBackend` defaults
 

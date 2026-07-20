@@ -15,6 +15,12 @@
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -356,6 +362,117 @@ namespace CNA::Internal::Backends::Dx2
             // match with a non-Add function), same recorded scope limitation SOFTWARE/DX3 already
             // made (no general blend-equation interpreter in v1).
             return Dx2BlendMode::AlphaBlend;
+        }
+
+        // ---- Phase O6 (design decision 10): raw XNA int -> real D3D v1/v2 render-state value
+        // mapping, modeled on D3D9StateMapping.cpp's own per-enum switch style. Two real
+        // architectural gaps found while writing these, both documented rather than silently
+        // dropped: (1) D3D v1/v2 has NO separate alpha blend-factor/op pair (D3DRENDERSTATE_
+        // SRCBLENDALPHA/BLENDOP don't exist in d3dtypes.h at this era -- confirmed by inspection,
+        // not assumed) -- alphaSrcBlend/alphaDstBlend/colorBlendFunc/alphaBlendFunc are accepted
+        // and ignored (decision 7's pattern), only colorSrcBlend/colorDstBlend map to real state.
+        // (2) D3DRENDERSTATE_TEXTUREADDRESS is a SINGLE combined U+V mode (no separate ADDRESSU/
+        // ADDRESSV render states exist either) -- addressV is accepted and ignored, only addressU
+        // maps to real state, a real lossy-mapping case documented per design decision 10's own
+        // "document any lossy mapping" instruction.
+        using Microsoft::Xna::Framework::Graphics::Blend;
+        using Microsoft::Xna::Framework::Graphics::CompareFunction;
+        using Microsoft::Xna::Framework::Graphics::CullMode;
+        using Microsoft::Xna::Framework::Graphics::FillMode;
+        using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+        using Microsoft::Xna::Framework::Graphics::TextureFilter;
+
+        DWORD Dx2BlendToD3D(int blend)
+        {
+            switch (static_cast<Blend>(blend))
+            {
+                case Blend::One:                     return D3DBLEND_ONE;
+                case Blend::Zero:                     return D3DBLEND_ZERO;
+                case Blend::SourceColor:             return D3DBLEND_SRCCOLOR;
+                case Blend::InverseSourceColor:      return D3DBLEND_INVSRCCOLOR;
+                case Blend::SourceAlpha:             return D3DBLEND_SRCALPHA;
+                case Blend::InverseSourceAlpha:      return D3DBLEND_INVSRCALPHA;
+                case Blend::DestinationColor:        return D3DBLEND_DESTCOLOR;
+                case Blend::InverseDestinationColor: return D3DBLEND_INVDESTCOLOR;
+                case Blend::DestinationAlpha:        return D3DBLEND_DESTALPHA;
+                case Blend::InverseDestinationAlpha: return D3DBLEND_INVDESTALPHA;
+                case Blend::SourceAlphaSaturation:   return D3DBLEND_SRCALPHASAT;
+                // BlendFactor/InverseBlendFactor (a constant-color blend factor) has no D3D v1/v2
+                // equivalent render state (D3DRENDERSTATE_BLENDFACTOR doesn't exist at this era) --
+                // falls back to ONE, matching D3D9StateMapping's own "default: ONE" fallback shape.
+                default:                               return D3DBLEND_ONE;
+            }
+        }
+
+        DWORD Dx2CompareFunctionToD3D(int compareFunction)
+        {
+            switch (static_cast<CompareFunction>(compareFunction))
+            {
+                case CompareFunction::Always:        return D3DCMP_ALWAYS;
+                case CompareFunction::Never:         return D3DCMP_NEVER;
+                case CompareFunction::Less:          return D3DCMP_LESS;
+                case CompareFunction::LessEqual:     return D3DCMP_LESSEQUAL;
+                case CompareFunction::Equal:         return D3DCMP_EQUAL;
+                case CompareFunction::GreaterEqual:  return D3DCMP_GREATEREQUAL;
+                case CompareFunction::Greater:       return D3DCMP_GREATER;
+                case CompareFunction::NotEqual:      return D3DCMP_NOTEQUAL;
+                default:                               return D3DCMP_ALWAYS;
+            }
+        }
+
+        DWORD Dx2CullModeToD3D(int cullMode)
+        {
+            switch (static_cast<CullMode>(cullMode))
+            {
+                case CullMode::None:                     return D3DCULL_NONE;
+                case CullMode::CullClockwiseFace:        return D3DCULL_CW;
+                case CullMode::CullCounterClockwiseFace: return D3DCULL_CCW;
+                default:                                   return D3DCULL_NONE;
+            }
+        }
+
+        DWORD Dx2FillModeToD3D(int fillMode)
+        {
+            switch (static_cast<FillMode>(fillMode))
+            {
+                case FillMode::Solid:      return D3DFILL_SOLID;
+                case FillMode::WireFrame:  return D3DFILL_WIREFRAME;
+                default:                     return D3DFILL_SOLID;
+            }
+        }
+
+        DWORD Dx2TextureAddressModeToD3D(int addressMode)
+        {
+            switch (static_cast<TextureAddressMode>(addressMode))
+            {
+                case TextureAddressMode::Wrap:   return D3DTADDRESS_WRAP;
+                case TextureAddressMode::Clamp:  return D3DTADDRESS_CLAMP;
+                case TextureAddressMode::Mirror: return D3DTADDRESS_MIRROR;
+                default:                           return D3DTADDRESS_WRAP;
+            }
+        }
+
+        struct Dx2FilterPair { DWORD mag; DWORD min; };
+
+        // No mip-filter concept is mapped -- D3D v1/v2 (and this backend's textures) have no real
+        // mip chain at all (design decision, ported from DX1/DX3's own identical "no native mip
+        // chain" finding), so every "MipPoint"/"MipLinear" variant collapses to its own mag/min
+        // pair with the mip distinction simply not represented -- a real, documented simplification.
+        Dx2FilterPair Dx2TextureFilterToD3D(int textureFilter)
+        {
+            switch (static_cast<TextureFilter>(textureFilter))
+            {
+                case TextureFilter::Linear:                        return {D3DTFG_LINEAR, D3DTFN_LINEAR};
+                case TextureFilter::Point:                          return {D3DTFG_POINT, D3DTFN_POINT};
+                case TextureFilter::Anisotropic:                    return {D3DTFG_ANISOTROPIC, D3DTFN_ANISOTROPIC};
+                case TextureFilter::LinearMipPoint:                 return {D3DTFG_LINEAR, D3DTFN_LINEAR};
+                case TextureFilter::PointMipLinear:                 return {D3DTFG_POINT, D3DTFN_POINT};
+                case TextureFilter::MinLinearMagPointMipLinear:     return {D3DTFG_POINT, D3DTFN_LINEAR};
+                case TextureFilter::MinLinearMagPointMipPoint:      return {D3DTFG_POINT, D3DTFN_LINEAR};
+                case TextureFilter::MinPointMagLinearMipLinear:     return {D3DTFG_LINEAR, D3DTFN_POINT};
+                case TextureFilter::MinPointMagLinearMipPoint:      return {D3DTFG_LINEAR, D3DTFN_POINT};
+                default:                                              return {D3DTFG_LINEAR, D3DTFN_LINEAR};
+            }
         }
 
         // TextureAddressMode raw int convention (matches ISpriteBatchBackend::SetSamplerAddressMode's
@@ -1644,6 +1761,55 @@ namespace CNA::Internal::Backends::Dx2
     {
         impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                                                   colorBlendFunc, alphaBlendFunc);
+
+        // Phase O6: real 3D blend state. D3D v1/v2 has no separate alpha blend-factor/op pair or
+        // blend-equation render state (confirmed absent from d3dtypes.h by inspection) --
+        // alphaSrcBlend/alphaDstBlend/colorBlendFunc/alphaBlendFunc are accepted and ignored.
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ALPHABLENDENABLE, TRUE);
+        impl_->device2->SetRenderState(D3DRENDERSTATE_SRCBLEND, Dx2BlendToD3D(colorSrcBlend));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_DESTBLEND, Dx2BlendToD3D(colorDstBlend));
+    }
+
+    void Dx2GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                                    bool /*stencilEnable*/, int /*stencilFunc*/,
+                                                    int /*stencilPass*/, int /*stencilFail*/, int /*stencilDepthFail*/,
+                                                    int /*stencilMask*/, int /*stencilWriteMask*/, int /*referenceStencil*/,
+                                                    bool /*twoSidedStencilMode*/,
+                                                    int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+                                                    int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    {
+        // Phase O6 (design decision 7): only depth is real at this DirectX era -- every stencil
+        // parameter is accepted and silently ignored (no real stencil buffer/ops exist until DX6).
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ZENABLE, depthEnable ? D3DZB_TRUE : D3DZB_FALSE);
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, depthWriteEnable ? TRUE : FALSE);
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ZFUNC, Dx2CompareFunctionToD3D(depthFunc));
+    }
+
+    void Dx2GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool /*scissorTestEnable*/,
+                                                  float /*depthBias*/, float /*slopeScaleDepthBias*/)
+    {
+        // Phase O6: scissorTestEnable/depthBias/slopeScaleDepthBias are accepted and ignored -- no
+        // scissor test or depth-bias render state exists in d3dtypes.h at this DirectX era
+        // (confirmed by inspection, matching design decision 7's pattern).
+        impl_->device2->SetRenderState(D3DRENDERSTATE_CULLMODE, Dx2CullModeToD3D(cullMode));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_FILLMODE, Dx2FillModeToD3D(fillMode));
+    }
+
+    void Dx2GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int /*addressV*/,
+                                               int maxAnisotropy)
+    {
+        // Phase O6: D3D v1/v2 has exactly one texture stage (no multitexture, decision 7) and no
+        // per-slot sampler state concept at all -- only slot 0 is honored, matching the single
+        // combined D3DRENDERSTATE_TEXTUREMAG/MIN/ADDRESS/ANISOTROPY render states that exist.
+        // addressV is accepted and ignored: D3DRENDERSTATE_TEXTUREADDRESS is a single combined U+V
+        // mode, there is no separate per-axis render state to set it on.
+        if (slot != 0) return;
+
+        const Dx2FilterPair filterPair = Dx2TextureFilterToD3D(filter);
+        impl_->device2->SetRenderState(D3DRENDERSTATE_TEXTUREMAG, filterPair.mag);
+        impl_->device2->SetRenderState(D3DRENDERSTATE_TEXTUREMIN, filterPair.min);
+        impl_->device2->SetRenderState(D3DRENDERSTATE_TEXTUREADDRESS, Dx2TextureAddressModeToD3D(addressU));
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ANISOTROPY, static_cast<DWORD>(maxAnisotropy));
     }
 
     // Phase O3 (design decision 5): color goes through the same ActiveSurface() path Clear(r,g,b,a)
@@ -1675,9 +1841,21 @@ namespace CNA::Internal::Backends::Dx2
     {
         ClearColorAndDepth(r, g, b, a, depth);
     }
-    void Dx2GraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
-    void Dx2GraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
-    void Dx2GraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
+    void Dx2GraphicsBackend::SetDepthTestEnabled(bool enabled)
+    {
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ZENABLE, enabled ? D3DZB_TRUE : D3DZB_FALSE);
+    }
+
+    // Deliberate no-op, matching D3D9's/D3D11's/D3D12's own identical choice: a bare "enable
+    // blending" has no defined blend factors in XNA -- real blend configuration always arrives via
+    // ApplyBlendState(), which already unconditionally enables blending
+    // (D3DRENDERSTATE_ALPHABLENDENABLE) whenever it's called.
+    void Dx2GraphicsBackend::SetBlendEnabled(bool) {}
+
+    void Dx2GraphicsBackend::SetDepthWriteEnabled(bool enabled)
+    {
+        impl_->device2->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, enabled ? TRUE : FALSE);
+    }
 
     std::unique_ptr<IVertexBufferBackend> Dx2GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {

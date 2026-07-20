@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
@@ -63,6 +64,11 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        // Explicit PointClamp: this test verifies "does texture sampling read the right texel",
+        // not wrap/bilinear edge behavior -- XNA's real default sampler state is LinearWrap, and
+        // with real ApplySamplerState wired (Phase O6), a corner sample at the exact UV edge (0,0)
+        // would otherwise genuinely blend with the wrapped-around opposite-edge texel.
+        dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
 
         dev.Clear(Color::Black, 1.0f);
         const std::vector<uint8_t> checkerPixels = {
