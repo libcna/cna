@@ -368,12 +368,12 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-80` | Full renamed-2D CTest suite passing (`DX2-15`) | ⬜ | |
-| `DX2-81` | Full 3D CTest suite passing (`DX2-26`, `DX2-35`..`39`, `DX2-42`) | ⬜ | |
-| `DX2-82` | `docs/dx2-backend.md`: mirror `docs/dx1-backend.md`'s completeness-table structure, plus a new "3D capability" section documenting exactly what's real (geometry/Z-test/one-texture/blend) vs. accepted-and-ignored (lighting/fog/multitexture/skinning/stencil) vs. thrown (MRT/instancing/custom effects) | ⬜ | |
-| `DX2-83` | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring, `README.md`, and `plan_dxold.md`'s status row for DX2 | ⬜ | |
+| `DX2-80` | Full renamed-2D CTest suite passing (`DX2-15`) | ✅ | |
+| `DX2-81` | Full 3D CTest suite passing (`DX2-26`, `DX2-35`..`39`, `DX2-42`) | ✅ | 17/17 `DX2`-labeled CTests, independently re-verified check-by-check throughout Phases O3-O7. |
+| `DX2-82` | `docs/dx2-backend.md`: mirror `docs/dx1-backend.md`'s completeness-table structure, plus a new "3D capability" section documenting exactly what's real (geometry/Z-test/one-texture/blend) vs. accepted-and-ignored (lighting/fog/multitexture/skinning/stencil) vs. thrown (MRT/instancing/custom effects) | ✅ | |
+| `DX2-83` | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring, `README.md`, and `plan_dxold.md`'s status row for DX2 | ✅ | `cmake/BackendSelection.cmake`'s STRINGS (done in Phase O1); `README.md` §1 backend list + a new prose bullet; `plan_dxold.md`'s DX2 row updated to 🟨 (implementation complete, `DX2-84` full regression still pending). |
 | `DX2-84` | Full `CnaTests`/DX2 CTest suite regression run under `-DCNA_GRAPHICS_BACKEND=DX2` (MinGW cross-compile) — confirm no unrelated suite breaks, same rigor `DX1-88` applied | ⬜ | |
-| `DX2-90` | Update `docs/directx-legacy-backends-analysis.md` §3.1's DX2/3 row: the ~15%/execute-buffer-only estimate was analysis-level and is now superseded by this plan's empirical finding (real `DrawPrimitive`-based rendering, not execute buffers) — record the actual delivered capability instead of the earlier assumption, and cross-reference `dx2-spike/README.md` | ⬜ | |
+| `DX2-90` | Update `docs/directx-legacy-backends-analysis.md` §3.1's DX2/3 row: the ~15%/execute-buffer-only estimate was analysis-level and is now superseded by this plan's empirical finding (real `DrawPrimitive`-based rendering, not execute buffers) — record the actual delivered capability instead of the earlier assumption, and cross-reference `dx2-spike/README.md` | ✅ | |
 
 ---
 

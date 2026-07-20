@@ -194,6 +194,22 @@ Two things worth calling out from the matrix:
 - **Occlusion query is DX9-only.** It is absent in *every* version through DX8 — and not even a gap
   unique to legacy backends: CNA's own shipping `D3D9` and `D3D12` backends don't wire it either
   (`docs/graphics-backend-feature-matrix.md`).
+- **Update (2026-07-20, `DX2-90`, superseding the row above for `DX2` specifically): the ~15%
+  execute-buffer estimate was analysis-level and did not hold up empirically.** `plan_dx2.md`'s
+  `DX2-0` existence-gate spike found the literal execute-buffer Direct3D (`IDirect3D`/
+  `IDirect3DDevice::Execute`) genuinely non-functional in this environment's Wine — 14 variants
+  tried, every one produced black output despite every API call succeeding (`dx2-spike/README.md`
+  has the full record). The *next* interface revision, `IDirect3DDevice2`'s `DrawPrimitive`/
+  `DrawIndexedPrimitive` (added in the DX3 SDK, not the DX2 SDK), works correctly and is what the
+  shipping `DX2` backend is actually built on (owner-confirmed scope decision). Measured result:
+  real geometry, real order-independent depth-test occlusion, real one-texture sampling, and real
+  per-draw rasterizer/depth/blend/sampler state (`docs/dx2-backend.md`) — closer in practice to the
+  `DrawPrimitive`-model row below than to the execute-buffer-only figure this row describes.
+  Lighting/fog/multitexture/stencil remain out of scope (matching the `Software` backend's own
+  identical, pre-existing v1 boundary), so the DX2/3 row's per-feature table below still describes
+  those correctly — only the *draw-call mechanism itself* (execute buffers vs. `DrawPrimitive`)
+  and the resulting ~15% headline figure are superseded, for `DX2` specifically. The shipping
+  `DX3` backend (`../free-direct`-based) is unaffected by this finding — see the next bullet.
 - **`DX3` as shipped is 0% 3D by choice, not by DirectX limit.** DX2/3's execute-buffer Direct3D
   could back ~15% of the 3D contract in principle, but the shipping `DX3` backend deliberately does
   0% because its `../free-direct` sibling implements **DirectDraw only, no Direct3D** — so there is no
