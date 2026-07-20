@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+
 // plan_metal.md: real bug found 2026-07-20 in the original metalMinFilter()/metalMagFilter()/
 // metalMipFilter() case-set membership (three independently-maintained {..} sets, easy to
 // transcribe wrong) -- 3 of the 9 real XNA TextureFilter values (3/6/7) produced the wrong
@@ -10,6 +12,14 @@
 // ordinal and returns a plain C++ struct -- zero Objective-C dependency, so this is genuinely
 // unit-tested on this Linux machine; only the final `MTLSamplerMinMagFilter`/`MTLSamplerMipFilter`
 // enum translation stays in MetalGraphicsBackend.mm.
+//
+// plan_metal.md METAL-19: the switch below dispatches on the real `TextureFilter` enumerator
+// names (cast once, at the top, from the plain int the .mm call sites still pass), not on magic
+// integer literals -- unlike the version this replaced, which switched on raw case 1/3/4/5/6/7/8
+// values with only a comment recording the assumed ordinals. A future reordering of
+// TextureFilter's declaration is now a compile-time-irrelevant no-op here: the compiler resolves
+// each `TextureFilter::Name` to whatever its current value actually is, so this function cannot
+// silently drift out of sync with the enum the way the old literal-based version could have.
 namespace CNA::Internal::Backends::Metal
 {
     struct MetalSamplerFilterPlan
@@ -24,20 +34,21 @@ namespace CNA::Internal::Backends::Metal
         return a.minIsPoint == b.minIsPoint && a.magIsPoint == b.magIsPoint && a.mipIsPoint == b.mipIsPoint;
     }
 
-    // Microsoft::Xna::Framework::Graphics::TextureFilter ordinals: 0 Linear, 1 Point,
-    // 2 Anisotropic, 3 LinearMipPoint, 4 PointMipLinear, 5 MinLinearMagPointMipLinear,
-    // 6 MinLinearMagPointMipPoint, 7 MinPointMagLinearMipLinear, 8 MinPointMagLinearMipPoint.
     inline MetalSamplerFilterPlan DescribeMetalSamplerFilter(int xnaFilter)
     {
-        switch (xnaFilter) {
-            case 1: return MetalSamplerFilterPlan{true,  true,  true};   // Point
-            case 3: return MetalSamplerFilterPlan{false, false, true};  // LinearMipPoint
-            case 4: return MetalSamplerFilterPlan{true,  true,  false}; // PointMipLinear
-            case 5: return MetalSamplerFilterPlan{false, true,  false}; // MinLinearMagPointMipLinear
-            case 6: return MetalSamplerFilterPlan{false, true,  true};  // MinLinearMagPointMipPoint
-            case 7: return MetalSamplerFilterPlan{true,  false, false}; // MinPointMagLinearMipLinear
-            case 8: return MetalSamplerFilterPlan{true,  false, true};  // MinPointMagLinearMipPoint
-            default: return MetalSamplerFilterPlan{false, false, false}; // 0 Linear, 2 Anisotropic
+        using TF = Microsoft::Xna::Framework::Graphics::TextureFilter;
+        switch (static_cast<TF>(xnaFilter)) {
+            case TF::Point:                      return MetalSamplerFilterPlan{true,  true,  true};
+            case TF::LinearMipPoint:              return MetalSamplerFilterPlan{false, false, true};
+            case TF::PointMipLinear:              return MetalSamplerFilterPlan{true,  true,  false};
+            case TF::MinLinearMagPointMipLinear:  return MetalSamplerFilterPlan{false, true,  false};
+            case TF::MinLinearMagPointMipPoint:   return MetalSamplerFilterPlan{false, true,  true};
+            case TF::MinPointMagLinearMipLinear:  return MetalSamplerFilterPlan{true,  false, false};
+            case TF::MinPointMagLinearMipPoint:   return MetalSamplerFilterPlan{true,  false, true};
+            case TF::Linear:
+            case TF::Anisotropic:
+            default:
+                return MetalSamplerFilterPlan{false, false, false};
         }
     }
 }
