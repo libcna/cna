@@ -1,7 +1,8 @@
 # DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
-> **Status (2026-07-20): `DX2-0` existence-gate spike complete, design settled, implementation not
-> yet started.**
+> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phase O1 (CMake skeleton) and
+> Phase O2 (2D layer, verbatim port from `DX1`) are done — 9/9 `DX2`-labeled CTests passing,
+> independently re-verified. Phase O3 (Direct3D v2 device bring-up) starts next.**
 >
 > Owner's own words (translated from Czech): *"Now please implement DirectX 2, and it should be
 > able to do 3D as well (within what's possible)."* Unlike `DX1` (2D-only by construction — DX1
@@ -278,23 +279,23 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-1` | Add `"DX2"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + `CNA_BACKEND_DX2` option; extend the Windows-only `FATAL_ERROR` gate; add the execute-buffer-discipline grep CTest (design decision 12) | ⬜ | |
-| `DX2-2` | `cna_backend_graphics_dx2` static library target; confirm minimal link set empirically | ⬜ | |
-| `DX2-3` | `include/CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.hpp` (pimpl-only) + `src/CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.cpp` skeleton: every `IGraphicsBackend` pure virtual implemented — real where O2/O3/O4 land, honest defaults/throws elsewhere | ⬜ | |
-| `DX2-4` | Factory dispatch for `DX2` in `CreateGraphicsBackend()` | ⬜ | |
-| `DX2-5` | `scripts/run-wine-dx2.sh` (design decision 11) | ⬜ | |
-| `DX2-6` | Confirm `CnaTests`/the new MinGW test binaries link cleanly against the new backend target under cross-compilation | ⬜ | |
+| `DX2-1` | Add `"DX2"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + `CNA_BACKEND_DX2` option; extend the Windows-only `FATAL_ERROR` gate; add the execute-buffer-discipline grep CTest (design decision 12) | ✅ | `Dx2_ExecuteBufferDiscipline` passing; regex verified to spare `IDirect3D2`/`IDirect3DDevice2`. |
+| `DX2-2` | `cna_backend_graphics_dx2` static library target; confirm minimal link set empirically | ✅ | Same link set as `DX1` (`SDL3::SDL3 ddraw dxguid`), confirmed by a clean build. |
+| `DX2-3` | `include/CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.hpp` (pimpl-only) + `src/CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.cpp` skeleton: every `IGraphicsBackend` pure virtual implemented — real where O2/O3/O4 land, honest defaults/throws elsewhere | ✅ | Verbatim port from `Dx1GraphicsBackend`; 3D methods still throw exactly as `DX1` does (temporary, corrected doc comments distinguish this from `DX1`'s permanent throw). |
+| `DX2-4` | Factory dispatch for `DX2` in `CreateGraphicsBackend()` | ✅ | |
+| `DX2-5` | `scripts/run-wine-dx2.sh` (design decision 11) | ✅ | Reuses `~/.wine-cna-dx1` prefix as planned. |
+| `DX2-6` | Confirm `CnaTests`/the new MinGW test binaries link cleanly against the new backend target under cross-compilation | ✅ | `cmake-build-dx2` configures/builds clean (MinGW cross, Release, ccache). |
 
 ## Phase O2 — 2D layer (verbatim port from `Dx1GraphicsBackend`)
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-10` | Device/window bring-up: `DirectDrawCreate`/`SetCooperativeLevel`/primary surface/shadow-backbuffer (now `DDSCAPS_3DDEVICE`-flagged, decision 4)/`Clear`/`Present` | ⬜ | Port `DX1-10`..`DX1-18`. |
-| `DX2-11` | Texture/render-target backends | ⬜ | Port `DX1-20`..`DX1-28`. |
-| `DX2-12` | `SpriteBatch` CPU compositor, all rotation/scale/flip/blend/sampling paths | ⬜ | Port `DX1-30`..`DX1-46`. |
-| `DX2-13` | `SpriteFont` | ⬜ | Port `DX1-50`..`DX1-54`. |
-| `DX2-14` | `TransformWindowToLogical`/`TransformLogicalToWindow`/letterbox present math | ⬜ | Port `DX1-68`. |
-| `DX2-15` | Renamed 2D CTests (`Dx2_Smoke`, `Dx2_TextureRenderTarget`, `Dx2_SpriteBatch`, `Dx2_Blend`, `Dx2_AddressMode`, `Dx2_SpriteFont`) passing, pixel-verified, before Phase O3 starts | ⬜ | |
+| `DX2-10` | Device/window bring-up: `DirectDrawCreate`/`SetCooperativeLevel`/primary surface/shadow-backbuffer (now `DDSCAPS_3DDEVICE`-flagged, decision 4)/`Clear`/`Present` | ✅ | Port `DX1-10`..`DX1-18`; verified the `DDSCAPS_3DDEVICE` flag lands on the shadow-backbuffer only, not on texture/render-target surfaces. |
+| `DX2-11` | Texture/render-target backends | ✅ | Port `DX1-20`..`DX1-28`. |
+| `DX2-12` | `SpriteBatch` CPU compositor, all rotation/scale/flip/blend/sampling paths | ✅ | Port `DX1-30`..`DX1-46`. |
+| `DX2-13` | `SpriteFont` | ✅ | Port `DX1-50`..`DX1-54`. |
+| `DX2-14` | `TransformWindowToLogical`/`TransformLogicalToWindow`/letterbox present math | ✅ | Port `DX1-68`. |
+| `DX2-15` | Renamed 2D CTests (`Dx2_Smoke`, `Dx2_TextureRenderTarget`, `Dx2_SpriteBatch`, `Dx2_Blend`, `Dx2_AddressMode`, `Dx2_SpriteFont`) passing, pixel-verified, before Phase O3 starts | ✅ | **9/9 `DX2`-labeled CTests pass** (the 6 listed here + `Dx2_GraphicsCapability` + `Dx2_LogicalTransform` + `Dx2_ExecuteBufferDiscipline`), independently re-run and confirmed, real `ddraw.dll` engagement gated via `trace:ddraw:`. Pre-existing gap found (not DX2-specific, not fixed here): `cmake/UnitTests.cmake` never wired a `CROSSCOMPILING_EMULATOR` for `DX1`'s own full `CnaTests` binary either — tracked for `DX2-84`. |
 
 ## Phase O3 — Direct3D v2 device bring-up
 
