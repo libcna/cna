@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/CNA/Internal/Backends/Metal/**'
       - 'include/CNA/Internal/Backends/Metal/**'
+      - 'tests/CNA/Internal/Backends/Metal/**'
       - 'include/CNA/GraphicsBackendType.hpp'
       - 'cmake/BackendSelection.cmake'
       - 'cmake/BackendLibraries.cmake'
@@ -33,6 +34,13 @@ jobs:
       - name: Build native Metal backend
         working-directory: cna
         run: cmake --build build-metal --parallel 3
-      - name: Run Metal smoke test
+      - name: Run Metal tests
         working-directory: cna/build-metal
-        run: ctest -R Metal_Smoke --output-on-failure
+        # Anchored at the start so this also covers every plain-C++ logic extraction under
+        # include/CNA/Internal/Backends/Metal/ (MetalPipelineKey/MetalNormalMatrix/
+        # MetalPrimitiveVertexCount/MetalLogicalViewport/MetalMat4/MetalSelectPipelineKind/
+        # MetalUniformFill -- previously only real-build-verified on Linux HEADLESS, since they
+        # carry no CNA_BACKEND_METAL gate) in addition to Metal_Smoke, on real Apple hardware.
+        # An unanchored `-R Metal` also matches unrelated PbrEffectDefaultsTest.Metallic*/
+        # SkinnedPbrEffectDefaultsTest.Metallic* tests -- anchoring avoids that collision.
+        run: ctest -R "^Metal" --output-on-failure

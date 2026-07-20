@@ -926,6 +926,26 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     Metal-related failures) — both were citation-accuracy problems only, not functional bugs. No
     functional defects found in any of the 7 extractions after a genuine attempt to find one.
 
+36. **`metal-macos-ci.yml` extended to actually run the 7 extractions' 55 tests on real Apple
+    hardware, not just Linux HEADLESS (partial `METAL-227`)**: every extraction this whole session
+    was, by design, only ever real-build-verified on this Linux machine's `HEADLESS` backend — the
+    logic is platform-agnostic, but the *build* was never actually the `METAL` backend build, and the
+    existing `metal-macos-ci.yml` job (real `macos-14` GitHub Actions runner) only ever ran
+    `ctest -R Metal_Smoke`, never the general `CnaTests` gtest binary it already silently builds as
+    part of `-DCNA_BUILD_TESTS=ON` (confirmed via `cmake/UnitTests.cmake`: `CnaTests` has no
+    `EXCLUDE_FROM_ALL`, so `cmake --build build-metal` — no explicit target — already builds it every
+    run, the CI job just never asked `ctest` to run any of the tests inside it). Changed the job's
+    final step to `ctest -R "^Metal" --output-on-failure` — anchored at the start, per item 35's own
+    finding, so it picks up `Metal_Smoke` plus all 55 extraction tests without also matching the 6
+    unrelated `PbrEffectDefaultsTest.Metallic*`/`SkinnedPbrEffectDefaultsTest.Metallic*` tests an
+    unanchored `-R Metal` would catch (confirmed the exact count, 55, against this Linux build before
+    touching the CI file). Also added the previously-missing `tests/CNA/Internal/Backends/Metal/**`
+    path to the workflow's own trigger list (`METAL-227`'s "living checklist" — the `include`/`src`
+    Metal dirs were already covered, `tests` was not). This is genuinely new coverage the next real
+    push/PR against this branch will exercise on actual Apple hardware for the first time — not
+    something this Linux sandbox can trigger or observe itself, so it stays reported here rather than
+    claimed as a verified pass.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
