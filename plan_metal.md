@@ -1951,6 +1951,26 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     grounded guess. Twenty-second real, observed CI signal — the point this session's own "read the
     code, don't guess" discipline correctly says to stop and ask, not push further blind.
 
+73. **Resumed the paused investigation with the user's explicit direction: a minimal reduced-repro
+    test, chosen specifically to isolate "PBR-specific" from "any real 3D draw + same-process
+    readback on Metal at all"**: rather than author a new test from scratch, found and reused
+    `examples/easygl_draw_user_primitives_vpc_test.cpp` verbatim — already existing, already
+    genuinely backend-agnostic (public XNA API only: `Game`/`GraphicsDeviceManager`/`BasicEffect`/
+    `DrawUserPrimitives`, zero EasyGL-specific includes), and already doing exactly what this
+    investigation needs: draws one full-NDC red quad via the simplest possible stock effect
+    (`BasicEffect` with only `VertexColorEnabled=true`, no lighting/texturing at all — dispatches to
+    `PipelineKind::Colored16`, the simplest shader pair in the whole file, `cna_v3d_color`/
+    `cna_f3d_color`, with none of PBR's BRDF/texture-sampling complexity), reads back the center
+    pixel, and checks it's red. Its own second sub-test additionally exercises `vertexOffset=1` — the
+    *exact* class of bug item 68 fixed, now in the simplest possible shader context, a genuine bonus
+    regression check for that fix specifically. Registered as `Metal_DrawUserPrimitives_VPC` in
+    `cmake/Tests/MetalTests.cmake`, same reuse pattern as items 67's `Metal_PbrEffect_Golden`. If this
+    also reads back only the `Clear` color, the remaining problem is generic to Metal's own 3D-draw-
+    then-readback pipeline, unrelated to PBR; if it passes, the problem is narrowed specifically to
+    PBR's own shader/uniform path (something this investigation's reading-based checks already found
+    no evidence for, but real execution is the only way to be sure). The next CI run's result decides
+    which branch of investigation continues.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

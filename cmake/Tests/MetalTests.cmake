@@ -34,4 +34,24 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "METAL")
     endif()
     cna_register_backend_test(NAME Metal_SkinnedPbrEffect_Golden COMMAND cna_test_metal_skinnedpbreffect_golden
         TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" LABELS "Metal")
+
+    # plan_metal.md: minimal reduced-repro diagnostic (narrative item 72's own next step) --
+    # Metal_PbrEffect_Golden/Metal_SkinnedPbrEffect_Golden's root cause remains undetermined after
+    # ruling out every checkable-by-reading hypothesis (pipeline selection, viewport/cull/fill/
+    # scissor, vertexStart, vertex descriptor layout, shader attribute indices, pixel format,
+    # alpha-test discard). This reuses EasyGL's own existing, already-backend-agnostic
+    # DrawUserPrimitives<VertexPositionColor> test verbatim (public XNA API only, no EasyGL-specific
+    # includes) -- the simplest possible real 3D draw + same-process readback (PipelineKind::
+    # Colored16, no lighting/texturing/PBR math at all), including its own vertexOffset=1 sub-test
+    # (the exact class of offset item 68 fixed, in the simplest possible shader context). If this
+    # ALSO fails identically (reads only the Clear color), that proves the remaining problem is
+    # generic to "any real 3D draw + readback in this process" rather than PBR-specific; if it
+    # passes, that narrows the remaining problem specifically to PBR's own shader/uniform path.
+    add_executable(cna_test_metal_draw_user_primitives_vpc examples/easygl_draw_user_primitives_vpc_test.cpp)
+    target_link_libraries(cna_test_metal_draw_user_primitives_vpc PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_draw_user_primitives_vpc PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_backend_test(NAME Metal_DrawUserPrimitives_VPC COMMAND cna_test_metal_draw_user_primitives_vpc
+        TIMEOUT 30 LABELS "Metal")
 endif()
