@@ -3,7 +3,9 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
+#include <thread>
 
 #include "CNA/Devices/Detail/IFileDialogBackend.hpp"
 #include "CNA/Devices/FileDialog.hpp"
@@ -223,6 +225,63 @@ TEST(FileDialogTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
     // SetBackendForTesting(nullptr) does not crash -- the real backend's dialog-
     // launching behavior itself is deliberately never exercised in this test file.
     EXPECT_NO_THROW({ (void)FileDialog::getIsSupportedProperty(); });
+}
+
+// Task REMED-DEVICES-001: FileDialog's GetBackend() (see FileDialog.cpp, internal
+// linkage) used to return a raw pointer after already releasing BackendMutex(),
+// so a concurrent SetBackendForTesting() could reassign -- and destroy -- the
+// backend object while another thread was still calling through the just-returned
+// pointer (a genuine use-after-free window). GetBackend() now returns a
+// shared_ptr copy taken under the lock, which keeps the pointee alive for the
+// full duration of any in-flight call regardless of a concurrent swap.
+//
+// This does not deterministically reproduce the pre-fix bug on every run -- the
+// original race window was a handful of machine instructions -- but racing both
+// operations for many iterations reliably trips ThreadSanitizer/AddressSanitizer
+// against the pre-fix code (see the devices-tsan/devices-asan CMake presets).
+// Against the fix, it must complete cleanly under a plain build and under both
+// sanitizers.
+TEST(FileDialogTests, ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls)
+{
+    constexpr int kIterations = 2000;
+    std::atomic<int> callCount{0};
+
+    // Install a fake before racing -- the caller thread below must never reach
+    // the real Detail::SdlFileDialogBackend, which would launch a real
+    // interactive dialog (see this file's own top-of-file comment on why).
+    FileDialog::SetBackendForTesting(std::make_unique<FakeFileDialogBackend>());
+
+    std::thread caller(
+        [&]
+        {
+            for (int i = 0; i < kIterations; ++i)
+            {
+                FileDialog::ShowOpenFile([&](const std::vector<std::string>&) { ++callCount; });
+            }
+        });
+
+    std::thread swapper(
+        [&]
+        {
+            for (int i = 0; i < kIterations; ++i)
+            {
+                // Never pass nullptr here -- that would install the real
+                // backend mid-race, which the caller thread above must never
+                // touch.
+                FileDialog::SetBackendForTesting(std::make_unique<FakeFileDialogBackend>());
+            }
+        });
+
+    caller.join();
+    swapper.join();
+
+    FileDialog::SetBackendForTesting(nullptr);
+
+    // Every call must have run its callback exactly once, regardless of which
+    // backend instance happened to be installed at the time -- a UAF would show
+    // up here as a crash (under a sanitizer or even a plain build, given enough
+    // iterations) well before this assertion is reached.
+    EXPECT_EQ(callCount.load(), kIterations);
 }
 
 #endif // CNA_DEVICES

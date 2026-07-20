@@ -16,17 +16,24 @@ namespace
         return mutex;
     }
 
-    std::unique_ptr<CNA::Devices::Detail::IFileDialogBackend>& BackendStorage()
+    // Task REMED-DEVICES-001: shared_ptr, not unique_ptr -- GetBackend() below
+    // returns a local copy (a new owning reference) while holding the lock, so a
+    // concurrent SetBackendForTesting() reassigning this storage can never destroy
+    // the object an in-flight call is still using. Holding BackendMutex() across
+    // the actual backend call instead was rejected: it would serialize a
+    // UI-blocking dialog call against every other FileDialog caller and invite
+    // deadlock.
+    std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend>& BackendStorage()
     {
-        static std::unique_ptr<CNA::Devices::Detail::IFileDialogBackend> backend =
-            std::make_unique<CNA::Devices::Detail::SdlFileDialogBackend>();
+        static std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend> backend =
+            std::make_shared<CNA::Devices::Detail::SdlFileDialogBackend>();
         return backend;
     }
 
-    CNA::Devices::Detail::IFileDialogBackend* GetBackend()
+    std::shared_ptr<CNA::Devices::Detail::IFileDialogBackend> GetBackend()
     {
         std::lock_guard<std::mutex> lock(BackendMutex());
-        return BackendStorage().get();
+        return BackendStorage();
     }
 } // namespace
 
@@ -76,11 +83,11 @@ namespace CNA::Devices
         std::lock_guard<std::mutex> lock(BackendMutex());
         if (backend)
         {
-            BackendStorage() = std::move(backend);
+            BackendStorage() = std::shared_ptr<Detail::IFileDialogBackend>(std::move(backend));
         }
         else
         {
-            BackendStorage() = std::make_unique<Detail::SdlFileDialogBackend>();
+            BackendStorage() = std::make_shared<Detail::SdlFileDialogBackend>();
         }
     }
 } // namespace CNA::Devices

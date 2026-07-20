@@ -35,11 +35,11 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 7 | 0 | 0 | 4 |
+| P0 | 11 | 8 | 0 | 0 | 3 |
 | P1 | 21 | 0 | 0 | 0 | 21 |
 | P2 | 44 | 1 | 0 | 0 | 43 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **8** | **0** | **0** | **96** |
+| **Total** | **104** | **9** | **0** | **0** | **95** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -86,7 +86,7 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 | REMED-GFX-003 | NOT STARTED | | | After GFX-002. Resize tables **and** add flag operators together. |
 | REMED-NET-001 | DONE | | feature/audit | Landed atomically with NET-003, same file/change — see detail below. |
 | REMED-NET-003 | DONE | | feature/audit | Landed atomically with NET-001, same file/change — see detail below. |
-| REMED-DEVICES-001 | NOT STARTED | | | Prefer `shared_ptr` over holding a mutex across a UI-blocking call. |
+| REMED-DEVICES-001 | DONE | | feature/audit | `shared_ptr` used, not a mutex held across the UI-blocking call — see detail below. |
 | REMED-MEDIA-001 | NOT STARTED | | | VERIFY on a 32-bit build first. |
 
 ### REMED-CONTENT-003 detail — TextureCube byte-count validation
@@ -466,6 +466,106 @@ handlers via the one legitimate sender (`ClientProcessesGamerLeaveBroadcast`,
   comment on why a second real `NetworkSession` can't coexist in one process) confirms legitimate
   host broadcasts and the repeated-hello regression case both still work.
 
+### REMED-DEVICES-001 detail — `FileDialog`/`MessageBox` `GetBackend()` UAF
+
+**Root cause confirmed exactly as described:** both `src/CNA/Devices/FileDialog.cpp` and
+`src/CNA/Devices/MessageBox.cpp` implement an identical anonymous-namespace `GetBackend()` helper that
+takes `BackendMutex()`, reads the file-local `BackendStorage()` `unique_ptr`'s raw pointer, and returns
+it — releasing the lock as the function returns, *before* the caller (`FileDialog::ShowOpenFile()` etc.)
+dereferences it via `GetBackend()->ShowOpenFile(...)`. A concurrent `SetBackendForTesting()` reassigning
+`BackendStorage()` destroys the old backend object under its own lock acquisition while a second thread
+may already be mid-call through the now-dangling pointer returned moments earlier — a genuine
+use-after-free with no synchronization covering the object's lifetime across the virtual call.
+
+**Sweep for the same pattern elsewhere in `Microsoft::Devices`/`CNA::Devices` (required before considering
+this closed):** grepped for `BackendStorage`/`GetBackend()`/`SetBackendForTesting`/`BackendMutex` across
+`src/CNA/Devices`, `src/Microsoft/Devices`, `include/CNA/Devices`, `include/Microsoft/Devices`. Confirmed
+`FileDialog.cpp`/`MessageBox.cpp` are the *only* two files using this specific "module-level swappable
+singleton, raw pointer returned outside the lock" pattern. `VibrateController.cpp` (`Microsoft::Devices`)
+uses a different, already-correct shape — an instance member `backendMutex_` held for the *entire*
+duration of every call through `backend_`, exactly as the master plan's own evidence notes. The
+`Microsoft::Devices::Sensors` family (`Accelerometer`/`Compass`/`Gyroscope`/`Motion`) uses yet another
+shape — a per-instance `backend_` behind each `SensorBase<T>`'s own `control_->mutex`, with an explicit,
+documented rationale in `Compass.cpp` for releasing the lock before the `backend_->Start()`/`Stop()` call
+specifically (a different, already-reviewed design, not this bug). No second instance of this task's root
+cause found; nothing outside the two named files needed a change.
+
+**Changes (`src/CNA/Devices/FileDialog.cpp`, `src/CNA/Devices/MessageBox.cpp` only — public API
+unchanged, both `SetBackendForTesting()` signatures still take `std::unique_ptr`):**
+- `BackendStorage()` changed from `std::unique_ptr<I...Backend>` to `std::shared_ptr<I...Backend>` in
+  both files.
+- `GetBackend()` now returns a `std::shared_ptr<I...Backend>` **by value** (a copy taken while
+  `BackendMutex()` is held), instead of a raw pointer. The returned shared_ptr is a genuine new owning
+  reference to the backend object; as a temporary bound to the full `GetBackend()->Show...(...)`
+  expression, it keeps the pointee alive for the entire duration of that call regardless of what
+  `SetBackendForTesting()` does concurrently to `BackendStorage()`. `shared_ptr`'s own reference count is
+  atomic, so no additional locking around the virtual call is needed.
+- `SetBackendForTesting()` in both files now constructs a `shared_ptr` from the incoming `unique_ptr`
+  (`std::shared_ptr<I...Backend>(std::move(backend))`) or `std::make_shared<Sdl...Backend>()` for the
+  `nullptr` (restore-default) case, still entirely under `BackendMutex()`.
+- The **"hold the lock across the whole call" alternative** (`VibrateController.cpp`'s own pattern) was
+  deliberately not used here, matching the master plan's own explicit preference: `MessageBox::Show()`
+  blocks the calling thread until a human responds to a real modal dialog, and `FileDialog`'s real
+  backend can similarly launch a long-lived external process (`zenity` on Linux) — serializing every
+  caller behind a lock held across either of those would invite deadlock for no safety benefit the
+  `shared_ptr` approach doesn't already provide.
+
+**Tests added** (`tests/CNA/Devices/FileDialogTests.cpp`, `tests/CNA/Devices/MessageBoxTests.cpp` — one
+new `TEST()` per file, both named `ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls`): two threads,
+2000 iterations each — one thread repeatedly calls `ShowOpenFile`/`ShowSimple` through the currently
+installed fake backend, the other repeatedly calls `SetBackendForTesting()` with a freshly allocated fake
+(never `nullptr` mid-race, since that would route the racing caller thread into the real interactive
+backend). Asserts every call's callback/return path completed exactly once — a UAF surfaces as a crash
+well before that assertion, under a sanitizer or, given enough iterations, even a plain build.
+
+**Verification — reproduced the pre-fix bug live, as the task's `Verify: NO` field still implies doing
+for a UAF this narrow (the fix's own verification criteria explicitly call for a clean sanitizer run, which
+requires first confirming the sanitizer is capable of catching the *un-fixed* bug on this exact test):**
+`git stash`-ed just the two `.cpp` fixes (tests kept), rebuilt under
+`-fsanitize=address` (new `cmake-build-devices-asan/` — CNA_DEVICES=ON was added on the command line, since
+the existing `devices-asan` CMakePresets.json preset does not itself set `CNA_DEVICES=ON`; this gap is
+worth fixing but is a BUILD_TEST_CI-lane concern, out of this task's scope, not recorded as a new finding
+since it doesn't block DEVICES-001 itself) — `FileDialogTests.ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls`
+reliably reproduced a **heap-use-after-free** (`ASan`: `previously allocated by thread T2` /// `freed`, a
+write into a destroyed `FakeFileDialogBackend`'s `std::vector<FileDialogFilter>` member from the racing
+caller thread). Restored the fix (`git stash pop`) and re-ran: **0 ASan reports across 10 full repeats**
+(250 individual test executions, `ASAN_OPTIONS=detect_leaks=0` — see NET-001's own detail section above
+for why leak detection is disabled project-wide for these ad hoc sanitizer runs; not relevant to a
+UAF/race check).
+
+**Sanitizers (both isolated to just `FileDialogTests.*`/`MessageBoxTests.*`, since the rest of `CnaTests`
+opening a real EasyGL/Mesa window under `GuideTest` produces pre-existing, unrelated
+`ThreadSanitizer`-reported races **inside `libgallium` itself**, not in any CNA code — confirmed by
+address: none resolve into `FileDialog.cpp`/`MessageBox.cpp`/the new tests):**
+- **ASan** (`cmake-build-devices-asan/`, `-fsanitize=address -fno-omit-frame-pointer -g -O0`): clean, as
+  above.
+- **TSan** (`cmake-build-devices-tsan/`, `-fsanitize=thread -fno-omit-frame-pointer -g -O1`):
+  `FileDialogTests.*:MessageBoxTests.*:MessageBoxIconTest.*` (13 tests, 20 repeats = 260 executions):
+  **0 ThreadSanitizer warnings**, exit 0.
+
+**Regression run — full `CnaTests`, `CNA_DEVICES=ON` (new `cmake-build-devices/`, since neither existing
+build dir had `CNA_DEVICES` on before this task):**
+- Baseline (pre-fix, same binary layout): `MediaLibraryTestFixture.*`/`PictureAlbumTests.*` excluded from
+  this run — that suite crashes/fails in this sandbox regardless of this task's changes (no real
+  Music/Pictures library on this container; `MediaLibraryTestFixture.ObjectGraphIsInternallyConsistent`
+  segfaults, matching the already-tracked `REMED-MEDIA-002` finding — confirmed by reproducing the same
+  crash before touching any Devices file). With that suite excluded: **5515 tests, 5510 passed, 4 skipped
+  (Accelerometer/Gyroscope hardware skips, pre-existing), 1 failed**
+  (`TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`,
+  confirmed pre-existing network-discovery-port flakiness already documented in NET-001's own detail
+  section above — passes 100% in isolation).
+- Post-fix: **5517 tests** (5515 + 2 new), **5513 passed, 4 skipped, 0 failed** — the flaky network test
+  passed on this run (consistent with it being non-deterministic, not a regression). **0 regressions.**
+- `./cmake-build-debug` (the project's existing `CNA_DEVICES=OFF` baseline, 5798 registered CTest tests):
+  rebuilt `CNA` and `CnaTests` targets after this task's changes — both link cleanly. Both changed `.cpp`
+  files are entirely `#ifdef CNA_DEVICES`-gated, so with the flag off they compile to empty translation
+  units; this task cannot regress that baseline by construction, confirmed by the clean rebuild.
+
+**Completion criteria met:** the backend object's lifetime is now guaranteed for the duration of every
+call through it, in both files — proven both by the ASan reproduction-then-fix above and by the TSan-clean
+stress run.
+**Verification criteria met:** TSan/ASan runs of the new concurrent tests are clean.
+
 ## Wave 1 (parallel) — unblockers
 
 | ID | Status | Owner | Branch | Notes |
@@ -575,6 +675,7 @@ existing task.
 | ID | Title | Sev | Pri | Found while working on | Status |
 |---|---|---|---|---|---|
 | REMED-BUILD-010 | `EasyGL_RealWindowResize` hangs the full 60s CTest `TIMEOUT` under a real desktop compositor (`DISPLAY` = a real logged-in GNOME/Mutter session, not an isolated Xvfb) | MEDIUM | P2 | REMED-BUILD-001 (full unfiltered `ctest` baseline run) | NOT STARTED — recorded, not fixed (out of scope for Wave 0) |
+| REMED-BUILD-011 | `CMakePresets.json`'s `devices-asan`/`devices-tsan`/`devices-ubsan` configure presets (description explicitly says "Microsoft::Devices hardening") never set `CNA_DEVICES=ON` in their own `cacheVariables` — configuring with any of the three as documented (`cmake --preset devices-asan`) silently builds with the entire `CNA::Devices`/`Microsoft::Devices::Sensors` surface compiled out, so none of the sanitizer coverage the preset names promise actually exists unless the caller separately remembers `-DCNA_DEVICES=ON` | MEDIUM | P2 | REMED-DEVICES-001 (setting up ASan/TSan runs for the new concurrent tests) | NOT STARTED — recorded, not fixed (out of DEVICES-001's scope; worked around this task's own verification by passing `-DCNA_DEVICES=ON` on the configure command line into ad hoc `cmake-build-devices-asan`/`cmake-build-devices-tsan` build dirs rather than the named presets — a BUILD_TEST_CI-lane fix, not a DEVICES one) |
 | REMED-CONTENT-007 | `VideoContentTypeReader.cpp`/`SongContentTypeReader.cpp` each duplicate a `ResolveRelativeFilePath()` helper with **zero** containment check (not even the partial one `ContentReader.cpp` had before this task) — a `Video`/`Song` `.xnb`'s own embedded filename field can be absolute or `..`-escaping and is joined onto the content root unchecked | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; same root cause, same fix shape — reuse `CNA::Internal::IsDisallowedAbsolutePath`/the `ResolveRelativeAssetPath` pattern) |
 | REMED-CONTENT-008 | `ContentManager.cpp` joins 8 `.cnj`/JSON-manifest-supplied path fields (`dataField->stringValue` for `Texture3D`; `vertRel`/`fragRel` for `ShaderEffect`; `clipFileField->stringValue` for `AnimationClip`; `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile` for skinned-model morph/animation data) onto the content root with no containment check — same `fs::path::operator/` pitfall as the 3 sites `-002` fixed, at file-supplied (not caller-supplied) untrusted strings | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; notably, this is the *same* `.cnj`-manifest subsystem that already has one field, `sourceFile`, correctly hardened via `CnjSourceFile.hpp` — these 8 fields were simply never given the same treatment) |
 | REMED-NET-008 | A "client"-role `NetworkSession`'s own incidental listening `ENetHost` (bound on every non-Emscripten `ConnectToHost()` call, so a peer can be promoted to host later via migration without rebinding — see `ENetHostHandle`'s own doc comment) still accepts and fully processes `ClientHello` from *any* third party that connects to it, not just its real host — `HandleClientHello` has no "am I actually supposed to be hosting anyone" check. A rogue peer can connect directly to a client's own bound port (`ENetBackend::GetBoundPort()` is non-zero for a client-role session too) and get a real `ServerWelcomeMessage` snapshotting that peer's own roster, plus get added as a real `NetworkGamer`/fire a real `GamerJoined` event on that peer's session — despite that peer never intending to host anyone | MEDIUM | P2 | REMED-NET-001 (host-authority audit sweep) | NOT STARTED — recorded, not fixed (distinct root cause from NET-001: `ClientHello` is not one of the four host-authoritative broadcast types NET-001 covers; this is a missing role-check on the *accept* side of a client-scoped session, not a missing sender-authority check on a broadcast-only message. Confirmed real via manual reasoning about `ConnectToHost`'s own non-Emscripten `StartHosting()` call and `HandleClientHello`'s unconditional accept — not separately reproduced with a new test, since fixing/proving it is out of this task's scope; the closest existing coverage is `ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer`, new in this task, which proves the same rogue-third-party-on-a-client-socket attack surface is real for the four NET-001 message types specifically) |
