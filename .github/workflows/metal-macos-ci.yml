@@ -23,6 +23,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: cna
+          submodules: true # non-recursive on purpose (DEV-BUILD-001, matching every other CI
+                            # workflow in this repo) -- initializes vendor/googletest and
+                            # third_party/SDL/SDL_image/SDL_mixer without their own nested
+                            # SDL_image/SDL_mixer codec submodules, which this project's CMake
+                            # args disable anyway
       - name: Checkout sharp-runtime sibling
         uses: actions/checkout@v4
         with:

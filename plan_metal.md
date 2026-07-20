@@ -1104,6 +1104,23 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `.mm`-only, so — like every functional fix this whole plan has made — correct on inspection and
     by reference-comparison, but genuinely unverified without a Mac to actually run it.
 
+45. **First real CI signal from `metal-macos-ci.yml`, and a genuine CI bug fixed**: the push
+    landed the job's first-ever run on real Apple hardware — and it failed immediately at the
+    `cmake` configure step, not from anything in this backend's own code: `cmake/ThirdPartySDL.cmake`
+    threw its own actionable "Missing vendored 'SDL' ... run: git submodule update --init" error,
+    because the job's `actions/checkout@v4` step never set `submodules:` at all. Checked every
+    other CI workflow in this repo (`d3d-windows-ci.yml`/`devices-tests.yml`/`input-ci.yml`) —
+    every single one of them sets `submodules: true` (non-recursive, matching the established
+    `DEV-BUILD-001` precedent: initializes `vendor/googletest` and `third_party/SDL`/`SDL_image`/
+    `SDL_mixer` without their own nested codec submodules this project's CMake args disable
+    anyway) — `metal-macos-ci.yml` was the one workflow that never had it, confirmed against
+    `.gitmodules` that this covers every top-level submodule CMake actually needs. Fixed by adding
+    the identical `submodules: true` line, matching the rest of the repo exactly rather than
+    inventing a new pattern. This is the first genuine, observed (not just predicted) real-hardware
+    CI signal this whole plan has ever received — a config-level failure, not a code-level one, so
+    it says nothing about whether the backend itself actually compiles yet; that remains the very
+    next thing to find out once this fix lands.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
