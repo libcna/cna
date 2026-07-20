@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <sstream>
 
 namespace Microsoft::Xna::Framework
@@ -33,12 +34,70 @@ namespace Microsoft::Xna::Framework
             return static_cast<bytecs>(ClampToByteInt(value));
         }
 
-        // Scale a unit float in [0,1] to a byte value in [0,255].
+        // Scale a unit float in [0,1] to a byte value in [0,255], clamping out-of-range input.
+        // Matches every float-taking Color constructor in real FNA (e.g. "R = (byte)
+        // MathHelper.Clamp(color.X * 255, Byte.MinValue, Byte.MaxValue);", Color.cs) -- used by
+        // this file's Color(Vector4)/Color(Vector3)/Color(float,float,float[,float]) ctors.
         [[nodiscard]] bytecs ToByteFromUnitClamped(float value)
         {
-            return static_cast<bytecs>(
-                static_cast<intcs>(MathHelper::Clamp(value * 255.0f, static_cast<float>(SharpRuntime::BYTE_MIN),
-                                                     static_cast<float>(SharpRuntime::BYTE_MAX))));
+            const float clamped = MathHelper::Clamp(value * 255.0f, static_cast<float>(SharpRuntime::BYTE_MIN),
+                                                     static_cast<float>(SharpRuntime::BYTE_MAX));
+            if (std::isnan(clamped))
+            {
+                // MathHelper::Clamp faithfully reproduces FNA's own comparison-based clamp,
+                // under which a NaN input passes through unclamped (NaN < min and max < NaN are
+                // both false) -- correct to preserve, since MathHelper::Clamp is a public XNA
+                // API method used well beyond this file. But static_cast<intcs>(NaN) below would
+                // be undefined behavior in C++ (NaN is not representable in any integer type),
+                // unlike C#'s own (byte) cast, which merely yields an unspecified-but-defined
+                // value for NaN. 0 is this project's deterministic, documented stand-in for a
+                // result FNA itself leaves unspecified.
+                return bytecs{0};
+            }
+            return static_cast<bytecs>(static_cast<intcs>(clamped));
+        }
+
+        // Scale a unit float to a byte value via truncation (not clamping), matching FNA's
+        // IPackedVector.PackFromVector4 exactly: unlike every constructor above, FNA's real
+        // implementation does NOT clamp -- "R = (byte) (vector.X * 255.0f);" (Color.cs) casts
+        // directly, so an out-of-range component wraps rather than saturating at 0/255. A
+        // direct static_cast<bytecs>(value * 255.0f) is genuine undefined behavior in C++
+        // whenever the scaled value cannot be represented in bytecs's source integer type --
+        // which routinely happens for an HDR-authored or otherwise-unclamped Vector4. This
+        // truncates through a wide, always-safely-representable integer type first (a signed
+        // int -> bytecs narrowing conversion is well-defined modulo-256 wraparound in C++, not
+        // UB), reproducing FNA's truncating low-byte behavior for every realistic input while
+        // remaining well-defined for all of them; NaN/+-Infinity deterministically produce 0 (a
+        // result .NET itself leaves unspecified for this exact conversion).
+        [[nodiscard]] bytecs ToByteFromUnitTruncated(float value)
+        {
+            const float scaled = value * 255.0f;
+            if (!std::isfinite(scaled))
+            {
+                return bytecs{0};
+            }
+            constexpr float SafeBound = 8388608.0f; // 2^23: exact in float, well within intcs
+            const float bounded = std::clamp(scaled, -SafeBound, SafeBound);
+            return static_cast<bytecs>(static_cast<intcs>(bounded));
+        }
+
+        // Safely narrows a float already destined for the intcs-taking Color constructor (which
+        // clamps again to [0,255] via ToByte() immediately) down to intcs, avoiding the
+        // undefined behavior of casting a non-finite or out-of-intcs-range float directly to a
+        // 32-bit integer. Color::Lerp/Multiply share the exact same root cause as
+        // ToByteFromUnitTruncated above -- an interpolation/scale factor that is NaN (e.g. a
+        // caller's own 0/0) or otherwise produces a huge intermediate float reaches a bare
+        // static_cast<intcs>(...) with no guard. The exact pre-clamp bound is otherwise
+        // inconsequential -- ToByte()'s own clamp to [0,255] runs right after -- so any range
+        // comfortably inside intcs's representable span is safe to pick.
+        [[nodiscard]] intcs SafeFloatToIntcs(float value)
+        {
+            if (!std::isfinite(value))
+            {
+                return intcs{0};
+            }
+            constexpr float SafeBound = 1'000'000.0f;
+            return static_cast<intcs>(std::clamp(value, -SafeBound, SafeBound));
         }
 
         [[nodiscard]] int ToInt(bytecs value)
@@ -377,16 +436,16 @@ namespace Microsoft::Xna::Framework
     {
         amount = MathHelper::Clamp(amount, 0.0f, 1.0f);
         return Color(
-            static_cast<intcs>(MathHelper::Lerp(
+            SafeFloatToIntcs(MathHelper::Lerp(
                 static_cast<float>(ToInt(value1.getRProperty())),
                 static_cast<float>(ToInt(value2.getRProperty())), amount)),
-            static_cast<intcs>(MathHelper::Lerp(
+            SafeFloatToIntcs(MathHelper::Lerp(
                 static_cast<float>(ToInt(value1.getGProperty())),
                 static_cast<float>(ToInt(value2.getGProperty())), amount)),
-            static_cast<intcs>(MathHelper::Lerp(
+            SafeFloatToIntcs(MathHelper::Lerp(
                 static_cast<float>(ToInt(value1.getBProperty())),
                 static_cast<float>(ToInt(value2.getBProperty())), amount)),
-            static_cast<intcs>(MathHelper::Lerp(
+            SafeFloatToIntcs(MathHelper::Lerp(
                 static_cast<float>(ToInt(value1.getAProperty())),
                 static_cast<float>(ToInt(value2.getAProperty())), amount)));
     }
@@ -412,10 +471,10 @@ namespace Microsoft::Xna::Framework
     Color Color::Multiply(const Color& value, float scale)
     {
         return Color(
-            static_cast<intcs>(static_cast<float>(ToInt(value.getRProperty())) * scale),
-            static_cast<intcs>(static_cast<float>(ToInt(value.getGProperty())) * scale),
-            static_cast<intcs>(static_cast<float>(ToInt(value.getBProperty())) * scale),
-            static_cast<intcs>(static_cast<float>(ToInt(value.getAProperty())) * scale));
+            SafeFloatToIntcs(static_cast<float>(ToInt(value.getRProperty())) * scale),
+            SafeFloatToIntcs(static_cast<float>(ToInt(value.getGProperty())) * scale),
+            SafeFloatToIntcs(static_cast<float>(ToInt(value.getBProperty())) * scale),
+            SafeFloatToIntcs(static_cast<float>(ToInt(value.getAProperty())) * scale));
     }
 
     // ------------------------------------------------------------------
@@ -424,10 +483,10 @@ namespace Microsoft::Xna::Framework
 
     void Color::PackFromVector4(const Vector4& vector)
     {
-        setRProperty(static_cast<bytecs>(vector.X * 255.0f));
-        setGProperty(static_cast<bytecs>(vector.Y * 255.0f));
-        setBProperty(static_cast<bytecs>(vector.Z * 255.0f));
-        setAProperty(static_cast<bytecs>(vector.W * 255.0f));
+        setRProperty(ToByteFromUnitTruncated(vector.X));
+        setGProperty(ToByteFromUnitTruncated(vector.Y));
+        setBProperty(ToByteFromUnitTruncated(vector.Z));
+        setAProperty(ToByteFromUnitTruncated(vector.W));
     }
 
     // ------------------------------------------------------------------

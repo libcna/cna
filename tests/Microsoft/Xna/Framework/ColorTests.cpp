@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <limits>
 #include "Microsoft/Xna/Framework/Color.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -167,6 +168,25 @@ TEST(ColorTest, LerpClampsAboveOne)
     EXPECT_EQ(result.getRProperty(), 255);
 }
 
+// REMED-CORE-004: MathHelper::Clamp(NaN, 0, 1) faithfully reproduces FNA's own
+// comparison-based clamp, under which NaN passes through unclamped (matches
+// MathHelper.Clamp's real C# implementation). A NaN `amount` previously reached a bare
+// static_cast<intcs>(NaN) with no guard -- undefined behavior, reachable via this public API.
+TEST(ColorTest, LerpWithNaNAmountIsDefinedNotUndefinedBehavior)
+{
+    Color result = Color::Lerp(Color::Black, Color::White, std::numeric_limits<float>::quiet_NaN());
+    EXPECT_EQ(result.getRProperty(), 0);
+    EXPECT_EQ(result.getGProperty(), 0);
+    EXPECT_EQ(result.getBProperty(), 0);
+    EXPECT_EQ(result.getAProperty(), 0);
+}
+
+TEST(ColorTest, LerpWithInfiniteAmountIsDefinedNotUndefinedBehavior)
+{
+    Color result = Color::Lerp(Color::Black, Color::White, std::numeric_limits<float>::infinity());
+    EXPECT_EQ(result.getRProperty(), 255);
+}
+
 // --- Multiply ---
 
 TEST(ColorTest, MultiplyByOnePreservesColor)
@@ -191,6 +211,31 @@ TEST(ColorTest, MultiplyOperatorMatchesStaticMethod)
     Color b = Color::Multiply(Color::White, 0.5f);
     EXPECT_EQ(a.getRProperty(), b.getRProperty());
     EXPECT_EQ(a.getAProperty(), b.getAProperty());
+}
+
+// REMED-CORE-004: Multiply shares Lerp's exact same root cause -- an unguarded
+// static_cast<intcs>(component * scale) is undefined behavior whenever `scale` is NaN or
+// produces a huge finite product. Multiply has no upfront clamp on `scale` at all (unlike
+// Lerp's `amount`), so this was reachable for any caller-supplied scale, not just NaN misuse.
+TEST(ColorTest, MultiplyWithNaNScaleIsDefinedNotUndefinedBehavior)
+{
+    Color result = Color::Multiply(Color::White, std::numeric_limits<float>::quiet_NaN());
+    EXPECT_EQ(result.getRProperty(), 0);
+    EXPECT_EQ(result.getGProperty(), 0);
+    EXPECT_EQ(result.getBProperty(), 0);
+    EXPECT_EQ(result.getAProperty(), 0);
+}
+
+TEST(ColorTest, MultiplyWithExtremeScaleIsDefinedNotUndefinedBehavior)
+{
+    Color result = Color::Multiply(Color::White, 1e30f);
+    EXPECT_EQ(result.getRProperty(), 255);
+}
+
+TEST(ColorTest, MultiplyWithNegativeScaleIsDefinedNotUndefinedBehavior)
+{
+    Color result = Color::Multiply(Color::White, -1.0f);
+    EXPECT_EQ(result.getRProperty(), 0);
 }
 
 // --- ToVector3 / ToVector4 ---
@@ -361,6 +406,86 @@ TEST(ColorTest, PackFromVector4SetsComponents)
     EXPECT_EQ(c.getGProperty(), 0);
     EXPECT_EQ(c.getBProperty(), 0);
     EXPECT_EQ(c.getAProperty(), 255);
+}
+
+// REMED-CORE-004: PackFromVector4's own IPackedVector contract (Color.cs's
+// "R = (byte)(vector.X * 255.0f);") does NOT clamp like the Color(Vector4) constructor does --
+// out-of-range components truncate/wrap instead of saturating at 0/255. These pin the exact,
+// documented, UB-free wraparound values CNA now produces, matching FNA's truncating (not
+// clamping) semantics for in-range-ish overflow while remaining well-defined for every input.
+TEST(ColorTest, PackFromVector4AtZeroGivesZero)
+{
+    Color c(255, 255, 255, 255);
+    c.PackFromVector4(Vector4(0.0f, 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 0);
+    EXPECT_EQ(c.getAProperty(), 0);
+}
+
+TEST(ColorTest, PackFromVector4AtOneGivesTwoFiftyFive)
+{
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+    EXPECT_EQ(c.getRProperty(), 255);
+    EXPECT_EQ(c.getGProperty(), 255);
+    EXPECT_EQ(c.getBProperty(), 255);
+    EXPECT_EQ(c.getAProperty(), 255);
+}
+
+TEST(ColorTest, PackFromVector4JustOutsideRangeWrapsRatherThanClamping)
+{
+    // 2.0 * 255 = 510 -> truncated int 510 -> low byte 510 mod 256 = 254.
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(2.0f, 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 254);
+}
+
+TEST(ColorTest, PackFromVector4NegativeWrapsRatherThanClampingToZero)
+{
+    // -1.0 * 255 = -255 -> truncated int -255 -> low byte (-255 mod 256) = 1.
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(-1.0f, 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 1);
+}
+
+TEST(ColorTest, PackFromVector4NaNIsDefinedNotUndefinedBehavior)
+{
+    Color c(128, 128, 128, 128);
+    c.PackFromVector4(Vector4(std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 0);
+}
+
+TEST(ColorTest, PackFromVector4PositiveInfinityIsDefinedNotUndefinedBehavior)
+{
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 0);
+}
+
+TEST(ColorTest, PackFromVector4NegativeInfinityIsDefinedNotUndefinedBehavior)
+{
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(-std::numeric_limits<float>::infinity(), 0.0f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 0);
+}
+
+TEST(ColorTest, PackFromVector4ExtremeFiniteValueIsDefinedNotUndefinedBehavior)
+{
+    Color c(0, 0, 0, 0);
+    c.PackFromVector4(Vector4(1e30f, -1e30f, 0.0f, 0.0f));
+    EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getGProperty(), 0);
+}
+
+TEST(ColorTest, PackFromVector4IsDeterministicAcrossRepeatedCalls)
+{
+    Color a(0, 0, 0, 0);
+    Color b(0, 0, 0, 0);
+    const Vector4 v(3.7f, -2.2f, 1e20f, std::numeric_limits<float>::quiet_NaN());
+    a.PackFromVector4(v);
+    b.PackFromVector4(v);
+    EXPECT_EQ(a.getPackedValueProperty(), b.getPackedValueProperty());
 }
 
 // --- operator* commutative (NOXNA) ---
