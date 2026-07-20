@@ -2231,6 +2231,17 @@ ReinvokeUnloadContent`, `UnloadContentWorksAcrossRepeatedGameInstancesInOneProce
 `ApplyChangesRaisesResettingAndResetExactlyOnce`, `BackendDetectedDeviceLostIsForwardedToManager
 Listeners`, `ForwardedDeviceEventsReportTheManagerAsSender`, `RepeatedDisposeDoesNotReraiseDevice
 Disposing`, plus 3 more — none touched by this tranche's changes.
+**Full unfiltered `ctest -j4` run** (`cmake-build-debug`, EASYGL, per this session's own instruction
+to cap test/build parallelism at 4 cores): **5869 registered, 5863 passed, 6 failed, 6 skipped,
+262.15s.** All 6 failures reconcile exactly against this file's own Wave 0 triage table and the
+POST-WAVE-1 baseline — `EasyGL_AvatarRenderer_TintRouting`, `EasyGL_MRT_TwoAttachments`,
+`EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests` (all 4 already tracked
+pre-existing), plus `ENetDiscoveryServiceTest.MalformedAnnounceDuringSearchIsIgnoredAndDoesNotLeave
+ADanglingResultsPointer`/`.PollIgnoresMalformedAnnounceWhileIdlingAndDiscoveryKeepsWorking` (the
+already-documented `ctest -j4` network-port-contention flake class). `EasyGL_GraphicsDeviceManager_
+Vsync` correctly reports **Skipped**, not failed — exactly the `REMED-BUILD-014` fix's designed
+behavior under Xvfb. Zero new failures; zero regressions confirmed by both the direct-binary and
+`ctest` measurement.
 
 **Completion criteria met:** all float→component paths in `Color.cpp` clamp or safely truncate
 (never invoke UB); the `IPackedVector`/`Graphics::PackedVector` sweep is complete (3 files fixed here,
