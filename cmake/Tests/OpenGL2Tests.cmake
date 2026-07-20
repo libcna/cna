@@ -200,4 +200,50 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_context_loss_recovery examples/opengl2_context_loss_recovery_test.cpp)
     cna_register_backend_test(NAME OpenGL2_ContextLossRecovery COMMAND cna_test_opengl2_context_loss_recovery
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: broader cross-backend golden-image visual-parity sweep.
+    cna_opengl2_test(cna_test_opengl2_blendstate_additive_golden examples/opengl2_blendstate_additive_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_BlendState_Additive_Golden COMMAND cna_test_opengl2_blendstate_additive_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_rasterizerstate_cullmode_golden examples/opengl2_rasterizerstate_cullmode_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_RasterizerState_CullMode_Golden COMMAND cna_test_opengl2_rasterizerstate_cullmode_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_dualtextureeffect_golden examples/opengl2_dualtextureeffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_DualTextureEffect_Golden COMMAND cna_test_opengl2_dualtextureeffect_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_texture_filter_linear_golden examples/opengl2_texture_filter_linear_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_Texture_Filter_Linear_Golden COMMAND cna_test_opengl2_texture_filter_linear_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_depthstencilstate_write_enable_golden examples/opengl2_depthstencilstate_write_enable_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_DepthStencilState_WriteEnable_Golden COMMAND cna_test_opengl2_depthstencilstate_write_enable_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_spritebatch_rotation_golden examples/opengl2_spritebatch_rotation_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SpriteBatch_Rotation_Golden COMMAND cna_test_opengl2_spritebatch_rotation_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_goldenimage_smoke examples/opengl2_goldenimage_smoke_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_GoldenImage_Smoke COMMAND cna_test_opengl2_goldenimage_smoke
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_pbreffect_golden examples/opengl2_pbreffect_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_PbrEffect_Golden COMMAND cna_test_opengl2_pbreffect_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl2_test(cna_test_opengl2_skinnedeffect_vertexcolor_golden examples/opengl2_skinnedeffect_vertexcolor_golden_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_SkinnedEffect_VertexColor_Golden COMMAND cna_test_opengl2_skinnedeffect_vertexcolor_golden
+        TIMEOUT 60 LABELS "OpenGL2" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -700,6 +700,14 @@ possibilities of OpenGL 2"):
     VertexBuffer/IndexBuffer/Texture2D content survives (CPU-shadow restore), brand-new resources
     created after the loss work correctly, a RenderTarget2D created after the loss renders and
     samples correctly. 8/8 PASS.
+  - `OpenGL2_BlendState_Additive_Golden`/`_RasterizerState_CullMode_Golden`/
+    `_DualTextureEffect_Golden`/`_Texture_Filter_Linear_Golden`/
+    `_DepthStencilState_WriteEnable_Golden`/`_SpriteBatch_Rotation_Golden`/`_GoldenImage_Smoke`/
+    `_PbrEffect_Golden`/`_SkinnedEffect_VertexColor_Golden` -- the remaining 13 of 17 EasyGL golden
+    PNGs (PbrEffect and SkinnedEffect.VertexColorEnabled each cover multiple images in one test),
+    completing the cross-backend visual-parity sweep. Found and fixed 2 real bugs along the way
+    (`vertexStart`/`startIndex` ignored in draw calls; `ComputeSpriteScreenCorners()` double-counted
+    `origin` after rotation) -- see the status section above. All PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -708,8 +716,8 @@ possibilities of OpenGL 2"):
   except `cna_demo_xact`, which fails only at its Content-copy POST_BUILD step because
   `examples/demo_xact/Content/` does not exist in this checkout at all (never committed to git) --
   pre-existing, unrelated to this backend or this branch.
-- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5542 cases
-  as of session 11) has ~225 pre-existing/expected failures (± the pre-existing
+- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5551 cases
+  as of session 12) has ~225 pre-existing/expected failures (± the pre-existing
   `ENetDiscoveryServiceTest` parallel-execution flakiness noted below), none an actual regression:
   ~220 are missing local test fixture files (media/audio/video/XNB content assets absent from this
   checkout, e.g. `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`) that
@@ -1001,6 +1009,74 @@ constructor signature changes (`VB`/`IB`/`Tex`/`RenderTarget`/`RenderTargetCubeB
 `OcclusionQuery` all now take a backend pointer) or the `OpenGL2GraphicsBackend` constructor's new
 `contextRecoveryEnabled`/`swapInterval_` handling.
 
+## Status: broader golden-image sweep + 2 real bugs found (2026-07-20, session 12)
+User asked for a fresh EasyGL-vs-OpenGL2 comparison after the 3 big session-8-deferred items
+(MRT/instancing/context-loss) all landed. Redid the same `IGraphicsBackend` virtual-method diff
+technique from session 8: of 93 methods, only 3 remain unoverridden on OpenGL2, and all 3 are
+confirmed non-gaps -- EasyGL doesn't implement them either (`SetReferenceStencil`/
+`SetStringMarkerEXT`/`UpdatePresentationFormatEXT`, the latter two D3D9/Vulkan-specific).
+`ApplyMultiSampleCount` (flagged as "missing" back in session 8 but never actually verified) turned
+out to be a FALSE POSITIVE on closer inspection: `EasyGLGraphicsBackend.hpp`'s own comment says it
+deliberately uses the same base-class default OpenGL2 does, since MSAA sample count can't change
+without a full context recreation. **Method-level API parity is now complete** against everything
+EasyGL itself implements.
+
+Given that, continued into the remaining, already-tracked incremental item: the broader
+golden-image sweep (4/17 scenes ported as of session 8). Ported all 13 remaining scenes this
+session (`BlendState::Additive`, `RasterizerState.CullMode`, `DualTextureEffect`,
+`TextureFilter::Linear`, `DepthStencilState` write-enable, `SpriteBatch` rotation, the golden-image
+canary smoke test, `PbrEffect` (4 images), `SkinnedEffect.VertexColorEnabled` (2 images)) --
+**17/17 golden PNGs now have an OpenGL2 counterpart.**
+
+**Two real, previously-undiscovered bugs found and fixed while porting, not just ported tests
+passing on the first try:**
+
+1. **`params->vertexStart`/`params->startIndex` were silently ignored in `drawInternal()`'s
+   built-in-effect and custom-ShaderEffect draw paths** -- `glDrawArrays`/`glDrawElements` always
+   drew from vertex/index 0 regardless of what `GraphicsDevice::DrawPrimitives`/
+   `DrawIndexedPrimitives` actually requested. `EasyGLGraphicsBackend` does not have this gap (see
+   its own `params.vertexStart`/`params.startIndex`-driven `draw_arrays`/`draw_elements_base_vertex`
+   calls). This broke ANY `DrawPrimitives()`/`DrawIndexedPrimitives()` sequence drawing multiple
+   sub-ranges of ONE buffer at different offsets (e.g. several quads packed into a single
+   `VertexBuffer`, each drawn with its own `DrawPrimitives(type, offset, count)` call) -- every
+   draw after the first silently re-rendered the FIRST range's geometry instead of its own. Found
+   via the ported `PbrEffect`/`SkinnedEffect.VertexColorEnabled` golden tests (both draw multiple
+   quads from one buffer): quads at a non-zero vertex offset read back as pure background colour
+   (nothing rendered at their real screen position) or the wrong material entirely. Fixed for both
+   `vertexStart` (`glDrawArrays`'s own `first` parameter, core GL 1.1) and `startIndex` (index
+   buffer byte offset, core GL 1.5); `baseVertex` (`glDrawElementsBaseVertex`, GL 3.2+/
+   `ARB_draw_elements_base_vertex`) is NOT guaranteed on GL 2.1 and still silently falls back to 0 --
+   documented in the fix's own comment, not silently dropped.
+2. **`Sprite::ComputeSpriteScreenCorners()` double-counted `origin` in the final screen-space
+   translation** -- `+ destination.X + origin.X` (and Y) instead of just `+ destination.X`, since
+   `origin` is already subtracted into `localCorners` earlier in the same function. Verified against
+   FNA's own authoritative `SpriteBatch.cs` (`SpriteBatchItem.Texture`): `cornerX = -originX *
+   destinationW; ... position = rotate(corner) + destinationX` -- no origin term added back after
+   rotation. Harmless at `rotation=0` (the two origin terms happen to cancel exactly), which is why
+   this went undetected until a genuinely rotated sprite was pixel-verified: any
+   `SpriteBatch.Draw(..., rotation, origin, ...)` call with BOTH a non-zero rotation AND a non-zero
+   origin (e.g. rotating a sprite around its own centre -- an extremely common real usage pattern)
+   rendered the sprite shifted by the origin vector, in the wrong screen location entirely. Found
+   via the ported `SpriteBatch` rotation golden test (`sb.Draw(..., PiOver2, Vector2(100,100),
+   ...)`): a diagnostic scan of the whole backbuffer showed the sprite's rendered footprint shifted
+   by exactly `+origin` from its FNA-correct position, before the fix.
+
+Both fixes verified via a diagnostic build-test-inspect cycle (not guessed): for bug 1, confirmed
+by re-running the two golden tests that had failed pre-fix, now passing exactly; for bug 2, added a
+temporary diagnostic test that scanned the entire 400x300 backbuffer in a coarse grid to locate the
+sprite's actual rendered footprint, confirmed the derivation by hand against FNA's own source, then
+removed the diagnostic once the real fix was verified.
+
+`OpenGL2_PbrEffect_Golden`/`OpenGL2_SkinnedEffect_VertexColor_Golden`/
+`OpenGL2_SpriteBatch_Rotation_Golden` all PASS after the fixes (all 3 initially FAILED, confirming
+these were real regressions the new tests genuinely caught, not tests written to already pass).
+Full `OpenGL2` suite: 41/41 PASS (up from 32, +9 new golden tests). Full unfiltered `CnaTests`
+sweep (5551 cases): 227 failures, consistent with the established ~225 baseline ± the pre-existing
+`ENetDiscoveryServiceTest` flakiness; a dedicated `ctest -R GraphicsDeviceCapabilityTest` re-run and
+a targeted `ctest -R "SpriteBatch|DrawPrimitives|DrawUserPrimitives"` re-run (covering every other
+test that exercises either fixed code path, including `OpenGL2_SpriteBatchCustomEffect`'s own use
+of the same `ComputeSpriteScreenCorners()`) both confirm no new regression.
+
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
 - SDL-created OpenGL 2.1 compatibility context. SDL is only window/context glue; rendering is direct OpenGL.
@@ -1075,6 +1151,11 @@ constructor signature changes (`VB`/`IB`/`Tex`/`RenderTarget`/`RenderTargetCubeB
   CPU shadow; RenderTarget2D/RenderTargetCube/OcclusionQuery recreate (blank, matching EasyGL's own
   real limitation); TextureCube/Texture3D/custom ShaderEffect programs are not recoverable, also
   matching EasyGL's own real limitation exactly (see `OpenGL2_ContextLossRecovery` above).
+- `DrawPrimitives`/`DrawIndexedPrimitives`/custom-`ShaderEffect` draws correctly honor
+  `vertexStart`/`startIndex` (multi-quad-in-one-buffer draws at a non-zero offset; see the session
+  12 status section above for the real bug this fixed).
+- `SpriteBatch.Draw(..., rotation, origin, ...)` correctly combines a non-zero rotation with a
+  non-zero origin (see the session 12 status section above for the real bug this fixed).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -1083,14 +1164,8 @@ constructor signature changes (`VB`/`IB`/`Tex`/`RenderTarget`/`RenderTargetCubeB
   still NOT tested on an actual Windows runtime -- `wglGetProcAddress`'s real behavior, actual GL
   driver entry-point availability, and end-to-end rendering on Windows remain to be checked on a
   real machine.
-- Visual parity tests against other backends (golden-image comparison) beyond the four scenes now
-  covered (`OpenGL2_EnvironmentMapEffect_Golden`/`_BasicEffect_Golden`/`_AlphaTestEffect_Golden`/
-  `_SkinnedEffect_Golden`, see the status entry above) -- this project has dozens of
-  `*_golden_test.cpp`/checked-in PNG pairs across its other backends (more `BasicEffect` lighting
-  variants, fog, DualTextureEffect, `BlendState`/`RasterizerState`/`DepthStencilState` scenes,
-  PbrEffect's 4 golden images, texture-filter/sampler-state scenes, ...). Each additional scene is
-  mechanically similar to the four already ported (reuse the existing golden PNG + its exact scene
-  setup verbatim) but real, incremental effort per scene, not a single remaining task.
+- ~~Visual parity tests against other backends (golden-image comparison)~~ -- **DONE (session 12,
+  see status section above)**: all 17 of 17 EasyGL golden PNGs now have an OpenGL2 counterpart.
 - ~~Real Multiple Render Targets (MRT)~~ -- **DONE (session 9, see status section below)**.
 - ~~`DrawInstancedPrimitivesEx` (hardware instancing)~~ -- **DONE (session 10, see status section
   below)**.

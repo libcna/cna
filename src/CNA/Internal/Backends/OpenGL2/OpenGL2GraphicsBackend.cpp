@@ -1629,12 +1629,19 @@ namespace CNA::Internal::Backends::OpenGL2
                 {-origin.X, destination.Height - origin.Y},
             };
             const float uv[4][2] = {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
+            // Task (plan_opengl2.md follow-up): the translation term used to be
+            // `+ destination.X + origin.X` (and Y) -- origin is already subtracted into
+            // localCorners above (matches FNA's own SpriteBatch.cs SpriteBatchItem.Texture
+            // formula: cornerX = -originX*destinationW, then position = rotate(corner) +
+            // destinationX, with NO extra origin term added back). Adding origin a second time
+            // here shifted the whole rotated sprite by the origin vector for any non-zero
+            // rotation (harmless at rotation=0, where the two origin terms happen to cancel).
             const float cosR = std::cos(rotation);
             const float sinR = std::sin(rotation);
             for (int i = 0; i < 4; ++i)
             {
-                out[i].x = localCorners[i][0] * cosR - localCorners[i][1] * sinR + destination.X + origin.X;
-                out[i].y = localCorners[i][0] * sinR + localCorners[i][1] * cosR + destination.Y + origin.Y;
+                out[i].x = localCorners[i][0] * cosR - localCorners[i][1] * sinR + destination.X;
+                out[i].y = localCorners[i][0] * sinR + localCorners[i][1] * cosR + destination.Y;
                 out[i].u = uv[i][0];
                 out[i].v = uv[i][1];
             }
@@ -2747,13 +2754,17 @@ namespace CNA::Internal::Backends::OpenGL2
             const int customVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
             if (ib)
             {
+                // See the non-custom-effect path's identical params->startIndex handling below --
+                // same real gap, same GL 2.1 baseVertex limitation.
+                const std::size_t indexElemSize = ib->thirtyTwoBit ? 4 : 2;
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
                 glDrawElements(ToGLPrimitiveMode(primitive), customVertexCount,
-                               ib->thirtyTwoBit ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
+                               ib->thirtyTwoBit ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
+                               reinterpret_cast<void*>(static_cast<std::uintptr_t>(params->startIndex) * indexElemSize));
             }
             else
             {
-                glDrawArrays(ToGLPrimitiveMode(primitive), 0, customVertexCount);
+                glDrawArrays(ToGLPrimitiveMode(primitive), params->vertexStart, customVertexCount);
             }
             return;
         }
@@ -2990,13 +3001,31 @@ namespace CNA::Internal::Backends::OpenGL2
         const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
         if (ib)
         {
+            // Task (plan_opengl2.md follow-up): params->startIndex/baseVertex were previously
+            // ignored entirely (always drew from index 0, no base-vertex offset) -- a real gap
+            // EasyGLGraphicsBackend does not have (see its own params.startIndex/params.baseVertex
+            // handling). glDrawElementsBaseVertex is GL 3.2+/ARB_draw_elements_base_vertex, not
+            // guaranteed on GL 2.1, so a non-zero baseVertex here still silently falls back to 0
+            // (startIndex alone -- the byte offset into the index buffer -- is core GL 1.5 and
+            // always honored).
+            const std::size_t indexElemSize = ib->thirtyTwoBit ? 4 : 2;
+            const int startIndex = params ? params->startIndex : 0;
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
             glDrawElements(ToGLPrimitiveMode(primitive), vertexCount,
-                           ib->thirtyTwoBit ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT, nullptr);
+                           ib->thirtyTwoBit ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
+                           reinterpret_cast<void*>(static_cast<std::uintptr_t>(startIndex) * indexElemSize));
         }
         else
         {
-            glDrawArrays(ToGLPrimitiveMode(primitive), 0, vertexCount);
+            // Task (plan_opengl2.md follow-up): params->vertexStart was previously ignored
+            // entirely (always drew from vertex 0) -- a real gap EasyGLGraphicsBackend does not
+            // have (see its own params.vertexStart-driven draw_arrays call). This broke any
+            // DrawPrimitives() sequence that draws multiple sub-ranges of ONE VertexBuffer at
+            // different vertexStart offsets (e.g. several quads packed into a single buffer) --
+            // every draw after the first silently rendered the FIRST range's geometry again
+            // instead of its own.
+            const int vertexStart = params ? params->vertexStart : 0;
+            glDrawArrays(ToGLPrimitiveMode(primitive), vertexStart, vertexCount);
         }
     }
 
