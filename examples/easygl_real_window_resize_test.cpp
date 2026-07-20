@@ -44,6 +44,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <chrono>
 #include <cstdio>
 #include <memory>
 
@@ -53,6 +54,17 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kMaxWaitFrames = 300;
+
+    // REMED-BUILD-010: under a real desktop compositor a window that isn't focused/mapped the way
+    // an isolated Xvfb server is can have its frame rate throttled arbitrarily (observed: this
+    // test's own frame_ counter still advances, just slowly, rather than the process being
+    // genuinely blocked in a syscall) -- kMaxWaitFrames alone can then take far longer in wall-clock
+    // time than intended, silently eating into CTest's own 60s TIMEOUT with zero diagnostic output
+    // until that blunt kill fires. This independent wall-clock deadline (checked every Draw() call,
+    // not tied to frame count) fails fast with an actionable message well before that, regardless of
+    // which display this runs against -- CTest's own TIMEOUT remains only a backstop for a genuine
+    // full hang, not the normal way this scenario is expected to end.
+    constexpr auto kWallClockDeadline = std::chrono::seconds(20);
 }
 
 class RealWindowResizeTest : public Game
@@ -69,6 +81,7 @@ class RealWindowResizeTest : public Game
     int initialBackBufferHeight_ = 0;
     int targetPhysicalWidth_  = 0;
     int targetPhysicalHeight_ = 0;
+    std::chrono::steady_clock::time_point deadline_{};
 
     void check(bool ok, const char* label)
     {
@@ -128,6 +141,8 @@ protected:
             // simulating a user dragging the window edge rather than a game-driven API resize.
             SDL_SetWindowSize(window, targetPhysicalWidth_, targetPhysicalHeight_);
 
+            deadline_ = std::chrono::steady_clock::now() + kWallClockDeadline;
+
             ++frame_;
             return;
         }
@@ -139,6 +154,18 @@ protected:
 
         if (physicalResizeApplied && viewportUpdated)
         {
+            finish(dev);
+            return;
+        }
+
+        if (std::chrono::steady_clock::now() >= deadline_)
+        {
+            check(false, "Timed out waiting for the real window resize to propagate within "
+                          "the wall-clock deadline (REMED-BUILD-010: a live desktop compositor can "
+                          "throttle/delay this indefinitely for an unfocused or unmapped window; "
+                          "this is an environment/window-manager-state sensitivity, not a defect in "
+                          "the resize/viewport code itself, which check 2's own PASS already proves "
+                          "correct whenever the event does arrive)");
             finish(dev);
             return;
         }
