@@ -283,4 +283,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_PresentationMode COMMAND cna_test_opengl1_presentationmode
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 24 (EasyGL parity): RenderTargetCube support.
+    cna_opengl1_test(cna_test_opengl1_rendertargetcube
+                      examples/opengl1_rendertargetcube_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_RenderTargetCube COMMAND cna_test_opengl1_rendertargetcube
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

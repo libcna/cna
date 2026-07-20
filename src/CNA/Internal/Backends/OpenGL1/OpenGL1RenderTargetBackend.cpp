@@ -203,4 +203,150 @@ void OpenGL1RenderTargetBackend::GetData(int /*level*/, int x, int y, int w, int
         std::copy(tmp.begin(), tmp.end(), bot);
     }
 }
+
+// plan_opengl1.md item 24 (EasyGL parity): shared by the constructor and RecreateGLResource(),
+// same "GPU-produced, nothing to restore" reasoning as OpenGL1RenderTargetBackend::Build(). Every
+// face is pre-allocated with an empty (nullptr) level-0 image up front -- glFramebufferTexture2D
+// (in BindAsRenderTargetFace()) requires the target level to already have a defined image, the
+// same reasoning OpenGL1TextureCubeBackend::Build() already documents for its own per-level
+// pre-allocation.
+void OpenGL1RenderTargetCubeBackend::Build()
+{
+    if (!loaded_)
+        throw std::runtime_error("OpenGL1RenderTargetCubeBackend: framebuffer object functions not loaded");
+
+    glGenTextures(1, &id_);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, id_);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    for (int face = 0; face < 6; ++face)
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, 0, GL_RGBA, size_, size_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    glGenFramebuffers_(1, &fbo_);
+    glBindFramebuffer_(GL_FRAMEBUFFER, fbo_);
+    // Attach face 0 just to check completeness here -- BindAsRenderTargetFace() re-attaches
+    // whichever face is actually requested on every bind (one FBO, six re-attachments, not six
+    // separate FBOs).
+    glFramebufferTexture2D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X, id_, 0);
+
+    bool hasStencil = false;
+    const GLenum depthInternalFormat = DepthRenderbufferInternalFormat(depthFormat_, hasStencil);
+    if (depthInternalFormat != 0)
+    {
+        // One depth/stencil renderbuffer shared across all 6 faces -- only one face is ever the
+        // active draw target at a time, so a single buffer sized to match is sufficient (the same
+        // convention any real env-map-capture renderer uses), avoiding 6x the depth memory.
+        glGenRenderbuffers_(1, &depthRbo_);
+        glBindRenderbuffer_(GL_RENDERBUFFER, depthRbo_);
+        glRenderbufferStorage_(GL_RENDERBUFFER, depthInternalFormat, size_, size_);
+        glFramebufferRenderbuffer_(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthRbo_);
+        if (hasStencil)
+            glFramebufferRenderbuffer_(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthRbo_);
+    }
+
+    const GLenum status = glCheckFramebufferStatus_(GL_FRAMEBUFFER);
+    glBindFramebuffer_(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+    {
+        if (depthRbo_) { glDeleteRenderbuffers_(1, &depthRbo_); depthRbo_ = 0; }
+        if (fbo_) { glDeleteFramebuffers_(1, &fbo_); fbo_ = 0; }
+        if (id_) { glDeleteTextures(1, &id_); id_ = 0; }
+        throw std::runtime_error("OpenGL1RenderTargetCubeBackend: incomplete framebuffer (GL status 0x"
+            + std::to_string(status) + ")");
+    }
+}
+
+OpenGL1RenderTargetCubeBackend::OpenGL1RenderTargetCubeBackend(int size, int depthFormat, bool mipMap, OpenGL1ResourceRegistry* registry)
+    : size_(size), depthFormat_(depthFormat), mipMap_(mipMap), registry_(registry)
+{
+    Build();
+    if (registry_) registry_->Add(this);
+}
+
+OpenGL1RenderTargetCubeBackend::~OpenGL1RenderTargetCubeBackend()
+{
+    if (registry_) registry_->Remove(this);
+    if (depthRbo_) glDeleteRenderbuffers_(1, &depthRbo_);
+    if (fbo_) glDeleteFramebuffers_(1, &fbo_);
+    if (id_) glDeleteTextures(1, &id_);
+}
+
+void OpenGL1RenderTargetCubeBackend::ReleaseGLHandleOnly()
+{
+    fbo_ = 0;
+    id_ = 0;
+    depthRbo_ = 0;
+    hasMips_ = false;
+}
+
+void OpenGL1RenderTargetCubeBackend::RecreateGLResource()
+{
+    try { Build(); }
+    catch (const std::exception& e)
+    {
+        std::cerr << "CNA: OpenGL1RenderTargetCubeBackend failed to recreate after context loss: "
+                  << e.what() << std::endl;
+    }
+}
+
+void OpenGL1RenderTargetCubeBackend::BindGL() const { glBindTexture(GL_TEXTURE_CUBE_MAP, id_); }
+
+void OpenGL1RenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+{
+    if (face < 0 || face >= 6) return;
+    glBindFramebuffer_(GL_FRAMEBUFFER, fbo_);
+    glFramebufferTexture2D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, id_, 0);
+}
+
+// Same FNA3D OPENGL_ResolveTarget reasoning as OpenGL1RenderTargetBackend::UnbindAsRenderTarget()
+// -- glGenerateMipmap(GL_TEXTURE_CUBE_MAP) regenerates all 6 faces' mip chains in a single call,
+// matching OpenGL1TextureCubeBackend::RegenerateMips()'s own identical observation.
+void OpenGL1RenderTargetCubeBackend::UnbindAsRenderTarget()
+{
+    if (mipMap_ && glGenerateMipmap_)
+    {
+        glBindTexture(GL_TEXTURE_CUBE_MAP, id_);
+        glGenerateMipmap_(GL_TEXTURE_CUBE_MAP);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        hasMips_ = true;
+    }
+    else if (mipMap_)
+    {
+        hasMips_ = false;
+    }
+    glBindFramebuffer_(GL_FRAMEBUFFER, 0);
+}
+
+// Reads back via glGetTexImage directly on the cube texture object, not glReadPixels against the
+// bound FBO -- a cube face's rendered content is already retrievable straight from the texture
+// object regardless of which FBO/attachment point last wrote it (the same mechanism
+// OpenGL1TextureCubeBackend::GetData() already uses for CPU-uploaded content). Still needs the
+// SAME row-flip OpenGL1RenderTargetBackend::GetData() applies, though: GPU-rasterized content is
+// bottom-up, unlike a CPU-uploaded face's top-down convention.
+void OpenGL1RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h, void* data, int /*dataLength*/) const
+{
+    if (face < 0 || face >= 6 || !data) return;
+    glBindTexture(GL_TEXTURE_CUBE_MAP, id_);
+    int levelSize = size_;
+    for (int i = 0; i < level; ++i) levelSize = std::max(1, levelSize / 2);
+    std::vector<uint8_t> full(static_cast<size_t>(levelSize) * levelSize * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, GL_RGBA, GL_UNSIGNED_BYTE, full.data());
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+    auto* dest = static_cast<uint8_t*>(data);
+    const int rowBytes = w * 4;
+    for (int row = 0; row < h; ++row)
+    {
+        const int srcRow = levelSize - (y + row) - 1;
+        std::copy(full.data() + (static_cast<size_t>(srcRow) * levelSize + x) * 4,
+                   full.data() + (static_cast<size_t>(srcRow) * levelSize + x) * 4 + rowBytes,
+                   dest + static_cast<size_t>(row) * rowBytes);
+    }
+}
 }

@@ -100,4 +100,78 @@ namespace CNA::Internal::Backends::OpenGL1
      * @return True only if every required entry point resolved to a non-null address.
      */
     bool TryLoadOpenGL1FramebufferObjectFunctions();
+
+    /**
+     * @brief FBO-backed cube-map render target for the OPENGL1 backend (plan_opengl1.md item 24,
+     * EasyGL parity).
+     *
+     * Combines the two pieces of machinery this backend already has: an `ARB_texture_cube_map`
+     * cube texture (same allocation shape `OpenGL1TextureCubeBackend` already uses) and a single
+     * reusable FBO whose color attachment is re-pointed at the requested face
+     * (`GL_TEXTURE_CUBE_MAP_POSITIVE_X+face`) on every `BindAsRenderTargetFace()` call -- the
+     * standard "one FBO, six re-attachments" pattern, not six separate FBOs. One depth/stencil
+     * renderbuffer is shared across all six faces (only one face is ever the active draw target
+     * at a time, so a single depth buffer sized to match is sufficient, matching every real
+     * engine's own env-map-capture convention).
+     *
+     * `GetData()` reads back via `glGetTexImage` directly on the cube texture object (not
+     * `glReadPixels` against the bound FBO) -- unlike a 2D render target, a cube map face's
+     * rendered content is already retrievable straight from the texture object regardless of
+     * which FBO/attachment point last wrote it, the same mechanism `OpenGL1TextureCubeBackend::
+     * GetData()` already uses for CPU-uploaded content. Still needs the same row-flip
+     * `OpenGL1RenderTargetBackend::GetData()` applies, though: GPU-rasterized content is
+     * bottom-up, unlike a CPU-uploaded texture's top-down convention.
+     *
+     * Same capability/fallback shape as `OpenGL1RenderTargetBackend`: requires BOTH
+     * `OpenGL1Capabilities::framebufferObject` and `::textureCubeMap`;
+     * `OpenGL1GraphicsBackend::CreateRenderTargetCube()` returns nullptr when either is absent.
+     * Does not support MSAA (`multiSampleCount` argument is accepted but ignored) -- out of scope
+     * for this item; plan_opengl1.md item 25 addresses `RenderTarget2D` MSAA specifically, and
+     * does not attempt to extend to six separate cube-face resolve targets.
+     */
+    class OpenGL1RenderTargetCubeBackend final : public IRenderTargetCubeBackend, public IOpenGL1Recoverable
+    {
+    public:
+        /**
+         * @brief Creates the cube texture, optional depth/stencil renderbuffer, and one reusable FBO.
+         *
+         * @param size        Width/height of each of the 6 faces, in pixels.
+         * @param depthFormat Raw ordinal of Microsoft::Xna::Framework::Graphics::DepthFormat
+         *                    (None=0, Depth16=1, Depth24=2, Depth24Stencil8=3).
+         * @param mipMap      Whether UnbindAsRenderTarget() should regenerate a full mip chain
+         *                    (all 6 faces) from level 0 each time the target stops being active.
+         * @param registry    Context-loss recovery registry to register with, or nullptr when
+         *                    context recovery is disabled.
+         * @throws std::runtime_error if the resulting framebuffer is incomplete.
+         */
+        OpenGL1RenderTargetCubeBackend(int size, int depthFormat, bool mipMap, OpenGL1ResourceRegistry* registry);
+        ~OpenGL1RenderTargetCubeBackend() override;
+
+        int GetSize() const override { return size_; }
+        void BindAsRenderTargetFace(int face) override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetGLHandle() const override { return id_; }
+
+        void GetData(int face, int level, int x, int y, int w, int h, void* data, int dataLength) const override;
+        void BindGL() const override;
+
+        /** @brief True if the last UnbindAsRenderTarget() call generated a complete mip chain. */
+        bool HasMips() const { return hasMips_; }
+
+        /** @brief Same rationale as OpenGL1RenderTargetBackend::ReleaseGLHandleOnly(). */
+        void ReleaseGLHandleOnly() override;
+        /** @brief Rebuilds an empty FBO/cube-texture/depth-renderbuffer of the same size/format. */
+        void RecreateGLResource() override;
+
+    private:
+        void Build();
+        unsigned int fbo_ = 0;
+        unsigned int id_ = 0;
+        unsigned int depthRbo_ = 0;
+        int size_ = 0;
+        int depthFormat_ = 0;
+        bool mipMap_ = false;
+        bool hasMips_ = false;
+        OpenGL1ResourceRegistry* registry_ = nullptr;
+    };
 }

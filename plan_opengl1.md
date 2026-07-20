@@ -36,7 +36,6 @@ Target platforms: Linux and Windows desktop compatibility-profile drivers. The b
   edge-weighting/`EnvironmentMapSpecular` -- item 5), or arbitrary custom vertex declarations.
 - No MRT (`SetRenderTargets()` falls back to the shared `IGraphicsBackend` single-target default).
 - No instancing.
-- No `RenderTargetCube` (no `CreateRenderTargetCube()` override).
 - RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. No `RenderTarget2D` MSAA (item 22's backbuffer MSAA is a separate, window-visual-based mechanism that does not extend to FBO-based render targets -- EasyGL's own manual offscreen-FBO resolve for that case correctly stays out of OPENGL1's scope).
 - `DualTextureEffect` is implemented via `ARB_multitexture`/core (>=1.3), detected at runtime (`OpenGL1Capabilities::multitexture`) with the entry points (`glActiveTexture`/`glMultiTexCoord2f`) loaded through `SDL_GL_GetProcAddress`; a strict 1.1 driver silently falls back to texture unit 0 only (`texture1` ignored, matching every other textured draw).
 - Anisotropic filtering requires `GL_EXT_texture_filter_anisotropic`, detected at runtime (`OpenGL1Capabilities::anisotropicFiltering`, `GraphicsCapability::AnisotropicFiltering`); silently falls back to no anisotropy (clamped to 1.0x) when the driver lacks it.
@@ -428,6 +427,82 @@ This closed item 23. Items 13-19 (virtual-resolution/presentation-mode scaling, 
 factors) were completed the same day in the same session -- see each item's own entry above for
 its full writeup. **All 11 items in the EasyGL parity list (13-23) found 2026-07-20 are now
 Done.**
+
+## Further improvements beyond EasyGL parity (2026-07-20)
+
+With the EasyGL parity list closed, the project owner asked what else could realistically be
+improved without turning OPENGL1 into "a second modern OpenGL backend" (this backend's own design
+rule). Of the "Intentional OpenGL 1.x limitations" list, two are genuinely addable with zero new
+shader/programmable-pipeline dependency, reusing machinery this backend already has:
+
+24. ~~Add `RenderTargetCube` by combining the existing FBO (`OpenGL1RenderTargetBackend`, item 2)
+    and cube-map (`OpenGL1TextureCubeBackend`, item 5) machinery -- `CreateRenderTargetCube()`
+    currently inherits the `IGraphicsBackend` `nullptr` default.~~ **Done**: new
+    `OpenGL1RenderTargetCubeBackend` (`OpenGL1RenderTargetBackend.hpp`/`.cpp`, same translation
+    unit as the 2D render target -- they already share the FBO loader/`glGenerateMipmap_` symbol)
+    uses ONE reusable FBO whose color attachment is re-pointed at the requested face
+    (`GL_TEXTURE_CUBE_MAP_POSITIVE_X+face`) on every `BindAsRenderTargetFace()` call, not six
+    separate FBOs -- the standard pattern. One depth/stencil renderbuffer is shared across all six
+    faces (only one is ever the active draw target at a time). `GetData()` reads back via
+    `glGetTexImage` directly on the cube texture object (not `glReadPixels` against the bound FBO)
+    -- a cube face's rendered content is retrievable straight from the texture object regardless
+    of which FBO/attachment point last wrote it, the same mechanism `OpenGL1TextureCubeBackend::
+    GetData()` already uses for CPU-uploaded content -- but still needs the same row-flip
+    `OpenGL1RenderTargetBackend::GetData()` applies (GPU-rasterized content is bottom-up, unlike a
+    CPU-uploaded face's top-down convention). Mip-chain regeneration on unbind reuses item 21's
+    exact mechanism (`glGenerateMipmap(GL_TEXTURE_CUBE_MAP)` regenerates all 6 faces in one call).
+    Requires both `framebufferObject` and `textureCubeMap` capabilities; `CreateRenderTargetCube()`
+    returns nullptr when either is absent. `multiSampleCount` is accepted but ignored -- out of
+    scope for this item (item 25 addresses `RenderTarget2D` MSAA specifically, not six separate
+    cube-face resolve targets).
+
+    **A cube-face target needed its own tracked state, separate from `currentRt_`**: unlike
+    `SetRenderTarget2D()`'s single `IRenderTargetBackend* currentRt_`, a bound cube face has no
+    natural home in that 2D-only-typed pointer, so `EffectiveWidth()`/`EffectiveHeight()`/
+    `SetViewport()`/`SetScissorRect()` (which all branch on `currentRt_` for the active target's
+    real size) would have had no way to see a cube face's size at all. Added `currentCubeRt_`/
+    `currentCubeFace_` members and a new `SetRenderTargetCubeFace()` override (default
+    implementation is call-through-only, no state tracking); `SetRenderTarget2D()` and
+    `SetRenderTargetCubeFace()` now each clear the OTHER's stale pointer when switching between
+    the two kinds, mirroring `SetRenderTarget2D()`'s own pre-existing "unbind whatever was active
+    before" symmetry. `DebugSimulateContextLoss()`'s rebind-what-was-active fix (item 8) is
+    extended to the cube case too (`currentCubeFace_` tracks WHICH face, so recovery re-attaches
+    the correct one, not just any).
+
+    New test `OpenGL1_RenderTargetCube` (`examples/opengl1_rendertargetcube_test.cpp`) renders two
+    DIFFERENT solid colors into two DIFFERENT faces of the same target (+X red, +Y blue), unbinds,
+    and reads both back independently via `RenderTargetCube::GetData()` -- a genuine GPU readback,
+    not a CPU shadow -- confirming each face kept its own distinct content (not just "something got
+    painted somewhere", which a single-face test could not rule out an all-faces-aliased bug). A
+    third, never-rendered face is checked to have picked up neither color, confirming `Build()`'s
+    per-face pre-allocation didn't leak content across faces. Also exercises
+    `DebugSimulateContextLoss()` while a face is genuinely bound and active, matching the
+    established item-8 rigor for `RenderTarget2D`/`TextureCube`. All 4 checks matched their
+    predicted values exactly on the first attempt. Mutation-tested two ways, independently: (1)
+    `BindAsRenderTargetFace()` mutated to always attach face 0 regardless of the requested face --
+    reproduces the predicted failure exactly (+X reads blue, last-write-wins since both draws
+    landed on the same actual face; +Y reads black, since the real +Y attachment point was never
+    written; the never-rendered -X face correctly stays unaffected; the context-loss check also
+    fails, since its own draw also silently landed on face 0). (2) `CreateRenderTargetCube()`
+    mutated to always return `nullptr` -- reproduces the predicted graceful-degradation failure
+    (every face reads back `(0,0,0)`, no crash, matching `RenderTargetCube`'s own documented
+    null-backend tolerance). Restoring each mutation independently reconfirmed all 4 checks pass.
+    Full `ctest -R "OpenGL1_"` regression sweep: 37/37 passed after this change.
+
+    **Unrelated environment note, encountered while mutation-testing this item**: a full `CNA`
+    library rebuild transiently failed with `ContentReader has no member named ReadChar/
+    ReadDecimal` (Xnb content-reader code, unrelated to graphics/OPENGL1) on one attempt, then
+    succeeded cleanly on retry with no source changes -- confirmed by compiling the affected file
+    in isolation (succeeded immediately) and by `ContentReader.hpp` being byte-identical between
+    `feature/opengl1` and `develop`. A transient incremental-build/dependency-scan glitch, not a
+    real defect in either this item's own changes or the pre-existing Xnb code; flagged here in
+    case it recurs, not fixed (out of scope).
+
+25. Add `RenderTarget2D` MSAA via `glRenderbufferStorageMultisample`/`glBlitFramebuffer` (core GL
+    3.0, or the older `EXT_framebuffer_multisample`/`EXT_framebuffer_blit` pair) -- the same
+    "driver from ~2005+ already has this" tier `RenderTarget2D`/mipmap-generation/item-24 above
+    already rely on. `GetMultiSampleCount()` currently hardcoded 0; `multiSampleCount` constructor
+    argument accepted but ignored.
 
 ## Bugs found while adding test coverage (2026-07-19)
 

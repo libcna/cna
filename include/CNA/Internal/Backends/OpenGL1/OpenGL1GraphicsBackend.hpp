@@ -111,6 +111,17 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  std::unique_ptr<ITextureBackend>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchBackend>CreateSpriteBatch()override;
  std::unique_ptr<IRenderTargetBackend>CreateRenderTarget2D(int,int,int,bool,bool,int)override;void SetRenderTarget2D(IRenderTargetBackend*)override;
  std::unique_ptr<ITextureCubeBackend>CreateTextureCube(int,bool,int)override;
+ // plan_opengl1.md item 24 (EasyGL parity): real cube-map render targets, combining the existing
+ // FBO (CreateRenderTarget2D) and cube-map (CreateTextureCube) machinery. Returns nullptr (the
+ // documented IGraphicsBackend contract) when either the FBO or cube-map capability is absent.
+ // multiSampleCount is accepted but ignored -- out of scope for this item (item 25 addresses
+ // RenderTarget2D MSAA specifically, not six separate cube-face resolve targets).
+ std::unique_ptr<IRenderTargetCubeBackend>CreateRenderTargetCube(int,int,bool,int)override;
+ // Unlike SetRenderTarget2D()'s default single-target tracking, a cube-face target needs its OWN
+ // tracked pointer+size (currentCubeRt_) so EffectiveWidth()/EffectiveHeight()/SetViewport()/
+ // SetScissorRect() report the ACTIVE face's real size, not the window's -- SetRenderTarget2D()
+ // and this override each clear the other's stale pointer when switching between the two kinds.
+ void SetRenderTargetCubeFace(IRenderTargetCubeBackend*,int)override;
  // plan_opengl1.md item 23 (EasyGL parity): real ARB_occlusion_query/core-1.5 occlusion queries --
  // returns nullptr (the documented IGraphicsBackend contract, matching CreateRenderTarget2D's own
  // capability-gated fallback) when the driver genuinely lacks it.
@@ -135,8 +146,11 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  // active, matching EasyGL's own getLogicalSize(). Every other mode keeps today's original
  // behavior (see ComputeLogicalSize()'s own doc comment for why that's a real, not merely
  // deferred, answer for Stretch/NativeBackBuffer specifically).
- int EffectiveWidth()const{if(currentRt_)return currentRt_->GetWidth();int w,h;ComputeLogicalSize(w,h);return w;}
- int EffectiveHeight()const{if(currentRt_)return currentRt_->GetHeight();int w,h;ComputeLogicalSize(w,h);return h;}
+ // plan_opengl1.md item 24: also checks currentCubeRt_ (a cube-face render target) before
+ // falling back to the window-relative logical size -- see SetRenderTargetCubeFace()'s own doc
+ // comment for why a cube-face target needs its own tracked pointer, separate from currentRt_.
+ int EffectiveWidth()const{if(currentRt_)return currentRt_->GetWidth();if(currentCubeRt_)return currentCubeRt_->GetSize();int w,h;ComputeLogicalSize(w,h);return w;}
+ int EffectiveHeight()const{if(currentRt_)return currentRt_->GetHeight();if(currentCubeRt_)return currentCubeRt_->GetSize();int w,h;ComputeLogicalSize(w,h);return h;}
  // plan_opengl1.md phase 8: context-loss resource recreation registry, independent of EasyGL's
  // own (::easygl::ResourceRegistry). SetContextRecoveryEnabled(false) stops future Create* calls
  // from registering (matches the documented IGraphicsBackend contract: "safe to call ... when no
@@ -177,6 +191,10 @@ private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawI
  struct GL1SamplerParams{int filter=0,addrU=0,addrV=0,maxAniso=4;};
  void ApplySamplerFilterAndWrap(int slot,bool hasMips);
  SDL_Window* window_=nullptr;SDL_GLContext glContext_=nullptr;int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;IRenderTargetBackend* currentRt_=nullptr;
+ // plan_opengl1.md item 24: currentCubeFace_ is only meaningful while currentCubeRt_ is
+ // non-null -- used to re-bind the correct face after a context loss, the same "rebind whatever
+ // was ACTIVE at loss time" fix phase 8 already established for currentRt_.
+ IRenderTargetCubeBackend* currentCubeRt_=nullptr;int currentCubeFace_=-1;
  OpenGL1ResourceRegistry registry_;bool contextRecoveryEnabled_=true;
  GL1SamplerParams samplerSlot_[2];
 };
