@@ -171,6 +171,11 @@ include(cmake/Tests/SdlGpuTests.cmake)
 # wrapper) rather than DX3's native-Linux shape, since DX1 genuinely needs real ddraw.h.
 include(cmake/Tests/Dx1Tests.cmake)
 
+# plan_dx2.md Phase O1/O2: DX2 (real DirectDraw v1 2D layer ported from DX1 + Direct3D v2
+# DrawPrimitive 3D layer, landing in a later phase) CTest registration, mirroring Dx1Tests.cmake's
+# own shape (Windows-only, MinGW cross-compile + Wine wrapper).
+include(cmake/Tests/Dx2Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

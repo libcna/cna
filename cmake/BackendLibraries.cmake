@@ -121,6 +121,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")
     # d3d11/dxgi. SDL3 is linked only for window/HWND access (design decision 3), same as every
     # other backend.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX2")
+    # plan_dx2.md design decision 10: same confirmed minimal link set as DX1 -- ddraw + dxguid +
+    # SDL3::SDL3. No separate Direct3D import library is needed: IDirect3D2/IDirect3DDevice2 are
+    # obtained purely via QueryInterface/CreateDevice on DirectDraw objects/surfaces (confirmed
+    # during the DX2-0 spike, see plan_dx2.md section 1).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

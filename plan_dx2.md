@@ -171,15 +171,21 @@ verified empirically, not assumed. Phase O1 is unblocked.
      environment has not been spiked for its own clipping robustness at extreme W values, so
      clipping before submission removes that as a risk entirely, matching why `Software` clips
      itself despite `Execute`'s hypothetical (unverified, and now known-fragile) internal clipper.
-   - Per clipped vertex: perspective-divide (`x/w, y/w, z/w`, matching `ClipVertexToRasterVertex`'s
-     math) then map to a `D3DTLVERTEX`: `sx = (ndcX*0.5+0.5) * viewportWidth`,
-     `sy = (1 - (ndcY*0.5+0.5)) * viewportHeight` (Y-flip, D3D screen-space convention — matches
-     `ClipVertexToRasterVertex`'s own viewport mapping), `sz = ndcZ` (already 0..1, XNA/D3D
-     convention, no remap — same comment `Software`'s own header carries), `rhw = 1/w`, `color`
-     packed as `D3DCOLOR` (`0xAARRGGBB` — **the exact bug found and fixed during the spike**, watch
-     for it again here), `tu`/`tv` copied through unmodified (already 0..1 UV space, no
-     perspective-divide needed on texcoords beyond what feeds into `RasterVertex.u/v` in `Software`
-     — mirror that exactly).
+   - Per clipped vertex: perspective-divide the *position* only (`ndcX=x/w, ndcY=y/w, ndcZ=z/w`,
+     matching `ClipVertexToRasterVertex`'s `x`/`y`/`depth` math) then map to a `D3DTLVERTEX`:
+     `sx = (ndcX*0.5+0.5) * viewportWidth`, `sy = (1 - (ndcY*0.5+0.5)) * viewportHeight` (Y-flip,
+     D3D screen-space convention — matches `ClipVertexToRasterVertex`'s own viewport mapping),
+     `sz = ndcZ` (already 0..1, XNA/D3D convention, no remap — same comment `Software`'s own header
+     carries), `rhw = 1/w`, `color` packed as `D3DCOLOR` (`0xAARRGGBB` — **the exact bug found and
+     fixed during the spike**, watch for it again here), `tu`/`tv` copied through unmodified.
+     **Deliberate divergence from `ClipVertexToRasterVertex`: do NOT premultiply `color`/`tu`/`tv`
+     by `invW`.** `Software`'s `RasterVertex` premultiplies those attributes by `invW` because
+     *it* performs its own perspective-correct barycentric interpolation in `RasterizeTriangle` and
+     needs to un-premultiply at the end. Real Direct3D's rasterizer already does perspective-correct
+     attribute interpolation internally using the vertex's own `rhw` field — feeding it
+     already-premultiplied color/UV would double-apply the correction and produce visibly wrong
+     (over-darkened near the viewer, over-brightened far away) shading. Pass `cv.r/g/b/a`/`cv.u/v`
+     straight through unmodified; only the position (`sx`/`sy`/`sz`) and `rhw` come from the divide.
    - Submit the resulting triangle(s) via `device2->DrawIndexedPrimitive(D3DPT_TRIANGLELIST,
      D3DVT_TLVERTEX, verts, count, indices, indexCount, 0)` (or `DrawPrimitive` for the
      non-indexed calls) inside a `BeginScene()`/`EndScene()` pair, `D3DEXECUTE_UNCLIPPED`-equivalent

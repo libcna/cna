@@ -49,6 +49,9 @@ namespace CNA
         /** @brief DX1 (real DirectDraw v1, no ../free-direct). */
         Dx1,
 
+        /** @brief DX2 (real DirectDraw v1 + Direct3D v2 DrawPrimitive, no execute buffers). */
+        Dx2,
+
         /** @brief SDL_GPU. */
         SdlGpu
     };
@@ -92,6 +95,8 @@ namespace CNA
         return GraphicsBackendType::D3D9;
 #elif defined(CNA_BACKEND_DX1)
         return GraphicsBackendType::Dx1;
+#elif defined(CNA_BACKEND_DX2)
+        return GraphicsBackendType::Dx2;
 #elif defined(CNA_BACKEND_SDL_GPU)
         return GraphicsBackendType::SdlGpu;
 #else
@@ -127,6 +132,7 @@ namespace CNA
             case GraphicsBackendType::Dx3:           return "DX3";
             case GraphicsBackendType::D3D9:          return "D3D9";
             case GraphicsBackendType::Dx1:            return "DX1";
+            case GraphicsBackendType::Dx2:            return "DX2";
             case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
         }
         return "UNKNOWN";
