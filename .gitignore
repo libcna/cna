@@ -32,6 +32,7 @@ cmake-build-devices-asan/*
 cmake-build-devices-tsan/*
 cmake-build-devices-ubsan/*
 cmake-build-net-asan/*
+cmake-build-media-asan/*
 cmake-build-windows/*
 cmake-build-tests/*
 cmake-build-ubsan/*

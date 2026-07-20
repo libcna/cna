@@ -302,3 +302,107 @@ TEST(AudioTagParserTest, UnratedFileReportsNoRatingRatherThanARatingOfZero)
     EXPECT_FALSE(tags.hasRating);
     EXPECT_EQ(tags.rating, 0);
 }
+
+// ---------------------------------------------------------------------------------------------
+// REMED-MEDIA-001: `pos + len > bound`-style bounds checks are vulnerable to unsigned integer
+// overflow on a 32-bit size_t target -- `pos + len` can wrap around and make the check pass for a
+// length that is actually out of bounds. AudioTagParser.cpp now uses an overflow-safe
+// `len > bound - pos` subtraction form throughout (matching XactParser.cpp's own
+// AUDIO-PARSER-001 hardening for the identical vulnerability class).
+//
+// No 32-bit toolchain is available in this sandbox to build and run a real 32-bit binary (no
+// gcc-multilib/g++-multilib/libc6-dev-i386 -- `g++ -m32` fails outright, unable to even find
+// crt objects), so this class of defect is verified two ways instead, per the task's own stated
+// "or a size_t-narrowing test harness" alternative:
+//
+//   1. `WouldOverflowOnNarrowSizeT`/`IsOverflowSafe` below mirror the pre-fix and post-fix
+//      formulas using uint32_t arithmetic -- the exact width and unsigned wraparound behavior a
+//      real 32-bit size_t has -- and directly demonstrate the wraparound class executing today,
+//      on this 64-bit host, without needing an actual 32-bit build.
+//   2. The crafted ID3v2.3/FLAC fixtures below use the exact attacker-controlled length values
+//      that reproduce the wraparound on a real 32-bit size_t; on this 64-bit sandbox they are
+//      simply rejected without ever wrapping (64-bit size_t has no trouble representing the sum),
+//      so they cannot be observed to fail pre-fix here -- but they are the concrete fixtures that
+//      would have driven a genuine OOB read on a 32-bit build, and must keep passing (rejecting
+//      cleanly) after the fix on every target width.
+namespace
+{
+    bool WouldOverflowOnNarrowSizeT(uint32_t pos, uint32_t len, uint32_t bound)
+    {
+        return pos + len > bound; // the pre-fix idiom -- wraps on a 32-bit size_t
+    }
+
+    bool IsOverflowSafe(uint32_t pos, uint32_t len, uint32_t bound)
+    {
+        return len > bound - pos; // AudioTagParser.cpp's own post-fix ExceedsBound() form
+    }
+}
+
+TEST(AudioTagParserTest, Id3v23FrameSizeOverflowIsCaughtOnANarrow32BitSizeT)
+{
+    // A 20-byte buffer; pos=20 is right after a frame's 10-byte header. `len` is chosen so that
+    // `pos + len` wraps a 32-bit size_t back down to 10 -- comfortably "within bounds" under the
+    // vulnerable formula, even though the requested length does not remotely fit.
+    constexpr uint32_t bound = 20;
+    constexpr uint32_t pos = 20;
+    constexpr uint32_t len = 0xFFFFFFF6u; // 2^32 - 10: pos + len wraps to 10 on a 32-bit size_t
+
+    EXPECT_FALSE(WouldOverflowOnNarrowSizeT(pos, len, bound))
+        << "sanity check: the pre-fix idiom must actually wrap and under-report for this "
+           "fixture, proving it reproduces the AUDIO-PARSER-001 vulnerability class";
+    EXPECT_TRUE(IsOverflowSafe(pos, len, bound))
+        << "the post-fix subtraction form must correctly detect this length as out of bounds";
+}
+
+TEST(AudioTagParserTest, FlacPictureBlockLengthOverflowIsCaughtOnANarrow32BitSizeT)
+{
+    // Same vulnerability class, applied to FLAC METADATA_BLOCK_PICTURE's own 32-bit
+    // mimeLen/descLen/dataLen fields.
+    constexpr uint32_t bound = 128;
+    constexpr uint32_t pos = 40;
+    constexpr uint32_t len = 0xFFFFFFE0u; // 2^32 - 32: pos + len wraps to 8 on a 32-bit size_t
+
+    EXPECT_FALSE(WouldOverflowOnNarrowSizeT(pos, len, bound));
+    EXPECT_TRUE(IsOverflowSafe(pos, len, bound));
+}
+
+// Crafted ID3v2.3 fixture: a single TIT2 frame whose 4-byte, non-synchsafe (v2.3) frameSize field
+// is 0xFFFFFFF6 (2^32 - 10) -- chosen so that, on a real 32-bit size_t, `pos + frameSize` wraps
+// back down to 10, which is <= the 20-byte tagEnd and would have let a ~4GB "frame size" through
+// into `DecodeId3TextFrame(&fileBytes[pos], frameSize)` against a real 20-byte buffer. Must be
+// rejected cleanly (no crash, no garbage title) on every target width.
+TEST(AudioTagParserTest, CraftedId3v23WrapInducingFrameSizeIsRejectedCleanly)
+{
+    std::vector<uint8_t> tag = {
+        'I', 'D', '3', 3, 0, 0,             // "ID3" + major version 3 (non-synchsafe frame sizes) + revision + flags
+        0x00, 0x00, 0x00, 0x14,             // tagSize, synchsafe = 20
+        'T', 'I', 'T', '2',                 // frameId
+        0xFF, 0xFF, 0xFF, 0xF6,             // frameSize, raw big-endian (v2.3) = 0xFFFFFFF6
+        0, 0,                                // frame flags
+    };
+    ASSERT_EQ(tag.size(), 20u);
+
+    AudioTags tags;
+    EXPECT_FALSE(AudioTagParser::TryReadId3v2(tag, tags));
+    EXPECT_TRUE(tags.title.empty());
+    EXPECT_FALSE(tags.fromRealTags);
+}
+
+// Crafted FLAC fixture: a VORBIS_COMMENT metadata block whose 4-byte vendorLen field (read via
+// ReadU32LE, so full 32-bit range) is 0xFFFFFFF6 -- the same wrap-inducing value, this time for
+// TryReadFlacComments's own `p + vendorLen > fileBytes.size()`-shaped check. Must be rejected
+// cleanly on every target width.
+TEST(AudioTagParserTest, CraftedFlacWrapInducingVendorLenIsRejectedCleanly)
+{
+    std::vector<uint8_t> data = {
+        'f', 'L', 'a', 'C',
+        0x84, 0x00, 0x00, 0x04,             // last-block=1, type=4 (VORBIS_COMMENT), blockLen=4
+        0xF6, 0xFF, 0xFF, 0xFF,             // vendorLen, little-endian = 0xFFFFFFF6
+    };
+    ASSERT_EQ(data.size(), 12u);
+
+    AudioTags tags;
+    EXPECT_FALSE(AudioTagParser::TryReadFlacComments(data, tags));
+    EXPECT_TRUE(tags.title.empty());
+    EXPECT_FALSE(tags.fromRealTags);
+}

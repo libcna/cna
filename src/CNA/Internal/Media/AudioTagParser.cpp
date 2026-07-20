@@ -60,6 +60,18 @@ namespace CNA::Internal::Media
             }
         }
 
+        // Overflow-safe replacement for the `pos + len > bound`-style bounds checks used
+        // throughout this file: on a 32-bit size_t target, `pos + len` can itself wrap around
+        // when `len` is an attacker-controlled length field read straight from the file, making
+        // the check pass for a length that is actually out of bounds. Subtracting instead of
+        // adding cannot overflow, given the invariant -- true at every call site below -- that
+        // `pos <= bound`. Matches XactParser.cpp's own AUDIO-PARSER-001 hardening for the
+        // identical vulnerability class.
+        bool ExceedsBound(std::size_t pos, std::size_t len, std::size_t bound)
+        {
+            return len > bound - pos;
+        }
+
         // ---------------------------------------------------------------------------------
         // Ogg page framing (plan_media.md MEDIA-47)
         // ---------------------------------------------------------------------------------
@@ -77,7 +89,7 @@ namespace CNA::Internal::Media
         {
             std::vector<OggPage> pages;
             std::size_t pos = 0;
-            while (pos + 27 <= data.size() && pages.size() < maxPages)
+            while (!ExceedsBound(pos, 27, data.size()) && pages.size() < maxPages)
             {
                 if (std::memcmp(&data[pos], "OggS", 4) != 0)
                 {
@@ -85,7 +97,7 @@ namespace CNA::Internal::Media
                 }
                 uint8_t segCount = data[pos + 26];
                 std::size_t segTableStart = pos + 27;
-                if (segTableStart + segCount > data.size())
+                if (ExceedsBound(segTableStart, segCount, data.size()))
                 {
                     break;
                 }
@@ -95,7 +107,7 @@ namespace CNA::Internal::Media
                     payloadSize += data[segTableStart + i];
                 }
                 std::size_t payloadStart = segTableStart + segCount;
-                if (payloadStart + payloadSize > data.size())
+                if (ExceedsBound(payloadStart, payloadSize, data.size()))
                 {
                     break;
                 }
@@ -285,13 +297,13 @@ namespace CNA::Internal::Media
         }
 
         std::size_t pos = static_cast<std::size_t>(it - concatenated.begin()) + 7;
-        if (pos + 4 > concatenated.size()) return false;
+        if (ExceedsBound(pos, 4, concatenated.size())) return false;
         uint32_t vendorLen = ReadU32LE(&concatenated[pos]);
         pos += 4;
-        if (pos + vendorLen > concatenated.size()) return false;
+        if (ExceedsBound(pos, vendorLen, concatenated.size())) return false;
         pos += vendorLen;
 
-        if (pos + 4 > concatenated.size()) return false;
+        if (ExceedsBound(pos, 4, concatenated.size())) return false;
         uint32_t commentCount = ReadU32LE(&concatenated[pos]);
         pos += 4;
 
@@ -311,10 +323,10 @@ namespace CNA::Internal::Media
         bool any = false;
         for (uint32_t i = 0; i < commentCount; ++i)
         {
-            if (pos + 4 > data.size()) break;
+            if (ExceedsBound(pos, 4, data.size())) break;
             uint32_t len = ReadU32LE(&data[pos]);
             pos += 4;
-            if (pos + len > data.size()) break;
+            if (ExceedsBound(pos, len, data.size())) break;
 
             std::string comment(reinterpret_cast<const char*>(&data[pos]), len);
             pos += len;
@@ -362,13 +374,13 @@ namespace CNA::Internal::Media
         }
 
         std::size_t pos = static_cast<std::size_t>(it - concatenated.begin()) + 8;
-        if (pos + 4 > concatenated.size()) return false;
+        if (ExceedsBound(pos, 4, concatenated.size())) return false;
         uint32_t vendorLen = ReadU32LE(&concatenated[pos]);
         pos += 4;
-        if (pos + vendorLen > concatenated.size()) return false;
+        if (ExceedsBound(pos, vendorLen, concatenated.size())) return false;
         pos += vendorLen;
 
-        if (pos + 4 > concatenated.size()) return false;
+        if (ExceedsBound(pos, 4, concatenated.size())) return false;
         uint32_t commentCount = ReadU32LE(&concatenated[pos]);
         pos += 4;
 
@@ -387,7 +399,7 @@ namespace CNA::Internal::Media
         }
 
         std::size_t pos = 4;
-        while (pos + 4 <= fileBytes.size())
+        while (!ExceedsBound(pos, 4, fileBytes.size()))
         {
             const uint8_t header = fileBytes[pos];
             const bool isLast = (header & 0x80) != 0;
@@ -396,18 +408,18 @@ namespace CNA::Internal::Media
                                        (static_cast<uint32_t>(fileBytes[pos + 2]) << 8) |
                                         static_cast<uint32_t>(fileBytes[pos + 3]);
             pos += 4;
-            if (pos + blockLen > fileBytes.size()) return false; // truncated/hostile file
+            if (ExceedsBound(pos, blockLen, fileBytes.size())) return false; // truncated/hostile file
 
             if (blockType == 4) // VORBIS_COMMENT
             {
                 std::size_t p = pos;
-                if (p + 4 > fileBytes.size()) return false;
+                if (ExceedsBound(p, 4, fileBytes.size())) return false;
                 uint32_t vendorLen = ReadU32LE(&fileBytes[p]);
                 p += 4;
-                if (p + vendorLen > fileBytes.size()) return false;
+                if (ExceedsBound(p, vendorLen, fileBytes.size())) return false;
                 p += vendorLen;
 
-                if (p + 4 > fileBytes.size()) return false;
+                if (ExceedsBound(p, 4, fileBytes.size())) return false;
                 uint32_t commentCount = ReadU32LE(&fileBytes[p]);
                 p += 4;
 
@@ -438,7 +450,7 @@ namespace CNA::Internal::Media
         std::size_t pos = 10;
         bool any = false;
 
-        while (pos + 10 <= tagEnd)
+        while (!ExceedsBound(pos, 10, tagEnd))
         {
             if (fileBytes[pos] == 0)
             {
@@ -465,7 +477,7 @@ namespace CNA::Internal::Media
             }
             pos += 10; // frame header: id[4] + size[4] + flags[2]
 
-            if (frameSize == 0 || pos + frameSize > tagEnd)
+            if (frameSize == 0 || ExceedsBound(pos, frameSize, tagEnd))
             {
                 break; // malformed -- stop gracefully rather than reading out of bounds
             }
@@ -577,7 +589,7 @@ namespace CNA::Internal::Media
             uint32_t p = 1;
 
             while (p < size && body[p] != 0) ++p;   // MIME
-            if (p + 2 >= size) return false;
+            if (size - p <= 2) return false; // overflow-safe: p <= size is already established
             ++p;                                     // MIME terminator
             pictureType = body[p];
             ++p;
@@ -620,7 +632,7 @@ namespace CNA::Internal::Media
             const std::size_t tagEnd = std::min(bytes.size(), static_cast<std::size_t>(10) + tagSize);
 
             std::size_t pos = 10;
-            while (pos + 10 <= tagEnd)
+            while (!ExceedsBound(pos, 10, tagEnd))
             {
                 if (bytes[pos] == 0) break; // padding
                 const std::string frameId(reinterpret_cast<const char*>(&bytes[pos]), 4);
@@ -641,7 +653,7 @@ namespace CNA::Internal::Media
                                   static_cast<uint32_t>(bytes[pos + 7]);
                 }
                 pos += 10;
-                if (frameSize == 0 || pos + frameSize > tagEnd) break; // truncated/hostile
+                if (frameSize == 0 || ExceedsBound(pos, frameSize, tagEnd)) break; // truncated/hostile
 
                 if (frameId == "APIC")
                 {
@@ -660,7 +672,7 @@ namespace CNA::Internal::Media
         else if (std::memcmp(bytes.data(), "fLaC", 4) == 0)
         {
             std::size_t pos = 4;
-            while (pos + 4 <= bytes.size())
+            while (!ExceedsBound(pos, 4, bytes.size()))
             {
                 const uint8_t header = bytes[pos];
                 const bool isLast = (header & 0x80) != 0;
@@ -669,7 +681,7 @@ namespace CNA::Internal::Media
                                            (static_cast<uint32_t>(bytes[pos + 2]) << 8) |
                                             static_cast<uint32_t>(bytes[pos + 3]);
                 pos += 4;
-                if (pos + blockLen > bytes.size()) break;
+                if (ExceedsBound(pos, blockLen, bytes.size())) break;
 
                 if (blockType == 6 && blockLen >= 32)
                 {
@@ -683,15 +695,17 @@ namespace CNA::Internal::Media
                     std::size_t p = pos;
                     const uint32_t pictureType = be32(p); p += 4;
                     const uint32_t mimeLen = be32(p);     p += 4;
-                    if (p + mimeLen + 4 > bytes.size()) break;
+                    if (ExceedsBound(p, mimeLen, bytes.size())) break;
+                    if (ExceedsBound(p + mimeLen, 4, bytes.size())) break;
                     p += mimeLen;
                     const uint32_t descLen = be32(p);     p += 4;
-                    if (p + descLen + 20 > bytes.size()) break;
+                    if (ExceedsBound(p, descLen, bytes.size())) break;
+                    if (ExceedsBound(p + descLen, 20, bytes.size())) break;
                     p += descLen;
                     p += 16; // width, height, depth, colour count
-                    if (p + 4 > bytes.size()) break;
+                    if (ExceedsBound(p, 4, bytes.size())) break;
                     const uint32_t dataLen = be32(p);     p += 4;
-                    if (p + dataLen > bytes.size()) break;
+                    if (ExceedsBound(p, dataLen, bytes.size())) break;
 
                     std::vector<uint8_t> image(bytes.begin() + static_cast<std::ptrdiff_t>(p),
                                                 bytes.begin() + static_cast<std::ptrdiff_t>(p + dataLen));

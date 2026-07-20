@@ -35,11 +35,11 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 8 | 0 | 0 | 3 |
+| P0 | 11 | 9 | 0 | 0 | 2 |
 | P1 | 21 | 1 | 0 | 0 | 20 |
 | P2 | 44 | 3 | 0 | 1 | 40 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **12** | **0** | **1** | **91** |
+| **Total** | **104** | **13** | **0** | **1** | **90** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -87,7 +87,7 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 | REMED-NET-001 | DONE | | feature/audit | Landed atomically with NET-003, same file/change — see detail below. |
 | REMED-NET-003 | DONE | | feature/audit | Landed atomically with NET-001, same file/change — see detail below. |
 | REMED-DEVICES-001 | DONE | | feature/audit | `shared_ptr` used, not a mutex held across the UI-blocking call — see detail below. |
-| REMED-MEDIA-001 | NOT STARTED | | | VERIFY on a 32-bit build first. |
+| REMED-MEDIA-001 | DONE | | feature/audit | No 32-bit toolchain available in this sandbox — used the plan's own "size_t-narrowing test harness" alternative instead — see detail below. |
 
 ### REMED-CONTENT-003 detail — TextureCube byte-count validation
 
@@ -565,6 +565,111 @@ build dir had `CNA_DEVICES` on before this task):**
 call through it, in both files — proven both by the ASan reproduction-then-fix above and by the TSan-clean
 stress run.
 **Verification criteria met:** TSan/ASan runs of the new concurrent tests are clean.
+
+### REMED-MEDIA-001 detail — `AudioTagParser` 32-bit `size_t` integer-overflow bounds checks
+
+**Root cause confirmed exactly as described:** every length check in
+`src/CNA/Internal/Media/AudioTagParser.cpp` used the `pos + len > bound`-style idiom — audited the
+*entire* file, not only the two sites the audit named (ID3v2.3 frame size, FLAC picture block),
+per the task's own "audit every length check in the file" instruction. Found and fixed **24**
+such sites across every reader in the file: `ReadOggPages` (Ogg page framing, 3 sites),
+`TryReadVorbisComments`/`TryReadOpusTags` (vendor string + comment count, 3 sites each),
+`ParseVorbisCommentList` (shared by Vorbis/Opus/FLAC, 2 sites), `TryReadFlacComments` (block
+length + vendor string + comment count, 5 sites), `TryReadId3v2` (the cited frame-size check, 2
+sites incl. the outer frame-header loop bound), `ExtractEmbeddedArt`'s own duplicated ID3v2 frame
+loop (2 sites) and FLAC `METADATA_BLOCK_PICTURE` walk (6 sites: block length, mimeLen, descLen,
+dataLen), and `ParseApicBody`'s MIME-terminator check (1 site, fixed-literal `p+2>=size`, not a
+variable-length overflow risk but converted for consistency). On a 32-bit `size_t` target, `pos +
+len` (where `len` is a full-range `uint32_t` read straight from the file — e.g. ID3v2.3's frame
+size is NOT synchsafe, a real 4-byte big-endian value up to ~4.29 billion) can wrap around and make
+the check incorrectly pass, letting a claimed length far larger than the real buffer through into a
+downstream read.
+
+**Changes (`src/CNA/Internal/Media/AudioTagParser.cpp` only):** added one helper,
+`ExceedsBound(pos, len, bound) { return len > bound - pos; }`, in the file's existing anonymous
+namespace (shared by both of the file's two `namespace CNA::Internal::Media { namespace { ... } }`
+blocks, since unnamed namespaces in one translation unit are the same namespace) — a direct port
+of `XactParser.cpp`'s own `AUDIO-PARSER-001` hardening pattern (validate via subtraction, which
+cannot overflow given the invariant `pos <= bound` that holds at every call site, instead of
+addition, which can). Replaced all 24 `pos + len > bound`/`pos + len <= bound` sites with
+`ExceedsBound(pos, len, bound)`/`!ExceedsBound(pos, len, bound)`. Two sites combined two untrusted
+quantities in one comparison (`p + mimeLen + 4 > bytes.size()`, `p + descLen + 20 > bytes.size()`
+in the FLAC picture-block reader) — each was split into two sequential `ExceedsBound` checks so
+that no single expression ever adds two attacker-controlled values before a check has bounded the
+first one. The one fixed-literal `p + 2 >= size` check in `ParseApicBody` was rewritten directly as
+`size - p <= 2` (no helper needed — `p <= size` is already an established invariant there).
+
+**Open-decision resolution (verification approach):** the task's own field says `Verification
+required: YES — reproduce on a 32-bit build before fixing`, with an explicit fallback: `"Add a
+32-bit build configuration (or a size_t-narrowing test harness) to CI"`. Checked for a 32-bit
+toolchain first, as required: `g++ -m32` fails outright in this sandbox (`cannot find Scrt1.o` /
+`cannot find crti.o` / `cannot find -lstdc++` — no `gcc-multilib`/`g++-multilib`/`libc6-dev-i386`
+installed, and this environment has no package-install access). This is a genuine environment
+constraint, not a scope choice — matching the precedent already set by `REMED-BUILD-008`'s
+Wine/vkd3d-proton blocker. **Decision: use the plan's own explicitly-offered alternative — a
+size_t-narrowing test harness — rather than leaving the defect unverified.** Two new tests
+(`Id3v23FrameSizeOverflowIsCaughtOnANarrow32BitSizeT`,
+`FlacPictureBlockLengthOverflowIsCaughtOnANarrow32BitSizeT`) mirror the pre-fix (`pos + len >
+bound`) and post-fix (`len > bound - pos`) formulas using `uint32_t` arithmetic — the exact width
+and unsigned-wraparound behavior a real 32-bit `size_t` has — with crafted `pos`/`len`/`bound`
+triples chosen so `pos + len` wraps back down to a small in-bounds-looking value. These **actually
+execute and demonstrate the vulnerability class today**, on this 64-bit sandbox, which is strictly
+more verification value than reasoning about the shape alone. Real 32-bit CI coverage
+(`REMED-BUILD-001`'s own dependency note lists `AudioTagParserTest` among the tests it unblocks)
+remains a `BUILD_TEST_CI`-lane action item, out of this MEDIA-lane task's scope — not implemented
+here, consistent with the "no root cause/action item picked up outside its owning lane" rule.
+
+**Tests added** (`tests/CNA/Internal/Media/AudioTagParserTests.cpp`, 4 new `TEST()`s):
+- `Id3v23FrameSizeOverflowIsCaughtOnANarrow32BitSizeT` / `FlacPictureBlockLengthOverflowIsCaughtOnANarrow32BitSizeT`
+  — the size_t-narrowing harness tests described above.
+- `CraftedId3v23WrapInducingFrameSizeIsRejectedCleanly` — a hand-built ID3v2.3 tag (matching the
+  task's own "Crafted ID3v2.3 ... fixtures" requirement) with a single `TIT2` frame whose raw
+  (non-synchsafe) `frameSize` is `0xFFFFFFF6` (2^32 − 10), chosen so `pos + frameSize` wraps to 10
+  on a real 32-bit `size_t` — comfortably inside the 20-byte `tagEnd`, which would have let a ~4GB
+  claimed frame size through into `DecodeId3TextFrame()` against a real 20-byte buffer pre-fix.
+  Asserted via `TryReadId3v2()` directly: rejected cleanly, `title` stays empty, `fromRealTags`
+  stays false. On this 64-bit sandbox `size_t` doesn't wrap for this magnitude, so the check
+  already correctly rejects it before *and* after the fix here — the test's value is as the
+  literal crafted fixture that must keep being rejected on every target width, not as a
+  before/after differential on this host (that's what the harness tests above are for).
+- `CraftedFlacWrapInducingVendorLenIsRejectedCleanly` — same technique for
+  `TryReadFlacComments()`'s `vendorLen` field (`0xFFFFFFF6`, little-endian).
+
+**Verification:**
+- `AudioTagParserTest.*` direct-binary run (EASYGL, `cmake-build-debug`, run from the repo root so
+  the existing fixture-file tests can resolve their relative paths): **26/26 passed** (22
+  pre-existing + 4 new), 0 regressions.
+- Broader Media filter (`*Media*:*Song*:*Video*:*Playlist*`): **243/243 passed**, including
+  `MediaLibraryTestFixture.*`/`PictureLibraryIndexTest.*` — no interaction with `REMED-MEDIA-002`'s
+  separate, not-in-scope SEGFAULT finding observed.
+- Full `CnaTests` direct-binary run (EASYGL, `cmake-build-debug`, `CNA_DEVICES=OFF`): **5562
+  tests, 5555 passed, 4 skipped (Accelerometer/Gyroscope hardware skips, pre-existing), 3 failed**
+  — the same 3 already-documented pre-existing failures (`TwoProcessLoopbackTest.
+  HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`, network-port flake;
+  `GameTest.DisposingDeviceInvokesUnloadContent` and `GraphicsDeviceManagerTest.
+  BackendDetectedDeviceLostIsForwardedToManagerListeners`, both intentional per `REMED-TEST-002`'s
+  own detail above). **Zero unexpected regressions.**
+- Repo-wide sweep confirming completeness: `grep -n "> .*\.size()\|>= .*\.size()\|<= .*\.size()\|>
+  tagEnd\|>= tagEnd\|<= tagEnd" src/CNA/Internal/Media/AudioTagParser.cpp` after the fix returns
+  only the `ExceedsBound` helper's own doc comment — no remaining raw addition-based bound
+  comparison anywhere in the file.
+- **Sanitizers:** new scoped build dir `cmake-build-media-asan/` (HEADLESS backend, matching
+  `cmake-build-net-asan/`'s own established recipe: `-fsanitize=address,undefined
+  -fno-omit-frame-pointer -g -O1`), added to `.gitignore` matching the existing per-subsystem
+  convention. `ASAN_OPTIONS=detect_leaks=0` (same rationale as `REMED-NET-001`'s own detail above —
+  this project has no CMake-wired sanitizer build at all outside these ad hoc ones, so a repo-wide
+  pre-existing leak pattern would otherwise swamp this task's own signal; not relevant to an
+  OOB-read/UB check). `AudioTagParserTest.*`: **26/26 passed, 0 ASan/UBSan reports.** Broader Media
+  filter (`*Media*:*Song*:*Video*:*Playlist*`): **243/243 passed, 0 ASan/UBSan reports.**
+
+**Completion criteria met:** every length check in the file (24 sites, not just the 2 the audit
+named) uses the overflow-safe subtraction form.
+**Verification criteria met, via the plan's own stated alternative:** the size_t-narrowing harness
+directly demonstrates the pre-fix formula wrapping and the post-fix formula correctly rejecting the
+same crafted input; ASan reports no OOB for the crafted fixtures (see sanitizer result above); a
+real 32-bit ASan run was not possible in this sandbox (no 32-bit toolchain), recorded here rather
+than silently skipped, matching the project's established precedent for documenting genuine
+environment constraints (`REMED-BUILD-008`).
 
 ## Wave 1 (parallel) — unblockers
 
