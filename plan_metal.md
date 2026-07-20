@@ -1761,6 +1761,50 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     12/13's GPU readback work) — a reasoned, not just hopeful, basis for expecting this to work,
     though genuinely unconfirmed until the next CI run reports back.
 
+68. **Real eighteenth CI signal — a genuine, significant, previously-undiscovered rendering bug:
+    `drawMetal3D` silently ignored `GpuDrawParams::vertexStart`/`startIndex`/`baseVertex`, always
+    hardcoding a zero offset**: the new `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden`
+    tests (item 67) both compiled and ran — the build itself stayed green — but both failed their
+    pixel checks, with clearly abnormal readings: some sample points read back as `(0,255,0,255)`
+    (this test's own literal `Clear` color, meaning nothing was ever drawn there) and others as
+    `(0,0,0,0)`, neither of which looks like a subtle BRDF math discrepancy. Before assuming a shader
+    bug, traced the actual draw call chain: this test issues 4 separate `DrawPrimitives` calls
+    against **one shared `VertexBuffer`** at four different vertex offsets (0/6/12/18), reconfiguring
+    `PbrEffect`'s texture/material properties between each — exactly the "multiple draws from
+    nonzero offsets in one shared buffer" shape no Metal test had ever exercised before today.
+    `GraphicsDevice::DrawPrimitives()` threads its `vertexStart` argument through as
+    `GpuDrawParams::vertexStart` (confirmed by reading `GraphicsDevice.cpp` directly), and grepped
+    every other backend's own draw dispatch for how they consume it:
+    `EasyGLGraphicsBackend.cpp`/`VulkanGraphicsBackend.cpp`/`BgfxGraphicsBackend.cpp`/
+    `SdlGpuGraphicsBackend.cpp`/`WebGPUGraphicsBackend.cpp` all read `params.vertexStart` (and, for
+    indexed draws, `params.startIndex`/`params.baseVertex`) and apply it as a real byte/index offset
+    or native draw-call argument — `MetalGraphicsBackend.mm` was the **only** backend of the six that
+    never read any of the three fields at all, hardcoding `vertexStart:0` (non-indexed path) and
+    `indexBufferOffset:0` with no base-vertex support whatsoever (indexed path). This means any
+    `GraphicsDevice.DrawPrimitives`/`DrawIndexedPrimitives` call with a nonzero start offset has been
+    silently rendering the wrong vertex range on Metal since the backend's very first draw-dispatch
+    code was written — undetected until today because nothing had ever exercised a nonzero offset on
+    Metal before this exact test.
+    Fixed both paths in `drawMetal3D`: the non-indexed branch now passes `params ?
+    params->vertexStart : 0` as Metal's own `drawPrimitives:vertexStart:vertexCount:` argument; the
+    indexed branch switched from the simple 5-argument `drawIndexedPrimitives:...:indexBufferOffset:`
+    overload to the full 8-argument Metal API overload
+    (`...:instanceCount:baseVertex:baseInstance:`), passing `params->startIndex` (converted to a byte
+    offset via the index buffer's own 2-or-4-byte element size, mirroring exactly how
+    `EasyGLGraphicsBackend.cpp` computes its own equivalent byte offset) and `params->baseVertex`
+    directly, with `instanceCount:1`/`baseInstance:0` for the non-instanced case. Confirmed the
+    Metal API's own real signature for this overload (Apple's documented
+    `MTLRenderCommandEncoder` 8-parameter `drawIndexedPrimitives` method) before writing the call,
+    rather than guessing. Cannot be build-verified from this Linux sandbox (`.mm`, Apple Clang/Metal
+    frameworks only) — brace/bracket balance re-checked across the whole file (324/324, 762/762,
+    unchanged from before this edit) as the only sanity check available here. This is a real,
+    substantive correctness fix, not CI plumbing — the next CI run is the actual test of whether it
+    resolves `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden`, and, more importantly, of
+    whether any *other* currently-passing Metal test was silently relying on this same always-zero
+    behavior in a way that a nonzero-offset fix could now change. Eighteenth real, observed CI
+    signal, and the most significant correctness bug found by this session's testing (as opposed to
+    its CI-infrastructure) work.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

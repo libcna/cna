@@ -2287,7 +2287,25 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
             }
         }
     }
-    int n=primitiveVertexCount(pt,pc); if(ib)[p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16 indexBuffer:ib->native() indexBufferOffset:0];else[p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:0 vertexCount:n];
+    int n=primitiveVertexCount(pt,pc);
+    // plan_metal.md: real bug found and fixed 2026-07-20 -- every other backend (EasyGL/Vulkan/
+    // Bgfx/SdlGpu/WebGPU) reads GpuDrawParams::vertexStart/startIndex/baseVertex and applies them;
+    // this function silently hardcoded 0/0 for all three, so any draw with a nonzero offset into a
+    // shared vertex/index buffer rendered the wrong vertex range. Never caught until
+    // Metal_PbrEffect_Golden/Metal_SkinnedPbrEffect_Golden (METAL-89) became the first Metal test
+    // to ever exercise multiple draws from nonzero offsets within one shared buffer.
+    if(ib){
+        const NSUInteger startIndex=static_cast<NSUInteger>(params?params->startIndex:0);
+        const NSInteger baseVertex=static_cast<NSInteger>(params?params->baseVertex:0);
+        const NSUInteger indexSize=ib->IsThirtyTwoBit()?4:2;
+        [p.encoder drawIndexedPrimitives:metalPrimitive(pt) indexCount:n
+            indexType:ib->IsThirtyTwoBit()?MTLIndexTypeUInt32:MTLIndexTypeUInt16
+            indexBuffer:ib->native() indexBufferOffset:startIndex*indexSize
+            instanceCount:1 baseVertex:baseVertex baseInstance:0];
+    } else {
+        const NSUInteger vertexStart=static_cast<NSUInteger>(params?params->vertexStart:0);
+        [p.encoder drawPrimitives:metalPrimitive(pt) vertexStart:vertexStart vertexCount:n];
+    }
 }
 void MetalGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);if(!vb)throw std::runtime_error("Metal: foreign vertex buffer");drawMetal3D(*impl_,*vb,nullptr,w,vi,p,pt,pc,nullptr);}
 void MetalGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&v,const IIndexBufferBackend&i,const Matrix&w,const Matrix&vi,const Matrix&p,PrimitiveType pt,int pc){auto*vb=dynamic_cast<const MetalVertexBuffer*>(&v);auto*ib=dynamic_cast<const MetalIndexBuffer*>(&i);if(!vb||!ib)throw std::runtime_error("Metal: foreign buffer");drawMetal3D(*impl_,*vb,ib,w,vi,p,pt,pc,nullptr);}
