@@ -974,6 +974,17 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     for the first time — whether it actually fires without a code path to intentionally trip it is
     unverified from this Linux sandbox, so it's reported as "added" rather than "confirmed working."
 
+39. **`METAL-222`/`223` (SDL display-driver audit) answered**: `cmake/Tests/MetalTests.cmake`'s
+    `Metal_Smoke` registration sets no `SDL_VIDEODRIVER`/`DISPLAY` `ENVIRONMENT` override at all,
+    unlike `Dx3Tests.cmake`'s `SDL_VIDEODRIVER=dummy` on every one of its entries. Confirmed this is
+    correct, not an oversight: `plan_dx3.md`'s own hard-won mistake (issue #1) was the *opposite*
+    direction — wrongly requiring a real display/`x11` where a dummy driver would have worked fine.
+    Metal fundamentally needs a real `CAMetalLayer` bound to a real window and cannot use a dummy
+    driver at all (unlike DX3's 2D-only `IDirectDrawSurface` path), so relying on the CI runner's
+    own real display session (GitHub's documented `macos-14` runner capability) is the right choice
+    already in place, not a gap to fix. Both stay 🟨 rather than ✅ since this reasoning is checked
+    from source/documentation, not confirmed against actual observed CI behavior.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1622,8 +1633,8 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 |---|---|---|
 | METAL-220 | Extend `cmake/Tests/MetalTests.cmake` from its current single `Metal_Smoke` registration to every `Metal_*` CTest named throughout this plan, one `cna_register_backend_test()` call per executable, as each phase's implementation actually lands | ⬜ |
 | METAL-221 | Shared Metal test fixture/helper (extends `PixelTestGame.hpp`, already used by `metal_smoke_test.cpp`) with common probe-pixel/readback assertions once Phase 12 lands | ⬜ |
-| METAL-222 | Audit `SDL_VIDEODRIVER`/`DISPLAY` requirements for every new Metal test — get this right from the start rather than repeating `plan_dx3.md`'s own hard-won issue #1 mistake (hardcoded `x11`/real display when a dummy driver would have worked) | ⬜ |
-| METAL-223 | Confirm the real macOS CI runner's display capabilities (GitHub-hosted macOS runners provide a real virtual display, unlike this project's Linux Xvfb sandbox) rather than assuming Linux-style constraints apply | ⬜ |
+| METAL-222 | Audit `SDL_VIDEODRIVER`/`DISPLAY` requirements for every new Metal test — get this right from the start rather than repeating `plan_dx3.md`'s own hard-won issue #1 mistake (hardcoded `x11`/real display when a dummy driver would have worked) | 🟨 audited 2026-07-20: `cmake/Tests/MetalTests.cmake`'s `Metal_Smoke` registration sets no `ENVIRONMENT` override at all (unlike `Dx3Tests.cmake`'s `SDL_VIDEODRIVER=dummy` on every entry) — correct, not an oversight, since `plan_dx3.md`'s mistake was the *opposite* direction (wrongly requiring a real display where a dummy one would work); Metal fundamentally needs a real `CAMetalLayer`/window and cannot use a dummy driver at all, so relying on the CI runner's own real display is the right choice, not something to fix. Stays 🟨, not ✅, since this reasoning is unverified against actual CI behavior |
+| METAL-223 | Confirm the real macOS CI runner's display capabilities (GitHub-hosted macOS runners provide a real virtual display, unlike this project's Linux Xvfb sandbox) rather than assuming Linux-style constraints apply | 🟨 confirmed by the same reasoning as `METAL-222` — GitHub's `macos-14` runners provide a real display session (documented runner capability), which is exactly what `Metal_Smoke`'s no-override registration already assumes and needs |
 | METAL-224 | Confirm whether the `WEBGPU-123`-style cross-backend pixel-parity harness (still open even for WebGPU) can extend to Metal once broad enough — folds into Phase 28 | ⬜ |
 | METAL-225 | Add Metal to whatever full-`CnaTests`-suite regression-count tracking this project already performs per-backend once it has enough tests to matter | ⬜ |
 | METAL-226 | Explicit "N/A, verified" note: a `ThrowNo3D`-style audit (DX3's own Phase X7) does not apply to Metal — it is a 3D-only backend, unlike DX3/SDL_Renderer/Canvas | ⬜ |
