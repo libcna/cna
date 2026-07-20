@@ -258,6 +258,11 @@ namespace CNA::Internal::Backends
         }
         /// Binds this cube map to the currently active GL texture unit. No-op on non-GL backends.
         virtual void BindGL() const {}
+        /// Shares a reference to the CPU pixel buffer owned by TextureCube::cpuPixels_[face] for
+        /// one cube face's level 0. Mirrors ITextureBackend::ShareCpuPixels()'s own purpose
+        /// exactly (OpenGL-style backend context-loss restoration) -- default no-op; only OPENGL1
+        /// currently implements it.
+        virtual void ShareCpuPixels(int /*face*/, std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
     };
 
     /** @brief Backend interface for a 3D (volume) texture. */

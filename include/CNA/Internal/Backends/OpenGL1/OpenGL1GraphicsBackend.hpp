@@ -51,12 +51,25 @@ private:void RegenerateMips(const uint8_t*level0);
  unsigned int id_=0;int width_=0,height_=0;OpenGL1ResourceRegistry* registry_=nullptr;std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
  bool mipMap_=false;bool hasMips_=false;bool generateMipmapCap_=false;
 };
-class OpenGL1TextureCubeBackend final : public ITextureCubeBackend {
-public: OpenGL1TextureCubeBackend(int size,bool mipMap,int surfaceFormat); ~OpenGL1TextureCubeBackend() override;
+// plan_opengl1.md phase 8 follow-up: implements IOpenGL1Recoverable so TextureCube content
+// survives a simulated/real GL context loss the same way OpenGL1TextureBackend does --
+// ShareCpuPixels(face,...) retains the SAME shared_ptr<vector<uint8_t>> TextureCube itself keeps
+// per face (no duplicate copy). Closes the gap plan_opengl1.md previously documented as
+// intentional (ITextureCubeBackend had no ShareCpuPixels()-equivalent hook -- now added to the
+// shared IGraphicsBackend.hpp interface with a default no-op, so every other backend stays
+// source-compatible unchanged).
+class OpenGL1TextureCubeBackend final : public ITextureCubeBackend, public IOpenGL1Recoverable {
+public: OpenGL1TextureCubeBackend(int size,bool mipMap,int surfaceFormat,OpenGL1ResourceRegistry*registry,bool generateMipmapCap); ~OpenGL1TextureCubeBackend() override;
  void SetData(int face,int level,int x,int y,int w,int h,const void*data,int dataLength) override;
  void GetData(int face,int level,int x,int y,int w,int h,void*data,int dataLength) const override;
  void BindGL()const override;
-private:unsigned int id_=0;int size_=0;
+ void ShareCpuPixels(int face,std::shared_ptr<std::vector<uint8_t>> pixels) override{if(face>=0&&face<6)cpuPixels_[face]=std::move(pixels);}
+ void ReleaseGLHandleOnly() override{id_=0;}
+ void RecreateGLResource() override;
+private:void Build();void RegenerateMips();
+ unsigned int id_=0;int size_=0;bool mipMap_=false;bool generateMipmapCap_=false;
+ OpenGL1ResourceRegistry* registry_=nullptr;
+ std::shared_ptr<std::vector<uint8_t>> cpuPixels_[6];
 };
 class OpenGL1SpriteBatchBackend final : public ISpriteBatchBackend {
 public: explicit OpenGL1SpriteBatchBackend(class OpenGL1GraphicsBackend& o):owner_(o){}

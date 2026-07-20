@@ -6,8 +6,11 @@
 // DebugSimulateContextLoss()/DebugRestoreContext() semantics, see IGraphicsBackend.hpp's own doc
 // comment), then walks an OPENGL1-private OpenGL1ResourceRegistry (no dependency on EasyGL's own
 // ::easygl::ResourceRegistry) to rebuild every tracked GPU resource:
-//   - Texture2D: re-uploaded from the SAME CPU-side pixel buffer Texture2D itself keeps and
-//     shares with the backend via ITextureBackend::ShareCpuPixels() -- content survives exactly.
+//   - Texture2D/TextureCube: re-uploaded from the SAME CPU-side pixel buffer(s) Texture2D/
+//     TextureCube themselves keep and share with the backend via ITextureBackend::
+//     ShareCpuPixels()/ITextureCubeBackend::ShareCpuPixels(face,...) -- content survives exactly.
+//     TextureCube's own CPU shadow (and the ShareCpuPixels(face,...) hook itself) were added
+//     specifically to close this backend's own previously-documented, intentional gap.
 //   - RenderTarget2D: rebuilt as an empty FBO/color-texture/depth-renderbuffer of the same
 //     size/format -- content does NOT survive (a render target's content is GPU-produced, XNA/FNA
 //     RenderTarget2D itself does not guarantee content survives a real device reset either unless
@@ -27,9 +30,12 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -97,6 +103,44 @@ protected:
                     after.getRProperty(), after.getGProperty(), after.getBProperty());
         Check(after.getRProperty() > 200 && after.getBProperty() > 200 && after.getGProperty() < 20,
               "Texture2D: content survives DebugSimulateContextLoss() (recreated from CPU shadow)");
+
+        // ---- TextureCube: content must survive a simulated context loss, same as Texture2D ----
+        {
+            const Color kOrange(255, 128, 0, 255);
+            const Color kBlack(0, 0, 0, 0);
+            TextureCube cube(dev, 2, false, SurfaceFormat::Color);
+            const Color faceTexels[4] = { kOrange, kOrange, kOrange, kOrange };
+            cube.SetData(CubeMapFace::PositiveY, faceTexels, 4);
+
+            Color cubeBefore[4] = { kBlack, kBlack, kBlack, kBlack };
+            cube.GetData(CubeMapFace::PositiveY, cubeBefore, 4);
+            Check(cubeBefore[0].getRProperty() > 200 && cubeBefore[0].getGProperty() > 100 &&
+                  cubeBefore[0].getGProperty() < 180 && cubeBefore[0].getBProperty() < 20,
+                  "TextureCube: orange face before simulated context loss");
+
+            dev.GetBackend().DebugSimulateContextLoss();
+
+            Color cubeAfter[4] = { kBlack, kBlack, kBlack, kBlack };
+            cube.GetData(CubeMapFace::PositiveY, cubeAfter, 4);
+            std::printf("cube face after context loss: (%d,%d,%d)\n",
+                        cubeAfter[0].getRProperty(), cubeAfter[0].getGProperty(), cubeAfter[0].getBProperty());
+            Check(cubeAfter[0].getRProperty() > 200 && cubeAfter[0].getGProperty() > 100 &&
+                  cubeAfter[0].getGProperty() < 180 && cubeAfter[0].getBProperty() < 20,
+                  "TextureCube: face content survives DebugSimulateContextLoss() (recreated from CPU shadow)");
+
+            // A face that was NEVER written (no CPU shadow ever shared for it) must not crash on
+            // rebuild -- Build() seeds it from a null cpuPixels_[face] (an empty pre-allocated
+            // level, same as a brand new cube map), not from stale/uninitialized memory.
+            bool untouchedFaceSurvivedRecovery = true;
+            try
+            {
+                Color untouched[4] = { kBlack, kBlack, kBlack, kBlack };
+                cube.GetData(CubeMapFace::NegativeY, untouched, 4);
+            }
+            catch (...) { untouchedFaceSurvivedRecovery = false; }
+            Check(untouchedFaceSurvivedRecovery,
+                  "TextureCube: a face with no CPU shadow (never SetData'd) still reads back cleanly after recovery");
+        }
 
         // ---- RenderTarget2D: must remain the ACTIVE, correctly-bound target across a loss ---
         // Deliberately keeps the RT bound WHILE the simulated loss happens (not unbound first --

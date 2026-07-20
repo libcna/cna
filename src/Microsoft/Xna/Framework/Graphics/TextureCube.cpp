@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <vector>
 
@@ -189,6 +190,28 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 "TextureCube::SetData: this graphics backend did not store the complete requested "
                 "cube face region -- the face, mip level or region is not supported here");
+        }
+
+        // Level-0-only CPU shadow (see the header's own comment on cpuPixels_ for scope) --
+        // lazily created on first write, then mutated in place for every subsequent write to
+        // the SAME face; only re-shared with the backend when the shared_ptr object itself is
+        // first created, since mutating the existing buffer is already visible through the
+        // backend's own aliased shared_ptr (same convention Texture2D::SetData(level,rect,...)
+        // already established for its own single-face cpuPixels_ buffer). Updated only after the
+        // backend accepted the store above, so a refused write cannot desynchronize the shadow.
+        if (level == 0)
+        {
+            const int faceIdx = static_cast<int>(face);
+            auto& shadow = cpuPixels_[faceIdx];
+            const bool isNew = !shadow;
+            if (isNew)
+                shadow = std::make_shared<std::vector<uint8_t>>(static_cast<std::size_t>(size_) * size_ * 4, 0);
+            for (int row = 0; row < h; ++row)
+                std::memcpy(shadow->data() + (static_cast<std::size_t>(y + row) * size_ + x) * 4,
+                            rgba.data() + static_cast<std::size_t>(row) * w * 4,
+                            static_cast<std::size_t>(w) * 4);
+            if (isNew)
+                backend_->ShareCpuPixels(faceIdx, shadow);
         }
     }
 

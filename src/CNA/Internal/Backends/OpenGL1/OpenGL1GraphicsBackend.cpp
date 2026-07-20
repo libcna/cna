@@ -140,10 +140,40 @@ void OpenGL1TextureBackend::UpdatePixelsLevel(int level,const uint8_t*p,int w,in
 // OpenGL1RenderTargetBackend/EasyGLTextureCubeBackend's own comments: glTexSubImage2D (used by
 // SetData) requires the target level to already have a defined image, so skipping this loop
 // would silently break SetData(level>0,...).
-OpenGL1TextureCubeBackend::OpenGL1TextureCubeBackend(int size,bool mipMap,int /*surfaceFormat*/):size_(size){glGenTextures(1,&id_);glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levels=1;if(mipMap){int sz=size;while(sz>1){sz/=2;levels++;}}for(int face=0;face<6;++face){int levelSize=size;for(int lvl=0;lvl<levels;++lvl){glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,lvl,GL_RGBA,levelSize,levelSize,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);levelSize=std::max(1,levelSize/2);}}glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_R,GL_CLAMP_TO_EDGE);}
-OpenGL1TextureCubeBackend::~OpenGL1TextureCubeBackend(){if(id_)glDeleteTextures(1,&id_);}
+OpenGL1TextureCubeBackend::OpenGL1TextureCubeBackend(int size,bool mipMap,int /*surfaceFormat*/,OpenGL1ResourceRegistry*registry,bool generateMipmapCap):size_(size),mipMap_(mipMap),generateMipmapCap_(generateMipmapCap),registry_(registry){Build();if(registry_)registry_->Add(this);}
+// Shared by the constructor and RecreateGLResource() -- every level of every face is always
+// pre-allocated (glTexSubImage2D, used by SetData, requires the target level to already have a
+// defined image), and level 0 is seeded from whatever cpuPixels_[face] currently holds (nullptr
+// -- an empty pre-allocated level, same as before this phase -- on first construction; the real
+// retained per-face pixel data on a post-context-loss rebuild).
+void OpenGL1TextureCubeBackend::Build(){
+glGenTextures(1,&id_);glBindTexture(GL_TEXTURE_CUBE_MAP,id_);
+int levels=1;if(mipMap_){int sz=size_;while(sz>1){sz/=2;levels++;}}
+if(mipMap_&&!glGenerateMipmap_&&generateMipmapCap_)glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_GENERATE_MIPMAP,GL_TRUE);
+for(int face=0;face<6;++face){
+const void*px=cpuPixels_[face]?cpuPixels_[face]->data():nullptr;
+glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,0,GL_RGBA,size_,size_,0,GL_RGBA,GL_UNSIGNED_BYTE,px);
+int levelSize=std::max(1,size_/2);
+for(int lvl=1;lvl<levels;++lvl){glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,lvl,GL_RGBA,levelSize,levelSize,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);levelSize=std::max(1,levelSize/2);}
+}
+glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_WRAP_R,GL_CLAMP_TO_EDGE);
+RegenerateMips();
+}
+// Same 3-tier priority OpenGL1TextureBackend::RegenerateMips() uses (glGenerateMipmap > the
+// GL_GENERATE_MIPMAP texparam set in Build() above, already handled automatically by the driver
+// as a side effect of any level-0 upload > a per-face CPU box-filter fallback), except
+// glGenerateMipmap(GL_TEXTURE_CUBE_MAP) regenerates all 6 faces' mip chains in one call (unlike
+// Texture2D, no need to loop faces for that path).
+void OpenGL1TextureCubeBackend::RegenerateMips(){
+if(!mipMap_)return;
+if(glGenerateMipmap_){glGenerateMipmap_(GL_TEXTURE_CUBE_MAP);return;}
+if(generateMipmapCap_)return;
+for(int face=0;face<6;++face)if(cpuPixels_[face])GenerateMipsCPU(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,size_,size_,cpuPixels_[face]->data());
+}
+OpenGL1TextureCubeBackend::~OpenGL1TextureCubeBackend(){if(registry_)registry_->Remove(this);if(id_)glDeleteTextures(1,&id_);}
+void OpenGL1TextureCubeBackend::RecreateGLResource(){Build();}
 void OpenGL1TextureCubeBackend::BindGL()const{glBindTexture(GL_TEXTURE_CUBE_MAP,id_);}
-void OpenGL1TextureCubeBackend::SetData(int face,int level,int x,int y,int w,int h,const void*data,int /*dataLength*/){if(face<0||face>=6||!data)return;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,x,y,w,h,GL_RGBA,GL_UNSIGNED_BYTE,data);}
+void OpenGL1TextureCubeBackend::SetData(int face,int level,int x,int y,int w,int h,const void*data,int /*dataLength*/){if(face<0||face>=6||!data)return;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,x,y,w,h,GL_RGBA,GL_UNSIGNED_BYTE,data);if(level==0&&mipMap_)RegenerateMips();}
 // Desktop GL (unlike EasyGL's GLES3 target) has glGetTexImage, but it always reads the FULL
 // face/level image -- no sub-rectangle readback exists at the GL API level -- so the requested
 // [x,y,w,h] box is copied out of a full-image temporary rather than read directly.
@@ -190,7 +220,7 @@ if(currentRt_)currentRt_->BindAsRenderTarget();
 std::cout<<"CNA: OpenGL1 desktop GL context recreated and all tracked resources restored"<<std::endl;
 }
 void OpenGL1GraphicsBackend::DebugRestoreContext(){DebugSimulateContextLoss();}
-std::unique_ptr<ITextureCubeBackend>OpenGL1GraphicsBackend::CreateTextureCube(int size,bool mipMap,int surfaceFormat){if(!caps_.textureCubeMap)return nullptr;return std::make_unique<OpenGL1TextureCubeBackend>(size,mipMap,surfaceFormat);}
+std::unique_ptr<ITextureCubeBackend>OpenGL1GraphicsBackend::CreateTextureCube(int size,bool mipMap,int surfaceFormat){if(!caps_.textureCubeMap)return nullptr;return std::make_unique<OpenGL1TextureCubeBackend>(size,mipMap,surfaceFormat,RegistryIfEnabled(),caps_.generateMipmap);}
 void OpenGL1GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend*rt){if(currentRt_&&currentRt_!=rt)currentRt_->UnbindAsRenderTarget();currentRt_=rt;if(rt)rt->BindAsRenderTarget();}
 void OpenGL1GraphicsBackend::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1GraphicsBackend::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1GraphicsBackend::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1GraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepth(float d){glClearDepth(d);glClear(GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearStencil(int s){glClearStencil(s);glClear(GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);glClear(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
 void OpenGL1GraphicsBackend::ApplyBlendState(int cs,int,int cd,int,int,int){glEnable(GL_BLEND);glBlendFunc(BlendF(cs),BlendF(cd));}void OpenGL1GraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int df,bool se,int sf,int sp,int sfa,int sdf,int sm,int sw,int ref,bool,int,int,int,int){de?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);glDepthMask(dw);glDepthFunc(Cmp(df));se?glEnable(GL_STENCIL_TEST):glDisable(GL_STENCIL_TEST);stencilRef_=ref;glStencilFunc(Cmp(sf),ref,(GLuint)sm);glStencilMask((GLuint)sw);glStencilOp(StencilOp(sfa),StencilOp(sdf),StencilOp(sp));}
