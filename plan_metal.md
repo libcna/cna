@@ -1272,6 +1272,37 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     as item 50 (already pinned in `metal-macos-ci.yml`), so no further CI-workflow change was
     needed. Fifth real, observed CI signal — `BitConverter.cpp` (and the rest of `SHARP_RUNTIME`)
     should now compile; the Metal backend's own source is the next thing this CI has never reached.
+    **Correction, item 52**: "should now compile" was too optimistic — the very next CI run showed
+    `BitConverter.cpp` itself compiled fine, but a *different* file, `Environment.cpp`, then hit two
+    more Linux-only symbols. Worth recording plainly rather than quietly editing this claim away.
+
+52. **Real sixth CI signal — a third `sharp-runtime` portability gap, this time two symbols in one
+    file, both genuinely Linux-only**: `Environment.cpp` failed with `use of undeclared identifier
+    'HOST_NAME_MAX'` and `use of undeclared identifier 'CLOCK_BOOTTIME'`. Both are real —
+    `HOST_NAME_MAX` is a glibc extension Apple's libc never defines at all (even though
+    `gethostname()` itself is fully POSIX and available everywhere); `CLOCK_BOOTTIME` is a
+    Linux-only clock ID (kernel 2.6.39+) absent from Apple's `<time.h>` entirely. Both are exactly
+    the class of gap this whole session keeps finding: real Unix code, written once, that had
+    simply never been compiled on a non-Linux Unix before this CI job existed.
+
+    Fixed with portable fallbacks, not platform-specific reimplementations: `HOST_NAME_MAX` falls
+    back to 255 (the POSIX-guaranteed `_POSIX_HOST_NAME_MAX` minimum) when undefined, guarded so
+    Linux keeps using its own real constant unchanged; `CLOCK_BOOTTIME` falls back to
+    `CLOCK_MONOTONIC` when undefined — the portable POSIX clock available on every Unix-like
+    platform, and matches .NET's own cross-platform `GetTickCount64` PAL implementation, which
+    uses `CLOCK_MONOTONIC` uniformly rather than a Linux-specific clock (not a guess — this is
+    what real .NET's own reference implementation does).
+
+    Proactively grepped the rest of `src`/`include` for other likely Linux-only symbols (`gettid`,
+    `pthread_setname_np`, `epoll_*`, `eventfd`, `O_TMPFILE`, further `/proc` usage) specifically to
+    avoid another slow CI round-trip per individual issue, rather than waiting for each to surface
+    one at a time — found none: `AppDomain.cpp`'s `/proc/self/exe` is already correctly gated
+    behind the final Linux-and-other-POSIX `#else` (it has its own proper `#elif defined(__APPLE__)`
+    branch using `_NSGetExecutablePath` first), and `FileSystemWatcher.cpp`'s `eventfd`/`inotify`
+    usage is already gated behind `SHARP_RUNTIME_FSW_LINUX` (`defined(__linux__)` only) — both
+    genuinely already correct, not new findings. Full `SharpRuntimeTests` suite (12,481 tests,
+    including all 99 `EnvironmentTests`) passes with zero regressions. Landed on the same fix
+    branch, no further `cnametal`-side change needed. Sixth real, observed CI signal.
 
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
