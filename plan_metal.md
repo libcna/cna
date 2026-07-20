@@ -963,6 +963,17 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `METAL-235` already explicitly defers for the sibling feature-matrix doc, so deferred for the
     same reason rather than actioned or silently skipped.
 
+38. **`MTL_SHADER_VALIDATION`/`MTL_DEBUG_LAYER` enabled in CI (`METAL-218`/`229`)**: Apple's own
+    documented runtime validation env vars — the Metal-side equivalent of Vulkan's
+    `VK_LAYER_KHRONOS_validation` already used elsewhere in this project — set on
+    `metal-macos-ci.yml`'s "Run Metal tests" step only (they're read at runtime by whatever process
+    creates the `MTLDevice`, not needed at build/link time). Documented in `docs/metal-backend.md`'s
+    verification methodology section, including the note that anyone reproducing a CI failure
+    locally on a real Mac should set both by hand for the same diagnostic benefit. Like item 36's CI
+    filter change, this is new coverage the next real push/PR will exercise on real Apple hardware
+    for the first time — whether it actually fires without a code path to intentionally trip it is
+    unverified from this Linux sandbox, so it's reported as "added" rather than "confirmed working."
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1602,7 +1613,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-215 | Extend `SetStringMarkerEXT`'s existing `insertDebugSignpost:` to `pushDebugGroup:`/`popDebugGroup:` around logical draw batches for structured Xcode GPU Frame Capture grouping | ⬜ |
 | METAL-216 | `MTLCounterSampleBuffer` — Apple GPU hardware performance counters for optional NOXNA profiling | ⬜ |
 | METAL-217 | Document the Xcode GPU Frame Capture workflow for this backend (`MTL_CAPTURE_ENABLED`, `MTLCaptureManager`) — a real, physical-Mac-only workflow with no Linux/CI equivalent | ⬜ |
-| METAL-218 | Document `MTL_SHADER_VALIDATION`/`MTL_DEBUG_LAYER` as the macOS-side equivalent of Vulkan's validation layers; enable in the macOS CI job (Phase 26) | ⬜ |
+| METAL-218 | Document `MTL_SHADER_VALIDATION`/`MTL_DEBUG_LAYER` as the macOS-side equivalent of Vulkan's validation layers; enable in the macOS CI job (Phase 26) | ✅ documented in `docs/metal-backend.md`'s verification methodology, enabled in CI 2026-07-20 (`METAL-229`) |
 | METAL-219 | Explicitly note this phase has no meaningful CTest equivalent — interactive/visual tooling, not automatable | ⬜ |
 
 ## Phase 25 — Testing infrastructure (METAL-220 – METAL-226)
@@ -1623,7 +1634,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 |---|---|---|
 | METAL-227 | Keep `.github/workflows/metal-macos-ci.yml`'s `paths:` trigger list current as new files land (new `.mm`/`.hpp` splits, new example/test `.cpp`, new `docs/*.md`) — a living checklist, revisited at the end of each phase | ⬜ |
 | METAL-228 | Consider a second macOS CI job variant (different macOS version / Apple Silicon vs. Intel runner) once GPU-family differences (e.g. BC compression, `METAL-17`) start mattering | ⬜ |
-| METAL-229 | Add `MTL_SHADER_VALIDATION=1`/`MTL_DEBUG_LAYER=1` to the CI job (ties to `METAL-218`) | ⬜ |
+| METAL-229 | Add `MTL_SHADER_VALIDATION=1`/`MTL_DEBUG_LAYER=1` to the CI job (ties to `METAL-218`) | ✅ added 2026-07-20 to `metal-macos-ci.yml`'s "Run Metal tests" step — unverified whether it actually fires without a real CI run, but the mechanism itself (Apple's own documented env var contract) needs no further code |
 | METAL-230 | Audit CI build-time budget as the backend grows toward EasyGL's scale — revisit `--parallel 3` once compile times actually grow | ⬜ |
 | METAL-231 | Consider splitting the monolithic `.mm` into multiple translation units once file size approaches EasyGL's ~5,300-line mark (a concrete threshold, not a premature rule) | ⬜ |
 | METAL-232 | Confirm `GraphicsBackendCompileDefinitionsTest` already knows about `CNA_BACKEND_METAL` (DX3's own external review found the equivalent gap for `CNA_BACKEND_DX3`/`D3D11`/`D3D12` until fixed) | ⬜ |

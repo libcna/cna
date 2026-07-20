@@ -43,4 +43,14 @@ jobs:
         # carry no CNA_BACKEND_METAL gate) in addition to Metal_Smoke, on real Apple hardware.
         # An unanchored `-R Metal` also matches unrelated PbrEffectDefaultsTest.Metallic*/
         # SkinnedPbrEffectDefaultsTest.Metallic* tests -- anchoring avoids that collision.
+        #
+        # METAL-218/229: MTL_SHADER_VALIDATION/MTL_DEBUG_LAYER are Apple's own runtime validation
+        # env vars, the Metal-side equivalent of Vulkan's VK_LAYER_KHRONOS_validation already used
+        # elsewhere in this project -- they surface real API misuse (out-of-bounds shader access,
+        # invalid resource binding, etc.) as clear diagnostics instead of silent undefined behavior
+        # or a hard-to-diagnose GPU hang. Set only for this step since they're read at runtime by
+        # whatever process creates the MTLDevice, not at compile/link time.
+        env:
+          MTL_SHADER_VALIDATION: "1"
+          MTL_DEBUG_LAYER: "1"
         run: ctest -R "^Metal" --output-on-failure

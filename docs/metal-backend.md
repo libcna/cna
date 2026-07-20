@@ -154,6 +154,15 @@ represented as the other:
    but a passing run has not yet been observed from this Linux sandbox — treat as pending until a
    real CI run or physical Mac confirms it.
 
+**Runtime validation** (`METAL-218`/`229`): `MTL_SHADER_VALIDATION=1` and `MTL_DEBUG_LAYER=1` are
+Apple's own documented runtime validation environment variables — the Metal-side equivalent of
+Vulkan's `VK_LAYER_KHRONOS_validation` already used elsewhere in this project. They surface real
+API misuse (out-of-bounds shader access, invalid resource binding, mismatched attachment formats,
+etc.) as a clear diagnostic instead of silent undefined behavior or a hard-to-diagnose GPU hang.
+Set for the `metal-macos-ci.yml` job's test-running step (read at runtime by whatever process
+creates the `MTLDevice`, not needed at build time). Anyone reproducing a CI failure locally on a
+real Mac should set both before running `Metal_Smoke`/`CnaTests` by hand, for the same reason.
+
 ## Command-buffer / encoder lifecycle model (`METAL-181`)
 
 One `id<MTLCommandQueue>` for the backend's lifetime. Within a single logical frame, zero or more
