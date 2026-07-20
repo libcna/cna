@@ -115,6 +115,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     # design decision 9/16 keep the stock pipeline dependency-free; it will only be added, later, to
     # a custom-ShaderEffect-only target if Phase D9-11 is authorized (ask-first per its own row).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d9)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")
+    # plan_dx1.md design decision 10: ddraw + dxguid (GUID storage for IID_IDirectDraw etc.) is the
+    # confirmed minimal link set (DX1-0 spike) -- no free-direct, no DXVK, no d3dcompiler, no
+    # d3d11/dxgi. SDL3 is linked only for window/HWND access (design decision 3), same as every
+    # other backend.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

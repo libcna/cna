@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, or SDL_GPU)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "SDL_GPU")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, DX1, or SDL_GPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "DX1" "SDL_GPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -27,10 +27,15 @@ option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten on
 option(CNA_BACKEND_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics backend" OFF)
 option(CNA_BACKEND_DX3 "Enable DirectX 3 (DirectDraw, via the ../free-direct sibling) graphics backend" OFF)
 option(CNA_BACKEND_D3D9 "Enable Direct3D 9 graphics backend (Windows only)" OFF)
+# plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics backend -- genuine ddraw.h v1 COM
+# interfaces (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC, never IDirectDraw2+), Windows-only,
+# same MinGW-cross-compile + Wine delivery route as D3D9/D3D11/D3D12 (Route B). Unlike DX3, this
+# backend deliberately does NOT use ../free-direct -- see plan_dxold.md's roadmap.
+option(CNA_BACKEND_DX1 "Enable Direct X 1 (real DirectDraw v1) graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_SDL_GPU)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_SDL_GPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -75,6 +80,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_D3D9)
         list(APPEND _cna_enabled_backends "D3D9")
     endif()
+    if(CNA_BACKEND_DX1)
+        list(APPEND _cna_enabled_backends "DX1")
+    endif()
     if(CNA_BACKEND_SDL_GPU)
         list(APPEND _cna_enabled_backends "SDL_GPU")
     endif()
@@ -90,8 +98,10 @@ endif()
 # plan_dx.md design decision 2: D3D11/D3D12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1
-# extends this same gate to D3D9 (d3d9.h is equally Windows-only).
-if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+# extends this same gate to D3D9 (d3d9.h is equally Windows-only). plan_dx1.md design decision 1
+# extends it again to DX1: unlike DX3 (SDL3-backed ../free-direct, genuinely native-Linux-buildable),
+# DX1 uses the real Windows ddraw.h, so it needs the exact same gate.
+if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "DX1")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
@@ -260,6 +270,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     set(BACKEND_TARGET "cna_backend_graphics_d3d9")
     add_compile_definitions(CNA_BACKEND_D3D9)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_D3D9")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")
+    message(STATUS "CNA: Using DX1 (real DirectDraw v1) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Dx1")
+    set(BACKEND_TARGET "cna_backend_graphics_dx1")
+    add_compile_definitions(CNA_BACKEND_DX1)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_DX1")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     message(STATUS "CNA: Using SDL_GPU graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/SdlGpu")
