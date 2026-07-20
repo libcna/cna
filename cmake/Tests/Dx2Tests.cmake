@@ -108,4 +108,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX2")
     cna_dx2_ctest_command(_dx2_vertex_index_buffer_cmd cna_test_dx2_vertex_index_buffer)
     cna_register_backend_test(NAME Dx2_VertexIndexBuffer COMMAND ${_dx2_vertex_index_buffer_cmd}
         TIMEOUT 60 LABELS "DX2")
+
+    # Phase O4 (DX2-30..DX2-35): real CPU transform/clip -> D3DTLVERTEX -> DrawIndexedPrimitive
+    # pipeline CTest -- pixel-verified triangle rendering through the real Direct3D v2 device.
+    cna_dx2_test(cna_test_dx2_colored_primitives examples/dx2_colored_primitives_test.cpp)
+    cna_dx2_ctest_command(_dx2_colored_primitives_cmd cna_test_dx2_colored_primitives)
+    cna_register_backend_test(NAME Dx2_ColoredPrimitives COMMAND ${_dx2_colored_primitives_cmd}
+        TIMEOUT 60 LABELS "DX2")
+
+    # Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives (16-bit and 32-bit indices) CTest.
+    cna_dx2_test(cna_test_dx2_indexed_primitives examples/dx2_indexed_primitives_test.cpp)
+    cna_dx2_ctest_command(_dx2_indexed_primitives_cmd cna_test_dx2_indexed_primitives)
+    cna_register_backend_test(NAME Dx2_IndexedPrimitives COMMAND ${_dx2_indexed_primitives_cmd}
+        TIMEOUT 60 LABELS "DX2")
+
+    # Phase O4 (DX2-37): real depth-test occlusion CTest, order-independent.
+    cna_dx2_test(cna_test_dx2_ztest examples/dx2_ztest_test.cpp)
+    cna_dx2_ctest_command(_dx2_ztest_cmd cna_test_dx2_ztest)
+    cna_register_backend_test(NAME Dx2_ZTest COMMAND ${_dx2_ztest_cmd}
+        TIMEOUT 60 LABELS "DX2")
+
+    # Phase O4 (DX2-34, DX2-38): real texture0 sampling via D3DRENDERSTATE_TEXTUREHANDLE CTest.
+    cna_dx2_test(cna_test_dx2_texture3d examples/dx2_texture3d_test.cpp)
+    cna_dx2_ctest_command(_dx2_texture3d_cmd cna_test_dx2_texture3d)
+    cna_register_backend_test(NAME Dx2_Texture3D COMMAND ${_dx2_texture3d_cmd}
+        TIMEOUT 60 LABELS "DX2")
+
+    # Phase O4 (DX2-30, DX2-39): near-plane clipping CTest.
+    cna_dx2_test(cna_test_dx2_clipping examples/dx2_clipping_test.cpp)
+    cna_dx2_ctest_command(_dx2_clipping_cmd cna_test_dx2_clipping)
+    cna_register_backend_test(NAME Dx2_Clipping COMMAND ${_dx2_clipping_cmd}
+        TIMEOUT 60 LABELS "DX2")
 endif()

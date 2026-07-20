@@ -62,6 +62,19 @@ mirror `Clear(r,g,b,a)`'s own existing direct-Lock()-and-fill approach exactly, 
 Z-buffer surface instead of the color surface — no dependence on `viewport->Clear()`'s ambiguous
 default-value semantics for this.
 
+**Phase O4 pre-work finding (`dx2_spike9_dualcap_texture.cpp`):** `Dx2TextureBackend`'s existing
+surfaces (used for both regular XNA `Texture2D`s and `RenderTarget2D`s) only had `DDSCAPS_
+OFFSCREENPLAIN` — no `DDSCAPS_TEXTURE` — since Phase O2/O3 only needed plain 2D `Lock`/`Blt`
+access. 3D texture sampling requires `QueryInterface(IID_IDirect3DTexture2)`, which real
+DirectDraw only allows on a surface created with `DDSCAPS_TEXTURE`, and surface caps are immutable
+after `CreateSurface` — so this had to be spiked before deciding to add the cap to every texture's
+creation call. Confirmed: a surface created with **both** `DDSCAPS_OFFSCREENPLAIN | DDSCAPS_
+TEXTURE` together (no explicit pixel format, matching the existing "let Wine pick the native
+format" convention) supports plain 2D `Lock()`-style writes/`Blt` **and** real `IDirect3DTexture2`
+sampling via `DrawIndexedPrimitive` on the *same surface instance* — verified by writing a 2x2
+texture via a direct 2D-style `Lock()`, then sampling it correctly (exact 4-quadrant readback) via
+a 3D draw. `CreateOffscreenSurface` now requests both caps unconditionally.
+
 ## Original result before the v2 breakthrough: 2D layer proven; 3D execute-buffer rendering NOT achieved
 
 **2D (DirectDraw v1):** not re-spiked here — DX1's spike and full backend already prove this

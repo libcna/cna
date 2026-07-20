@@ -2,10 +2,12 @@
 // plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DX2's real Direct3D v2 device bring-up --
 // IDirect3D2/IDirect3DDevice2/IDirect3DViewport2 creation against the shadow-backbuffer surface,
 // a real attached 16-bit Z-buffer, and the newly-real ClearColorAndDepth/ClearDepth/etc entry
-// points. VertexBuffer/IndexBuffer storage is real as of Phase O5 (DX2-40/41) -- only the actual
-// 3D DRAW path (DrawColoredPrimitives/DrawPrimitivesEx) remains Phase O4, not this test -- Check D
-// below confirms it still throws, documenting the exact phase boundary rather than silently
-// over-claiming.
+// points. VertexBuffer/IndexBuffer storage (Phase O5) and the 3D draw path itself
+// (DrawColoredPrimitives/DrawPrimitivesEx, Phase O4) are both real as of this session -- pixel-
+// verified 3D rendering is covered by dx2_colored_primitives_test.cpp/dx2_ztest_test.cpp/etc, not
+// this file. Only STATE APPLICATION (SetDepthTestEnabled/ApplyRasterizerState/etc, Phase O6)
+// remains unimplemented -- Check D below confirms it still throws, documenting the exact phase
+// boundary rather than silently over-claiming.
 //
 // Check A -- backend.SupportsDepthStencil() reports true (device bring-up succeeded; DX1 always
 //   reports false here).
@@ -17,8 +19,8 @@
 // Check C -- ClearColorDepthAndStencil (via GraphicsDevice::Clear(ClearOptions, color, depth,
 //   stencil) with all three flags) does not throw and clears color correctly -- stencil is
 //   accepted and silently ignored (design decision 7), not thrown.
-// Check D -- DrawColoredPrimitives still throws std::runtime_error: the 3D draw path itself is
-//   Phase O4, not yet implemented, even though CreateVertexBuffer (Phase O5) now succeeds.
+// Check D -- SetDepthTestEnabled still throws std::runtime_error: state APPLICATION is Phase O6,
+//   not yet implemented, even though device bring-up/drawing (Phase O3/O4/O5) now all succeed.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -28,8 +30,6 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
-#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
-#include "Microsoft/Xna/Framework/Matrix.hpp"
 
 #include "CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.hpp"
 
@@ -111,18 +111,13 @@ protected:
                   "Clear(Target|DepthBuffer|Stencil) does not throw and clears color correctly");
         }
 
-        // Check D: the 3D DRAW path is still Phase O4/O5 -- CreateVertexBuffer must still throw,
-        // proving this test isn't over-claiming beyond Phase O3's actual scope.
+        // Check D: state APPLICATION is still Phase O6 -- SetDepthTestEnabled must still throw,
+        // proving this test isn't over-claiming beyond what Phase O3/O4/O5 actually deliver.
         {
-            auto vb = backend.CreateVertexBuffer(3);
             bool threw = false;
-            try
-            {
-                const Matrix identity = Matrix::getIdentityProperty();
-                backend.DrawColoredPrimitives(*vb, identity, identity, identity, PrimitiveType::TriangleList, 1);
-            }
+            try { backend.SetDepthTestEnabled(true); }
             catch (const std::exception&) { threw = true; }
-            check(threw, "DrawColoredPrimitives still throws (Phase O4 draw path not yet implemented)");
+            check(threw, "SetDepthTestEnabled still throws (Phase O6 state application not yet implemented)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, 4);

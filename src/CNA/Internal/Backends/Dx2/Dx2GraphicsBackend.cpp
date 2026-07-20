@@ -14,6 +14,7 @@
 #include <d3d.h>
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -130,12 +131,20 @@ namespace CNA::Internal::Backends::Dx2
             g_layoutDetected = true;
         }
 
+        // Phase O4 (dx2_spike9_dualcap_texture.cpp finding): DDSCAPS_TEXTURE is added alongside
+        // DDSCAPS_OFFSCREENPLAIN so any texture/render-target surface can ALSO be bound as a real
+        // Direct3D v2 texture (IDirect3DTexture2, QueryInterface'd on demand at draw time -- see
+        // DrawPrimitivesEx) for GpuDrawParams::texture0 sampling, without needing a second surface.
+        // Spike-confirmed: the combined caps are accepted with no explicit pixel format (same
+        // "let Wine pick the native format" convention this helper already used), and the SAME
+        // surface instance supports both a plain 2D Lock()-style write/Blt (already exercised by
+        // Phase O2/O3's own tests) and 3D IDirect3DTexture2 sampling correctly.
         LPDIRECTDRAWSURFACE CreateOffscreenSurface(LPDIRECTDRAW dd, int width, int height)
         {
             DDSURFACEDESC desc{};
             desc.dwSize = sizeof(DDSURFACEDESC);
             desc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
-            desc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN;
+            desc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_TEXTURE;
             desc.dwWidth = static_cast<DWORD>(width);
             desc.dwHeight = static_cast<DWORD>(height);
             LPDIRECTDRAWSURFACE surface = nullptr;
@@ -722,6 +731,21 @@ namespace CNA::Internal::Backends::Dx2
             if (FAILED(hr)) ThrowHr("IDirect3DDevice2::SetCurrentViewport", hr);
 
             device2->SetRenderState(D3DRENDERSTATE_LIGHTING, FALSE);
+            // Phase O4 safe default: real Direct3D's own default cull mode was never spike-verified
+            // against this backend's triangle-winding conventions (every DX2-0 spike explicitly
+            // set D3DCULL_NONE rather than relying on the default). Cull-none never discards a
+            // triangle due to winding, so it is a safe interim default until Phase O6 wires
+            // ApplyRasterizerState to select the real per-draw cull mode from RasterizerState.
+            device2->SetRenderState(D3DRENDERSTATE_CULLMODE, D3DCULL_NONE);
+            // Phase O4 safe default, matching real XNA's own DepthStencilState.Default
+            // (DepthBufferEnable=true, DepthBufferFunction=CompareFunction.LessEqual,
+            // DepthBufferWriteEnable=true) rather than relying on whatever Direct3D's own
+            // undocumented device default happens to be -- explicit until Phase O6 wires
+            // ApplyDepthStencilState to select the real per-draw depth state from
+            // GraphicsDevice.DepthStencilState.
+            device2->SetRenderState(D3DRENDERSTATE_ZENABLE, D3DZB_TRUE);
+            device2->SetRenderState(D3DRENDERSTATE_ZFUNC, D3DCMP_LESSEQUAL);
+            device2->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, TRUE);
         }
 
         // Design decision 4 / DX2-0b: the primary surface is created exactly once, with no
@@ -983,6 +1007,276 @@ namespace CNA::Internal::Backends::Dx2
         bool thirtyTwoBit_ = false;
         std::vector<uint8_t> data_;
     };
+
+    // ---- Phase O4 (design decision 6): CPU transform + clip pipeline, ported from
+    // SoftwareGraphicsBackend.cpp -- computes world*view*projection on the CPU, transforms each
+    // vertex into clip space, clips against the near plane (Sutherland-Hodgman, single plane),
+    // then perspective-divides the POSITION ONLY and packs into a real D3DTLVERTEX for submission
+    // via IDirect3DDevice2::DrawPrimitive/DrawIndexedPrimitive. Simplified from Software's own
+    // ClipVertex/RasterVertex: no world-space position/normal fields are carried (design decision
+    // 7 scopes lighting/fog/envMap/skinning out of this backend's v1), and color/uv are NOT
+    // premultiplied by invW the way Software's RasterVertex is -- real Direct3D's rasterizer
+    // already performs perspective-correct attribute interpolation internally via rhw, so
+    // premultiplying here would double-apply the correction (a load-bearing distinction found and
+    // documented before this code was written, see plan_dx2.md design decision 6).
+
+    /// One vertex in clip space (before the perspective divide), matching
+    /// SoftwareGraphicsBackend.cpp's own ClipVertex (position + un-premultiplied color/uv only --
+    /// no world-space position/normal, unlike Software's, since lighting/envMap are out of scope).
+    struct Dx2ClipVertex
+    {
+        float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
+        float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
+        float u = 0.0f, v = 0.0f;
+    };
+
+    Dx2ClipVertex Dx2LerpClipVertex(const Dx2ClipVertex& a, const Dx2ClipVertex& b, float t)
+    {
+        Dx2ClipVertex out;
+        out.x = a.x + t * (b.x - a.x);
+        out.y = a.y + t * (b.y - a.y);
+        out.z = a.z + t * (b.z - a.z);
+        out.w = a.w + t * (b.w - a.w);
+        out.r = a.r + t * (b.r - a.r);
+        out.g = a.g + t * (b.g - a.g);
+        out.b = a.b + t * (b.b - a.b);
+        out.a = a.a + t * (b.a - a.a);
+        out.u = a.u + t * (b.u - a.u);
+        out.v = a.v + t * (b.v - a.v);
+        return out;
+    }
+
+    /// Ported verbatim from SoftwareGraphicsBackend.cpp's ClipTriangleNearPlane (SOFTWARE-83):
+    /// Sutherland-Hodgman clip against the single near-plane half-space `w > kNearEpsilon`.
+    /// Returns 0 (fully behind, discarded), 3 (no clip needed / one corner clipped), or 4 (two
+    /// corners clipped, forming a quad -- caller fans it into 2 triangles). Preserves winding.
+    int Dx2ClipTriangleNearPlane(const Dx2ClipVertex verts[3], Dx2ClipVertex out[4])
+    {
+        constexpr float kNearEpsilon = 1e-5f;
+        int count = 0;
+        for (int i = 0; i < 3; ++i)
+        {
+            const Dx2ClipVertex& cur = verts[i];
+            const Dx2ClipVertex& prev = verts[(i + 2) % 3];
+            const bool curIn = cur.w > kNearEpsilon;
+            const bool prevIn = prev.w > kNearEpsilon;
+            if (curIn != prevIn)
+            {
+                const float t = (kNearEpsilon - prev.w) / (cur.w - prev.w);
+                out[count++] = Dx2LerpClipVertex(prev, cur, t);
+            }
+            if (curIn)
+                out[count++] = cur;
+        }
+        return count;
+    }
+
+    /// Transforms a VertexPositionColor vertex (Position@0, Color@12 -- DrawColoredPrimitives/
+    /// DrawIndexedColoredPrimitives's own fixed layout) into clip space. Ported from
+    /// SoftwareGraphicsBackend.cpp's BuildPositionColorClipVertex.
+    Dx2ClipVertex Dx2BuildPositionColorClipVertex(const uint8_t* raw, const Matrix& combined)
+    {
+        Vector3 position;
+        std::memcpy(&position, raw, sizeof(Vector3));
+        const Vector4 clip = Vector4::Transform(position, combined);
+
+        Dx2ClipVertex out;
+        out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
+        const uint8_t* colorBytes = raw + sizeof(Vector3);
+        out.r = colorBytes[0] / 255.0f;
+        out.g = colorBytes[1] / 255.0f;
+        out.b = colorBytes[2] / 255.0f;
+        out.a = colorBytes[3] / 255.0f;
+        return out;
+    }
+
+    /// Stride-dispatched vertex transform for the DrawPrimitivesEx/DrawIndexedPrimitivesEx path
+    /// (design decision 7's simplified scope -- no skinning bone-blend, no envMap world-space
+    /// output, matching this backend's v1 boundary): 16=VertexPositionColor, 20=
+    /// VertexPositionTexture, 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (the
+    /// normal is read but ignored -- no lighting), 52=VertexPositionNormalTextureSkinned (normal
+    /// and bone weights/indices are read but ignored -- renders as if unskinned, matching the
+    /// "accept and ignore" pattern design decision 7 documents). `vertexColorEnabled` mirrors
+    /// GpuDrawParams' own flag -- when false, vertex color is forced to opaque white so only
+    /// texture modulation and the material-less diffuse pass-through apply.
+    Dx2ClipVertex Dx2BuildGenericClipVertex(const uint8_t* raw, std::size_t stride, const Matrix& combined,
+                                            bool vertexColorEnabled)
+    {
+        Vector3 position;
+        std::memcpy(&position, raw, sizeof(Vector3));
+        const Vector4 clip = Vector4::Transform(position, combined);
+
+        Dx2ClipVertex out;
+        out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
+
+        if (stride == 16)
+        {
+            out.r = raw[12] / 255.0f; out.g = raw[13] / 255.0f; out.b = raw[14] / 255.0f; out.a = raw[15] / 255.0f;
+        }
+        else if (stride == 20)
+        {
+            std::memcpy(&out.u, raw + 12, sizeof(float));
+            std::memcpy(&out.v, raw + 16, sizeof(float));
+        }
+        else if (stride == 24)
+        {
+            out.r = raw[12] / 255.0f; out.g = raw[13] / 255.0f; out.b = raw[14] / 255.0f; out.a = raw[15] / 255.0f;
+            std::memcpy(&out.u, raw + 16, sizeof(float));
+            std::memcpy(&out.v, raw + 20, sizeof(float));
+        }
+        else if (stride == 32)
+        {
+            // VertexPositionNormalTexture: Position@0, Normal@12 (ignored), TextureCoordinate@24.
+            std::memcpy(&out.u, raw + 24, sizeof(float));
+            std::memcpy(&out.v, raw + 28, sizeof(float));
+        }
+        else if (stride == 52)
+        {
+            // VertexPositionNormalTextureSkinned: TextureCoordinate@24; Normal@12 and
+            // BlendWeight@32/BlendIndices@48 are both ignored (design decision 7).
+            std::memcpy(&out.u, raw + 24, sizeof(float));
+            std::memcpy(&out.v, raw + 28, sizeof(float));
+        }
+
+        if (!vertexColorEnabled)
+        {
+            out.r = out.g = out.b = out.a = 1.0f;
+        }
+        return out;
+    }
+
+    /// Perspective-divides the POSITION ONLY and maps into a real D3DTLVERTEX ready for
+    /// DrawPrimitive/DrawIndexedPrimitive. Deliberately does NOT premultiply color/uv by invW --
+    /// see this section's own header comment and plan_dx2.md design decision 6 for why.
+    D3DTLVERTEX Dx2ClipVertexToD3DTLVERTEX(const Dx2ClipVertex& cv, int viewportWidth, int viewportHeight)
+    {
+        const float invW = 1.0f / cv.w;
+        const float ndcX = cv.x * invW;
+        const float ndcY = cv.y * invW;
+        const float ndcZ = cv.z * invW;
+
+        D3DTLVERTEX out{};
+        out.sx = (ndcX * 0.5f + 0.5f) * static_cast<float>(viewportWidth);
+        out.sy = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(viewportHeight);
+        out.sz = ndcZ;
+        out.rhw = invW;
+        const auto channel = [](float c) -> uint8_t {
+            return static_cast<uint8_t>(std::clamp(c, 0.0f, 1.0f) * 255.0f);
+        };
+        out.color = (static_cast<D3DCOLOR>(channel(cv.a)) << 24) |
+                    (static_cast<D3DCOLOR>(channel(cv.r)) << 16) |
+                    (static_cast<D3DCOLOR>(channel(cv.g)) << 8) |
+                    static_cast<D3DCOLOR>(channel(cv.b));
+        out.tu = cv.u;
+        out.tv = cv.v;
+        return out;
+    }
+
+    /// Resolves a GpuDrawParams::texture0-style ITextureBackend* into a real D3DTEXTUREHANDLE for
+    /// the current device, or 0 (no texture) when `texture` is null. Fetched fresh on every draw
+    /// (not cached) rather than stored on Dx2TextureBackend: a handle is only valid for the device
+    /// it was obtained against, and this backend's device2 is torn down and recreated whenever the
+    /// backbuffer is resized (Create3DDevice) -- caching would need explicit invalidation on
+    /// resize for no real benefit, since QueryInterface+GetHandle is a cheap COM call.
+    D3DTEXTUREHANDLE Dx2ResolveTextureHandle(const ITextureBackend* texture, LPDIRECT3DDEVICE2 device2)
+    {
+        if (!texture) return 0;
+        const auto* owner = dynamic_cast<const Dx2SurfaceOwner*>(texture);
+        if (!owner)
+            throw std::runtime_error(
+                "Dx2GraphicsBackend: texture0 is not a DX2 surface (created by a different graphics backend?)");
+
+        LPDIRECT3DTEXTURE2 tex2 = nullptr;
+        HRESULT hr = owner->Surface()->QueryInterface(IID_IDirect3DTexture2, reinterpret_cast<void**>(&tex2));
+        if (FAILED(hr)) ThrowHr("IDirectDrawSurface::QueryInterface(IID_IDirect3DTexture2)", hr);
+
+        D3DTEXTUREHANDLE handle = 0;
+        hr = tex2->GetHandle(device2, &handle);
+        tex2->Release();
+        if (FAILED(hr)) ThrowHr("IDirect3DTexture2::GetHandle", hr);
+        return handle;
+    }
+
+    /// Shared core for all 4 draw entry points: clips each triangle (Dx2ClipTriangleNearPlane),
+    /// packs the result into D3DTLVERTEX (Dx2ClipVertexToD3DTLVERTEX), and submits via a single
+    /// DrawIndexedPrimitive call -- used even for CNA's non-indexed draw calls
+    /// (DrawColoredPrimitives/DrawPrimitivesEx) since near-plane clipping can turn one triangle
+    /// into a quad (2 triangles sharing 2 vertices), which an index buffer expresses without
+    /// vertex duplication. `fetchVertex(i)` returns the i-th vertex in sequential triangle-list
+    /// order (i in [0, primitiveCount*3)); the caller supplies whichever stride/index-buffer
+    /// resolution its own entry point needs. `texHandle` is applied via
+    /// D3DRENDERSTATE_TEXTUREHANDLE every call (0 = no texture) since it is a per-draw state,
+    /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plan_dx2.md design decision 6).
+    void SubmitDx2Primitives(LPDIRECT3DDEVICE2 device2, int viewportWidth, int viewportHeight,
+                             const std::function<Dx2ClipVertex(int)>& fetchVertex,
+                             int primitiveCount, D3DTEXTUREHANDLE texHandle)
+    {
+        std::vector<D3DTLVERTEX> verts;
+        std::vector<WORD> indices;
+        verts.reserve(static_cast<std::size_t>(primitiveCount) * 3);
+        indices.reserve(static_cast<std::size_t>(primitiveCount) * 3);
+
+        for (int i = 0; i < primitiveCount; ++i)
+        {
+            Dx2ClipVertex cv[3];
+            for (int k = 0; k < 3; ++k)
+                cv[k] = fetchVertex(i * 3 + k);
+
+            Dx2ClipVertex clipped[4];
+            const int clippedCount = Dx2ClipTriangleNearPlane(cv, clipped);
+            if (clippedCount == 0) continue;
+
+            const auto baseIdx = static_cast<WORD>(verts.size());
+            for (int k = 0; k < clippedCount; ++k)
+                verts.push_back(Dx2ClipVertexToD3DTLVERTEX(clipped[k], viewportWidth, viewportHeight));
+
+            indices.push_back(static_cast<WORD>(baseIdx + 0));
+            indices.push_back(static_cast<WORD>(baseIdx + 1));
+            indices.push_back(static_cast<WORD>(baseIdx + 2));
+            if (clippedCount == 4)
+            {
+                indices.push_back(static_cast<WORD>(baseIdx + 0));
+                indices.push_back(static_cast<WORD>(baseIdx + 2));
+                indices.push_back(static_cast<WORD>(baseIdx + 3));
+            }
+        }
+
+        if (indices.empty()) return;  // every triangle fully clipped by the near plane
+
+        HRESULT hr = device2->SetRenderState(D3DRENDERSTATE_TEXTUREHANDLE, texHandle);
+        if (FAILED(hr)) ThrowHr("IDirect3DDevice2::SetRenderState(TEXTUREHANDLE)", hr);
+        hr = device2->SetRenderState(D3DRENDERSTATE_TEXTUREMAPBLEND, D3DTBLEND_MODULATE);
+        if (FAILED(hr)) ThrowHr("IDirect3DDevice2::SetRenderState(TEXTUREMAPBLEND)", hr);
+
+        hr = device2->BeginScene();
+        if (FAILED(hr)) ThrowHr("IDirect3DDevice2::BeginScene", hr);
+        hr = device2->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, D3DVT_TLVERTEX,
+                                           verts.data(), static_cast<DWORD>(verts.size()),
+                                           indices.data(), static_cast<DWORD>(indices.size()), 0);
+        if (FAILED(hr))
+        {
+            device2->EndScene();
+            ThrowHr("IDirect3DDevice2::DrawIndexedPrimitive", hr);
+        }
+        hr = device2->EndScene();
+        if (FAILED(hr)) ThrowHr("IDirect3DDevice2::EndScene", hr);
+    }
+
+    /// Common precondition checks shared by all 4 draw entry points (design decision 4: 3D drawing
+    /// is scoped to the default backbuffer only -- device2 is never bound to a custom render
+    /// target's surface).
+    void Dx2CheckDrawPreconditions(const char* who, bool customRenderTargetBound,
+                                   PrimitiveType primitive, int primitiveCount)
+    {
+        if (customRenderTargetBound)
+            throw std::runtime_error(std::string("Dx2GraphicsBackend::") + who +
+                ": 3D drawing is not supported while a custom RenderTarget2D is bound "
+                "(design decision 4 -- 3D is scoped to the default backbuffer only)");
+        if (primitiveCount <= 0)
+            throw std::runtime_error(std::string("Dx2GraphicsBackend::") + who + ": primitiveCount must be > 0");
+        if (primitive != PrimitiveType::TriangleList)
+            throw std::runtime_error(std::string("Dx2GraphicsBackend::") + who + ": only TriangleList is supported in v1");
+    }
 
     // ---- Phase O3: textures and render targets ----
     // Both classes below are never named outside this .cpp (only returned polymorphically), so
@@ -1400,14 +1694,155 @@ namespace CNA::Internal::Backends::Dx2
         return std::make_unique<Dx2IndexBufferBackend>(index_capacity, true);
     }
 
-    void Dx2GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
-                                                   const Matrix&, const Matrix&, const Matrix&,
-                                                   PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
+    void Dx2GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                   PrimitiveType primitive, int primitiveCount)
+    {
+        Dx2CheckDrawPreconditions("DrawColoredPrimitives", impl_->currentTargetSurface != nullptr,
+                                  primitive, primitiveCount);
+        if (primitiveCount * 3 > vb.GetVertexCount())
+            throw std::runtime_error(
+                "Dx2GraphicsBackend::DrawColoredPrimitives: primitiveCount needs more vertices than the bound buffer has");
 
-    void Dx2GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
-                                                          const IIndexBufferBackend&,
-                                                          const Matrix&, const Matrix&, const Matrix&,
-                                                          PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
+        const auto& dxVb = static_cast<const Dx2VertexBufferBackend&>(vb);
+        const uint8_t* base = dxVb.Data().data();
+        const std::size_t stride = dxVb.Stride();
+        const Matrix combined = world * view * projection;
+        int vw = 0, vh = 0;
+        impl_->ActiveSurfaceSize(vw, vh);
+
+        SubmitDx2Primitives(impl_->device2, vw, vh,
+            [&](int i) { return Dx2BuildPositionColorClipVertex(base + static_cast<std::size_t>(i) * stride, combined); },
+            primitiveCount, 0);
+    }
+
+    void Dx2GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
+                                                          const IIndexBufferBackend& ib,
+                                                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                          PrimitiveType primitive, int primitiveCount)
+    {
+        Dx2CheckDrawPreconditions("DrawIndexedColoredPrimitives", impl_->currentTargetSurface != nullptr,
+                                  primitive, primitiveCount);
+        if (primitiveCount * 3 > ib.GetIndexCount())
+            throw std::runtime_error(
+                "Dx2GraphicsBackend::DrawIndexedColoredPrimitives: primitiveCount needs more indices than the bound buffer has");
+
+        const auto& dxVb = static_cast<const Dx2VertexBufferBackend&>(vb);
+        const auto& dxIb = static_cast<const Dx2IndexBufferBackend&>(ib);
+        const uint8_t* vbBase = dxVb.Data().data();
+        const std::size_t stride = dxVb.Stride();
+        const uint8_t* ibBase = dxIb.Data().data();
+        const bool thirtyTwoBit = dxIb.IsThirtyTwoBit();
+        const Matrix combined = world * view * projection;
+        int vw = 0, vh = 0;
+        impl_->ActiveSurfaceSize(vw, vh);
+
+        const auto readIndex = [&](int i) -> uint32_t {
+            if (thirtyTwoBit)
+            {
+                uint32_t v;
+                std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(uint32_t), sizeof(uint32_t));
+                return v;
+            }
+            uint16_t v;
+            std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(uint16_t), sizeof(uint16_t));
+            return v;
+        };
+
+        SubmitDx2Primitives(impl_->device2, vw, vh,
+            [&](int i) {
+                const uint32_t idx = readIndex(i);
+                return Dx2BuildPositionColorClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, combined);
+            },
+            primitiveCount, 0);
+    }
+
+    void Dx2GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                                              PrimitiveType primitive, int primitiveCount,
+                                              const GpuDrawParams& params)
+    {
+        Dx2CheckDrawPreconditions("DrawPrimitivesEx", impl_->currentTargetSurface != nullptr,
+                                  primitive, primitiveCount);
+        if (params.textureEnabled && params.texture0 == nullptr)
+            throw std::runtime_error("Dx2GraphicsBackend::DrawPrimitivesEx: textureEnabled=true but texture0 is null");
+        if (params.vertexStart + primitiveCount * 3 > vb.GetVertexCount())
+            throw std::runtime_error(
+                "Dx2GraphicsBackend::DrawPrimitivesEx: vertexStart + primitiveCount needs more vertices than the bound buffer has");
+
+        const auto& dxVb = static_cast<const Dx2VertexBufferBackend&>(vb);
+        const std::size_t stride = dxVb.Stride();
+        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
+            throw std::runtime_error(
+                "Dx2GraphicsBackend::DrawPrimitivesEx: unsupported vertex stride (only 16/20/24/32/52 supported in v1)");
+
+        const uint8_t* base = dxVb.Data().data();
+        const Matrix combined = world * view * projection;
+        int vw = 0, vh = 0;
+        impl_->ActiveSurfaceSize(vw, vh);
+        const D3DTEXTUREHANDLE texHandle = params.textureEnabled
+            ? Dx2ResolveTextureHandle(params.texture0, impl_->device2) : 0;
+        const bool vertexColorEnabled = params.vertexColorEnabled;
+        const int vertexStart = params.vertexStart;
+
+        SubmitDx2Primitives(impl_->device2, vw, vh,
+            [&](int i) { return Dx2BuildGenericClipVertex(base + static_cast<std::size_t>(vertexStart + i) * stride,
+                                                          stride, combined, vertexColorEnabled); },
+            primitiveCount, texHandle);
+    }
+
+    void Dx2GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                     PrimitiveType primitive, int primitiveCount,
+                                                     const GpuDrawParams& params)
+    {
+        Dx2CheckDrawPreconditions("DrawIndexedPrimitivesEx", impl_->currentTargetSurface != nullptr,
+                                  primitive, primitiveCount);
+        if (params.textureEnabled && params.texture0 == nullptr)
+            throw std::runtime_error("Dx2GraphicsBackend::DrawIndexedPrimitivesEx: textureEnabled=true but texture0 is null");
+        if (params.startIndex + primitiveCount * 3 > ib.GetIndexCount())
+            throw std::runtime_error(
+                "Dx2GraphicsBackend::DrawIndexedPrimitivesEx: startIndex + primitiveCount needs more indices than the bound buffer has");
+
+        const auto& dxVb = static_cast<const Dx2VertexBufferBackend&>(vb);
+        const auto& dxIb = static_cast<const Dx2IndexBufferBackend&>(ib);
+        const std::size_t stride = dxVb.Stride();
+        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
+            throw std::runtime_error(
+                "Dx2GraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride (only 16/20/24/32/52 supported in v1)");
+
+        const uint8_t* vbBase = dxVb.Data().data();
+        const uint8_t* ibBase = dxIb.Data().data();
+        const bool thirtyTwoBit = dxIb.IsThirtyTwoBit();
+        const Matrix combined = world * view * projection;
+        int vw = 0, vh = 0;
+        impl_->ActiveSurfaceSize(vw, vh);
+        const D3DTEXTUREHANDLE texHandle = params.textureEnabled
+            ? Dx2ResolveTextureHandle(params.texture0, impl_->device2) : 0;
+        const bool vertexColorEnabled = params.vertexColorEnabled;
+        const int startIndex = params.startIndex;
+        const int baseVertex = params.baseVertex;
+
+        const auto readIndex = [&](int i) -> uint32_t {
+            if (thirtyTwoBit)
+            {
+                uint32_t v;
+                std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(uint32_t), sizeof(uint32_t));
+                return v;
+            }
+            uint16_t v;
+            std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(uint16_t), sizeof(uint16_t));
+            return v;
+        };
+
+        SubmitDx2Primitives(impl_->device2, vw, vh,
+            [&](int i) {
+                const uint32_t idx = readIndex(startIndex + i) + static_cast<uint32_t>(baseVertex);
+                return Dx2BuildGenericClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, stride,
+                                                 combined, vertexColorEnabled);
+            },
+            primitiveCount, texHandle);
+    }
 }
 
 namespace CNA::Internal::Backends

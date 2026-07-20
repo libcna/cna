@@ -1,10 +1,15 @@
 # DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
-> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phase O1 (CMake skeleton),
-> Phase O2 (2D layer, verbatim port from `DX1`), Phase O3 (Direct3D v2 device bring-up), and
-> Phase O5 (`VertexBuffer`/`IndexBuffer` backends) are done — 11/11 `DX2`-labeled CTests passing,
-> independently re-verified. Phase O4 (CPU transform/clip pipeline + `DrawPrimitive` submission,
-> which depends on O5's buffers) starts next.**
+> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phases O1 (CMake skeleton),
+> O2 (2D layer, verbatim port from `DX1`), O3 (Direct3D v2 device bring-up), O5
+> (`VertexBuffer`/`IndexBuffer` backends), and O4 (CPU transform/clip pipeline + real
+> `DrawPrimitive`/`DrawIndexedPrimitive` submission) are all done — **real, pixel-verified 3D
+> rendering through the actual Direct3D v2 device works end-to-end**: solid and interpolated
+> triangle color, indexed draws (16- and 32-bit), order-independent depth-test occlusion, real
+> texture sampling, and near-plane clipping. 16/16 `DX2`-labeled CTests passing, independently
+> re-verified. Phase O6 (state mapping — `ApplyRasterizerState`/`ApplyDepthStencilState`/
+> `ApplyBlendState`/`ApplySamplerState`) starts next; Phase O4 shipped safe interim device-level
+> defaults for cull mode and depth state in the meantime (see `DX2-37`'s own note).**
 >
 > Owner's own words (translated from Czech): *"Now please implement DirectX 2, and it should be
 > able to do 3D as well (within what's possible)."* Unlike `DX1` (2D-only by construction — DX1
@@ -315,16 +320,16 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-30` | Port `BuildPositionColorClipVertex`/`ClipVertex`/`LerpClipVertex`/`ClipTriangleNearPlane`/`ClipVertexToRasterVertex`'s math from `SoftwareGraphicsBackend.cpp` (decision 6) — but stop at "produce a screen-space+color+uv vertex," do not port the rasterizer itself | ⬜ | |
-| `DX2-31` | `D3DTLVERTEX` packing: `sx`/`sy` from the ported viewport-map math, `sz`=post-divide Z (0..1, no remap), `rhw`=1/w, `color` packed `0xAARRGGBB` (**watch the alpha-byte-position bug found during the spike**) | ⬜ | |
-| `DX2-32` | `DrawColoredPrimitives`: `VertexPositionColor` stride, `TriangleList` only (matching `Software`'s own v1 scope), submit via `DrawPrimitive` | ⬜ | |
-| `DX2-33` | `DrawIndexedColoredPrimitives`: same, via `DrawIndexedPrimitive`, 16-bit and 32-bit index buffers both supported (confirm `IDirect3DDevice2::DrawIndexedPrimitive`'s index parameter width — spike-confirm if 32-bit indices need a fallback, same discipline `DX1-88`-style "don't assume" applied to this one remaining unconfirmed detail) | ⬜ | |
-| `DX2-34` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: stride-dispatched vertex layouts (16/20/24/32/52 bytes, matching `Software`'s own set), texture0 sampled via real `D3DRENDERSTATE_TEXTUREHANDLE`+`TEXTUREMAPBLEND` (decision 7) | ⬜ | |
-| `DX2-35` | `Dx2_ColoredPrimitives` CTest: triangle/quad pixel-verified (color, position) | ⬜ | |
-| `DX2-36` | `Dx2_IndexedPrimitives` CTest | ⬜ | |
-| `DX2-37` | `Dx2_ZTest` CTest: two overlapping primitives at different depths, correct occlusion pixel-verified (mirrors `DX2-0c`'s spike test directly) | ⬜ | |
-| `DX2-38` | `Dx2_Texture3D` CTest: `DrawPrimitivesEx` with `textureEnabled=true`, sampled texture pixel-verified (mirrors `DX2-0d`) | ⬜ | |
-| `DX2-39` | Near-plane clipping CTest: a triangle straddling the near plane renders its visible portion only, no crash/garbage | ⬜ | |
+| `DX2-30` | Port `BuildPositionColorClipVertex`/`ClipVertex`/`LerpClipVertex`/`ClipTriangleNearPlane`/`ClipVertexToRasterVertex`'s math from `SoftwareGraphicsBackend.cpp` (decision 6) — but stop at "produce a screen-space+color+uv vertex," do not port the rasterizer itself | ✅ | `Dx2ClipVertex`/`Dx2LerpClipVertex`/`Dx2ClipTriangleNearPlane`/`Dx2BuildPositionColorClipVertex`/`Dx2BuildGenericClipVertex`, simplified (no world-space position/normal fields — lighting/envMap/skinning out of scope, decision 7). |
+| `DX2-31` | `D3DTLVERTEX` packing: `sx`/`sy` from the ported viewport-map math, `sz`=post-divide Z (0..1, no remap), `rhw`=1/w, `color` packed `0xAARRGGBB` (**watch the alpha-byte-position bug found during the spike**) | ✅ | `Dx2ClipVertexToD3DTLVERTEX` — color/uv deliberately NOT premultiplied by `invW` (the load-bearing correction found before implementation, see decision 6). |
+| `DX2-32` | `DrawColoredPrimitives`: `VertexPositionColor` stride, `TriangleList` only (matching `Software`'s own v1 scope), submit via `DrawPrimitive` | ✅ | Submits via the shared `SubmitDx2Primitives` helper (uses `DrawIndexedPrimitive` internally even for non-indexed calls, since near-plane clipping can turn 1 triangle into a quad needing 2 triangles sharing vertices). |
+| `DX2-33` | `DrawIndexedColoredPrimitives`: same, via `DrawIndexedPrimitive`, 16-bit and 32-bit index buffers both supported (confirm `IDirect3DDevice2::DrawIndexedPrimitive`'s index parameter width — spike-confirm if 32-bit indices need a fallback, same discipline `DX1-88`-style "don't assume" applied to this one remaining unconfirmed detail) | ✅ | Both widths work — CNA reads the source index buffer itself (16 or 32-bit) on the CPU and always submits a freshly-built 16-bit `WORD` index array to `DrawIndexedPrimitive` (the post-clip vertex list is always small), so `IDirect3DDevice2`'s own index width was never actually a constraint to spike. `Dx2_IndexedPrimitives` CTest covers both source widths. |
+| `DX2-34` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: stride-dispatched vertex layouts (16/20/24/32/52 bytes, matching `Software`'s own set), texture0 sampled via real `D3DRENDERSTATE_TEXTUREHANDLE`+`TEXTUREMAPBLEND` (decision 7) | ✅ | `Dx2ResolveTextureHandle` fetches a fresh `IDirect3DTexture2`+handle per draw (not cached — see its own doc comment on why, re: device recreation on resize). Also fixed a real gap found while implementing this: neither `Software` (the reference backend) nor the original plan text accounted for `GpuDrawParams::vertexStart`/`startIndex`/`baseVertex` — `EasyGL` does honor them, so DX2 now does too rather than copying `Software`'s own gap. |
+| `DX2-35` | `Dx2_ColoredPrimitives` CTest: triangle/quad pixel-verified (color, position) | ✅ | 2/2 checks pass, independently re-verified: solid-color triangle exact center pixel, tri-color triangle's centroid is the real barycentric average (proves genuine Direct3D perspective-correct interpolation via `D3DTLVERTEX`, not just "some color got written"). |
+| `DX2-36` | `Dx2_IndexedPrimitives` CTest | ✅ | 2/2 checks pass (16-bit and 32-bit index buffers both produce the identical result as the equivalent non-indexed draw). |
+| `DX2-37` | `Dx2_ZTest` CTest: two overlapping primitives at different depths, correct occlusion pixel-verified (mirrors `DX2-0c`'s spike test directly) | ✅ | 2/2 checks pass, both draw orders — proves real, order-independent depth-test occlusion. Required adding an explicit Phase-O4-safe `D3DRENDERSTATE_ZENABLE=TRUE`/`ZFUNC=LESSEQUAL`/`ZWRITEENABLE=TRUE` default to `Create3DDevice()` (matching real XNA's own `DepthStencilState.Default` exactly) rather than relying on Direct3D's own undocumented/unspiked device default — the same reasoning already applied to `D3DRENDERSTATE_CULLMODE`. |
+| `DX2-38` | `Dx2_Texture3D` CTest: `DrawPrimitivesEx` with `textureEnabled=true`, sampled texture pixel-verified (mirrors `DX2-0d`) | ✅ | 1/1 check passes — a 2x2 checker texture's 4 texels read back correctly at opposite corners of a full-screen quad, via a real `IDirect3DTexture2` bound through `D3DRENDERSTATE_TEXTUREHANDLE`. Required adding `DDSCAPS_TEXTURE` to `CreateOffscreenSurface`'s caps (spike-verified first via `dx2_spike9_dualcap_texture.cpp` — a surface with both `DDSCAPS_OFFSCREENPLAIN` and `DDSCAPS_TEXTURE` supports both plain 2D Lock/Blt and 3D `IDirect3DTexture2` sampling correctly). |
+| `DX2-39` | Near-plane clipping CTest: a triangle straddling the near plane renders its visible portion only, no crash/garbage | ✅ | 2/2 checks pass, using a real (non-identity) perspective projection: a straddling triangle clips to a visible partial fragment with no crash, and a triangle fully behind the near plane renders nothing at all (full-triangle rejection). |
 
 ## Phase O5 — `VertexBuffer`/`IndexBuffer` backends
 

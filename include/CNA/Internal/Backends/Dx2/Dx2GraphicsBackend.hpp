@@ -174,6 +174,23 @@ namespace CNA::Internal::Backends::Dx2
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
 
+        // Effect-aware draws (design decisions 6/7): stride-dispatched vertex layouts, real
+        // texture0 modulation via D3DRENDERSTATE_TEXTUREHANDLE. Overridden explicitly rather than
+        // relying on the shared IGraphicsBackend default (which falls back to
+        // DrawColoredPrimitives/DrawIndexedColoredPrimitives and would silently ignore
+        // params.texture0). Lighting/fog/multitexture/envMap/skinning are read from `params` but
+        // not evaluated -- accepted and ignored, matching the Software backend's own identical,
+        // already-documented v1 scope boundary (design decision 7) -- the vertex's own diffuse
+        // color is used as-is.
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                             const Matrix& world, const Matrix& view, const Matrix& projection,
+                             PrimitiveType primitive, int primitiveCount,
+                             const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
+
     private:
         struct Impl;
         std::unique_ptr<Impl> impl_;

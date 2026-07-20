@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports that
-// DX2 (DirectDraw v1, 3D not yet implemented -- Phase O1/O2 scope, see plan_dx2.md) supports none
-// of the currently-enumerated capabilities,
-// and that calling the corresponding 3D methods anyway still throws (SupportsCapability() is a
-// way to check ahead of time, not a way to make the underlying call itself succeed). Twin of
+// CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports false
+// for every currently-enumerated capability -- CNA::GraphicsCapability::ThreeD's own documented
+// definition bundles vertex/index buffers, 3D draw calls, AND depth/stencil clears/state as one
+// flag (see Dx2GraphicsBackend.hpp's own comment), so it stays false even though real geometry
+// drawing is now genuinely implemented (Phase O4/O5, plan_dx2.md) -- state APPLICATION
+// (SetDepthTestEnabled/ApplyRasterizerState/etc, Phase O6) is not. This test also confirms calling
+// the still-unimplemented state-toggle methods anyway still throws (SupportsCapability() is a way
+// to check ahead of time, not a way to make the underlying call itself succeed). Twin of
 // sdlrenderer_graphics_capability_test.cpp/canvas_graphics_capability_test.cpp.
 //
 // Exit code 0 = PASS, 1 = FAIL.
@@ -12,7 +15,6 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -59,11 +61,13 @@ protected:
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported");
 
         // SupportsCapability() is a check, not an enforcement mechanism -- calling the actual 3D
-        // method anyway still throws exactly as before this feature existed.
+        // state-toggle methods anyway still throws exactly as before this feature existed. Unlike
+        // an earlier version of this test, constructing a VertexBuffer is deliberately NOT checked
+        // here anymore -- Phase O5 made vertex/index buffer construction genuinely real.
         check(Throws([&] { dev.SetDepthTestEnabled(true); }),
               "SetDepthTestEnabled still throws when called without checking first");
-        check(Throws([&] { VertexBuffer vb(dev, 4); (void)vb; }),
-              "Constructing a VertexBuffer still throws when called without checking first");
+        check(Throws([&] { dev.SetBlendEnabled(true); }),
+              "SetBlendEnabled still throws when called without checking first");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();
