@@ -25,12 +25,14 @@
 #include <stdexcept>
 #include <vector>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
@@ -43,11 +45,38 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // Constructor / properties
 // -----------------------------------------------------------------------
 
+// REMED-CONTENT-004: Texture3D is a documented, backend-dependent capability -- Headless has no
+// real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
+// (plan_software.md Boundaries). Every test below constructs a real Texture3D, so on a backend that
+// doesn't support it the constructor now throws System::NotSupportedException before any test body
+// logic runs -- skip cleanly rather than fail, matching this project's own hardware-capability-skip
+// convention (e.g. Accelerometer/Gyroscope). See Texture3DUnsupportedBackendTest below for the
+// positive verification that the new throw behavior actually fires on such a backend.
 class Texture3DTest : public ::testing::Test
 {
 protected:
+    void SetUp() override
+    {
+        if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        {
+            GTEST_SKIP() << "Texture3D is not supported on this backend (REMED-CONTENT-004)";
+        }
+    }
+
     GraphicsDevice gd;
 };
+
+// Deliberately NOT a Texture3DTest fixture (that fixture skips on an unsupported backend) --
+// this is the mirror-image check, verifying the new throw behavior on such a backend.
+TEST(Texture3DUnsupportedBackendTest, ConstructorThrowsNotSupportedExceptionWhenBackendLacksTexture3D)
+{
+    GraphicsDevice gd;
+    if (gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+    {
+        GTEST_SKIP() << "this backend supports Texture3D; nothing to verify here";
+    }
+    EXPECT_THROW((Texture3D(gd, 2, 2, 2, false, SurfaceFormat::Color)), System::NotSupportedException);
+}
 
 TEST_F(Texture3DTest, ConstructorSetsWidth)
 {

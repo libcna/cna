@@ -617,6 +617,21 @@ namespace CNA::Internal::Backends::Headless
         return effect;
     }
 
+    bool HeadlessGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            // REMED-CONTENT-004: HeadlessTexture3DBackend validates arguments and records a trace
+            // but never actually stores pixel data -- Headless has no real GPU resource of any
+            // kind by design. Reported here so Texture3D's own constructor can fail cleanly instead
+            // of silently discarding every SetData()/GetData() call.
+            case CNA::GraphicsCapability::Texture3D:
+                return false;
+            default:
+                return true;
+        }
+    }
+
     void HeadlessGraphicsBackend::ApplyBlendState(int, int, int, int, int, int)
     {
         state_->stats.blendStateChangeCount++;

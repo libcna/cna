@@ -152,6 +152,9 @@ namespace CNA::Internal::Backends::Software
     // Cube-map render targets, Texture3D, and hardware occlusion queries remain out of scope for
     // v1 (plan_software.md Boundaries) -- CreateRenderTargetCube/CreateTexture3D/
     // CreateOcclusionQuery all keep IGraphicsBackend's own shared default (returns nullptr).
+    // REMED-CONTENT-004: Texture3D's own absence is now reported via
+    // SupportsCapability(GraphicsCapability::Texture3D) => false, so Texture3D's constructor fails
+    // cleanly instead of a caller's SetData()/GetData() calls silently discarding data.
 
     class SoftwareEffectBackend final : public IEffectBackend
     {
@@ -258,6 +261,8 @@ namespace CNA::Internal::Backends::Software
                                                              const std::string& fragSrc) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
+
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;

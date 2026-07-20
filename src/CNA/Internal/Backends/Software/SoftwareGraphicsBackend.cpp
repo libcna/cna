@@ -1053,6 +1053,22 @@ namespace CNA::Internal::Backends::Software
         return std::make_unique<SoftwareTextureCubeBackend>(size);
     }
 
+    bool SoftwareGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            // REMED-CONTENT-004: Texture3D remains an explicit, documented v1 scope boundary for
+            // this backend (see this header's own "Boundaries" comment) -- CreateTexture3D() keeps
+            // IGraphicsBackend's shared default (returns nullptr). Reported here so Texture3D's own
+            // constructor can fail cleanly instead of silently discarding every SetData()/GetData()
+            // call.
+            case CNA::GraphicsCapability::Texture3D:
+                return false;
+            default:
+                return true;
+        }
+    }
+
     std::unique_ptr<ISpriteBatchBackend> SoftwareGraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<SoftwareSpriteBatchBackend>(*this);

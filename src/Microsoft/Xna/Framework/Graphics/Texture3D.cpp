@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -62,6 +63,19 @@ namespace Microsoft::Xna::Framework::Graphics
         , depth_(depth)
         , backend_(nullptr)
     {
+        // REMED-CONTENT-004: Headless and Software both leave IGraphicsBackend::CreateTexture3D()
+        // at its shared default (returns nullptr) -- Headless has no real GPU resource of any kind
+        // by design; Software's Texture3D support is an explicit, documented v1 scope boundary
+        // (plan_software.md Boundaries), not an oversight. Previously this left backend_ null and
+        // every subsequent SetData()/GetData() call silently no-op'd instead of failing -- a caller
+        // had no way to know their data was silently discarded. Checked ahead of backend creation,
+        // matching this file's own D3D9 profile-ceiling check immediately below and the
+        // GraphicsCapability doc's own "query before relying on the feature" convention.
+        if (!device.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+        {
+            throw System::NotSupportedException(
+                "Texture3D: this backend does not support real volume (3D) texture storage");
+        }
 #ifdef CNA_BACKEND_D3D9
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
 #endif

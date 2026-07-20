@@ -39,6 +39,17 @@ namespace CNA
         OcclusionQuery,
 
         /** @brief A custom (non-stock) Effect passed to SpriteBatch.Begin(). */
-        CustomEffects
+        CustomEffects,
+
+        /**
+         * @brief Real volume (3D) texture storage -- Texture3D::SetData()/GetData() actually
+         * persist and retrieve pixel data, not just validate arguments. Headless has no real GPU
+         * resource of any kind by design; Software's Texture3D support is an explicit, documented
+         * v1 scope boundary (`plan_software.md` Boundaries) -- both currently leave
+         * `IGraphicsBackend::CreateTexture3D()` at its shared default (returns `nullptr`), which
+         * previously let `Texture3D::SetData()`/`GetData()` silently no-op instead of failing
+         * cleanly (REMED-CONTENT-004).
+         */
+        Texture3D
     };
 } // CNA

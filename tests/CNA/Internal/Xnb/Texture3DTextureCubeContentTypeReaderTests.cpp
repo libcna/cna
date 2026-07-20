@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -102,6 +103,11 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     EXPECT_NO_THROW(cube.GetData(CubeMapFace::NegativeZ, 6, nullptr, &onePixel, 0, 1));
 }
 
+// REMED-CONTENT-004: Texture3D is a documented, backend-dependent capability -- Headless has no
+// real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
+// (plan_software.md Boundaries). On a backend that doesn't support it, reading now throws a clean
+// System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
+// succeeding with all-zero pixel data.
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder)
 {
     // No real Texture3D .xnb fixture was found anywhere in the available library -- hand
@@ -142,6 +148,13 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConst
 
     auto typeReader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.Texture3DReader");
     ASSERT_NE(typeReader, nullptr);
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+    {
+        EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), System::NotSupportedException);
+        return;
+    }
+
     std::any resultAny = typeReader->ReadUntyped(reader, std::any{});
     auto texture = std::any_cast<std::shared_ptr<Texture3D>>(resultAny);
     ASSERT_NE(texture, nullptr);

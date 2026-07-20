@@ -11,11 +11,13 @@
 #include <gtest/gtest.h>
 #include <vector>
 
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -89,6 +91,11 @@ protected:
     GraphicsDevice gd;
 };
 
+// REMED-CONTENT-004: Texture3D is a documented, backend-dependent capability -- Headless has no
+// real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
+// (plan_software.md Boundaries). On a backend that doesn't support it, loading now throws a clean
+// System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
+// succeeding with all-zero pixel data.
 TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
 {
     ScratchContentRoot root;
@@ -96,6 +103,12 @@ TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
+
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::Texture3D))
+    {
+        EXPECT_THROW(cm.Load<std::shared_ptr<Texture3D>>("volume"), System::NotSupportedException);
+        return;
+    }
 
     std::shared_ptr<Texture3D> texture = cm.Load<std::shared_ptr<Texture3D>>("volume");
 

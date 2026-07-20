@@ -500,6 +500,8 @@ namespace CNA::Internal::Backends::Headless
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
 
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
