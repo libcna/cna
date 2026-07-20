@@ -35,18 +35,18 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 1 | 0 | 0 | 10 |
+| P0 | 11 | 2 | 0 | 0 | 9 |
 | P1 | 21 | 0 | 0 | 0 | 21 |
 | P2 | 44 | 0 | 0 | 0 | 44 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **1** | **0** | **0** | **103** |
+| **Total** | **104** | **2** | **0** | **0** | **102** |
 
 ## Wave 0 — make the tests trustworthy
 
 | ID | Status | Owner | Branch | Notes |
 |---|---|---|---|---|
 | REMED-BUILD-001 | DONE | | feature/audit | `WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"` added to `gtest_discover_tests(CnaTests ...)` in `cmake/UnitTests.cmake` (one line, matching `EasyGLTests.cmake`/`VulkanTests.cmake`'s existing pattern). Full unfiltered `ctest` run against `cmake-build-debug` (EASYGL) and the direct `./CnaTests` binary now **agree exactly** on the gtest-discovered subset: 5507 tests, 5503 passed / 4 skipped (Accelerometer/Gyroscope hardware skips) / 0 failed, both ways. See "Wave 0 triage" below for the 5 additional failures ctest reports outside that subset (4 already-tracked, 1 newly discovered — recorded below). Completion + verification criteria met. |
-| REMED-BUILD-002 | NOT STARTED | | | Decide first whether `XactFileGen.hpp` makes the copy step obsolete. |
+| REMED-BUILD-002 | DONE | | feature/audit | Decision: `XactFileGen.hpp` makes the copy obsolete (see Decisions log) — POST_BUILD `copy_directory` removed from `cmake/Examples.cmake`. Verified: unpiped, unfiltered `cmake --build` exits 0 on 3 backends (HEADLESS, SOFTWARE, VULKAN — all rebuilt from a reconfigure of the changed `Examples.cmake`), `cna_demo_xact` itself linking cleanly on all three. Completion + verification criteria met. |
 
 ### Wave 0 triage — full post-`REMED-BUILD-001` `ctest` baseline (`cmake-build-debug`, EASYGL)
 
@@ -237,7 +237,7 @@ Owner decisions required by the plan, plus any scope calls made during implement
 | _(none yet)_ | `REMED-GFX-035` | Which GLSL dialect is the contract? | pending |
 | _(none yet)_ | `REMED-CORE-011` | Implement `CNA::Runtime` or delete it? | pending |
 | _(none yet)_ | `REMED-BUILD-007` | Is `CNA::Internal::Net`'s MIT licensing deliberate? | pending |
-| _(none yet)_ | `REMED-BUILD-002` | Does `XactFileGen.hpp` make the Content copy obsolete? | pending |
+| 2026-07-20 | `REMED-BUILD-002` | **Yes — the copy step is obsolete, deleted outright (not guarded, not backfilled with a real `Content/` dir).** Investigated `examples/demo_xact/src/XactFileGen.hpp` + `XactDemo.cpp`: `XactDemo::LoadContent()` calls `GenerateXactFiles("Content/Audio")`, which itself calls `std::filesystem::create_directories(audioDir)` and then `XactFileGen::SaveFile()`s a freshly synthesized `Waves.xwb`/`Demo.xgs`/`Sounds.xsb` (sine-wave PCM + minimal XGS/XWB/XSB binaries matching `XactParser.cpp`'s expected layout) directly into that runtime-relative directory — no pre-existing `.xwb`/`.xgs`/`.xsb` asset is ever read from disk. `examples/demo_xact/` contains only `src/` (confirmed: no `Content/` anywhere in the repo, matching the audit finding). The POST_BUILD `copy_directory` in `cmake/Examples.cmake` therefore copied a directory that never existed and could never usefully exist — deleting it is strictly correct, not a stopgap. | Claude (autonomous remediation session, user-directed) |
 
 ## Findings that did not reproduce
 

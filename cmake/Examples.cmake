@@ -116,11 +116,10 @@ if(CNA_BUILD_EXAMPLES)
     if(TARGET SDL3::SDL3main)
         target_link_libraries(cna_demo_xact PRIVATE SDL3::SDL3main)
     endif()
-    add_custom_command(TARGET cna_demo_xact POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_xact/Content"
-            "$<TARGET_FILE_DIR:cna_demo_xact>/Content"
-        COMMENT "Copying Content next to cna_demo_xact executable")
+    # REMED-BUILD-002: no POST_BUILD Content copy here, unlike the other demo targets above --
+    # examples/demo_xact/ has no Content/ directory at all. XactDemo::LoadContent() generates its
+    # own XGS/XWB/XSB files at runtime via XactFileGen::GenerateXactFiles() into "Content/Audio"
+    # relative to the process's working directory, so there is nothing to copy from source.
     if(WIN32)
         set_target_properties(cna_demo_xact PROPERTIES WIN32_EXECUTABLE TRUE)
         cna_copy_sdl_runtime(cna_demo_xact)
