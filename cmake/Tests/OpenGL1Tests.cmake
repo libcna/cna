@@ -277,4 +277,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_BlendAlphaFactor COMMAND cna_test_opengl1_blendalphafactor
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 13 (EasyGL parity): virtual-resolution/presentation-mode scaling.
+    cna_opengl1_test(cna_test_opengl1_presentationmode
+                      examples/opengl1_presentationmode_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_PresentationMode COMMAND cna_test_opengl1_presentationmode
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

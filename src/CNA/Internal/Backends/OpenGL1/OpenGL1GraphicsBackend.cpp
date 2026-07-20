@@ -230,7 +230,7 @@ int msBuffers=0,msSamples=0;SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS,&msBuf
 multiSampleCount_=(msBuffers>0&&msSamples>1)?msSamples:0;
 if(multiSampleCount_>1)glEnable(GL_MULTISAMPLE);
 }
-OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();if(caps_.extendedBlend)caps_.extendedBlend=TryLoadBlendFunctions();DetectMultiSampleCount();
+OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):presentationMode_(static_cast<int>(a.presentationMode)),window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();if(caps_.extendedBlend)caps_.extendedBlend=TryLoadBlendFunctions();DetectMultiSampleCount();
 std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.versionMinor
  <<"; framebuffer object: "<<(caps_.framebufferObject?"yes":"no")
  <<"; multitexture: "<<(caps_.multitexture?"yes":"no")
@@ -240,7 +240,30 @@ std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.ve
  <<"; MSAA: "<<(multiSampleCount_>1?(std::to_string(multiSampleCount_)+"x"):std::string("no"))
  <<std::endl;
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);IGraphicsBackend::RegisterForWindow(window_,this);}
-OpenGL1GraphicsBackend::~OpenGL1GraphicsBackend(){IGraphicsBackend::UnregisterForWindow(window_);if(glContext_)SDL_GL_DestroyContext(glContext_);}void OpenGL1GraphicsBackend::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1GraphicsBackend::Present(){SDL_GL_SwapWindow(window_);}void OpenGL1GraphicsBackend::GetViewportSize(int&w,int&h){SDL_GetWindowSizeInPixels(window_,&w,&h);}void OpenGL1GraphicsBackend::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1GraphicsBackend::SetPresentationMode(int){}
+OpenGL1GraphicsBackend::~OpenGL1GraphicsBackend(){IGraphicsBackend::UnregisterForWindow(window_);if(glContext_)SDL_GL_DestroyContext(glContext_);}void OpenGL1GraphicsBackend::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1GraphicsBackend::Present(){SDL_GL_SwapWindow(window_);}void OpenGL1GraphicsBackend::GetViewportSize(int&w,int&h){SDL_GetWindowSizeInPixels(window_,&w,&h);}void OpenGL1GraphicsBackend::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1GraphicsBackend::SetPresentationMode(int mode){presentationMode_=mode;}
+// plan_opengl1.md item 13 (EasyGL parity): see EffectiveWidth()/EffectiveHeight()'s own doc
+// comment in the header for the full rationale of which modes recompute and which don't.
+void OpenGL1GraphicsBackend::ComputeLogicalSize(int&outW,int&outH)const{
+if(presentationMode_!=4){outW=virtualWidth_;outH=virtualHeight_;return;} // Only FixedHeightDynamicWidth recomputes.
+int physW=0,physH=0;SDL_GetWindowSizeInPixels(window_,&physW,&physH);
+if(physW<=0||physH<=0||virtualHeight_<=0){outW=virtualWidth_;outH=virtualHeight_;return;}
+outH=virtualHeight_;
+outW=(int)(((long long)physW*virtualHeight_+physH/2)/physH); // round(physW*preferredH/physH)
+}
+bool OpenGL1GraphicsBackend::TransformWindowToLogical(float windowX,float windowY,float&logX,float&logY)const{
+if(presentationMode_!=4)return false;
+int physW=0,physH=0;SDL_GetWindowSizeInPixels(window_,&physW,&physH);int logW,logH;ComputeLogicalSize(logW,logH);
+if(physH<=0||logH<=0)return false;
+const float scale=(float)logH/(float)physH; // uniform -- see the header's own doc comment for why width/height scale are identical here.
+logX=windowX*scale;logY=windowY*scale;return true;
+}
+bool OpenGL1GraphicsBackend::TransformLogicalToWindow(float logX,float logY,float&windowX,float&windowY)const{
+if(presentationMode_!=4)return false;
+int physW=0,physH=0;SDL_GetWindowSizeInPixels(window_,&physW,&physH);int logW,logH;ComputeLogicalSize(logW,logH);
+if(logH<=0||physH<=0)return false;
+const float scale=(float)physH/(float)logH;
+windowX=logX*scale;windowY=logY*scale;return true;
+}
 void OpenGL1GraphicsBackend::SetSwapInterval(int interval){SDL_GL_SetSwapInterval(interval);}
 void OpenGL1GraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t*pixels){int W,H;GetViewportSize(W,H);glReadBuffer(GL_BACK);glPixelStorei(GL_PACK_ALIGNMENT,1);const int glY=H-y-h;glReadPixels(x,glY,w,h,GL_RGBA,GL_UNSIGNED_BYTE,pixels);const int rowBytes=w*4;std::vector<uint8_t>tmp(rowBytes);for(int i=0;i<h/2;++i){uint8_t*top=pixels+i*rowBytes;uint8_t*bot=pixels+(h-1-i)*rowBytes;std::copy(top,top+rowBytes,tmp.data());std::copy(bot,bot+rowBytes,top);std::copy(tmp.begin(),tmp.end(),bot);}}
 std::unique_ptr<ITextureBackend>OpenGL1GraphicsBackend::CreateTexture(const ImageData&d){return std::make_unique<OpenGL1TextureBackend>(d,RegistryIfEnabled(),caps_.generateMipmap);}std::unique_ptr<ISpriteBatchBackend>OpenGL1GraphicsBackend::CreateSpriteBatch(){return std::make_unique<OpenGL1SpriteBatchBackend>(*this);}std::unique_ptr<IVertexBufferBackend>OpenGL1GraphicsBackend::CreateVertexBuffer(int c){return std::make_unique<OpenGL1VertexBufferBackend>(c);}std::unique_ptr<IIndexBufferBackend>OpenGL1GraphicsBackend::CreateIndexBuffer16(int){return std::make_unique<OpenGL1IndexBufferBackend>(false);}std::unique_ptr<IIndexBufferBackend>OpenGL1GraphicsBackend::CreateIndexBuffer32(int){return std::make_unique<OpenGL1IndexBufferBackend>(true);}

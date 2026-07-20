@@ -83,7 +83,17 @@ private:OpenGL1GraphicsBackend& owner_;bool begun_=false;Matrix transform_=Matri
 };
 class OpenGL1GraphicsBackend final : public IGraphicsBackend {
 public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenGL1GraphicsBackend()override;
- void Clear(float,float,float,float)override;void Present()override;void GetViewportSize(int&,int&)override;void SetVirtualResolution(int,int)override;void SetPresentationMode(int)override;
+ void Clear(float,float,float,float)override;void Present()override;void GetViewportSize(int&,int&)override;void SetVirtualResolution(int,int)override;
+ // plan_opengl1.md item 13 (EasyGL parity): was a no-op -- now stores the mode, consulted by
+ // EffectiveWidth()/EffectiveHeight() (FixedHeightDynamicWidth only; see their own doc comment).
+ void SetPresentationMode(int)override;
+ // plan_opengl1.md item 13: uniform logical<->physical scale for FixedHeightDynamicWidth (no
+ // offset needed -- the logical canvas fills the window exactly, by construction, so there are no
+ // letterbox bars to account for). Default (unimplemented, "window==logical") behavior stays for
+ // every other presentation mode. Registered for GetForWindow() lookup already, in the
+ // constructor (IGraphicsBackend::RegisterForWindow) -- Mouse::logical_to_window's own consumer.
+ bool TransformWindowToLogical(float windowX,float windowY,float&logX,float&logY)const override;
+ bool TransformLogicalToWindow(float logX,float logY,float&windowX,float&windowY)const override;
  // plan_opengl1.md item 20 (EasyGL parity): only the constructor's swapInterval ever reached SDL
  // before this -- a runtime GraphicsDevice.PresentationParameters/vsync change silently did
  // nothing.
@@ -118,8 +128,15 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  bool SupportsCapability(CNA::GraphicsCapability capability)const override;
  int VirtualWidth()const{return virtualWidth_;}int VirtualHeight()const{return virtualHeight_;}
  const OpenGL1Capabilities& Capabilities()const{return caps_;}
- int EffectiveWidth()const{return currentRt_?currentRt_->GetWidth():virtualWidth_;}
- int EffectiveHeight()const{return currentRt_?currentRt_->GetHeight():virtualHeight_;}
+ // plan_opengl1.md item 13 (EasyGL parity): used to return the raw, never-recomputed
+ // virtualWidth_/virtualHeight_ regardless of the window's actual current size or
+ // presentationMode_ -- now applies the FixedHeightDynamicWidth aspect-correct recomputation
+ // (logicalW = round(physicalW * preferredH / physicalH), preferredH fixed) when that mode is
+ // active, matching EasyGL's own getLogicalSize(). Every other mode keeps today's original
+ // behavior (see ComputeLogicalSize()'s own doc comment for why that's a real, not merely
+ // deferred, answer for Stretch/NativeBackBuffer specifically).
+ int EffectiveWidth()const{if(currentRt_)return currentRt_->GetWidth();int w,h;ComputeLogicalSize(w,h);return w;}
+ int EffectiveHeight()const{if(currentRt_)return currentRt_->GetHeight();int w,h;ComputeLogicalSize(w,h);return h;}
  // plan_opengl1.md phase 8: context-loss resource recreation registry, independent of EasyGL's
  // own (::easygl::ResourceRegistry). SetContextRecoveryEnabled(false) stops future Create* calls
  // from registering (matches the documented IGraphicsBackend contract: "safe to call ... when no
@@ -137,6 +154,17 @@ private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawI
  // for consistency rather than assumed unchanged).
  void DetectMultiSampleCount();
  int multiSampleCount_=0;
+ // plan_opengl1.md item 13 (EasyGL parity): the actual FixedHeightDynamicWidth recomputation --
+ // see EffectiveWidth()/EffectiveHeight()'s own doc comment above for the formula and rationale.
+ // Every mode besides FixedHeightDynamicWidth (Letterbox/Overscan/Stretch/NativeBackBuffer)
+ // returns virtualWidth_/virtualHeight_ unchanged: Stretch and NativeBackBuffer are honestly
+ // already correct that way (Stretch means "don't preserve aspect", which is exactly what an
+ // unscaled logical size mapped onto a differently-shaped physical viewport already produces;
+ // NativeBackBuffer means "no scaling" by definition) -- Letterbox/Overscan (real bars/cropping)
+ // would need the actual glViewport sub-rectangle adjusted, not just this SpriteBatch-facing
+ // logical size, and are a documented, intentional gap (plan_opengl1.md).
+ void ComputeLogicalSize(int&outW,int&outH)const;
+ int presentationMode_=4; // CnaPresentationMode::FixedHeightDynamicWidth, matches the shared interface's own default.
  // Fixes a real, pre-existing bug found while implementing phase 6's mip-aware filtering:
  // ApplySamplerState() used to write glTexParameteri directly, once per draw for every sampler
  // slot, called (via GraphicsDevice::applySamplerStatesToBackend()) BEFORE DrawInternal actually

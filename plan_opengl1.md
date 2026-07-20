@@ -68,11 +68,64 @@ RenderTargetCube/custom-VertexDeclaration class of gaps (real, not revisited her
 11 gaps are genuinely expressible with real legacy/period-compatible fixed-function OpenGL (no
 shader, no modern-only extension) and were simply never implemented yet:
 
-13. Add virtual-resolution/presentation-mode scaling (`GetViewportSize()`/`EffectiveWidth()`/
+13. ~~Add virtual-resolution/presentation-mode scaling (`GetViewportSize()`/`EffectiveWidth()`/
     `EffectiveHeight()` returning the raw physical window size instead of a dynamically-recomputed
     logical size; `SetPresentationMode()` a no-op; `TransformWindowToLogical`/
     `TransformLogicalToWindow` never overridden) via the same `FixedHeightDynamicWidth`
-    aspect-correct recomputation EasyGL's own `getLogicalSize()` already does.
+    aspect-correct recomputation EasyGL's own `getLogicalSize()` already does.~~
+    **Done, deliberately narrower scope than the item's own original wording** (found while
+    implementing): `GetViewportSize()` was NOT changed -- `GraphicsDevice::UpdateViewportFromWindow()`
+    (shared, backend-agnostic) feeds `GetViewportSize()`'s return value DIRECTLY into the real
+    `glViewport()` call as well as the public `GraphicsDevice.Viewport` property; making it return a
+    recomputed LOGICAL size instead of the real physical size would silently break rendering (GL
+    would only draw into a sub-rectangle of the actual window) unless paired with a full
+    intermediate-render-target-then-scale-blit compositing pipeline -- a much larger undertaking
+    that would push OPENGL1 toward "a second modern rendering pipeline", against this backend's own
+    design rule. `EffectiveWidth()`/`EffectiveHeight()` (`OpenGL1SpriteBatchBackend::Begin()`'s own
+    `glOrtho` range -- the ONLY consumer, entirely separate from the real `glViewport` call) are
+    what actually needed the recomputation, and are the only thing changed: now call a new private
+    `ComputeLogicalSize()`, which applies `logicalH = preferredH` (fixed), `logicalW =
+    round(physicalW * preferredH / physicalH)` -- matching EasyGL's own `getLogicalSize()` --
+    **only** when `presentationMode_ == FixedHeightDynamicWidth` (the default). Every other mode
+    (`Letterbox`/`Overscan`/`Stretch`/`NativeBackBuffer`) keeps today's original, unrecomputed
+    behavior: `Stretch` and `NativeBackBuffer` are honestly already correct that way (`Stretch`
+    means "don't preserve aspect", which is exactly what an unscaled logical size mapped via
+    `glOrtho` onto a differently-shaped physical viewport already produces; `NativeBackBuffer` means
+    "no scaling" by definition); true `Letterbox`/`Overscan` (real bars/cropping) would need the
+    actual `glViewport` sub-rectangle adjusted, not just this `SpriteBatch`-facing logical size --
+    a documented, intentional gap, not attempted here. `SetPresentationMode(int)` now stores the
+    mode (was a pure no-op) in a new `presentationMode_` member, initialized from
+    `GraphicsBackendCreateArgs::presentationMode` in the constructor (previously never read at all).
+    `TransformWindowToLogical`/`TransformLogicalToWindow` are now overridden using the same
+    recomputed logical size: a single uniform `logicalH/physicalH` scale with no offset (the
+    logical canvas fills the window exactly under `FixedHeightDynamicWidth`, by construction, so
+    there are no letterbox bars to account for) -- matching `Mouse::logical_to_window`'s own
+    documented comment for EasyGL's identical model ("a uniform height-scale with no offset ...
+    exact for its FixedHeightDynamicWidth model"). Both return the shared interface's own default
+    (`false`, "window==logical") for every other presentation mode.
+
+    New test `OpenGL1_PresentationMode` (`examples/opengl1_presentationmode_test.cpp`) constructs
+    at 320x240 (4:3), confirms a baseline stripe drawn at logical X=160 lands at physical X=160
+    (unresized sanity), then genuinely resizes the real SDL window to 480x480 (a real aspect
+    change, 4:3 to 1:1) via `SDL_SetWindowSize`+`SDL_SyncWindow` (found empirically that
+    `SDL_SetWindowSize` alone is asynchronous even under this sandbox's Xvfb -- `SDL_GetWindowSizeInPixels`
+    read stale pre-resize values immediately afterward without `SDL_SyncWindow`+`SDL_PumpEvents`,
+    confirmed via an explicit sanity check in the test itself before trusting the resize).
+    Post-resize, a stripe drawn at logical X=120 (half of the CORRECTLY recomputed
+    `round(480*240/480)=240`) must land at physical X=~240 (the real centre) -- the pre-existing
+    bug (`EffectiveWidth()` stuck at the original 320) would instead place it at physical X=~180, a
+    clearly distinguishable 60-pixel difference, matched exactly on the first attempt.
+    `TransformWindowToLogical(240,240)`/`TransformLogicalToWindow(120,120)` are checked as an exact
+    inverse pair against the same 0.5 scale. Mutation-tested three ways, independently: (1)
+    reverting `ComputeLogicalSize()` to always return the stuck construction-time values reproduces
+    the predicted stripe position exactly (physical X=180, only that one check fails); (2)
+    reverting `TransformWindowToLogical` alone to the shared no-op default reproduces the predicted
+    failure (`ok=false`) in exactly its own two checks, leaving every other check -- including the
+    structurally-identical but independent `TransformLogicalToWindow` -- still passing, confirming
+    clean, isolated discrimination with no coincidental cross-check masking. Full
+    `ctest -R "OpenGL1_"` regression sweep: 36/36 passed after this change (confirming the
+    FixedHeightDynamicWidth recomputation is a mathematical no-op, and therefore non-regressing,
+    for every existing test's construction-time window size, none of which resize their window).
 14. ~~Add `BasicEffect.DirectionalLight1`/`DirectionalLight2` via `GL_LIGHT1`/`GL_LIGHT2` (`DrawInternal`
     only ever configures `GL_LIGHT0`, despite `GpuDrawParams` already carrying all 3 lights' data).~~
     **Done**: `DrawInternal`'s lit path now also configures `GL_LIGHT1`/`GL_LIGHT2` from
