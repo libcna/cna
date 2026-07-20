@@ -1954,15 +1954,19 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
-`METAL-19` (the enum-reordering regression guard — `METAL-14`-`18`/`20` are now closed, several
-found to be based on a false premise, see above, and `METAL-14` itself landed real 2026-07-20); the
+`METAL-19` (the enum-reordering regression guard — the one real, extracted instance found
+[`MetalSamplerFilter.hpp`] is fixed, see item 66; the remaining scope is the un-extracted `.mm`-only
+`CullMode`/`Blend`/`CompareFunction`/`StencilOperation` tables, still needing extraction first,
+same as `METAL-14` originally did); the
 *wiring* of the generic `VertexElement`-driven descriptor builder into a live draw path
 (`METAL-26`/`27`'s core logic landed real 2026-07-20 — see narrative — but no `PipelineKind`/shader
 currently pairs with an arbitrary declaration, so this stays correctly blocked on Phase 14, same
 conclusion as before, just with real tested infrastructure now waiting for it instead of nothing);
-attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); Phase 8's
-remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
-`90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
+attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); `METAL-89`/`90` are now closed
+(see item 67) but `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden` themselves still fail on
+real hardware for a still-undetermined reason — see item 72, paused pending either a physical Mac
+or further diagnostics, not attributable to either of the two real bugs (`vertexStart`/
+`ReadBackbuffer`) already found and fixed from this same investigation; the rest of
 Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
 `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108`, `RenderTargetCube`
 `METAL-109`–`111`, and `GetData()` `METAL-131` are now closed, see above); Phase 14 (custom
