@@ -35,18 +35,43 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 0 | 0 | 0 | 11 |
+| P0 | 11 | 1 | 0 | 0 | 10 |
 | P1 | 21 | 0 | 0 | 0 | 21 |
 | P2 | 44 | 0 | 0 | 0 | 44 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **0** | **0** | **0** | **104** |
+| **Total** | **104** | **1** | **0** | **0** | **103** |
 
 ## Wave 0 — make the tests trustworthy
 
 | ID | Status | Owner | Branch | Notes |
 |---|---|---|---|---|
-| REMED-BUILD-001 | NOT STARTED | | | **Start here.** Expect follow-on triage of ~220 newly-running tests. |
+| REMED-BUILD-001 | DONE | | feature/audit | `WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"` added to `gtest_discover_tests(CnaTests ...)` in `cmake/UnitTests.cmake` (one line, matching `EasyGLTests.cmake`/`VulkanTests.cmake`'s existing pattern). Full unfiltered `ctest` run against `cmake-build-debug` (EASYGL) and the direct `./CnaTests` binary now **agree exactly** on the gtest-discovered subset: 5507 tests, 5503 passed / 4 skipped (Accelerometer/Gyroscope hardware skips) / 0 failed, both ways. See "Wave 0 triage" below for the 5 additional failures ctest reports outside that subset (4 already-tracked, 1 newly discovered — recorded below). Completion + verification criteria met. |
 | REMED-BUILD-002 | NOT STARTED | | | Decide first whether `XactFileGen.hpp` makes the copy step obsolete. |
+
+### Wave 0 triage — full post-`REMED-BUILD-001` `ctest` baseline (`cmake-build-debug`, EASYGL)
+
+Total registered CTest tests: 5754 = 5507 gtest-discovered (governed by the `WORKING_DIRECTORY` fix) + 247
+separately-registered tests (backend smoke tests, `CnaInputTests`, `easy-gl-*` submodule tests, etc. — these
+already had correct `WORKING_DIRECTORY` before this task, per `EasyGLTests.cmake`/`VulkanTests.cmake`, so they
+are unaffected by the fix either way). Result: **5749 passed, 5 failed, 4 skipped** (`Total Test time (real) =
+583.90 sec`).
+
+The 5 failures are **all outside the 5507 gtest-discovered set** (confirmed by cross-referencing the ctest log
+against the direct-binary run — the discovered subset is 5503/4/0 both ways, exactly matching). Triage:
+
+| Failing CTest | Classification | Evidence |
+|---|---|---|
+| `EasyGL_AvatarRenderer_TintRouting` | Already known — tracked in `MASTER_REMEDIATION_PLAN.md` (REMED-BUILD-003 evidence list; interacts with `REMED-GFX-006`). Not fixed by this task; real production tint-doubling bug (observed left=(81,51,31) vs expected (40,25,15) — almost exactly 2×+clamp). | `AUDIT_CROSS_CUTTING_FINDINGS.md` §CI-masking-risk |
+| `EasyGL_MRT_TwoAttachments` | Already known — `REMED-GFX-016`. | `MASTER_REMEDIATION_PLAN.md` line 1238 |
+| `EasyGL_GraphicsDevice_ReferenceStencil` | Already known — disclosed in-source (Task 319/872), confirmed still-open by the audit, tracked under REMED-BUILD-003's evidence list. | `AUDIT_CROSS_CUTTING_FINDINGS.md` §2176 |
+| `easy-gl-resource-smoke-tests` | Already known and **out of scope** — `REMED-NA-011`, external `easy-gl` sibling repo's own test suite (reference-only per decision D-6), not a CNA finding. | `MASTER_REMEDIATION_PLAN.md` line 3081 |
+| `EasyGL_RealWindowResize` | **Genuinely new** — see `REMED-BUILD-010` below. | This session |
+
+None of these 5 are newly *introduced* by the `WORKING_DIRECTORY` fix or by `REMED-BUILD-002`'s cmake edit —
+4 are pre-existing findings the audit already tracked (their own CTest registrations already had correct
+`WORKING_DIRECTORY`, so the bug being fixed here never hid them), and the 5th is a pre-existing hang whose
+trigger (a real desktop compositor on the test `DISPLAY`) is orthogonal to both Wave 0 tasks. No opportunistic
+production fixes were made for any of the 4 already-tracked findings, per instruction.
 
 ## Wave 1 — security and memory safety
 
@@ -172,7 +197,36 @@ existing task.
 
 | ID | Title | Sev | Pri | Found while working on | Status |
 |---|---|---|---|---|---|
-| _(none yet)_ | | | | | |
+| REMED-BUILD-010 | `EasyGL_RealWindowResize` hangs the full 60s CTest `TIMEOUT` under a real desktop compositor (`DISPLAY` = a real logged-in GNOME/Mutter session, not an isolated Xvfb) | MEDIUM | P2 | REMED-BUILD-001 (full unfiltered `ctest` baseline run) | NOT STARTED — recorded, not fixed (out of scope for Wave 0) |
+
+#### REMED-BUILD-010 detail
+
+- **Root cause:** `examples/easygl_real_window_resize_test.cpp` (Task 348) drives a real
+  `SDL_SetWindowSize()` and polls up to 300 draw frames for the async X11 resize event to propagate,
+  with its own internal timeout that logs a `FAIL` and exits cleanly. Confirmed by isolated re-run:
+  under `DISPLAY=:99` (Xvfb, headless) it completes in well under a second with `4/4 PASS`; under
+  `DISPLAY=:0` (this machine's real, logged-in GNOME/Mutter session — the value baked into every
+  build dir's cached `CNA_TEST_DISPLAY`) it produces **zero output past backend init** and is killed
+  by CTest's 60s `TIMEOUT` (confirmed reproducible in isolation, not a parallel-build resource-
+  contention artifact — re-ran alone on an otherwise idle machine, same result). The window resize
+  or its `SDL_EVENT_WINDOW_RESIZED` delivery appears to never complete against a real compositor,
+  most plausibly because Mutter defers/never delivers a `ConfigureNotify` to a window that isn't
+  focused/mapped the way a bare Xvfb server does — not verified further, out of scope for this task.
+- **Not a stale/incorrectly-authored test:** the test's own logic was independently re-verified
+  (matches `audit/examples/easygl_real_window_resize_test.cpp.audit.md`'s "Healthy" verdict) and it
+  passes cleanly given the environment it was clearly designed for (an isolated Xvfb, matching every
+  other `CNA_TEST_DISPLAY`-driven test's actual runtime environment during the original audit).
+- **Not a production (GameWindow/GraphicsDevice) bug:** the 4/4 PASS under Xvfb confirms the actual
+  resize/viewport/event-firing logic this test checks is correct; only the interaction with a real
+  desktop compositor on the test `DISPLAY` is at fault.
+- **Suggested remediation directions (not implemented — recording only):** (a) point
+  `CNA_TEST_DISPLAY` at an isolated Xvfb display in every build dir rather than the login session's
+  real `DISPLAY`, and/or (b) give this specific test a hard wall-clock watchdog independent of its
+  frame-count loop so a stalled resize can't consume the full CTest `TIMEOUT` regardless of which
+  display it's pointed at.
+- **Scope note:** only this one CTest is affected project-wide (grep confirms
+  `easygl_real_window_resize_test.cpp` is EasyGL's only real-OS-resize test; no equivalent test
+  exists for other backends).
 
 ## Decisions log
 

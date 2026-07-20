@@ -212,7 +212,12 @@ if(CNA_BUILD_TESTS)
     endif()
 
     include(GoogleTest)
-    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)
+    # REMED-BUILD-001: without WORKING_DIRECTORY, CMake defaults every discovered case's cwd to
+    # CnaTests' own runtime output directory, not the repo root where tests/assets/** lives --
+    # CTest runs then fail to find fixture files that the same binary finds fine when run
+    # directly from the repo root. Mirrors the already-correct pattern in
+    # cmake/Tests/EasyGLTests.cmake / VulkanTests.cmake.
+    gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
     # INPUT-BUILD-003: canonical Input-test selector — SINGLE SOURCE OF TRUTH.
     # The input subset used to be selected by a long --gtest_filter string copy-pasted across the docs
