@@ -366,6 +366,38 @@ namespace CNA::Internal::Backends::EasyGL
             return line;
         }
 
+        // plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 has no integer vertex attribute types
+        // at all -- "layout(location=N) in uvec4 aBoneIndices;" (this file's
+        // SkinnedEffect/SkinnedPbrEffect shaders) has no direct equivalent. Encodes bone indices
+        // as a float vec4 instead (the matching C++-side change is
+        // DescribeVertexElementFormat()'s Byte4 case, which reads the same underlying
+        // UnsignedByte bytes as floats under this profile rather than true integers -- 0-255
+        // range, far more than the <=72 bone count needs, exactly float-representable). Rewrites,
+        // applied only when the source actually declares "aBoneIndices" (a no-op for every other
+        // shader in this file):
+        //   - "uvec4" -> "vec4" (only ever appears in the aBoneIndices declaration itself, so a
+        //     blanket whole-word replace is safe)
+        //   - "aBoneIndices.x"/".y"/".z"/".w" -> "int(aBoneIndices.x)"/etc. at their 4 uBones[]
+        //     index expressions (the only place aBoneIndices is ever used in this file) -- array
+        //     indices must be integer-typed even though the attribute itself is now a float vec4.
+        std::string RewriteBoneIndicesForEs100(std::string text)
+        {
+            if (text.find("aBoneIndices") == std::string::npos) return text;
+            text = ReplaceWholeWord(std::move(text), "uvec4", "vec4");
+            for (char component : { 'x', 'y', 'z', 'w' })
+            {
+                const std::string from = std::string("aBoneIndices.") + component;
+                const std::string to = "int(" + from + ")";
+                size_t pos = 0;
+                while ((pos = text.find(from, pos)) != std::string::npos)
+                {
+                    text.replace(pos, from.size(), to);
+                    pos += to.size();
+                }
+            }
+            return text;
+        }
+
         // plan_glbackends.md GLB-36: rewrites a GLSL ES 3.00 shader body to GLSL ES 1.00
         // (WebGL 1). Real syntax differences handled, confirmed exhaustive by a full survey of
         // every shader in this file during GLB-36 (no texelFetch/textureSize/derivatives/
@@ -384,14 +416,8 @@ namespace CNA::Internal::Backends::EasyGL
         //     sampler's declared type (see RewriteTextureCallsForEs100 above).
         //   - "#version 300 es" -> "#version 100"; the following "precision ... float;" line is
         //     kept as-is (valid, and required, GLSL ES 1.00 syntax too).
-        //
-        // NOT handled -- a real, currently-blocking gap, not silently swallowed: vertex attributes
-        // declared as integer types (this file's SkinnedEffect/SkinnedPbrEffect shaders'
-        // "layout(location=N) in uvec4 aBoneIndices;") have no GLSL ES 1.00 equivalent at all --
-        // ES 1.00 vertex attributes must be float/vec2/vec3/vec4/mat2/mat3/mat4. Encoding bone
-        // indices as float attributes (and adjusting the C++-side VertexBuffer upload format to
-        // match, only for this profile) is a real, separate architecture change, out of scope for
-        // this pass -- see the caller-facing note where this is detected and left unconverted.
+        //   - "uvec4 aBoneIndices" (SkinnedEffect/SkinnedPbrEffect only) -> float-encoded, see
+        //     RewriteBoneIndicesForEs100 above.
         std::string TransformGlslEs300BodyToEs100(const std::string& es300Body, GlShaderStageKind stage)
         {
             std::set<std::string> cubeSamplerNames;
@@ -455,7 +481,10 @@ namespace CNA::Internal::Backends::EasyGL
                 }
                 out += rewritten + "\n";
             }
-            return out;
+            // Applied to the whole assembled output, not per-line, since it must also see the
+            // "attribute uvec4 aBoneIndices;" declaration line produced by the
+            // layout(location=N) branch above (which `continue`s past the per-line pipeline).
+            return RewriteBoneIndicesForEs100(std::move(out));
         }
     }
 
@@ -529,16 +558,19 @@ namespace CNA::Internal::Backends::EasyGL
         if (versionPos == std::string::npos) return src;
         src.replace(versionPos, versionLine.size(), "#version 100\n");
         std::string transformed = TransformGlslEs300BodyToEs100(src, stage);
-        // Known, documented, NOT converted gap (see TransformGlslEs300BodyToEs100's own comment):
-        // integer vertex attributes (this file's SkinnedEffect/SkinnedPbrEffect
-        // "uvec4 aBoneIndices") have no GLSL ES 1.00 equivalent. Fail loudly here rather than let
-        // an invalid shader reach the driver with only an opaque compile-error log as the symptom.
+        // SkinnedEffect/SkinnedPbrEffect's "uvec4 aBoneIndices" is converted away by
+        // TransformGlslEs300BodyToEs100/RewriteBoneIndicesForEs100 (float-encoded bone indices,
+        // GLB-36 follow-up). This check is now a defensive safety net for any FUTURE shader that
+        // introduces a genuinely new integer vertex attribute the transform doesn't yet handle --
+        // fail loudly rather than let an invalid shader reach the driver with only an opaque
+        // compile-error log as the symptom.
         if (transformed.find("uvec4") != std::string::npos || transformed.find("ivec") != std::string::npos)
         {
             std::cerr << "[CNA EasyGL WEBGL1] shader uses an integer vertex attribute type "
-                          "(uvec4/ivecN), which has no GLSL ES 1.00 equivalent -- this shader "
-                          "(likely SkinnedEffect/SkinnedPbrEffect) is not yet supported under "
-                          "WEBGL1 (plan_glbackends.md GLB-36's documented remaining gap)."
+                          "(uvec4/ivecN) that TransformGlslEs300BodyToEs100 doesn't know how to "
+                          "convert, which has no GLSL ES 1.00 equivalent -- this shader is not "
+                          "supported under WEBGL1 (see EasyGLGraphicsBackend.cpp's WEBGL1 shader "
+                          "adaptation code)."
                        << std::endl;
         }
         return transformed;
@@ -3498,7 +3530,22 @@ void main()
             case VertexElementFormat::Vector3:         return { 3, ::easygl::DataType::Float,        false, false };
             case VertexElementFormat::Vector4:         return { 4, ::easygl::DataType::Float,        false, false };
             case VertexElementFormat::Color:           return { 4, ::easygl::DataType::UnsignedByte, true,  false };
-            case VertexElementFormat::Byte4:           return { 4, ::easygl::DataType::UnsignedByte, false, true  };
+            case VertexElementFormat::Byte4:
+#if defined(CNA_GL_PROFILE_WEBGL1)
+                // plan_glbackends.md GLB-36 follow-up: WEBGL1 (GLSL ES 1.00) has no integer
+                // vertex attributes at all -- glVertexAttribIPointer isn't available. Byte4 is
+                // used exclusively for BLENDINDICES-style bone-index attributes (confirmed: only
+                // VertexPositionNormalTangentTextureSkinned/VertexPositionNormalTextureSkinned
+                // declare it), so read the same underlying bytes as floats instead (0-255 range,
+                // far more than the <=72 bone count needs, exactly float-representable) rather
+                // than as a true integer. The skinned shaders themselves declare
+                // "attribute vec4 aBoneIndices;" (not uvec4) and cast to int() when indexing
+                // uBones[] for this profile -- see TransformGlslEs300BodyToEs100's bone-index
+                // rewrite.
+                return { 4, ::easygl::DataType::UnsignedByte, false, false };
+#else
+                return { 4, ::easygl::DataType::UnsignedByte, false, true  };
+#endif
             case VertexElementFormat::Short2:          return { 2, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::Short4:          return { 4, ::easygl::DataType::Short,        false, false };
             case VertexElementFormat::NormalizedShort2:return { 2, ::easygl::DataType::Short,        true,  false };
