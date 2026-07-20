@@ -91,8 +91,31 @@ shader, no modern-only extension) and were simply never implemented yet:
     tested: removing the new `GL_LIGHT1`/`GL_LIGHT2` configuration reproduces the predicted failure
     (pure black `(0,0,0)`, both lights silently dropped); restoring reconfirms `(255,0,255)`. Full
     `ctest -R "OpenGL1_"` regression sweep: 30/30 passed after this change.
-15. Add `BasicEffect` specular highlights via `GL_SPECULAR` material/light state (`GpuDrawParams::
-    specularColor`/`specularPower`/`light0-2Specular` are never read by `DrawInternal` at all).
+15. ~~Add `BasicEffect` specular highlights via `GL_SPECULAR` material/light state (`GpuDrawParams::
+    specularColor`/`specularPower`/`light0-2Specular` are never read by `DrawInternal` at all).~~
+    **Done**: the lit path now sets `glMaterialfv(GL_SPECULAR)`/`glMaterialf(GL_SHININESS)` from
+    `GpuDrawParams::specularColor`/`specularPower` (clamped to GL's `[0,128]` `GL_SHININESS`
+    range) and `glLightfv(GL_LIGHTn,GL_SPECULAR)` for all three lights from `light0-2Specular`,
+    plus `glLightModeli(GL_LIGHT_MODEL_COLOR_CONTROL,GL_SEPARATE_SPECULAR_COLOR)` (core GL 1.2) so
+    the specular term is added AFTER texture modulation instead of being folded into it (matching
+    `BasicEffect.fx`'s own `texture*(ambient+diffuse) + specular` formula) and
+    `glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER,GL_TRUE)` so GL computes the eye vector from the
+    real eye-space viewer position (available for free since `MODELVIEW` already holds
+    `View*World` whenever lights/vertices are specified) instead of an infinite viewer along -Z --
+    GL's own automatic equivalent of `GpuDrawParams::eyePositionWorld`'s explicit half-vector
+    term, so no separate read of that field is needed for this fixed-function path. New test
+    `OpenGL1_Specular` (`examples/opengl1_specular_test.cpp`) isolates the specular term
+    completely (material `DiffuseColor`/`AmbientLightColor`/`EmissiveColor` and the light's own
+    `DiffuseColor` all black), places a small quad away from the origin along -Z with
+    `View`/`World=Identity` so the local-viewer eye position and the light direction are both
+    close to the surface normal (the classic near-maximal Blinn-Phong configuration, avoiding a
+    razor-thin highlight that would be fragile to assert against), and asserts
+    `SpecularColor=black` reads pure black (sanity) while `SpecularColor=white` reads a strong,
+    real highlight (`R=236` on the first attempt). Mutation-tested: removing the material
+    `GL_SPECULAR`/`GL_SHININESS`/`GL_LIGHT_MODEL_*` configuration reproduces the predicted failure
+    (`R=0`, specular silently dropped even with the light's own specular color still configured);
+    restoring reconfirms `R=236`. Full `ctest -R "OpenGL1_"` regression sweep: 31/31 passed after
+    this change.
 16. Add `TextureAddressMode.Mirror` via `GL_MIRRORED_REPEAT` (core GL 1.4) -- currently silently
     treated as `Clamp` in both the 3D path and `SpriteBatch::Draw`.
 17. Add constant blend color via `glBlendColor`/`GL_CONSTANT_COLOR` (core GL 1.4/`EXT_blend_color`)

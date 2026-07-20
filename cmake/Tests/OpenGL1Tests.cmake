@@ -247,4 +247,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_DirectionalLight12 COMMAND cna_test_opengl1_directionallight12
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 15 (EasyGL parity): BasicEffect specular highlights.
+    cna_opengl1_test(cna_test_opengl1_specular
+                      examples/opengl1_specular_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_Specular COMMAND cna_test_opengl1_specular
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

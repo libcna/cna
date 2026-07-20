@@ -326,6 +326,22 @@ if(params&&params->lightingEnabled&&normal){glEnable(GL_LIGHTING);glEnable(GL_LI
 // light's zero diffuse contributes nothing, matching every other lit-path field's own convention.
 float dif1[4]={params->light1Diffuse[0],params->light1Diffuse[1],params->light1Diffuse[2],1};float pos1[4]={-params->light1Dir[0],-params->light1Dir[1],-params->light1Dir[2],0};glEnable(GL_LIGHT1);glLightfv(GL_LIGHT1,GL_DIFFUSE,dif1);glLightfv(GL_LIGHT1,GL_POSITION,pos1);
 float dif2[4]={params->light2Diffuse[0],params->light2Diffuse[1],params->light2Diffuse[2],1};float pos2[4]={-params->light2Dir[0],-params->light2Dir[1],-params->light2Dir[2],0};glEnable(GL_LIGHT2);glLightfv(GL_LIGHT2,GL_DIFFUSE,dif2);glLightfv(GL_LIGHT2,GL_POSITION,pos2);
+// plan_opengl1.md item 15 (EasyGL parity): BasicEffect specular highlights via GL_SPECULAR
+// material/light state. GL_SEPARATE_SPECULAR_COLOR (core GL 1.2) adds the specular term AFTER
+// texture modulation instead of folding it into the modulated primary color -- matches BasicEffect
+// .fx's own "texture*(ambient+diffuse) + specular" formula rather than darkening/distorting the
+// highlight through the texture. GL_LIGHT_MODEL_LOCAL_VIEWER makes GL compute the eye vector from
+// the real (eye-space) viewer position instead of an infinite viewer along -Z; since MODELVIEW
+// already holds View*World (SetupMatrices above) whenever lights/vertices are specified here, this
+// is GL's own automatic equivalent of BasicEffect's explicit `eyePositionWorld` half-vector term --
+// no separate GpuDrawParams::eyePositionWorld read needed for this fixed-function path.
+glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER,GL_TRUE);glLightModeli(GL_LIGHT_MODEL_COLOR_CONTROL,GL_SEPARATE_SPECULAR_COLOR);
+float matSpec[4]={params->specularColor[0],params->specularColor[1],params->specularColor[2],1};
+float shininess=params->specularPower;if(shininess<0.0f)shininess=0.0f;if(shininess>128.0f)shininess=128.0f; // GL_SHININESS valid range.
+glMaterialfv(GL_FRONT_AND_BACK,GL_SPECULAR,matSpec);glMaterialf(GL_FRONT_AND_BACK,GL_SHININESS,shininess);
+float spec0[4]={params->light0Specular[0],params->light0Specular[1],params->light0Specular[2],1};glLightfv(GL_LIGHT0,GL_SPECULAR,spec0);
+float spec1[4]={params->light1Specular[0],params->light1Specular[1],params->light1Specular[2],1};glLightfv(GL_LIGHT1,GL_SPECULAR,spec1);
+float spec2[4]={params->light2Specular[0],params->light2Specular[1],params->light2Specular[2],1};glLightfv(GL_LIGHT2,GL_SPECULAR,spec2);
 glEnable(GL_COLOR_MATERIAL);glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE);
 // plan_opengl1.md phase 5 finding: the lit (stride 32) path never set GL_EMISSION, so
 // EnvironmentMapEffect's EmissiveColor/AmbientLightColor contribution (pre-combined into
