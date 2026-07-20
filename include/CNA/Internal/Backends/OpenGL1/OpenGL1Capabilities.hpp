@@ -36,6 +36,8 @@ namespace CNA::Internal::Backends::OpenGL1
         float maxAnisotropy = 1.0f;
         /** @brief ARB_occlusion_query or core (>=1.5) -- needed for real OcclusionQuery support (item 23). */
         bool occlusionQuery = false;
+        /** @brief Core (>=1.4) -- needed for glBlendColor/glBlendFuncSeparate/glBlendEquationSeparate (items 17/18/19). */
+        bool extendedBlend = false;
     };
 
     /**

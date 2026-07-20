@@ -58,6 +58,7 @@ OpenGL1Capabilities DetectOpenGL1Capabilities()
         || HasExtensionToken(padded, "GL_SGIS_generate_mipmap")
         || caps.framebufferObject;
     caps.occlusionQuery = coreAtLeast(1, 5) || HasExtensionToken(padded, "GL_ARB_occlusion_query");
+    caps.extendedBlend = coreAtLeast(1, 4);
     caps.anisotropicFiltering = HasExtensionToken(padded, "GL_EXT_texture_filter_anisotropic");
     if (caps.anisotropicFiltering)
     {

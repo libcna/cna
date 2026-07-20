@@ -16,7 +16,16 @@ namespace {
 GLenum Prim(PrimitiveType p){switch(p){case PrimitiveType::TriangleList:return GL_TRIANGLES;case PrimitiveType::TriangleStrip:return GL_TRIANGLE_STRIP;case PrimitiveType::LineList:return GL_LINES;case PrimitiveType::LineStrip:return GL_LINE_STRIP;default:return GL_POINTS;}}
 int VertCount(PrimitiveType p,int n){switch(p){case PrimitiveType::TriangleList:return n*3;case PrimitiveType::TriangleStrip:return n+2;case PrimitiveType::LineList:return n*2;case PrimitiveType::LineStrip:return n+1;default:return n;}}
 GLenum Cmp(int v){static const GLenum a[]={GL_ALWAYS,GL_NEVER,GL_LESS,GL_LEQUAL,GL_EQUAL,GL_GEQUAL,GL_GREATER,GL_NOTEQUAL};return (v>=0&&v<8)?a[v]:GL_ALWAYS;}
-GLenum BlendF(int v){static const GLenum a[]={GL_ONE,GL_ZERO,GL_SRC_COLOR,GL_ONE_MINUS_SRC_COLOR,GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_DST_COLOR,GL_ONE_MINUS_DST_COLOR,GL_DST_ALPHA,GL_ONE_MINUS_DST_ALPHA,GL_ONE,GL_ZERO,GL_SRC_ALPHA_SATURATE};return(v>=0&&v<13)?a[v]:GL_ONE;}
+// plan_opengl1.md item 17 (EasyGL parity): indices 10/11 are Blend.BlendFactor/InverseBlendFactor
+// (constant blend color) -- GL_ONE/GL_ZERO here is a fallback for a driver without extendedBlend
+// (GL_CONSTANT_COLOR/GL_ONE_MINUS_CONSTANT_COLOR are themselves core-1.4-gated enum tokens, not
+// valid to pass to glBlendFunc on an older driver), NOT the correct answer when it's available.
+GLenum BlendF(int v,bool extendedBlend){static const GLenum a[]={GL_ONE,GL_ZERO,GL_SRC_COLOR,GL_ONE_MINUS_SRC_COLOR,GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_DST_COLOR,GL_ONE_MINUS_DST_COLOR,GL_DST_ALPHA,GL_ONE_MINUS_DST_ALPHA,GL_ONE,GL_ZERO,GL_SRC_ALPHA_SATURATE};
+ if(extendedBlend){if(v==10)return GL_CONSTANT_COLOR;if(v==11)return GL_ONE_MINUS_CONSTANT_COLOR;}
+ return(v>=0&&v<13)?a[v]:GL_ONE;}
+// plan_opengl1.md item 18 (EasyGL parity): Blend.BlendFunction ordinals: Add=0,Subtract=1,
+// ReverseSubtract=2,Max=3,Min=4.
+GLenum BlendEq(int v){switch(v){case 1:return GL_FUNC_SUBTRACT;case 2:return GL_FUNC_REVERSE_SUBTRACT;case 3:return GL_MAX;case 4:return GL_MIN;default:return GL_FUNC_ADD;}}
 GLenum StencilOp(int v){static const GLenum a[]={GL_KEEP,GL_ZERO,GL_REPLACE,GL_INCR,GL_DECR,GL_INCR,GL_DECR,GL_INVERT};return(v>=0&&v<8)?a[v]:GL_KEEP;}
 // plan_opengl1.md item 16 (EasyGL parity): TextureAddressMode -> GL wrap mode. XNA ordinals:
 // Wrap=0, Clamp=1, Mirror=2. GL_MIRRORED_REPEAT is core GL 1.4 (2002), same era as GL_CLAMP_TO_EDGE
@@ -66,6 +75,23 @@ bool TryLoadMultitextureFunctions(){
 // (OpenGL1RenderTargetBackend.cpp) so a driver missing full FBO support but still exposing
 // glGenerateMipmap (rare, but not impossible) isn't penalized, and so RenderTarget2D's own
 // capability gating stays independent of texture mipmap generation's.
+// plan_opengl1.md items 17/18/19 (EasyGL parity): glBlendColor/glBlendFuncSeparate/
+// glBlendEquationSeparate are all core GL 1.4 (2002) -- the same core version bundles constant
+// blend color, separate color/alpha blend factors, and blend equations beyond additive together,
+// so a single capability flag (OpenGL1Capabilities::extendedBlend) and a single loader cover all
+// three items. Same locally-named-typedef reasoning as the multitexture loader above.
+typedef void (APIENTRY *CnaPFNGLBLENDCOLORPROC)(GLfloat,GLfloat,GLfloat,GLfloat);
+typedef void (APIENTRY *CnaPFNGLBLENDFUNCSEPARATEPROC)(GLenum,GLenum,GLenum,GLenum);
+typedef void (APIENTRY *CnaPFNGLBLENDEQUATIONSEPARATEPROC)(GLenum,GLenum);
+CnaPFNGLBLENDCOLORPROC glBlendColor_=nullptr;
+CnaPFNGLBLENDFUNCSEPARATEPROC glBlendFuncSeparate_=nullptr;
+CnaPFNGLBLENDEQUATIONSEPARATEPROC glBlendEquationSeparate_=nullptr;
+bool TryLoadBlendFunctions(){
+ glBlendColor_=reinterpret_cast<CnaPFNGLBLENDCOLORPROC>(SDL_GL_GetProcAddress("glBlendColor"));
+ glBlendFuncSeparate_=reinterpret_cast<CnaPFNGLBLENDFUNCSEPARATEPROC>(SDL_GL_GetProcAddress("glBlendFuncSeparate"));
+ glBlendEquationSeparate_=reinterpret_cast<CnaPFNGLBLENDEQUATIONSEPARATEPROC>(SDL_GL_GetProcAddress("glBlendEquationSeparate"));
+ return glBlendColor_&&glBlendFuncSeparate_&&glBlendEquationSeparate_;
+}
 typedef void (APIENTRY *CnaPFNGLGENERATEMIPMAPPROC)(GLenum target);
 CnaPFNGLGENERATEMIPMAPPROC glGenerateMipmap_=nullptr;
 bool TryLoadGenerateMipmapFunction(){
@@ -204,7 +230,7 @@ int msBuffers=0,msSamples=0;SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS,&msBuf
 multiSampleCount_=(msBuffers>0&&msSamples>1)?msSamples:0;
 if(multiSampleCount_>1)glEnable(GL_MULTISAMPLE);
 }
-OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();DetectMultiSampleCount();
+OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();if(caps_.extendedBlend)caps_.extendedBlend=TryLoadBlendFunctions();DetectMultiSampleCount();
 std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.versionMinor
  <<"; framebuffer object: "<<(caps_.framebufferObject?"yes":"no")
  <<"; multitexture: "<<(caps_.multitexture?"yes":"no")
@@ -234,7 +260,7 @@ if(glContext_){SDL_GL_MakeCurrent(window_,nullptr);SDL_GL_DestroyContext(glConte
 glContext_=SDL_GL_CreateContext(window_);
 if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed during debug context loss: ")+SDL_GetError());
 SDL_GL_MakeCurrent(window_,glContext_);
-caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();DetectMultiSampleCount();
+caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();if(caps_.extendedBlend)caps_.extendedBlend=TryLoadBlendFunctions();DetectMultiSampleCount();
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);
 registry_.NotifyContextRestored();
 // The new context defaults to FBO 0 (the backbuffer) regardless of what was bound before the
@@ -252,7 +278,15 @@ std::unique_ptr<ITextureCubeBackend>OpenGL1GraphicsBackend::CreateTextureCube(in
 std::unique_ptr<IOcclusionQueryBackend>OpenGL1GraphicsBackend::CreateOcclusionQuery(){if(!caps_.occlusionQuery)return nullptr;return std::make_unique<OpenGL1OcclusionQueryBackend>();}
 void OpenGL1GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend*rt){if(currentRt_&&currentRt_!=rt)currentRt_->UnbindAsRenderTarget();currentRt_=rt;if(rt)rt->BindAsRenderTarget();}
 void OpenGL1GraphicsBackend::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1GraphicsBackend::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1GraphicsBackend::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1GraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepth(float d){glClearDepth(d);glClear(GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearStencil(int s){glClearStencil(s);glClear(GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);glClear(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
-void OpenGL1GraphicsBackend::ApplyBlendState(int cs,int,int cd,int,int,int){glEnable(GL_BLEND);glBlendFunc(BlendF(cs),BlendF(cd));}void OpenGL1GraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int df,bool se,int sf,int sp,int sfa,int sdf,int sm,int sw,int ref,bool,int,int,int,int){de?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);glDepthMask(dw);glDepthFunc(Cmp(df));se?glEnable(GL_STENCIL_TEST):glDisable(GL_STENCIL_TEST);stencilRef_=ref;glStencilFunc(Cmp(sf),ref,(GLuint)sm);glStencilMask((GLuint)sw);glStencilOp(StencilOp(sfa),StencilOp(sdf),StencilOp(sp));}
+// plan_opengl1.md items 18/19 (EasyGL parity): colorBlendFunc/alphaBlendFunc (blend equations
+// beyond additive) and alphaSrcBlend/alphaDstBlend (separate alpha blend factors) used to be
+// dropped entirely -- glBlendFunc always implied GL_FUNC_ADD for both channels and reused the
+// color factors for alpha too. glBlendFuncSeparate/glBlendEquationSeparate (both core GL 1.4,
+// same TryLoadBlendFunctions() loader as item 17's glBlendColor) fix both; falls back to the
+// old single-value glBlendFunc/implicit-Add behavior when the driver genuinely lacks them.
+void OpenGL1GraphicsBackend::ApplyBlendState(int cs,int as,int cd,int ad,int cbf,int abf){glEnable(GL_BLEND);
+if(caps_.extendedBlend){glBlendFuncSeparate_(BlendF(cs,true),BlendF(cd,true),BlendF(as,true),BlendF(ad,true));glBlendEquationSeparate_(BlendEq(cbf),BlendEq(abf));}
+else glBlendFunc(BlendF(cs,false),BlendF(cd,false));}void OpenGL1GraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int df,bool se,int sf,int sp,int sfa,int sdf,int sm,int sw,int ref,bool,int,int,int,int){de?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);glDepthMask(dw);glDepthFunc(Cmp(df));se?glEnable(GL_STENCIL_TEST):glDisable(GL_STENCIL_TEST);stencilRef_=ref;glStencilFunc(Cmp(sf),ref,(GLuint)sm);glStencilMask((GLuint)sw);glStencilOp(StencilOp(sfa),StencilOp(sdf),StencilOp(sp));}
 void OpenGL1GraphicsBackend::ApplyRasterizerState(int c,int f,bool sc,float db,float slope){if(c==0)glDisable(GL_CULL_FACE);else{glEnable(GL_CULL_FACE);glFrontFace(GL_CCW);glCullFace(c==1?GL_BACK:GL_FRONT);}glPolygonMode(GL_FRONT_AND_BACK,f==1?GL_LINE:GL_FILL);sc?glEnable(GL_SCISSOR_TEST):glDisable(GL_SCISSOR_TEST);if(db!=0||slope!=0){glEnable(GL_POLYGON_OFFSET_FILL);glPolygonOffset(slope,db);}else glDisable(GL_POLYGON_OFFSET_FILL);}// Pure bookkeeping now -- see the header's own comment on ApplySamplerFilterAndWrap for why this
 // no longer issues any gl* calls directly (fixes a real ordering + ignored-slot bug found while
 // implementing phase 6's mip-aware filtering).
@@ -261,7 +295,10 @@ void OpenGL1GraphicsBackend::ApplySamplerState(int slot,int filter,int u,int v,i
 // CURRENTLY ACTIVE texture unit -- callers must glActiveTexture() + BindGL() the right texture
 // first. `hasMips` gates whether the min filter is allowed to request a _MIPMAP_ variant (see
 // OpenGL1TextureBackend::HasMips()'s own doc comment for why).
-void OpenGL1GraphicsBackend::ApplySamplerFilterAndWrap(int slot,bool hasMips){if(slot<0||slot>=2)return;const GL1SamplerParams&s=samplerSlot_[slot];GLenum minF,magF;MinMagFilter(s.filter,hasMips,minF,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,minF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,WrapMode(s.addrU));glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,WrapMode(s.addrV));if(caps_.anisotropicFiltering){float req=(s.filter==2)?(float)s.maxAniso:1.0f;if(req<1.0f)req=1.0f;if(req>caps_.maxAnisotropy)req=caps_.maxAnisotropy;glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,req);}}void OpenGL1GraphicsBackend::SetBlendFactor(float,float,float,float){}void OpenGL1GraphicsBackend::SetReferenceStencil(int v){stencilRef_=v;}void OpenGL1GraphicsBackend::SetScissorRect(int x,int y,int w,int h){int H;if(currentRt_)H=currentRt_->GetHeight();else{int W;GetViewportSize(W,H);}glScissor(x,H-y-h,w,h);}void OpenGL1GraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){int H;if(currentRt_)H=currentRt_->GetHeight();else{int W;GetViewportSize(W,H);}glViewport(x,H-y-h,w,h);glDepthRange(mn,mx);}
+void OpenGL1GraphicsBackend::ApplySamplerFilterAndWrap(int slot,bool hasMips){if(slot<0||slot>=2)return;const GL1SamplerParams&s=samplerSlot_[slot];GLenum minF,magF;MinMagFilter(s.filter,hasMips,minF,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,minF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,WrapMode(s.addrU));glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,WrapMode(s.addrV));if(caps_.anisotropicFiltering){float req=(s.filter==2)?(float)s.maxAniso:1.0f;if(req<1.0f)req=1.0f;if(req>caps_.maxAnisotropy)req=caps_.maxAnisotropy;glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,req);}}// plan_opengl1.md item 17 (EasyGL parity): was a no-op -- Blend.BlendFactor/InverseBlendFactor
+// mapped to GL_ONE/GL_ZERO instead (BlendF above), meaning a game using GraphicsDevice.
+// BlendFactor got a silently WRONG constant color, not just a degraded/ignored one.
+void OpenGL1GraphicsBackend::SetBlendFactor(float r,float g,float b,float a){if(caps_.extendedBlend)glBlendColor_(r,g,b,a);}void OpenGL1GraphicsBackend::SetReferenceStencil(int v){stencilRef_=v;}void OpenGL1GraphicsBackend::SetScissorRect(int x,int y,int w,int h){int H;if(currentRt_)H=currentRt_->GetHeight();else{int W;GetViewportSize(W,H);}glScissor(x,H-y-h,w,h);}void OpenGL1GraphicsBackend::SetViewport(int x,int y,int w,int h,float mn,float mx){int H;if(currentRt_)H=currentRt_->GetHeight();else{int W;GetViewportSize(W,H);}glViewport(x,H-y-h,w,h);glDepthRange(mn,mx);}
 void OpenGL1GraphicsBackend::SetupMatrices(const Matrix&w,const Matrix&v,const Matrix&p){float a[16];glMatrixMode(GL_PROJECTION);Mat(p,a);glLoadMatrixf(a);glMatrixMode(GL_MODELVIEW);Mat(v,a);glLoadMatrixf(a);Mat(w,a);glMultMatrixf(a);}
 void OpenGL1GraphicsBackend::DrawInternal(const OpenGL1VertexBufferBackend&vb,const OpenGL1IndexBufferBackend*ib,PrimitiveType prim,int pc,const GpuDrawParams*params){const auto&s=vb.Data();const size_t st=vb.Stride();if(st<12||s.empty())return;bool tex=params&&params->texture0&&(st==20||st==24||st==32);bool normal=(st==32);
 bool dual=tex&&params->dualTexture&&params->texture1&&glActiveTexture_&&glMultiTexCoord2f_;

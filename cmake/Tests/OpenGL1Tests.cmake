@@ -259,4 +259,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_TextureAddressMode_Mirror COMMAND cna_test_opengl1_textureaddressmode_mirror
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 17 (EasyGL parity): constant blend color.
+    cna_opengl1_test(cna_test_opengl1_blendfactor
+                      examples/opengl1_blendfactor_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_BlendFactor COMMAND cna_test_opengl1_blendfactor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl1.md item 18 (EasyGL parity): blend equation beyond additive.
+    cna_opengl1_test(cna_test_opengl1_blendequation
+                      examples/opengl1_blendequation_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_BlendEquation COMMAND cna_test_opengl1_blendequation
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl1.md item 19 (EasyGL parity): separate alpha blend factors.
+    cna_opengl1_test(cna_test_opengl1_blendalphafactor
+                      examples/opengl1_blendalphafactor_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_BlendAlphaFactor COMMAND cna_test_opengl1_blendalphafactor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

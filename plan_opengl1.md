@@ -39,7 +39,6 @@ Target platforms: Linux and Windows desktop compatibility-profile drivers. The b
 - No `RenderTargetCube` (no `CreateRenderTargetCube()` override).
 - RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. No `RenderTarget2D` MSAA (item 22's backbuffer MSAA is a separate, window-visual-based mechanism that does not extend to FBO-based render targets -- EasyGL's own manual offscreen-FBO resolve for that case correctly stays out of OPENGL1's scope).
 - `DualTextureEffect` is implemented via `ARB_multitexture`/core (>=1.3), detected at runtime (`OpenGL1Capabilities::multitexture`) with the entry points (`glActiveTexture`/`glMultiTexCoord2f`) loaded through `SDL_GL_GetProcAddress`; a strict 1.1 driver silently falls back to texture unit 0 only (`texture1` ignored, matching every other textured draw).
-- Blend equations beyond additive blending and constant blend color need later extension/version detection.
 - Anisotropic filtering requires `GL_EXT_texture_filter_anisotropic`, detected at runtime (`OpenGL1Capabilities::anisotropicFiltering`, `GraphicsCapability::AnisotropicFiltering`); silently falls back to no anisotropy (clamped to 1.0x) when the driver lacks it.
 - `GraphicsProfile.Reach`/`.HiDef` numeric ceilings (texture/cube/volume size, format whitelist,
   MRT count) are not enforced -- matches every non-D3D9 CNA backend, per `plan_dx9.md`'s own
@@ -136,14 +135,60 @@ shader, no modern-only extension) and were simply never implemented yet:
     confirming `U=1.75` is genuinely the load-bearing check and not `U=1.25`); restoring
     reconfirms all 4 points. Full `ctest -R "OpenGL1_"` regression sweep: 32/32 passed after this
     change.
-17. Add constant blend color via `glBlendColor`/`GL_CONSTANT_COLOR` (core GL 1.4/`EXT_blend_color`)
+17. ~~Add constant blend color via `glBlendColor`/`GL_CONSTANT_COLOR` (core GL 1.4/`EXT_blend_color`)
     -- `SetBlendFactor()` is a no-op and `Blend.BlendFactor`/`InverseBlendFactor` currently map to
-    `GL_ONE`/`GL_ZERO` instead, meaning this isn't a degraded case, it's a silently WRONG color.
-18. Add blend-equation-beyond-add via `glBlendEquationSeparate` (core GL 1.4/`EXT_blend_subtract`/
+    `GL_ONE`/`GL_ZERO` instead, meaning this isn't a degraded case, it's a silently WRONG color.~~
+18. ~~Add blend-equation-beyond-add via `glBlendEquationSeparate` (core GL 1.4/`EXT_blend_subtract`/
     `EXT_blend_minmax`) -- `ApplyBlendState()` drops `colorBlendFunc`/`alphaBlendFunc` entirely,
-    always implicit `GL_FUNC_ADD`.
-19. Add separate alpha blend factors via `glBlendFuncSeparate` (core GL 1.4/`EXT_blend_func_separate`)
-    -- `ApplyBlendState()` currently reuses the color factors for alpha too.
+    always implicit `GL_FUNC_ADD`.~~
+19. ~~Add separate alpha blend factors via `glBlendFuncSeparate` (core GL 1.4/`EXT_blend_func_separate`)
+    -- `ApplyBlendState()` currently reuses the color factors for alpha too.~~
+
+    **Items 17/18/19 Done together** (2026-07-20): all three are core GL 1.4 (2002) and were
+    implemented as one change, gated on a single new `OpenGL1Capabilities::extendedBlend` flag
+    (`coreAtLeast(1,4)`) and one loader (`TryLoadBlendFunctions()`, loading `glBlendColor`/
+    `glBlendFuncSeparate`/`glBlendEquationSeparate` via `SDL_GL_GetProcAddress`, same locally-named-
+    typedef pattern the multitexture/mipmap loaders already use). `ApplyBlendState()` now calls
+    `glBlendFuncSeparate`+`glBlendEquationSeparate` when `extendedBlend` is available, falling back
+    to the old single-value `glBlendFunc` (implicit `GL_FUNC_ADD`, color factors reused for alpha)
+    on a driver that genuinely lacks it. `SetBlendFactor()` now calls `glBlendColor` when available.
+    `BlendF()`'s indices 10/11 (`Blend.BlendFactor`/`InverseBlendFactor`) now map to
+    `GL_CONSTANT_COLOR`/`GL_ONE_MINUS_CONSTANT_COLOR` when `extendedBlend` is true (the old
+    `GL_ONE`/`GL_ZERO` mapping stays as the fallback for when it isn't, since those enum tokens are
+    themselves core-1.4-gated and invalid to pass to `glBlendFunc` on an older driver).
+
+    Three new tests, one per item, all using the 3D draw path (`BasicEffect`+`DrawUserPrimitives`)
+    rather than `SpriteBatch` -- found while writing item 17's test that
+    `OpenGL1SpriteBatchBackend::Begin()` hardcodes its own `glBlendFunc(GL_SRC_ALPHA,
+    GL_ONE_MINUS_SRC_ALPHA)` independent of whatever `BlendState` a game passes to
+    `SpriteBatch.Begin()` -- a separate, pre-existing limitation (SpriteBatch ignores a custom
+    `BlendState`'s actual factors/equation beyond standard alpha blending) that would otherwise
+    mask all three of these fixes; confirmed empirically (an earlier version of the item 17 test
+    using `SpriteBatch` always read back the SpriteBatch-hardcoded blend result regardless of
+    `BlendFactor`). Flagged here, not fixed -- out of scope for these 3 blend-state items.
+    - `OpenGL1_BlendFactor`: draws solid white over black with `ColorSourceBlend=BlendFactor`,
+      `ColorDestinationBlend=Zero`, `BlendFactor=(128,0,0,255)` -- correct result `(128,0,0)`,
+      matched exactly on the first attempt; the pre-existing bug would give white `(255,255,255)`
+      (`BlendFactor` silently treated as `Blend.One`). Mutation-tested (reverting `SetBlendFactor`
+      to a no-op): reproduces a distinct third wrong answer, `(0,0,0)` (GL's never-set default
+      constant color), confirming the check catches this specific fix independently of `BlendF`'s
+      own mapping.
+    - `OpenGL1_BlendEquation`: draws an opaque destination `(200,50,50)` then a second quad
+      `(50,20,20)` with `ColorBlendFunction=ReverseSubtract`, `ColorSourceBlend=ColorDestinationBlend
+      =One` -- correct result `(150,30,30)` (`dest-src`), matched exactly on the first attempt;
+      mutation-tested (dropping `colorBlendFunc`/`alphaBlendFunc`): reproduces the predicted
+      always-`Add` result `(250,70,70)` (`dest+src`) exactly.
+    - `OpenGL1_BlendAlphaFactor`: uses a `RenderTarget2D` (not the backbuffer, for a genuine
+      alpha-channel readback via `RenderTarget2D::GetData()`'s real `glReadPixels` against the
+      FBO) cleared to alpha=100, then draws a full quad with alpha=200 using
+      `ColorSourceBlend=One`/`ColorDestinationBlend=Zero` (color: source passes through, a sanity
+      check that the split is genuine) but `AlphaSourceBlend=Zero`/`AlphaDestinationBlend=One`
+      (alpha: destination explicitly preserved) -- correct result alpha=100, matched exactly on
+      the first attempt; mutation-tested (alpha reusing color's `One`/`Zero` factors): reproduces
+      the predicted wrong value alpha=200 (source alpha, following color's own formula by
+      mistake) exactly.
+
+    Full `ctest -R "OpenGL1_"` regression sweep: 35/35 passed after these changes.
 20. ~~Add a runtime `SetSwapInterval()` override (`SDL_GL_SetSwapInterval`) -- currently only the
     construction-time value ever reaches SDL; changing vsync mid-session silently does nothing.~~
     **Done**: `OpenGL1GraphicsBackend::SetSwapInterval(int)` now calls `SDL_GL_SetSwapInterval(interval)`
