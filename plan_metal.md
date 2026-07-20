@@ -1230,6 +1230,49 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     Metal backend's own source has still not been reached by an actual compile yet, but is now only
     one more successful `SHARP_RUNTIME` build away.
 
+51. **Real fifth CI signal — a second, more subtle `sharp-runtime` bug, this one a genuine
+    product tradeoff, not a mechanical fix**: `SHARP_RUNTIME` began compiling real `.cpp` files
+    (confirming item 50's fix worked) and failed on `BitConverter.cpp`'s translation unit with
+    Clang reporting "no viable overload for call to 'from_chars'" — only the *integer*
+    `from_chars` template as a candidate. Root cause: Apple's libc++ omits the floating-point
+    `std::from_chars`/`std::to_chars` overloads entirely below a macOS 13.3+ deployment target
+    (the underlying implementation was only added to the OS-shipped `libc++.dylib` at that OS
+    version) — genuinely absent from the overload set under this build's deployment target, not
+    merely deprecated.
+
+    Unlike item 50's flag-portability fix, this had a real tradeoff worth surfacing rather than
+    silently deciding: raise `CMAKE_OSX_DEPLOYMENT_TARGET` to 13.3+ (simple, zero code-risk, but
+    forces a higher minimum runtime macOS for every consumer of `sharp-runtime`, not just this CI
+    job) vs. a portable `strtof`/`strtod` fallback (keeps the current floor, but touches code with
+    carefully-documented, ticket-referenced .NET-exact parsing behavior — real regression risk).
+    Asked; the user chose the portable-fallback path.
+
+    Added `SharpRuntime::FromCharsFloat` (`include/SharpRuntime/PortableFromChars.hpp`): uses the
+    real `std::from_chars` when a `requires`-detected floating-point overload actually exists,
+    falls back to `strtof`/`strtod` otherwise. The fallback is not a naive passthrough — it
+    corrects two real behavioral differences from `std::from_chars` *before* delegating (both
+    rejected up front as `std::errc::invalid_argument`, matching what real `from_chars` would do):
+    `strtof`/`strtod` skip leading whitespace (`from_chars` never does — this codebase's own
+    `XmlConvert.cpp` comment documents callers relying on that strictness), and `strtof`/`strtod`
+    accept a leading `+` (`from_chars`'s floating-point grammar does not, a well-known asymmetry).
+    Wired into the 3 real affected call sites: `System/Single.hpp`/`System/Double.hpp`'s
+    `tryParseCore` (float/double `.Parse`), and
+    `System/Xml/XPath/XPathAstInternal.cpp`'s `ParseXPathNumberLiteralString` (its own
+    `chars_format::fixed` restriction is redundant with the portable helper's format-less parsing,
+    since that call site's own character pre-filter already guarantees no exponent can reach the
+    parse call regardless).
+
+    Verified the fallback logic *directly* — this Linux/GCC 14.2 machine's libstdc++ already has
+    floating-point `from_chars`, so the `if constexpr` dispatch would never actually exercise the
+    fallback branch here otherwise — with a standalone test calling `PortableFromCharsFloat`
+    directly: simple/negative floats, trailing-garbage partial consumption, leading-whitespace
+    rejection, leading-plus rejection, empty/garbage rejection, exponent notation, and
+    out-of-range (`ERANGE`) all correct. Full `SharpRuntimeTests` suite (12,481 tests) passes with
+    zero regressions on this machine. Landed on the same `fix/clang-format-truncation-flag` branch
+    as item 50 (already pinned in `metal-macos-ci.yml`), so no further CI-workflow change was
+    needed. Fifth real, observed CI signal — `BitConverter.cpp` (and the rest of `SHARP_RUNTIME`)
+    should now compile; the Metal backend's own source is the next thing this CI has never reached.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
