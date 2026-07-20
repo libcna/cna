@@ -34,8 +34,10 @@ void main() {
     fragUV = inUV;
     // Mix vertex color and diffuse based on vertexColorEnabled flag.
     fragTint = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
-    // Task 899: fog factor from raw object-space Z (matches the established Task 888 formula).
+    // Task 899: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
+    // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
+    // mirror image and wrong. Zero-length range -> fully fogged, matching FNA SetFogVector.
     fragFogFactor = (fog.fogColorEnabled.w > 0.5)
-        ? clamp((fog.fogStartEnd.y - inPos.z) / max(fog.fogStartEnd.y - fog.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((inPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
         : 1.0;
 }

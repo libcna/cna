@@ -31,9 +31,10 @@ void main() {
     gl_Position = pos;
     fragUV   = inUV;
     fragTint = pc.diffuseColor;
-    // Task 888: fog factor from raw object-space Z (matches EasyGL's established formula
-    // exactly). 1.0 = no fog, 0.0 = full fog.
+    // Task 888: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL
+    // Task-1111 form (z+FogEnd)/(FogEnd-FogStart); prior (FogEnd-z) was the mirror image and
+    // wrong. 1.0 = no fog, 0.0 = full fog. Zero-length range -> fully fogged (FNA parity).
     fragFogFactor = (pc.fogEnabled > 0.5)
-        ? clamp((pc.fogEnd - inPos.z) / max(pc.fogEnd - pc.fogStart, 1e-6), 0.0, 1.0)
+        ? ((abs(pc.fogEnd - pc.fogStart) < 1e-6) ? 0.0 : clamp((inPos.z + pc.fogEnd) / (pc.fogEnd - pc.fogStart), 0.0, 1.0))
         : 1.0;
 }

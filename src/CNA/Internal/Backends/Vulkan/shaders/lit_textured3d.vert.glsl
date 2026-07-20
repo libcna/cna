@@ -56,9 +56,10 @@ void main() {
     fragNormal   = normalize(normalMatrix * inNormal);
     fragWorldPos = (lp.world * vec4(inPos, 1.0)).xyz;
     fragTint     = pc.diffuseColor;
-    // Task 888: fog factor from raw object-space Z (matches EasyGL's established formula
-    // exactly). 1.0 = no fog, 0.0 = full fog.
+    // Task 888: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL
+    // Task-1111 form (z+FogEnd)/(FogEnd-FogStart); prior (FogEnd-z) was the mirror image and
+    // wrong. 1.0 = no fog, 0.0 = full fog. Zero-length range -> fully fogged (FNA parity).
     fragFogFactor = (lp.fogColorEnabled.w > 0.5)
-        ? clamp((lp.fogStartEnd.y - inPos.z) / max(lp.fogStartEnd.y - lp.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        ? ((abs(lp.fogStartEnd.y - lp.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((inPos.z + lp.fogStartEnd.y) / (lp.fogStartEnd.y - lp.fogStartEnd.x), 0.0, 1.0))
         : 1.0;
 }

@@ -58,7 +58,7 @@ void main() {
     gl_Position = pos;
     fragUV = inUV;
     fragFogFactor = (lp.fogColorEnabled.w > 0.5)
-        ? clamp((lp.fogStartEnd.y - inPos.z) / max(lp.fogStartEnd.y - lp.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        ? ((abs(lp.fogStartEnd.y - lp.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((inPos.z + lp.fogStartEnd.y) / (lp.fogStartEnd.y - lp.fogStartEnd.x), 0.0, 1.0))
         : 1.0;
 
     mat3 normalMatrix = transpose(inverse(mat3(lp.world)));

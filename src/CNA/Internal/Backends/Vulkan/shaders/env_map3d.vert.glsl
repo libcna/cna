@@ -38,8 +38,10 @@ void main() {
     vWorldNormal     = normalize(nm * aNormal);
     vEyeDir          = ep.eyePos_pad.xyz - worldPos;
     vUV              = aUV;
-    // Fog factor from raw object-space Z (matches the established Task 888 formula).
+    // Fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
+    // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
+    // mirror image and wrong. Zero-length range -> fully fogged, matching FNA SetFogVector.
     vFogFactor = (ep.fogColorEnabled.w > 0.5)
-        ? clamp((ep.fogStartEnd.y - aPos.z) / max(ep.fogStartEnd.y - ep.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        ? ((abs(ep.fogStartEnd.y - ep.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((aPos.z + ep.fogStartEnd.y) / (ep.fogStartEnd.y - ep.fogStartEnd.x), 0.0, 1.0))
         : 1.0;
 }

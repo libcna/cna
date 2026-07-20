@@ -65,6 +65,6 @@ void main() {
     vUV = aUV;
     vWorldPos = (pbr.world * vec4(aPos, 1.0)).xyz;
     vFogFactor = (pbr.fogColorEnabled.w > 0.5)
-        ? clamp((pbr.fogStartEnd_pad.y - aPos.z) / max(pbr.fogStartEnd_pad.y - pbr.fogStartEnd_pad.x, 1e-6), 0.0, 1.0)
+        ? ((abs(pbr.fogStartEnd_pad.y - pbr.fogStartEnd_pad.x) < 1e-6) ? 0.0 : clamp((aPos.z + pbr.fogStartEnd_pad.y) / (pbr.fogStartEnd_pad.y - pbr.fogStartEnd_pad.x), 0.0, 1.0))
         : 1.0;
 }

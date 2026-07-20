@@ -60,9 +60,11 @@ void main() {
     vNormal     = normalize(mat3(skinMat) * aNormal);
     vUV         = aUV;
     vWorldPos   = (fog.world * skinnedPos).xyz;
-    // Task 899: fog factor from the PRE-SKIN raw object-space Z (matches EasyGL/Bgfx's
-    // established SkinnedEffect fog formula exactly -- Task 900/899 bonus scope).
+    // Task 899: fog factor from the PRE-SKIN raw object-space Z. REMED-GFX-005: corrected to
+    // FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); prior (FogEnd-z) was the mirror
+    // image and wrong. (Bgfx/D3DCommon are still mirrored until their own REMED-GFX-005 pass,
+    // so this no longer claims parity with them.)
     vFogFactor = (fog.fogColorEnabled.w > 0.5)
-        ? clamp((fog.fogStartEnd.y - aPos.z) / max(fog.fogStartEnd.y - fog.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((aPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
         : 1.0;
 }

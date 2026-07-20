@@ -70,6 +70,6 @@ void main() {
     vUV = aUV;
     vWorldPos = (pbr.world * skinnedPos).xyz;
     vFogFactor = (pbr.fogColorEnabled.w > 0.5)
-        ? clamp((pbr.fogStartEnd_weights.y - aPos.z) / max(pbr.fogStartEnd_weights.y - pbr.fogStartEnd_weights.x, 1e-6), 0.0, 1.0)
+        ? ((abs(pbr.fogStartEnd_weights.y - pbr.fogStartEnd_weights.x) < 1e-6) ? 0.0 : clamp((aPos.z + pbr.fogStartEnd_weights.y) / (pbr.fogStartEnd_weights.y - pbr.fogStartEnd_weights.x), 0.0, 1.0))
         : 1.0;
 }

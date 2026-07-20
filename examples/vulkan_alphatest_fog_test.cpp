@@ -7,7 +7,7 @@
 // after the existing alpha-discard test in the fragment shader.
 //
 // Formula (matches EasyGL's already-tested formula exactly, Task 378):
-//   fogFactor = clamp((FogEnd - Z) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
+//   fogFactor = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
 //   finalRGB  = mix(FogColor, geomRGB, fogFactor)
 //
 // Uses a stride-20 VertexPositionTexture quad (routes through alpha_test3d, the non-colored
@@ -50,10 +50,14 @@ static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 // Kept inside Vulkan's valid clip-space Z range [0,1] (NOT OpenGL's [-1,1] -- World/View/
 // Projection are all Identity here, so raw vertex z IS gl_Position.z/w before the y-flip, and a
 // negative z would be near-plane clipped away before the fragment shader ever runs).
-static constexpr float kFogStart = 0.05f;
-static constexpr float kFogEnd   = 0.95f;
+// REMED-GFX-005: FogStart=0, FogEnd=-0.9 is the [0,1]-depth analog of EasyGL's [-1,1]
+// FogStart=-0.9/FogEnd=0.9 choice. With identity View the corrected FNA formula
+// clamp((z+FogEnd)/(FogEnd-FogStart),0,1) only produces a genuine gradient over the *positive*
+// visible-z range when a fog boundary is negative; positive FogStart/FogEnd collapse to constant.
+static constexpr float kFogStart =  0.0f;
+static constexpr float kFogEnd   = -0.9f;
 
-// Expected: mix(FogColor, MaterialColor, clamp((FogEnd-z)/(FogEnd-FogStart),0,1)), where
+// Expected: mix(FogColor, MaterialColor, clamp((z+FogEnd)/(FogEnd-FogStart),0,1)) = 1-z/0.9, where
 // MaterialColor = white(identity) * DiffuseColor = DiffuseColor*255 = (204,51,102).
 static const Color kExpectedNoFog(204, 51, 102, 255);
 static const Color kExpectedFullFog(26, 153, 230, 255);
@@ -142,17 +146,20 @@ protected:
         Texture2D tex(dev, 1, 1);
         tex.SetData(&kWhite, 1);
 
-        const Color noFogGot = renderAtZ(dev, tex, kFogStart);
+        // z=0 (=FogStart) -> factor=1 -> no fog -> unblended material color.
+        const Color noFogGot = renderAtZ(dev, tex, 0.0f);
         check(matches(noFogGot, kExpectedNoFog),
-              "z=FogStart: unblended material color", noFogGot, "(204,51,102)");
+              "z=0 (=FogStart): unblended material color", noFogGot, "(204,51,102)");
 
-        const Color fullFogGot = renderAtZ(dev, tex, kFogEnd);
+        // z=0.9 -> factor=(0.9-0.9)/(-0.9)=0 -> full fog -> pure fog color.
+        const Color fullFogGot = renderAtZ(dev, tex, 0.9f);
         check(matches(fullFogGot, kExpectedFullFog),
-              "z=FogEnd: pure fog color", fullFogGot, "(26,153,230)");
+              "z=0.9: pure fog color", fullFogGot, "(26,153,230)");
 
-        const Color halfFogGot = renderAtZ(dev, tex, 0.5f);
+        // z=0.45 -> factor=0.5 -> 50/50 blend, proves real interpolation not on/off.
+        const Color halfFogGot = renderAtZ(dev, tex, 0.45f);
         check(matches(halfFogGot, kExpectedHalfFog),
-              "z=0.5 (halfway): 50/50 blend, proves real interpolation not on/off",
+              "z=0.45 (halfway): 50/50 blend, proves real interpolation not on/off",
               halfFogGot, "(115,102,166)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);

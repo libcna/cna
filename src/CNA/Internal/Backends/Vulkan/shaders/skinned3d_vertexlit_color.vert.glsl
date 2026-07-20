@@ -61,7 +61,7 @@ void main() {
     vColor = aColor;
     vec3 worldPos = (fog.world * skinnedPos).xyz;
     vFogFactor = (fog.fogColorEnabled.w > 0.5)
-        ? clamp((fog.fogStartEnd.y - aPos.z) / max(fog.fogStartEnd.y - fog.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((aPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
         : 1.0;
 
     vec3 N = normalize(mat3(skinMat) * aNormal);
