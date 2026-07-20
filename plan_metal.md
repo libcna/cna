@@ -1203,6 +1203,33 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     entirely toolchain/environment-level so far, not a single Metal-backend source issue found by
     the CI itself yet.
 
+50. **Real fourth CI signal — actual C++ compilation started, and a real cross-repo bug found and
+    fixed in `sharp-runtime` (a sibling repo, not this one)**: the log showed `enet` build
+    successfully and `SHARP_RUNTIME` (the sibling `sharp-runtime` library CNA depends on) begin
+    compiling real `.cpp` files — genuine progress past every prior blocker. Failed on
+    `StoragePaths.cpp` with `error: unknown warning option '-Wno-format-truncation'
+    [-Werror,-Wunknown-warning-option]`. Traced to `sharp-runtime`'s own `CMakeLists.txt`
+    (`target_compile_options(SHARP_RUNTIME PRIVATE -Wall -Wextra -Werror
+    -Wno-format-truncation)`, and an identical line for `SharpRuntimeTests`) — `-Wformat-truncation`
+    is a GCC-only diagnostic Clang never implemented, so `-Wno-format-truncation` is an unrecognized
+    flag under Apple Clang, which `-Werror` then escalates to a hard build failure rather than a
+    harmless no-op.
+
+    This is the first bug this whole plan has found outside `cnametal` itself. Fixed properly at
+    the source: gated both occurrences behind `if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")` in
+    `sharp-runtime`'s own `CMakeLists.txt` — verified zero regression by rebuilding `SHARP_RUNTIME`
+    on this Linux/GCC 14.2.0 machine (still adds the flag there, unchanged behavior). Did **not**
+    commit this to `sharp-runtime`'s `develop` branch directly, nor to whatever topic branch
+    happened to be checked out locally (`feature/xnb-charreader`, unrelated in-progress work) — a
+    shared dependency repo's default branch is a bigger blast radius than this session's own
+    established scope, so the fix landed on a new `fix/clang-format-truncation-flag` branch off
+    `origin/develop` instead, pushed to `origin`. `metal-macos-ci.yml`'s sharp-runtime checkout
+    step is temporarily pinned to that branch (`ref:`, clearly commented as temporary) so this CI
+    job can proceed without waiting for a human to review and merge a PR into another repo's
+    `develop` — revert that pin once the fix branch merges. Fourth real, observed CI signal; the
+    Metal backend's own source has still not been reached by an actual compile yet, but is now only
+    one more successful `SHARP_RUNTIME` build away.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

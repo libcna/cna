@@ -33,6 +33,13 @@ jobs:
         with:
           repository: openeggbert/sharp-runtime
           path: sharp-runtime
+          # TEMPORARY: pinned to a fix branch, not develop, until
+          # openeggbert/sharp-runtime#fix/clang-format-truncation-flag is merged -- develop's
+          # CMakeLists.txt unconditionally adds -Wno-format-truncation (a GCC-only diagnostic;
+          # Clang treats the unrecognized flag as a hard -Werror build failure under
+          # -Wunknown-warning-option), found via a real CI run compiling StoragePaths.cpp on this
+          # runner. Revert this `ref:` to develop's default once that branch merges.
+          ref: fix/clang-format-truncation-flag
       - name: Install FFmpeg (Homebrew)
         # cmake/CnaLibrary.cmake requires libavcodec/libavformat/libavutil/libswresample via
         # pkg-config on every non-Windows/Emscripten/Android target (VideoPlayer decoding) --
