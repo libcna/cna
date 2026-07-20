@@ -36,10 +36,12 @@ disproved finding is a real result and should be recorded with the same rigor as
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
 | P0 | 12 | 12 | 0 | 0 | 0 |
-| P1 | 21 | 3 | 0 | 0 | 18 |
+| P1 | 21 | 5 | 0 | 0 | 16 |
 | P2 | 44 | 4 | 0 | 1 | 39 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **105** | **19** | **0** | **1** | **85** |
+| **Total** | **105** | **21** | **0** | **1** | **83** |
+
+*P1's Done count 3→5 reflects `REMED-CORE-001`/`-004` closing (see "Wave 2 — CORE lane" below).*
 
 *P0's total was corrected 11→12 while closing `REMED-GFX-001`: `REMED-GFX-001`, `-002`, and `-003`
 are all `Priority: P0-SAFETY` per `MASTER_REMEDIATION_PLAN.md`, so the row's prior total had
@@ -2046,6 +2048,227 @@ criteria:** native-mode dry run confirms the harness's own logic and self-check 
 validity confirmed; the `-m32` leg itself requires a real CI run or a root-capable environment to
 close out.
 
+## Wave 2 — CORE lane (2026-07-20)
+
+**Scope determination (per this tranche's own explicit instruction):** read
+`MASTER_REMEDIATION_PLAN.md`, `REMEDIATION_INDEX.md`, `REMEDIATION_DEPENDENCIES.md`, and this file's
+own Wave 0/1/POST-WAVE-1/CONTENT-lane/BUILD_TEST_CI-lane sections in full before starting. The
+POST-WAVE-1 baseline's own "Wave 2 readiness — recommended lane order" (above) names exactly two
+CORE tasks for this tranche: `REMED-CORE-001` (Logger, do first — other Wave 2 work may want to log
+through it) then `REMED-CORE-004` (Color UB). Both are P1, blocker-free per the Decisions log.
+`REMED-CORE-002`/`-003` (the exception-type sweep) were **explicitly not pulled forward** — see
+Decisions log entry below; they are P2, `REMEDIATION_DEPENDENCIES.md` schedules them into Wave 4's
+"quiet window" specifically because of their LARGE/cross-lane blast radius, and nothing in the
+dependency graph names them as blocking `-001`/`-004`.
+
+| ID | Status | Owner | Branch | Notes |
+|---|---|---|---|---|
+| REMED-CORE-001 | DONE | | feature/audit | `Logger::ToSDLPriority()`'s FATAL/ERROR/WARN/INFO cases uncommented — see detail below. |
+| REMED-CORE-004 | DONE | | feature/audit | Root cause was broader than the plan's literal strategy — see detail below (Notes on scope correction). |
+
+### REMED-CORE-001 detail — `CNA::Logger::ToSDLPriority()` mistagging
+
+**Root cause confirmed exactly as described:** `src/CNA/Logger.cpp`'s `ToSDLPriority()` switch had
+its `FATAL`/`ERROR`/`WARN`/`INFO` cases commented out behind a literal `//todo`, so all four fell
+through to `default: return SDL_LOG_PRIORITY_INFO`. Only `DEBUG`/`TRACE`/`EXPERIMENT` had live cases
+(all three collapsing to `SDL_LOG_PRIORITY_DEBUG`, pre-existing and not part of the bug). Confirmed
+this is the *only* severity-to-native-priority translation function in the repo — repo-wide grep for
+`SDL_LOG_PRIORITY`/`SDL_LogPriority`/`SDL_SetLogPriorit*` outside `Logger.cpp`/`.hpp` returns nothing.
+(Separately, ~15 backend files call raw `SDL_Log()` directly, bypassing `CNA::Logger` entirely — an
+existing, pre-existing architectural choice for backend startup diagnostics, not an instance of this
+bug: `SDL_Log()` doesn't do any level translation at all, so there is nothing to mistag.)
+
+**Change (`src/CNA/Logger.cpp` only):** uncommented the four cases (`FATAL→CRITICAL`,
+`ERROR→ERROR`, `WARN→WARN`, `INFO→INFO`). `DEBUG`/`TRACE`/`EXPERIMENT` deliberately left collapsed to
+`SDL_LOG_PRIORITY_DEBUG` (documented in a new source comment as intentional — this project uses none
+of SDL's finer `TRACE`/`VERBOSE` priorities anywhere else) rather than expanded to a full 7-way
+bijection, since the master plan's own root-cause/strategy text frames only the four commented-out
+cases as the defect ("Only DEBUG/TRACE/EXPERIMENT have live cases" — treated as already-intentional).
+This also fixes `SetMinimumLevel()`, which routes through the same function (previously
+`SetMinimumLevel(WARN)` set SDL's native threshold to `INFO`).
+
+**Tests added** (`tests/CNA/LoggerTests.cpp`, new file): a `TestWithParam` table-driven suite over
+all 7 `LogLevel` values (`AllLogLevels/LoggerSdlPriorityTest.*`), asserting `SDL_GetLogPriority()`
+after `Logger::SetMinimumLevel()` — the lowest practical seam, since `ToSDLPriority()` is private;
+plus a direct `WARN`-does-not-collapse-to-`INFO` regression test naming the exact original symptom,
+a `LogDoesNotThrowAtAnySeverity` smoke test across all 7 levels (checks no formatting/routing
+regression), and an `IsEnabledGatingRespectsMinimumLevelOrdering` test for the *other* gate
+(`Logger::IsEnabled()`) so a future change to one gate can't silently break the other.
+
+**Verification — reverted just the production fix, kept the new tests, rebuilt:** 4 of 10 new tests
+failed exactly as predicted (`FATAL`/`ERROR`/`WARN` parametrized cases + the direct `WARN` test),
+all reporting the buggy value `4` (`SDL_LOG_PRIORITY_INFO`) where `7`/`6`/`5`
+(`CRITICAL`/`ERROR`/`WARN`) was expected. Re-applied the fix — same rebuild: 10/10 pass. Confirms the
+tests are real regression guards, not tautologies.
+
+**Portability:** `src/CNA/Logger.cpp` compiles clean under both MinGW cross-targets in this sandbox
+(`cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`, `CNA` target) — no platform-specific code was
+touched, no new macros/Windows-header collisions introduced.
+
+**Sanitizers:** not required per this task's own instruction ("optional unless the code path
+warrants them" for Logger work) — this is a pure logic/data-mapping bug, not a memory/UB defect.
+
+**Completion criteria met:** every `LogLevel` maps to its documented SDL priority;
+`SetMinimumLevel()` sets the intended native threshold. **Verification criteria met:** table-driven
+test passes for all 7 current enum values (would catch a future 8th value silently defaulting).
+
+### REMED-CORE-004 detail — `Color::PackFromVector4()` unclamped float→byte cast (UB)
+
+**Root cause confirmed exactly as described, PLUS a broader root cause found while implementing —
+recorded per Rule 3, not silently absorbed:** `PackFromVector4`'s `static_cast<bytecs>(vector.X *
+255.0f)` (and the Y/Z/W siblings) skips the `ToByteFromUnitClamped()` clamp every other float-based
+`Color` construction path in the file uses — confirmed exactly as the master plan describes.
+
+**Scope correction — the master plan's suggested strategy ("route through the existing
+`ToByteFromUnitClamped()`") would have introduced an undisclosed FNA divergence:** cross-checked real
+FNA source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Color.cs`) before implementing, per
+`CLAUDE.md`'s "FNA is the authoritative behavioral reference." FNA's real constructors
+(`Color(Vector4)`, `Color(float,float,float[,float])`, lines 1576-1661) **do** clamp via
+`(byte) MathHelper.Clamp(x * 255, Byte.MinValue, Byte.MaxValue)` — CNA's `ToByteFromUnitClamped()`
+already matches this correctly. But FNA's `IPackedVector.PackFromVector4` (line 1876-1883,
+`// Should we round here?` / `R = (byte) (vector.X * 255.0f);`) is the **one** float-conversion call
+site in the whole file that deliberately does **not** clamp — a genuine, disclosed FNA behavioral
+difference (`IPackedVector`'s raw-bit-truncation contract vs. the user-facing constructors'
+saturating one), not a copy-paste inconsistency in FNA. Routing `PackFromVector4` through
+`ToByteFromUnitClamped()` as literally suggested would have silently made CNA's `Color(2.0f, 0, 0,
+0).PackFromVector4-equivalent` saturate at 255 where real FNA (and now real CNA) truncates/wraps to
+254. **Implemented instead:** a new `ToByteFromUnitTruncated()` helper that eliminates the C++ UB
+(the genuine defect) while preserving FNA's truncating, non-clamping semantics for realistic
+in-range-ish overflow — truncates through a wide, always-safely-representable `intcs` first (an
+`intcs → bytecs` narrowing conversion is well-defined modulo-256 wraparound in C++, not UB), which is
+where C++'s stricter conversion rules diverge from C#'s.
+
+**A second, broader root cause found in the same file, also fixed (per this task's own explicit
+"verify all Color constructors/operators touched by the same root cause" instruction):**
+`Color::Lerp()` and `Color::Multiply()` share the *identical* unguarded-cast root cause one level up
+— `static_cast<intcs>(MathHelper::Lerp(...))`/`static_cast<intcs>(component * scale)` with no NaN or
+range guard. `Lerp`'s own `amount = MathHelper::Clamp(amount, 0.0f, 1.0f);` does **not** neutralize a
+NaN `amount`: `MathHelper::Clamp` faithfully reproduces FNA's own comparison-based clamp (`value >
+max ? max : value; value < min ? min : value;`), under which NaN survives unclamped (both comparisons
+are false for NaN) — this is **correct, FNA-faithful `MathHelper::Clamp` behavior, not itself a bug**
+(that function is public XNA API used well beyond this file and must keep this behavior). The UB was
+purely at the *local* `static_cast<intcs>(...)` sites immediately consuming the (possibly-NaN)
+clamped result. `Multiply` has no upfront clamp on `scale` at all, so it was reachable for any
+caller-supplied scale, not just NaN. Fixed with a new local `SafeFloatToIntcs()` helper (NaN→0,
+otherwise clamp to a wide, arbitrary-but-safe intcs-representable bound before casting) — the exact
+bound doesn't affect the final color, since `Color(intcs,...)`'s own `ToByte()` clamps again to
+[0,255] immediately after.
+
+**Changes (`src/Microsoft/Xna/Framework/Color.cpp` only):**
+- `ToByteFromUnitClamped()`: added an explicit `std::isnan()` guard before the final
+  `static_cast<intcs>(...)` (returns `0`) — `MathHelper::Clamp`'s NaN passthrough was previously
+  unguarded here too, affecting `Color(Vector4)`/`Color(Vector3)`/`Color(float,float,float[,float])`.
+- New `ToByteFromUnitTruncated()`: used by `PackFromVector4` only (see scope correction above).
+- New `SafeFloatToIntcs()`: used by `Lerp()` and `Multiply()`.
+- `#include <cmath>` added for `std::isnan`/`std::isfinite`.
+
+**Required per-file sweep of other `IPackedVector` implementations (per the master plan's own
+instruction) — confirmed the identical `std::clamp(...)`-NaN-survives-then-UB-cast pattern in
+`Graphics::PackedVector`'s `Pack()` helpers** (`Bgra5551`, `Bgra4444`, `Rgba1010102`, `Rgba64`,
+`Byte4`, `NormalizedByte4`, `Short4` all follow the same shape as `MathHelper::Clamp` — `std::clamp`
+also lets NaN survive its own comparisons unchanged, feeding an unguarded `static_cast<uintN_t>(...)`
+immediately after). **Not fixed here** — these are `Microsoft::Xna::Framework::Graphics::PackedVector`
+files, GRAPHICS-owned (overlaps `REMED-GFX-033`'s already-scheduled "PackedVector rounding" pass, per
+`REMEDIATION_DEPENDENCIES.md`'s cross-lane single-ownership rule). Recorded as an evidence extension
+to `REMED-GFX-033` below, not a new ID (same root cause, same owning task). Also found in
+`src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp` (`static_cast<intcs>(dw * scale)` and 3
+siblings, `DrawString`/`Draw`) — same root cause as `Color::Lerp`/`Multiply`, GRAPHICS-owned file,
+**not fixed**, recorded as new finding `REMED-GFX-057` below.
+
+**Not touched, considered and rejected:** `Color::FromNonPremultiplied(intcs r,g,b,a)`'s
+`static_cast<intcs>(r * a / ByteMax)` — a genuinely different mechanism (signed integer overflow if a
+caller passes far-outside-contract `intcs` values, not a float-conversion issue) and only reachable
+by violating the method's own documented 0-255 contract. Not the same root cause; left alone rather
+than opportunistically expanding scope.
+
+**Tests added** (`tests/Microsoft/Xna/Framework/ColorTests.cpp`): 8 new `PackFromVector4*` tests
+(0, 1, just-outside-range wrap [2.0→254], negative wrap [-1.0→1], NaN, +Inf, -Inf, an extreme finite
+value [±1e30], and a determinism check) plus 4 new `Lerp`/`Multiply` NaN/extreme/negative-scale
+tests — covering the master plan's required list (0, 1, 255, just-outside-range, negative, NaN,
++Inf, -Inf, extreme values) exactly. `ColorTest` suite: 57 tests total, all passing.
+
+**Verification — reproduced under UBSan's `float-cast-overflow` check specifically (required, since
+this project's own `-fsanitize=undefined` build presets do NOT enable it by default — see new finding
+`REMED-BUILD-016` below):** compiled the original (pre-fix) `Color.cpp` standalone with
+`-fsanitize=address,undefined,float-cast-overflow` against a small driver exercising
+`PackFromVector4(NaN, 1e30, -1e30, 2.0)`/`Lerp(...,NaN)`/`Multiply(...,1e30)` — **12 distinct runtime
+UB reports**, e.g. `Color.cpp:427: runtime error: nan is outside the range of representable values of
+type 'unsigned char'`, `Color.cpp:430: runtime error: 510 is outside the range of representable
+values of type 'unsigned char'` (the plain "just outside range" 2.0 case — genuinely UB even without
+NaN/extreme input), `Color.cpp:389: runtime error: nan is outside the range of representable values
+of type 'int'` (Lerp), `Color.cpp:415-418: runtime error: 2.55e+32 is outside the range... 'int'`
+(Multiply) — one report per fixed call site, confirming every site was real, live UB, not
+theoretical. Rebuilt the same driver against the fixed `Color.cpp`: **zero sanitizer reports**,
+output values match the new tests exactly (`PackFromVector4` R=0/G=0/B=0/A=254; `Lerp(NaN)`=0;
+`Multiply(1e30)`=255).
+- Full `ColorTest` suite (57 tests) also run clean under the project's own `cmake-build-media-asan`
+  (ASan+UBSan, `-fsanitize=undefined` without `float-cast-overflow`, HEADLESS backend): 0 failures,
+  0 sanitizer reports (expected — this preset doesn't catch this specific class, which is exactly why
+  the dedicated `float-cast-overflow` driver above was needed to close the loop).
+- Confirmed genuine regression guards the same way as `REMED-CORE-001`: reverted just the production
+  Color.cpp fix under `cmake-build-media-asan` (its default, non-`float-cast-overflow` UBSan config)
+  — `MultiplyWithExtremeScaleIsDefinedNotUndefinedBehavior` failed on a genuine wrong-value mismatch
+  (`R=0` vs. expected `255`) even *without* the dedicated `float-cast-overflow` flag, i.e. this
+  specific defect is bad enough that it produces an observably wrong functional result on this
+  compiler/optimization level, not merely a sanitizer-only concern. (The NaN/Inf `PackFromVector4`
+  cases coincidentally still passed with the buggy code on this exact compiler/`-O1` combination —
+  itself the underlying risk this whole task exists to close: implementation-defined-on-this-build
+  results are not guaranteed to keep matching on a different compiler or optimization level.)
+
+**Portability:** `Color.cpp` compiles clean under both MinGW cross-targets (`cmake-build-d3d9-mingw`,
+`cmake-build-d3d11-mingw`) — `<cmath>`'s `std::isnan`/`std::isfinite` and `std::clamp` are
+standard-library, no platform-specific code introduced.
+
+**Regressions:** full `CnaTests` direct-binary run (EASYGL, `cmake-build-debug`, repo root): **5622
+tests, 5617 passed, 5 skipped** (4 hardware-sensor + 1 `Texture3D`-unsupported-backend, all
+pre-existing), **0 failed** — reconciles against the POST-WAVE-1 baseline's 5579 (`REMED-CORE-006/
+007/014`'s own reported figure) + 43 new tests (10 Logger + 33 net-new/extended Color) = 5622, zero
+regressions. **CORE lifecycle regression suite re-run per this task's own explicit instruction**
+(`GameTest.*:GraphicsDeviceManagerTest.*`, the `REMED-CORE-006`/`-007`/`-014` regression coverage):
+**11/11 still pass, unmodified** — `DisposingDeviceInvokesUnloadContent`, `RepeatedDisposeDoesNot
+ReinvokeUnloadContent`, `UnloadContentWorksAcrossRepeatedGameInstancesInOneProcess`,
+`DeferredLoadContentFiresOnDeviceCreatedWhenServiceHasNoDeviceAtInitializeTime`,
+`ApplyChangesRaisesResettingAndResetExactlyOnce`, `BackendDetectedDeviceLostIsForwardedToManager
+Listeners`, `ForwardedDeviceEventsReportTheManagerAsSender`, `RepeatedDisposeDoesNotReraiseDevice
+Disposing`, plus 3 more — none touched by this tranche's changes.
+
+**Completion criteria met:** all float→component paths in `Color.cpp` clamp or safely truncate
+(never invoke UB); the `IPackedVector`/`Graphics::PackedVector` sweep is complete (3 files fixed here,
+the wider sweep's remaining hits recorded for GRAPHICS, not silently fixed or silently dropped).
+**Verification criteria met:** `float-cast-overflow`-enabled UBSan build passes every new
+out-of-range/NaN/Inf/extreme test with zero reports (demonstrated via the dedicated driver above,
+since the project's own default preset doesn't enable that specific check).
+
+### Cross-lane dependencies / new findings from this tranche
+
+- **`REMED-GFX-033` evidence extension (not a new ID):** `Graphics::PackedVector`'s `Bgra5551`,
+  `Bgra4444`, `Rgba1010102`, `Rgba64`, `Byte4`, `NormalizedByte4`, `Short4` `Pack()` helpers share
+  `Color.cpp`'s exact pre-fix root cause (`std::clamp(x, lo, hi)` lets NaN survive unclamped, feeding
+  an unguarded `static_cast<uintN_t>(...)` immediately after). Not fixed (GRAPHICS-owned); flagging
+  for whoever picks up `REMED-GFX-033`'s "PackedVector rounding" pass so the NaN-cast-UB dimension
+  isn't missed alongside the rounding-correctness one that task already covers.
+- **`REMED-GFX-057` (new):** `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`'s `DrawString`/
+  `Draw` (`static_cast<intcs>(dw * scale)`, `static_cast<intcs>(dh * scale)`, and the `Vector2`-scale
+  siblings, ~lines 311/329/514/515) share the identical unguarded-float-to-`intcs`-cast root cause
+  `Color::Lerp`/`Multiply` had — a NaN or extreme `scale`/`Vector2 scale` reaching `DrawString`/`Draw`
+  is undefined behavior. GRAPHICS-owned file, not fixed here. Sev: MEDIUM (same class as `-004`, UB
+  not memory corruption). Pri: suggest P2, fold into whichever GRAPHICS batch next touches
+  `SpriteBatch.cpp`.
+- **`REMED-BUILD-016` (new):** this project's `-fsanitize=undefined` build configuration
+  (`cmake-build-media-asan` and, by the same `CMAKE_CXX_FLAGS` shape, the `devices-ubsan` preset in
+  `CMakePresets.json`) does **not** include `-fsanitize=float-cast-overflow`. Unlike Clang (which
+  bundles `float-cast-overflow` into its `undefined` group), GCC requires it as a separate,
+  explicitly-named check. Confirmed empirically: the exact defect this task fixed produced **zero**
+  sanitizer output under the project's own `cmake-build-media-asan` (default `-fsanitize=undefined`)
+  despite being live, reproducible UB — only reproduced once `float-cast-overflow` was added
+  explicitly to an ad hoc build. This means **any** out-of-range/NaN float→integer cast anywhere in
+  the codebase currently passes this project's own UBSan coverage silently. Sev: MEDIUM (test/CI
+  infrastructure gap, not a production defect itself — but it hides this exact defect *class*
+  project-wide). Pri: suggest P1 given the blast-radius/leverage precedent set by `REMED-BUILD-001`/
+  `-002` (a build-config fix that makes an entire defect class newly detectable). Owner: BUILD_TEST_CI
+  (`CMakePresets.json`, and wherever `cmake-build-media-asan`/`net-asan`/`devices-asan` ad hoc
+  `CMAKE_CXX_FLAGS` conventions are documented). Not fixed here (cross-lane).
+
 ## Waves 2-5 — remaining tasks
 
 | ID | Pri | Status | Owner | Branch | Notes |
@@ -2058,10 +2281,10 @@ close out.
 | REMED-BUILD-007 | P3 | NOT STARTED | | | |
 | REMED-BUILD-009 | P3 | NOT STARTED | | | |
 | REMED-CONTENT-004 | P1 | NOT STARTED | | | |
-| REMED-CORE-001 | P1 | NOT STARTED | | | |
-| REMED-CORE-002 | P2 | NOT STARTED | | | |
-| REMED-CORE-003 | P2 | NOT STARTED | | | |
-| REMED-CORE-004 | P1 | NOT STARTED | | | |
+| REMED-CORE-001 | P1 | DONE | | feature/audit | See "Wave 2 — CORE lane" above. |
+| REMED-CORE-002 | P2 | NOT STARTED | | | Deliberately not pulled into this tranche — see Decisions log. |
+| REMED-CORE-003 | P2 | NOT STARTED | | | Deliberately not pulled into this tranche — see Decisions log. |
+| REMED-CORE-004 | P1 | DONE | | feature/audit | See "Wave 2 — CORE lane" above. |
 | REMED-CORE-005 | P2 | NOT STARTED | | | |
 | REMED-CORE-006 | P1 | DONE | | feature/audit | See "Wave 1 (parallel) — CORE lane" above. |
 | REMED-CORE-007 | P1 | DONE | | feature/audit | See "Wave 1 (parallel) — CORE lane" above. |
@@ -2164,6 +2387,8 @@ existing task.
 | REMED-GFX-056 | `HeadlessTextureCubeBackend::SetData`/`GetData` (`src/CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.cpp`) validate arguments and record a trace but never actually store or return pixel data — the identical "validates but never stores" shape confirmed and fixed for `HeadlessTexture3DBackend` under `REMED-CONTENT-004`, but a different file/backend-type. Confirmed via `Texture3DTextureCubeContentTypeReaderTest.TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd` still failing on Headless after `REMED-CONTENT-004` landed (root-caused, not just observed: `HeadlessTextureBackend`, the 2D path, has a real `pixels_` member and genuinely stores data — Headless implements 2D texture storage for real but never implemented Cube storage) | MEDIUM | P2 | `REMED-CONTENT-004`'s own Headless full-suite verification run | NOT STARTED — recorded, not fixed (`ITextureCubeBackend` is GRAPHICS-owned, out of the CONTENT lane's scope; candidate fix mirrors `REMED-CONTENT-004`'s own: add `GraphicsCapability::TextureCube`, or extend a "real 2D storage but not Cube/3D" capability shape, and make `TextureCube`'s constructor fail cleanly on Headless the same way `Texture3D`'s now does) |
 | REMED-MEDIA-005 | `MediaLibraryTestFixture`'s 6 dependent test cases (`AlbumDurationIsARealNonZeroSumOfMemberSongDurations`, `FavoritesResolvesToThreeRealSongsSkippingTheMissingOne`, `InternationalResolvesTheNonAsciiEntry`, `LibrarySongsCarryTheirRealTrackNumberFromTags`, `PlaylistDurationIsARealNonZeroSumOfMemberSongDurations`, `RockGenreHasThreeSongs`) all fail identically on **both** D3D9 and D3D11 (Wine cross-compile) — `MediaLibrary`'s song count resolves to 0 where 3+ are expected — while every single-file Media read test (`AudioTagParserTest.*`, `MediaQueueTest.*`, `MediaPlayerNoSoundFallbackTest.*`, etc.) in the same partial run passes cleanly on both backends. `MediaLibraryTestFixture::SetUp()` redirects `MediaLibraryPaths` at a relative directory (`tests/assets/media/music`) and constructs a real `MediaLibrary`, which recursively scans it — the failure is isolated to this directory-scan path, not single-file reads, suggesting a Wine-specific `std::filesystem::directory_iterator`/`recursive_directory_iterator` behavior against a relative path under Wine's own Z:-drive translation, not a path-separator or WORKING_DIRECTORY bug (which would affect single-file reads too, and doesn't since the `WORKING_DIRECTORY` fix from `REMED-BUILD-001` is confirmed intact and correct). Not reachable/observable before this tranche — `CnaTests` never built on D3D9/D3D11 until `REMED-BUILD-005`/`-013` landed | MEDIUM | P2 | This tranche's own D3D9/D3D11 partial full-suite verification runs (`REMED-BUILD-005`/`-013`) | NOT STARTED — recorded, not fixed (out of BUILD_TEST_CI scope; MEDIA/CONTENT-lane investigation needed into `MediaLibraryIndex`'s real-directory-scan behavior specifically under Wine; isolated to Wine/Windows cross-compile targets only — every native Linux backend's `MediaLibraryTestFixture` coverage is unaffected) |
 | REMED-DEVICES-004 | `devices-asan` preset's `CNA_DEVICES_GTEST_FILTER` run (all 50 `tests/CNA/Devices/*.cpp` cases) exits process code 1 despite **all 50 gtest cases reporting PASSED** — AddressSanitizer reports 12032 bytes leaked in 16 allocations. Bisected precisely: excluding `CameraTests.*` alone makes the same run exit 0 with the other 46 tests still passing; within `CameraTests`, the leak is specific to the 4 `TryAcquireFrame*` cases (which construct a real `Texture2D`/`GraphicsDevice` for pixel upload), not the other 4 `CameraTests` cases. Every leak's stack trace bottoms out in `libdrm.so.2`/`<unknown module>` (GL/DRI driver initialization), not any `CNA::Devices::Camera`/`CameraTests` source line. **Extended under `devices-tsan`:** the same run there (exit 66, TSan's own convention) reports 8 data-race warnings, **all 8 in the identical shape** — `pthread_barrier_init`/`pthread_barrier_destroy` racing inside `libgallium-25.0.7-2.so`/`libEGL_mesa.so` during real `GraphicsDevice`/`EasyGLGraphicsBackend` construction/teardown, triggered by the exact same `CameraTests.TryAcquireFrame*` cases (confirmed via full stack traces: `GraphicsDevice::GraphicsDevice()`/`::Dispose()`/`::~GraphicsDevice()` → Mesa/EGL internals, never a `CNA::Devices::Camera`/`CameraTests.cpp` frame) — the same root class as the ASan leak, not a second, independent finding | MEDIUM | P3 | `REMED-BUILD-011`'s own devices-asan/devices-tsan verification runs (this tranche) | NOT STARTED — recorded, not fixed (out of BUILD_TEST_CI scope; both the ASan leak and the TSan races point at Mesa/libgallium/libEGL driver-internal synchronization during real GL context construction/teardown, not `CNA::Devices::Camera` code — matches this project's own already-documented Wave 1 decision that ASan/TSan+real-GPU-rendering paths are known-noisy and intentionally out of sanitizer-coverage scope. DEVICES lane should still confirm this directly before permanently dismissing it, since a driver false positive vs. a real bug in `Camera.cpp`'s own texture-upload/device-lifecycle path have very different remediations) |
+| REMED-BUILD-016 | This project's `-fsanitize=undefined` build configuration (`cmake-build-media-asan`'s ad hoc flags, and by the same shape `devices-ubsan` in `CMakePresets.json`) does not include `-fsanitize=float-cast-overflow`. GCC (unlike Clang, which bundles it into `undefined`) requires this check named explicitly. Confirmed empirically while verifying `REMED-CORE-004`: the exact UB that task fixed (`static_cast<bytecs>(NaN * 255.0f)` etc.) produced **zero** sanitizer output under the project's own `cmake-build-media-asan`, and only reproduced (12 distinct runtime-error reports) once `float-cast-overflow` was added explicitly to an ad hoc standalone build. Any out-of-range/NaN float→integer cast anywhere in the codebase currently passes this project's own UBSan coverage silently | MEDIUM | P1 (suggested — same leverage precedent as `REMED-BUILD-001`/`-002`: a build-config fix that makes an entire defect class newly detectable project-wide) | `REMED-CORE-004`'s own UBSan verification pass | NOT STARTED — recorded, not fixed (BUILD_TEST_CI-owned: `CMakePresets.json` and this session's own ad hoc `cmake-build-*-asan` `CMAKE_CXX_FLAGS` convention) |
+| REMED-GFX-057 | `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`'s `DrawString`/`Draw` (`static_cast<intcs>(dw * scale)`/`static_cast<intcs>(dh * scale)` ~line 311, the `Vector2`-scale siblings ~line 329, and the glyph-width/height `std::lround(...)`-wrapped casts ~lines 514-515) share the identical unguarded-float-to-`intcs`-cast root cause `Color::Lerp`/`Color::Multiply` had before `REMED-CORE-004`: a NaN or extreme `scale`/`Vector2 scale` argument reaching `DrawString`/`Draw` is undefined behavior with no guard | MEDIUM | P2 (suggested — same defect class as `REMED-CORE-004`, UB not memory corruption; fold into whichever GRAPHICS batch next touches `SpriteBatch.cpp`) | `REMED-CORE-004`'s own "verify all constructors/operators touched by the same root cause" sweep, extended past `Color.cpp` to other unguarded-float-cast sites project-wide | NOT STARTED — recorded, not fixed (GRAPHICS-owned file, out of the CORE lane's scope) |
 
 #### REMED-BUILD-010 detail
 
@@ -2267,6 +2492,8 @@ Owner decisions required by the plan, plus any scope calls made during implement
 | 2026-07-20 | `REMED-BUILD-010`, `REMED-BUILD-011` | **Deferred to Wave 2, not pulled into Wave 1.** Both are genuinely real, already-recorded findings (Wave 0/`REMED-DEVICES-001` respectively), but both are **P2** and neither `MASTER_REMEDIATION_PLAN.md` nor `REMEDIATION_DEPENDENCIES.md` lists either as blocking any Wave 1 task — the dependency file's own Wave 1 description names exactly four BUILD_TEST_CI starters (`REMED-BUILD-004`, `REMED-BUILD-008`, `REMED-TEST-002`, `REMED-TEST-004`, all P1), and neither BUILD-010 nor BUILD-011 appears in the "Hard dependencies" table as a blocker for anything. Per this task's own explicit instruction ("Do not assume either belongs to Wave 1 until you verify the plan and dependencies" / "Do not pull later-wave tasks forward without justification"), both remain `NOT STARTED`, scheduled at their assigned P2 priority in Waves 2-5. | Claude (autonomous remediation session, user-directed) |
 | 2026-07-20 | `REMED-CORE-006`, `-007`, `-014` | **Picked up now, despite `REMEDIATION_DEPENDENCIES.md` narratively listing `-006`/`-007` under "Wave 2."** Their only documented hard blocker is `REMED-TEST-002` (now DONE); no other Wave-1/Wave-2 gate applies to them specifically. Treated the same way `BUILD_TEST_CI`'s own non-P0 Wave-1 unblockers (`REMED-BUILD-004`/`-008`/`TEST-002`/`TEST-004`) were already treated in this file — started as soon as their blocker cleared, not held for a literal wave boundary. `REMED-CORE-001`/`-004` (also nominally "Wave 2," no `TEST-002` dependency) were **not** pulled forward — no blocker justifies moving them early. Full rationale in "Wave 1 (parallel) — CORE lane." | Claude (autonomous CORE-lane session, user-directed) |
 | 2026-07-20 | `REMED-BUILD-002` | **Yes — the copy step is obsolete, deleted outright (not guarded, not backfilled with a real `Content/` dir).** Investigated `examples/demo_xact/src/XactFileGen.hpp` + `XactDemo.cpp`: `XactDemo::LoadContent()` calls `GenerateXactFiles("Content/Audio")`, which itself calls `std::filesystem::create_directories(audioDir)` and then `XactFileGen::SaveFile()`s a freshly synthesized `Waves.xwb`/`Demo.xgs`/`Sounds.xsb` (sine-wave PCM + minimal XGS/XWB/XSB binaries matching `XactParser.cpp`'s expected layout) directly into that runtime-relative directory — no pre-existing `.xwb`/`.xgs`/`.xsb` asset is ever read from disk. `examples/demo_xact/` contains only `src/` (confirmed: no `Content/` anywhere in the repo, matching the audit finding). The POST_BUILD `copy_directory` in `cmake/Examples.cmake` therefore copied a directory that never existed and could never usefully exist — deleting it is strictly correct, not a stopgap. | Claude (autonomous remediation session, user-directed) |
+| 2026-07-20 | `REMED-CORE-002`, `-003` | **Deliberately not pulled into the Wave 2 CORE tranche.** Both are **P2** per `REMEDIATION_INDEX.md`/`MASTER_REMEDIATION_PLAN.md` (not P1 like `-001`/`-004`), and `REMEDIATION_DEPENDENCIES.md` explicitly schedules the exception-type sweep into Wave 4's "quiet window" specifically because of its LARGE/cross-lane blast radius (`Cx LARGE (breadth) · PS NO (touches files owned by nearly every other lane — schedule in a quiet window`). The POST-WAVE-1 baseline's own "Wave 2 readiness — recommended lane order" names exactly `REMED-CORE-001` then `-004` for this tranche's CORE lane, not `-002`/`-003`. Nothing in the dependency graph names `-002`/`-003` as blocking `-001`/`-004`, or vice versa. Left `NOT STARTED` at their assigned P2 priority, per the tranche's own explicit instruction not to pull later-wave CORE tasks forward without clear dependency justification. | Claude (autonomous CORE-lane session, user-directed) |
+| 2026-07-20 | `REMED-CORE-004` scope (`PackFromVector4`) | **Did not literally follow the master plan's suggested strategy** ("route through the existing `ToByteFromUnitClamped()`"). Cross-checked real FNA source first (per `CLAUDE.md`'s FNA-authoritative-behavior instruction) and found FNA's own `IPackedVector.PackFromVector4` deliberately does not clamp, unlike every constructor in the same file — literally following the plan would have introduced an undisclosed FNA divergence (saturating where FNA truncates/wraps). Implemented a new non-clamping `ToByteFromUnitTruncated()` helper instead, preserving FNA's real semantics while still eliminating the C++ UB. Recorded per Rule 3 ("if implementation reveals the root cause differs from the plan's, record that ... do not silently widen scope"). | Claude (autonomous CORE-lane session, user-directed) |
 
 ## Findings that did not reproduce
 
