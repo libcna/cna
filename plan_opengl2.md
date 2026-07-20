@@ -692,6 +692,10 @@ possibilities of OpenGL 2"):
   - `OpenGL2_MRT` -- genuine simultaneous multi-attachment output: a custom `ShaderEffect` writes
     two DIFFERENT colours to `gl_FragData[0]`/`gl_FragData[1]` in one draw call across 2 bound
     render targets. 1/1 PASS.
+  - `OpenGL2_InstancedModel` -- real GPU hardware instancing: 2 quad instances, each reading its
+    own 4x4 world transform from a per-instance vertex stream, drawn in ONE
+    `DrawInstancedPrimitives` call; a per-instance-varying lighting readback (translate-only vs.
+    rotated-away-from-light) proves genuine per-instance data. 2/2 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -700,8 +704,8 @@ possibilities of OpenGL 2"):
   except `cna_demo_xact`, which fails only at its Content-copy POST_BUILD step because
   `examples/demo_xact/Content/` does not exist in this checkout at all (never committed to git) --
   pre-existing, unrelated to this backend or this branch.
-- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5540 cases
-  as of session 9) has ~225 pre-existing/expected failures (± the pre-existing
+- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5541 cases
+  as of session 10) has ~225 pre-existing/expected failures (± the pre-existing
   `ENetDiscoveryServiceTest` parallel-execution flakiness noted below), none an actual regression:
   ~220 are missing local test fixture files (media/audio/video/XNB content assets absent from this
   checkout, e.g. `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`) that
@@ -838,6 +842,79 @@ UDP test, not this backend) -- no real regression from either the `gl_FragData[0
 the MRT implementation itself, confirmed via a dedicated `ctest -R GraphicsDeviceCapabilityTest`
 re-run and the full `OpenGL2`-labeled suite (30/30 PASS, up from 29).
 
+## Status: hardware instancing (DrawInstancedPrimitivesEx) (2026-07-20, session 10)
+User-directed follow-up: implement real GPU hardware instancing (session 8's other biggest
+deferred item, picked next after MRT).
+
+GL 2.1 has no instancing in core, but `GL_ARB_draw_instanced` (`glDrawElementsInstancedARB`) +
+`GL_ARB_instanced_arrays` (`glVertexAttribDivisorARB`) are widely-supported extensions on real
+GL2.1-era desktop drivers/GPUs. Unlike this file's own GL 2.0/2.1 CORE calls (which link directly
+via `GL_GLEXT_PROTOTYPES`'s extern declarations on Linux/macOS -- see the file-header comment),
+true ARB extension entry points are not reliably direct-linkable on any platform, Windows included
+-- both are resolved at runtime via `SDL_GL_GetProcAddress()` UNCONDITIONALLY (not gated to
+Windows like `LoadWin32GLExtensions()`), via a new `LoadInstancingExtensions()` called from the
+constructor on every platform. A namespace-scope function-pointer variable with the same name as
+the extern-declared global (e.g. `glDrawElementsInstancedARB`) correctly shadows it for unqualified
+lookups within this backend's own namespace -- confirmed by a clean compile/link, exactly the same
+pattern the file already establishes for its Windows-only core-function pointers, just applied more
+broadly here since ARB extension symbols need it everywhere. Added `CNA::GraphicsCapability::
+Instancing` (new enum entry -- didn't exist before this task) reporting both proc addresses
+resolved non-null.
+
+Implementation scope mirrors `EasyGLGraphicsBackend::DrawInstancedPrimitivesEx`'s own documented
+reduction: only the custom-`ShaderEffect` path is supported (no built-in stock effect ever needs
+per-instance data in practice; a non-1 `VertexBufferBinding.InstanceFrequency` is not threaded
+through either). When no custom effect is bound, or the driver genuinely lacks either extension,
+this override delegates to the shared base-class default (`std::runtime_error` -- the correct,
+honest behavior for a genuinely unsupported case, unchanged). The mesh (per-vertex) buffer binds
+through the existing declaration-driven/fixed-stride dispatch every other custom-effect draw uses;
+the per-instance buffer's own attributes are bound the SAME way -- by NAME via
+`glGetAttribLocation` -- which needs no "continue right after the mesh buffer's own locations"
+offset arithmetic EasyGL's fixed-layout-location approach requires, since each attribute's real
+location comes straight from the linker regardless of mesh-attribute count.
+`glVertexAttribDivisorARB(location, 1)` is what makes each per-instance attribute advance once per
+INSTANCE instead of once per vertex; reset back to divisor 0 (not just disabled) after the draw so
+a later, unrelated draw reusing the same location number doesn't silently inherit per-instance
+advancement.
+
+`opengl2_instancedmodel_test.cpp` adapts `easygl_instancedmodel_shader_test.cpp`'s own scene, math
+derivation, and expected values verbatim to GLSL 1.10 syntax (`attribute`/`varying`, no
+`#version 300 es`, no explicit `layout(location=N)`) -- two quad instances drawn in ONE
+`DrawInstancedPrimitives` call, each with its own 4x4 world transform read from a second,
+per-instance vertex stream (the classic D3D9/XNA `BLENDWEIGHT0-3` hardware-instancing convention:
+4 consecutive Vector4 rows, reconstructed into a `mat4` in the vertex shader). A
+per-instance-varying lighting readback (WHITE for a pure-translation instance vs. dim GRAY for a
+rotated-away-from-the-light instance) proves genuinely different per-instance data drove the
+result, not just "some instance renders somewhere".
+
+**Two real GLSL-1.10-portability bugs found and fixed along the way** (both in the new *test* file,
+not the backend):
+- `transpose()` (used by EasyGL's own GLES3/GL3+ shader to reconstruct the instance matrix from its
+  4 packed rows) requires GLSL 1.20 -- worked around with a manual 16-scalar `mat4(...)`
+  reconstruction (verified algebraically: feeding `M[i][j]` column-major into a fresh
+  `mat4(16 scalars)` call, column-by-column, produces exactly `transpose(M)`).
+- `mat3(mat4)` truncation (also GLSL 1.20+) -- worked around with this file's own established
+  `mat3(m[0].xyz, m[1].xyz, m[2].xyz)` idiom (already used by every other shader in this backend
+  that needs a 3x3 normal-transform submatrix, e.g. the skinned/PBR fragment shaders).
+
+**One real test-authoring bug found via `glGetAttribLocation` diagnostics** (not a backend bug):
+the test's shader declared per-instance attributes as `aBoneWeight0`/`aBoneWeight1`/
+`aBoneWeight2`/`aBoneWeight3`, but `VertexElementAttribName()`'s own established convention gives
+USAGE INDEX 0 the bare, unsuffixed base name (`aBoneWeight`, no `0`) -- confirmed via a diagnostic
+`glGetAttribLocation` printout showing only 3 of 4 per-instance attributes resolving to a valid
+location (the mismatched `aBoneWeight0` returned -1), producing a degenerate 3-row instance
+transform and rendering nothing at either instance's expected screen position. Fixed by renaming
+the shader's row-0 attribute to match; both checks passed exactly on the first re-run after the fix.
+
+`OpenGL2_InstancedModel` 2/2 PASS. `opengl2_graphics_capability_test.cpp` gained an
+`Instancing query does not throw` check (same device/driver-dependent treatment as
+MultiSampleAntiAliasing/AnisotropicFiltering -- doesn't assert a specific value). Full `OpenGL2`
+suite: 31/31 PASS (up from 30). Full unfiltered `CnaTests` sweep (5541 cases): failure count
+differs from session 9's 226 only by ±1, consistent with the same pre-existing
+`ENetDiscoveryServiceTest` parallel-execution flakiness already documented -- a dedicated
+`ctest -R GraphicsDeviceCapabilityTest` re-run confirms only the already-documented
+`DoesNotSupportWireFrame` remains failed in that suite, no new regression.
+
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
 - SDL-created OpenGL 2.1 compatibility context. SDL is only window/context glue; rendering is direct OpenGL.
@@ -905,6 +982,8 @@ re-run and the full `OpenGL2`-labeled suite (30/30 PASS, up from 29).
   switched from `gl_FragColor` to `gl_FragData[0]` as part of this (behavior-identical for the
   single-draw-buffer case, but required so a single-output built-in effect drawn under MRT writes
   only its intended attachment instead of broadcasting to every bound draw buffer).
+- Real GPU hardware instancing (`DrawInstancedPrimitivesEx`, custom-`ShaderEffect` path only, via
+  `GL_ARB_draw_instanced`/`GL_ARB_instanced_arrays`; see `OpenGL2_InstancedModel` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -922,20 +1001,8 @@ re-run and the full `OpenGL2`-labeled suite (30/30 PASS, up from 29).
   mechanically similar to the four already ported (reuse the existing golden PNG + its exact scene
   setup verbatim) but real, incremental effort per scene, not a single remaining task.
 - ~~Real Multiple Render Targets (MRT)~~ -- **DONE (session 9, see status section below)**.
-- **`DrawInstancedPrimitivesEx` (hardware instancing) throws `std::runtime_error` on OpenGL2.**
-  This IS the documented, acceptable default for backends that don't support it (the interface's own
-  doc comment says so) -- not a bug, unlike the 5 gaps fixed in session 8. EasyGL implements it for
-  real. GL 2.1 has no instancing in core, but `ARB_draw_instanced`
-  (`glDrawArraysInstancedARB`/`glDrawElementsInstancedARB`) + `ARB_instanced_arrays`
-  (`glVertexAttribDivisorARB`) are widely-supported extensions on real GL2.1-era desktop
-  drivers/GPUs (the per-instance-attribute-divisor technique needs no `gl_InstanceID`, so plain
-  GLSL 1.10 is sufficient) -- a legitimate, in-scope GL 2.1 feature per this project's own "EasyGL
-  parity, within OpenGL 2.1's real limits" mandate, but needs: a runtime extension-presence check
-  (report via `SupportsCapability` -- note `CNA::GraphicsCapability` has no `Instancing` entry yet,
-  add one), per-instance VBO wiring with attribute divisors, and its own test. Not attempted this
-  session: real risk of a subtly-wrong-but-plausible instanced-transform implementation, which is
-  worse than the current honest "throws" default, and no way to cross-check the driver's actual
-  ARB extension behavior without deeper, unhurried verification.
+- ~~`DrawInstancedPrimitivesEx` (hardware instancing)~~ -- **DONE (session 10, see status section
+  below)**.
 - **Context-loss recovery (`DebugSimulateContextLoss`/`DebugRestoreContext`/
   `SetContextRecoveryEnabled`) is entirely unimplemented on OpenGL2** (all three fall back to
   no-op base-class defaults). EasyGL's version of this is a substantial, cross-cutting

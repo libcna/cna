@@ -183,6 +183,27 @@ namespace CNA::Internal::Backends::OpenGL2
         }
 #endif
 
+        // Hardware instancing (DrawInstancedPrimitivesEx, plan_opengl2.md follow-up): GL_ARB_
+        // draw_instanced/GL_ARB_instanced_arrays are NOT GL 2.1 core, and -- unlike this file's own
+        // GL 2.0/2.1 CORE calls, which link directly via GL_GLEXT_PROTOTYPES's extern declarations
+        // on Linux/macOS (see the file-header comment) -- true ARB extension entry points are not
+        // reliably direct-linkable on any platform, Windows included, so these are always resolved
+        // at runtime via SDL_GL_GetProcAddress() regardless of platform (LoadInstancingExtensions(),
+        // called unconditionally from the constructor, unlike LoadWin32GLExtensions() above which
+        // is Windows-only). Null after loading means the driver genuinely lacks the extension --
+        // every call site below must check before use (see SupportsCapability(Instancing) and
+        // DrawInstancedPrimitivesEx's own guard).
+        PFNGLDRAWELEMENTSINSTANCEDARBPROC glDrawElementsInstancedARB = nullptr;
+        PFNGLVERTEXATTRIBDIVISORARBPROC glVertexAttribDivisorARB = nullptr;
+
+        void LoadInstancingExtensions()
+        {
+            glDrawElementsInstancedARB = reinterpret_cast<PFNGLDRAWELEMENTSINSTANCEDARBPROC>(
+                SDL_GL_GetProcAddress("glDrawElementsInstancedARB"));
+            glVertexAttribDivisorARB = reinterpret_cast<PFNGLVERTEXATTRIBDIVISORARBPROC>(
+                SDL_GL_GetProcAddress("glVertexAttribDivisorARB"));
+        }
+
         GLuint CompileShader(GLenum type, const char* src)
         {
             GLuint shader = glCreateShader(type);
@@ -1705,6 +1726,7 @@ namespace CNA::Internal::Backends::OpenGL2
 #if defined(_WIN32)
         LoadWin32GLExtensions();
 #endif
+        LoadInstancingExtensions();
         SetSwapInterval(swapInterval);
         ensurePrograms();
 
@@ -2755,6 +2777,98 @@ namespace CNA::Internal::Backends::OpenGL2
         drawInternal(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
     }
 
+    void OpenGL2GraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vbi, const IIndexBufferBackend& ibi,
+                                                            const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                            PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                                            const GpuDrawParams& params)
+    {
+        // plan_opengl2.md follow-up: hardware instancing is only supported through the custom-
+        // ShaderEffect path (mirrors EasyGLGraphicsBackend::DrawInstancedPrimitivesEx's own
+        // identical, documented scope reduction -- a non-1 VertexBufferBinding.InstanceFrequency
+        // is not threaded through here either) -- the shared base-class default's
+        // std::runtime_error is the correct, honest behavior for anything outside that scope
+        // (no custom effect bound, or the driver genuinely lacks GL_ARB_draw_instanced/
+        // GL_ARB_instanced_arrays), so this override only handles the cases it can do for real.
+        if (!params.customEffectBackend || !glDrawElementsInstancedARB || !glVertexAttribDivisorARB)
+        {
+            IGraphicsBackend::DrawInstancedPrimitivesEx(vbi, ibi, world, view, projection, primitive,
+                                                        primitiveCount, instanceCount, params);
+            return;
+        }
+
+        const auto* vb = dynamic_cast<const VB*>(&vbi);
+        const auto* ib = dynamic_cast<const IB*>(&ibi);
+        if (!vb || !ib)
+            throw std::runtime_error("OPENGL2: incompatible vertex/index buffer");
+
+        auto* custom = dynamic_cast<EffectBackend*>(params.customEffectBackend);
+        if (!custom)
+            throw std::runtime_error("OPENGL2: DrawInstancedPrimitivesEx requires an OpenGL2 ShaderEffect");
+
+        params.customEffectBackend->Bind();
+        float worldCM[16], viewCM[16], projCM[16];
+        world.ToColumnMajor(worldCM);
+        view.ToColumnMajor(viewCM);
+        projection.ToColumnMajor(projCM);
+        params.customEffectBackend->SetUniformMat4("World", worldCM);
+        params.customEffectBackend->SetUniformMat4("View", viewCM);
+        params.customEffectBackend->SetUniformMat4("Projection", projCM);
+
+        const GLuint program = custom->GetProgramHandle();
+
+        // Mesh (per-vertex) attributes -- same declaration-driven or fixed-stride dispatch every
+        // other custom-effect draw uses.
+        if (!vb->declaration.empty())
+            BindVertexAttributesForDeclaration(program, vb->id, vb->stride, vb->declaration);
+        else
+            BindVertexAttributesForStride(vb->id, vb->stride);
+
+        // Per-instance attributes: bound by NAME (glGetAttribLocation), exactly like the mesh
+        // buffer above -- unlike EasyGLGraphicsBackend's own fixed-layout-location approach, name-
+        // based binding needs no "continue right after the mesh buffer's own locations" offset
+        // arithmetic, since each attribute's location comes straight from the linker regardless of
+        // how many mesh attributes exist. glVertexAttribDivisorARB(location, 1) is what makes each
+        // of these advance once per INSTANCE instead of once per vertex -- the whole mechanism this
+        // task exists to add.
+        const auto* instVb = dynamic_cast<const VB*>(params.instanceVb);
+        std::vector<GLuint> instanceLocations;
+        if (instVb && !instVb->declaration.empty())
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, instVb->id);
+            for (const auto& element : instVb->declaration)
+            {
+                const std::string name = VertexElementAttribName(
+                    element.getVertexElementUsageProperty(), element.getUsageIndexProperty());
+                const GLint location = glGetAttribLocation(program, name.c_str());
+                if (location < 0) continue;
+
+                const VertexAttribFormat desc = DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                const auto offset = reinterpret_cast<const void*>(
+                    static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                glEnableVertexAttribArray(static_cast<GLuint>(location));
+                glVertexAttribPointer(static_cast<GLuint>(location), desc.componentCount, desc.type,
+                                      desc.normalized, static_cast<GLsizei>(instVb->stride), offset);
+                glVertexAttribDivisorARB(static_cast<GLuint>(location), 1);
+                instanceLocations.push_back(static_cast<GLuint>(location));
+            }
+        }
+
+        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib->id);
+        glDrawElementsInstancedARB(ToGLPrimitiveMode(primitive), indexCount,
+                                   ib->thirtyTwoBit ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
+                                   nullptr, instanceCount);
+
+        // Reset divisor back to 0 (not just disable the attribute) -- otherwise a later,
+        // unrelated draw that reuses the same attribute location number would silently inherit
+        // per-instance advancement instead of the normal per-vertex behavior.
+        for (GLuint location : instanceLocations)
+        {
+            glVertexAttribDivisorARB(location, 0);
+            glDisableVertexAttribArray(location);
+        }
+    }
+
     void OpenGL2GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                                                   int colorBlendFunc, int alphaBlendFunc)
     {
@@ -2935,6 +3049,11 @@ namespace CNA::Internal::Backends::OpenGL2
                 const auto* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
                 return extensions && std::strstr(extensions, "GL_EXT_texture_filter_anisotropic") != nullptr;
             }
+            case CNA::GraphicsCapability::Instancing:
+                // Both proc addresses must have resolved (LoadInstancingExtensions(), called
+                // unconditionally from the constructor) -- DrawInstancedPrimitivesEx's own guard
+                // checks the same condition before using either.
+                return glDrawElementsInstancedARB != nullptr && glVertexAttribDivisorARB != nullptr;
             default:
                 return true;
         }

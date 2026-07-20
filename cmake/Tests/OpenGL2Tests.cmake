@@ -190,4 +190,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_mrt examples/opengl2_mrt_test.cpp)
     cna_register_backend_test(NAME OpenGL2_MRT COMMAND cna_test_opengl2_mrt
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: real GPU hardware-instancing proof via DrawInstancedPrimitivesEx.
+    cna_opengl2_test(cna_test_opengl2_instancedmodel examples/opengl2_instancedmodel_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_InstancedModel COMMAND cna_test_opengl2_instancedmodel
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

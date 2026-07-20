@@ -7,9 +7,11 @@
 // header comment says it "only ever builds against a fully 3D-capable backend (EasyGL by default
 // on Linux)"), this backend-specific test asserts WireFrame=true instead.
 //
-// MultiSampleAntiAliasing/AnisotropicFiltering are genuinely device/driver-dependent -- same
-// treatment as GraphicsDeviceCapabilityTests.cpp's own MultiSampleAntiAliasingQueryDoesNotThrow:
-// don't assert a specific value, just that querying doesn't throw.
+// MultiSampleAntiAliasing/AnisotropicFiltering/Instancing are genuinely device/driver-dependent --
+// same treatment as GraphicsDeviceCapabilityTests.cpp's own
+// MultiSampleAntiAliasingQueryDoesNotThrow: don't assert a specific value, just that querying
+// doesn't throw. Instancing specifically reflects GL_ARB_draw_instanced/GL_ARB_instanced_arrays
+// presence -- see opengl2_instancedmodel_test.cpp for the actual hardware-instancing proof.
 //
 // MultipleRenderTargets: real MRT via a shared FBO (glFramebufferTexture2D per target +
 // glDrawBuffers), see OpenGL2GraphicsBackend::SetRenderTargets -- asserted true below; see
@@ -70,6 +72,11 @@ protected:
         try { (void)dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering); }
         catch (const std::exception&) { threw = true; }
         check(!threw, "AnisotropicFiltering query does not throw");
+
+        threw = false;
+        try { (void)dev.SupportsCapability(GraphicsCapability::Instancing); }
+        catch (const std::exception&) { threw = true; }
+        check(!threw, "Instancing query does not throw (GL_ARB_draw_instanced/GL_ARB_instanced_arrays presence, device/driver-dependent)");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();
