@@ -60,6 +60,52 @@ Target platforms: Linux and Windows desktop compatibility-profile drivers. The b
 11. ~~Add explicit `GraphicsCapability` reporting so unsupported shader-era features return false instead of over-reporting support~~ **Done** (audit, no source change needed): `GraphicsDevice::SupportsCapability()`'s existing OPENGL1 truth table was already correct after phase 1's anisotropic fix -- `ThreeD`/`DepthStencilBuffer`/`WireFrame` true, `AnisotropicFiltering` tracks the real runtime-detected extension, and `MultiSampleAntiAliasing`/`MultipleRenderTargets`/`OcclusionQuery`/`CustomEffects` correctly report false (none of these are implemented by this backend). Locked in by `OpenGL1_GraphicsCapability`, which cross-checks every value against independent evidence rather than trusting the flag alone: `AnisotropicFiltering` against a direct `glGetString(GL_EXTENSIONS)` scan, `OcclusionQuery=false` against a real `OcclusionQuery` object that never completes, `WireFrame=true` against an actual `glGetIntegerv(GL_POLYGON_MODE)` readback.
 12. ~~Audit XNA Reach-profile behavior against what the fixed-function pipeline can reproduce exactly~~ **Done**: confirmed `GraphicsAdapter::IsProfileSupported()` correctly returns `true` unconditionally for OPENGL1 too, matching `plan_dx9.md`'s own documented project-wide "Divergence 3" decision (`docs/d3d9-backend.md`: D3D9 is the *only* backend with a real `D3DCAPS9` to consult for genuine per-profile enforcement -- "on the other backends it is genuinely unfixable-in-principle... this plan forbids faking it there"). OPENGL1 correctly does not attempt to fake `Reach`/`HiDef` numeric-ceiling enforcement (texture size, cube size, format whitelist), same as every other non-D3D9 backend. Functional characterization of what OPENGL1's fixed-function pipeline can/cannot reproduce from real XNA `GraphicsProfile.Reach`'s guaranteed feature set: `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect` -- full coverage; `EnvironmentMapEffect` -- reflection-only subset (phase 5, no Fresnel/specular); `SkinnedEffect` and any custom (non-stock) `Effect` -- entirely unsupported (`CreateEffectBackend()` inherited `nullptr` default, matching this backend's own "no GLSL/custom ShaderEffect pipeline" design rule -- Reach itself permits some vs_2_0/ps_2_0 custom shaders, so this is a real, deliberate, documented OPENGL1 gap versus Reach, not a coincidental match); MRT -- `SetRenderTargets()`'s inherited single-target-only default happens to coincide with Reach's own `MaxRenderTargets=1` ceiling, though not by deliberate profile-awareness; volume/3D textures -- unsupported (no `CreateTexture3D()` override), which also happens to coincide with Reach's own `MaxVolumeExtent=0` (3D textures are HiDef-only in real XNA); `RenderTargetCube` -- unsupported (no `CreateRenderTargetCube()` override), an unconditional gap regardless of profile; occlusion queries -- unsupported, and this one is a **genuine Reach-relevant gap, not coincidental** (`docs/d3d9-backend.md` lists occlusion queries among the features real XNA guarantees are present at the `Reach` floor itself, not `HiDef`-gated) -- already flagged by phase 11's `OpenGL1_GraphicsCapability` test. NPOT textures -- no restriction enforced at all (whatever size is given goes straight to `glTexImage2D`), which is *more* permissive than what `Reach` XNA content could actually rely on, the same "unfixable, forbidden to fake" situation as texture-size ceilings. Hardware instancing -- not applicable, no custom-shader Effect pipeline exists to instance through. **Two real, previously-latent bugs found and fixed while actually running the full, unfiltered `CnaTests` suite under `CNA_GRAPHICS_BACKEND=OPENGL1` for the first time ever** (this audit's own empirical step, not just documentation): `tests/.../GraphicsDeviceCapabilityTests.cpp` hardcoded EasyGL-only expected values for `MultipleRenderTargets`/`OcclusionQuery`/`CustomEffects`/`WireFrame` (its own header comment already admitted "only ever builds against a fully 3D-capable backend (EasyGL by default)" -- OPENGL1 is a second, legitimately-different, equally-honest 3D-capable backend that comment did not anticipate), and `tests/.../GraphicsBackendCompileDefinitionTests.cpp`'s `ExactlyOneGraphicsBackendIsSelected` check never had a `CNA_BACKEND_OPENGL1` branch (the exact same gap class as a documented, already-fixed D3D9 bug sitting in that same file). Both fixed with `#ifdef CNA_BACKEND_OPENGL1` branches; `CnaTests` reconfirmed green for the affected suites on OPENGL1 (33/33) and regression-checked on EasyGL (9/9, zero behavior change). The other 126 `CnaTests` failures seen in this same run are pre-existing, environment-specific (Media/Video/Sound/Xnb content-fixture tests needing files/codecs not present in this sandbox) and unrelated to OPENGL1 or this audit.
 
+## EasyGL parity gap (found 2026-07-20)
+
+Systematic method-by-method diff of `EasyGLGraphicsBackend` against `OpenGL1GraphicsBackend`,
+requested explicitly by the project owner ("najdi ti co easy gl backend umi a opengl1 backend
+neumi" -- find what EasyGL can do that OPENGL1 can't). Confirmed the existing "Intentional OpenGL
+1.x limitations" section already correctly covers the shader/PBR/skinning/MRT/instancing/
+RenderTargetCube/custom-VertexDeclaration class of gaps (real, not revisited here). The following
+11 gaps are genuinely expressible with real legacy/period-compatible fixed-function OpenGL (no
+shader, no modern-only extension) and were simply never implemented yet:
+
+13. Add virtual-resolution/presentation-mode scaling (`GetViewportSize()`/`EffectiveWidth()`/
+    `EffectiveHeight()` returning the raw physical window size instead of a dynamically-recomputed
+    logical size; `SetPresentationMode()` a no-op; `TransformWindowToLogical`/
+    `TransformLogicalToWindow` never overridden) via the same `FixedHeightDynamicWidth`
+    aspect-correct recomputation EasyGL's own `getLogicalSize()` already does.
+14. Add `BasicEffect.DirectionalLight1`/`DirectionalLight2` via `GL_LIGHT1`/`GL_LIGHT2` (`DrawInternal`
+    only ever configures `GL_LIGHT0`, despite `GpuDrawParams` already carrying all 3 lights' data).
+15. Add `BasicEffect` specular highlights via `GL_SPECULAR` material/light state (`GpuDrawParams::
+    specularColor`/`specularPower`/`light0-2Specular` are never read by `DrawInternal` at all).
+16. Add `TextureAddressMode.Mirror` via `GL_MIRRORED_REPEAT` (core GL 1.4) -- currently silently
+    treated as `Clamp` in both the 3D path and `SpriteBatch::Draw`.
+17. Add constant blend color via `glBlendColor`/`GL_CONSTANT_COLOR` (core GL 1.4/`EXT_blend_color`)
+    -- `SetBlendFactor()` is a no-op and `Blend.BlendFactor`/`InverseBlendFactor` currently map to
+    `GL_ONE`/`GL_ZERO` instead, meaning this isn't a degraded case, it's a silently WRONG color.
+18. Add blend-equation-beyond-add via `glBlendEquationSeparate` (core GL 1.4/`EXT_blend_subtract`/
+    `EXT_blend_minmax`) -- `ApplyBlendState()` drops `colorBlendFunc`/`alphaBlendFunc` entirely,
+    always implicit `GL_FUNC_ADD`.
+19. Add separate alpha blend factors via `glBlendFuncSeparate` (core GL 1.4/`EXT_blend_func_separate`)
+    -- `ApplyBlendState()` currently reuses the color factors for alpha too.
+20. Add a runtime `SetSwapInterval()` override (`SDL_GL_SetSwapInterval`) -- currently only the
+    construction-time value ever reaches SDL; changing vsync mid-session silently does nothing.
+21. Add `RenderTarget2D` mip-chain generation on unbind, reusing the existing `Texture2D` mip
+    machinery (`glGenerateMipmap`/`GL_GENERATE_MIPMAP`/CPU box-filter, phase 6) -- `CreateRenderTarget2D`
+    currently silently drops its own `mipMap` parameter (unnamed `bool`).
+22. Add backbuffer multisampling via `SDL_GL_MULTISAMPLEBUFFERS`/`SAMPLES` context attributes +
+    `GL_MULTISAMPLE` (`WGL`/`GLX_ARB_multisample`, ratified 1998, same era as `ARB_multitexture`
+    already used here) -- `multiSampleCount` is currently read by nothing, `SupportsCapability
+    (MultiSampleAntiAliasing)` hardcoded false. Backbuffer-only; `RenderTarget2D` MSAA (EasyGL's own
+    manual offscreen-FBO resolve) correctly stays out of scope -- genuinely needs modern extensions.
+23. Add real occlusion queries via `ARB_occlusion_query`/core GL 1.5 (`glGenQueries`/
+    `glBeginQuery(GL_SAMPLES_PASSED)`/`glEndQuery`/`glGetQueryObjectuiv`, ratified 2001/core 2003,
+    same `SDL_GL_GetProcAddress` loading pattern already used for `ARB_framebuffer_object`) --
+    genuinely pre-shader-era and fixed-function-orthogonal, not a "second modern OpenGL backend"
+    concern any more than the existing FBO-based `RenderTarget2D` support already is. Supersedes
+    phase 11/12's "no native modern occlusion-query guarantee" framing, which predates this finding.
+
 ## Bugs found while adding test coverage (2026-07-19)
 
 Fixed alongside the initial `void*`/`SDL_GLContext` build error, `ApplyRasterizerState`'s
