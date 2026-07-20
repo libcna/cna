@@ -1,0 +1,69 @@
+name: 32-bit Arithmetic Coverage
+
+# REMED-MEDIA-001 (32-bit CI coverage, BUILD_TEST_CI Wave 2): compiles and RUNS
+# AudioTagParser.cpp's own width-dependent std::size_t bounds check
+# (ExceedsBound()) at a genuine 32-bit std::size_t width, on a real i386
+# GitHub-hosted runner target via gcc-multilib/g++-multilib -- not a
+# uint32_t-arithmetic simulation on a 64-bit host, which is what
+# AudioTagParserTests.cpp's own Id3v23FrameSizeOverflowIsCaughtOnANarrow32BitSizeT
+# / FlacPictureBlockLengthOverflowIsCaughtOnANarrow32BitSizeT cases are limited
+# to (see that file's own comment on why -- no 32-bit toolchain was available
+# in the sandbox that wrote them).
+#
+# Deliberately narrow in scope: this job builds ONLY
+# tools/media/arithmetic32bit/ (a small, standalone CMake project -- see that
+# directory's own CMakeLists.txt header comment for why it is not part of the
+# main build), not the full CNA library/CnaTests. The main build's SDL3/
+# SDL3_image/SDL3_mixer/FFmpeg dependencies are not available for a 32-bit
+# target in this project's toolchain, and AudioTagParser.cpp/
+# ContentLoadException.cpp need none of them.
+#
+# If a future width-dependent-arithmetic finding needs the same treatment
+# (e.g. another size_t-bounds-check class), extend
+# tools/media/arithmetic32bit/CMakeLists.txt's source list rather than adding a
+# second standalone project.
+
+on:
+  push:
+    branches: [ master, main ]
+    paths:
+      - 'src/CNA/Internal/Media/AudioTagParser.cpp'
+      - 'include/CNA/Internal/Media/AudioTagParser.hpp'
+      - 'src/Microsoft/Xna/Framework/Content/ContentLoadException.cpp'
+      - 'include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp'
+      - 'tools/media/**'
+      - '.github/workflows/32bit-arithmetic-ci.yml'
+  pull_request:
+    paths:
+      - 'src/CNA/Internal/Media/AudioTagParser.cpp'
+      - 'include/CNA/Internal/Media/AudioTagParser.hpp'
+      - 'src/Microsoft/Xna/Framework/Content/ContentLoadException.cpp'
+      - 'include/Microsoft/Xna/Framework/Content/ContentLoadException.hpp'
+      - 'tools/media/**'
+      - '.github/workflows/32bit-arithmetic-ci.yml'
+  workflow_dispatch: {}
+
+jobs:
+  build-and-run-32bit:
+    name: Build + run (i386, gcc-multilib)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install 32-bit toolchain
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends gcc-multilib g++-multilib
+
+      - name: Configure (-m32)
+        run: |
+          cmake -S tools/media/arithmetic32bit -B cmake-build-32bit-arithmetic \
+                -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32
+
+      - name: Build
+        run: cmake --build cmake-build-32bit-arithmetic --parallel
+
+      - name: Run (must genuinely be a 32-bit binary -- the check's own first
+              assertion fails loudly otherwise, see the harness source)
+        run: ./cmake-build-32bit-arithmetic/cna_audio_tag_parser_32bit_overflow_check
