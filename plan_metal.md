@@ -1185,6 +1185,24 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     first — a toolchain/config-level blocker, not a code-level one; whether the Metal backend's own
     source actually compiles remains unknown until a run gets past this too.
 
+49. **Real third CI signal — the Objective-C++ compiler and `METAL` backend selection both
+    confirmed working, third blocker fixed**: this run's log is the strongest evidence yet that this
+    backend is genuinely close to a real compile: `-- Detecting OBJCXX compiler ABI info ... done`
+    and `-- CNA: Using native METAL graphics backend` both appeared, meaning
+    `cmake/BackendSelection.cmake`'s Apple-only gate and `enable_language(OBJCXX)` call (documented
+    as already-correct back in the "Implemented initial foundation" list) are now genuinely
+    confirmed, not just source-reviewed. Failed next at `cmake/CnaLibrary.cmake`'s `REQUIRED
+    libavcodec` `pkg_check_modules` — this repo's `CLAUDE.md` documents the Linux
+    `apt-get install libavcodec-dev ...` step, but `metal-macos-ci.yml` is this project's first-ever
+    macOS CI job, so no Homebrew equivalent existed yet. Fixed by adding a `brew install ffmpeg`
+    step before configure — a single Homebrew formula provides all 4 required pkg-config modules
+    (`libavcodec`/`libavformat`/`libavutil`/`libswresample`). `find_package(draco CONFIG QUIET)`
+    needs no equivalent install — it's genuinely optional (`QUIET`, with an already-documented
+    graceful "throws a clear unsupported-format error" fallback when absent), unlike FFmpeg's
+    `REQUIRED`. Third real, observed CI signal — each one closer to an actual compile result, still
+    entirely toolchain/environment-level so far, not a single Metal-backend source issue found by
+    the CI itself yet.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

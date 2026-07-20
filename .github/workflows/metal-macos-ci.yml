@@ -33,6 +33,13 @@ jobs:
         with:
           repository: openeggbert/sharp-runtime
           path: sharp-runtime
+      - name: Install FFmpeg (Homebrew)
+        # cmake/CnaLibrary.cmake requires libavcodec/libavformat/libavutil/libswresample via
+        # pkg-config on every non-Windows/Emscripten/Android target (VideoPlayer decoding) --
+        # CLAUDE.md's own "System Dependencies (Linux)" section documents the apt-get equivalent,
+        # but this is the first macOS CI job in this repo, so there was no Homebrew install step
+        # yet. A single `ffmpeg` formula provides all 4 required pkg-config modules.
+        run: brew install ffmpeg
       - name: Configure native Metal backend
         working-directory: cna
         # CMAKE_POLICY_VERSION_MINIMUM=3.5: third_party/enet/CMakeLists.txt (vendored, not a
