@@ -35,11 +35,11 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 12 | 10 | 0 | 0 | 2 |
+| P0 | 12 | 11 | 0 | 0 | 1 |
 | P1 | 21 | 1 | 0 | 0 | 20 |
 | P2 | 44 | 3 | 0 | 1 | 40 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **105** | **14** | **0** | **1** | **90** |
+| **Total** | **105** | **15** | **0** | **1** | **89** |
 
 *P0's total was corrected 11→12 while closing `REMED-GFX-001`: `REMED-GFX-001`, `-002`, and `-003`
 are all `Priority: P0-SAFETY` per `MASTER_REMEDIATION_PLAN.md`, so the row's prior total had
@@ -86,7 +86,7 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 | REMED-CONTENT-003 | DONE | | feature/audit | Ported the sibling readers' existing check verbatim — see detail below. |
 | REMED-CONTENT-006 | DONE | | feature/audit | VERIFY passed (reproduced a real segfault before fixing) — see detail below. |
 | REMED-GFX-001 | DONE | | feature/audit | `RegisterForWindow` moved to last constructor statement — see detail below. |
-| REMED-GFX-002 | NOT STARTED | | | Sequence before GFX-003 (same file). |
+| REMED-GFX-002 | DONE | | feature/audit | Landed with construction/setter validation as well as the use-site fix — see detail below. |
 | REMED-GFX-003 | NOT STARTED | | | After GFX-002. Resize tables **and** add flag operators together. |
 | REMED-NET-001 | DONE | | feature/audit | Landed atomically with NET-003, same file/change — see detail below. |
 | REMED-NET-003 | DONE | | feature/audit | Landed atomically with NET-001, same file/change — see detail below. |
@@ -339,6 +339,71 @@ normal startup. Full `CnaTests` direct-binary run (EASYGL, non-ASan): 5574 tests
 skipped, 2 failed — both pre-existing, already tracked (`GameTest.DisposingDeviceInvokesUnloadContent`,
 `GraphicsDeviceManagerTest.BackendDetectedDeviceLostIsForwardedToManagerListeners`, `REMED-TEST-002`'s
 own intentional reproductions of `REMED-CORE-006`/`-014`, unrelated to GRAPHICS) — 0 regressions.
+
+### REMED-GFX-002 detail — `SpriteFont::MeasureString`/`SpriteBatch::DrawString` end() dereference
+
+**Root cause confirmed exactly as described in the audit:** both functions' "character not found →
+fall back to `defaultCharacter_`" path performed a second `characterIndexMap_.find()` and
+dereferenced `it->second` without checking the second lookup succeeded. Nothing validated that a
+`SpriteFont`'s `defaultCharacter` was itself present in `characters`.
+
+**Change — both the use-site fix and the construction/setter validation the master plan's
+suggested strategy asked for, landed together:**
+- `SpriteFont.cpp`: constructor and `setDefaultCharacterProperty` both now throw
+  `System::ArgumentException` if the given `defaultCharacter` is not present in the character list
+  (checked against `characterIndexMap_`, built before the check in the constructor). Strong
+  exception safety: `setDefaultCharacterProperty` validates *before* assigning, so a rejected call
+  leaves `defaultCharacter_` unchanged.
+- `SpriteFont.cpp` `MeasureString` and `SpriteBatch.cpp` `DrawString`: the second `find()` result is
+  now checked; on failure (unreachable in practice once construction/setter validation is in place,
+  but checked anyway rather than dereferencing `end()`) throws
+  `System::Collections::Generic::KeyNotFoundException`, matching FNA's
+  `characterIndexMap[DefaultCharacter.Value]` `Dictionary` indexer, which throws
+  `KeyNotFoundException` on a miss.
+- **Root cause note vs. the plan's literal "Required tests" wording:** the plan's required-tests
+  list describes constructing a `SpriteFont` with an inconsistent `defaultCharacter` and then
+  observing `MeasureString`/`DrawString` throw `KeyNotFoundException`. With construction/setter
+  validation now in place, that inconsistent state is unreachable through the public API — the
+  `ArgumentException` fires first, at construction/set time. Both code paths are still implemented
+  (defense in depth, matching the plan's own "Additionally validate..." strategy verbatim) and
+  covered by tests below; the `KeyNotFoundException` branch is exercised by direct code inspection
+  and its presence verified by build, not by a reachable unit test, since making it reachable would
+  require deliberately bypassing the new, correct invariant enforcement.
+
+**Existing call sites broken by the new invariant, fixed in the same commit (not scope creep — an
+atomic-pair requirement, same shape as the plan's own `REMED-TEST-001` pattern):**
+- `examples/sprite_font_test.cpp`: its own long-standing comment already flagged this exact
+  precondition ("`defaultCharacter = u'?'`, but `'?'` is not in the character list") as the *reason*
+  the audit found this bug. Extended, per the master plan's own instruction, to assert the
+  constructor now throws `ArgumentException`; the later `setDefaultCharacterProperty(u'*')` call
+  (`'*'` also absent from that fixture's character list) similarly extended to assert-throws instead
+  of silently corrupting state.
+- `tests/Microsoft/Xna/Framework/Content/CnjSpriteFontTests.cpp`:
+  `LoadRealCnjFixtureEndToEnd`'s fixture declared `"defaultCharacter": "?"` with only glyph `'A'` in
+  `"glyphs"` — genuinely inconsistent test data. Added a `'?'` glyph to the fixture (preserves the
+  test's intent — defaultCharacter round-trips through the `.cnj` reader) and added a new
+  `DefaultCharacterAbsentFromGlyphsThrows` test asserting `ContentManager::Load<SpriteFont>` now
+  surfaces `System::ArgumentException` for a malformed `.cnj` with this defect — a real hardening
+  win for malformed/malicious content, consistent with this plan's `REMED-CONTENT-*` findings.
+- Swept every other `SpriteFont`/`defaultCharacter` construction site repo-wide (`examples/`,
+  `tests/`, `src/CNA/Internal/Backends/Ascii/AsciiFontAtlas.cpp`,
+  `src/CNA/Internal/Xnb/SpriteFontContentTypeReader.cpp`): all others already have `defaultCharacter`
+  present in their character list (or unset), confirmed individually — no other breakage.
+
+**Tests added:**
+- `SpriteFontTests.cpp` — `ConstructorThrowsWhenDefaultCharacterAbsentFromCharacters`,
+  `ConstructorAcceptsDefaultCharacterPresentInCharacters`,
+  `SetDefaultCharacterThrowsWhenAbsentFromCharacters` (also asserts the rejected value did not take
+  effect).
+- `CnjSpriteFontTests.cpp` — `DefaultCharacterAbsentFromGlyphsThrows` (see above).
+- `examples/sprite_font_test.cpp` — extended in place (see above), still exit 0/1 convention.
+
+**Verification criteria met:** ASan+UBSan build (`cmake-build-devices-asan`, EASYGL) — all 63
+SpriteFont/SpriteBatch/CnjSpriteFont/ContentManagerSpriteFontXnb gtests pass clean. Full `CnaTests`
+run (EASYGL, non-ASan) — same 2 pre-existing unrelated failures as GFX-001's run, 0 GRAPHICS
+regressions. `cna_test_sprite_font` and all 6 EasyGL SpriteFont/SpriteBatch pixel example tests
+(`single_glyph`, `multiglyph_spacing`, `newline`, `default_char`, `effects_flip`,
+`effects_rotation_scale`) still pass unchanged.
 
 ### REMED-NET-001 + REMED-NET-003 detail — `ENetBackend` host-authority checks
 

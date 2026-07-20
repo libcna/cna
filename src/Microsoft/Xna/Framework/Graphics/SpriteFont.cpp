@@ -6,6 +6,8 @@
 #include <stdexcept>
 
 #include "CNA/Internal/Utf8Decode.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/Collections/Generic/KeyNotFoundException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -31,6 +33,16 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             characterIndexMap_[characterMap_[i]] = i;
         }
+
+        // REMED-GFX-002: a defaultCharacter absent from characters would otherwise only be
+        // caught later, at the point MeasureString/DrawString falls back to it -- reject the
+        // inconsistency here instead, at the point it is actually introduced.
+        if (defaultCharacter_.has_value() &&
+            characterIndexMap_.find(defaultCharacter_.value()) == characterIndexMap_.end())
+        {
+            throw System::ArgumentException(
+                "defaultCharacter is not present in characters.", "defaultCharacter");
+        }
     }
 
     const std::vector<charcs>& SpriteFont::getCharactersProperty() const
@@ -45,6 +57,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteFont::setDefaultCharacterProperty(std::optional<charcs> value)
     {
+        // REMED-GFX-002: same invariant as the constructor -- reject a fallback character that
+        // this font cannot actually render, rather than letting MeasureString/DrawString hit an
+        // unchecked end() dereference the first time the fallback is needed.
+        if (value.has_value() && characterIndexMap_.find(value.value()) == characterIndexMap_.end())
+        {
+            throw System::ArgumentException(
+                "defaultCharacter is not present in characters.", "value");
+        }
         defaultCharacter_ = value;
     }
 
@@ -107,6 +127,15 @@ namespace Microsoft::Xna::Framework::Graphics
                         "Text contains characters that cannot be resolved by this SpriteFont.");
                 }
                 it = characterIndexMap_.find(defaultCharacter_.value());
+                // REMED-GFX-002: defaultCharacter is validated on construction/set, so this
+                // cannot fail in practice -- checked anyway rather than dereferencing end(),
+                // matching FNA's characterIndexMap[DefaultCharacter.Value] Dictionary indexer,
+                // which throws KeyNotFoundException on a miss.
+                if (it == characterIndexMap_.end())
+                {
+                    throw System::Collections::Generic::KeyNotFoundException(
+                        "defaultCharacter is not present in characters.");
+                }
             }
             const int index = it->second;
 

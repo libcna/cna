@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/ArgumentException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -82,7 +83,8 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
         "spacing": 1.5,
         "defaultCharacter": "?",
         "glyphs": [
-            { "char": 65, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] }
+            { "char": 65, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] },
+            { "char": 63, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] }
         ]
     })");
 
@@ -95,8 +97,39 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
     EXPECT_FLOAT_EQ(font.getSpacingProperty(), 1.5f);
     ASSERT_TRUE(font.getDefaultCharacterProperty().has_value());
     EXPECT_EQ(*font.getDefaultCharacterProperty(), u'?');
-    ASSERT_EQ(font.getCharactersProperty().size(), 1u);
+    ASSERT_EQ(font.getCharactersProperty().size(), 2u);
     EXPECT_EQ(font.getCharactersProperty()[0], u'A');
+    EXPECT_EQ(font.getCharactersProperty()[1], u'?');
+}
+
+// REMED-GFX-002: a defaultCharacter absent from the glyph list must now be rejected at
+// construction time (System::ArgumentException surfaces as a load failure), not silently
+// accepted and left to invoke UB the first time MeasureString/DrawString needed the fallback.
+TEST_F(CnjSpriteFontTest, DefaultCharacterAbsentFromGlyphsThrows)
+{
+    ScratchContentRoot root;
+
+    Texture2D atlas(gd, 16, 24);
+    std::vector<Color> pixels(16 * 24, Color(255, 255, 255, 255));
+    atlas.SetData(pixels.data(), static_cast<int>(pixels.size()));
+    atlas.SaveAsPng((root.path() / "atlas.png").string());
+
+    WriteFile(root.path() / "badDefault.cnj", R"({
+        "cnjVersion": 1,
+        "type": "SpriteFont",
+        "texture": "atlas.png",
+        "lineSpacing": 24,
+        "spacing": 1.5,
+        "defaultCharacter": "?",
+        "glyphs": [
+            { "char": 65, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] }
+        ]
+    })");
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(cm.Load<SpriteFont>("badDefault"), System::ArgumentException);
 }
 
 TEST_F(CnjSpriteFontTest, MismatchedTypeThrowsContentLoadException)

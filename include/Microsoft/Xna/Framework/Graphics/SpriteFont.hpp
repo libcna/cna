@@ -40,6 +40,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param spacing     Extra horizontal spacing applied between characters.
          * @param kerningData Per-glyph (left bearing, width, right bearing).
          * @param defaultCharacter Fallback glyph, or std::nullopt to throw on misses.
+         * @throws System::ArgumentException if @p defaultCharacter has a value not present in
+         *         @p characters.
          */
         NOXNA SpriteFont(Texture2D texture,
                          std::vector<Rectangle> glyphBounds,
@@ -64,6 +66,8 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Sets the fallback character used when a requested character is not in the font.
          * @param value Optional fallback character; pass std::nullopt to throw on misses.
+         * @throws System::ArgumentException if @p value is set but not present in this font's
+         *         character list.
          */
         void setDefaultCharacterProperty(std::optional<charcs> value);
 
@@ -94,6 +98,8 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param text The text to measure.
          * @return The width and height of the rendered text, in pixels.
+         * @throws std::invalid_argument if @p text contains a character this font cannot render
+         *         and no defaultCharacter is set.
          */
         [[nodiscard]] Vector2 MeasureString(const String& text) const;
 
@@ -102,6 +108,8 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * @param text The text to measure.
          * @return The width and height of the rendered text, in pixels.
+         * @throws std::invalid_argument if @p text contains a character this font cannot render
+         *         and no defaultCharacter is set.
          */
         [[nodiscard]] Vector2 MeasureString(const System::Text::StringBuilder& text) const;
 

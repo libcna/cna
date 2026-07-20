@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/ArgumentException.hpp"
 
 #include <cstdio>
 #include <cmath>
@@ -62,8 +63,23 @@ protected:
         const int   lineSpacing    = 24;
         const float spacing        = 0.0f;
 
-        SpriteFont font(atlas, bounds, cropping, chars, lineSpacing, spacing, kerning,
-                        std::optional<charcs>(u'?'));
+        // Task REMED-GFX-002: defaultCharacter='?' is deliberately absent from the character
+        // list here -- this precondition must now be rejected at construction time
+        // (System::ArgumentException) rather than silently accepted and left to invoke UB the
+        // first time MeasureString/DrawString needed the fallback (the audit's original finding).
+        {
+            bool threw = false;
+            try
+            {
+                SpriteFont badFont(atlas, bounds, cropping, chars, lineSpacing, spacing, kerning,
+                                   std::optional<charcs>(u'?'));
+            }
+            catch (const System::ArgumentException&)
+            {
+                threw = true;
+            }
+            check(threw, "SpriteFont ctor throws ArgumentException for defaultCharacter absent from characters");
+        }
 
         // Inject a '?' glyph so the default fallback works
         // (we set defaultCharacter = u'?', but '?' is not in the character list).
@@ -144,8 +160,23 @@ protected:
         check(f.getDefaultCharacterProperty().value() == u'?', "DefaultCharacter == '?'");
         f.setDefaultCharacterProperty(std::nullopt);
         check(!f.getDefaultCharacterProperty().has_value(), "DefaultCharacter nullopt");
-        f.setDefaultCharacterProperty(std::optional<charcs>(u'*'));
-        check(f.getDefaultCharacterProperty().value() == u'*', "DefaultCharacter set '*'");
+        // '*' is not one of chars2's glyphs -- Task REMED-GFX-002 requires this to be rejected,
+        // matching the constructor's own validation above.
+        {
+            bool threw = false;
+            try
+            {
+                f.setDefaultCharacterProperty(std::optional<charcs>(u'*'));
+            }
+            catch (const System::ArgumentException&)
+            {
+                threw = true;
+            }
+            check(threw, "setDefaultCharacterProperty throws ArgumentException for '*' absent from characters");
+            check(!f.getDefaultCharacterProperty().has_value(), "DefaultCharacter unchanged after rejected setter");
+        }
+        f.setDefaultCharacterProperty(std::optional<charcs>(u'A'));
+        check(f.getDefaultCharacterProperty().value() == u'A', "DefaultCharacter set 'A'");
 
         // --- Characters list ---
         const auto& ch = f.getCharactersProperty();

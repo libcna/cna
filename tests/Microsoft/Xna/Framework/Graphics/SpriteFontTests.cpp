@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/Text/StringBuilder.hpp"
 
 using Microsoft::Xna::Framework::Rectangle;
@@ -100,6 +101,29 @@ TEST(SpriteFontTest, EmptyFontHasEmptyCharacterList)
 }
 
 // -----------------------------------------------------------------------
+// REMED-GFX-002: defaultCharacter must be present in characters, validated at the point the
+// invariant would be violated (construction / setter), rather than left to invoke UB the first
+// time MeasureString/DrawString needs the fallback.
+// -----------------------------------------------------------------------
+
+TEST(SpriteFontTest, ConstructorThrowsWhenDefaultCharacterAbsentFromCharacters)
+{
+    std::vector<Rectangle> glyphs   = { {0, 0, 8, 12} };
+    std::vector<Rectangle> cropping = { {0, 0, 8, 12} };
+    std::vector<charcs>    chars    = { u'A' };
+    std::vector<Vector3>   kern     = { Vector3(1.0f, 8.0f, 2.0f) };
+    EXPECT_THROW(
+        SpriteFont(Texture2D{}, glyphs, cropping, chars, 16, 0.0f, kern,
+                   std::optional<charcs>(u'?')),
+        System::ArgumentException);
+}
+
+TEST(SpriteFontTest, ConstructorAcceptsDefaultCharacterPresentInCharacters)
+{
+    EXPECT_NO_THROW({ SpriteFont font = makeFontA(0.0f, u'A'); });
+}
+
+// -----------------------------------------------------------------------
 // Property setters
 // -----------------------------------------------------------------------
 
@@ -129,6 +153,14 @@ TEST(SpriteFontTest, SetDefaultCharacterToNullopt)
 {
     SpriteFont font = makeFontA(0.0f, u'A');
     font.setDefaultCharacterProperty(std::nullopt);
+    EXPECT_FALSE(font.getDefaultCharacterProperty().has_value());
+}
+
+TEST(SpriteFontTest, SetDefaultCharacterThrowsWhenAbsentFromCharacters)
+{
+    SpriteFont font = makeFontA();   // only 'A' is a known character
+    EXPECT_THROW(font.setDefaultCharacterProperty(u'Z'), System::ArgumentException);
+    // The rejected assignment must not have taken effect.
     EXPECT_FALSE(font.getDefaultCharacterProperty().has_value());
 }
 
