@@ -156,8 +156,16 @@ namespace CNA::Internal::Backends::Dx2
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
+        // Phase O5 (design decision 8): plain CPU-side storage (Dx2VertexBufferBackend/
+        // Dx2IndexBufferBackend, defined entirely in Dx2GraphicsBackend.cpp), matching the
+        // Software backend's own identical approach -- Phase O4's CPU transform pipeline reads
+        // directly from these buffers each draw, so there is no GPU-side object to upload to.
+        // CreateIndexBuffer32 is explicitly overridden (real 32-bit storage) rather than relying
+        // on the shared default's delegate-to-16-bit fallback, which would silently truncate a
+        // 32-bit index request.
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;

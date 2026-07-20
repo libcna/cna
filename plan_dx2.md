@@ -1,9 +1,10 @@
 # DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
 > **Status (2026-07-20): `DX2-0` spike complete, design settled. Phase O1 (CMake skeleton),
-> Phase O2 (2D layer, verbatim port from `DX1`), and Phase O3 (Direct3D v2 device bring-up) are
-> done — 10/10 `DX2`-labeled CTests passing, independently re-verified. Phase O4 (CPU
-> transform/clip pipeline + `DrawPrimitive` submission) starts next.**
+> Phase O2 (2D layer, verbatim port from `DX1`), Phase O3 (Direct3D v2 device bring-up), and
+> Phase O5 (`VertexBuffer`/`IndexBuffer` backends) are done — 11/11 `DX2`-labeled CTests passing,
+> independently re-verified. Phase O4 (CPU transform/clip pipeline + `DrawPrimitive` submission,
+> which depends on O5's buffers) starts next.**
 >
 > Owner's own words (translated from Czech): *"Now please implement DirectX 2, and it should be
 > able to do 3D as well (within what's possible)."* Unlike `DX1` (2D-only by construction — DX1
@@ -329,9 +330,9 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-40` | `Dx2VertexBufferBackend : IVertexBufferBackend` — CPU `std::vector<uint8_t>` storage, matching `SoftwareVertexBufferBackend` (decision 8) | ⬜ | |
-| `DX2-41` | `Dx2IndexBufferBackend : IIndexBufferBackend` — 16-bit and 32-bit variants | ⬜ | |
-| `DX2-42` | `SetData`/`GetData` round-trip tests for both | ⬜ | |
+| `DX2-40` | `Dx2VertexBufferBackend : IVertexBufferBackend` — CPU `std::vector<uint8_t>` storage, matching `SoftwareVertexBufferBackend` (decision 8) | ✅ | |
+| `DX2-41` | `Dx2IndexBufferBackend : IIndexBufferBackend` — 16-bit and 32-bit variants | ✅ | `CreateIndexBuffer32` explicitly overridden (real 32-bit storage), not left to the shared default's delegate-to-16-bit fallback (which would silently truncate a 32-bit request). |
+| `DX2-42` | `SetData`/`GetData` round-trip tests for both | ✅ | Neither `IVertexBufferBackend` nor `IIndexBufferBackend` exposes a `GetData()`-style readback at all (write-only interfaces, same as every other CNA backend) — `Dx2_VertexIndexBuffer` CTest instead verifies `SetData` succeeds and `GetVertexCount()`/`GetIndexCount()`/`IsThirtyTwoBit()` report back exactly what was set, plus that over-capacity and bit-width-mismatched `SetData` calls throw. 5/5 checks pass, independently re-verified. |
 
 ## Phase O6 — State mapping
 

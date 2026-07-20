@@ -102,4 +102,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX2")
     cna_dx2_ctest_command(_dx2_device3d_smoke_cmd cna_test_dx2_device3d_smoke)
     cna_register_backend_test(NAME Dx2_Device3DSmoke COMMAND ${_dx2_device3d_smoke_cmd}
         TIMEOUT 60 LABELS "DX2")
+
+    # Phase O5 (DX2-40..DX2-42): Dx2VertexBufferBackend/Dx2IndexBufferBackend CTest.
+    cna_dx2_test(cna_test_dx2_vertex_index_buffer examples/dx2_vertex_index_buffer_test.cpp)
+    cna_dx2_ctest_command(_dx2_vertex_index_buffer_cmd cna_test_dx2_vertex_index_buffer)
+    cna_register_backend_test(NAME Dx2_VertexIndexBuffer COMMAND ${_dx2_vertex_index_buffer_cmd}
+        TIMEOUT 60 LABELS "DX2")
 endif()

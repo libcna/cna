@@ -901,6 +901,89 @@ namespace CNA::Internal::Backends::Dx2
         return true;
     }
 
+    // ---- Phase O5 (design decision 8): VertexBuffer/IndexBuffer backends ----
+    // Plain CPU-side storage (a std::vector<uint8_t> holding raw vertex/index bytes), matching
+    // SoftwareVertexBufferBackend/SoftwareIndexBufferBackend's own identical approach exactly --
+    // Phase O4's CPU transform pipeline reads directly from these buffers each draw, so there is
+    // no GPU-side vertex buffer object to upload to (IDirect3DVertexBuffer doesn't exist until
+    // DX6 anyway, per docs/directx-legacy-backends-analysis.md section 3.1's table).
+
+    class Dx2VertexBufferBackend final : public IVertexBufferBackend
+    {
+    public:
+        explicit Dx2VertexBufferBackend(int vertexCapacity) : capacity_(vertexCapacity) {}
+
+        void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override
+        {
+            if (vertex_count < 0 || vertex_count > capacity_)
+                throw std::runtime_error("Dx2VertexBufferBackend::SetData: vertex_count exceeds capacity");
+            if (stride_in_bytes == 0)
+                throw std::runtime_error("Dx2VertexBufferBackend::SetData: stride_in_bytes must be > 0");
+
+            vertexCount_ = vertex_count;
+            stride_ = stride_in_bytes;
+            const std::size_t byteCount = static_cast<std::size_t>(vertex_count) * stride_in_bytes;
+            data_.assign(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + byteCount);
+        }
+
+        void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
+                                SetDataOptions) override
+        {
+            SetData(data, vertex_count, stride_in_bytes);
+        }
+
+        [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
+        [[nodiscard]] int Capacity() const { return capacity_; }
+        [[nodiscard]] std::size_t Stride() const { return stride_; }
+        [[nodiscard]] const std::vector<uint8_t>& Data() const { return data_; }
+
+    private:
+        int capacity_ = 0;
+        int vertexCount_ = 0;
+        std::size_t stride_ = 0;
+        std::vector<uint8_t> data_;
+    };
+
+    class Dx2IndexBufferBackend final : public IIndexBufferBackend
+    {
+    public:
+        Dx2IndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
+            : capacity_(indexCapacity), thirtyTwoBit_(thirtyTwoBit)
+        {
+        }
+
+        void SetData16(const void* data, int index_count) override { Upload(data, index_count, false); }
+        void SetData32(const void* data, int index_count) override { Upload(data, index_count, true); }
+        void SetData16WithOptions(const void* data, int index_count, SetDataOptions) override
+        { Upload(data, index_count, false); }
+        void SetData32WithOptions(const void* data, int index_count, SetDataOptions) override
+        { Upload(data, index_count, true); }
+
+        [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
+        [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
+        [[nodiscard]] int Capacity() const { return capacity_; }
+        [[nodiscard]] const std::vector<uint8_t>& Data() const { return data_; }
+
+    private:
+        void Upload(const void* data, int index_count, bool dataIsThirtyTwoBit)
+        {
+            if (index_count < 0 || index_count > capacity_)
+                throw std::runtime_error("Dx2IndexBufferBackend: index_count exceeds capacity");
+            if (dataIsThirtyTwoBit != thirtyTwoBit_)
+                throw std::runtime_error("Dx2IndexBufferBackend: SetData bit-width does not match the buffer's declared width");
+
+            indexCount_ = index_count;
+            const std::size_t elementSize = dataIsThirtyTwoBit ? sizeof(uint32_t) : sizeof(uint16_t);
+            const std::size_t byteCount = static_cast<std::size_t>(index_count) * elementSize;
+            data_.assign(static_cast<const uint8_t*>(data), static_cast<const uint8_t*>(data) + byteCount);
+        }
+
+        int capacity_ = 0;
+        int indexCount_ = 0;
+        bool thirtyTwoBit_ = false;
+        std::vector<uint8_t> data_;
+    };
+
     // ---- Phase O3: textures and render targets ----
     // Both classes below are never named outside this .cpp (only returned polymorphically), so
     // <ddraw.h> stays fully contained here.
@@ -1302,14 +1385,19 @@ namespace CNA::Internal::Backends::Dx2
     void Dx2GraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
     void Dx2GraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
 
-    std::unique_ptr<IVertexBufferBackend> Dx2GraphicsBackend::CreateVertexBuffer(int)
+    std::unique_ptr<IVertexBufferBackend> Dx2GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        ThrowNo3D("CreateVertexBuffer");
+        return std::make_unique<Dx2VertexBufferBackend>(vertex_capacity);
     }
 
-    std::unique_ptr<IIndexBufferBackend> Dx2GraphicsBackend::CreateIndexBuffer16(int)
+    std::unique_ptr<IIndexBufferBackend> Dx2GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        ThrowNo3D("CreateIndexBuffer16");
+        return std::make_unique<Dx2IndexBufferBackend>(index_capacity, false);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> Dx2GraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<Dx2IndexBufferBackend>(index_capacity, true);
     }
 
     void Dx2GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
