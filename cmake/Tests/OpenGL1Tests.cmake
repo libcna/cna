@@ -229,4 +229,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_SwapInterval COMMAND cna_test_opengl1_swapinterval
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 21 (EasyGL parity): RenderTarget2D mip-chain generation on unbind.
+    cna_opengl1_test(cna_test_opengl1_rendertarget2d_mip
+                      examples/opengl1_rendertarget2d_mip_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_RenderTarget2D_Mip COMMAND cna_test_opengl1_rendertarget2d_mip
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

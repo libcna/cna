@@ -92,6 +92,19 @@ void GenerateMipsCPU(GLenum target,int w,int h,const uint8_t*level0){
   prev=std::move(next);w=nw;h=nh;++level;
  }
 }
+// plan_opengl1.md item 21 (EasyGL parity): a RenderTarget2D is never an OpenGL1TextureBackend
+// (separate class -- GPU-produced content, no CPU shadow), so the plain dynamic_cast<const
+// OpenGL1TextureBackend*> every sampling call site already used to gate mip-aware filtering
+// always came back null for one, silently forcing mip=false even after
+// OpenGL1RenderTargetBackend::UnbindAsRenderTarget() genuinely generated a complete chain.
+// Centralizes both checks so BasicEffect/DualTextureEffect 3D sampling and SpriteBatch::Draw all
+// honor a render target's real HasMips() the same way they already honor a Texture2D's.
+bool HasMipsFor(const ITextureBackend*t){
+ if(!t)return false;
+ if(const auto*tex=dynamic_cast<const OpenGL1TextureBackend*>(t))return tex->HasMips();
+ if(const auto*rt=dynamic_cast<const OpenGL1RenderTargetBackend*>(t))return rt->HasMips();
+ return false;
+}
 }
 void OpenGL1VertexBufferBackend::SetData(const void*d,int c,std::size_t s){if(c<0||c>capacity_)throw std::runtime_error("OPENGL1 vertex count exceeds capacity");count_=c;stride_=s;data_.resize((size_t)c*s);if(d&&!data_.empty())std::memcpy(data_.data(),d,data_.size());}
 void OpenGL1IndexBufferBackend::SetData16(const void*d,int c){i32_=false;count_=c;data_.resize((size_t)c*2);if(d&&c)std::memcpy(data_.data(),d,data_.size());}
@@ -191,7 +204,7 @@ OpenGL1GraphicsBackend::~OpenGL1GraphicsBackend(){IGraphicsBackend::UnregisterFo
 void OpenGL1GraphicsBackend::SetSwapInterval(int interval){SDL_GL_SetSwapInterval(interval);}
 void OpenGL1GraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t*pixels){int W,H;GetViewportSize(W,H);glReadBuffer(GL_BACK);glPixelStorei(GL_PACK_ALIGNMENT,1);const int glY=H-y-h;glReadPixels(x,glY,w,h,GL_RGBA,GL_UNSIGNED_BYTE,pixels);const int rowBytes=w*4;std::vector<uint8_t>tmp(rowBytes);for(int i=0;i<h/2;++i){uint8_t*top=pixels+i*rowBytes;uint8_t*bot=pixels+(h-1-i)*rowBytes;std::copy(top,top+rowBytes,tmp.data());std::copy(bot,bot+rowBytes,top);std::copy(tmp.begin(),tmp.end(),bot);}}
 std::unique_ptr<ITextureBackend>OpenGL1GraphicsBackend::CreateTexture(const ImageData&d){return std::make_unique<OpenGL1TextureBackend>(d,RegistryIfEnabled(),caps_.generateMipmap);}std::unique_ptr<ISpriteBatchBackend>OpenGL1GraphicsBackend::CreateSpriteBatch(){return std::make_unique<OpenGL1SpriteBatchBackend>(*this);}std::unique_ptr<IVertexBufferBackend>OpenGL1GraphicsBackend::CreateVertexBuffer(int c){return std::make_unique<OpenGL1VertexBufferBackend>(c);}std::unique_ptr<IIndexBufferBackend>OpenGL1GraphicsBackend::CreateIndexBuffer16(int){return std::make_unique<OpenGL1IndexBufferBackend>(false);}std::unique_ptr<IIndexBufferBackend>OpenGL1GraphicsBackend::CreateIndexBuffer32(int){return std::make_unique<OpenGL1IndexBufferBackend>(true);}
-std::unique_ptr<IRenderTargetBackend>OpenGL1GraphicsBackend::CreateRenderTarget2D(int w,int h,int depthFormat,bool,bool,int){if(!caps_.framebufferObject)return nullptr;try{return std::make_unique<OpenGL1RenderTargetBackend>(w,h,depthFormat,RegistryIfEnabled());}catch(const std::exception&){return nullptr;}}
+std::unique_ptr<IRenderTargetBackend>OpenGL1GraphicsBackend::CreateRenderTarget2D(int w,int h,int depthFormat,bool,bool mipMap,int){if(!caps_.framebufferObject)return nullptr;try{return std::make_unique<OpenGL1RenderTargetBackend>(w,h,depthFormat,mipMap,RegistryIfEnabled());}catch(const std::exception&){return nullptr;}}
 // plan_opengl1.md phase 8: matches EasyGLGraphicsBackend's own desktop DebugSimulateContextLoss()/
 // DebugRestoreContext() pattern (destroy+recreate is one atomic operation on desktop -- there is
 // no genuine asynchronous lost/restored pair the way WebGL has), implemented independently with
@@ -250,8 +263,7 @@ bool envMap=params&&params->envMapping&&params->envMap&&normal&&caps_.textureCub
 auto resetUnit1EnvGen=[&](){if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_GEN_S);glDisable(GL_TEXTURE_GEN_T);glDisable(GL_TEXTURE_GEN_R);if(caps_.textureCubeMap)glDisable(GL_TEXTURE_CUBE_MAP);glActiveTexture_(GL_TEXTURE0);}};
 if(tex||envMap){
 if(tex){glEnable(GL_TEXTURE_2D);params->texture0->BindGL();
-const auto*t0gl=dynamic_cast<const OpenGL1TextureBackend*>(params->texture0);
-ApplySamplerFilterAndWrap(0,t0gl&&t0gl->HasMips());
+ApplySamplerFilterAndWrap(0,HasMipsFor(params->texture0));
 // Render targets sample bottom-up relative to every CPU-uploaded texture's top-down convention
 // (see OpenGL1SpriteBatchBackend::Draw's identical fix/comment) -- flip V via the legacy texture
 // matrix here since these texcoords are baked into the vertex buffer, not computed per-draw.
@@ -267,8 +279,7 @@ glMatrixMode(GL_MODELVIEW);
 // modulates that result (GL_PREVIOUS) by texture1. Both units sample the SAME per-vertex UV
 // (XNA's own DualTextureEffect has no second texcoord channel either -- see FillGpuDrawParams).
 if(dual){resetUnit1EnvGen();glActiveTexture_(GL_TEXTURE1);glEnable(GL_TEXTURE_2D);params->texture1->BindGL();
-const auto*t1gl=dynamic_cast<const OpenGL1TextureBackend*>(params->texture1);
-ApplySamplerFilterAndWrap(1,t1gl&&t1gl->HasMips());
+ApplySamplerFilterAndWrap(1,HasMipsFor(params->texture1));
 glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_COMBINE);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_RGB,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_RGB,GL_PREVIOUS);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_RGB,GL_TEXTURE);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_ALPHA,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_ALPHA,GL_PREVIOUS);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_ALPHA,GL_TEXTURE);
 glActiveTexture_(GL_TEXTURE0);glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_COMBINE);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_RGB,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_RGB,GL_TEXTURE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_RGB,GL_PRIMARY_COLOR);glTexEnvf(GL_TEXTURE_ENV,GL_RGB_SCALE,2.0f);glTexEnvi(GL_TEXTURE_ENV,GL_COMBINE_ALPHA,GL_MODULATE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE0_ALPHA,GL_TEXTURE);glTexEnvi(GL_TEXTURE_ENV,GL_SOURCE1_ALPHA,GL_PRIMARY_COLOR);glTexEnvf(GL_TEXTURE_ENV,GL_ALPHA_SCALE,1.0f);
 }else if(envMap){
@@ -347,7 +358,7 @@ glMatrixMode(GL_MODELVIEW);glPushMatrix();float m[16];Mat(transform_,m);glLoadMa
 // always GL_CLAMP_TO_EDGE) -- harmless for the common default (Clamp=1, same result), a real gap
 // for a game requesting Wrap/tiling. Also now uses the same mip-aware min/mag mapping the 3D
 // path does, gated on this specific texture's own HasMips().
-{const auto*tgl=dynamic_cast<const OpenGL1TextureBackend*>(&t);GLenum minF,magF;MinMagFilter(filter_,tgl&&tgl->HasMips(),minF,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,minF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,u_==0?GL_REPEAT:GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,v_==0?GL_REPEAT:GL_CLAMP_TO_EDGE);}
+{GLenum minF,magF;MinMagFilter(filter_,HasMipsFor(&t),minF,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,minF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,u_==0?GL_REPEAT:GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,v_==0?GL_REPEAT:GL_CLAMP_TO_EDGE);}
 float u0=(float)s.X/t.GetWidth(),v0=(float)s.Y/t.GetHeight(),u1=(float)(s.X+s.Width)/t.GetWidth(),v1=(float)(s.Y+s.Height)/t.GetHeight();if((int)e&1)std::swap(u0,u1);if((int)e&2)std::swap(v0,v1);
 // A render target's color texture is written by the GPU rasterizer, whose row 0 is the BOTTOM
 // of what was drawn into it (standard GL framebuffer convention) -- the opposite of every

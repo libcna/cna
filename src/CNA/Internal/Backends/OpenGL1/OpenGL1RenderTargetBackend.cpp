@@ -25,6 +25,15 @@ namespace
     PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer_ = nullptr;
     bool loaded_ = false;
 
+    // plan_opengl1.md item 21 (EasyGL parity): loaded alongside the required FBO entry points
+    // above, but NOT required for `loaded_` to become true -- RenderTarget2D itself must keep
+    // working even on the (expected-unreachable-in-practice) driver that has ARB_framebuffer_object
+    // but genuinely lacks glGenerateMipmap; mipMap-requesting render targets on such a driver just
+    // never report HasMips()==true, the same honest-failure shape OpenGL1TextureBackend's own
+    // RegenerateMips() falls back to when neither mechanism is present (minus the CPU box-filter
+    // tier, which needs a CPU-side pixel buffer this GPU-only surface never has).
+    PFNGLGENERATEMIPMAPPROC glGenerateMipmap_ = nullptr;
+
     // DepthFormat: None=0, Depth16=1, Depth24=2, Depth24Stencil8=3 (see this project's own
     // IGraphicsBackend::CreateRenderTarget2D doc comment for the raw-ordinal convention).
     GLenum DepthRenderbufferInternalFormat(int depthFormat, bool& hasStencil)
@@ -53,6 +62,7 @@ bool TryLoadOpenGL1FramebufferObjectFunctions()
     glDeleteRenderbuffers_ = reinterpret_cast<PFNGLDELETERENDERBUFFERSPROC>(load("glDeleteRenderbuffers"));
     glRenderbufferStorage_ = reinterpret_cast<PFNGLRENDERBUFFERSTORAGEPROC>(load("glRenderbufferStorage"));
     glFramebufferRenderbuffer_ = reinterpret_cast<PFNGLFRAMEBUFFERRENDERBUFFERPROC>(load("glFramebufferRenderbuffer"));
+    glGenerateMipmap_ = reinterpret_cast<PFNGLGENERATEMIPMAPPROC>(load("glGenerateMipmap"));
 
     loaded_ = glGenFramebuffers_ && glBindFramebuffer_ && glDeleteFramebuffers_
         && glFramebufferTexture2D_ && glCheckFramebufferStatus_ && glGenRenderbuffers_
@@ -61,8 +71,8 @@ bool TryLoadOpenGL1FramebufferObjectFunctions()
     return loaded_;
 }
 
-OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, int depthFormat, OpenGL1ResourceRegistry* registry)
-    : width_(width), height_(height), depthFormat_(depthFormat), registry_(registry)
+OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, int depthFormat, bool mipMap, OpenGL1ResourceRegistry* registry)
+    : width_(width), height_(height), depthFormat_(depthFormat), mipMap_(mipMap), registry_(registry)
 {
     Build();
     if (registry_) registry_->Add(this);
@@ -130,6 +140,7 @@ void OpenGL1RenderTargetBackend::ReleaseGLHandleOnly()
     fbo_ = 0;
     colorTex_ = 0;
     depthRbo_ = 0;
+    hasMips_ = false;
 }
 
 void OpenGL1RenderTargetBackend::RecreateGLResource()
@@ -146,7 +157,28 @@ void OpenGL1RenderTargetBackend::BindGL() const { glBindTexture(GL_TEXTURE_2D, c
 
 void OpenGL1RenderTargetBackend::BindAsRenderTarget() { glBindFramebuffer_(GL_FRAMEBUFFER, fbo_); }
 
-void OpenGL1RenderTargetBackend::UnbindAsRenderTarget() { glBindFramebuffer_(GL_FRAMEBUFFER, 0); }
+// plan_opengl1.md item 21 (EasyGL parity): following FNA3D's own OPENGL_ResolveTarget mechanism
+// -- the whole mip chain is unconditionally regenerated from level 0 every time the target stops
+// being active, matching how EasyGL's own Task 336 fix (docs/rendertarget-support.md) works.
+// Must run before glBindFramebuffer_(GL_FRAMEBUFFER, 0): glGenerateMipmap reads the CURRENTLY
+// bound texture object, not the framebuffer, so binding order between the two calls doesn't
+// actually matter for correctness here, but is kept FBO-bound-first to mirror BindAsRenderTarget's
+// own ordering and avoid a redundant glBindTexture while some other texture might be active.
+void OpenGL1RenderTargetBackend::UnbindAsRenderTarget()
+{
+    if (mipMap_ && glGenerateMipmap_)
+    {
+        glBindTexture(GL_TEXTURE_2D, colorTex_);
+        glGenerateMipmap_(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        hasMips_ = true;
+    }
+    else if (mipMap_)
+    {
+        hasMips_ = false;
+    }
+    glBindFramebuffer_(GL_FRAMEBUFFER, 0);
+}
 
 void OpenGL1RenderTargetBackend::GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const
 {

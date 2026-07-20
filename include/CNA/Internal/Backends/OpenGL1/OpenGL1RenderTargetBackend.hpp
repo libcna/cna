@@ -17,8 +17,19 @@ namespace CNA::Internal::Backends::OpenGL1
      * and supporting it would meaningfully complicate this file for near-zero practical benefit.
      *
      * Does not support MSAA (GetMultiSampleCount() always 0, matching
-     * SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing) == false) or mip-chain
-     * auto-generation (mipMap is accepted but currently ignored -- level 0 only).
+     * SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing) == false).
+     *
+     * plan_opengl1.md item 21 (EasyGL parity, found 2026-07-20): mipMap now genuinely regenerates
+     * the color texture's mip chain from level 0 every time the target is unbound, following
+     * FNA3D's own `OPENGL_ResolveTarget` mechanism (games never render into non-zero mip levels
+     * directly -- the whole chain is always regenerated wholesale from level 0). Content is
+     * GPU-produced, so unlike Texture2D there is no CPU-side pixel buffer to box-filter from as a
+     * last-resort fallback: generation is gated purely on glGenerateMipmap being loadable, which
+     * is expected always true in practice (see TryLoadOpenGL1FramebufferObjectFunctions()'s own
+     * comment -- glGenerateMipmap is part of the same ARB_framebuffer_object/core-3.0 entry-point
+     * family RenderTarget2D support already requires). HasMips() reports whether the last unbind
+     * actually generated a complete chain (false before the first unbind, or if the driver
+     * genuinely lacks glGenerateMipmap).
      */
     class OpenGL1RenderTargetBackend final : public IRenderTargetBackend, public IOpenGL1Recoverable
     {
@@ -30,12 +41,14 @@ namespace CNA::Internal::Backends::OpenGL1
          * @param height      Render target height in pixels.
          * @param depthFormat Raw ordinal of Microsoft::Xna::Framework::Graphics::DepthFormat
          *                    (None=0, Depth16=1, Depth24=2, Depth24Stencil8=3).
+         * @param mipMap      Whether UnbindAsRenderTarget() should regenerate a full mip chain
+         *                    from level 0 each time the target stops being active.
          * @param registry    Context-loss recovery registry to register with, or nullptr when
          *                    context recovery is disabled (IGraphicsBackend::
          *                    SetContextRecoveryEnabled(false)).
          * @throws std::runtime_error if the resulting framebuffer is incomplete.
          */
-        OpenGL1RenderTargetBackend(int width, int height, int depthFormat, OpenGL1ResourceRegistry* registry);
+        OpenGL1RenderTargetBackend(int width, int height, int depthFormat, bool mipMap, OpenGL1ResourceRegistry* registry);
         ~OpenGL1RenderTargetBackend() override;
 
         int GetWidth() const override { return width_; }
@@ -47,6 +60,9 @@ namespace CNA::Internal::Backends::OpenGL1
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetColorGLHandle() const override { return colorTex_; }
+
+        /** @brief True if the last UnbindAsRenderTarget() call generated a complete mip chain. */
+        bool HasMips() const { return hasMips_; }
 
         /**
          * @brief plan_opengl1.md phase 8: drops the FBO/texture/renderbuffer handles without
@@ -68,6 +84,8 @@ namespace CNA::Internal::Backends::OpenGL1
         int width_ = 0;
         int height_ = 0;
         int depthFormat_ = 0;
+        bool mipMap_ = false;
+        bool hasMips_ = false;
         OpenGL1ResourceRegistry* registry_ = nullptr;
     };
 

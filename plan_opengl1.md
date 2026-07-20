@@ -101,9 +101,57 @@ shader, no modern-only extension) and were simply never implemented yet:
     (`SDL_GL_GetSwapInterval=1` after `SetSwapInterval(0)`, i.e. the driver's prior value was never
     touched); restoring the fix reproduces the predicted correct values (`0` then `1`). Full
     `ctest -R "OpenGL1_"` regression sweep: 27/27 passed after this change.
-21. Add `RenderTarget2D` mip-chain generation on unbind, reusing the existing `Texture2D` mip
+21. ~~Add `RenderTarget2D` mip-chain generation on unbind, reusing the existing `Texture2D` mip
     machinery (`glGenerateMipmap`/`GL_GENERATE_MIPMAP`/CPU box-filter, phase 6) -- `CreateRenderTarget2D`
-    currently silently drops its own `mipMap` parameter (unnamed `bool`).
+    currently silently drops its own `mipMap` parameter (unnamed `bool`).~~
+    **Done**: `CreateRenderTarget2D` now forwards `mipMap` into `OpenGL1RenderTargetBackend`, which
+    calls `glGenerateMipmap(GL_TEXTURE_2D)` on `UnbindAsRenderTarget()` every time the target stops
+    being active, following FNA3D's own `OPENGL_ResolveTarget` mechanism (the whole chain is always
+    regenerated wholesale from level 0 -- games never render into non-zero mip levels directly).
+    Unlike `Texture2D` there is no CPU-side pixel buffer to box-filter from as a last-resort
+    fallback (render target content is GPU-produced), so this is a single-tier fallback: gated
+    purely on `glGenerateMipmap` being loadable, which is expected always true in practice since
+    it's part of the same `ARB_framebuffer_object`/core-3.0 entry-point family `RenderTarget2D`
+    support already requires (`TryLoadOpenGL1FramebufferObjectFunctions()` now loads it alongside
+    the other FBO entry points, but does not gate `loaded_` on it, matching the same honest-failure
+    shape `OpenGL1TextureBackend::RegenerateMips()` already uses when neither mechanism is
+    present). `OpenGL1RenderTargetBackend::HasMips()` reports whether the last unbind actually
+    produced a complete chain.
+
+    **Adjacent finding**: fixing generation alone was not sufficient to make the chain usable.
+    Every 3D/SpriteBatch texture-sampling call site (`DrawInternal`'s `texture0`/`texture1`
+    binding, `OpenGL1SpriteBatchBackend::Draw`) decided mip-awareness via
+    `dynamic_cast<const OpenGL1TextureBackend*>`, which is always `nullptr` for an
+    `OpenGL1RenderTargetBackend` -- a different class entirely -- silently forcing `mip=false` for
+    every render-target sample regardless of whether a real chain existed. Fixed by centralizing
+    all three call sites behind a new `HasMipsFor(const ITextureBackend*)` helper that also checks
+    `OpenGL1RenderTargetBackend::HasMips()`.
+
+    **Test-design finding**: a first version of the regression test filled the render target with
+    a single solid color and sampled it back minified with `TextureFilter::Anisotropic` (the same
+    probe EasyGL's own Task 336 fix, `examples/easygl_rendertarget2d_mip_test.cpp`, uses) -- this
+    passed even with mip regeneration mutated out entirely, a false pass, for two compounding
+    reasons: (1) a solid color reads back identically at every mip level regardless of whether
+    real levels exist, since `HasMipsFor()`'s own gating correctly falls back to a plain
+    non-mipmap `GL_LINEAR` filter when `HasMips()` is `false`, and a flat color survives that
+    fallback unchanged; (2) a second attempt using a checkerboard pattern (mirroring
+    `OpenGL1_MipmapGeneration`'s already-proven discriminator) still produced a coincidental exact
+    mid-gray even with generation mutated out, because the specific quad/viewport geometry chosen
+    mapped the read-back pixel's center to EXACTLY a texel-grid corner where a checkerboard's
+    diagonal 2x2 neighborhood (2 white + 2 black) blends to exact gray under plain bilinear
+    filtering ALONE, with no mip chain involved at all -- the same "default value masks bug" class
+    of trap this project was already burned by once in phase 6's SamplerState finding. Fixed by
+    choosing a minification amount whose read-back pixel lands solidly inside a single checker
+    block (not on a block-boundary corner), so an unmipped level-0-only sample reads a pure,
+    unblended block color, unambiguously far from gray. New test `OpenGL1_RenderTarget2D_Mip`
+    (`examples/opengl1_rendertarget2d_mip_test.cpp`) mutation-tested against both fixes
+    independently: reverting `UnbindAsRenderTarget()`'s generation call reproduces the predicted
+    failure (minified sample reads pure white `(255,255,255)` instead of mid-gray); separately
+    forcing `HasMipsFor()` to always return `false` (generation intact) reproduces the identical
+    failure, confirming the sampling-path fix is independently load-bearing, not just the
+    generation call. Restoring both fixes reconfirms the predicted correct values (native: sharp
+    aliased white `(255,255,255)`; minified: exact mid-gray `(128,128,128)`). Full
+    `ctest -R "OpenGL1_"` regression sweep: 28/28 passed after this change.
 22. Add backbuffer multisampling via `SDL_GL_MULTISAMPLEBUFFERS`/`SAMPLES` context attributes +
     `GL_MULTISAMPLE` (`WGL`/`GLX_ARB_multisample`, ratified 1998, same era as `ARB_multitexture`
     already used here) -- `multiSampleCount` is currently read by nothing, `SupportsCapability
