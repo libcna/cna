@@ -1,8 +1,9 @@
 # DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
-> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phase O1 (CMake skeleton) and
-> Phase O2 (2D layer, verbatim port from `DX1`) are done — 9/9 `DX2`-labeled CTests passing,
-> independently re-verified. Phase O3 (Direct3D v2 device bring-up) starts next.**
+> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phase O1 (CMake skeleton),
+> Phase O2 (2D layer, verbatim port from `DX1`), and Phase O3 (Direct3D v2 device bring-up) are
+> done — 10/10 `DX2`-labeled CTests passing, independently re-verified. Phase O4 (CPU
+> transform/clip pipeline + `DrawPrimitive` submission) starts next.**
 >
 > Owner's own words (translated from Czech): *"Now please implement DirectX 2, and it should be
 > able to do 3D as well (within what's possible)."* Unlike `DX1` (2D-only by construction — DX1
@@ -301,13 +302,13 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-20` | `dd->QueryInterface(IID_IDirect3D2, &d3d2_)` at backend construction (or lazily, first 3D call — decide during implementation which matches `IGraphicsBackend`'s existing construction-time-vs-lazy convention for other backends) | ⬜ | |
-| `DX2-21` | `DDSCAPS_ZBUFFER` surface creation + `AddAttachedSurface` onto the shadow-backbuffer (decision 5) | ⬜ | |
-| `DX2-22` | `d3d2_->CreateDevice(IID_IDirect3DRGBDevice, shadowSurface, &device2_)` (decision 3) | ⬜ | |
-| `DX2-23` | `IDirect3DViewport2` creation, `SetViewport2` (`dvClipX/Y/Width/Height` full-viewport, decision 6's mapping math needs no viewport scale since `D3DTLVERTEX` is pre-transformed — confirm the viewport is still required for `Clear()`/`AddViewport`/`SetCurrentViewport` bookkeeping even though its scale fields go unused) | ⬜ | |
-| `DX2-24` | `viewport->Clear()` wired into `Dx2`'s existing `ClearColorAndDepth`/etc. entry points instead of throwing (unlike `DX1`'s permanent `ThrowNo3D`) | ⬜ | |
-| `DX2-25` | `SupportsDepthStencil()` → `true` (unlike `DX1`'s `false`) | ⬜ | |
-| `DX2-26` | `Dx2_Device3DSmoke` CTest: construct the 3D device, clear color+depth, confirm no throw and a pixel-verified clear color | ⬜ | |
+| `DX2-20` | `dd->QueryInterface(IID_IDirect3D2, &d3d2_)` at backend construction (or lazily, first 3D call — decide during implementation which matches `IGraphicsBackend`'s existing construction-time-vs-lazy convention for other backends) | ✅ | Created once at construction, reused across `CreateBackBuffer()` calls (`d3d2` only depends on `dd`, not on the specific backbuffer surface instance). |
+| `DX2-21` | `DDSCAPS_ZBUFFER` surface creation + `AddAttachedSurface` onto the shadow-backbuffer (decision 5) | ✅ | 16-bit, sized to match; recreated inside `CreateBackBuffer()` alongside the backbuffer itself. |
+| `DX2-22` | `d3d2_->CreateDevice(IID_IDirect3DRGBDevice, shadowSurface, &device2_)` (decision 3) | ✅ | |
+| `DX2-23` | `IDirect3DViewport2` creation, `SetViewport2` (`dvClipX/Y/Width/Height` full-viewport, decision 6's mapping math needs no viewport scale since `D3DTLVERTEX` is pre-transformed — confirm the viewport is still required for `Clear()`/`AddViewport`/`SetCurrentViewport` bookkeeping even though its scale fields go unused) | ✅ | Full-viewport clip rect (`dvClipX=-1,dvClipY=1,dvClipWidth=2,dvClipHeight=2`); confirmed required — `AddViewport`/`SetCurrentViewport` must still be called even though the clip-rect fields themselves go unused by pre-transformed `D3DTLVERTEX` draws. `D3DRENDERSTATE_LIGHTING=FALSE` also set once here (not per-draw), since Phase O4's CPU pipeline always submits already-lit vertices. |
+| `DX2-24` | `viewport->Clear()` wired into `Dx2`'s existing `ClearColorAndDepth`/etc. entry points instead of throwing (unlike `DX1`'s permanent `ThrowNo3D`) | ✅ | **Design correction found via a new spike (`dx2_spike8_zclear.cpp`) before implementing**: `IDirect3DViewport(2)::Clear()` has no depth/color *value* parameter at all (only `IDirect3DViewport3::Clear2`, DX5+, does) — so it cannot implement an arbitrary caller-requested depth. Implemented via direct `Lock()`+fill on the Z-buffer surface instead (`FillZBuffer16`, mirroring `Clear(r,g,b,a)`'s own existing `FillSurfaceColor` approach) — spike-confirmed that a manually-written Z-buffer value is genuinely respected by the real depth test. Stencil-involving variants (`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`) accept and silently ignore the stencil value (design decision 7 — no real stencil buffer exists at this era), never throwing. |
+| `DX2-25` | `SupportsDepthStencil()` → `true` (unlike `DX1`'s `false`) | ✅ | `SupportsCapability(GraphicsCapability::ThreeD)` deliberately stays `false` — that flag's own documented definition bundles vertex/index buffers and 3D draw calls, which are still Phase O4/O5. |
+| `DX2-26` | `Dx2_Device3DSmoke` CTest: construct the 3D device, clear color+depth, confirm no throw and a pixel-verified clear color | ✅ | 4/4 checks pass, independently re-verified: `SupportsDepthStencil()==true`, `Clear(color,depth)` clears correctly, `Clear(Target\|DepthBuffer\|Stencil)` clears correctly, and `CreateVertexBuffer` still throws (confirms the Phase O3/O4 boundary isn't over-claimed). |
 
 ## Phase O4 — CPU transform/clip pipeline + `DrawPrimitive` submission
 

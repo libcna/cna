@@ -11,6 +11,7 @@
 // forbidden, asserted by the Dx2_ExecuteBufferDiscipline CTest
 // (scripts/check-dx2-execute-buffer-discipline.sh, plan_dx2.md design decision 12).
 #include <ddraw.h>
+#include <d3d.h>
 
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -226,6 +227,33 @@ namespace CNA::Internal::Backends::Dx2
                 }
             }
             surface->Unlock(desc.lpSurface);
+        }
+
+        // Phase O3 (plan_dx2.md design decision 5, DX2-0's dx2_spike8_zclear.cpp finding):
+        // IDirect3DViewport(2)::Clear() has no depth/color VALUE parameter at all (only
+        // IDirect3DViewport3::Clear2, DX5+, takes an explicit dvZ) -- so ClearDepth/
+        // ClearColorAndDepth's arbitrary caller-requested depth value cannot go through it. Mirrors
+        // FillSurfaceColor's own direct Lock()+fill approach instead, confirmed by spike to be
+        // genuinely respected by the real depth test: a manually-written Z-buffer value blocks a
+        // subsequent draw exactly as a real draw's own Z-write would. A 16-bit DDSCAPS_ZBUFFER
+        // surface stores a plain unsigned value per pixel, 0=near/0xFFFF=far, linearly mapped over
+        // the viewport's dvMinZ..dvMaxZ (0..1 here) -- matches XNA/D3D's own post-divide depth
+        // convention with no remap needed.
+        void FillZBuffer16(LPDIRECTDRAWSURFACE zbuf, int width, int height, float depth)
+        {
+            DDSURFACEDESC desc{};
+            desc.dwSize = sizeof(DDSURFACEDESC);
+            const HRESULT hr = zbuf->Lock(nullptr, &desc, DDLOCK_WAIT, nullptr);
+            if (FAILED(hr)) ThrowHr("IDirectDrawSurface::Lock(z-clear)", hr);
+
+            const uint16_t value = static_cast<uint16_t>(std::clamp(depth, 0.0f, 1.0f) * 65535.0f);
+            auto* base = static_cast<uint8_t*>(desc.lpSurface);
+            for (int y = 0; y < height; ++y)
+            {
+                auto* row = reinterpret_cast<uint16_t*>(base + static_cast<std::size_t>(y) * static_cast<std::size_t>(desc.lPitch));
+                for (int x = 0; x < width; ++x) row[x] = value;
+            }
+            zbuf->Unlock(desc.lpSurface);
         }
 
         [[noreturn]] void ThrowMipLevelUnsupported(int level)
@@ -564,6 +592,19 @@ namespace CNA::Internal::Backends::Dx2
         // resolution, that Clear() and (from Phase O4 on) SpriteBatch draws always composite into.
         LPDIRECTDRAWSURFACE backBuffer = nullptr;
 
+        // Phase O3 (plan_dx2.md design decisions 3/5): the real Direct3D v2 device, built directly
+        // on the shadow backbuffer (design decision 4's DDSCAPS_3DDEVICE flag). d3d2 only needs `dd`
+        // and is created once, reused across backbuffer resizes; zbuffer/device2/viewport2 are all
+        // tied to the specific backBuffer surface instance and must be torn down and recreated
+        // whenever CreateBackBuffer() replaces it (DX2-0 spike: IDirect3DDevice2 has no
+        // SetRenderTarget-equivalent to rebind an existing device to a new surface).
+        LPDIRECT3D2 d3d2 = nullptr;
+        LPDIRECT3DDEVICE2 device2 = nullptr;
+        LPDIRECT3DVIEWPORT2 viewport2 = nullptr;
+        // 16-bit DDSCAPS_ZBUFFER surface, attached to backBuffer via AddAttachedSurface, sized to
+        // match it exactly (design decision 5).
+        LPDIRECTDRAWSURFACE zbuffer = nullptr;
+
         // Phase O3: the offscreen surface owned by the currently-bound Dx2RenderTargetBackend, or
         // nullptr when no custom render target is bound (i.e. the shadow backbuffer is active). Set
         // directly by Dx2RenderTargetBackend::BindAsRenderTarget/UnbindAsRenderTarget via a pointer
@@ -607,9 +648,80 @@ namespace CNA::Internal::Backends::Dx2
 
         ~Impl()
         {
+            Release3DDevice();
+            if (d3d2) d3d2->Release();
+            if (zbuffer) zbuffer->Release();
             if (backBuffer) backBuffer->Release();
             if (primary) primary->Release();
             if (dd) dd->Release();
+        }
+
+        // Tears down device2/viewport2 (but not d3d2 or zbuffer -- callers that recreate the
+        // z-buffer/backbuffer release those separately) -- shared by ~Impl() and CreateBackBuffer()
+        // before rebuilding against the new backbuffer surface.
+        void Release3DDevice()
+        {
+            if (viewport2)
+            {
+                if (device2) device2->DeleteViewport(viewport2);
+                viewport2->Release();
+                viewport2 = nullptr;
+            }
+            if (device2) { device2->Release(); device2 = nullptr; }
+        }
+
+        // Phase O3 (design decisions 3-5): builds the real Direct3D v2 device against the current
+        // backBuffer surface -- a 16-bit DDSCAPS_ZBUFFER surface sized to match, a software RGB
+        // device (IID_IDirect3DRGBDevice -- DX2-0 spike: routes the same as IID_IDirect3DHALDevice
+        // in this environment; RGB is the historically-correct no-hardware-required choice), and a
+        // full-surface IDirect3DViewport2. D3DRENDERSTATE_LIGHTING is set to FALSE once here, not
+        // per-draw: Phase O4's CPU transform pipeline always submits already-lit D3DTLVERTEX data
+        // (design decision 6), so real Direct3D's fixed-function lighting must never re-light it.
+        void Create3DDevice(int width, int height)
+        {
+            Release3DDevice();
+            if (zbuffer) { zbuffer->Release(); zbuffer = nullptr; }
+
+            if (!d3d2)
+            {
+                const HRESULT hr = dd->QueryInterface(IID_IDirect3D2, reinterpret_cast<void**>(&d3d2));
+                if (FAILED(hr)) ThrowHr("IDirectDraw::QueryInterface(IID_IDirect3D2)", hr);
+            }
+
+            DDSURFACEDESC zDesc{};
+            zDesc.dwSize = sizeof(DDSURFACEDESC);
+            zDesc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_ZBUFFERBITDEPTH;
+            zDesc.ddsCaps.dwCaps = DDSCAPS_ZBUFFER;
+            zDesc.dwWidth = static_cast<DWORD>(width);
+            zDesc.dwHeight = static_cast<DWORD>(height);
+            zDesc.dwZBufferBitDepth = 16;
+            HRESULT hr = dd->CreateSurface(&zDesc, &zbuffer, nullptr);
+            if (FAILED(hr)) ThrowHr("IDirectDraw::CreateSurface(z-buffer)", hr);
+            hr = backBuffer->AddAttachedSurface(zbuffer);
+            if (FAILED(hr)) ThrowHr("IDirectDrawSurface::AddAttachedSurface(z-buffer)", hr);
+
+            hr = d3d2->CreateDevice(IID_IDirect3DRGBDevice, backBuffer, &device2);
+            if (FAILED(hr)) ThrowHr("IDirect3D2::CreateDevice(IID_IDirect3DRGBDevice)", hr);
+
+            hr = d3d2->CreateViewport(&viewport2, nullptr);
+            if (FAILED(hr)) ThrowHr("IDirect3D2::CreateViewport", hr);
+            hr = device2->AddViewport(viewport2);
+            if (FAILED(hr)) ThrowHr("IDirect3DDevice2::AddViewport", hr);
+
+            D3DVIEWPORT2 vp{};
+            vp.dwSize = sizeof(D3DVIEWPORT2);
+            vp.dwX = 0; vp.dwY = 0;
+            vp.dwWidth = static_cast<DWORD>(width);
+            vp.dwHeight = static_cast<DWORD>(height);
+            vp.dvClipX = -1.0f; vp.dvClipY = 1.0f;
+            vp.dvClipWidth = 2.0f; vp.dvClipHeight = 2.0f;
+            vp.dvMinZ = 0.0f; vp.dvMaxZ = 1.0f;
+            hr = viewport2->SetViewport2(&vp);
+            if (FAILED(hr)) ThrowHr("IDirect3DViewport2::SetViewport2", hr);
+            hr = device2->SetCurrentViewport(viewport2);
+            if (FAILED(hr)) ThrowHr("IDirect3DDevice2::SetCurrentViewport", hr);
+
+            device2->SetRenderState(D3DRENDERSTATE_LIGHTING, FALSE);
         }
 
         // Design decision 4 / DX2-0b: the primary surface is created exactly once, with no
@@ -652,6 +764,8 @@ namespace CNA::Internal::Backends::Dx2
 
             logicalWidth = width;
             logicalHeight = height;
+
+            Create3DDevice(width, height);
         }
     };
 
@@ -1155,12 +1269,35 @@ namespace CNA::Internal::Backends::Dx2
                                                   colorBlendFunc, alphaBlendFunc);
     }
 
-    void Dx2GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
-    void Dx2GraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
-    void Dx2GraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
-    void Dx2GraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
-    void Dx2GraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
-    void Dx2GraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
+    // Phase O3 (design decision 5): color goes through the same ActiveSurface() path Clear(r,g,b,a)
+    // already uses; depth always targets impl_->zbuffer directly, since only the shadow backbuffer
+    // (design decision 4) ever has a Z-buffer attached in this v1 -- a custom RenderTarget2D bound
+    // at the same time has no 3D capability at all (Phase O3/O4's scope), so this combination is
+    // out of scope, not specially guarded against here.
+    void Dx2GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
+    {
+        Clear(r, g, b, a);
+        ClearDepth(depth);
+    }
+
+    void Dx2GraphicsBackend::ClearDepth(float depth)
+    {
+        int width = 0, height = 0;
+        impl_->ActiveSurfaceSize(width, height);
+        FillZBuffer16(impl_->zbuffer, width, height, depth);
+    }
+
+    // Design decision 7: no real stencil buffer exists at this DirectX era (DX6+) -- stencil clears
+    // are accepted and silently ignored, never thrown, matching the "accept and ignore" pattern
+    // docs/directx-legacy-backends-analysis.md documents as already blessed elsewhere in this
+    // family. A pure stencil-only clear is therefore a complete no-op.
+    void Dx2GraphicsBackend::ClearStencil(int) {}
+    void Dx2GraphicsBackend::ClearDepthAndStencil(float depth, int) { ClearDepth(depth); }
+    void Dx2GraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int) { Clear(r, g, b, a); }
+    void Dx2GraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int)
+    {
+        ClearColorAndDepth(r, g, b, a, depth);
+    }
     void Dx2GraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
     void Dx2GraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
     void Dx2GraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }

@@ -118,28 +118,33 @@ namespace CNA::Internal::Backends::Dx2
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
 
-        // ---- 3D pipeline: NOT YET implemented by this phase (O1/O2, plan_dx2.md). Unlike DX1
-        // (which throws PERMANENTLY -- DirectX 1 shipped no Direct3D at all, so there is genuinely
-        // no COM interface reachable from a real DirectX-1-era header pairing to even call), DX2
-        // (1996) is the first DirectX release with real Direct3D, and this backend's own plan
-        // commits to real 3D via IDirect3D2/IDirect3DDevice2::DrawPrimitive (not execute buffers --
-        // proven non-functional in this environment, see plan_dx2.md's status note), landing in
-        // Phase O3 (device/viewport/Z-buffer bring-up) and Phase O4 (the CPU transform/clip +
-        // DrawPrimitive submission pipeline). Every 3D entry point below is a temporary, ported-
-        // from-DX1 stub (identical throw/false/nullptr behavior to Dx1GraphicsBackend) until those
-        // phases land -- not a permanent boundary the way it is for DX1. ----
-        // @note Status: STUB (Phase O1/O2 only). Every entry point throws std::runtime_error
-        // (CreateOcclusionQuery/CreateEffectBackend/CreateTexture3D/CreateTextureCube/
-        // CreateRenderTargetCube deliberately don't override the shared nullptr-returning defaults
-        // at all -- matching DX1/DX3-66's own corrected pattern). SupportsCapability() lets callers
-        // check ahead of time instead of relying on the throw.
-        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        // ---- 3D pipeline: device/viewport/Z-buffer bring-up (Phase O3) is real; the draw path
+        // itself (Phase O4/O5 -- VertexBuffer/IndexBuffer, DrawColoredPrimitives/DrawPrimitivesEx)
+        // is NOT yet implemented. Unlike DX1 (which throws PERMANENTLY -- DirectX 1 shipped no
+        // Direct3D at all, so there is genuinely no COM interface reachable from a real
+        // DirectX-1-era header pairing to even call), DX2 (1996) is the first DirectX release with
+        // real Direct3D, and this backend's own plan commits to real 3D via
+        // IDirect3D2/IDirect3DDevice2::DrawPrimitive (not execute buffers -- proven non-functional
+        // in this environment, see plan_dx2.md's status note). Every 3D entry point below still
+        // temporarily throws/degrades exactly as DX1's do until Phase O4/O5 lands (Clear*
+        // depth/color entry points are the exception -- real as of Phase O3, see below) -- not a
+        // permanent boundary the way it is for DX1. ----
+        // @note Status: STUB for the draw path (Phase O3 only). Every draw/buffer entry point still
+        // throws std::runtime_error (CreateOcclusionQuery/CreateEffectBackend/CreateTexture3D/
+        // CreateTextureCube/CreateRenderTargetCube deliberately don't override the shared
+        // nullptr-returning defaults at all -- matching DX1/DX3-66's own corrected pattern).
+        // SupportsCapability() lets callers check ahead of time instead of relying on the throw.
+        [[nodiscard]] bool SupportsDepthStencil() const override { return true; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
         {
-            // Phase O1/O2 (2D layer only) status quo: none of the capabilities
-            // CNA::GraphicsCapability currently enumerates are supported yet -- a later phase
-            // (O3/O4) reports ThreeD/DepthStencil support once real Direct3D v2 device bring-up
-            // lands, unlike DX1 where this is a permanent 2D-only boundary.
+            // Phase O3 status quo: the 3D DEVICE (viewport/Z-buffer/Clear*) is real, but the 3D
+            // PIPELINE as CNA::GraphicsCapability::ThreeD defines it (vertex/index buffers, 3D draw
+            // calls, depth/stencil clears AND state -- IGraphicsCapability.hpp's own bundled
+            // definition) is not usable yet: CreateVertexBuffer/DrawColoredPrimitives etc. still
+            // throw until Phase O4/O5 lands. Every CNA::GraphicsCapability value therefore still
+            // reports false here (SupportsDepthStencil() above is a narrower, differently-scoped
+            // query -- specifically about whether Clear(ClearOptions) can route to this backend's
+            // now-real ClearColorAndDepth/ClearDepth/etc, which it now genuinely can).
             return false;
         }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;

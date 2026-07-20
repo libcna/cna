@@ -91,8 +91,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX2")
         TIMEOUT 60 LABELS "DX2")
 
     # NOTE: Dx1_No3D has no DX2 equivalent here by design (plan_dx2.md task instructions) -- DX2's
-    # 3D layer is real (not a permanent throw like DX1's), so its own 3D CTest suite (Dx2_Device3DSmoke,
-    # Dx2_ColoredPrimitives, Dx2_ZTest, Dx2_Texture3D, ...) is added in a later phase (O3/O4) once
-    # that 3D layer actually exists, instead of a "throws" test that would need replacing almost
-    # immediately.
+    # 3D layer is real (not a permanent throw like DX1's), so its own 3D CTest suite grows across
+    # Phase O3/O4/O5 instead of a single "throws" test that would need replacing almost immediately.
+
+    # Phase O3 (DX2-20..DX2-26): real Direct3D v2 device bring-up CTest -- device/viewport/Z-buffer
+    # construction and the newly-real ClearColorAndDepth/ClearDepth/ClearColorDepthAndStencil entry
+    # points. The 3D DRAW path (VertexBuffer/DrawColoredPrimitives) is still Phase O4/O5 -- this
+    # test's own Check D confirms CreateVertexBuffer still throws, rather than over-claiming.
+    cna_dx2_test(cna_test_dx2_device3d_smoke examples/dx2_device3d_smoke_test.cpp)
+    cna_dx2_ctest_command(_dx2_device3d_smoke_cmd cna_test_dx2_device3d_smoke)
+    cna_register_backend_test(NAME Dx2_Device3DSmoke COMMAND ${_dx2_device3d_smoke_cmd}
+        TIMEOUT 60 LABELS "DX2")
 endif()

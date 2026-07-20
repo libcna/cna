@@ -46,6 +46,22 @@ This is now a fully de-risked design: **DX2's 3D layer will be implemented via
 `DrawIndexedPrimitive` immediate-mode API**, confirmed by the project owner as the intended
 approach over staying strictly within the literal DirectX-2-SDK execute-buffer-only surface.
 
+**Phase O3 pre-work finding (`dx2_spike8_zclear.cpp`):** `IDirect3DViewport`/`IDirect3DViewport2`'s
+`Clear()` has no depth/color *value* parameter at all (only `IDirect3DViewport3::Clear2`, DX5+,
+takes explicit `dwColor`/`dvZ`/`dwStencil`) — so it cannot implement `IGraphicsBackend::ClearDepth`/
+`ClearColorAndDepth`'s arbitrary caller-requested depth value. Spiked the alternative directly:
+`Lock()` the `DDSCAPS_ZBUFFER` surface itself and write raw 16-bit values by hand (confirmed layout:
+`lPitch = width*2`, a plain unsigned 16-bit value per pixel, 0=near/0xFFFF=far). A far quad
+(`sz=0.9`) was then submitted with `D3DRENDERSTATE_ZENABLE=D3DZB_TRUE`/`ZFUNC=D3DCMP_LESS` against
+a Z-buffer manually pre-filled with a near value (`0x1000`), with **no** `viewport->Clear()` call
+touching it at all — the far quad was correctly rejected everywhere (readback stayed the baseline
+red, never showed green), proving a **manually-written** Z-buffer is genuinely respected by the
+real depth test, not just Z values a real draw itself writes (already proven separately in
+`dx2_spike7_full.cpp` test A). `Dx2GraphicsBackend`'s `ClearDepth`/`ClearColorAndDepth` therefore
+mirror `Clear(r,g,b,a)`'s own existing direct-Lock()-and-fill approach exactly, just targeting the
+Z-buffer surface instead of the color surface — no dependence on `viewport->Clear()`'s ambiguous
+default-value semantics for this.
+
 ## Original result before the v2 breakthrough: 2D layer proven; 3D execute-buffer rendering NOT achieved
 
 **2D (DirectDraw v1):** not re-spiked here — DX1's spike and full backend already prove this
