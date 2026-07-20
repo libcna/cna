@@ -2313,7 +2313,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-004 | P1 | NOT STARTED | | | |
 | REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4 | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass** — see "Wave 3 — GRAPHICS shader campaign" below). Bgfx + D3DCommon (D3D11/D3D12) slices PENDING (bytecode regen blocked in this sandbox: no shaderc/fxc/dxc binary). Cross-backend fog conformance test still to build. |
 | REMED-GFX-006 | P1 | NOT STARTED | | | |
-| REMED-GFX-007 | P1 | NOT STARTED | | | |
+| REMED-GFX-007 | P1 | IN PROGRESS | 31668819 | feature/audit | **Vulkan slice DONE** — env_map3d.frag emissive now added unscaled (`lightSum*Diffuse + Emissive`); test-driven discriminating case added (non-white Diffuse). 8/8 Vulkan env-map tests pass, zero regressions. Bgfx/WebGPU/SdlGpu/D3DCommon slices PENDING (bytecode regen blocked). See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-008 | P1 | NOT STARTED | | | |
 | REMED-GFX-009 | P1 | NOT STARTED | | | |
 | REMED-GFX-010 | P2 | NOT STARTED | | | |
@@ -2599,3 +2599,21 @@ is why every fog test uses identity transforms. GFX-005 deliberately fixes *only
 EasyGL's established object-space approach); moving stock-effect fog to true view-space is a larger
 shared change (needs a WorldView/fog-vector plumbed into every backend's fog path) that GFX-010's
 cross-backend scope should own. Flagging so GFX-010 is not scoped as D3D9-only.
+
+### REMED-GFX-007 — EnvironmentMapEffect emissive re-multiply — **Vulkan slice DONE** (commit `31668819`)
+
+- **Root cause:** static shader source. `env_map3d.frag.glsl` computed
+  `litRGB = (Emissive + lightSum) * DiffuseColor`, re-scaling the already-ambient-folded emissive by
+  DiffuseColor. FNA `Lighting.fxh` adds emissive **unscaled**: `litRGB = lightSum*DiffuseColor + Emissive`.
+- **FNA/XNA evidence:** CPU side `EnvironmentMapEffect.cpp:424` already uploads the pre-folded
+  `(EmissiveColor + AmbientLightColor*DiffuseColor)*alpha` with an in-source "matches FNA" comment —
+  only the shader diverged from the layer that feeds it.
+- **Affected files:** `Vulkan/shaders/env_map3d.frag.glsl` + regenerated `spirv_shaders.hpp`;
+  test `examples/vulkan_environmentmapeffect_amount_zero_test.cpp`.
+- **Tests / numerical verification:** masked on all existing tests (none set non-white DiffuseColor;
+  with white diffuse both formulas coincide). Added a discriminating sub-test at
+  `EnvironmentMapAmount=0` (isolates litRGB): no lights, Diffuse=(0.5,0.5,0.5), Emissive=(0.5,0.5,0.5)
+  → correct pixel `(100,50,25)`; the bug gave `(50,25,13)`. **Test-driven**: verified the new case
+  FAILS on the pre-fix shader and PASSES after. All 8 Vulkan env-map tests pass; zero regressions.
+- **Remaining GFX-007 scope:** Bgfx, WebGPU, SdlGpu (incl. its extra alpha-squaring), D3DCommon
+  (D3D11/D3D12) — bytecode regen blocked in this sandbox.
