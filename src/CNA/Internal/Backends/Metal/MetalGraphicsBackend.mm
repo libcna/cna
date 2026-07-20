@@ -1352,7 +1352,14 @@ struct MetalGraphicsBackend::Impl
             case PipelineKind::SkinnedPbr68:      vs=@"cna_v3d_skinned_pbr";  fs=@"cna_f3d_pbr";      stride=68; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
         }
-        id<MTLVertexDescriptor> vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
+        // plan_metal.md: real bug found and fixed 2026-07-20 -- MTLVertexDescriptor is a concrete
+        // Objective-C class (unlike MTLTexture/MTLBuffer/MTLRenderPipelineState etc., which are
+        // protocols), so it needs a plain `MTLVertexDescriptor*` pointer, not the `id<Protocol>`
+        // syntax used everywhere else in this file -- vertexDescriptorForStride() itself already
+        // correctly declared this way, only this one call site got it wrong. Never caught until
+        // this was compiled for the first time ever on real Apple hardware -- Clang's own "type
+        // argument 'MTLVertexDescriptor' must be a pointer (requires a '*')" error.
+        MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
         id<MTLRenderPipelineState> pipe = makePipeline(device, library, vs, fs, vd, currentBlend);
         pipelineCache.emplace(key, pipe);
         return pipe;
@@ -1467,12 +1474,19 @@ public:
         id<MTLTexture> nativeTex=nativeTextureFor(&t); if(!nativeTex) throw std::runtime_error("Metal: foreign texture backend");
         auto& p=b_.impl(); p.ensureFrame();
         struct V{float x,y,u,v,r,g,b,a;}; V q[6];
-        float x0=(float)d.getXProperty(), y0=(float)d.getYProperty(), x1=x0+d.getWidthProperty(), y1=y0+d.getHeightProperty();
-        float u0=(float)s.getXProperty()/t.GetWidth(), v0=(float)s.getYProperty()/t.GetHeight();
-        float u1=(float)(s.getXProperty()+s.getWidthProperty())/t.GetWidth(), v1=(float)(s.getYProperty()+s.getHeightProperty())/t.GetHeight();
+        // plan_metal.md: real bug found and fixed 2026-07-20 -- Rectangle/Vector2 in this codebase
+        // use plain public fields (X/Y/Width/Height), matching real XNA's own struct convention,
+        // not the getXProperty()-style getter this line originally guessed at (that convention is
+        // real for Color, which this same function correctly uses just below, but Rectangle/
+        // Vector2 were never converted to properties). Never caught until this was compiled for
+        // the first time ever on real Apple hardware -- Clang's own "no member named
+        // 'getXProperty'" error.
+        float x0=(float)d.X, y0=(float)d.Y, x1=x0+d.Width, y1=y0+d.Height;
+        float u0=(float)s.X/t.GetWidth(), v0=(float)s.Y/t.GetHeight();
+        float u1=(float)(s.X+s.Width)/t.GetWidth(), v1=(float)(s.Y+s.Height)/t.GetHeight();
         if((int)effects & 1) std::swap(u0,u1); if((int)effects & 2) std::swap(v0,v1);
         const float cr=c.getRProperty()/255.f,cg=c.getGProperty()/255.f,cb=c.getBProperty()/255.f,ca=c.getAProperty()/255.f;
-        auto xf=[&](float x,float y){ float px=x-(x0+origin.getXProperty()), py=y-(y0+origin.getYProperty()); float cs=std::cos(rotation),sn=std::sin(rotation); return std::array<float,2>{x0+origin.getXProperty()+px*cs-py*sn,y0+origin.getYProperty()+px*sn+py*cs};};
+        auto xf=[&](float x,float y){ float px=x-(x0+origin.X), py=y-(y0+origin.Y); float cs=std::cos(rotation),sn=std::sin(rotation); return std::array<float,2>{x0+origin.X+px*cs-py*sn,y0+origin.Y+px*sn+py*cs};};
         auto tf=[&](std::array<float,2> q){ float x=q[0],y=q[1]; return std::array<float,2>{x*transform_.M11+y*transform_.M21+transform_.M41, x*transform_.M12+y*transform_.M22+transform_.M42}; };
         auto a=tf(xf(x0,y0)),bb=tf(xf(x1,y0)),cc=tf(xf(x1,y1)),dd=tf(xf(x0,y1));
         V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};

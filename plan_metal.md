@@ -1378,6 +1378,57 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     the `getentropy()` branch itself is unverified from this Linux sandbox until the next macOS CI
     run. Ninth real, observed CI signal.
 
+56. **A genuine milestone: `MetalGraphicsBackend.mm` compiled for the first time ever, and found
+    two real bugs in this repo's own source (not `sharp-runtime`) on its very first attempt**: with
+    all 6 `sharp-runtime` gaps fixed, `SHARP_RUNTIME` finished building completely on this run, and
+    `cna_backend_graphics_metal`'s own compile step began — every piece of Metal backend source
+    written this entire session, most of it never touched by a compiler until this exact moment.
+    Found two real, independent bugs, both real language/API-surface mistakes rather than
+    portability issues:
+
+    **Bug 1 — Objective-C class/protocol confusion**: `id<MTLVertexDescriptor> vd = ...` in
+    `getOrCreatePipeline()` — Clang: `"type argument 'MTLVertexDescriptor' must be a pointer
+    (requires a '*')"`. `MTLVertexDescriptor` is a concrete Objective-C class (like every other
+    `MTL*Descriptor` type this file already correctly uses as a plain pointer everywhere else —
+    `MTLRenderPipelineDescriptor`/`MTLTextureDescriptor`/`MTLRenderPassDescriptor`/
+    `MTLDepthStencilDescriptor`/`MTLSamplerDescriptor`, all checked and all already correct), not a
+    protocol like `MTLDevice`/`MTLTexture`/`MTLBuffer`/`MTLCommandQueue`/etc. (which genuinely are
+    protocols, and correctly use `id<...>` throughout this same file — checked every `id<MTL*>`
+    usage in the file, all 11 distinct protocol names, all correct). `vertexDescriptorForStride()`
+    itself already returned the correct `MTLVertexDescriptor*` type; only this one call site's
+    local variable declaration got it wrong. Fixed to `MTLVertexDescriptor* vd = ...`.
+
+    **Bug 2 — real XNA API-surface mismatch, `Rectangle`/`Vector2` field access**: 16 compile
+    errors across `MetalSpriteBatch::Draw()`, all `no member named 'getXProperty'`/`'getYProperty'`/
+    `'getWidthProperty'`/`'getHeightProperty'` in `Rectangle`/`Vector2`. Checked the real headers:
+    `Rectangle`/`Vector2`/`Vector3`/`Vector4`/`Point` in this codebase all use **plain public
+    fields** (`X`/`Y`/`Width`/`Height`), matching real XNA's own lightweight value-type struct
+    convention exactly — `Rectangle` doesn't even have `getWidthProperty()`/`getHeightProperty()`
+    at all, only `getLeftProperty()`/`getRightProperty()`/`getTopProperty()`/`getBottomProperty()`
+    (computed edge accessors, a real but different part of the API). The `.getXProperty()`-style
+    call this code guessed at is the correct convention for `Color` (which this exact same function
+    correctly uses for `.getRProperty()`/`.getGProperty()`/etc., just two lines below the broken
+    code) — but `Rectangle`/`Vector2` were never converted to properties, matching CLAUDE.md's own
+    "don't replace C# properties with public fields unless the type already establishes that
+    style" rule precisely, just in the opposite direction of the mistake actually made here.
+    Proactively grepped the whole file for the same pattern afterward (any other
+    `.getXProperty()`/`.getYProperty()`/`.getWidthProperty()`/`.getHeightProperty()` call) — found
+    none remaining; this was contained to the one function. Fixed all 16 occurrences to plain field
+    access (`d.X`, `s.Width`, `origin.Y`, etc.).
+
+    Both bugs are exactly the class of mistake this entire multi-hundred-task plan has been unable
+    to catch by inspection alone, no matter how carefully each phase cross-checked against the
+    EasyGL reference — a real compiler, for the first time, checking real Objective-C class/
+    protocol rules and real API member names against the actual codebase, not against memory or
+    assumption. Verified zero regression in the already-real-tested plain-C++ extraction subset
+    (85/85 `ctest -R "^Metal"` still pass — neither bug touched any extracted header). The .mm file
+    itself remains uncompilable from this Linux sandbox by definition, so whether these were the
+    *only* two bugs, or whether more lie further into the file past where this run's error count
+    cut off, is still unknown — the next CI run is the real answer. Tenth real, observed CI signal,
+    and the most significant one yet: the first evidence, positive or negative, about the Metal
+    backend's own source code correctness, not this repo's build/CI plumbing or a sibling repo's
+    portability.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
