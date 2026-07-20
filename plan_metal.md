@@ -985,6 +985,28 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     already in place, not a gap to fix. Both stay 🟨 rather than ✅ since this reasoning is checked
     from source/documentation, not confirmed against actual observed CI behavior.
 
+40. **`METAL-232`: a real, confirmed compile-definition gap found and fixed**: this session's
+    highest-confidence bug of the whole "documentation and CI hardening" tail — not a maybe, not a
+    "reasoning check," an actual missing `#ifdef CNA_BACKEND_METAL` branch in
+    `GraphicsBackendCompileDefinitionTests.cpp`'s `ExactlyOneGraphicsBackendIsSelected` test, which
+    counts one `++enabled` per known `CNA_BACKEND_*` macro and asserts `enabled==1`. Every other
+    backend this project ships has its own branch; Metal never got one, and the file's own existing
+    comment already documents an *identical* historical gap for `CNA_BACKEND_D3D9` (found while
+    merging `feature/sdlgpu`, only caught because someone finally built under `D3D9`). Same root
+    cause here: this test has never once been built or run under `CNA_GRAPHICS_BACKEND=METAL` (no
+    Apple toolchain in any session to date), so a real `METAL` build would define
+    `CNA_BACKEND_METAL` while this test kept counting 0 for it — `EXPECT_EQ(enabled, 1)` would fail
+    the very first time `metal-macos-ci.yml`'s build actually reached this test. Fixed with the
+    identical one-`#ifdef` pattern every other backend already uses; rebuilt and reran under this
+    Linux `HEADLESS` build to confirm the fix doesn't disturb the existing pass (`CNA_BACKEND_METAL`
+    stays undefined here, so `enabled` is still exactly 1 — the new branch is provably inert on this
+    machine, its correctness for the `METAL` case itself remains real-CI-pending like everything
+    else in this backend). Also added a dedicated `metal-macos-ci.yml` step
+    (`ctest -R "GraphicsBackendCompileDefinitionsTest"`) specifically because this test's name
+    doesn't start with "Metal" and so was invisible to the existing `^Metal` filter — without that
+    addition, the very fix just made would never actually be exercised by the CI job meant to
+    exercise it.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1648,7 +1670,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-229 | Add `MTL_SHADER_VALIDATION=1`/`MTL_DEBUG_LAYER=1` to the CI job (ties to `METAL-218`) | ✅ added 2026-07-20 to `metal-macos-ci.yml`'s "Run Metal tests" step — unverified whether it actually fires without a real CI run, but the mechanism itself (Apple's own documented env var contract) needs no further code |
 | METAL-230 | Audit CI build-time budget as the backend grows toward EasyGL's scale — revisit `--parallel 3` once compile times actually grow | ⬜ |
 | METAL-231 | Consider splitting the monolithic `.mm` into multiple translation units once file size approaches EasyGL's ~5,300-line mark (a concrete threshold, not a premature rule) | ⬜ |
-| METAL-232 | Confirm `GraphicsBackendCompileDefinitionsTest` already knows about `CNA_BACKEND_METAL` (DX3's own external review found the equivalent gap for `CNA_BACKEND_DX3`/`D3D11`/`D3D12` until fixed) | ⬜ |
+| METAL-232 | Confirm `GraphicsBackendCompileDefinitionsTest` already knows about `CNA_BACKEND_METAL` (DX3's own external review found the equivalent gap for `CNA_BACKEND_DX3`/`D3D11`/`D3D12` until fixed) | ✅ **real gap found and fixed 2026-07-20** — see narrative item 40 |
 | METAL-233 | Keep `README.md`'s backend list/build instructions honest about Metal's real current capability boundary as phases land | ⬜ |
 
 ## Phase 27 — Documentation (METAL-234 – METAL-238)

@@ -54,3 +54,13 @@ jobs:
           MTL_SHADER_VALIDATION: "1"
           MTL_DEBUG_LAYER: "1"
         run: ctest -R "^Metal" --output-on-failure
+      - name: Run backend compile-definition sanity check
+        working-directory: cna/build-metal
+        # METAL-232: GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected
+        # asserts exactly one CNA_BACKEND_* macro is defined -- doesn't match the `^Metal` filter
+        # above (its own name doesn't start with "Metal"), but is exactly the kind of check a real
+        # CNA_GRAPHICS_BACKEND=METAL build needs to actually exercise: a missing #ifdef
+        # CNA_BACKEND_METAL branch in this test was found and fixed on 2026-07-20 by reading the
+        # source alone (this file's own comment already documents an identical past gap for
+        # CNA_BACKEND_D3D9), but was never actually run under a real METAL build until this step.
+        run: ctest -R "GraphicsBackendCompileDefinitionsTest" --output-on-failure
