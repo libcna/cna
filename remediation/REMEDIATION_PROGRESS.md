@@ -1272,6 +1272,190 @@ larger feature (constructing a `GraphicsDevice` without a `Game`/window) not imp
 `-007`/`-014`'s own strategy text, and is left for a future task if the project ever needs a
 `Game`-less `GraphicsDeviceManager` to actually work.
 
+## POST-WAVE-1 INTEGRATION BASELINE (2026-07-20)
+
+A dedicated integration/verification pass, run before starting Wave 2 production fixes, per explicit
+user direction. **Verification-only — no Wave 2 production code was written in this pass.** The one
+production-adjacent change made was a bookkeeping fix (`.gitignore` — see Phase 2 below); everything
+else is measurement. `audit/` was not touched.
+
+### Phase 1-2 — plan read, git/worktree sanity
+
+Confirmed 18/105 tracked tasks DONE (all 12 P0, 3/21 P1, 3/44 P2), 1 P2 BLOCKED
+(`REMED-BUILD-008`, genuinely environment-blocked), 86 NOT STARTED, plus `REMED-CORE-014` DONE among
+the (then-)8 "Discovered during remediation" entries. `audit/`'s last commit (`74ebf356`, 2026-07-19)
+predates all remediation work — untouched. One unpushed commit on `feature/audit` (`ebf75803`,
+CORE-006/007/014) was legitimate, already-documented Wave 1 work.
+
+**One bookkeeping issue found and fixed (safe, additive, no production-code change):** 5 build
+directories (~6.6GB — `cmake-build-d3d11-mingw`, `-d3d12-mingw`, `-d3d9-mingw`, `-devices`,
+`-sdlrenderer`) were untracked but not covered by any `.gitignore` pattern (the file enumerates
+build-dir names one at a time and these weren't in the list). Replaced the enumeration approach with
+one `cmake-build-*/` catch-all pattern — commit `b101e81a`. No tracked build artifacts or unexpected
+large binaries found anywhere else in the tree.
+
+### Phase 3 — default full test baseline (EasyGL, `cmake-build-debug`)
+
+Rebuilt against HEAD, full unfiltered `ctest -j1`: **5826 registered, 5817 passed, 4 skipped
+(hardware sensors), 5 failed, 716.96s.** All 5 failures reconcile exactly against
+`REMEDIATION_PROGRESS.md`'s own Wave 0 triage table — `EasyGL_AvatarRenderer_TintRouting`,
+`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests`
+(all already tracked), plus `EasyGL_RealWindowResize` (`REMED-BUILD-010`, expected timeout under a
+real desktop compositor). **Zero regressions.** Total also reconciles: 5579 gtest-discovered (the
+figure the `REMED-CORE-006/007/014` commit itself reported) + 247 separately-registered smoke/backend/
+input tests = 5826.
+
+### Phase 4 — configuration matrix (13 native backends + `CNA_DEVICES=ON`)
+
+Extended past the instructed minimum list to every backend with an existing build directory in this
+sandbox (Canvas/Emscripten excluded — browser target, no native CTest equivalent). All rebuilt against
+HEAD `b101e81a`, full unfiltered serial `ctest`, `DISPLAY=:99` (Xvfb — see the display-handling note
+below).
+
+| Config | Total | Passed | Failed | Notes |
+|---|---|---|---|---|
+| EasyGL (default) | 5826 | 5817 | 5 | = Phase 3 baseline |
+| `CNA_DEVICES=ON` (EasyGL) | 5876 | 5871 | 5 | Same 5 pre-catalogued; Net 327/327, Media 211/211; both `REMED-DEVICES-001` regression tests pass |
+| Headless | 5588 | 5579 | 5 | `REMED-CONTENT-004` (×3), `REMED-GFX-036` (×1), network-port flake (×1) |
+| Software | 5587 | 5579 | 3 | `REMED-CONTENT-004` (×2); WireFrame check correctly passes here |
+| Vulkan | 5719 | 5708 | 7 | audio-timing flake (×2, confirmed flaky in isolation), GLSL-toolchain-absent (×2), `REMED-GFX-036` (×1), pre-existing `Vulkan_DepthBias` (×1), **new: `Vulkan_SkinnedEffect_Fog` hang (×1, `REMED-GFX-052`)** |
+| WebGPU | 5604 | 5593 | 7 | network-port flake (×1), **new: WebGPU custom-GLSL-effect failures (×2, `REMED-GFX-053`)**, **new: WebGPU skinned-model index-buffer failures (×3, `REMED-GFX-054`)**, `REMED-GFX-036` (×1); both `REMED-CONTENT-001` regression tests pass |
+| D3D9 (Wine) | 23 registered | 20 | 3 | infra-only: `CnaTests_NOT_BUILT` placeholder + **new CTest-wiring gap (×2, `REMED-BUILD-013`)** |
+| D3D11 (Wine) | 11 registered | 6 | 5 | same infra gap (×3) + `REMED-GFX-020` (×2, pre-catalogued, evidence text matches verbatim) |
+| D3D12 (Wine) | 1 registered (`D3D12_Smoke`) | 1 | 0 | `REMED-BUILD-012` reconfirmed unchanged (identical Wine/vkd3d-proton swap-chain-crash signature on the unregistered diagnostic) |
+| Bgfx | 5699 | ~5688 | 7 deterministic + 2 flaky | GLSL-toolchain-absent (×2), `REMED-GFX-036` (×1), `REMED-BUILD-003`-evidence-listed (×2), `REMED-GFX-017` (×2); 2 more failures were `REMED-BUILD-010`-class real-compositor artifacts (see that finding's evidence extension); `AudioCategoryTest` flaked under heavy concurrent load, 8/8 clean in isolation |
+| SdlGpu | 5602 | 5594 | 3 | `REMED-GFX-035` (×2, precise attribution — SdlGpu rejects EasyGL-compatible custom GLSL), `REMED-GFX-036` (×1) |
+| Ascii | 5587 | 5536 | 51 | all = deliberate, already-audited `ThrowNo3D` 2D-only design, + `REMED-GFX-036` (×1) |
+| Dx3 | 5590 | 5530 | 60 | mostly the same `ThrowNo3D` pattern; + pre-existing `IDirectDraw::CreateSurface` gap (×2, already documented under `REMED-CONTENT-001`'s own verification notes), `Dx3_SpriteBatch` (×2 of 10 checks, pre-catalogued rotation/alpha-blend defects); 2 `DynamicSoundEffectInstanceTest` failures under `-j1` **not re-isolated** (minor open item, low-confidence flag, not a confirmed new defect) |
+| SdlRenderer | 5649 | 5591 | 58 | mostly `ThrowNo3D` pattern; + this backend's 3 already-named findings (`SDL_Renderer_RenderTarget_DepthDecision`, `SDL_Renderer_FullscreenToggle`, `SDL_Renderer_ClearOptions_Audit`) |
+
+**Zero regressions found anywhere in the 13-configuration matrix.** Every failure is either
+already-catalogued, an already-understood environment limitation, or one of the 5 new findings logged
+above (`REMED-CONTENT-009`, `REMED-GFX-052`, `REMED-GFX-053`, `REMED-GFX-054`, `REMED-BUILD-013` — see
+their own detail sections in "Discovered during remediation").
+
+### Phase 5 — sanitizer regression
+
+| Area | Sanitizer | Build dir | Result |
+|---|---|---|---|
+| Net | ASan+UBSan | `net-asan` | Clean — 249/249, 0 sanitizer hits |
+| Devices | ASan | `devices-asan` | Clean — 13/13, 0 sanitizer hits |
+| Devices | TSan | `devices-tsan` | Clean — 13/13, 0 races |
+| Core lifecycle | ASan | `devices-asan` | Clean — 11/11 (reconfirms `REMED-GFX-001`'s UAF fix and `REMED-CORE-006/007/014` hold under ASan) |
+| Media | ASan+UBSan | `media-asan` | Clean — 284/284, 0 sanitizer hits |
+| Graphics CPU-side (SpriteFont/SpriteBatch/SpriteEffects) | ASan+UBSan | `media-asan` | Clean — 68/68, 0 sanitizer hits |
+| Content/XNB | ASan+UBSan | `media-asan` | **1 new UBSan finding (`REMED-CONTENT-009`)** + 3 pre-catalogued gtest failures (`REMED-CONTENT-004` ×2, `REMED-GFX-036` ×1) |
+
+**Coverage gaps, explicitly recorded, not fixed (per instruction not to implement deferred
+`REMED-BUILD-010`/`-011` in this pass):** Devices lane has no UBSan-only build in this session
+(`devices-asan` is ASan-only) — same gap `REMED-BUILD-011` already documents. No TSan coverage outside
+Devices — no other genuinely concurrent code path was in scope for Wave 1. No sanitizer coverage of
+GPU-runtime rendering paths (Vulkan/WebGPU/EasyGL real rendering) — not appropriate per the task's own
+instruction.
+
+### Phase 6 — security regression
+
+All 12 completed Wave 1 security/safety fixes re-verified in the integrated state: malformed
+Texture2D/XNB crash protection, TextureCube OOB protection, path containment, `XnbTypeName`
+recursion/string limits, ENet host authority, `ClientHello` resend guard, FileDialog/MessageBox
+concurrent backend-swap lifetime, `AudioTagParser` overflow, EasyGL constructor-failure registry
+lifetime, SpriteFont/SpriteBatch invalid default character, `SpriteEffects` OOB, Game/
+GraphicsDeviceManager lifecycle. **106/106 direct-binary regression tests pass** (19 suites, default
+build) **+ 2/2 Devices-gated regression tests pass** (`CNA_DEVICES=ON` build). Zero regressions.
+
+### Phase 7 — test infrastructure check
+
+`WORKING_DIRECTORY` fix (`REMED-BUILD-001`) intact in `cmake/UnitTests.cmake`. `general-tests-ci.yml`
+(`REMED-BUILD-004`) present and valid YAML. `CNA_TEST_DISPLAY` baking mechanism live-verified: `ctest`
+run with zero exported `DISPLAY` still passes, confirming the baked CTest `ENVIRONMENT` property is
+authoritative — matches the workflow's own documented design. Serial-vs-parallel flakiness pattern
+reconfirmed (network-port contention, audio-timing sensitivity under heavy concurrent load) — same
+class as already documented, not new. `REMED-BUILD-011` (sanitizer presets not setting
+`CNA_DEVICES=ON`) reconfirmed still present, correctly left unfixed. Not implemented:
+`REMED-BUILD-010`/`-011` themselves (per instruction).
+
+**Mid-pass display-handling correction (worth recording for future sessions):** Phase 3/4/5 forks were
+initially instructed to use `DISPLAY=:0` (this sandbox's real, logged-in desktop session), matching
+what earlier Wave 1 sessions had used. The user asked mid-pass to keep test windows off the real
+desktop. All work was redirected to the project's own existing Xvfb `:99` (already running, and
+already the convention `general-tests-ci.yml` itself uses server-side). Root cause of the user-visible
+disruption, diagnosed by one of the forks: `gtest_discover_tests`-registered tests (~5600) have no
+baked `ENVIRONMENT` property and inherit whatever `DISPLAY` is exported on the `ctest` command line;
+`cna_register_backend_test`-registered backend pixel/smoke tests (~200) DO have a baked
+`SDL_VIDEODRIVER=x11;DISPLAY=:99` property that overrides ambient `DISPLAY` regardless — so the
+disruption was specifically from the ~5600 gtest-discovered tests during the affected runs, not the
+backend smoke tests. Every build directory's `CNA_TEST_DISPLAY` cache variable was reconfigured to
+`:99` (cheap — reconfigure only, no rebuild) partway through this pass; confirmed via a live `ctest`
+run with `DISPLAY` unset entirely that the baked property is now authoritative everywhere. **Some
+Phase 4 data above (the initial Bgfx run specifically) was collected partly under `:0` before the
+correction landed** — reconciled against a `:99` re-run of the same suite by the responsible fork, no
+discrepancy found, figures above are the reconciled `:99` numbers.
+
+### New findings summary (5 new remediation IDs, 2 evidence extensions to existing findings — none fixed in this pass)
+
+| ID | One-line | Severity | Suggested priority |
+|---|---|---|---|
+| `REMED-CONTENT-009` | Signed int64 overflow in `REMED-CONTENT-001`'s own new validation code (`width*height*4`) | MEDIUM (UB in a CRITICAL-path fix) | P1 — fold into Wave 2 CONTENT lane, ahead of `REMED-CONTENT-004` |
+| `REMED-GFX-052` | `Vulkan_SkinnedEffect_Fog` reproducible 30s hang | HIGH | Needs triage before scheduling |
+| `REMED-GFX-053` | WebGPU rejects custom-GLSL `ShaderEffect` content | MEDIUM | Route to GRAPHICS lane or `plan_webgpu.md` after triage |
+| `REMED-GFX-054` | WebGPU skinned-model index-buffer upload fails (3 tests) | MEDIUM-HIGH | Route to GRAPHICS lane or `plan_webgpu.md` after triage |
+| `REMED-BUILD-013` | D3D9/D3D11 CTest wiring gap (2 tests missing Wine-wrapper macro) | LOW | Bundle with `REMED-BUILD-010`/`-011` cleanup |
+| — | `REMED-GFX-036` (WireFrame capability) evidence extended from 3 to **6** confirmed-affected backends (Headless, Vulkan, WebGPU, Bgfx, SdlGpu, Ascii) | (no change) | Raises this fix's leverage — one shared-code fix likely closes 6 backends at once |
+| — | `REMED-BUILD-010` (real-compositor-vs-Xvfb sensitivity) evidence extended — confirmed **not EasyGL-specific**, Bgfx shows the identical pattern | (no change) | No scheduling change, informational |
+
+### Regressions
+
+**None.** Zero tests that previously passed now fail, across the default baseline, the 13-configuration
+matrix, and the full sanitizer/security sweep. The one Wave-1-introduced defect found
+(`REMED-CONTENT-009`) does not currently fail any test — it was only surfaced because this pass added
+UBSan coverage over Content/XNB that did not exist when `REMED-CONTENT-001` landed. This is exactly the
+kind of interaction this integration pass exists to catch.
+
+### Remediation bookkeeping consistency
+
+Task statuses, commit references, and progress-table counts all check out internally consistent against
+`git log`. No task was found marked `DONE` without a matching commit, and no commit was found
+implementing a task still marked `NOT STARTED`. The one bookkeeping gap found (`.gitignore` coverage,
+Phase 2) was fixed as an explicitly-authorized "obvious, strictly safe" correction, not a scope
+expansion.
+
+### Wave 2 readiness: **safe to begin.**
+
+No regression, no open correctness question, and no cross-lane interaction blocks starting Wave 2. See
+"Wave 2 readiness" recommendation below for lane ordering.
+
+### Wave 2 readiness — recommended lane order (not implemented, recommendation only)
+
+Derived from `REMEDIATION_DEPENDENCIES.md`'s own Wave 2 scope, adjusted for this pass's findings. Not
+all lanes need work yet — GRAPHICS' big serialized shader cluster (`REMED-GFX-005`→`-011`→`-020`,
+Bottleneck 1 in the dependency doc) is deliberately **not** pulled forward; it remains Wave 3.
+
+1. **CONTENT lane, first, small and fast:** `REMED-CONTENT-009` (this pass's own finding — one-line
+   fix, sits inside the CRITICAL `REMED-CONTENT-001` path) bundled with the already-scheduled
+   `REMED-CONTENT-004` (Texture3D/TextureCube round-trip returns zeros, MEDIUM, reproducible today on
+   Headless and Software). No file overlap with any other lane below — closes out Wave 1's own loose
+   end before anything else starts.
+2. **CORE lane:** `REMED-CORE-001` (foundational logging — do first, other Wave 2 work may want to log
+   through it) then `REMED-CORE-004` (Color UB). Both P1, blocker-free per the Decisions log, correctly
+   held back from Wave 1 with no dependency reason to hold them further.
+3. **GRAPHICS lane, isolated per-backend defects (the dependency doc's own "highly parallel" batch):**
+   `REMED-GFX-004` (RenderTargetCube `Dispose(bool)`, UAF risk — still open despite being
+   security-flavored), `-012`/`-013`/`-016`/`-017`/`-018`/`-019`. Fold in `REMED-GFX-036` (WireFrame —
+   now confirmed across 6 backends, high leverage for one shared fix) and this pass's own
+   `REMED-GFX-052` (Vulkan hang — triage first, root cause unconfirmed) into the same batch; they are
+   similarly isolated, not part of the serialized shader cluster.
+4. **NET/MEDIA, parallel-safe with the above (no file overlap):** `REMED-NET-002` (unchecked iterator
+   arithmetic) and `REMED-MEDIA-002` (MediaLibrary object-graph SEGFAULT, HIGH severity, 6+ backends —
+   still open, worth prioritizing early within this lane given the severity).
+5. **Defer explicitly:** `REMED-GFX-005`→`-011`→`-020` (Wave 3 shader campaign — the schedule's long
+   pole, do not start early). `REMED-BUILD-003` (`WILL_FAIL` rollout) stays sequenced *after* the
+   GRAPHICS batch in step 3, per the dependency doc's own ordering constraint (would otherwise mask
+   in-progress fixes). This pass's `REMED-GFX-053`/`-054` (WebGPU-specific) need a routing decision
+   (general GRAPHICS lane vs. `plan_webgpu.md`) before scheduling — do not assume either home without
+   that triage. This pass's `REMED-BUILD-013` is cheap and can be picked up opportunistically by
+   whoever next touches D3D9/D3D11, or bundled with the already-deferred `REMED-BUILD-010`/`-011`
+   cleanup.
+
 ## Waves 2-5 — remaining tasks
 
 | ID | Pri | Status | Owner | Branch | Notes |
@@ -1379,6 +1563,11 @@ existing task.
 | REMED-TEST-008 | `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails under a full unfiltered `ctest -j4` run but passes 10/10 in isolation (`--gtest_filter` + `--gtest_repeat=10`) — a real-time audio buffer-starvation-count assertion is timing-sensitive under heavy 4-way parallel CPU load on this sandbox. Extends `REMED-NET-001`'s already-documented `ctest -j4` transient-failure finding (previously only `ENetDiscoveryServiceTest.*` ×4 and 2 `TwoProcessLoopbackTest`/`NetworkSessionTest` cases, all network-port contention) to a second, previously-undocumented flakiness class (audio timing, not networking) | LOW | P3 | REMED-BUILD-004 (establishing a full local `ctest -j4` baseline before designing the new CI job) | NOT STARTED — recorded, not fixed (test-reliability finding, not a production defect; `REMED-BUILD-004`'s own new CI job runs `ctest` serially specifically to avoid this and the already-known network-port class, rather than allowlisting either) |
 | REMED-CORE-014 | `GraphicsDeviceManager`'s private `ownsGraphicsDevice_` flag is initialized `false` in both constructors and never set `true` anywhere in `GraphicsDeviceManager.cpp` (confirmed by grep of the whole file, and independently by a live probe program: construct `Game` + `GraphicsDeviceManager(&game)`, subscribe to `getDeviceDisposingEvent()`, call `gdm->Dispose()` — the subscriber never fires). Both of `Dispose()`'s and `CreateDevice()`'s only conditional branches that raise `DeviceDisposing` and release the owned `GraphicsDevice` are therefore permanently dead code, for **every** `GraphicsDeviceManager` instance, not only the `Game`-attached case this entire codebase always constructs. This directly compounds `REMED-CORE-006`: even after `Game::Initialize()` subscribes to `DeviceDisposing` (that task's own stated fix strategy), a real `GraphicsDeviceManager::Dispose()` call on a `Game`-attached manager still would not raise the event without this dead-code path also being addressed — the CORE-lane owner should know this before scoping `REMED-CORE-006`'s fix as "just add the subscription" | HIGH | P1 | REMED-TEST-002 (investigating how to trigger `REMED-CORE-006`'s own required test, "dispose the device, assert `UnloadContent()` was called") | **DONE** — fixed atomically with `REMED-CORE-006`/`-007`, same root cause, same files. See "Wave 1 (parallel) — CORE lane" above. The `Game`-attached (non-owning) path's `DeviceDisposing` raise is no longer gated on `ownsGraphicsDevice_`; the standalone-owned-device path (still unreachable — `CreateDevice()` still throws when `game_ == nullptr`) remains a separate, unimplemented future feature, noted in that section. |
 | REMED-BUILD-012 | Any test that constructs a real window via `Game`+`GraphicsDeviceManager` on the D3D12 backend crashes identically under this dev environment's Wine+vkd3d-proton setup: `wine: Unhandled page fault on read access to 0000000000000000`, backtrace bottoming out in `vkd3d_instance_get_vk_instance(instance=nullptr)` inside `dxgi_factory_CreateSwapChainForHwnd` → `d3d12_swapchain_create` → `d3d12_swapchain_init` — real window-attached DXGI swap-chain creation crashing inside vanilla Wine's own `dxgi.dll`, confirmed identically for two independent test executables (a reused `DepthStencilState` test and a reused `RasterizerState`/scissor test). `cmake/Tests/D3D12Tests.cmake`'s own pre-existing comment on `cna_diag_d3d12_swapchain` already documented this exact crash for **one specific diagnostic tool** ("DX-100's own spike..."); this generalizes it to a blanket constraint — **no** D3D12 test using the public `Game`/`GraphicsDeviceManager`/real-window API can run in this dev loop at all, only `D3D12_Smoke`'s own deliberately off-screen (`window=nullptr`), much lower-level, hand-rolled internal-`EXT`-API style avoids it | HIGH | P1 | REMED-BUILD-008 (attempting to reuse D3D11's own backend-agnostic public-API test sources for D3D12) | NOT STARTED — recorded, not fixed (a Wine/vkd3d-proton dev-environment limitation, not a CNA code defect fixable in this repo; blocks `REMED-BUILD-008`/`REMED-GFX-014`/`REMED-GFX-015` from being verified via the public-API test style every other backend uses — whoever picks these up needs `D3D12_Smoke`'s own off-screen internal-`EXT` construction style instead, a substantially larger undertaking than a simple test-source reuse) |
+| REMED-CONTENT-009 | `Texture2DContentTypeReader.cpp:88-89`'s own `REMED-CONTENT-001` fix computes `input.CheckDecodedByteSize(static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4, "Texture2DReader")` — for `width`/`height` both near `INT32_MAX`, `width*height` (int64_t) reaches ≈4.6e18, still in-range, but the subsequent `* 4` overflows signed 64-bit (`int64_t` max ≈9.22e18): confirmed live by UBSan (`runtime error: signed integer overflow: 4611686014132420609 * 4 cannot be represented in type 'long int'`) on `Texture2DContentTypeReaderTest.AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc`. This directly contradicts the fix's own comment ("computed in int64_t so it can't itself silently wrap back into range"). The regression test still passes today only because the implementation-defined wraparound happens to still land outside the valid range — a different compiler/optimization level is not guaranteed to preserve that. **This is new code added by REMED-CONTENT-001 itself, not a pre-existing defect** — found only because this integration pass added UBSan coverage over Content/XNB that did not exist when CONTENT-001 landed | MEDIUM | P1 | Post-Wave-1 integration pass, Phase 5 (sanitizer regression) — `cmake-build-media-asan`, `Texture2DContentTypeReaderTest.*` under ASan+UBSan | NOT STARTED — recorded, not fixed (verification-only pass; recommend folding into Wave 2's CONTENT lane ahead of `REMED-CONTENT-004`, given it sits inside the CRITICAL-severity validation path CONTENT-001 itself closed) |
+| REMED-GFX-052 | `Vulkan_SkinnedEffect_Fog` hangs reproducibly (CTest 30s `TIMEOUT`) on the Vulkan backend — confirmed not resource contention (reproduces identically on an idle system, load avg 0.46, 43°C) and not a display/environment artifact (reproduces identically via direct binary execution of `cna_test_vulkan_skinnedeffect_fog`, bypassing CTest entirely). Both runs hang with zero output past `[Vulkan] Backend initialised`. Distinct root cause from `REMED-GFX-005` (mirrored fog *formula*, a values defect) — this is a hang, not a wrong-value defect, and no existing remediation ID covers it | HIGH | P1 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — Vulkan full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; needs root-cause triage before scheduling — candidate for the GRAPHICS lane's fog/skinned-effect work, but should not be silently absorbed into `REMED-GFX-005`/`-006` without confirming the hang shares their root cause) |
+| REMED-GFX-053 | WebGPU rejects custom-GLSL `ShaderEffect` content: `CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks` both fail (`shaderEffect->IsEffectValid()` false, no crash). Distinct from the same two tests' failure on Vulkan/Bgfx (there, `glslc`/`glslangValidator` are simply absent from this sandbox — an environment gap, not a code defect) — WebGPU consumes WGSL, not GLSL/SPIR-V, so the toolchain-absence explanation does not apply here; the actual root cause is unconfirmed (custom user-authored GLSL `ShaderEffect` content may simply not be implemented yet on this experimental backend) | MEDIUM | P2 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — WebGPU full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; root-cause triage needed; given `CLAUDE.md`'s own framing of WebGPU as an experimental backend with baseline SpriteBatch/Texture2D support and explicitly not yet full effect parity, this may belong in `plan_webgpu.md`'s own WEBGPU-* task series rather than the general GRAPHICS remediation lane — whoever triages should route it to the correct owner) |
+| REMED-GFX-054 | Three `ContentManagerSkinnedModelTest` cases (`PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`, `TextureLoadsFromNestedButUnderRootManifestDirectory`, `TextureLoadsFromManifestOutsideContentRoot`) throw `"CNA WebGPU: invalid index buffer upload"` on the WebGPU backend. No existing remediation ID covers WebGPU skinned-model index-buffer handling | MEDIUM-HIGH | P2 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — WebGPU full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; same WebGPU-experimental-backend routing question as `REMED-GFX-053` — triage owner should decide general GRAPHICS lane vs. `plan_webgpu.md`) |
+| REMED-BUILD-013 | `StrictXnaApiSurfaceCheck_Compile_Run` and `CnaInputTests` CTest registrations are missing the Wine-runner wrapper macro every other cross-compiled D3D9/D3D11 test uses — confirmed identically on both backends (`StrictXnaApiSurfaceCheck_Compile_Run` fails "unable to find an interpreter"; `CnaInputTests` fails `wine: ... CnaTests.exe: c0000135`, downstream of the same `CnaTests_NOT_BUILT` placeholder fact). `StrictXnaApiSurfaceCheck_Compile_Run` is registered in `cmake/Harnesses.cmake` via a plain `add_test(COMMAND cna_strict_xna_api_check)`; `CnaInputTests` is registered in `cmake/UnitTests.cmake` with a hardcoded `COMMAND CnaTests`, unconditional on cross-compiling. A structural CTest-wiring gap, not a backend-specific code defect | LOW | P3 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — D3D9/D3D11 Wine ctest runs | NOT STARTED — recorded, not fixed (verification-only pass; BUILD_TEST_CI-lane fix, cheap — candidate to bundle with `REMED-BUILD-010`/`-011` cleanup) |
 
 #### REMED-BUILD-010 detail
 
@@ -1408,6 +1597,67 @@ existing task.
 - **Scope note:** only this one CTest is affected project-wide (grep confirms
   `easygl_real_window_resize_test.cpp` is EasyGL's only real-OS-resize test; no equivalent test
   exists for other backends).
+- **Evidence extension, this integration pass:** the same real-compositor-vs-Xvfb sensitivity is
+  **not EasyGL-specific**. `Bgfx_DepthStencilState_CompareFunction` and
+  `Bgfx_SpriteFont_MultiGlyphSpacingNewline` showed the identical pattern (failed/timed out under
+  `DISPLAY=:0`, passed cleanly and repeatedly under `DISPLAY=:99`) during Phase 4 of the post-Wave-1
+  integration pass. Not re-scoped to a new ID — same root cause, same fix directions apply.
+
+#### REMED-CONTENT-009 detail (found during the post-Wave-1 integration pass)
+
+New code, not pre-existing: `REMED-CONTENT-001`'s own dimension-guard fix in
+`Texture2DContentTypeReader.cpp:88-89` computes
+`input.CheckDecodedByteSize(static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4, ...)`.
+The file's own comment at that fix's construction time claimed this was "computed in int64_t so it
+can't itself silently wrap back into range" — true for the multiplication of `width*height` alone,
+false once the `* 4` is applied: for `width`/`height` both near `INT32_MAX`, `width*height` (int64_t)
+reaches ≈4.6×10^18, still representable, but `* 4` overflows signed 64-bit (max ≈9.22×10^18).
+Confirmed live: `Texture2DContentTypeReaderTest.AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc`
+reliably triggers `UndefinedBehaviorSanitizer: runtime error: signed integer overflow: 4611686014132420609
+* 4 cannot be represented in type 'long int'` under `cmake-build-media-asan` (ASan+UBSan, HEADLESS).
+The regression test itself still passes today only because the implementation-defined post-overflow
+value happens to still land outside `CheckDecodedByteSize`'s valid range on this compiler/platform —
+not a guarantee. **Not fixed** (out of this verification-only pass's scope) — recommended for Wave 2's
+CONTENT lane given its location inside the CRITICAL-severity `REMED-CONTENT-001` validation path.
+
+#### REMED-GFX-052 detail (found during the post-Wave-1 integration pass)
+
+`Vulkan_SkinnedEffect_Fog` hangs reproducibly under CTest's 30s `TIMEOUT`. Confirmed not resource
+contention: reproduced identically re-run alone on an idle system (load average 0.46, 43°C). Confirmed
+not a CTest/environment artifact: reproduced identically invoking the underlying binary
+(`cna_test_vulkan_skinnedeffect_fog`) directly, bypassing CTest. Both hangs stop dead immediately after
+`[Vulkan] Backend initialised`, with zero further output — consistent with a hang inside pipeline/shader
+setup for this specific effect+fog combination, not a rendering-correctness defect. Distinct from
+`REMED-GFX-005` (Vulkan's fog *formula* is mirrored — a wrong-values defect, not a hang) — root cause
+not triaged further. **Not fixed** (out of this verification-only pass's scope).
+
+#### REMED-GFX-053 + REMED-GFX-054 detail (found during the post-Wave-1 integration pass)
+
+Both found on the WebGPU backend during Phase 4's configuration-matrix sweep. `REMED-GFX-053`:
+`CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks` fail
+(`shaderEffect->IsEffectValid()` returns false, no crash) — these same two tests also fail on
+Vulkan/Bgfx in this sandbox, but there the cause is confirmed to be the absence of a `glslc`/
+`glslangValidator` toolchain (environment gap, not a code defect). WebGPU consumes WGSL, not
+GLSL/SPIR-V, so that explanation does not transfer; root cause unconfirmed. `REMED-GFX-054`: three
+`ContentManagerSkinnedModelTest` cases throw `"CNA WebGPU: invalid index buffer upload"`. Neither was
+triaged to a root cause or fixed (out of this verification-only pass's scope). Given `CLAUDE.md`'s own
+description of the WebGPU backend as experimental with a 2D/SpriteBatch/Texture2D baseline and
+explicitly not yet at shader/effect parity with the established backends, whoever triages these should
+decide whether they belong in the general GRAPHICS remediation lane or in `plan_webgpu.md`'s own
+WEBGPU-* task series.
+
+#### REMED-BUILD-013 detail (found during the post-Wave-1 integration pass)
+
+`StrictXnaApiSurfaceCheck_Compile_Run` (registered in `cmake/Harnesses.cmake` via a plain
+`add_test(COMMAND cna_strict_xna_api_check)`) and `CnaInputTests` (registered in
+`cmake/UnitTests.cmake` with a hardcoded `COMMAND CnaTests`) both lack the Wine-runner wrapper macro
+every other cross-compiled D3D9/D3D11 CTest uses. Confirmed identically on both backends during Phase 4:
+`StrictXnaApiSurfaceCheck_Compile_Run` fails "unable to find an interpreter"; `CnaInputTests` fails
+`wine: ... CnaTests.exe: c0000135` (downstream of the same, already-understood `CnaTests_NOT_BUILT`
+placeholder fact — the full gtest suite isn't built for cross-compiled targets, so `CnaInputTests`'
+hardcoded `COMMAND CnaTests` has nothing valid to run). A CTest-wiring gap, not a backend code defect.
+**Not fixed** (out of this verification-only pass's scope) — cheap BUILD_TEST_CI-lane fix, candidate to
+bundle with `REMED-BUILD-010`/`-011` cleanup.
 
 ## Decisions log
 
