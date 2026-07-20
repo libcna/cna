@@ -748,3 +748,125 @@ TEST(SpriteBatchSortModeTest, BackToFrontSortsByDescendingLayerDepth)
     EXPECT_FLOAT_EQ(rec->drawCalls[2].layerDepth, 0.1f);
     EXPECT_EQ(rec->drawCalls[2].destinationRectangle.X, 10);
 }
+
+// -----------------------------------------------------------------------
+// REMED-GFX-003: DrawString's axis-direction tables are indexed by (int)effects, and
+// SpriteEffects is a composable [Flags] enum -- FlipHorizontally|FlipVertically (value 3) is a
+// real, reachable value. The pre-fix tables were sized for 3 entries only, an out-of-bounds
+// stack read for the combined value. Verified structurally: combined flip must mirror X the same
+// way FlipHorizontally alone does, and Y the same way FlipVertically alone does (FNA's own
+// axisDirX/axisIsMirroredX[3] == [1]'s values; axisDirY/axisIsMirroredY[3] == [2]'s values) --
+// rotation=0 keeps the two axes independent, so this cross-check needs no hand-computed numbers.
+// -----------------------------------------------------------------------
+
+namespace
+{
+    SpriteFont makeSingleGlyphFontWithBackend(
+        const std::shared_ptr<CNA::Internal::Backends::ITextureBackend>& texBackend)
+    {
+        Texture2D atlas = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+        std::vector<Rectangle> glyphs   = { Rectangle(0, 0, 8, 12) };
+        std::vector<Rectangle> cropping = { Rectangle(0, 0, 8, 12) };
+        std::vector<SharpRuntime::charcs> chars = { u'A' };
+        std::vector<Microsoft::Xna::Framework::Vector3> kern =
+            { Microsoft::Xna::Framework::Vector3(1.0f, 8.0f, 2.0f) };
+        return SpriteFont(atlas, glyphs, cropping, chars, /*lineSpacing=*/16, /*spacing=*/0.0f,
+                          kern, std::nullopt);
+    }
+
+    std::vector<RecordingSpriteBatchBackend::DrawCall> drawSingleCharWithEffects(
+        const SpriteFont& font, SpriteEffects effects)
+    {
+        auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+        RecordingSpriteBatchBackend* rec = backend.get();
+        SpriteBatch batch(std::move(backend));
+        batch.Begin();
+        batch.DrawString(font, std::string("A"), Vector2(10.0f, 20.0f), Color::White,
+                         0.0f, Vector2::Zero, 1.0f, effects, 0.0f);
+        batch.End();
+        return rec->drawCalls;
+    }
+}
+
+TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsXLikeHorizontalAlone)
+{
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    SpriteFont font = makeSingleGlyphFontWithBackend(texBackend);
+
+    auto horiz = drawSingleCharWithEffects(font, SpriteEffects::FlipHorizontally);
+    auto both  = drawSingleCharWithEffects(
+        font, SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically);
+
+    ASSERT_EQ(horiz.size(), 1u);
+    ASSERT_EQ(both.size(), 1u);
+    EXPECT_EQ(both[0].destinationRectangle.X, horiz[0].destinationRectangle.X);
+}
+
+TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsYLikeVerticalAlone)
+{
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    SpriteFont font = makeSingleGlyphFontWithBackend(texBackend);
+
+    auto vert = drawSingleCharWithEffects(font, SpriteEffects::FlipVertically);
+    auto both = drawSingleCharWithEffects(
+        font, SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically);
+
+    ASSERT_EQ(vert.size(), 1u);
+    ASSERT_EQ(both.size(), 1u);
+    EXPECT_EQ(both[0].destinationRectangle.Y, vert[0].destinationRectangle.Y);
+}
+
+TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipDiffersFromNone)
+{
+    // Sanity check that the combined value actually changes placement relative to None --
+    // guards against a fix that merely avoids the OOB read without applying real flip math.
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    SpriteFont font = makeSingleGlyphFontWithBackend(texBackend);
+
+    auto none = drawSingleCharWithEffects(font, SpriteEffects::None);
+    auto both = drawSingleCharWithEffects(
+        font, SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically);
+
+    ASSERT_EQ(none.size(), 1u);
+    ASSERT_EQ(both.size(), 1u);
+    EXPECT_NE(both[0].destinationRectangle.X, none[0].destinationRectangle.X);
+    EXPECT_NE(both[0].destinationRectangle.Y, none[0].destinationRectangle.Y);
+}
+
+// -----------------------------------------------------------------------
+// REMED-GFX-003: SpriteEffects flag operators (matches GestureType's established convention)
+// -----------------------------------------------------------------------
+
+TEST(SpriteEffectsOperatorsTest, OrCombinesFlags)
+{
+    const SpriteEffects combined = SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically;
+    EXPECT_EQ(static_cast<int>(combined), 3);
+}
+
+TEST(SpriteEffectsOperatorsTest, AndMasksFlags)
+{
+    const SpriteEffects combined = SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically;
+    EXPECT_EQ(combined & SpriteEffects::FlipHorizontally, SpriteEffects::FlipHorizontally);
+    EXPECT_EQ(combined & SpriteEffects::FlipVertically, SpriteEffects::FlipVertically);
+    EXPECT_EQ(SpriteEffects::FlipHorizontally & SpriteEffects::FlipVertically, SpriteEffects::None);
+}
+
+TEST(SpriteEffectsOperatorsTest, OrAssignCombinesInPlace)
+{
+    SpriteEffects effects = SpriteEffects::FlipHorizontally;
+    effects |= SpriteEffects::FlipVertically;
+    EXPECT_EQ(static_cast<int>(effects), 3);
+}
+
+TEST(SpriteEffectsOperatorsTest, AndAssignMasksInPlace)
+{
+    SpriteEffects effects = SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically;
+    effects &= SpriteEffects::FlipHorizontally;
+    EXPECT_EQ(effects, SpriteEffects::FlipHorizontally);
+}

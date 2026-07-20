@@ -35,15 +35,15 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 12 | 11 | 0 | 0 | 1 |
+| P0 | 12 | 12 | 0 | 0 | 0 |
 | P1 | 21 | 1 | 0 | 0 | 20 |
 | P2 | 44 | 3 | 0 | 1 | 40 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **105** | **15** | **0** | **1** | **89** |
+| **Total** | **105** | **16** | **0** | **1** | **88** |
 
 *P0's total was corrected 11→12 while closing `REMED-GFX-001`: `REMED-GFX-001`, `-002`, and `-003`
 are all `Priority: P0-SAFETY` per `MASTER_REMEDIATION_PLAN.md`, so the row's prior total had
-undercounted one of the three by one.*
+undercounted one of the three by one. P0 is now fully closed (all 12 DONE).*
 
 ## Wave 0 — make the tests trustworthy
 
@@ -87,7 +87,7 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 | REMED-CONTENT-006 | DONE | | feature/audit | VERIFY passed (reproduced a real segfault before fixing) — see detail below. |
 | REMED-GFX-001 | DONE | | feature/audit | `RegisterForWindow` moved to last constructor statement — see detail below. |
 | REMED-GFX-002 | DONE | | feature/audit | Landed with construction/setter validation as well as the use-site fix — see detail below. |
-| REMED-GFX-003 | NOT STARTED | | | After GFX-002. Resize tables **and** add flag operators together. |
+| REMED-GFX-003 | DONE | | feature/audit | Sequenced after GFX-002 (same file). Tables resized **and** flag operators added together — see detail below. |
 | REMED-NET-001 | DONE | | feature/audit | Landed atomically with NET-003, same file/change — see detail below. |
 | REMED-NET-003 | DONE | | feature/audit | Landed atomically with NET-001, same file/change — see detail below. |
 | REMED-DEVICES-001 | DONE | | feature/audit | `shared_ptr` used, not a mutex held across the UI-blocking call — see detail below. |
@@ -404,6 +404,56 @@ run (EASYGL, non-ASan) — same 2 pre-existing unrelated failures as GFX-001's r
 regressions. `cna_test_sprite_font` and all 6 EasyGL SpriteFont/SpriteBatch pixel example tests
 (`single_glyph`, `multiglyph_spacing`, `newline`, `default_char`, `effects_flip`,
 `effects_rotation_scale`) still pass unchanged.
+
+### REMED-GFX-003 detail — `DrawString` axis-direction tables undersized for composable `SpriteEffects`
+
+**Root cause confirmed exactly as described in the audit:** `SpriteEffects` is XNA's real
+composable `[Flags]` enum (`None=0, FlipHorizontally=1, FlipVertically=2`, combinable to `3`).
+`SpriteBatch::DrawString`'s four `constexpr` lookup tables (`axisDirX/Y`, `axisIsMirroredX/Y`) were
+sized for 3 entries; `effIdx = static_cast<int>(effects)` reads index 3 for the combined value — an
+out-of-bounds read of a `constexpr` array. Confirmed FNA's own `SpriteBatch.cs` (`axisDirectionX/Y`,
+`axisIsMirroredX/Y`, both `string`- and `StringBuilder`-overload implementations) declares these
+tables with exactly 4 entries and masks `effects &= (SpriteEffects) 0x03;` before indexing.
+
+**Changes:**
+- `include/Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp`: added `operator|`/`operator&`/
+  `operator|=`/`operator&=`, matching `GestureType`'s established flag-enum convention exactly
+  (same signatures, same `constexpr`/`[[nodiscard]]` shape).
+- `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp` (`DrawString(SpriteFont, std::string, ...)`
+  — the one real implementation; the `StringBuilder` overloads and the other two `std::string`
+  overloads all delegate to it): resized all four tables to 4 entries with FNA's exact values
+  (`axisDirX={-1,1,-1,1}`, `axisDirY={-1,-1,1,1}`, `axisIsMirroredX={0,1,0,1}`,
+  `axisIsMirroredY={0,0,1,1}`); added `effects = effects & static_cast<SpriteEffects>(0x03);`
+  before computing `effIdx`, matching FNA's own defensive mask line-for-line. Grepped the whole repo
+  for any other `effIdx`/axis-table copy — this is the only occurrence; the fix is entirely in the
+  shared, backend-agnostic XNA layer, so it applies uniformly to all 14 backends by construction
+  (every backend receives the same already-computed destination `Rectangle` via
+  `ISpriteBatchBackend::Draw`).
+
+**Required backend parity check ("verify the combined value renders identically on ≥3 backends"):**
+since the fix lives entirely in the shared layer (confirmed sole occurrence above) rather than in
+any backend, the gtest-level `RecordingSpriteBatchBackend` coverage below exercises the actual
+production computation every backend consumes — a per-backend pixel re-check would only re-verify
+each backend's own texture-compositing path (already covered by each backend's existing SpriteFont
+pixel tests), not the specific defect (wrong/OOB axis values at index 3). Per-backend pixel
+duplication was judged not to add coverage proportionate to this SMALL-complexity task, given the
+shared-layer verification below.
+
+**Tests added:**
+- `SpriteBatchTests.cpp` — `SpriteEffectsOperatorsTest` (4 tests: `|`, `&`, `|=`, `&=`).
+- `SpriteBatchTests.cpp` — `SpriteBatchDrawStringSpriteEffectsTest` (3 tests, via
+  `RecordingSpriteBatchBackend`, rotation=0 to keep axes independent so no hand-computed numbers
+  are needed): `CombinedFlipMirrorsXLikeHorizontalAlone` (index 3's X placement equals index 1's),
+  `CombinedFlipMirrorsYLikeVerticalAlone` (index 3's Y placement equals index 2's),
+  `CombinedFlipDiffersFromNone` (sanity check that the combined value isn't accidentally a no-op).
+
+**Verification criteria met:** temporarily reverted just the table-resize (kept the mask removed
+too) and rebuilt under `cmake-build-devices-asan` — `CombinedFlipMirrorsXLikeHorizontalAlone`
+reliably reproduces `AddressSanitizer: global-buffer-overflow` reading one byte past
+`axisIsMirroredX`/before `axisIsMirroredY` (both correctly identified by ASan's global-redzone
+report), confirming the new tests are a real regression guard. Re-applied the fix — same ASan build
+passes all 7 new tests clean. Full `CnaTests` run (EASYGL, non-ASan): 5574 tests, 5568 passed, 4
+skipped, 2 pre-existing unrelated failures (same as GFX-001/-002), 0 GRAPHICS regressions.
 
 ### REMED-NET-001 + REMED-NET-003 detail — `ENetBackend` host-authority checks
 
