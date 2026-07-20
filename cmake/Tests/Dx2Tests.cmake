@@ -139,4 +139,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX2")
     cna_dx2_ctest_command(_dx2_clipping_cmd cna_test_dx2_clipping)
     cna_register_backend_test(NAME Dx2_Clipping COMMAND ${_dx2_clipping_cmd}
         TIMEOUT 60 LABELS "DX2")
+
+    # Phase O7 (DX2-60..DX2-66): remaining IGraphicsBackend entry points genuinely unavailable at
+    # this DirectX era -- occlusion query, volume/cube textures, custom effects, instancing.
+    cna_dx2_test(cna_test_dx2_remaining_defaults examples/dx2_remaining_defaults_test.cpp)
+    cna_dx2_ctest_command(_dx2_remaining_defaults_cmd cna_test_dx2_remaining_defaults)
+    cna_register_backend_test(NAME Dx2_RemainingDefaults COMMAND ${_dx2_remaining_defaults_cmd}
+        TIMEOUT 60 LABELS "DX2")
 endif()

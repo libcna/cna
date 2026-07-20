@@ -1,16 +1,18 @@
 # DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
-> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phases O1-O6 are all done** —
+> **Status (2026-07-20): `DX2-0` spike complete, design settled. Phases O1-O7 are all done** —
 > CMake skeleton, 2D layer (verbatim port from `DX1`), Direct3D v2 device bring-up,
 > `VertexBuffer`/`IndexBuffer` backends, the CPU transform/clip pipeline + real
-> `DrawPrimitive`/`DrawIndexedPrimitive` submission, and full per-draw state mapping
-> (`ApplyRasterizerState`/`ApplyDepthStencilState`/`ApplyBlendState`/`ApplySamplerState`) are all
-> real and pixel-verified. **`SupportsCapability(GraphicsCapability::ThreeD)` now reports `true`**
-> — the full 3D pipeline that flag bundles (buffers, draws, depth/stencil clears, and state) is
-> genuinely complete. 16/16 `DX2`-labeled CTests pass, independently re-verified. Remaining:
-> Phase O7 (the few `IGraphicsBackend` entry points genuinely unavailable at this DirectX era —
-> occlusion query, volume/cube textures, custom effects, instancing) and Phase O8 (docs + full
-> `CnaTests` regression).
+> `DrawPrimitive`/`DrawIndexedPrimitive` submission, full per-draw state mapping
+> (`ApplyRasterizerState`/`ApplyDepthStencilState`/`ApplyBlendState`/`ApplySamplerState`), and the
+> remaining `IGraphicsBackend` entry points genuinely unavailable at this DirectX era (occlusion
+> query, volume/cube textures, custom effects, instancing — all satisfied by simply never
+> overriding the shared defaults, same as `DX1`/`DX3`) are all real, correct, and pixel-verified
+> where applicable. **`SupportsCapability(GraphicsCapability::ThreeD)` now reports `true`** — the
+> full 3D pipeline that flag bundles (buffers, draws, depth/stencil clears, and state) is
+> genuinely complete. 17/17 `DX2`-labeled CTests pass, independently re-verified. Remaining: Phase
+> O8 (docs + full `CnaTests` regression + `plan_dxold.md`/`docs/directx-legacy-backends-analysis.md`
+> updates).
 >
 > Owner's own words (translated from Czech): *"Now please implement DirectX 2, and it should be
 > able to do 3D as well (within what's possible)."* Unlike `DX1` (2D-only by construction — DX1
@@ -354,13 +356,13 @@ actually passing.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| `DX2-60` | `CreateOcclusionQuery()` → `nullptr` (inherited default — DX9-only feature per the analysis doc, not available at any version this backend targets) | ⬜ | |
-| `DX2-61` | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` → `nullptr` (inherited default; volume/cube textures are DX7/DX8+ per the analysis doc) | ⬜ | |
-| `DX2-62` | `CreateEffectBackend()` → `nullptr` (no programmable shaders exist at this DirectX era) | ⬜ | |
-| `DX2-63` | `SetRenderTargets` with 2+ bindings (MRT) → throw, matching `DX1-27` | ⬜ | |
-| `DX2-64` | `DrawInstancedPrimitivesEx` → throw (no instancing concept exists) | ⬜ | |
-| `DX2-65` | `ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`: real depth clear via `viewport->Clear(D3DCLEAR_ZBUFFER)`, stencil component accepted-and-ignored (decision 7's pattern — no real stencil buffer exists at this era) | ⬜ | |
-| `DX2-66` | `DebugSimulateContextLoss`/`DebugRestoreContext` → no-op, matching `DX1-69` | ⬜ | |
+| `DX2-60` | `CreateOcclusionQuery()` → `nullptr` (inherited default — DX9-only feature per the analysis doc, not available at any version this backend targets) | ✅ | Never overridden — satisfied entirely by the shared `IGraphicsBackend` default, same as `DX1`/`DX3`. Proven, not just claimed, by `Dx2_RemainingDefaults`. |
+| `DX2-61` | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` → `nullptr` (inherited default; volume/cube textures are DX7/DX8+ per the analysis doc) | ✅ | Same — never overridden. |
+| `DX2-62` | `CreateEffectBackend()` → `nullptr` (no programmable shaders exist at this DirectX era) | ✅ | Same — never overridden. |
+| `DX2-63` | `SetRenderTargets` with 2+ bindings (MRT) → throw, matching `DX1-27` | ✅ | Landed in Phase O2 alongside the rest of the 2D layer port; confirmed by `Dx2_GraphicsCapability`'s own `SetRenderTargets(count=2)` check. |
+| `DX2-64` | `DrawInstancedPrimitivesEx` → throw (no instancing concept exists) | ✅ | Never overridden — the shared default throws. |
+| `DX2-65` | `ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`: real depth clear via `viewport->Clear(D3DCLEAR_ZBUFFER)`, stencil component accepted-and-ignored (decision 7's pattern — no real stencil buffer exists at this era) | ✅ | Landed in Phase O3 (direct `Lock()`+fill on the Z-buffer, not `viewport->Clear()` — see `DX2-24`'s own note on why); confirmed by `Dx2_Device3DSmoke`'s Check C. |
+| `DX2-66` | `DebugSimulateContextLoss`/`DebugRestoreContext` → no-op, matching `DX1-69` | ✅ | Never overridden — the shared default is an empty no-op. Proven by `Dx2_RemainingDefaults`. |
 
 ## Phase O8 — Tests and documentation
 
