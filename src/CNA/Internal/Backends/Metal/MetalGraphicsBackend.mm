@@ -8,6 +8,7 @@
 #include "CNA/Internal/Backends/Metal/MetalUniformFill.hpp"
 #include "CNA/Internal/Backends/Metal/MetalVertexAttribFormat.hpp"
 #include "CNA/Internal/Backends/Metal/MetalVertexDescriptorPlan.hpp"
+#include "CNA/Internal/Backends/Metal/MetalSamplerFilter.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -664,30 +665,24 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
-    // Microsoft::Xna::Framework::Graphics::TextureFilter ordinals (TextureFilter.hpp):
-    // 0 Linear, 1 Point, 2 Anisotropic, 3 LinearMipPoint, 4 PointMipLinear,
-    // 5 MinLinearMagPointMipLinear, 6 MinLinearMagPointMipPoint,
-    // 7 MinPointMagLinearMipLinear, 8 MinPointMagLinearMipPoint.
+    // plan_metal.md: real bug found and fixed 2026-07-20 -- the previous implementation here used
+    // three independently-maintained case-set memberships (one per min/mag/mip axis), which had 3
+    // of the 9 real XNA TextureFilter values (3/6/7) wrong (min/mag component swapped or dropped
+    // relative to what each filter's own name specifies). The real per-filter logic now lives in
+    // the plain-C++ MetalSamplerFilter.hpp (no Objective-C, buildable and unit-tested on any
+    // platform without an Apple toolchain, unlike this translation to the real Metal enum type) --
+    // these three functions are now thin wrappers so the existing call site is unaffected.
     static MTLSamplerMinMagFilter metalMinFilter(int filter)
     {
-        switch (filter) {
-            case 1: case 4: case 6: case 8: return MTLSamplerMinMagFilterNearest;
-            default: return MTLSamplerMinMagFilterLinear;
-        }
+        return DescribeMetalSamplerFilter(filter).minIsPoint ? MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
     }
     static MTLSamplerMinMagFilter metalMagFilter(int filter)
     {
-        switch (filter) {
-            case 1: case 3: case 4: case 5: return MTLSamplerMinMagFilterNearest;
-            default: return MTLSamplerMinMagFilterLinear;
-        }
+        return DescribeMetalSamplerFilter(filter).magIsPoint ? MTLSamplerMinMagFilterNearest : MTLSamplerMinMagFilterLinear;
     }
     static MTLSamplerMipFilter metalMipFilter(int filter)
     {
-        switch (filter) {
-            case 1: case 3: case 6: case 8: return MTLSamplerMipFilterNearest;
-            default: return MTLSamplerMipFilterLinear;
-        }
+        return DescribeMetalSamplerFilter(filter).mipIsPoint ? MTLSamplerMipFilterNearest : MTLSamplerMipFilterLinear;
     }
     // Microsoft::Xna::Framework::Graphics::TextureAddressMode ordinals: 0 Wrap, 1 Clamp, 2 Mirror.
     static MTLSamplerAddressMode metalAddressMode(int mode)

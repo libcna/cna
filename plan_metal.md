@@ -1121,6 +1121,42 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     it says nothing about whether the backend itself actually compiles yet; that remains the very
     next thing to find out once this fix lands.
 
+46. **A genuinely serious real bug found and fixed in `TextureFilter`→min/mag/mip mapping, a ninth
+    real ✅**: continued the "cross-check every mapping table against the real reference
+    implementation" methodology that already caught the PBR sampler bug (item 44). The original
+    `metalMinFilter()`/`metalMagFilter()`/`metalMipFilter()` each independently maintained their own
+    `case 1: case X: case Y: ...` membership set — three separately-derived sets for what should be
+    one coherent per-filter table, and transcribing three sets independently is exactly the kind of
+    task where a single miscopied case number goes unnoticed. Verified programmatically (a small
+    Python script computing both the buggy table and the correct one, derived directly from each
+    XNA `TextureFilter` enumerator's own self-documenting name — e.g. `MinLinearMagPointMipPoint`
+    literally spells out min=Linear/mag=Point/mip=Point) against all 9 real filter values: **3 of
+    9 were wrong** — `LinearMipPoint` (3) had mag stuck at Point instead of Linear; `MinLinearMagPointMipPoint`
+    (6) had min and mag fully swapped; `MinPointMagLinearMipLinear` (7) had min stuck at Linear
+    instead of Point, silently degrading to plain `Linear` filtering. Cross-validated the corrected
+    table a second, independent way against `EasyGLGraphicsBackend::ApplySamplerState()`'s own
+    already-shipping GL filter table (read directly from its source) — full agreement on all 9
+    values. This would have produced visibly wrong texture filtering (either aliased/blocky where
+    smooth was requested, or blurry where sharp was requested, and no correct-vs-wrong sample point
+    to compare, since XNA's stock effects never touch these obscure filter modes but a game
+    directly setting `GraphicsDevice.SamplerStates[n]` to one of the 3 broken modes absolutely
+    could) for real, legitimate, documented XNA API usage — silently, with no crash or warning.
+
+    Following the same discipline as items 1–7 (the overnight extraction spree): rewrote the logic
+    as a single per-filter `switch` in the new plain-C++ `MetalSamplerFilter.hpp`
+    (`DescribeMetalSamplerFilter`) that spells out each filter's Min/Mag/Mip explicitly per case —
+    structurally harder to get wrong than three independently-derived membership sets, since each
+    case is self-contained and directly traceable to its own enumerator name. `metalMinFilter()`/
+    `metalMagFilter()`/`metalMipFilter()` are now thin wrappers, existing call site unaffected. 10
+    new tests, including one dedicated regression guard per previously-broken filter value (3/6/7)
+    and a structural "every Min*Mag* name is internally consistent" check across 5/6/7/8 together —
+    all pass on this Linux machine, full Metal-tagged `ctest` subset re-run afterward: 85/85 across
+    all 10 extracted/added headers, zero regressions. `TextureAddressMode`→`MTLSamplerAddressMode`
+    was checked the same way and confirmed already correct (matches `EasyGLGraphicsBackend`'s own
+    Wrap=0/Clamp=1/Mirror=2 mapping exactly) — not every table had a bug, this cross-check discipline
+    finds real problems specifically because it's applied uniformly, not because everything it
+    touches turns out broken.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1294,6 +1330,14 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   blocked on Phase 14 (custom `ShaderEffect`) — see narrative item 42 for the full reasoning (🟨→✅
   for the plain-C++ core, `METAL-14`/`26`/`27`, `.mm`-side glue stays 🟨 like every other
   Objective-C piece in this plan).
+- `TextureFilter`→min/mag/mip mapping (`METAL-1`) — a real, serious bug found by cross-checking
+  against `EasyGLGraphicsBackend`'s own reference table and each `TextureFilter` enumerator's own
+  self-documenting name: 3 of 9 real filter values (`LinearMipPoint`/`MinLinearMagPointMipPoint`/
+  `MinPointMagLinearMipLinear`) had a wrong min-or-mag component, one degrading silently to plain
+  `Linear` filtering. Rewritten as `MetalSamplerFilter.hpp`'s `DescribeMetalSamplerFilter()`, a
+  single self-contained per-filter table instead of three independently-derived membership sets —
+  a ninth genuinely real, fully-earned ✅ tier, 10 tests including a dedicated regression guard per
+  previously-broken value.
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -1373,7 +1417,7 @@ that replace it; do not re-derive scope from this table, use the phases:
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-1 | `ApplySamplerState(slot,filter,addressU,addressV,maxAnisotropy)` + `Impl::samplerFor()` cache (`TextureFilter`→min/mag/mip, `TextureAddressMode`→address mode, `Anisotropic`→`maxAnisotropy`), wired into `drawMetal3D` texture unit 0 | 🟨 |
+| METAL-1 | `ApplySamplerState(slot,filter,addressU,addressV,maxAnisotropy)` + `Impl::samplerFor()` cache (`TextureFilter`→min/mag/mip, `TextureAddressMode`→address mode, `Anisotropic`→`maxAnisotropy`), wired into `drawMetal3D` texture unit 0 | 🟨 **real bug found and fixed 2026-07-20** in the `TextureFilter`→min/mag/mip half — see narrative; `TextureAddressMode`→address mode cross-checked against `EasyGLGraphicsBackend`'s own mapping and confirmed already correct, no bug there |
 | METAL-2 | Wire the same cache into `MetalSpriteBatch::Draw()` via a new `SetSamplerAddressMode()` override (previously `filter_` was set but never read, and address mode had no override at all) | 🟨 |
 | METAL-3 | Extend sampler-slot consultation beyond unit 0 in `drawMetal3D` — needed once DualTextureEffect (Phase 5, unit 1) / EnvironmentMapEffect (Phase 6) / PBR (Phase 8, up to 4 map units) land | 🟨 **real bug found and fixed 2026-07-20**: `DualTextureEffect`/`EnvironmentMapEffect` already correctly consulted `samplerSlots[0]`/`[1]` per unit, but the `Pbr48`/`SkinnedPbr68` paths bound all 5 PBR texture units (base color/normal/metallic-roughness/emissive/occlusion) through a single `samplerSlots[0]` broadcast to every unit — confirmed as a real divergence by reading `EasyGLGraphicsBackend`'s own PBR binding code, which correctly uses a distinct GL sampler object per unit (`samplers_[0..4]`). Fixed to `samplerSlots[0..4]` respectively, matching the reference. `.mm`-only, so like every other fix in this plan, correct-on-inspection but genuinely unverified without a Mac — see narrative |
 | METAL-4 | Audit `TextureFilter::Anisotropic` mapping (min/mag/mip = Linear + `maxAnisotropy`) against real Apple GPU behavior — no surprising clamp/driver quirk | ⬜ |
