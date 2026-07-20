@@ -49,6 +49,23 @@ namespace CNA::Internal::Backends::Metal
                    enabled==o.enabled;
         }
     };
+    // plan_metal.md METAL-33: no eviction is implemented, and none is needed for a v1 backend --
+    // the key space is small and effectively bounded, the same reasoning EasyGLGraphicsBackend's
+    // own Prog3D relies on implicitly (a fixed struct field per shader variant instead of a hashed
+    // cache at all), just made explicit here since MetalPipelineCacheKey genuinely is a dynamic
+    // cache. `MetalPipelineKind` is a compile-time-fixed 15-value enum (this file's own
+    // declaration above); `MetalBlendKey`'s own theoretical space is much larger (each of 6 blend
+    // fields plus `enabled`), but in practice a real game only ever calls `ApplyBlendState()` with
+    // a handful of distinct `BlendState` combinations -- XNA's own 4 built-in presets
+    // (`Opaque`/`AlphaBlend`/`Additive`/`NonPremultiplied`) cover the overwhelming majority of real
+    // usage, plus whatever small number of custom `BlendState`s a specific game explicitly
+    // constructs. Even a pathologically blend-heavy game hitting a few dozen distinct
+    // `BlendState`s still caps this cache at kind-count × blend-count = a few hundred entries at
+    // most, each holding one lightweight `id<MTLRenderPipelineState>` reference -- not a real
+    // memory or lookup-cost concern. If a genuinely pathological case (e.g. a game that
+    // procedurally constructs thousands of distinct one-off `BlendState`s) is ever observed in
+    // practice, an LRU eviction policy would be the right NOXNA follow-up then, not something to
+    // design speculatively now.
     struct MetalPipelineCacheKey
     {
         MetalPipelineKind kind; MetalBlendKey blend;

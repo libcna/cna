@@ -1093,6 +1093,8 @@ struct MetalGraphicsBackend::Impl
     id<MTLDevice> device=nil;
     id<MTLCommandQueue> queue=nil;
     id<MTLLibrary> library=nil;
+    // plan_metal.md METAL-33: no eviction by design, not an oversight -- see
+    // MetalPipelineKey.hpp's own MetalPipelineCacheKey comment for the real bounded-size reasoning.
     std::unordered_map<PipelineCacheKey, id<MTLRenderPipelineState>, PipelineCacheKeyHash> pipelineCache;
     id<MTLDepthStencilState> depthState=nil;
     id<MTLSamplerState> sampler=nil;
