@@ -1456,6 +1456,280 @@ Bottleneck 1 in the dependency doc) is deliberately **not** pulled forward; it r
    whoever next touches D3D9/D3D11, or bundled with the already-deferred `REMED-BUILD-010`/`-011`
    cleanup.
 
+## Wave 2 — CONTENT lane (2026-07-20)
+
+**Scope determination (per this tranche's own explicit instruction — do not blindly implement every
+remaining CONTENT task):** read `MASTER_REMEDIATION_PLAN.md`, `REMEDIATION_INDEX.md`,
+`REMEDIATION_DEPENDENCIES.md`, and this file's own POST-WAVE-1 INTEGRATION BASELINE section in full
+before starting. The CONTENT lane's original 5-task scope (`REMEDIATION_INDEX.md`'s own count) is
+`REMED-CONTENT-001`/`-002`/`-003`/`-006` (all DONE, Wave 1) + `REMED-CONTENT-004` (P1, `PS: YES`,
+its sole documented dependency `REMED-BUILD-001` is DONE — unblocked). `REMED-CONTENT-009` (this
+pass's own new finding) was explicitly named the tranche's top priority by direct instruction.
+`REMED-CONTENT-007`/`-008` (also new findings, from `REMED-CONTENT-002`'s own sweep) are **not**
+placed in Wave 2 by either the frozen dependency doc (predates their discovery) or this file's own
+Wave 2 lane-order recommendation (which named only `REMED-CONTENT-009`+`REMED-CONTENT-004`) —
+**deliberately deferred, not implemented in this tranche**, per the instruction's own explicit
+conditional ("include ... only if the remediation dependency/progress files place them in this Wave
+2 tranche"). Recommend whoever schedules the next CONTENT tranche give them an explicit wave
+assignment; both are HIGH severity/P1 with no blocker, so Wave 2 is the natural home once
+triaged in.
+
+| ID | Status | Owner | Branch | Notes |
+|---|---|---|---|---|
+| REMED-CONTENT-009 | DONE | | feature/audit | Signed int64 overflow in `REMED-CONTENT-001`'s own decoded-byte-size arithmetic, plus 2 sibling readers + 1 additional int32_t overflow found via root-cause sweep — see detail below. Commit `c5ed8dd1`. |
+| REMED-CONTENT-004 | DONE | | feature/audit | Texture3D silently discarded all SetData/GetData calls on Software/Headless instead of failing cleanly — root cause differs from the plan's own hypothesis, see detail below. Commit `fa804b7d`. |
+| REMED-CONTENT-007 | DEFERRED | | | Not placed in Wave 2 by either frozen dependency doc or prior Wave-2 recommendation — see scope determination above. Remains `NOT STARTED`. |
+| REMED-CONTENT-008 | DEFERRED | | | Same as `-007`. Remains `NOT STARTED`. |
+
+### REMED-CONTENT-009 detail — signed int64 overflow in XNB texture decoded-size arithmetic
+
+**Root cause confirmed exactly as recorded in the post-Wave-1 integration pass's own finding:**
+`Texture2DContentTypeReader.cpp:88-89`'s `REMED-CONTENT-001` fix computed
+`static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4` — widening to `int64_t` is not
+sufficient on its own: two dimensions near `INT32_MAX` multiply to a value still representable in
+`int64_t` (~4.6×10^18), but the trailing `* 4` pushes the product past `INT64_MAX` (~9.22×10^18),
+which is undefined behavior in C++ (integer widening alone does not prevent the *subsequent*
+multiplication from overflowing). **Verification-before-fix (required for this task):** reverted
+just the fix (`git stash` on the 3 reader `.cpp` files + the not-yet-existing helper header),
+rebuilt `cmake-build-media-asan` (HEADLESS, ASan+UBSan), and confirmed live, in this session, that
+`Texture2DContentTypeReaderTest.AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc`
+(pre-existing test, width=height=`0x7FFFFFFF`) reliably triggers `UndefinedBehaviorSanitizer:
+runtime error: signed integer overflow: 4611686014132420609 * 4 cannot be represented in type 'long
+int'`, and that under `UBSAN_OPTIONS=halt_on_error=1` the test process genuinely aborts (exit 1, no
+gtest PASS/FAIL summary reached) rather than merely printing a warning — a real, halting failure
+against the pre-fix code, not just a theoretical finding.
+
+**Root-cause sweep (required by this task, not a new broad audit) found the same pattern in two
+sibling readers plus one more independent overflow, all fixed together as one root cause:**
+- `TextureCubeContentTypeReader.cpp:56-57`: `static_cast<int64_t>(size) * static_cast<int64_t>(size)
+  * 4` — the identical 2-factor-plus-multiplier shape. Confirmed live under UBSan (same recoverable
+  run): `runtime error: signed integer overflow: 4611686014132420609 * 4 cannot be represented in
+  type 'long int'`.
+- `Texture3DContentTypeReader.cpp:57-59`: `width * height * depth * 4` — one more factor than
+  Texture2DReader's own. Confirmed live under UBSan to be **more** fragile, not less: the
+  all-`0x7FFFFFFF` adversarial input fires **two independent overflow violations** in the same
+  expression (the `* depth` step, then the `* 4` step evaluated against an already-UB-corrupted
+  intermediate value) — `Texture3DContentTypeReader.cpp:58:72: ... 4611686014132420609 *
+  2147483647 ...` and `Texture3DContentTypeReader.cpp:57:35: ... 4611686024869838847 * 4 ...`.
+- `Texture3DContentTypeReader.cpp:117` (found during the sweep, not the original UBSan report): the
+  per-level `const int32_t voxelCount = width * height * depth;` is raw `int32_t` arithmetic with no
+  widening at all — a second, independent overflow risk in the same file, upstream-adjacent to but
+  distinct from the `CheckDecodedByteSize` call above it. Traced the invariant: this is transitively
+  bounded today by the (now-fixed) `CheckDecodedByteSize` call earlier in the same function, which
+  caps `width*height*depth*4` at `limits_.maxDecompressedSize` (256MB default, itself an `int32_t`
+  field so bounded by `INT32_MAX` even under an adversarially-configured custom limit) — meaning
+  `voxelCount` can never legitimately exceed `limits_.maxDecompressedSize/4`, always `< INT32_MAX`.
+  Rather than leave this correct-but-non-obviously-so (a future reader would need to trace back
+  through the function to see why it's safe), hardened it directly with the same
+  `CheckedMultiplyOrThrow()` + an explicit int32_t-range check, per this task's own "harden the
+  entire affected arithmetic path consistently, not just the one UBSan-triggering input" instruction.
+- **Reviewed and confirmed already safe, left unchanged (not silently skipped):**
+  Texture2DContentTypeReader.cpp's own downstream `pixelCount = levelWidth * levelHeight`
+  (line 170) is computed *after* the `REMED-CONTENT-001` per-axis `maxDim` check (default 16384),
+  so `pixelCount ≤ 16384² ≈ 2.68×10^8`, far under `INT32_MAX` (~2.15×10^9) — large margin, no
+  fix needed. TextureCubeContentTypeReader.cpp's own `pixelCount = faceSize * faceSize` (line 101)
+  is transitively bounded the same way `voxelCount` was (`≤ limits_.maxDecompressedSize/4`) — same
+  reasoning, but a 2-factor product has much more margin than Texture3D's 3-factor one, so left as a
+  pure raw-multiplication line without a redundant explicit re-check (asymmetric treatment
+  intentional: `voxelCount`'s 3-factor product was hardened because the sweep's own UBSan run showed
+  Texture3D's arithmetic to be measurably more overflow-fragile than the 2-factor siblings').
+  `ModelContentTypeReaders.cpp:143`'s `VertexBufferReader::Read` own `vertexCount * stride` product
+  (a genuinely unrelated file, checked because it matched a grep for the same `static_cast<int64_t>
+  ... *` shape): a true 2-factor product with **no** trailing multiplier, which cannot overflow
+  `int64_t` for `int32_t`-sourced inputs, and is already followed by its own explicit
+  `byteCount64 > INT32_MAX` bounds check before narrowing — already correct, not touched.
+
+**Changes:**
+- New `include/CNA/Internal/Xnb/XnbArithmetic.hpp` (header-only, matches
+  `CNA::Internal::PathContainment.hpp`'s established shared-helper convention): `CheckedMultiplyOrThrow(
+  std::initializer_list<int64_t> factors, const std::string& readerName)` multiplies a sequence of
+  non-negative `int64_t` factors via a division-based pre-check (`product > INT64_MAX / factor`,
+  guarded on `factor != 0`) before each multiplication, throwing `ContentLoadException` instead of
+  ever committing the overflow — the "prefer explicit checked arithmetic... division/subtraction-based
+  bounds checks over overflow-prone multiplication" approach this task's own instructions require.
+- `Texture2DContentTypeReader.cpp`, `TextureCubeContentTypeReader.cpp`: their own `CheckDecodedByteSize`
+  call sites now use `CheckedMultiplyOrThrow({...}, "...")` in place of raw `static_cast` chains.
+- `Texture3DContentTypeReader.cpp`: same for its own `CheckDecodedByteSize` call (4 factors); its
+  per-level `voxelCount` computation now goes through `CheckedMultiplyOrThrow({width, height, depth},
+  ...)` followed by an explicit `> INT32_MAX` guard before narrowing to `int32_t`.
+
+**Tests added:**
+- `tests/CNA/Internal/Xnb/XnbArithmeticTests.cpp` (new file, 11 cases): identity/single-factor/simple
+  product, any-zero-factor short-circuit, the exact 2-factor-then-`*4` overflow shape (matches
+  `REMED-CONTENT-009`'s own trigger), confirmation the 2-factor product *alone* (no `*4`) does **not**
+  over-reject, the 3-factor `Texture3DReader` shape, `INT64_MAX` boundary (`at-the-limit` does not
+  throw, `one-over` does), negative-factor rejection, and exception-message content.
+- `Texture2DContentTypeReaderTests.cpp`: `ZeroWidthThrowsContentLoadException`,
+  `ZeroHeightThrowsContentLoadException` (previously only negative width was tested — zero was an
+  explicit gap against this task's own required boundary list).
+- `Texture3DTextureCubeContentTypeReaderTests.cpp`: `Texture3DReaderAbsurdlyLargeDimensionsThrows...`,
+  `Texture3DReaderZeroWidthThrows...`, `Texture3DReaderZeroDepthThrows...`,
+  `TextureCubeReaderAbsurdlyLargeSizeThrows...`, `TextureCubeReaderZeroSizeThrows...` — the equivalent
+  overflow/zero-dimension coverage for the two sibling readers, previously entirely absent for these
+  cases in this file.
+
+**Verification:**
+- **Pre-fix reproduction (required, done first):** see root-cause-sweep section above — 4 separate
+  UBSan violations confirmed live across the 3 readers (Texture2D ×1, Texture3D ×2, TextureCube ×1)
+  before any fix was applied, via `git stash`.
+- **Post-fix, same build:** `Texture2DContentTypeReaderTest.*:Texture3DTextureCubeContentTypeReaderTest.*:
+  XnbArithmeticTest.*` (30 tests) under `UBSAN_OPTIONS=halt_on_error=1` — **28 passed, 2 failed, 0
+  sanitizer findings, process did not halt.** The 2 failures are the already-catalogued, unrelated
+  `REMED-CONTENT-004` defect (`TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd`,
+  `Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder`), confirmed to reproduce identically
+  with the fix reverted (i.e., not caused or masked by this fix either way).
+- **Broader Content/XNB ASan+UBSan sweep** (`*Content*:*Xnb*:*Texture*:*Cnj*`, `cmake-build-media-asan`):
+  662 tests, 659 passed, 3 failed. The 3 failures: the same 2 `REMED-CONTENT-004` cases plus
+  `CnjTexture3DTest.LoadsRealCnjFixture` (also already-catalogued under `REMED-CONTENT-004`'s own
+  evidence list). **2 new, unrelated sanitizer findings surfaced by this broader run, neither caused by
+  this task's changes** (confirmed: different files, different root-cause shapes, first time this
+  specific broad filter had been run under UBSan) — recorded as `REMED-GFX-055` and `REMED-NA-016`
+  above, not fixed (out of the CONTENT lane's scope: `IndexBuffer.cpp` is GRAPHICS-owned;
+  `third_party/cgltf/cgltf.h` is vendored third-party code).
+- **Fuzz/security regression re-run** (`XnbContainerFuzzTest.MutatedRealTexture2DFixtureNeverCrashesAndOnlyFailsCleanly`,
+  `XnbTypeNameTest.*` — the `REMED-CONTENT-001`/`REMED-CONTENT-006` regression suites): all pass clean
+  within the same broader sweep, confirming this fix doesn't disturb either sibling task's own
+  guarantees.
+- **Cross-backend verification** (the two backends `REMED-CONTENT-001` originally crashed on, plus one
+  more per this task's own instruction): rebuilt and ran the malformed-Texture2D fuzz test + this
+  task's own new tests (31 tests total) on **Vulkan** (llvmpipe software rasterizer — real Vulkan API
+  path, not a stub) — **31/31 pass**, including the fuzz test that used to `stack smashing detected`
+  before `REMED-CONTENT-001`; **WebGPU** — **31/31 pass**, including the fuzz test that used to
+  produce a non-catchable Rust panic; **Software** (third backend, CPU rasterizer) — **30/31 pass**,
+  the 1 non-pass being the same already-catalogued `REMED-CONTENT-004` case. No crash, no sanitizer
+  finding, clean `ContentLoadException` failure behavior, on any of the three.
+- **Full `CnaTests` suite** (EasyGL, default `cmake-build-debug`, `DISPLAY=:99`): **5844 registered**
+  (5826 post-Wave-1 baseline + 18 new tests from this task), **5839 passed, 5 failed.** 4 of the 5
+  failures reconcile exactly against the already-tracked pre-existing set
+  (`EasyGL_AvatarRenderer_TintRouting`, `EasyGL_MRT_TwoAttachments`,
+  `EasyGL_GraphicsDevice_ReferenceStencil`, `easy-gl-resource-smoke-tests`). The 5th,
+  `EasyGL_GraphicsDeviceManager_Vsync`, is a **new, unrelated finding** (recorded as
+  `REMED-BUILD-014` above) — Xvfb + software GL rendering cannot negotiate real vsync, a side effect
+  of this session's own switch to the `:99` virtual display (at the user's request, mid-session, to
+  stop disrupting their real desktop), not a code regression from this task: zero lines touched by
+  this fix have anything to do with vsync/`SwapInterval`. `EasyGL_RealWindowResize` (previously
+  failing under `DISPLAY=:0`, `REMED-BUILD-010`) now **passes** under `:99` — expected, not a
+  regression. **Zero regressions attributable to `REMED-CONTENT-009`'s own change.**
+
+**Completion criteria met:** the confirmed UB is removed from all three sibling XNB texture readers
+(not just the one UBSan flagged), the intermediate arithmetic itself is overflow-safe (not merely the
+final comparison), and the fix covers zero/max/near-boundary/malicious-mip/overflow/negative-factor
+input classes per this task's own required verification list.
+**Verification criteria met:** pre-fix UBSan reproduction confirmed live in this session (not just
+cited from the prior integration pass); post-fix UBSan-clean confirmed on the same build; the CRITICAL
+`REMED-CONTENT-001` remediation path (malformed-Texture2D fuzz test, both previously-crashing
+backends) remains fully functional; ASan+UBSan run over the full affected Content/XNB surface; full
+suite shows zero attributable regressions.
+
+### REMED-CONTENT-004 detail — Texture3D silently discarded SetData/GetData instead of failing cleanly
+
+**Root cause differs from the master plan's own hypothesis — recorded per instruction, not silently
+absorbed.** The plan's own Strategy text guessed an unvalidated size/stride calculation in the
+content reader, in the same class as `REMED-CONTENT-003`. Following the plan's own suggested
+isolation strategy ("run the reader test with a hand-constructed in-memory `Texture3D` bypassing the
+content reader"): confirmed the bug is neither in the reader nor in a stride calculation — it is in
+`Texture3D`'s own generic `SetData`/`GetData`, which only ever guarded on `backend_` being non-null
+before forwarding to it, and **two different backends leave `backend_` non-functional for two
+different reasons**:
+- **Software**: `SoftwareGraphicsBackend` never overrides `IGraphicsBackend::CreateTexture3D()`, so
+  it inherits the shared default (`return nullptr`). This is not an oversight — the backend's own
+  header already documented it: *"Cube-map render targets, Texture3D, and hardware occlusion queries
+  remain out of scope for v1 (plan_software.md Boundaries) — CreateRenderTargetCube/CreateTexture3D/
+  CreateOcclusionQuery all keep IGraphicsBackend's own shared default."*
+- **Headless**: `HeadlessGraphicsBackend::CreateTexture3D()` DOES return a real
+  `HeadlessTexture3DBackend` object (`backend_` is non-null) — but that object's own `SetData`/
+  `GetData` only validate arguments and call `state_->RecordTrace(...)`, never actually storing
+  anything. Confirmed this is backend-specific, not a Headless-wide policy: `HeadlessTextureBackend`
+  (2D) has a real `pixels_` member and genuinely stores/returns pixel data — Headless implements 2D
+  for real but never implemented 3D storage.
+
+Both shapes produce the identical observable symptom: `Texture3D::SetData()` silently succeeds and
+discards the data; `Texture3D::GetData()` silently succeeds and leaves the caller's buffer untouched
+— confirmed live (readback returned all-zero packed values on both backends, not garbage/random
+data, ruling out a stride/buffer-overrun bug). Confirmed EasyGL round-trips correctly (and, by
+inspection of `CreateTexture3D` overrides, so does every other backend that doesn't special-case
+`Texture3D` — only Headless/Software do).
+
+**Scope decision — did not implement real Texture3D storage for Software/Headless:** the master
+plan's own completion criteria ("Texture3D content round-trips correctly on every backend") reads as
+expecting a working implementation. Implementing real CPU-side volume-texture storage for two
+backends is a materially larger, `GRAPHICS`-flavored feature addition — and for Software specifically
+it would mean **unilaterally reversing an existing, explicitly documented v1 architectural scope
+boundary**, not a content-reader bug fix. Per this project's own "owner decision required" precedent
+(`REMED-GFX-035`, `REMED-CORE-011`, `REMED-BUILD-002` before its own resolution), this is flagged as
+a decision for the project owner, not made unilaterally inside a `MEDIUM`-complexity CONTENT task.
+**The fix implemented instead is the minimal, unambiguously-correct half: replace silent data loss
+with a clean, immediate, informative failure** — the same standard XNA-layer capability-query pattern
+this project already uses for `ThreeD`/`WireFrame`/etc.
+
+**Changes:**
+- `include/CNA/GraphicsCapability.hpp`: new `Texture3D` enum entry (real volume-texture storage —
+  `SetData`/`GetData` actually persist/retrieve pixels, not just validate arguments).
+- `src/Microsoft/Xna/Framework/Graphics/Texture3D.cpp`: constructor now checks
+  `device.SupportsCapability(CNA::GraphicsCapability::Texture3D)` and throws
+  `System::NotSupportedException` before touching the backend at all — placed immediately before the
+  existing `#ifdef CNA_BACKEND_D3D9` profile-ceiling check, matching that check's own style/exception
+  type exactly.
+- `HeadlessGraphicsBackend`/`SoftwareGraphicsBackend`: both gained a `SupportsCapability()` override
+  (neither had one before) returning `false` for `Texture3D`, `true` for everything else (matching
+  `EasyGLGraphicsBackend::SupportsCapability`'s own switch-with-default style). Every other backend
+  inherits `IGraphicsBackend`'s shared default (`true`), so the new constructor check is a **provable
+  no-op** for them — confirmed via full rebuild+test on EasyGL, Vulkan, and WebGPU.
+
+**Tests:**
+- `Texture3DTests.cpp`: the `Texture3DTest` fixture's `SetUp()` now `GTEST_SKIP()`s when the backend
+  lacks the capability — all 37 pre-existing tests are unchanged in meaning and still run fully on
+  every capable backend; they cleanly skip (not fail) on Software/Headless, matching this project's
+  own hardware-capability-skip convention. New
+  `Texture3DUnsupportedBackendTest.ConstructorThrowsNotSupportedExceptionWhenBackendLacksTexture3D`
+  is the mirror-image positive check (skips on capable backends; asserts the throw on incapable
+  ones) — without it, an incapable backend's run would prove nothing new actually happened.
+- `Texture3DTextureCubeContentTypeReaderTests.cpp`'s
+  `Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder` and `CnjTexture3DTests.cpp`'s
+  `LoadsRealCnjFixture` (the two tests the master plan's own evidence named) both now branch on
+  capability: assert the full real round-trip on capable backends (unchanged from before), assert a
+  clean `System::NotSupportedException` on incapable ones instead of asserting on now-meaningless
+  all-zero data.
+
+**Verification:**
+- **Software** full suite (`cmake-build-software`): 5606 tests, 3 failed — 2 pre-existing audio-timing
+  flakes (`DynamicSoundEffectInstanceTest.*`) + pre-existing `REMED-GFX-036` (`WireFrame`). **Zero
+  CONTENT-004-related failures** — the two originally-named tests both pass (via the new clean-throw
+  path).
+- **Headless** full suite (`cmake-build-headless`): 5607 tests, 2 failed — pre-existing `WireFrame` +
+  **one newly-recorded, separately-scoped finding**: `TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd`
+  still fails on Headless. Investigated: `HeadlessTextureCubeBackend` has the **identical**
+  "validates arguments, records a trace, never stores data" shape as `HeadlessTexture3DBackend` did —
+  same class of defect, but a genuinely different file/backend-type and outside `REMED-CONTENT-004`'s
+  own plan-declared `Affected files` (which name only `Texture3DContentTypeReader.cpp`/`Texture3D.cpp`).
+  Not silently folded into this task — recorded as `REMED-GFX-056` below, not fixed (`ITextureCubeBackend`
+  is GRAPHICS-owned).
+- **EasyGL** full suite (`cmake-build-debug`): 5845 tests, 6 failed — 3 already-tracked
+  (`EasyGL_AvatarRenderer_TintRouting`, `EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`),
+  1 already-recorded this session (`EasyGL_GraphicsDeviceManager_Vsync`, `REMED-BUILD-014`), 1
+  already-tracked out-of-scope (`easy-gl-resource-smoke-tests`), and **1 newly-observed, isolated
+  flake**: `GuideTest.RenderPendingKeyboardInputIsNoOpWhenNothingPending` — re-ran in isolation with
+  `--gtest_repeat=8`, **8/8 passed**, confirming a non-reproducible flake unrelated to this change
+  (Guide/keyboard-input rendering has nothing to do with Texture3D). Recorded, not chased further —
+  same general class as `REMED-TEST-008`'s already-documented flakiness.
+- **Vulkan**/**WebGPU** (Texture3D-filtered runs, 52 tests each): both **51 passed + 1 correctly
+  skipped** (`Texture3DUnsupportedBackendTest`, since both backends support `Texture3D`), **0
+  failed** — confirms the new capability check is a genuine no-op on capable backends.
+- **Environment note:** mid-verification, this sandbox's Xvfb `:99` process died (a resource/longevity
+  issue after many hours of window-creating test runs this session — unrelated to this change).
+  Produced one large, contiguous, easily-identified transient failure block (tests 636-2161, all
+  "`SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available`") on one Vulkan spot-check and one
+  EasyGL full-suite run. Restarted Xvfb, confirmed stable, and re-ran both to completion — every
+  figure recorded above is from the clean re-run.
+
+**Completion criteria met (for the scope actually implemented):** Texture3D content round-trips
+correctly on every backend that supports it (unchanged), and fails cleanly — never silently — on
+every backend that doesn't (new). Real storage on Software/Headless remains an explicit, flagged
+owner decision, not silently declared "done."
+**Verification criteria met:** both originally-named tests (`Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder`,
+`CnjTexture3DTest.LoadsRealCnjFixture`) now behave correctly — real data on capable backends, a clean
+exception on incapable ones — confirmed on Software, Headless, EasyGL, Vulkan, and WebGPU.
+
 ## Waves 2-5 — remaining tasks
 
 | ID | Pri | Status | Owner | Branch | Notes |
@@ -1563,11 +1837,15 @@ existing task.
 | REMED-TEST-008 | `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails under a full unfiltered `ctest -j4` run but passes 10/10 in isolation (`--gtest_filter` + `--gtest_repeat=10`) — a real-time audio buffer-starvation-count assertion is timing-sensitive under heavy 4-way parallel CPU load on this sandbox. Extends `REMED-NET-001`'s already-documented `ctest -j4` transient-failure finding (previously only `ENetDiscoveryServiceTest.*` ×4 and 2 `TwoProcessLoopbackTest`/`NetworkSessionTest` cases, all network-port contention) to a second, previously-undocumented flakiness class (audio timing, not networking) | LOW | P3 | REMED-BUILD-004 (establishing a full local `ctest -j4` baseline before designing the new CI job) | NOT STARTED — recorded, not fixed (test-reliability finding, not a production defect; `REMED-BUILD-004`'s own new CI job runs `ctest` serially specifically to avoid this and the already-known network-port class, rather than allowlisting either) |
 | REMED-CORE-014 | `GraphicsDeviceManager`'s private `ownsGraphicsDevice_` flag is initialized `false` in both constructors and never set `true` anywhere in `GraphicsDeviceManager.cpp` (confirmed by grep of the whole file, and independently by a live probe program: construct `Game` + `GraphicsDeviceManager(&game)`, subscribe to `getDeviceDisposingEvent()`, call `gdm->Dispose()` — the subscriber never fires). Both of `Dispose()`'s and `CreateDevice()`'s only conditional branches that raise `DeviceDisposing` and release the owned `GraphicsDevice` are therefore permanently dead code, for **every** `GraphicsDeviceManager` instance, not only the `Game`-attached case this entire codebase always constructs. This directly compounds `REMED-CORE-006`: even after `Game::Initialize()` subscribes to `DeviceDisposing` (that task's own stated fix strategy), a real `GraphicsDeviceManager::Dispose()` call on a `Game`-attached manager still would not raise the event without this dead-code path also being addressed — the CORE-lane owner should know this before scoping `REMED-CORE-006`'s fix as "just add the subscription" | HIGH | P1 | REMED-TEST-002 (investigating how to trigger `REMED-CORE-006`'s own required test, "dispose the device, assert `UnloadContent()` was called") | **DONE** — fixed atomically with `REMED-CORE-006`/`-007`, same root cause, same files. See "Wave 1 (parallel) — CORE lane" above. The `Game`-attached (non-owning) path's `DeviceDisposing` raise is no longer gated on `ownsGraphicsDevice_`; the standalone-owned-device path (still unreachable — `CreateDevice()` still throws when `game_ == nullptr`) remains a separate, unimplemented future feature, noted in that section. |
 | REMED-BUILD-012 | Any test that constructs a real window via `Game`+`GraphicsDeviceManager` on the D3D12 backend crashes identically under this dev environment's Wine+vkd3d-proton setup: `wine: Unhandled page fault on read access to 0000000000000000`, backtrace bottoming out in `vkd3d_instance_get_vk_instance(instance=nullptr)` inside `dxgi_factory_CreateSwapChainForHwnd` → `d3d12_swapchain_create` → `d3d12_swapchain_init` — real window-attached DXGI swap-chain creation crashing inside vanilla Wine's own `dxgi.dll`, confirmed identically for two independent test executables (a reused `DepthStencilState` test and a reused `RasterizerState`/scissor test). `cmake/Tests/D3D12Tests.cmake`'s own pre-existing comment on `cna_diag_d3d12_swapchain` already documented this exact crash for **one specific diagnostic tool** ("DX-100's own spike..."); this generalizes it to a blanket constraint — **no** D3D12 test using the public `Game`/`GraphicsDeviceManager`/real-window API can run in this dev loop at all, only `D3D12_Smoke`'s own deliberately off-screen (`window=nullptr`), much lower-level, hand-rolled internal-`EXT`-API style avoids it | HIGH | P1 | REMED-BUILD-008 (attempting to reuse D3D11's own backend-agnostic public-API test sources for D3D12) | NOT STARTED — recorded, not fixed (a Wine/vkd3d-proton dev-environment limitation, not a CNA code defect fixable in this repo; blocks `REMED-BUILD-008`/`REMED-GFX-014`/`REMED-GFX-015` from being verified via the public-API test style every other backend uses — whoever picks these up needs `D3D12_Smoke`'s own off-screen internal-`EXT` construction style instead, a substantially larger undertaking than a simple test-source reuse) |
-| REMED-CONTENT-009 | `Texture2DContentTypeReader.cpp:88-89`'s own `REMED-CONTENT-001` fix computes `input.CheckDecodedByteSize(static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4, "Texture2DReader")` — for `width`/`height` both near `INT32_MAX`, `width*height` (int64_t) reaches ≈4.6e18, still in-range, but the subsequent `* 4` overflows signed 64-bit (`int64_t` max ≈9.22e18): confirmed live by UBSan (`runtime error: signed integer overflow: 4611686014132420609 * 4 cannot be represented in type 'long int'`) on `Texture2DContentTypeReaderTest.AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc`. This directly contradicts the fix's own comment ("computed in int64_t so it can't itself silently wrap back into range"). The regression test still passes today only because the implementation-defined wraparound happens to still land outside the valid range — a different compiler/optimization level is not guaranteed to preserve that. **This is new code added by REMED-CONTENT-001 itself, not a pre-existing defect** — found only because this integration pass added UBSan coverage over Content/XNB that did not exist when CONTENT-001 landed | MEDIUM | P1 | Post-Wave-1 integration pass, Phase 5 (sanitizer regression) — `cmake-build-media-asan`, `Texture2DContentTypeReaderTest.*` under ASan+UBSan | NOT STARTED — recorded, not fixed (verification-only pass; recommend folding into Wave 2's CONTENT lane ahead of `REMED-CONTENT-004`, given it sits inside the CRITICAL-severity validation path CONTENT-001 itself closed) |
+| REMED-CONTENT-009 | `Texture2DContentTypeReader.cpp:88-89`'s own `REMED-CONTENT-001` fix computes `input.CheckDecodedByteSize(static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4, "Texture2DReader")` — for `width`/`height` both near `INT32_MAX`, `width*height` (int64_t) reaches ≈4.6e18, still in-range, but the subsequent `* 4` overflows signed 64-bit (`int64_t` max ≈9.22e18): confirmed live by UBSan (`runtime error: signed integer overflow: 4611686014132420609 * 4 cannot be represented in type 'long int'`) on `Texture2DContentTypeReaderTest.AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc`. This directly contradicts the fix's own comment ("computed in int64_t so it can't itself silently wrap back into range"). The regression test still passes today only because the implementation-defined wraparound happens to still land outside the valid range — a different compiler/optimization level is not guaranteed to preserve that. **This is new code added by REMED-CONTENT-001 itself, not a pre-existing defect** — found only because this integration pass added UBSan coverage over Content/XNB that did not exist when CONTENT-001 landed | MEDIUM | P1 | Post-Wave-1 integration pass, Phase 5 (sanitizer regression) — `cmake-build-media-asan`, `Texture2DContentTypeReaderTest.*` under ASan+UBSan | **DONE** — fixed in Wave 2's CONTENT lane (commit `c5ed8dd1`). See "Wave 2 — CONTENT lane" below for full detail. |
 | REMED-GFX-052 | `Vulkan_SkinnedEffect_Fog` hangs reproducibly (CTest 30s `TIMEOUT`) on the Vulkan backend — confirmed not resource contention (reproduces identically on an idle system, load avg 0.46, 43°C) and not a display/environment artifact (reproduces identically via direct binary execution of `cna_test_vulkan_skinnedeffect_fog`, bypassing CTest entirely). Both runs hang with zero output past `[Vulkan] Backend initialised`. Distinct root cause from `REMED-GFX-005` (mirrored fog *formula*, a values defect) — this is a hang, not a wrong-value defect, and no existing remediation ID covers it | HIGH | P1 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — Vulkan full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; needs root-cause triage before scheduling — candidate for the GRAPHICS lane's fog/skinned-effect work, but should not be silently absorbed into `REMED-GFX-005`/`-006` without confirming the hang shares their root cause) |
 | REMED-GFX-053 | WebGPU rejects custom-GLSL `ShaderEffect` content: `CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks` both fail (`shaderEffect->IsEffectValid()` false, no crash). Distinct from the same two tests' failure on Vulkan/Bgfx (there, `glslc`/`glslangValidator` are simply absent from this sandbox — an environment gap, not a code defect) — WebGPU consumes WGSL, not GLSL/SPIR-V, so the toolchain-absence explanation does not apply here; the actual root cause is unconfirmed (custom user-authored GLSL `ShaderEffect` content may simply not be implemented yet on this experimental backend) | MEDIUM | P2 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — WebGPU full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; root-cause triage needed; given `CLAUDE.md`'s own framing of WebGPU as an experimental backend with baseline SpriteBatch/Texture2D support and explicitly not yet full effect parity, this may belong in `plan_webgpu.md`'s own WEBGPU-* task series rather than the general GRAPHICS remediation lane — whoever triages should route it to the correct owner) |
 | REMED-GFX-054 | Three `ContentManagerSkinnedModelTest` cases (`PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`, `TextureLoadsFromNestedButUnderRootManifestDirectory`, `TextureLoadsFromManifestOutsideContentRoot`) throw `"CNA WebGPU: invalid index buffer upload"` on the WebGPU backend. No existing remediation ID covers WebGPU skinned-model index-buffer handling | MEDIUM-HIGH | P2 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — WebGPU full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; same WebGPU-experimental-backend routing question as `REMED-GFX-053` — triage owner should decide general GRAPHICS lane vs. `plan_webgpu.md`) |
 | REMED-BUILD-013 | `StrictXnaApiSurfaceCheck_Compile_Run` and `CnaInputTests` CTest registrations are missing the Wine-runner wrapper macro every other cross-compiled D3D9/D3D11 test uses — confirmed identically on both backends (`StrictXnaApiSurfaceCheck_Compile_Run` fails "unable to find an interpreter"; `CnaInputTests` fails `wine: ... CnaTests.exe: c0000135`, downstream of the same `CnaTests_NOT_BUILT` placeholder fact). `StrictXnaApiSurfaceCheck_Compile_Run` is registered in `cmake/Harnesses.cmake` via a plain `add_test(COMMAND cna_strict_xna_api_check)`; `CnaInputTests` is registered in `cmake/UnitTests.cmake` with a hardcoded `COMMAND CnaTests`, unconditional on cross-compiling. A structural CTest-wiring gap, not a backend-specific code defect | LOW | P3 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — D3D9/D3D11 Wine ctest runs | NOT STARTED — recorded, not fixed (verification-only pass; BUILD_TEST_CI-lane fix, cheap — candidate to bundle with `REMED-BUILD-010`/`-011` cleanup) |
+| REMED-GFX-055 | `IndexBuffer::SetData(unsigned short const*, int)` (`src/Microsoft/Xna/Framework/Graphics/IndexBuffer.cpp:61`) passes a null pointer to a parameter position UBSan reports as "declared to never be null" (both argument 1 and argument 2 independently reported) — confirmed live under UBSan via `ContentManagerSkinnedModelTest.PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`, reached through `ContentManager.cpp:2707`'s `SkinnedModelEXT` loader for a mesh part with zero indices. Almost certainly a `memcpy`/`std::copy`-family call receiving a null source and/or destination for a zero-length copy — technically UB per the C standard even though it is a no-op in every practical implementation, and likely reproducible for any skinned-model part with an empty index buffer, not only this one crafted fixture | MEDIUM | P2 | Wave 2 CONTENT lane, `REMED-CONTENT-009`'s own broader Content/XNB ASan+UBSan sweep (`*Content*:*Xnb*:*Texture*:*Cnj*` under `cmake-build-media-asan`) | NOT STARTED — recorded, not fixed (out of the CONTENT lane's scope — the defective code is in `IndexBuffer.cpp`, a GRAPHICS-owned file, even though it's reached via a CONTENT code path; GRAPHICS lane should own the fix, likely a null-guard before the copy call rather than a logic change) |
+| REMED-NA-016 | `third_party/cgltf/cgltf.h:2250` (`cgltf_component_read_float`) performs a misaligned 4-byte-aligned `float` load — confirmed live under UBSan via `GltfToCnjToolTest.ResolvesSparseAccessorOverride` (`load of misaligned address ... which requires 4 byte alignment`) | LOW | — | Wave 2 CONTENT lane, `REMED-CONTENT-009`'s own broader Content/XNB ASan+UBSan sweep | **OUT OF SCOPE, not fixed.** Vendored third-party header (`third_party/cgltf/`), not CNA-authored — same disposition as `REMED-NA-011`'s external easy-gl sibling repo: report upstream / patch only if a real crash (not just a UBSan advisory finding) is ever observed on a target where unaligned loads actually fault, rather than patching a vendored file and diverging from upstream |
+| REMED-BUILD-014 | `EasyGL_GraphicsDeviceManager_Vsync`'s `SynchronizeWithVerticalRetrace=true` check (`SDL_GL_GetSwapInterval()` expected non-zero) fails under Xvfb `:99` + software/llvmpipe GL rendering (`SDL_GL_GetSwapInterval()=0` even after enabling vsync) — the mirror-image case of `REMED-BUILD-010`'s already-documented real-compositor-vs-Xvfb sensitivity: that finding is tests that only pass under Xvfb, not a real compositor; this is a test that (per its own pre-existing passing history under `DISPLAY=:0`) needs a *real* display/compositor and fails specifically under Xvfb, since a virtual framebuffer has no real vertical-retrace timing to synchronize to. Surfaced only because this session switched test execution from `DISPLAY=:0` to Xvfb `:99` mid-task, at the user's request, to stop disrupting their real desktop session — not caused by any code change in this session | LOW | P3 | Wave 2 CONTENT lane's own full-suite regression run (`cmake-build-debug`, `DISPLAY=:99`), unrelated to any CONTENT-lane code change | NOT STARTED — recorded, not fixed (environment limitation, not a CNA code defect; BUILD_TEST_CI-lane concern — candidate directions: skip/mark this one CTest under a known-Xvfb-incompatible list, or document that a real display is required for vsync-specific tests, mirroring `REMED-BUILD-010`'s own eventual resolution) |
+| REMED-GFX-056 | `HeadlessTextureCubeBackend::SetData`/`GetData` (`src/CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.cpp`) validate arguments and record a trace but never actually store or return pixel data — the identical "validates but never stores" shape confirmed and fixed for `HeadlessTexture3DBackend` under `REMED-CONTENT-004`, but a different file/backend-type. Confirmed via `Texture3DTextureCubeContentTypeReaderTest.TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd` still failing on Headless after `REMED-CONTENT-004` landed (root-caused, not just observed: `HeadlessTextureBackend`, the 2D path, has a real `pixels_` member and genuinely stores data — Headless implements 2D texture storage for real but never implemented Cube storage) | MEDIUM | P2 | `REMED-CONTENT-004`'s own Headless full-suite verification run | NOT STARTED — recorded, not fixed (`ITextureCubeBackend` is GRAPHICS-owned, out of the CONTENT lane's scope; candidate fix mirrors `REMED-CONTENT-004`'s own: add `GraphicsCapability::TextureCube`, or extend a "real 2D storage but not Cube/3D" capability shape, and make `TextureCube`'s constructor fail cleanly on Headless the same way `Texture3D`'s now does) |
 
 #### REMED-BUILD-010 detail
 
