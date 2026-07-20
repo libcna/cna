@@ -242,6 +242,18 @@ if(CNA_BUILD_TESTS)
         elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX1")
+            # plan_dx2.md DX2-84 follow-up: this gap pre-dates DX2 (DX1 never got this wiring
+            # either, plan_dx1.md's own DX1-88 full-suite regression must have run CnaTests.exe
+            # directly through run-wine-dx1.sh by hand rather than via `ctest -L DX1`'s
+            # gtest_discover_tests(PRE_TEST) step) -- fixed here for both backends together, same
+            # skip-gate reasoning as D3D9/D3D11/D3D12 above (a bare --gtest_list_tests never opens
+            # a real DirectDraw object).
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX1_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx1.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX2")
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX2_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx2.sh")
         endif()
     endif()
 

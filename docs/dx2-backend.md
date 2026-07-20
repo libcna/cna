@@ -166,7 +166,51 @@ already-documented v1 scope boundary. This is measurably more than
 
 ## 10. Full `CnaTests` regression (`DX2-84`)
 
-See below (this section is filled in once the regression run completes).
+A full `CnaTests` run (all 5415 tests, not just the 17 dedicated `DX2` CTests) through Wine:
+**19 failed (1 confirmed a concurrency flake, independently re-verified as a clean pass in
+isolation — 18 genuine), 1 `Not Run`.**
+
+**Two real, pre-existing, cross-backend CMake/test-infrastructure gaps were found and fixed
+along the way** — this from-scratch MinGW + full `CnaTests` configuration had simply never been
+exercised via `ctest`'s own per-test discovery before (the same class of "never run this way
+before" gap `DX1-88` itself repeatedly found):
+
+1. `cmake/UnitTests.cmake` never wired a `CROSSCOMPILING_EMULATOR` for `DX1`'s or `DX2`'s own
+   `CnaTests` binary (`D3D9`/`D3D11`/`D3D12` already had one) — without it, `ctest`'s
+   `gtest_discover_tests(PRE_TEST)` step can't even enumerate tests under Wine. Fixed for both
+   backends together.
+2. `gtest_discover_tests` never set a `WORKING_DIRECTORY`, defaulting to the build directory
+   instead of the repo root — but roughly 140 test fixtures (`SongTest`/`MediaLibraryTestFixture`/
+   `PlaylistParserTest`/etc.) load real files via a path relative to the repo root, so every one
+   of them threw `FileNotFoundException` when ctest ran them from a non-repo-root cwd. Fixed by
+   pinning `WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"` — confirmed, by manually reproducing the
+   exact failure from the build directory, that this is a **genuine, universal gap affecting every
+   backend run this way, not a DX2 regression**.
+
+Also found and fixed two backend-list gaps of the exact same shape `DX1-1`/`DX3-27` already
+needed: `GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected` and
+`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` both lacked a
+`CNA_BACKEND_DX2` case.
+
+**Methodology finding, worth keeping for future full-suite regressions of this backend family**:
+running `ctest -j4` against a shared `WINEPREFIX` causes spurious failures/timeouts scattered
+across unrelated test categories — 2 `DX2` tests, 2 `GamerServices` tests, 1 audio test, and 1
+content-loading test all independently reproduced as clean, fast passes when run alone. `-j2`
+with a `--timeout` safety net is the practical balance between a fully-serial run's ~3-hour
+runtime and `-j4`'s contention; budget for a `ctest --rerun-failed` pass afterward rather than
+assuming every parallel failure is real.
+
+**Final 19 failures, categorized against `DX1-88`'s own precedent** (`docs/dx1-backend.md` §7a):
+
+| Category | Count | Notes |
+|---|---|---|
+| `MediaLibraryTestFixture`/`MediaLibrarySavePictureTest` | 7 | Pre-existing `CNA_FFMPEG_AVAILABLE=OFF` gap, matching `DX1-88`'s own ~6. |
+| `GraphicsDeviceCapabilityTest.SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects` | 3 | This test has **no backend gate at all** — the same pre-existing design `DX1-88` documented. Unlike `DX1`, `SupportsThreeD`/`SupportsDepthStencilBuffer` now correctly **pass** for `DX2`, since real 3D genuinely exists. |
+| `CnjTexture3DTest`/`CnjStockEffectTest`/`CnjEffectTest`/`XnbContainerFuzzTest.MutatedRealTexture2DFixture`/`Texture3DTextureCubeContentTypeReaderTest`×2 | 6 | Content genuinely requiring `Texture3D`/custom-effect support DX2 doesn't have by design — the content-pipeline code doesn't null-check `CreateTexture3D`'s `nullptr` return cleanly. A pre-existing content-pipeline robustness gap that would affect **any** nullptr-returning backend, not unique to DX2; out of this task's scope to fix. |
+| `AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly` | 1 | The **exact same test** `docs/dx1-backend.md` §7a already names as a pre-existing Windows/Wine non-ASCII-encoding quirk. |
+| `StrictXnaApiSurfaceCheck_Compile_Run` (`Not Run`) | 1 | A separate executable target never wired into the `CnaTests` build step — pre-existing, same category `DX1-88` also hit. |
+
+Zero DX2-caused failures remain unaccounted for.
 
 ## 11. Known permanent limitations
 

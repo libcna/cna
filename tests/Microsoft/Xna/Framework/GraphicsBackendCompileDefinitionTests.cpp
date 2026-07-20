@@ -58,6 +58,13 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_DX1
     ++enabled;
 #endif
+    // plan_dx2.md DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
+    // this file's history ever added a DX2 entry either, so the full CnaTests suite's first-ever
+    // run under CNA_GRAPHICS_BACKEND=DX2 (this regression pass) would have silently failed
+    // EXPECT_EQ(enabled, 1) the same way D3D9's did.
+#ifdef CNA_BACKEND_DX2
+    ++enabled;
+#endif
 #ifdef CNA_BACKEND_SDL_GPU
     ++enabled;
 #endif
