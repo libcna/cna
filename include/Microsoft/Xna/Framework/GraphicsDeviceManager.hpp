@@ -330,6 +330,7 @@ namespace Microsoft::Xna::Framework
         Game* game_;
         Graphics::GraphicsDevice* graphicsDevice_;
         bool ownsGraphicsDevice_;
+        bool deviceEventsSubscribed_;
         bool drawBegun_;
         bool disposed_;
         bool prefsChanged_;

@@ -36,14 +36,18 @@ disproved finding is a real result and should be recorded with the same rigor as
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
 | P0 | 12 | 12 | 0 | 0 | 0 |
-| P1 | 21 | 1 | 0 | 0 | 20 |
+| P1 | 21 | 3 | 0 | 0 | 18 |
 | P2 | 44 | 3 | 0 | 1 | 40 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **105** | **16** | **0** | **1** | **88** |
+| **Total** | **105** | **18** | **0** | **1** | **86** |
 
 *P0's total was corrected 11→12 while closing `REMED-GFX-001`: `REMED-GFX-001`, `-002`, and `-003`
 are all `Priority: P0-SAFETY` per `MASTER_REMEDIATION_PLAN.md`, so the row's prior total had
 undercounted one of the three by one. P0 is now fully closed (all 12 DONE).*
+
+*P1's Done count 1→3 reflects `REMED-CORE-006`/`-007` closing (see "Wave 1 (parallel) — CORE lane"
+below). `REMED-CORE-014` (a `Discovered during remediation` finding, not one of the 105 counted
+tasks) closed in the same change but is not part of this table.*
 
 ## Wave 0 — make the tests trustworthy
 
@@ -1109,6 +1113,165 @@ default suite on EasyGL and gates on it (fails on any name outside the tracked a
 **Verification criteria met:** classification script demonstrated to fail the job on a synthetic
 new/unexpected failure name, and to pass when only tracked names are present.
 
+## Wave 1 (parallel) — CORE lane
+
+**Wave-labeling note (recorded per the "Open decisions" instruction, since it affects scope):**
+`REMEDIATION_DEPENDENCIES.md`'s own Wave 2 section lists `REMED-CORE-001` (logging), `-004` (Color
+UB), and `-006`/`-007` (lifecycle) together, and its critical-path diagram places `TEST-002 ──▶
+CORE-006, CORE-007` after the Wave-1 unblockers. Read strictly, that puts zero CORE tasks in Wave 1.
+However: (a) the *only* documented blocker for `-006`/`-007` is `REMED-TEST-002` specifically ("Both
+production bugs currently have zero test coverage; there is no harness to verify a fix" —
+`REMEDIATION_DEPENDENCIES.md`'s own Hard-dependencies table), which is now DONE; (b) this matches
+exactly how `BUILD_TEST_CI`'s own Wave 1 was already operationalized in this same file (the
+"Wave 1 (parallel) — unblockers" section above runs `REMED-BUILD-004`/`-008`/`TEST-002`/`TEST-004` —
+none of them P0 — immediately once their own blockers clear, rather than waiting for a literal "Wave
+2" milestone); (c) `REMED-CORE-014` (discovered while implementing `TEST-002`) explicitly documents
+itself as blocking a real fix of `-006`. Grouped together (same root cause per the "if several
+findings share one root cause, fix the root cause once" instruction) and picked up now that their
+sole blocker is clear, following the established Wave-1-unblocker pattern rather than waiting for a
+separate Wave 2 milestone that would otherwise re-litigate the same three files. `REMED-CORE-001`
+and `REMED-CORE-004` have no such blocker (nothing in the dependency table names them as
+`TEST-002`-gated) and are **not** touched here — deferred to whoever picks up the CORE lane next,
+consistent with "do not opportunistically expand scope."
+
+| ID | Status | Owner | Branch | Notes |
+|---|---|---|---|---|
+| REMED-CORE-006 | DONE | | feature/audit | `Game::Initialize()` now subscribes `DeviceDisposing → UnloadContent()` and `DeviceCreated → LoadContent()` (deferred case), matching FNA `Game.cs:649-662` — see detail below. |
+| REMED-CORE-007 | DONE | | feature/audit | `GraphicsDeviceManager::CreateDevice()` now subscribes to the managed `GraphicsDevice`'s own `DeviceResetting`/`DeviceReset`, forwarding via `OnDeviceResetting`/`OnDeviceReset`; `ApplyChanges()`'s manual double-raise removed — see detail below. |
+| REMED-CORE-014 | DONE | | feature/audit | Landed atomically with `-006`/`-007`, same files, same root cause (see "Discovered during remediation" entry above, now closed) — see detail below. |
+
+### REMED-CORE-006 + REMED-CORE-007 + REMED-CORE-014 detail — Game/GraphicsDeviceManager lifecycle events
+
+**Why landed together:** `MASTER_REMEDIATION_PLAN.md`'s own `Cx / PS / Verify` field for both
+`-006` and `-007` says `CONDITIONAL — NO against` each other / `-009` ("same `Game.cpp`") and
+"coordinate with `REMED-CORE-006`" respectively — an atomic-pair-shaped constraint, not a
+suggestion. `REMED-CORE-014` is not separable from `-006` at all: `-006`'s own required test
+(`GameTest.DisposingDeviceInvokesUnloadContent`) cannot pass without `-014`'s fix, because
+`GraphicsDeviceManager::Dispose(bool)`'s `DeviceDisposing` raise was unconditionally gated behind
+`ownsGraphicsDevice_`, which is `false` for every `Game`-attached manager (the only configuration
+the codebase constructs) — `-006`'s subscription would have had nothing to ever invoke it.
+
+**Root causes confirmed exactly as described, plus one compounding gap found while implementing:**
+
+- **`REMED-CORE-006`:** `Game::Initialize()` (`Game.cpp:513-529`) never subscribed to
+  `graphicsDeviceService_->getDeviceDisposingEvent()`, unlike FNA's `Initialize()`
+  (`Game.cs:649-662`, `graphicsDeviceService.DeviceDisposing += (o,e) => UnloadContent();`).
+  Whole-repo grep confirmed `UnloadContent` had exactly 2 hits (declaration + empty default body,
+  zero call sites) before this fix.
+- **`REMED-CORE-014`** (compounding, discovered during `REMED-TEST-002`): `ownsGraphicsDevice_` is
+  initialized `false` in both `GraphicsDeviceManager` constructors and never set `true` anywhere —
+  confirmed by grep of the whole file. `Dispose(bool)`'s only branch that raised `DeviceDisposing`
+  was gated on this flag, making the raise permanently dead for the one configuration (`Game`-
+  attached) this whole codebase constructs. **Root cause is CNA-architectural, not a simple missed
+  flag-set:** unlike FNA (where `GraphicsDeviceManager` always constructs and owns its
+  `GraphicsDevice`), CNA's `Game` eagerly pre-owns its own `GraphicsDevice_` value member at
+  construction time, and a `Game`-attached `GraphicsDeviceManager` only ever points at it
+  (`graphicsDevice_ = &game_->getGraphicsDeviceProperty();`) — it is correctly non-owning by
+  design, so simply flipping `ownsGraphicsDevice_` to `true` would be wrong: `Dispose()` would then
+  `delete` a pointer into a `Game`-owned value member (not a heap allocation), which is memory
+  corruption. Confirmed this isn't reachable via the destructor-driven path either: `Game`'s member
+  destruction order runs `GraphicsDevice_`'s own `~GraphicsDevice()` (which raises `Disposing`)
+  *after* `Content_`/`Window_`/`LaunchParameters_`/`Services_` have already been destroyed, and
+  after any derived-class members (e.g. a demo's own `std::unique_ptr<GraphicsDeviceManager> gdm_`
+  member) have already been destroyed — and by that point in `~Game()`, the object's vtable has
+  already downgraded to `Game`'s own, so a virtual `UnloadContent()` call at that point would
+  silently resolve to the empty base stub, not any derived override. The fix therefore had to route
+  through the *explicit* `Dispose()`/`Dispose(true)` path (where the object is still fully "alive"
+  with its real derived vtable intact), matching exactly how the required test
+  (`GameTest.DisposingDeviceInvokesUnloadContent`) exercises it.
+- **`REMED-CORE-007`:** FNA's `IGraphicsDeviceManager.CreateDevice()` wires `graphicsDevice.
+  DeviceResetting += OnDeviceResetting; graphicsDevice.DeviceReset += OnDeviceReset;`
+  (`GraphicsDeviceManager.cs:556-557`) so that `ApplyChanges()`'s later `graphicsDevice.Reset(...)`
+  call (which raises the *device's* own events) is forwarded to the manager's public events purely
+  via that one-time subscription — FNA's `ApplyChanges()` itself never calls `OnDeviceResetting`/
+  `OnDeviceReset` directly. CNA instead had `ApplyChanges()` raise its own separate copies manually
+  around its own `applyToExistingBackend()` call, with no subscription at all — meaning a real
+  backend-detected device-lost/reset (`GraphicsDevice.cpp`'s `deviceEventCallback`, wired up today
+  only by the D3D9 backend, raising `GraphicsDevice::DeviceResetting`/`DeviceReset` directly) never
+  reached `GraphicsDeviceManager`'s own listeners at all.
+- **FNA-fidelity detail found while porting `-007` line-by-line:** FNA's own `OnDeviceDisposing`/
+  `OnDeviceReset`/`OnDeviceResetting` all re-send with `this` as sender rather than forwarding
+  whatever `sender` they were called with (`OnDeviceCreated` is the one exception — it does forward
+  its `sender`, an asymmetry present in the real FNA source, not a CNA invention). CNA's three
+  methods all forwarded the raw `sender` unchanged — invisible before this task because every prior
+  call site already passed `this` regardless, only becoming observable once forwarding from a real
+  `GraphicsDevice` (whose `sender` is the device, not the manager) was wired up. Fixed to match FNA
+  exactly; `OnDeviceCreated` deliberately left untouched (already correct).
+
+**Changes (`Game.cpp`, `GraphicsDeviceManager.cpp`/`.hpp` only):**
+- `Game::Initialize()`: subscribes `DeviceDisposing → UnloadContent()` unconditionally when a
+  service is registered; ports FNA's deferred-`LoadContent`-via-`DeviceCreated` branch too (full
+  fidelity with `Game.cs:649-662`, not just the cited `DeviceDisposing` line) — realistically
+  unreachable through the normal `Game`+`GraphicsDeviceManager` combination today (`DoInitialize()`
+  always calls `CreateDevice()` before `Initialize()`), but correct defensive behavior for any
+  `IGraphicsDeviceService` registered without going through that flow. The pre-existing
+  `LoadContent()`-called-immediately condition (`graphicsDeviceService_ == nullptr || ...device !=
+  nullptr`) is unchanged.
+- `GraphicsDeviceManager.hpp`/`.cpp`: new private `deviceEventsSubscribed_` flag (subscription
+  guard — `CreateDevice()` is public API and could otherwise be called again, accumulating
+  duplicate lambda subscriptions and double-forwarding every subsequent event; reset to `false`
+  alongside the existing owned-device teardown branch). `CreateDevice()` subscribes to
+  `graphicsDevice_->DeviceResetting`/`DeviceReset` *after* its own settle-in
+  `applyToExistingBackend()`/`Reset()` call, so initial device creation raises only `DeviceCreated`
+  on the manager (matching FNA, where a freshly-constructed device never raises `DeviceResetting`/
+  `DeviceReset`). `ApplyChanges()`'s manual `OnDeviceResetting`/`OnDeviceReset` calls removed (now
+  reached only via the forwarding subscription, avoiding a double-raise). `Dispose(bool)`: raises
+  `OnDeviceDisposing()` whenever `disposing && graphicsDevice_ != nullptr`, no longer gated on
+  `ownsGraphicsDevice_`; the actual `delete` stays gated on it (memory-safety requirement above);
+  `graphicsDevice_` is nulled and `deviceEventsSubscribed_` reset unconditionally afterward.
+  `OnDeviceDisposing`/`OnDeviceReset`/`OnDeviceResetting` re-send with `this`, matching FNA.
+
+**Tests added** (`tests/Microsoft/Xna/Framework/GameTests.cpp`,
+`GraphicsDeviceManagerTests.cpp`) — the two pre-existing `REMED-TEST-002` regression tests
+(`GameTest.DisposingDeviceInvokesUnloadContent`, `GraphicsDeviceManagerTest.
+BackendDetectedDeviceLostIsForwardedToManagerListeners`) now pass and had their stale
+"expected to fail" comments updated; 5 new tests: `GameTest.RepeatedDisposeDoesNotReinvokeUnloadContent`
+(no double-`UnloadContent` from a second explicit `Dispose()`, exercising FNA's own
+unconditional-`Disposed`-re-raise quirk that CNA's `Game::Dispose()` already faithfully has),
+`GameTest.UnloadContentWorksAcrossRepeatedGameInstancesInOneProcess` (2 full construct→run→dispose
+cycles in one process — no leftover static/global state), `GameTest.
+DeferredLoadContentFiresOnDeviceCreatedWhenServiceHasNoDeviceAtInitializeTime` (the deferred-
+`LoadContent` branch, via a minimal `IGraphicsDeviceService` test double since the normal
+`Game`+`GraphicsDeviceManager` path can't reach it), `GraphicsDeviceManagerTest.
+ForwardedDeviceEventsReportTheManagerAsSender` (the FNA-fidelity `sender` fix), `GraphicsDeviceManagerTest.
+RepeatedDisposeDoesNotReraiseDeviceDisposing` (no double-raise from a second `GraphicsDeviceManager::
+Dispose()`, independent of `Game`).
+
+**Verification:**
+- Focused run (`GameTest.*:GraphicsDeviceManagerTest.*:IGraphicsDeviceManagerTest.*`, EASYGL,
+  direct binary): 15/15 passed (was 8/10 before this change — the 2 known failures now pass).
+- Same focused run under ASan+UBSan (`cmake-build-devices-asan`): 15/15 passed, 0 sanitizer
+  findings — covers the lifecycle/ownership/exception-path/repeated-construction requirements this
+  task's brief called out explicitly (double-dispose, repeated `Game` instances, event-handler
+  observation during teardown).
+- Full `CnaTests` direct-binary run (EASYGL, **run from the repo root** — the binary has no baked
+  `WORKING_DIRECTORY` outside CTest's own `gtest_discover_tests` registration, so running it from
+  inside a build directory silently breaks every test using a repo-relative fixture path, e.g.
+  `MediaLibraryTestFixture`'s `tests/assets/media/...`; caught and corrected mid-session before
+  drawing any conclusions from the wrong-CWD run): **5579 tests, 5575 passed, 4 skipped, 0 failed**
+  — reconciles exactly with the prior baseline (5574 total / 5568 passed / 4 skipped / 2 known
+  failures) + 5 new tests, all passing: 5568 + 2 (now-fixed) + 5 (new) = 5575. Zero regressions
+  anywhere in the suite, including `MediaLibraryTestFixture`/`GamerServices`/`Net` and every other
+  lane's tests.
+
+**Completion criteria met:** `UnloadContent()` is invoked on device disposal, matching FNA's
+lifecycle (`-006`). All `GraphicsDevice` lifecycle events reach `IGraphicsDeviceService` listeners
+regardless of trigger (`-007`). `Dispose()`'s `DeviceDisposing` raise is no longer permanently dead
+code for the `Game`-attached configuration (`-014`).
+**Verification criteria met:** both tasks' required lifecycle-ordering/backend-triggered-reset tests
+pass; `ApplyChangesRaisesResettingAndResetExactlyOnce` (no double-raise) still passes; no double-
+dispose in either new repeated-`Dispose()` test.
+
+**Remaining CORE-lane gap, explicitly not addressed here (out of scope):** `GraphicsDeviceManager`'s
+no-`Game` constructor (`NOXNA GraphicsDeviceManager()`) still cannot ever reach a working owned
+device — `CreateDevice()` throws `std::runtime_error` immediately when `game_ == nullptr` and
+`graphicsDevice_ == nullptr`, so `ownsGraphicsDevice_` still can never become `true` through any
+reachable path today. This task's fixes make the `Game`-attached (non-owning) path correct and
+fully event-observable; a real standalone-owned-device implementation is a separate, materially
+larger feature (constructing a `GraphicsDevice` without a `Game`/window) not implied by `-006`/
+`-007`/`-014`'s own strategy text, and is left for a future task if the project ever needs a
+`Game`-less `GraphicsDeviceManager` to actually work.
+
 ## Waves 2-5 — remaining tasks
 
 | ID | Pri | Status | Owner | Branch | Notes |
@@ -1126,8 +1289,8 @@ new/unexpected failure name, and to pass when only tracked names are present.
 | REMED-CORE-003 | P2 | NOT STARTED | | | |
 | REMED-CORE-004 | P1 | NOT STARTED | | | |
 | REMED-CORE-005 | P2 | NOT STARTED | | | |
-| REMED-CORE-006 | P1 | NOT STARTED | | | |
-| REMED-CORE-007 | P1 | NOT STARTED | | | |
+| REMED-CORE-006 | P1 | DONE | | feature/audit | See "Wave 1 (parallel) — CORE lane" above. |
+| REMED-CORE-007 | P1 | DONE | | feature/audit | See "Wave 1 (parallel) — CORE lane" above. |
 | REMED-CORE-008 | P2 | NOT STARTED | | | |
 | REMED-CORE-009 | P2 | NOT STARTED | | | |
 | REMED-CORE-010 | P3 | NOT STARTED | | | |
@@ -1214,7 +1377,7 @@ existing task.
 | REMED-CONTENT-008 | `ContentManager.cpp` joins 8 `.cnj`/JSON-manifest-supplied path fields (`dataField->stringValue` for `Texture3D`; `vertRel`/`fragRel` for `ShaderEffect`; `clipFileField->stringValue` for `AnimationClip`; `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile` for skinned-model morph/animation data) onto the content root with no containment check — same `fs::path::operator/` pitfall as the 3 sites `-002` fixed, at file-supplied (not caller-supplied) untrusted strings | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; notably, this is the *same* `.cnj`-manifest subsystem that already has one field, `sourceFile`, correctly hardened via `CnjSourceFile.hpp` — these 8 fields were simply never given the same treatment) |
 | REMED-NET-008 | A "client"-role `NetworkSession`'s own incidental listening `ENetHost` (bound on every non-Emscripten `ConnectToHost()` call, so a peer can be promoted to host later via migration without rebinding — see `ENetHostHandle`'s own doc comment) still accepts and fully processes `ClientHello` from *any* third party that connects to it, not just its real host — `HandleClientHello` has no "am I actually supposed to be hosting anyone" check. A rogue peer can connect directly to a client's own bound port (`ENetBackend::GetBoundPort()` is non-zero for a client-role session too) and get a real `ServerWelcomeMessage` snapshotting that peer's own roster, plus get added as a real `NetworkGamer`/fire a real `GamerJoined` event on that peer's session — despite that peer never intending to host anyone | MEDIUM | P2 | REMED-NET-001 (host-authority audit sweep) | NOT STARTED — recorded, not fixed (distinct root cause from NET-001: `ClientHello` is not one of the four host-authoritative broadcast types NET-001 covers; this is a missing role-check on the *accept* side of a client-scoped session, not a missing sender-authority check on a broadcast-only message. Confirmed real via manual reasoning about `ConnectToHost`'s own non-Emscripten `StartHosting()` call and `HandleClientHello`'s unconditional accept — not separately reproduced with a new test, since fixing/proving it is out of this task's scope; the closest existing coverage is `ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer`, new in this task, which proves the same rogue-third-party-on-a-client-socket attack surface is real for the four NET-001 message types specifically) |
 | REMED-TEST-008 | `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails under a full unfiltered `ctest -j4` run but passes 10/10 in isolation (`--gtest_filter` + `--gtest_repeat=10`) — a real-time audio buffer-starvation-count assertion is timing-sensitive under heavy 4-way parallel CPU load on this sandbox. Extends `REMED-NET-001`'s already-documented `ctest -j4` transient-failure finding (previously only `ENetDiscoveryServiceTest.*` ×4 and 2 `TwoProcessLoopbackTest`/`NetworkSessionTest` cases, all network-port contention) to a second, previously-undocumented flakiness class (audio timing, not networking) | LOW | P3 | REMED-BUILD-004 (establishing a full local `ctest -j4` baseline before designing the new CI job) | NOT STARTED — recorded, not fixed (test-reliability finding, not a production defect; `REMED-BUILD-004`'s own new CI job runs `ctest` serially specifically to avoid this and the already-known network-port class, rather than allowlisting either) |
-| REMED-CORE-014 | `GraphicsDeviceManager`'s private `ownsGraphicsDevice_` flag is initialized `false` in both constructors and never set `true` anywhere in `GraphicsDeviceManager.cpp` (confirmed by grep of the whole file, and independently by a live probe program: construct `Game` + `GraphicsDeviceManager(&game)`, subscribe to `getDeviceDisposingEvent()`, call `gdm->Dispose()` — the subscriber never fires). Both of `Dispose()`'s and `CreateDevice()`'s only conditional branches that raise `DeviceDisposing` and release the owned `GraphicsDevice` are therefore permanently dead code, for **every** `GraphicsDeviceManager` instance, not only the `Game`-attached case this entire codebase always constructs. This directly compounds `REMED-CORE-006`: even after `Game::Initialize()` subscribes to `DeviceDisposing` (that task's own stated fix strategy), a real `GraphicsDeviceManager::Dispose()` call on a `Game`-attached manager still would not raise the event without this dead-code path also being addressed — the CORE-lane owner should know this before scoping `REMED-CORE-006`'s fix as "just add the subscription" | HIGH | P1 | REMED-TEST-002 (investigating how to trigger `REMED-CORE-006`'s own required test, "dispose the device, assert `UnloadContent()` was called") | NOT STARTED — recorded, not fixed (CORE-lane production defect, out of BUILD_TEST_CI's scope; `REMED-TEST-002`'s own `GameTest.DisposingDeviceInvokesUnloadContent` test already exercises the real, compounded failure end-to-end via `Game::Dispose()`, so no separate reproduction is needed for whoever picks this up) |
+| REMED-CORE-014 | `GraphicsDeviceManager`'s private `ownsGraphicsDevice_` flag is initialized `false` in both constructors and never set `true` anywhere in `GraphicsDeviceManager.cpp` (confirmed by grep of the whole file, and independently by a live probe program: construct `Game` + `GraphicsDeviceManager(&game)`, subscribe to `getDeviceDisposingEvent()`, call `gdm->Dispose()` — the subscriber never fires). Both of `Dispose()`'s and `CreateDevice()`'s only conditional branches that raise `DeviceDisposing` and release the owned `GraphicsDevice` are therefore permanently dead code, for **every** `GraphicsDeviceManager` instance, not only the `Game`-attached case this entire codebase always constructs. This directly compounds `REMED-CORE-006`: even after `Game::Initialize()` subscribes to `DeviceDisposing` (that task's own stated fix strategy), a real `GraphicsDeviceManager::Dispose()` call on a `Game`-attached manager still would not raise the event without this dead-code path also being addressed — the CORE-lane owner should know this before scoping `REMED-CORE-006`'s fix as "just add the subscription" | HIGH | P1 | REMED-TEST-002 (investigating how to trigger `REMED-CORE-006`'s own required test, "dispose the device, assert `UnloadContent()` was called") | **DONE** — fixed atomically with `REMED-CORE-006`/`-007`, same root cause, same files. See "Wave 1 (parallel) — CORE lane" above. The `Game`-attached (non-owning) path's `DeviceDisposing` raise is no longer gated on `ownsGraphicsDevice_`; the standalone-owned-device path (still unreachable — `CreateDevice()` still throws when `game_ == nullptr`) remains a separate, unimplemented future feature, noted in that section. |
 | REMED-BUILD-012 | Any test that constructs a real window via `Game`+`GraphicsDeviceManager` on the D3D12 backend crashes identically under this dev environment's Wine+vkd3d-proton setup: `wine: Unhandled page fault on read access to 0000000000000000`, backtrace bottoming out in `vkd3d_instance_get_vk_instance(instance=nullptr)` inside `dxgi_factory_CreateSwapChainForHwnd` → `d3d12_swapchain_create` → `d3d12_swapchain_init` — real window-attached DXGI swap-chain creation crashing inside vanilla Wine's own `dxgi.dll`, confirmed identically for two independent test executables (a reused `DepthStencilState` test and a reused `RasterizerState`/scissor test). `cmake/Tests/D3D12Tests.cmake`'s own pre-existing comment on `cna_diag_d3d12_swapchain` already documented this exact crash for **one specific diagnostic tool** ("DX-100's own spike..."); this generalizes it to a blanket constraint — **no** D3D12 test using the public `Game`/`GraphicsDeviceManager`/real-window API can run in this dev loop at all, only `D3D12_Smoke`'s own deliberately off-screen (`window=nullptr`), much lower-level, hand-rolled internal-`EXT`-API style avoids it | HIGH | P1 | REMED-BUILD-008 (attempting to reuse D3D11's own backend-agnostic public-API test sources for D3D12) | NOT STARTED — recorded, not fixed (a Wine/vkd3d-proton dev-environment limitation, not a CNA code defect fixable in this repo; blocks `REMED-BUILD-008`/`REMED-GFX-014`/`REMED-GFX-015` from being verified via the public-API test style every other backend uses — whoever picks these up needs `D3D12_Smoke`'s own off-screen internal-`EXT` construction style instead, a substantially larger undertaking than a simple test-source reuse) |
 
 #### REMED-BUILD-010 detail
@@ -1256,6 +1419,7 @@ Owner decisions required by the plan, plus any scope calls made during implement
 | _(none yet)_ | `REMED-CORE-011` | Implement `CNA::Runtime` or delete it? | pending |
 | _(none yet)_ | `REMED-BUILD-007` | Is `CNA::Internal::Net`'s MIT licensing deliberate? | pending |
 | 2026-07-20 | `REMED-BUILD-010`, `REMED-BUILD-011` | **Deferred to Wave 2, not pulled into Wave 1.** Both are genuinely real, already-recorded findings (Wave 0/`REMED-DEVICES-001` respectively), but both are **P2** and neither `MASTER_REMEDIATION_PLAN.md` nor `REMEDIATION_DEPENDENCIES.md` lists either as blocking any Wave 1 task — the dependency file's own Wave 1 description names exactly four BUILD_TEST_CI starters (`REMED-BUILD-004`, `REMED-BUILD-008`, `REMED-TEST-002`, `REMED-TEST-004`, all P1), and neither BUILD-010 nor BUILD-011 appears in the "Hard dependencies" table as a blocker for anything. Per this task's own explicit instruction ("Do not assume either belongs to Wave 1 until you verify the plan and dependencies" / "Do not pull later-wave tasks forward without justification"), both remain `NOT STARTED`, scheduled at their assigned P2 priority in Waves 2-5. | Claude (autonomous remediation session, user-directed) |
+| 2026-07-20 | `REMED-CORE-006`, `-007`, `-014` | **Picked up now, despite `REMEDIATION_DEPENDENCIES.md` narratively listing `-006`/`-007` under "Wave 2."** Their only documented hard blocker is `REMED-TEST-002` (now DONE); no other Wave-1/Wave-2 gate applies to them specifically. Treated the same way `BUILD_TEST_CI`'s own non-P0 Wave-1 unblockers (`REMED-BUILD-004`/`-008`/`TEST-002`/`TEST-004`) were already treated in this file — started as soon as their blocker cleared, not held for a literal wave boundary. `REMED-CORE-001`/`-004` (also nominally "Wave 2," no `TEST-002` dependency) were **not** pulled forward — no blocker justifies moving them early. Full rationale in "Wave 1 (parallel) — CORE lane." | Claude (autonomous CORE-lane session, user-directed) |
 | 2026-07-20 | `REMED-BUILD-002` | **Yes — the copy step is obsolete, deleted outright (not guarded, not backfilled with a real `Content/` dir).** Investigated `examples/demo_xact/src/XactFileGen.hpp` + `XactDemo.cpp`: `XactDemo::LoadContent()` calls `GenerateXactFiles("Content/Audio")`, which itself calls `std::filesystem::create_directories(audioDir)` and then `XactFileGen::SaveFile()`s a freshly synthesized `Waves.xwb`/`Demo.xgs`/`Sounds.xsb` (sine-wave PCM + minimal XGS/XWB/XSB binaries matching `XactParser.cpp`'s expected layout) directly into that runtime-relative directory — no pre-existing `.xwb`/`.xgs`/`.xsb` asset is ever read from disk. `examples/demo_xact/` contains only `src/` (confirmed: no `Content/` anywhere in the repo, matching the audit finding). The POST_BUILD `copy_directory` in `cmake/Examples.cmake` therefore copied a directory that never existed and could never usefully exist — deleting it is strictly correct, not a stopgap. | Claude (autonomous remediation session, user-directed) |
 
 ## Findings that did not reproduce

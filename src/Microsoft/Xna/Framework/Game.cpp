@@ -522,9 +522,27 @@ namespace Microsoft::Xna::Framework
         }
 
         graphicsDeviceService_ = Services_.GetService<Graphics::IGraphicsDeviceService>();
+
+        if (graphicsDeviceService_ != nullptr)
+        {
+            // REMED-CORE-006: FNA's Initialize() (Game.cs:649-662) subscribes
+            // graphicsDeviceService.DeviceDisposing += (o,e) => UnloadContent(); -- CNA never
+            // performed this subscription, so the documented UnloadContent() lifecycle hook was
+            // dead code under every circumstance.
+            graphicsDeviceService_->getDeviceDisposingEvent() +=
+                [this](System::Object*, const System::EventArgs&) { UnloadContent(); };
+        }
+
         if (graphicsDeviceService_ == nullptr || graphicsDeviceService_->getGraphicsDeviceProperty() != nullptr)
         {
             LoadContent();
+        }
+        else
+        {
+            // FNA fidelity: a registered IGraphicsDeviceService whose device is not yet available
+            // defers LoadContent() until DeviceCreated fires, rather than skipping it.
+            graphicsDeviceService_->getDeviceCreatedEvent() +=
+                [this](System::Object*, const System::EventArgs&) { LoadContent(); };
         }
     }
 

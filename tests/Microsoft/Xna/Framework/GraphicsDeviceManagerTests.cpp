@@ -91,20 +91,14 @@ TEST(GraphicsDeviceManagerTest, ApplyChangesRaisesResettingAndResetExactlyOnce)
     EXPECT_EQ(resetCount, 1);
 }
 
-// REMED-CORE-007: GraphicsDeviceManager never subscribes to GraphicsDevice's own DeviceResetting/
-// DeviceReset events. FNA's IGraphicsDeviceManager.CreateDevice() wires
-// graphicsDevice.DeviceResetting += OnDeviceResetting; graphicsDevice.DeviceReset += OnDeviceReset;
-// -- CNA instead raises its own separate copies manually, only around its own
-// applyToExistingBackend() call (see ApplyChangesRaisesResettingAndResetExactlyOnce above). A real
-// backend-detected device-lost/reset (GraphicsDevice's own deviceEventCallback seam, currently wired
-// up only by the D3D9 backend) raises GraphicsDevice::DeviceResetting/DeviceReset directly and is
-// never forwarded to GraphicsDeviceManager's listeners at all. Simulated here by raising those
+// REMED-CORE-007 (fixed): CreateDevice() now subscribes graphicsDevice_->DeviceResetting/
+// DeviceReset, forwarding to this manager's own OnDeviceResetting()/OnDeviceReset(), matching FNA's
+// IGraphicsDeviceManager.CreateDevice() (graphicsDevice.DeviceResetting += OnDeviceResetting;
+// graphicsDevice.DeviceReset += OnDeviceReset;). A real backend-detected device-lost/reset
+// (GraphicsDevice's own deviceEventCallback seam, currently wired up only by the D3D9 backend)
+// raises GraphicsDevice::DeviceResetting/DeviceReset directly -- simulated here by raising those
 // events directly on the managed GraphicsDevice instance, which is exactly what that callback does
-// on a real device-lost -- this does not require D3D9 hardware to reproduce the forwarding gap.
-//
-// This test is EXPECTED TO FAIL until REMED-CORE-007 is fixed (CORE lane, not this task) -- it
-// exists to prove the defect is real and reachable, and becomes the regression guard once fixed.
-// Not fixed here per this task's strict scope.
+// on a real device-lost, without requiring D3D9 hardware.
 TEST(GraphicsDeviceManagerTest, BackendDetectedDeviceLostIsForwardedToManagerListeners)
 {
     if (!VideoSubsystemAvailable())
@@ -129,10 +123,60 @@ TEST(GraphicsDeviceManagerTest, BackendDetectedDeviceLostIsForwardedToManagerLis
     device->DeviceResetting.Raise(device, System::EventArgs::Empty);
     device->DeviceReset.Raise(device, System::EventArgs::Empty);
 
-    EXPECT_EQ(resettingCount, 1)
-        << "REMED-CORE-007: GraphicsDeviceManager never subscribed to GraphicsDevice::DeviceResetting, "
-           "so a backend-detected device-lost never reaches IGraphicsDeviceService listeners.";
-    EXPECT_EQ(resetCount, 1)
-        << "REMED-CORE-007: GraphicsDeviceManager never subscribed to GraphicsDevice::DeviceReset, "
-           "so a backend-detected device reset never reaches IGraphicsDeviceService listeners.";
+    EXPECT_EQ(resettingCount, 1);
+    EXPECT_EQ(resetCount, 1);
+}
+
+// FNA fidelity detail: GraphicsDeviceManager's OnDeviceResetting/OnDeviceReset/OnDeviceDisposing
+// all re-send with `this` as sender rather than forwarding whatever sender they were called with
+// (an asymmetry present in the real FNA source -- OnDeviceCreated is the one exception, which does
+// forward its sender). This only became observable once forwarding from the managed GraphicsDevice
+// was wired up (REMED-CORE-007) -- previously every call site already passed `this` regardless.
+TEST(GraphicsDeviceManagerTest, ForwardedDeviceEventsReportTheManagerAsSender)
+{
+    if (!VideoSubsystemAvailable())
+    {
+        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+    }
+
+    OneFrameGame game;
+    GraphicsDeviceManager gdm(&game);
+    ASSERT_NO_THROW(game.Run());
+
+    Graphics::GraphicsDevice* device = gdm.getGraphicsDeviceProperty();
+    ASSERT_NE(device, nullptr);
+
+    System::Object* resettingSender = nullptr;
+    System::Object* resetSender = nullptr;
+    gdm.getDeviceResettingEvent() += [&](System::Object* sender, const System::EventArgs&) { resettingSender = sender; };
+    gdm.getDeviceResetEvent() += [&](System::Object* sender, const System::EventArgs&) { resetSender = sender; };
+
+    device->DeviceResetting.Raise(device, System::EventArgs::Empty);
+    device->DeviceReset.Raise(device, System::EventArgs::Empty);
+
+    EXPECT_EQ(resettingSender, static_cast<System::Object*>(&gdm));
+    EXPECT_EQ(resetSender, static_cast<System::Object*>(&gdm));
+}
+
+// REMED-CORE-014 regression guard: a second explicit Dispose() call must not re-raise
+// DeviceDisposing (GraphicsDeviceManager::Dispose(bool)'s disposed_ guard makes the whole method
+// idempotent, independent of ownsGraphicsDevice_).
+TEST(GraphicsDeviceManagerTest, RepeatedDisposeDoesNotReraiseDeviceDisposing)
+{
+    if (!VideoSubsystemAvailable())
+    {
+        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+    }
+
+    OneFrameGame game;
+    GraphicsDeviceManager gdm(&game);
+    ASSERT_NO_THROW(game.Run());
+
+    int disposingCount = 0;
+    gdm.getDeviceDisposingEvent() += [&](System::Object*, const System::EventArgs&) { ++disposingCount; };
+
+    gdm.Dispose();
+    ASSERT_NO_THROW(gdm.Dispose());
+
+    EXPECT_EQ(disposingCount, 1);
 }

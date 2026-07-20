@@ -36,6 +36,7 @@ namespace Microsoft::Xna::Framework
         : game_(nullptr),
           graphicsDevice_(nullptr),
           ownsGraphicsDevice_(false),
+          deviceEventsSubscribed_(false),
           drawBegun_(false),
           disposed_(false),
           prefsChanged_(true),
@@ -237,11 +238,13 @@ namespace Microsoft::Xna::Framework
             );
         }
 
-        OnDeviceResetting(this, System::EventArgs::Empty);
-
+        // REMED-CORE-007: applyToExistingBackend() below calls GraphicsDevice::Reset(), which
+        // raises the device's own DeviceResetting/DeviceReset. CreateDevice() subscribes this
+        // manager to those events and forwards them via OnDeviceResetting()/OnDeviceReset(), so
+        // this method must not raise them a second time itself (matches FNA's own ApplyChanges(),
+        // which never calls OnDeviceResetting/OnDeviceReset directly either).
         applyToExistingBackend(gdi);
 
-        OnDeviceReset(this, System::EventArgs::Empty);
         prefsChanged_ = false;
     }
 
@@ -265,6 +268,7 @@ namespace Microsoft::Xna::Framework
             delete graphicsDevice_;
             graphicsDevice_ = nullptr;
             ownsGraphicsDevice_ = false;
+            deviceEventsSubscribed_ = false;
         }
 
         if (game_ != nullptr)
@@ -307,6 +311,26 @@ namespace Microsoft::Xna::Framework
         }
 
         applyToExistingBackend(gdi);
+
+        // REMED-CORE-007: FNA's IGraphicsDeviceManager.CreateDevice() wires
+        // graphicsDevice.DeviceResetting += OnDeviceResetting; graphicsDevice.DeviceReset +=
+        // OnDeviceReset; so a real backend-detected device-lost/reset (raised directly on
+        // GraphicsDevice's own events, e.g. by GraphicsDevice's deviceEventCallback) reaches this
+        // manager's own listeners, not just resets this manager itself initiates. Installed after
+        // applyToExistingBackend()'s own settle-in Reset() call above, so that initial device
+        // creation raises only DeviceCreated below, matching FNA (a freshly-constructed FNA
+        // GraphicsDevice never raises DeviceResetting/DeviceReset). Guarded so a second
+        // CreateDevice() call against the same still-live device (game_-attached case; CreateDevice()
+        // is public API) does not accumulate duplicate subscriptions and double-forward every event.
+        if (!deviceEventsSubscribed_)
+        {
+            graphicsDevice_->DeviceResetting +=
+                [this](System::Object* sender, const System::EventArgs& args) { OnDeviceResetting(sender, args); };
+            graphicsDevice_->DeviceReset +=
+                [this](System::Object* sender, const System::EventArgs& args) { OnDeviceReset(sender, args); };
+            deviceEventsSubscribed_ = true;
+        }
+
         OnDeviceCreated(this, System::EventArgs::Empty);
         prefsChanged_ = false;
     }
@@ -346,13 +370,28 @@ namespace Microsoft::Xna::Framework
 
         unregisterServices();
 
-        if (disposing && graphicsDevice_ != nullptr && ownsGraphicsDevice_)
+        if (disposing && graphicsDevice_ != nullptr)
         {
+            // REMED-CORE-014: this raise must not be gated on ownsGraphicsDevice_. CNA's Game
+            // always pre-owns its GraphicsDevice_ (unlike FNA, where GraphicsDeviceManager always
+            // owns the device it manages), so ownsGraphicsDevice_ is correctly false for every
+            // Game-attached manager -- gating the raise on it left DeviceDisposing permanently
+            // dead for the one configuration this whole codebase actually constructs, which in
+            // turn left REMED-CORE-006's Game::Initialize() subscription with nothing to ever
+            // invoke. Only the actual delete below stays ownsGraphicsDevice_-gated: graphicsDevice_
+            // may point at a Game-owned value member, and deleting a non-heap object is memory
+            // corruption.
             OnDeviceDisposing(this, System::EventArgs::Empty);
-            graphicsDevice_->Dispose();
-            delete graphicsDevice_;
+
+            if (ownsGraphicsDevice_)
+            {
+                graphicsDevice_->Dispose();
+                delete graphicsDevice_;
+                ownsGraphicsDevice_ = false;
+            }
+
             graphicsDevice_ = nullptr;
-            ownsGraphicsDevice_ = false;
+            deviceEventsSubscribed_ = false;
         }
 
         Disposed.Raise(this, System::EventArgs::Empty);
@@ -386,17 +425,26 @@ namespace Microsoft::Xna::Framework
 
     void GraphicsDeviceManager::OnDeviceDisposing(System::Object* sender, const System::EventArgs& args)
     {
-        DeviceDisposing.Raise(sender, args);
+        // FNA's own OnDeviceDisposing/OnDeviceReset/OnDeviceResetting all re-send with `this`
+        // rather than forwarding the passed-in sender (unlike OnDeviceCreated, which does forward
+        // it) -- an asymmetry in the real FNA source, preserved here rather than "cleaned up".
+        // Previously invisible in CNA because every prior call site already passed `this`; now
+        // observable once REMED-CORE-007's device-event forwarding calls these with the managed
+        // GraphicsDevice as sender.
+        (void)sender;
+        DeviceDisposing.Raise(this, args);
     }
 
     void GraphicsDeviceManager::OnDeviceReset(System::Object* sender, const System::EventArgs& args)
     {
-        DeviceReset.Raise(sender, args);
+        (void)sender;
+        DeviceReset.Raise(this, args);
     }
 
     void GraphicsDeviceManager::OnDeviceResetting(System::Object* sender, const System::EventArgs& args)
     {
-        DeviceResetting.Raise(sender, args);
+        (void)sender;
+        DeviceResetting.Raise(this, args);
     }
 
     void GraphicsDeviceManager::OnPreparingDeviceSettings(System::Object* sender,
