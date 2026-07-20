@@ -2055,6 +2055,27 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     has not yet identified. Pausing here and reporting back rather than continuing to spend further CI
     cycles on decreasingly-well-grounded guesses. Twenty-fifth real, observed CI signal.
 
+77. **`METAL-31` closed — based on a false premise, the same class of finding `METAL-15`/`17` already
+    established for texture formats, now confirmed for render-target attachment formats**: with the
+    PBR investigation paused (physical-Mac-access unavailable), picked up Phase 2's other remaining
+    item. `METAL-31`'s own task text assumes Metal pipelines need to be keyed by attachment pixel
+    format because a `RenderTarget2D` *might* use a different format than the backbuffer's own
+    hardcoded `MTLPixelFormatBGRA8Unorm`. Reading Phase 10's real, already-landed
+    `MetalRenderTargetBackend`/`MetalRenderTargetCubeBackend` constructors (not assumed from the task
+    text alone) shows this was already correctly ruled out when Phase 10 was implemented, not merely
+    overlooked: both deliberately allocate their color texture as `MTLPixelFormatBGRA8Unorm` and
+    their depth texture as `MTLPixelFormatDepth32Float_Stencil8` — byte-identical to every pipeline's
+    own hardcoded attachment formats — with an existing, already-detailed comment
+    (`MetalRenderTargetBackend`'s own constructor) explicitly stating this is intentional, precisely
+    to avoid the exact attachment-format mismatch `METAL-31` worries about. No code path anywhere in
+    this file ever creates a color/depth/stencil attachment with any other format — backbuffer,
+    `RenderTarget2D`, and `RenderTargetCube` all funnel through the same fixed set of formats by
+    design — so there is no format variance for a pipeline key to disambiguate; adding one would be
+    real, unneeded complexity solving a problem this architecture already sidesteps a different way.
+    `METAL-32` (the sample-count sibling) stays genuinely open, since MSAA itself doesn't exist yet —
+    but noted the same "force every attachment to one fixed value" pattern as a real candidate design
+    for it too, rather than assuming a full keyed cache is the only option, when that phase lands.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -2066,7 +2087,9 @@ same as `METAL-14` originally did); the
 (`METAL-26`/`27`'s core logic landed real 2026-07-20 — see narrative — but no `PipelineKind`/shader
 currently pairs with an arbitrary declaration, so this stays correctly blocked on Phase 14, same
 conclusion as before, just with real tested infrastructure now waiting for it instead of nothing);
-attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); `METAL-89`/`90` are now closed
+sample-count-keyed pipelines (`METAL-32`, genuinely blocked on MSAA not existing yet;
+`METAL-31`'s own attachment-format-keying sibling is closed, false premise, see item 77);
+`METAL-89`/`90` are now closed
 (see item 67) but `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden` themselves still fail on
 real hardware for a still-undetermined reason — see item 72, paused pending either a physical Mac
 or further diagnostics, not attributable to either of the two real bugs (`vertexStart`/
@@ -2361,8 +2384,8 @@ already works and must not be redesigned by mistake.
 | METAL-28 | Fallback: when `SetVertexDeclaration` was never called, keep the existing stride-based inference for the 4 strides that already work — no regression | 🟨 the existing 8-stride `vertexDescriptorForStride()` switch is completely untouched (provably zero regression), but no live draw path yet *chooses* between it and the new generic builder — see narrative for why that choice is correctly still deferred to Phase 14 |
 | METAL-29 | `selectPipelineKey(stride, elements, GpuDrawParams)` dispatcher replicating `EasyGLGraphicsBackend::SelectProgram()`'s exact precedence (pbr+skinned → pbr → skinned(±vertexlit) → envMapping → dualTexture(stride-24 colored variant) → stride switch 20/24/32(±vertexlit) → default colored) | 🟨 |
 | METAL-30 | Regression-proof: every existing stride-16/20/24/32 path must select byte-identical pipelines before/after the cache rewrite — a Linux-side manual trace against the current 5-pipeline logic, ahead of any macOS build | ✅ **real trace done 2026-07-20**, against the actual pre-rewrite source (`git show 08707f81:.../MetalGraphicsBackend.mm`, the original commit, not assumed from memory): old dispatch was `textured=params&&params->texture0; if(textured){stride==20→pipe3Tex20; ==24→pipe3ColorTex24; ==32→pipe3NormalTex32; else throw} else if(stride!=16) throw; else pipe3Color`. Byte-identical to `SelectMetalPipelineKind()`'s current dispatch for strides 16/20/24 (same throw conditions, same textured-gate, only the destination name changed: `pipe3Color→Colored16`/`pipe3Tex20→Textured20`/`pipe3ColorTex24→ColorTex24`). Stride 32 is the one real, already-fully-documented divergence: old `pipe3NormalTex32` reused the same flat unlit `cna_f3d_texture` fragment shader as strides 20/24 (no lighting existed anywhere in the pre-rewrite backend), new `LitTex32`/`LitTex32VertexLit` is genuinely lit — Phase 3's deliberate, intentional addition (`METAL-38`'s own note already documents this exact swap), not a silent regression. `MetalSelectPipelineKindTests.cpp`'s 15 already-passing tests (item 33's own narrative) lock the new dispatch in going forward. |
-| METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ⬜ |
-| METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ |
+| METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ✅ **based on a false premise, confirmed 2026-07-20** — see narrative item 77: Phase 10's real `MetalRenderTargetBackend`/`MetalRenderTargetCubeBackend` constructors deliberately force every render target's color texture to `MTLPixelFormatBGRA8Unorm` and every depth texture to `MTLPixelFormatDepth32Float_Stencil8` — byte-identical to the backbuffer's own hardcoded pipeline format (`makePipeline()`'s own `d.colorAttachments[0].pixelFormat`/`depthAttachmentPixelFormat`/`stencilAttachmentPixelFormat`), by explicit, already-documented design (`METAL-101`'s own comment). No attachment in this codebase — backbuffer, `RenderTarget2D`, or `RenderTargetCube` — has ever used a different color/depth/stencil format, so there is no format variance for a pipeline key to disambiguate |
+| METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ genuinely still blocked — MSAA (`METAL-104`/`105`) itself remains unimplemented; unlike `METAL-31`, this one's premise is real (a pipeline's `sampleCount` genuinely must match its render pass once MSAA exists) — the `METAL-31` precedent (force every attachment to one fixed value) is a real candidate design for this too, worth trying first when MSAA lands, rather than assuming a full format/sample-count-keyed cache is needed |
 | METAL-33 | Document the expected cache size/no-eviction-needed-for-v1 assumption (mirrors EasyGL's own per-field `Prog3D` bound-variant assumption); flag unbounded-growth as a NOXNA follow-up only if a real pathological case appears | ⬜ |
 | METAL-34 | Extract `MetalPipelineKey`'s hash/equality into an `#ifdef __OBJC__`-free plain-C++ header so it can be exercised by a normal GoogleTest binary **without an Apple toolchain** — the one piece of Phase 2 genuinely build-verifiable on this Linux machine today | ✅ **real, on this Linux machine, 2026-07-19** — 8/8 new tests (`MetalBlendKey.*`/`MetalPipelineCacheKey.*`/`MetalPipelineCacheKeyHash.*`, CTest #102–109) pass under the real `CnaTests` binary (`cmake -DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON`, `cmake --build --target CnaTests`, `ctest -R 'MetalBlendKey\|MetalPipelineCacheKey'`) — the first of 7 extractions to genuinely earn this tier tonight (6 more plain-C++ pieces followed the same pattern, see the numbered narrative items below), matching `METAL-238`'s own "cite the actual CTest name" discipline |
 
