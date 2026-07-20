@@ -11,11 +11,16 @@
 > restructuring: `GLB-17` (startup log printed the old internal `EASYGL` name), `GLB-39` (a real
 > Emscripten link failure, wrong exception-handling ABI), and `GLB-9`-revisited (a hardcoded
 > `MIN/MAX_WEBGL_VERSION=2` that would have silently forced `WEBGL1` into a `WEBGL2` context).
-> **Deliberately not done, by explicit decision** (see §4): `GLB-14` (no example-file rename),
-> `GLB-38` (no autonomous repo merge/push), and the `SkinnedEffect`/`SkinnedPbrEffect`
-> `uvec4`-bone-index fix under `WEBGL1` (a real architecture change needing a go-ahead — see §4's
-> newest entry). Everything is committed on `feature/gl`; read the phase-by-phase detail below for
-> exactly what each task verified and how.
+> **Deliberately not done, by explicit decision** (see §4): `GLB-14` (no example-file rename) and
+> `GLB-38` (no autonomous repo merge/push). Everything is committed on `feature/gl`; read the
+> phase-by-phase detail below for exactly what each task verified and how.
+>
+> **2026-07-20 morning update:** the `SkinnedEffect`/`SkinnedPbrEffect` `uvec4`-bone-index gap
+> mentioned above as "needing a go-ahead" — go-ahead given, **now done** (turned out narrower than
+> estimated: no `VertexBuffer` upload-path change needed, just a `WEBGL1`-only attribute-read-mode
+> branch plus the shader rewrite). `GLB-40` (silent custom `ShaderEffect` compile failures under
+> `OPENGL33`) also authorized and investigated. See Phase F's `GLB-36` status and the dedicated
+> `GLB-40` note for detail.
 >
 > **Origin (2026-07-19):** project owner decision — `EasyGL` is a good internal implementation
 > name but means nothing to a `libcna.com` user. Public backend selection should use names users
@@ -389,9 +394,16 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   `emcmake`/`emcc` build of `cna_house3d_demo` under `-DCNA_GRAPHICS_BACKEND=WEBGL1` compiles and
   links cleanly, running under Node exactly as far as `WEBGL2` already does (same DOM-only
   limitation, not GL/shader-related). **Not verified**: actual GLSL ES 1.00 driver acceptance
-  (needs a real browser) and `SkinnedEffect`/`SkinnedPbrEffect` under `WEBGL1` (documented,
-  detected-at-runtime gap — `uvec4 aBoneIndices` has no GLSL ES 1.00 equivalent, deliberately not
-  attempted, see the source comment and §4 below for what a real fix would need).
+  (needs a real browser). **`SkinnedEffect`/`SkinnedPbrEffect`'s `uvec4 aBoneIndices` gap — closed
+  as a same-session follow-up** (project owner authorized it 2026-07-20 morning after the narrower
+  scope below was found): `DescribeVertexElementFormat()`'s `Byte4` case now reads the same
+  underlying bytes as floats under `WEBGL1` (no `VertexBuffer` upload change needed — `Byte4` is
+  `BLENDINDICES`'s only user), and a new `RewriteBoneIndicesForEs100()` converts the shader's
+  `uvec4` attribute and its 4 `uBones[]` index expressions. Verified via the same standalone
+  harness plus a real `OPENGLES`/`OPENGL33` regression run (`cna_test_easygl_skinnedeffect_golden`/
+  `skinnedpbreffect_golden`/`cna_test_skinned_effect`/`cna_test_skinned_integration`, all exit 0)
+  and a real `emcmake`/`emcc` compile+link under `WEBGL1`. See `docs/webgl1-backend.md` for full
+  detail.
   **Found and fixed a real, separate bug while verifying this**: `cna_house3d_demo`'s Emscripten
   link options hardcoded `-sMIN_WEBGL_VERSION=2 -sMAX_WEBGL_VERSION=2` unconditionally — exactly
   the class of gap the original `GLB-9` was looking for, just in a per-target CMake option instead
@@ -433,11 +445,17 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   pointer setup at those 2 call sites needs a `WEBGL1`-only branch, plus the shader needs
   `attribute vec4 aBoneIndices;` (not `uvec4`) and `int(aBoneIndices.x)`-style casts at its 4
   `uBones[...]` index expressions (3 shaders, `EnsureSkinnedProgram`/`EnsureSkinnedVertexLitProgram`/
-  `EnsurePbrSkinnedProgram`). Still not attempted — the commitment to ask first stands — but this
-  should make it a much faster go/no-go decision and a smaller diff than originally estimated.
+  `EnsurePbrSkinnedProgram`). **Decided 2026-07-20 morning: go ahead — done.** Implemented and
+  verified exactly as scoped above; see Phase F's `GLB-36` status note and `docs/webgl1-backend.md`
+  for full verification detail.
 - `GLB-38` (push/merge `easy-glrvc`'s commits into `easy-gl`'s real default branch so `cnagl` can
   drop the temporary `../easy-glrvc` dependency): **Decided: leave to the project owner — do not
-  attempt to merge/push between repos autonomously.**
+  attempt to merge/push between repos autonomously.** (Reconfirmed 2026-07-20 morning.)
+- `GLB-40` (custom `ShaderEffect` compile failures are silent under `OPENGL33`, no visible error
+  diagnostic reaches the caller): **Decided 2026-07-20 morning: investigate.** See the dedicated
+  status note under Phase D / the `GLB-40` task entry for findings — this needed a look at every
+  backend's `CreateEffectBackend()` error-handling contract before proposing a fix, not a
+  same-backend-only change.
 - Whether `OPENGLES` should default to GLES 3.0 (today's behavior, kept in this plan) or whether a
   true "OpenGL ES" public name should support ES 2.0 as well — this plan assumes ES 3.0-only
   scope for `OPENGLES` (matching current behavior) and treats ES2-class support as exclusively the

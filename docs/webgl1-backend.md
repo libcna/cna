@@ -60,6 +60,22 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
 - ✅ **No regression to `OPENGLES`/`OPENGL33`** — both re-verified against a real desktop Mesa GL
   context after the `AdaptGlslEs300ForActiveProfile()` signature change this work required;
   `BasicEffect` and `SkinnedEffect` golden-image tests still `[PASS]` on both.
+- ✅ **`SkinnedEffect`/`SkinnedPbrEffect` now supported under `WEBGL1`** — fixed as a same-plan
+  follow-up (originally left as a known gap, then investigated further and found narrower than
+  expected). `layout(location=N) in uvec4 aBoneIndices;` (GLSL ES 1.00 has no integer vertex
+  attribute type at all) is now rewritten to `attribute vec4 aBoneIndices;`, with its 4
+  `uBones[aBoneIndices.x/y/z/w]` index expressions rewritten to `uBones[int(aBoneIndices.x)]`/etc.
+  (`RewriteBoneIndicesForEs100()`). On the C++ side, `DescribeVertexElementFormat()`'s
+  `VertexElementFormat::Byte4` case (`BLENDINDICES`'s only user) reads the identical underlying
+  `UnsignedByte` bytes as floats under this profile instead of as a true integer — **no
+  `VertexBuffer` upload-path change needed at all**, only the attribute-pointer read mode at its 2
+  call sites, `#ifdef`-gated to `WEBGL1` only. Verified: a standalone C++ test harness confirmed the
+  real `SkinnedEffect` vertex shader transforms correctly (no `uvec4` remains); no regression on
+  `OPENGLES`/`OPENGL33` (`cna_test_easygl_skinnedeffect_golden`/`skinnedpbreffect_golden`/
+  `cna_test_skinned_effect`/`cna_test_skinned_integration` all still exit 0, real Mesa GL); a real
+  `emcmake`/`emcc` build compiles and links cleanly, exercising the new `#ifdef` branch for real.
+  **Actual GLSL ES 1.00 driver acceptance of the skinned shaders is still not verified** — same
+  browser-only limitation as everything else in this doc.
 
 ## What's not yet done — the real, documented remaining gaps
 
@@ -67,17 +83,9 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
   hand (standalone harness) and the *C++ build pipeline* was verified for real (`emcc` compile +
   link), but no real WebGL 1 implementation (browser, or a headless-GL shim under Node) has ever
   actually compiled the generated GLSL text. This is a real, not-yet-closed gap — the standalone
-  verification is strong evidence of correctness, not proof.
-- ⬜ **`SkinnedEffect`/`SkinnedPbrEffect` do not work under `WEBGL1`** — their vertex shaders
-  declare `layout(location=4) in uvec4 aBoneIndices;`. GLSL ES 1.00 vertex attributes must be
-  float-based (`float`/`vecN`/`matN`) — there is no integer attribute type at all. The transform
-  still runs (producing `attribute uvec4 aBoneIndices;`, which the ES 1.00 grammar itself
-  rejects) but detects this and logs a specific, clear diagnostic
-  (`"shader uses an integer vertex attribute type (uvec4/ivecN)..."`) rather than leaving only an
-  opaque driver compile-error as the symptom. **A real fix needs**: encoding bone indices as a
-  `vec4` (float) attribute instead, `int()`-casting each component when indexing `uBones[]` in the
-  shader body, and updating the C++-side `VertexBuffer`/vertex-format upload path for this profile
-  specifically to match (a real, separate architecture change — not attempted here).
+  verification is strong evidence of correctness, not proof. This now also covers the
+  `SkinnedEffect`/`SkinnedPbrEffect` fix above — its GLSL output was verified by hand and by a
+  successful `emcc` compile, not by an actual WebGL 1 driver.
 - ⬜ **Full example/pixel-test suite** — only one example (`cna_house3d_demo`, `BasicEffect` only)
   was built under this profile. The `cna_test_easygl_*` GTest-based pixel-comparison suite cannot
   run under Emscripten at all regardless of GL profile (`cmake/Tests/EasyGLTests.cmake` gates it to
@@ -91,5 +99,6 @@ See `plan_glbackends.md` §2's table and `docs/opengl33-backend.md`/`docs/webgl2
 versions of this section. In short: `OPENGLES` is today's original `EasyGL` public backend renamed
 (GLES 3.0, native); `WEBGL2` is the same GLES 3.0 path under Emscripten; `OPENGL33` is a new
 desktop GL 3.3 core-profile variant. `WEBGL1` is the only profile needing a real shader-body
-rewrite (not just a header swap) and the only one with a known, currently-unsupported effect family
-(`SkinnedEffect`/`SkinnedPbrEffect`).
+rewrite (not just a header swap) — all ~26 stock effect shaders, including `SkinnedEffect`/
+`SkinnedPbrEffect`, now have that rewrite implemented and standalone-verified; none of the 4
+profiles has real browser-level WebGL/GLSL driver acceptance verified in this sandbox.

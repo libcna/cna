@@ -72,7 +72,6 @@ context, GL 3.3.
 See `plan_glbackends.md` §2's table. In short: `OPENGLES` is today's original `EasyGL` public
 backend renamed (GLES 3.0, unchanged behavior); `WEBGL2` is the same GLES 3.0 path under
 Emscripten; `WEBGL1` (GLES 2.0 / Emscripten) has a real GLSL ES 1.00 shader rewrite implemented and
-verified as far as this sandbox can go (see `docs/webgl1-backend.md`) — its `SkinnedEffect`/
-`SkinnedPbrEffect` shaders don't work yet (a real, documented, separate gap: their `uvec4`
-bone-index vertex attribute has no GLSL ES 1.00 equivalent, needing a real float-encoding
-architecture change, not attempted — `plan_glbackends.md` GLB-36).
+verified as far as this sandbox can go, including `SkinnedEffect`/`SkinnedPbrEffect` (see
+`docs/webgl1-backend.md`) — no real browser-level driver verification exists for any of the 4
+profiles in this sandbox.
