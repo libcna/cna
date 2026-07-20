@@ -9,6 +9,8 @@ on:
       - 'include/CNA/GraphicsBackendType.hpp'
       - 'cmake/BackendSelection.cmake'
       - 'cmake/BackendLibraries.cmake'
+      - 'cmake/CnaLibrary.cmake'
+      - 'cmake/Examples.cmake'
       - 'cmake/Tests/MetalTests.cmake'
       - 'examples/metal_smoke_test.cpp'
       - 'CMakeLists.txt'
