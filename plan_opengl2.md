@@ -1211,6 +1211,110 @@ reverted the fix, rebuilt, re-ran, saw the exact predicted failure, restored the
 **Build/test result:** `cna_backend_graphics_opengl2` + all 46 `OpenGL2`-labeled ctest cases build
 and pass, 0 regressions (`ctest -L OpenGL2`: 46/46 PASS, including the extended scale test).
 
+## Status: session 13 follow-up -- 3 more of the documented gaps fixed, 2 confirmed NOT bugs (2026-07-20)
+User asked to fix the gaps this session's own audit had documented-but-deferred. Investigated each
+before touching code, since two turned out to be real bugs and two turned out to be deliberate,
+correct, cross-backend-consistent behavior that would have been WRONG to "fix" in isolation:
+
+**Fixed (3):**
+1. **`SetReferenceStencil()` was the shared `IGraphicsBackend` base class's silent no-op** --
+   `GraphicsDevice.ReferenceStencil`'s own setter calls this standalone (not a full
+   `DepthStencilState` re-application), a real XNA stencil-shadow-volume pattern (changing just
+   the reference value between passes). Fixed by caching the func/mask/two-sided-mode
+   `ApplyDepthStencilState()` most recently applied and re-issuing `glStencilFunc(Separate)` with
+   the new reference value alongside them. New test `OpenGL2_ReferenceStencil`: stamp stencil=7
+   into the left half of a render target, stencil-test-Equal(ref=7) a RED full-screen quad (only
+   left half passes), then change ONLY `GraphicsDevice.ReferenceStencil` to 0 (no new
+   `DepthStencilState`) and draw GREEN full-screen -- correct behavior turns the RIGHT half (which
+   has stencil==0) green while the left stays red; the pre-fix no-op instead left the GPU's real
+   reference stuck at 7, so the GREEN draw incorrectly re-matched (and overwrote) the LEFT half
+   again. Verified failing before the fix (temporarily reverted, rebuilt, confirmed the exact
+   predicted wrong result, restored).
+2. **`SetRenderTargets()` (MRT) never attached ANY depth/stencil buffer to `mrtFbo_`, and always
+   attached a target's single-sample `colorTex` directly even when created with
+   `multiSampleCount>0`** (silently discarding the requested antialiasing). Fixed: depth/stencil
+   now comes from attachment 0's own `depthRbo` (matches XNA's "every binding in a set shares the
+   same size" convention); MSAA-enabled targets attach their `msaaColorRbo` instead of `colorTex`,
+   and a new `mrtTargets_` list lets `unbindCurrentRenderTarget()` blit-resolve each one into its
+   own `resolveFbo` (and regenerate mips) individually when the MRT set stops being active --
+   `glBlitFramebuffer` can only resolve one selected read attachment per call, unlike the
+   single-RT path's one-attachment case. **Real GL constraint discovered while writing the new
+   test** (not a limitation of this fix): every simultaneously-bound attachment in one FBO
+   (including depth) must share the exact same sample count, or the framebuffer is
+   `GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` -- mixing an MSAA target with a non-MSAA target in ONE
+   MRT set is not valid GL at all, not something any amount of resolve logic here could fix; a
+   real MRT+MSAA set must use the same sample count on every attachment (which is what real games
+   actually do). Also had to explicitly detach any stale depth/stencil renderbuffer from a PRIOR
+   `SetRenderTargets()` call before conditionally re-attaching the current one (`mrtFbo_` is one
+   shared, persistent FBO reused across calls) -- caught by the new test itself failing with an
+   all-black readback (`GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE`, confirmed via a temporary
+   `glCheckFramebufferStatus` diagnostic) before this detach was added. New test
+   `OpenGL2_MRT_Depth_MSAA`: (a) a nearer quad drawn first then a farther one covering the same
+   pixels, written to both bound attachments in one draw -- the farther draw must be rejected by a
+   real depth test; (b) two matching-sample-count 4x-MSAA targets, a diagonal-edge triangle drawn
+   once -- both attachments must show a real resolve blend, not a flat colour. Verified all 4
+   checks fail with the exact predicted wrong values against the pre-fix code (temporarily
+   stashed just the backend files, rebuilt, confirmed, restored).
+3. **VB/IB `recreate_gl_resource()` (context-loss recovery) could under-allocate relative to the
+   buffer's original `capacity`** -- it only ever sized the recreated GPU buffer to
+   `cpuShadow_.size()` (the LAST upload's bytes), which can be smaller than `capacity*stride` after
+   a smaller `SetDataOptions::Discard` upload (the GPU side had stayed at full capacity; only the
+   CPU shadow shrank). A later `NoOverwrite` upload sized against the original capacity could then
+   write past the recreated (under-sized) buffer. Fixed by allocating
+   `max(cpuShadow_.size(), capacity*stride)`, uploading the shadow into the front via
+   `glBufferSubData`. SUSPECTED-severity edge case (not confirmed reachable from any current real
+   call site) -- fixed defensively since it was cheap and low-risk, no dedicated new test (would
+   need a specific Discard-then-loss-then-NoOverwrite sequence no existing test scenario produces).
+
+**Investigated and confirmed NOT bugs -- would have been WRONG to "fix" in OpenGL2 alone (2):**
+1. **`ApplyRasterizerState()`'s `DepthBias`/`SlopeScaleDepthBias` passed unscaled to
+   `glPolygonOffset()`.** Traced this project's OWN `BgfxGraphicsBackend.cpp` (`kDepthBiasScale`,
+   explicitly documented as "so a given DepthBias value produces a roughly comparable visual shift
+   on Bgfx as on EasyGL/Vulkan") and `VulkanGraphicsBackend.cpp` (`vkCmdSetDepthBias` called with
+   the RAW, unscaled value) and `D3D9GraphicsBackend.cpp` ("XNA's own float DepthBias/
+   SlopeScaleDepthBias (Task 767's 'r'-scaled convention)"): this is a DELIBERATE, established,
+   cross-backend-consistent project convention (Task 767) -- Bgfx's own emulation scale factor was
+   reverse-engineered specifically to MATCH this raw-passthrough convention, not FNA3D's real
+   `(1<<24)-1`-scaled driver behavior. Adding FNA3D's scaling to OpenGL2 alone would make it the
+   ONLY backend in this project that diverges from every other one. Not fixed -- would need a
+   coordinated, deliberate, whole-project convention change (out of this session's scope), not a
+   single-backend patch.
+2. **`ApplyRasterizerState()` never calls `glFrontFace()` (winding stays GL's default `GL_CCW`
+   always), unlike FNA3D's real driver, which flips CW/CCW specifically when a render target (vs.
+   the backbuffer) is bound.** Checked `VulkanGraphicsBackend.cpp`: `rs.frontFace` is hardcoded to
+   `VK_FRONT_FACE_CLOCKWISE` on EVERY draw, never varied by whether a render target is currently
+   bound. `EasyGLGraphicsBackend.cpp` has the identical no-`glFrontFace`-at-all gap OpenGL2 does.
+   This is a consistent, shared behavior across at least 3 backends in this project (Vulkan,
+   EasyGL, OpenGL2) -- whether originally deliberate or an inherited shared gap, "fixing" only
+   OpenGL2 to flip winding when a render target is bound would make it diverge from every sibling
+   backend for that exact scenario, risking a NEW cross-backend inconsistency for any future
+   cull-mode+render-target golden-image comparison. Not fixed -- flagging as a genuine, real,
+   cross-backend gap (culling the wrong winding for off-screen depth-tested draws with
+   `CullClockwiseFace`/`CullCounterClockwiseFace`, e.g. shadow maps/reflections/portals with
+   backface culling) worth a coordinated, whole-project follow-up, not a single-backend patch.
+
+**New regression tests:** `OpenGL2_ReferenceStencil` (`examples/opengl2_referencestencil_test.cpp`)
+and `OpenGL2_MRT_Depth_MSAA` (`examples/opengl2_mrt_depth_msaa_test.cpp`), both verified to
+genuinely fail against the pre-fix code (temporary revert-rebuild-confirm-restore cycle for each,
+not just written to already pass).
+
+**Unrelated pre-existing build breakage discovered while verifying `OpenGL2_ReferenceStencil`
+(NOT fixed, NOT this backend's scope, flagging for whoever owns `ContentReader`/Xnb):** a full,
+from-scratch rebuild of the shared `CNA` static library currently fails independent of any OpenGL2
+change -- `ContentReader::ReadDecimal()` (`include/CNA/Internal/Xnb/
+DecimalDateTimeContentTypeReaders.hpp:32`) and `ContentReader::ReadChar()`
+(`include/CNA/Internal/Xnb/PrimitiveContentTypeReaders.hpp:117`,
+`src/CNA/Internal/Xnb/SpriteFontContentTypeReader.cpp:44`) are both called but neither exists on
+`ContentReader`/`System::IO::BinaryReader` in the currently-checked-out `sharp-runtime` -- an
+apparent cross-repo API drift, not something introduced this session (confirmed via `git status`/
+`git diff` showing zero local changes to any of those files, and via `git log` showing no recent
+commits touching `ContentReader.hpp`). This build directory's own `libCNA.a` had a stale-but-valid
+cached archive from before this drift, which is why every OTHER build in this session (and
+presumably most day-to-day incremental OpenGL2 work) never hit it -- only a reconfigure-triggered
+full rebuild (`cmake ..` after editing `cmake/Tests/OpenGL2Tests.cmake`) exposed it. Worked around
+**locally and temporarily, never committed** (3 one-line stubs, reverted via `git checkout --`
+immediately after use) purely to link the two new OpenGL2 test executables above for verification.
+
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
 - SDL-created OpenGL 2.1 compatibility context. SDL is only window/context glue; rendering is direct OpenGL.

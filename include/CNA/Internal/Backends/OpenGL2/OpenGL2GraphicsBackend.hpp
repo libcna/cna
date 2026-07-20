@@ -105,6 +105,11 @@ namespace CNA::Internal::Backends::OpenGL2
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        // GraphicsDevice.ReferenceStencil is a standalone device property (see
+        // IGraphicsBackend.hpp's own doc comment) that must take effect without a full
+        // DepthStencilState re-application -- re-applies the func/mask most recently cached by
+        // ApplyDepthStencilState() alongside the new reference value.
+        void SetReferenceStencil(int value) override;
 
         void SetScissorRect(int x, int y, int w, int h) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
@@ -177,13 +182,20 @@ namespace CNA::Internal::Backends::OpenGL2
         int currentRtCubeFace_{};
         int currentRtWidth_{};
         int currentRtHeight_{};
-        // MRT (SetRenderTargets, count > 1): one shared FBO, re-attached (glFramebufferTexture2D
-        // per target + glDrawBuffers) on every call rather than cached per render-target-set --
-        // mirrors EasyGLGraphicsBackend::SetRenderTargets's own mrtFbo_ precedent, including its
-        // documented gap (MRT targets are never tracked as currentRt_/currentRtCube_, so mip
-        // regeneration on switching away from MRT mode is not supported).
+        // MRT (SetRenderTargets, count > 1): one shared FBO, re-attached (glFramebufferTexture2D/
+        // glFramebufferRenderbuffer per target + glDrawBuffers) on every call rather than cached
+        // per render-target-set -- mirrors EasyGLGraphicsBackend::SetRenderTargets's own mrtFbo_
+        // precedent. MRT targets are never tracked as currentRt_/currentRtCube_ (a single pointer
+        // can't represent a whole set) -- mrtTargets_ below is the dedicated equivalent used only
+        // by unbindCurrentRenderTarget()'s own MRT-specific per-target MSAA-resolve/mip-regen step.
         unsigned mrtFbo_{};
         bool mrtFboReady_{};
+        // The IRenderTargetBackend* set currently attached to mrtFbo_ (empty when not in MRT
+        // mode) -- unbindCurrentRenderTarget() walks this to resolve each MSAA-enabled target's
+        // own msaaColorRbo into its resolveFbo (one glBlitFramebuffer per target, since a single
+        // blit can only resolve ONE selected read attachment at a time) and regenerate mips,
+        // exactly mirroring RenderTarget::UnbindAsRenderTarget()'s own single-target equivalent.
+        std::vector<IRenderTargetBackend*> mrtTargets_;
 
         // plan_opengl2.md (context-loss recovery): every currently-live recoverable resource
         // (VB/IB/Tex/RenderTarget/RenderTargetCubeBackend/OcclusionQuery), registered/unregistered
@@ -209,6 +221,16 @@ namespace CNA::Internal::Backends::OpenGL2
         int samplerAddressU_[kMaxSamplerSlots] = {};
         int samplerAddressV_[kMaxSamplerSlots] = {};
         int samplerMaxAnisotropy_[kMaxSamplerSlots] = {};
+
+        // Cached by ApplyDepthStencilState(), re-used by SetReferenceStencil() to re-apply the
+        // func/mask unchanged alongside a new reference value (glStencilFuncSeparate takes all
+        // three together -- ReferenceStencil is otherwise a standalone GraphicsDevice property
+        // that must take effect without a full DepthStencilState re-application).
+        bool cachedStencilEnabled_ = false;
+        bool cachedTwoSidedStencil_ = false;
+        int cachedStencilFunc_ = 0;
+        int cachedCcwStencilFunc_ = 0;
+        unsigned cachedStencilMask_ = 0xFFFFFFFFu;
 
         // Lazily-created 1x1 white fallbacks for effects that always sample a texture regardless
         // of whether the XNA-level Texture property was actually set (unlike BasicEffect/

@@ -191,6 +191,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_register_backend_test(NAME OpenGL2_MRT COMMAND cna_test_opengl2_mrt
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl2.md session 13: real depth + MSAA support for MRT (previously mrtFbo_ had no
+    # depth/stencil attachment at all, and always attached a target's single-sample colorTex even
+    # when it was created with multiSampleCount>0, silently discarding the requested AA).
+    cna_opengl2_test(cna_test_opengl2_mrt_depth_msaa examples/opengl2_mrt_depth_msaa_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_MRT_Depth_MSAA COMMAND cna_test_opengl2_mrt_depth_msaa
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md session 13: real GraphicsDevice.ReferenceStencil support
+    # (SetReferenceStencil() was previously the shared IGraphicsBackend base class's silent no-op).
+    cna_opengl2_test(cna_test_opengl2_referencestencil examples/opengl2_referencestencil_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_ReferenceStencil COMMAND cna_test_opengl2_referencestencil
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_opengl2.md: real GPU hardware-instancing proof via DrawInstancedPrimitivesEx.
     cna_opengl2_test(cna_test_opengl2_instancedmodel examples/opengl2_instancedmodel_test.cpp)
     cna_register_backend_test(NAME OpenGL2_InstancedModel COMMAND cna_test_opengl2_instancedmodel

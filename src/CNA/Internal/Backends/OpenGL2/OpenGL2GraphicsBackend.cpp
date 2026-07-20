@@ -1498,11 +1498,24 @@ namespace CNA::Internal::Backends::OpenGL2
             void recreate_gl_resource() override
             {
                 glGenBuffers(1, &id);
-                if (!cpuShadow_.empty())
+                // cpuShadow_ only ever holds the LAST upload's bytes, which can be smaller than
+                // the buffer's original full `capacity` (e.g. a SetDataOptions::Discard upload of
+                // fewer vertices than the buffer was created for -- the GPU side is still
+                // allocated at full capacity, but cpuShadow_ shrinks to match the smaller upload).
+                // Recreating at only cpuShadow_.size() would under-allocate relative to the
+                // pre-loss buffer, so a later NoOverwrite upload sized against the ORIGINAL
+                // capacity could write past the recreated buffer's end. Allocate the larger of
+                // the two, matching SetDataWithOptions(Discard)'s own `total` calculation above.
+                const auto shadowBytes = static_cast<GLsizeiptr>(cpuShadow_.size());
+                const auto capacityBytes = (capacity > 0 && stride > 0)
+                    ? static_cast<GLsizeiptr>(capacity) * static_cast<GLsizeiptr>(stride) : 0;
+                const auto total = std::max(shadowBytes, capacityBytes);
+                if (total > 0)
                 {
                     glBindBuffer(GL_ARRAY_BUFFER, id);
-                    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cpuShadow_.size()),
-                                cpuShadow_.data(), GL_DYNAMIC_DRAW);
+                    glBufferData(GL_ARRAY_BUFFER, total, nullptr, GL_DYNAMIC_DRAW);
+                    if (shadowBytes > 0)
+                        glBufferSubData(GL_ARRAY_BUFFER, 0, shadowBytes, cpuShadow_.data());
                     gpuAllocated = true;
                 }
             }
@@ -1594,11 +1607,20 @@ namespace CNA::Internal::Backends::OpenGL2
             void recreate_gl_resource() override
             {
                 glGenBuffers(1, &id);
-                if (!cpuShadow_.empty())
+                // See VB::recreate_gl_resource()'s identical doc comment: cpuShadow_ can be
+                // smaller than the buffer's original full `capacity` after a smaller Discard
+                // upload -- allocate the larger of the two so a later NoOverwrite upload sized
+                // against the ORIGINAL capacity can't write past the recreated buffer's end.
+                const auto shadowBytes = static_cast<GLsizeiptr>(cpuShadow_.size());
+                const auto elemSize = thirtyTwoBit ? GLsizeiptr{4} : GLsizeiptr{2};
+                const auto capacityBytes = capacity > 0 ? static_cast<GLsizeiptr>(capacity) * elemSize : 0;
+                const auto total = std::max(shadowBytes, capacityBytes);
+                if (total > 0)
                 {
                     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, id);
-                    glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(cpuShadow_.size()),
-                                cpuShadow_.data(), GL_DYNAMIC_DRAW);
+                    glBufferData(GL_ELEMENT_ARRAY_BUFFER, total, nullptr, GL_DYNAMIC_DRAW);
+                    if (shadowBytes > 0)
+                        glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, shadowBytes, cpuShadow_.data());
                     gpuAllocated = true;
                 }
             }
@@ -2591,8 +2613,9 @@ namespace CNA::Internal::Backends::OpenGL2
         if (count <= 0) { SetRenderTarget2D(nullptr); return; }
         if (count == 1) { SetRenderTarget2D(rts[0]); return; }
 
-        // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed) --
-        // mirrors EasyGLGraphicsBackend::SetRenderTargets's identical ordering.
+        // MRT: unbind whatever single RT/cube-face (or previous MRT set) was previously active
+        // (mip regen/MSAA resolve if needed) -- mirrors EasyGLGraphicsBackend::SetRenderTargets's
+        // identical ordering.
         unbindCurrentRenderTarget();
 
         if (!mrtFboReady_)
@@ -2608,21 +2631,58 @@ namespace CNA::Internal::Backends::OpenGL2
         constexpr int kMaxMRT = 8;
         const int n = count < kMaxMRT ? count : kMaxMRT;
         GLenum drawBufs[kMaxMRT];
+        mrtTargets_.clear();
         for (int i = 0; i < n; ++i)
         {
             auto* target = static_cast<RenderTarget*>(rts[i]);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, target->colorTex, 0);
+            // A target created with multiSampleCount>0 renders into its OWN multisampled
+            // renderbuffer (see RenderTarget::CreateResources) -- attaching colorTex directly
+            // here (its single-sample RESOLVE target) would silently render single-sampled,
+            // discarding the requested antialiasing. unbindCurrentRenderTarget() resolves each
+            // such target into its own resolveFbo (one glBlitFramebuffer per target) once this
+            // MRT set stops being active -- see mrtTargets_ below.
+            if (target->multiSampleCount > 0)
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_RENDERBUFFER, target->msaaColorRbo);
+            else
+                glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, target->colorTex, 0);
             drawBufs[i] = GL_COLOR_ATTACHMENT0 + i;
+            mrtTargets_.push_back(rts[i]);
         }
         glDrawBuffers(n, drawBufs);
+
+        // A shared depth/stencil buffer across the whole MRT set, taken from attachment 0's own
+        // depthRbo -- matches XNA's own convention (FNA validates every binding in a set shares
+        // the same size) and this method's own "sized after attachment 0" precedent below.
+        // Previously MISSING entirely (mrtFbo_ never got a depth/stencil attachment at all), so
+        // any DepthStencilState with depth/stencil testing enabled had no real depth buffer to
+        // test against while MRT was active.
+        //
+        // Detach whatever depth/stencil renderbuffer a PRIOR SetRenderTargets() call may have
+        // left attached before conditionally re-attaching the current one -- mrtFbo_ is one
+        // shared, persistent FBO reused across calls, so a stale attachment from a set that HAD a
+        // depth format would otherwise survive into a set that doesn't. Left unaddressed, that
+        // stale (single-sample) depth attachment sitting alongside a NEW multisampled color
+        // attachment violates GL's same-sample-count-across-all-attachments rule
+        // (GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE), silently making every subsequent MRT draw a
+        // no-op on an incomplete FBO -- caught by this session's own new regression test
+        // (OpenGL2_MRT_Depth_MSAA) failing with an all-black readback before this detach was added.
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+        auto* target0 = static_cast<RenderTarget*>(rts[0]);
+        if (target0->depthRbo)
+        {
+            GLenum depthInternalFormat = 0, depthAttachment = 0;
+            MapDepthFormat(target0->depthFormat, depthInternalFormat, depthAttachment);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER, target0->depthRbo);
+        }
 
         // Sized after attachment 0 (matches XNA's own convention -- FNA validates every binding
         // in a MRT set shares the same size, so attachment 0's size represents them all).
         currentRtWidth_ = rts[0]->GetWidth();
         currentRtHeight_ = rts[0]->GetHeight();
-        // MRT targets are deliberately NOT tracked as currentRt_/currentRtCube_ -- see this
-        // method's own header-comment precedent (mrtFbo_'s doc comment) for the accepted gap
-        // this shares with EasyGL: switching away from MRT mode cannot regenerate per-target mips.
+        // MRT targets are deliberately NOT tracked as currentRt_/currentRtCube_ (a single pointer
+        // can't represent a whole set) -- mrtTargets_ above is the dedicated equivalent
+        // unbindCurrentRenderTarget() uses for MRT-specific per-target resolve/mip-regen.
     }
 
     void OpenGL2GraphicsBackend::unbindCurrentRenderTarget()
@@ -2637,6 +2697,36 @@ namespace CNA::Internal::Backends::OpenGL2
         if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
         currentRt_ = nullptr;
         currentRtCube_ = nullptr;
+
+        // MRT resolve: each attachment that rendered into its own msaaColorRbo (see
+        // SetRenderTargets above) needs its OWN per-target blit into its resolveFbo --
+        // glBlitFramebuffer can only resolve ONE selected read attachment (via glReadBuffer) into
+        // one draw attachment per call, unlike the single-RT UnbindAsRenderTarget() path above,
+        // which only ever had one attachment to begin with. Mip regeneration afterward mirrors
+        // that same single-RT precedent, per target.
+        if (!mrtTargets_.empty())
+        {
+            for (std::size_t i = 0; i < mrtTargets_.size(); ++i)
+            {
+                auto* target = static_cast<RenderTarget*>(mrtTargets_[i]);
+                if (target->multiSampleCount > 0)
+                {
+                    glBindFramebuffer(GL_READ_FRAMEBUFFER, mrtFbo_);
+                    glReadBuffer(static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i));
+                    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target->resolveFbo);
+                    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+                    glBlitFramebuffer(0, 0, target->w, target->h, 0, 0, target->w, target->h,
+                                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+                }
+                if (target->levelCount > 1)
+                {
+                    glBindTexture(GL_TEXTURE_2D, target->colorTex);
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                }
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            mrtTargets_.clear();
+        }
     }
 
     void OpenGL2GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -3252,6 +3342,11 @@ namespace CNA::Internal::Backends::OpenGL2
             glDepthFunc(ToGLCompareFunc(depthFunc));
 
         stencilEnable ? glEnable(GL_STENCIL_TEST) : glDisable(GL_STENCIL_TEST);
+        cachedStencilEnabled_ = stencilEnable;
+        cachedTwoSidedStencil_ = twoSidedStencilMode;
+        cachedStencilFunc_ = stencilFunc;
+        cachedCcwStencilFunc_ = ccwStencilFunc;
+        cachedStencilMask_ = static_cast<unsigned>(stencilMask);
         if (!stencilEnable) return;
 
         const GLenum glSFail = ToGLStencilOp(stencilFail);
@@ -3279,6 +3374,27 @@ namespace CNA::Internal::Backends::OpenGL2
             glStencilFunc(ToGLCompareFunc(stencilFunc), referenceStencil, static_cast<GLuint>(stencilMask));
             glStencilOp(glSFail, glDFail, glPass);
             glStencilMask(static_cast<GLuint>(stencilWriteMask));
+        }
+    }
+
+    void OpenGL2GraphicsBackend::SetReferenceStencil(int value)
+    {
+        // GraphicsDevice.ReferenceStencil (Task 870/319, see IGraphicsBackend.hpp's own doc
+        // comment) must take effect standalone, without a full DepthStencilState
+        // re-application -- glStencilFunc(Separate) requires func+ref+mask together, so the
+        // func/mask most recently applied by ApplyDepthStencilState() above are cached there and
+        // reused here unchanged, alongside the new reference value. No-op if stencil testing
+        // isn't currently enabled (matches ApplyDepthStencilState's own early-return for that
+        // case -- nothing to re-apply).
+        if (!cachedStencilEnabled_) return;
+        if (cachedTwoSidedStencil_)
+        {
+            glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(cachedStencilFunc_), value, cachedStencilMask_);
+            glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(cachedCcwStencilFunc_), value, cachedStencilMask_);
+        }
+        else
+        {
+            glStencilFunc(ToGLCompareFunc(cachedStencilFunc_), value, cachedStencilMask_);
         }
     }
 
