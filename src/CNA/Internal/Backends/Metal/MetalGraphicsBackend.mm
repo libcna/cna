@@ -6,6 +6,8 @@
 #include "CNA/Internal/Backends/Metal/MetalMat4.hpp"
 #include "CNA/Internal/Backends/Metal/MetalSelectPipelineKind.hpp"
 #include "CNA/Internal/Backends/Metal/MetalUniformFill.hpp"
+#include "CNA/Internal/Backends/Metal/MetalVertexAttribFormat.hpp"
+#include "CNA/Internal/Backends/Metal/MetalVertexDescriptorPlan.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -783,6 +785,53 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
+    // plan_metal.md METAL-27: translates one MetalVertexAttribKind (plain C++, see
+    // MetalVertexAttribFormat.hpp) to the real Apple MTLVertexFormat it stands in for -- the one
+    // piece of this table that must live here rather than in the plain-C++ header, since
+    // MTLVertexFormat is declared only in <Metal/Metal.h>. Deliberately a trivial 1:1 rename (each
+    // MetalVertexAttribKind enumerator is already named after its target), not a re-derivation, to
+    // keep this translation as low-risk as possible.
+    static MTLVertexFormat metalVertexFormat(MetalVertexAttribKind kind)
+    {
+        switch (kind) {
+            case MetalVertexAttribKind::Float1:            return MTLVertexFormatFloat;
+            case MetalVertexAttribKind::Float2:            return MTLVertexFormatFloat2;
+            case MetalVertexAttribKind::Float3:            return MTLVertexFormatFloat3;
+            case MetalVertexAttribKind::Float4:            return MTLVertexFormatFloat4;
+            case MetalVertexAttribKind::UChar4Normalized:  return MTLVertexFormatUChar4Normalized;
+            case MetalVertexAttribKind::UChar4:            return MTLVertexFormatUChar4;
+            case MetalVertexAttribKind::Short2:            return MTLVertexFormatShort2;
+            case MetalVertexAttribKind::Short4:             return MTLVertexFormatShort4;
+            case MetalVertexAttribKind::Short2Normalized:  return MTLVertexFormatShort2Normalized;
+            case MetalVertexAttribKind::Short4Normalized:  return MTLVertexFormatShort4Normalized;
+            case MetalVertexAttribKind::Half2:             return MTLVertexFormatHalf2;
+            case MetalVertexAttribKind::Half4:             return MTLVertexFormatHalf4;
+        }
+        return MTLVertexFormatFloat3;
+    }
+
+    // plan_metal.md METAL-26/27: builds a real MTLVertexDescriptor from an arbitrary
+    // VertexElement list -- the generic counterpart to vertexDescriptorForStride()'s 8 hand-written
+    // fixed layouts above. The actual attribute-shape decisions (which MetalVertexAttribKind, which
+    // offset, which location) are made by the already-tested, plain-C++
+    // BuildMetalVertexDescriptorPlan() (MetalVertexDescriptorPlan.hpp); this function only
+    // mechanically walks that plan and calls the real Metal API. Not yet called from any live draw
+    // path -- see MetalVertexBuffer::SetVertexDeclaration()'s own comment for why (no built-in
+    // PipelineKind shader currently pairs with an arbitrary declaration; this becomes reachable
+    // once Phase 14's custom ShaderEffect exists).
+    static MTLVertexDescriptor* vertexDescriptorFromElements(int stride, const std::vector<VertexElement>& elements)
+    {
+        const MetalVertexDescriptorPlan plan = BuildMetalVertexDescriptorPlan(stride, elements);
+        MTLVertexDescriptor* vd = [MTLVertexDescriptor vertexDescriptor];
+        for (const auto& attr : plan.attributes) {
+            vd.attributes[attr.location].format = metalVertexFormat(attr.kind);
+            vd.attributes[attr.location].offset = attr.offset;
+            vd.attributes[attr.location].bufferIndex = attr.bufferIndex;
+        }
+        vd.layouts[0].stride = plan.stride;
+        return vd;
+    }
+
     // plan_metal.md METAL-6/24: real per-BlendState blend factors/operation, replacing the
     // previous hardcoded-into-every-pipeline straight-alpha blend. When !blend.enabled, blending
     // is left off entirely (matches BlendState.Opaque's real observable behavior).
@@ -974,8 +1023,20 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         int GetVertexCount() const override { return count_; }
         id<MTLBuffer> native() const { return buffer_; }
         std::size_t stride() const { return stride_; }
+        // plan_metal.md METAL-26: generic-layout hook (IVertexBufferBackend's own doc comment,
+        // Task 1080) -- just stores the declaration, mirroring
+        // EasyGLVertexBufferBackend::SetVertexDeclaration()'s own identical trivial-storage
+        // pattern exactly. No consumer reads this yet: the fixed-stride PipelineKind shaders
+        // (Phases 3-8) all pair with one of the 8 hand-written vertexDescriptorForStride() cases,
+        // and a genuinely arbitrary declaration has no matching MSL shader to draw with until
+        // Phase 14 (custom ShaderEffect) exists -- storing it now is still correct and safe
+        // (matches the interface contract, callable regardless of what reads it later), it just
+        // has no live effect on any draw today.
+        void SetVertexDeclaration(const std::vector<VertexElement>& elements) override { declarationElements_ = elements; }
+        const std::vector<VertexElement>& declarationElements() const { return declarationElements_; }
     private:
         id<MTLDevice> dev_; id<MTLBuffer> buffer_=nil; int capacity_=0,count_=0; std::size_t stride_=0;
+        std::vector<VertexElement> declarationElements_;
     };
 
     class MetalIndexBuffer final : public IIndexBufferBackend

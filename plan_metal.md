@@ -595,11 +595,13 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     genuinely device-queried `maxSamplerAnisotropy`/`GL_MAX_TEXTURE_MAX_ANISOTROPY` caps, which vary
     by GPU) — confirming the existing hardcoded clamp needs no device query at all, for a
     Metal-specific reason worth recording rather than just copying the Vulkan/GL pattern blindly.
-    `METAL-14` (the real, general `VertexElementFormat`→`MTLVertexFormat` table) remains genuinely
-    open — unlike the texture-format question, vertex layouts genuinely do carry arbitrary
-    application-defined element formats via `VertexDeclaration`, with no equivalent "always
-    normalized upstream" simplification — but stays correctly scoped under Phase 2's already-deferred
-    generic `VertexElement`-driven descriptor builder (`METAL-26`/`27`), not attempted in isolation.
+    `METAL-14` (the real, general `VertexElementFormat`→`MTLVertexFormat` table) — unlike the
+    texture-format question, vertex layouts genuinely do carry arbitrary application-defined element
+    formats via `VertexDeclaration`, with no equivalent "always normalized upstream" simplification.
+    **Landed 2026-07-20, real ✅** alongside `METAL-26`/`27`'s core logic — see this session's own
+    later narrative items for the real `CnaTests` evidence; this paragraph is left as the original
+    research note, not rewritten, since it correctly explains *why* the table was scoped the way it
+    was.
     `METAL-19` (enum-reordering regression guard) remains open, needing a real compile-time check or
     CTest unreachable from this Linux machine.
 
@@ -1026,14 +1028,58 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `230` remain explicitly deferred: each has its own "once X grows/lands" gate in its own task
     description that genuinely hasn't been reached yet, not skipped without reason.
 
+42. **`METAL-14`/`26`/`27` — the generic `VertexElement`-driven descriptor builder's core logic, an
+    eighth genuine ✅ (user-authorized daytime session, not autonomous)**: with the user back and
+    explicitly asking to continue into this specific task, tackled the piece Phase 2's own original
+    text scoped down and every "Explicitly still open" summary since has deferred. Read
+    `EasyGLGraphicsBackend::ApplyLayout()`/`DescribeVertexElementFormat()` first as the reference
+    implementation (this project's established "port working reference logic" convention) — its
+    core insight (attribute location = the element's own index within the declaration's element
+    list, not sorted by offset) carries over exactly.
+
+    Split into a plain-C++ tier and an Objective-C-only tier, same discipline as items 29–35:
+    `MetalVertexAttribFormat.hpp` (`METAL-14`) maps all 12 `VertexElementFormat` values to a neutral
+    `MetalVertexAttribKind` enum (a stand-in for `MTLVertexFormat`, since that real enum lives only
+    in `<Metal/Metal.h>`) — 14 tests, including an all-pairs distinctness check across all 12
+    formats and a dedicated check that `Color` (normalized) and `Byte4` (raw, for XNA's
+    `BLENDINDICES`-style usage) never collide, the single riskiest distinction in the whole table.
+    `MetalVertexDescriptorPlan.hpp` (`METAL-27`'s core) builds the actual attribute layout
+    (location/offset/format per element) from an arbitrary `VertexElement` list and a stride — 6
+    tests, including one that deliberately declares elements out of offset order to prove location
+    comes from list position not sorted offset, and two that cross-validate the generic builder
+    against this file's own existing hand-written stride-48/52 `vertexDescriptorForStride()` cases
+    byte-for-byte. All 20 new tests pass on this Linux machine, full Metal-tagged `ctest` subset
+    re-run afterward: 75/75 across all 9 extracted/added headers, zero regressions; a full
+    whole-suite `ctest -j4` run confirmed no Metal-tagged failures either.
+
+    The `.mm`-side glue (`vertexDescriptorFromElements()`, translating the tested plan to a real
+    `MTLVertexDescriptor` via a one-line `MetalVertexAttribKind`→`MTLVertexFormat` switch) and
+    `MetalVertexBuffer::SetVertexDeclaration()` (storing the declaration, mirroring EasyGL's own
+    identical trivial-storage pattern) are both real, written code but Objective-C-only, so stay 🟨
+    like every other `.mm`-side piece this whole plan — genuinely untestable without a Mac.
+
+    **Deliberately not wired into any live draw path.** Traced `getOrCreatePipeline(PipelineKind
+    kind)`'s actual call site (`drawMetal3D()`) and confirmed it derives `stride` purely from `kind`
+    itself, never from the real bound `MetalVertexBuffer` — every built-in shader (`BasicEffect`
+    through `SkinnedPbrEffect`) already has a matching fixed-stride descriptor in
+    `vertexDescriptorForStride()`'s existing 8 cases, so nothing today would ever call the new
+    generic path with a shader that could actually consume an arbitrary layout. Forcing a live
+    wiring now would repeat exactly the mistake this plan's own Phase 9 note already warned against
+    for instancing: "a technically-present-but-functionally-inert override." The infrastructure is
+    real, tested, and ready; `METAL-28`'s fallback-choice wiring and any actual generic-layout draw
+    stay correctly blocked on Phase 14 (custom `ShaderEffect`), the same conclusion this plan
+    reached before, just backed by real code now instead of an open task.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
-`METAL-14`/`19` (the real `VertexElementFormat` table, scoped under the fully generic
-`VertexElement`-driven descriptor builder below, and the enum-reordering regression guard —
-`METAL-15`–`18`/`20` are now closed, several found to be based on a false premise, see above); the
-fully generic `VertexElement`-driven descriptor builder
-(`METAL-26`/`27`); attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); Phase 8's
+`METAL-19` (the enum-reordering regression guard — `METAL-14`-`18`/`20` are now closed, several
+found to be based on a false premise, see above, and `METAL-14` itself landed real 2026-07-20); the
+*wiring* of the generic `VertexElement`-driven descriptor builder into a live draw path
+(`METAL-26`/`27`'s core logic landed real 2026-07-20 — see narrative — but no `PipelineKind`/shader
+currently pairs with an arbitrary declaration, so this stays correctly blocked on Phase 14, same
+conclusion as before, just with real tested infrastructure now waiting for it instead of nothing);
+attachment-format/sample-count-keyed pipelines (`METAL-31`/`32`); Phase 8's
 remaining `CTest` coverage/doc-ownership tasks (`METAL-89`/
 `90` — both unskinned `PbrEffect` and `SkinnedPbrEffect` themselves landed this session); the rest of
 Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
@@ -1187,6 +1233,16 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   instead of a coincidental match, plus dedicated boolean-false-branch and delegation-correctness
   tests — a seventh genuinely real, fully-earned ✅ tier tonight (🟨→✅ — `METAL-38`–`47`/`66`–`68`/
   `73`/`74`/`76`–`78`/`81`/`83`–`86`).
+- The generic `VertexElement`-driven descriptor builder's core logic (`METAL-14`/`26`/`27`) —
+  `MetalVertexAttribFormat.hpp` (all 12 `VertexElementFormat` values, 14 tests) and
+  `MetalVertexDescriptorPlan.hpp` (arbitrary-declaration attribute-layout building, 6 tests,
+  cross-validated against the existing hand-written stride-48/52 cases) — an eighth genuinely real,
+  fully-earned ✅ tier, landed with the user back and present (not part of the autonomous overnight
+  run). Deliberately not wired into any live draw path: no built-in `PipelineKind` shader currently
+  pairs with an arbitrary declaration, so `METAL-28`'s fallback-choice wiring stays correctly
+  blocked on Phase 14 (custom `ShaderEffect`) — see narrative item 42 for the full reasoning (🟨→✅
+  for the plain-C++ core, `METAL-14`/`26`/`27`, `.mm`-side glue stays 🟨 like every other
+  Objective-C piece in this plan).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
@@ -1279,7 +1335,7 @@ that replace it; do not re-derive scope from this table, use the phases:
 | METAL-11 | `SetBlendFactor(r,g,b,a)` via `[encoder setBlendColor:...]` — currently unimplemented (base no-op) | 🟨 |
 | METAL-12 | `PrimitiveType`→`MTLPrimitiveType`: add the missing `PointList` case (currently falls through `metalPrimitive()`'s default to `Triangle`, silently wrong) | 🟨 |
 | METAL-13 | `primitiveVertexCount()`: fix the `PointList` case (currently falls to default `count*3`; should be `count`) | 🟨→✅ **the formula itself is now real-build-verified** — extracted to `MetalPrimitiveVertexCount.hpp` (same `METAL-34` technique) and covered by 5 real `CnaTests`/`ctest` tests, one per `PrimitiveType` value including a dedicated `PointListEXT` regression test locking this exact fix in, all passing on this Linux machine, cross-checked against `EasyGLGraphicsBackend`'s own already-tested equivalent switch |
-| METAL-14 | `VertexElementFormat`→`MTLVertexFormat` full table (Single/Vector2/Vector3/Vector4/Color/Byte4/Short2/Short4/NormalizedShort2/NormalizedShort4/HalfVector2/HalfVector4) — today only 3 hand-picked fixed vertex descriptors exist, no general element-format mapping | ⬜ (still genuinely open — this is real, unlike `METAL-15`/`17` below, and stays scoped under Phase 2's already-deferred generic `VertexElement`-driven descriptor builder, `METAL-26`/`27`; do not attempt in isolation, see that phase's own note) |
+| METAL-14 | `VertexElementFormat`→`MTLVertexFormat` full table (Single/Vector2/Vector3/Vector4/Color/Byte4/Short2/Short4/NormalizedShort2/NormalizedShort4/HalfVector2/HalfVector4) — today only 3 hand-picked fixed vertex descriptors exist, no general element-format mapping | ✅ **real, on this Linux machine, 2026-07-20** — `MetalVertexAttribFormat.hpp`'s `DescribeMetalVertexElementFormat()` covers all 12 real values as a plain-C++ table (translated to the real `MTLVertexFormat` via a trivial 1:1-named switch inside the `.mm`), 14/14 `MetalVertexAttribFormat.*` tests pass, including an all-pairs distinctness check across all 12 formats — landed alongside `METAL-26`/`27`, see narrative |
 | METAL-15 | `SurfaceFormat`→`MTLPixelFormat` table (Color/Bgr565/Bgra5551/Bgra4444/Dxt1/Dxt3/Dxt5/NormalizedByte2/NormalizedByte4/Rgba1010102/Rg32/Rgba64/Alpha8/Single/Vector2/Vector4/HalfSingle/HalfVector2/HalfVector4/HdrBlendable) — every texture is currently hardcoded `RGBA8Unorm` regardless of `ImageData`'s real format | 🟨 (**found to be based on a false premise**: `include/CNA/Internal/Graphics/ImageData.hpp` has no format field at all — its own doc comment states "RGBA8 pixel data," and `Texture2D.cpp`'s own real code confirms DXT1/DXT5 are decompressed to RGBA8 via `DxtUtil::DecompressDxt1`/`DecompressDxt5` *before* `CreateTexture(img)` is ever called, for every backend uniformly, not just Metal. There is no "real format" for `CreateTexture()` to diverge from — this was never a Metal-specific gap) |
 | METAL-16 | `DepthFormat`→`MTLPixelFormat` table (None/Depth16/Depth24/Depth24Stencil8) — backbuffer currently always allocates `Depth32Float_Stencil8` regardless of what `PresentationParameters` requested | 🟨 (confirmed intentional, not overlooked: matches `VulkanGraphicsBackend`'s own already-accepted "always allocate depth+stencil" simplification, explicitly called out as the deliberately-chosen tier back in `METAL-101`'s own note — not a priority fix) |
 | METAL-17 | Query `MTLDevice.supportsBCTextureCompression` and document the real, device-dependent DXT/BC boundary (no native support on Apple Silicon without emulation; yes on Intel Macs) rather than assuming universal support | 🟨 (confirmed moot under the current architecture: since `METAL-15`'s finding means nothing ever uploads real DXT/BC bytes to any backend today, this query has nothing to gate yet — would only become relevant if a future, genuinely different, cross-backend "upload real compressed texture data" path bypassing `ImageData` were ever added, which is a project-wide feature, not a Metal-only one) |
@@ -1303,9 +1359,9 @@ already works and must not be redesigned by mistake.
 | METAL-23 | Replace the 5 fixed named pipeline fields (`pipe3Color`/`pipe3Tex20`/`pipe3ColorTex24`/`pipe3NormalTex32`/`pipe2`) with `std::unordered_map<MetalPipelineKey, id<MTLRenderPipelineState>>` + `getOrCreatePipeline(key)` | 🟨 |
 | METAL-24 | Extend `makePipeline()` to accept full blend-attachment fields driven by `METAL-6`'s table, instead of the currently hardcoded straight-alpha blend baked into every pipeline | 🟨 |
 | METAL-25 | Release-on-destruction for the new pipeline cache (mirrors the sampler-cache destructor pattern added in `METAL-1`) | 🟨 |
-| METAL-26 | `SetVertexDeclaration(const std::vector<VertexElement>&)` override on `MetalVertexBuffer` (the `IVertexBufferBackend` contract already documents this as Task 1080's generic-layout hook) | ⬜ |
-| METAL-27 | Build a generic `MTLVertexDescriptor` from a `VertexElement` list via `METAL-14`'s format table — replaces the 4 hand-written `vd16`/`vd20`/`vd24`/`vd32` descriptors with a path that also covers strides 28/36/40/44/48/52/56/68 once Phases 5–8 need them | ⬜ |
-| METAL-28 | Fallback: when `SetVertexDeclaration` was never called, keep the existing stride-based inference for the 4 strides that already work — no regression | ⬜ |
+| METAL-26 | `SetVertexDeclaration(const std::vector<VertexElement>&)` override on `MetalVertexBuffer` (the `IVertexBufferBackend` contract already documents this as Task 1080's generic-layout hook) | 🟨 added 2026-07-20 — mirrors `EasyGLVertexBufferBackend::SetVertexDeclaration()`'s own trivial-storage pattern exactly; the override itself lives inside the Objective-C++ file, so unlike the plain-C++ pieces below it stays genuinely unverified on this Linux machine (no consumer reads it yet either — see narrative) |
+| METAL-27 | Build a generic `MTLVertexDescriptor` from a `VertexElement` list via `METAL-14`'s format table — replaces the 4 hand-written `vd16`/`vd20`/`vd24`/`vd32` descriptors with a path that also covers strides 28/36/40/44/48/52/56/68 once Phases 5–8 need them | 🟨→partial ✅ 2026-07-20 — the core attribute-plan logic (`BuildMetalVertexDescriptorPlan`) is real, machine-verified (6/6 `MetalVertexDescriptorPlan.*` tests, cross-validated against the existing hand-written stride-48/52 cases); the final `MTLVertexDescriptor` object construction itself (`vertexDescriptorFromElements()`) is real code but Objective-C-only, so stays 🟨 like every other `.mm`-side piece — see narrative |
+| METAL-28 | Fallback: when `SetVertexDeclaration` was never called, keep the existing stride-based inference for the 4 strides that already work — no regression | 🟨 the existing 8-stride `vertexDescriptorForStride()` switch is completely untouched (provably zero regression), but no live draw path yet *chooses* between it and the new generic builder — see narrative for why that choice is correctly still deferred to Phase 14 |
 | METAL-29 | `selectPipelineKey(stride, elements, GpuDrawParams)` dispatcher replicating `EasyGLGraphicsBackend::SelectProgram()`'s exact precedence (pbr+skinned → pbr → skinned(±vertexlit) → envMapping → dualTexture(stride-24 colored variant) → stride switch 20/24/32(±vertexlit) → default colored) | 🟨 |
 | METAL-30 | Regression-proof: every existing stride-16/20/24/32 path must select byte-identical pipelines before/after the cache rewrite — a Linux-side manual trace against the current 5-pipeline logic, ahead of any macOS build | ⬜ |
 | METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ⬜ |
