@@ -1304,6 +1304,31 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     including all 99 `EnvironmentTests`) passes with zero regressions. Landed on the same fix
     branch, no further `cnametal`-side change needed. Sixth real, observed CI signal.
 
+53. **Real seventh CI signal — a fourth `sharp-runtime` portability gap, a genuinely different
+    root cause class from the previous three**: `TcpClient.cpp`/`Socket.cpp` failed with `error:
+    expected unqualified-id` at every `::htonl(...)`/`::htons(...)` call site, Clang's own note
+    chain showing the expansion through Apple's `sys/_endian.h` (`#define htonl(x)
+    __DARWIN_OSSwapInt32(x)`) into `libkern/_OSByteOrder.h`'s ternary expression. Root cause: on
+    Apple's libc, `htonl`/`htons`/`ntohl`/`ntohs` are preprocessor **macros**, not real functions
+    — macro expansion happens on token match regardless of a preceding `::` qualifier, so
+    `::htonl(x)` expands to `::(a ternary expression)`, which isn't valid C++ (`::` must be
+    followed by an unqualified-id). On Linux these are ordinary functions, so the identical `::`
+    qualification silently works there, masking the problem until this CI job existed.
+
+    Grepped every `htonl`/`htons`/`ntohl`/`ntohs` call in `src`/`include` before fixing anything,
+    the same discipline as item 52's proactive sweep: found 20 real `::`-qualified call sites
+    across exactly 3 files (`TcpClient.cpp`, `Socket.cpp`, `UdpClient.cpp`), and confirmed
+    `Dns.cpp`/`Ping.cpp` already call these unqualified — not new findings, already portable.
+    Removed the `::` prefix from all 20 (a plain, behavior-preserving syntax fix — unqualified
+    calls resolve correctly via ordinary lookup on every platform, real functions on Linux, macro
+    expansion on Apple, no functional difference). Full `SharpRuntimeTests` suite (12,481 tests,
+    including all 95 Tcp/Udp/Socket/Listener tests) passes with zero regressions. Landed on the
+    same fix branch, no further `cnametal`-side change needed. Seventh real, observed CI signal —
+    four genuinely distinct classes of macOS-portability gap found and fixed in `sharp-runtime` so
+    far (GCC-only warning flag, missing floating-point `from_chars`, Linux-only POSIX symbols,
+    Apple's macro-not-function byte-order conversions), none of them in `cnametal` itself, none of
+    them the Metal backend's own source — which this CI still has not reached.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
