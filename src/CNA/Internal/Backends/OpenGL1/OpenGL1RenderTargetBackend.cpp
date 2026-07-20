@@ -34,6 +34,15 @@ namespace
     // tier, which needs a CPU-side pixel buffer this GPU-only surface never has).
     PFNGLGENERATEMIPMAPPROC glGenerateMipmap_ = nullptr;
 
+    // plan_opengl1.md item 25: unlike glGenerateMipmap (a separate, older extension family that
+    // can exist independently), glRenderbufferStorageMultisample/glBlitFramebuffer are part of
+    // the SAME ARB_framebuffer_object/core-3.0 entry-point family the required FBO functions
+    // above already are -- loaded here alongside them (still not required for `loaded_`, so a
+    // driver that somehow lacks just these two doesn't lose basic RenderTarget2D support, only
+    // MSAA specifically).
+    PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glRenderbufferStorageMultisample_ = nullptr;
+    PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer_ = nullptr;
+
     // DepthFormat: None=0, Depth16=1, Depth24=2, Depth24Stencil8=3 (see this project's own
     // IGraphicsBackend::CreateRenderTarget2D doc comment for the raw-ordinal convention).
     GLenum DepthRenderbufferInternalFormat(int depthFormat, bool& hasStencil)
@@ -63,6 +72,8 @@ bool TryLoadOpenGL1FramebufferObjectFunctions()
     glRenderbufferStorage_ = reinterpret_cast<PFNGLRENDERBUFFERSTORAGEPROC>(load("glRenderbufferStorage"));
     glFramebufferRenderbuffer_ = reinterpret_cast<PFNGLFRAMEBUFFERRENDERBUFFERPROC>(load("glFramebufferRenderbuffer"));
     glGenerateMipmap_ = reinterpret_cast<PFNGLGENERATEMIPMAPPROC>(load("glGenerateMipmap"));
+    glRenderbufferStorageMultisample_ = reinterpret_cast<PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC>(load("glRenderbufferStorageMultisample"));
+    glBlitFramebuffer_ = reinterpret_cast<PFNGLBLITFRAMEBUFFERPROC>(load("glBlitFramebuffer"));
 
     loaded_ = glGenFramebuffers_ && glBindFramebuffer_ && glDeleteFramebuffers_
         && glFramebufferTexture2D_ && glCheckFramebufferStatus_ && glGenRenderbuffers_
@@ -71,10 +82,11 @@ bool TryLoadOpenGL1FramebufferObjectFunctions()
     return loaded_;
 }
 
-OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, int depthFormat, bool mipMap, OpenGL1ResourceRegistry* registry)
-    : width_(width), height_(height), depthFormat_(depthFormat), mipMap_(mipMap), registry_(registry)
+OpenGL1RenderTargetBackend::OpenGL1RenderTargetBackend(int width, int height, int depthFormat, bool mipMap, int multiSampleCount, OpenGL1ResourceRegistry* registry)
+    : requestedMultiSampleCount_(multiSampleCount), width_(width), height_(height), depthFormat_(depthFormat), mipMap_(mipMap), registry_(registry)
 {
     Build();
+    BuildMsaa();
     if (registry_) registry_->Add(this);
 }
 
@@ -127,9 +139,65 @@ void OpenGL1RenderTargetBackend::Build()
     }
 }
 
+// plan_opengl1.md item 25: builds the separate multisample draw FBO -- best-effort, NOT fatal on
+// failure (see the header's own doc comment). Deliberately does not throw: an incomplete/
+// unsupported MSAA framebuffer just means multiSampleCount_ stays 0 and every draw/resolve call
+// below correctly falls back to the plain single-sample fbo_ path, matching FNA3D's own
+// "real, device-clamped value, possibly 0" MultiSampleCount semantics.
+void OpenGL1RenderTargetBackend::BuildMsaa()
+{
+    multiSampleCount_ = 0;
+    if (requestedMultiSampleCount_ <= 1 || !glRenderbufferStorageMultisample_ || !glBlitFramebuffer_)
+        return;
+
+    GLint maxSamples = 0;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+    int samples = requestedMultiSampleCount_;
+    if (maxSamples > 0 && samples > maxSamples) samples = maxSamples;
+    if (samples <= 1) return;
+
+    glGenFramebuffers_(1, &msaaFbo_);
+    glBindFramebuffer_(GL_FRAMEBUFFER, msaaFbo_);
+
+    glGenRenderbuffers_(1, &msaaColorRbo_);
+    glBindRenderbuffer_(GL_RENDERBUFFER, msaaColorRbo_);
+    glRenderbufferStorageMultisample_(GL_RENDERBUFFER, samples, GL_RGBA8, width_, height_);
+    glFramebufferRenderbuffer_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msaaColorRbo_);
+
+    bool hasStencil = false;
+    const GLenum depthInternalFormat = DepthRenderbufferInternalFormat(depthFormat_, hasStencil);
+    if (depthInternalFormat != 0)
+    {
+        glGenRenderbuffers_(1, &msaaDepthRbo_);
+        glBindRenderbuffer_(GL_RENDERBUFFER, msaaDepthRbo_);
+        glRenderbufferStorageMultisample_(GL_RENDERBUFFER, samples, depthInternalFormat, width_, height_);
+        glFramebufferRenderbuffer_(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, msaaDepthRbo_);
+        if (hasStencil)
+            glFramebufferRenderbuffer_(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, msaaDepthRbo_);
+    }
+
+    const GLenum status = glCheckFramebufferStatus_(GL_FRAMEBUFFER);
+    glBindFramebuffer_(GL_FRAMEBUFFER, 0);
+
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+    {
+        if (msaaDepthRbo_) { glDeleteRenderbuffers_(1, &msaaDepthRbo_); msaaDepthRbo_ = 0; }
+        if (msaaColorRbo_) { glDeleteRenderbuffers_(1, &msaaColorRbo_); msaaColorRbo_ = 0; }
+        if (msaaFbo_) { glDeleteFramebuffers_(1, &msaaFbo_); msaaFbo_ = 0; }
+        std::cerr << "CNA: OpenGL1RenderTargetBackend MSAA framebuffer incomplete (GL status 0x"
+                  << std::hex << status << std::dec << ") -- falling back to single-sample" << std::endl;
+        return;
+    }
+
+    multiSampleCount_ = samples;
+}
+
 OpenGL1RenderTargetBackend::~OpenGL1RenderTargetBackend()
 {
     if (registry_) registry_->Remove(this);
+    if (msaaDepthRbo_) glDeleteRenderbuffers_(1, &msaaDepthRbo_);
+    if (msaaColorRbo_) glDeleteRenderbuffers_(1, &msaaColorRbo_);
+    if (msaaFbo_) glDeleteFramebuffers_(1, &msaaFbo_);
     if (depthRbo_) glDeleteRenderbuffers_(1, &depthRbo_);
     if (fbo_) glDeleteFramebuffers_(1, &fbo_);
     if (colorTex_) glDeleteTextures(1, &colorTex_);
@@ -140,6 +208,10 @@ void OpenGL1RenderTargetBackend::ReleaseGLHandleOnly()
     fbo_ = 0;
     colorTex_ = 0;
     depthRbo_ = 0;
+    msaaFbo_ = 0;
+    msaaColorRbo_ = 0;
+    msaaDepthRbo_ = 0;
+    multiSampleCount_ = 0;
     hasMips_ = false;
 }
 
@@ -151,11 +223,14 @@ void OpenGL1RenderTargetBackend::RecreateGLResource()
         std::cerr << "CNA: OpenGL1RenderTargetBackend failed to recreate after context loss: "
                   << e.what() << std::endl;
     }
+    BuildMsaa();
 }
 
 void OpenGL1RenderTargetBackend::BindGL() const { glBindTexture(GL_TEXTURE_2D, colorTex_); }
 
-void OpenGL1RenderTargetBackend::BindAsRenderTarget() { glBindFramebuffer_(GL_FRAMEBUFFER, fbo_); }
+// plan_opengl1.md item 25: targets the multisample draw FBO when active, so all rendering goes
+// to the multisample buffers -- UnbindAsRenderTarget() below resolves it into fbo_/colorTex_.
+void OpenGL1RenderTargetBackend::BindAsRenderTarget() { glBindFramebuffer_(GL_FRAMEBUFFER, multiSampleCount_ > 1 ? msaaFbo_ : fbo_); }
 
 // plan_opengl1.md item 21 (EasyGL parity): following FNA3D's own OPENGL_ResolveTarget mechanism
 // -- the whole mip chain is unconditionally regenerated from level 0 every time the target stops
@@ -164,8 +239,25 @@ void OpenGL1RenderTargetBackend::BindAsRenderTarget() { glBindFramebuffer_(GL_FR
 // bound texture object, not the framebuffer, so binding order between the two calls doesn't
 // actually matter for correctness here, but is kept FBO-bound-first to mirror BindAsRenderTarget's
 // own ordering and avoid a redundant glBindTexture while some other texture might be active.
+//
+// plan_opengl1.md item 25: when the multisample path is active, resolves msaaFbo_ into
+// fbo_/colorTex_ via glBlitFramebuffer FIRST -- mips must be generated from the just-resolved
+// single-sample image, not stale prior content. A multisample->single-sample blit is the
+// standard, only-legal way to resolve MSAA content (src/dst dimensions must match exactly, which
+// they always do here); GL_NEAREST is required by spec for a multisample source regardless of
+// what filter is requested, since per-pixel sample averaging -- not spatial filtering -- is what
+// actually resolves the content.
 void OpenGL1RenderTargetBackend::UnbindAsRenderTarget()
 {
+    if (multiSampleCount_ > 1)
+    {
+        glBindFramebuffer_(GL_READ_FRAMEBUFFER, msaaFbo_);
+        glBindFramebuffer_(GL_DRAW_FRAMEBUFFER, fbo_);
+        glBlitFramebuffer_(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer_(GL_READ_FRAMEBUFFER, 0);
+        glBindFramebuffer_(GL_DRAW_FRAMEBUFFER, 0);
+    }
+
     if (mipMap_ && glGenerateMipmap_)
     {
         glBindTexture(GL_TEXTURE_2D, colorTex_);

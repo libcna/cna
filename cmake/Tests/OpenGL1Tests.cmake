@@ -289,4 +289,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_RenderTargetCube COMMAND cna_test_opengl1_rendertargetcube
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 25: RenderTarget2D MSAA.
+    cna_opengl1_test(cna_test_opengl1_rendertarget2d_msaa
+                      examples/opengl1_rendertarget2d_msaa_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_RenderTarget2D_MSAA COMMAND cna_test_opengl1_rendertarget2d_msaa
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

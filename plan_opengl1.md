@@ -36,7 +36,7 @@ Target platforms: Linux and Windows desktop compatibility-profile drivers. The b
   edge-weighting/`EnvironmentMapSpecular` -- item 5), or arbitrary custom vertex declarations.
 - No MRT (`SetRenderTargets()` falls back to the shared `IGraphicsBackend` single-target default).
 - No instancing.
-- RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. No `RenderTarget2D` MSAA (item 22's backbuffer MSAA is a separate, window-visual-based mechanism that does not extend to FBO-based render targets -- EasyGL's own manual offscreen-FBO resolve for that case correctly stays out of OPENGL1's scope).
+- RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. `RenderTarget2D` MSAA is supported (item 25, via its own explicit `glRenderbufferStorageMultisample`/`glBlitFramebuffer` resolve -- a separate mechanism from item 22's window-visual-based backbuffer MSAA, which does not extend to FBO-based render targets).
 - `DualTextureEffect` is implemented via `ARB_multitexture`/core (>=1.3), detected at runtime (`OpenGL1Capabilities::multitexture`) with the entry points (`glActiveTexture`/`glMultiTexCoord2f`) loaded through `SDL_GL_GetProcAddress`; a strict 1.1 driver silently falls back to texture unit 0 only (`texture1` ignored, matching every other textured draw).
 - Anisotropic filtering requires `GL_EXT_texture_filter_anisotropic`, detected at runtime (`OpenGL1Capabilities::anisotropicFiltering`, `GraphicsCapability::AnisotropicFiltering`); silently falls back to no anisotropy (clamped to 1.0x) when the driver lacks it.
 - `GraphicsProfile.Reach`/`.HiDef` numeric ceilings (texture/cube/volume size, format whitelist,
@@ -498,11 +498,67 @@ shader/programmable-pipeline dependency, reusing machinery this backend already 
     real defect in either this item's own changes or the pre-existing Xnb code; flagged here in
     case it recurs, not fixed (out of scope).
 
-25. Add `RenderTarget2D` MSAA via `glRenderbufferStorageMultisample`/`glBlitFramebuffer` (core GL
+25. ~~Add `RenderTarget2D` MSAA via `glRenderbufferStorageMultisample`/`glBlitFramebuffer` (core GL
     3.0, or the older `EXT_framebuffer_multisample`/`EXT_framebuffer_blit` pair) -- the same
     "driver from ~2005+ already has this" tier `RenderTarget2D`/mipmap-generation/item-24 above
     already rely on. `GetMultiSampleCount()` currently hardcoded 0; `multiSampleCount` constructor
-    argument accepted but ignored.
+    argument accepted but ignored.~~ **Done.**
+
+    `glRenderbufferStorageMultisample_`/`glBlitFramebuffer_` are loaded by the SAME
+    `TryLoadOpenGL1FramebufferObjectFunctions()` loader the required FBO functions already use --
+    unlike `glGenerateMipmap` (item 21, a genuinely separate, independently-existing extension
+    family), these two are part of the SAME `ARB_framebuffer_object`/core-3.0 entry-point family
+    the mandatory FBO functions already are. Not required for `loaded_`, so a driver that somehow
+    lacks just these two keeps plain single-sample `RenderTarget2D` working, only losing MSAA.
+
+    `OpenGL1RenderTargetBackend` gained a SEPARATE `msaaFbo_`/`msaaColorRbo_`/`msaaDepthRbo_`
+    triplet (built by the new `BuildMsaa()`, called right after the existing single-sample
+    `Build()` in both the constructor and `RecreateGLResource()`), alongside the pre-existing
+    single-sample `fbo_`/`colorTex_`/`depthRbo_` triplet. `BindAsRenderTarget()` now targets
+    `msaaFbo_` when `multiSampleCount_ > 1` (all rendering goes to the multisample buffers);
+    `UnbindAsRenderTarget()` resolves via `glBlitFramebuffer_(..., GL_COLOR_BUFFER_BIT,
+    GL_NEAREST)` BEFORE the existing mip-chain regeneration (mips must be generated from the
+    just-resolved image, not stale/undefined multisample content); `GetData()` is unchanged --
+    always reads the resolved single-sample `fbo_`. `BuildMsaa()` is best-effort and NOT fatal on
+    failure: an incomplete/unsupported MSAA framebuffer just leaves `multiSampleCount_` at 0 and
+    every draw/resolve call correctly falls back to the plain single-sample path, matching FNA3D's
+    own "real, device-clamped value, possibly 0" `MultiSampleCount` semantics rather than
+    throwing. Requested sample count is clamped to a queried `GL_MAX_SAMPLES`. New
+    `GetMultiSampleCount()` override returns the real, applied `multiSampleCount_` (was
+    previously the interface's hardcoded-0 default). `CreateRenderTarget2D()`'s
+    `multiSampleCount` parameter, previously accepted but silently dropped, is now forwarded.
+
+    New test `OpenGL1_RenderTarget2D_MSAA` (`examples/opengl1_rendertarget2d_msaa_test.cpp`)
+    creates a `RenderTarget2D` with `preferredMultiSampleCount=4` and checks: (1)
+    `MultiSampleCount` reflects a real, genuinely-applied value, not silently 0 (the pre-existing
+    bug); (2) a solid-color fill survives the render+resolve pipeline intact (a broken MSAA FBO or
+    resolve blit could easily produce black/garbage even for trivial full-coverage content); (3)
+    an edge-crossing triangle produces a genuinely blended (neither fully-covered nor uncovered)
+    pixel at the diagonal edge, proving `glBlitFramebuffer_` performed a real multisample resolve
+    rather than a degenerate copy. Unlike item 22's OWN backbuffer-MSAA test (downgraded to
+    diagnostic-only after a standalone SDL+GL probe proved even a driver-confirmed multisample GLX
+    *window* visual reads back perfectly binary on this sandbox's Mesa llvmpipe software
+    rasterizer -- a real environment limitation in implicit resolve-on-read), this render-target
+    path uses this backend's OWN EXPLICIT `glBlitFramebuffer_` resolve rather than any
+    driver-implicit resolve, and empirically DOES produce a real, exactly-mid-value blended pixel
+    (confirmed: `R=128` exactly, neither the fully-covered `R=255` nor the uncovered `R=0`) --
+    reliable enough to assert here as a real hard check, not just diagnostic. All 3 checks matched
+    their predicted values on the first attempt.
+
+    Mutation-tested two ways, independently: (1) `BindAsRenderTarget()` mutated to always bind
+    `fbo_` regardless of `multiSampleCount_` (simulating "rendering never actually reaches the
+    MSAA buffers") -- reproduces the predicted failure exactly (resolved centre reads `(0,0,0)`
+    instead of `(0,200,0)`, since the resolve blit overwrites the correctly-drawn single-sample
+    content with garbage from the never-written `msaaFbo_`; the antialiasing check also fails,
+    uniformly `r=0` with no blended value; `1/3 PASS`). (2) `BuildMsaa()` mutated to leave
+    `multiSampleCount_ = 0` even after a fully successful build (simulating "MSAA build succeeds
+    but its sample count is never reported") -- produces a DIFFERENT, complementary failure
+    signature: check 1 fails (`MultiSampleCount=0`), check 2 still PASSES (since `multiSampleCount_`
+    also drives `BindAsRenderTarget()`'s own branch, so the single-sample fallback path still
+    renders correctly), check 3 fails (no antialiasing possible from single-sample rendering);
+    `1/3 PASS`. Restoring each mutation independently reconfirmed all 3 checks pass with the exact
+    predicted correct values (`MultiSampleCount=4`, resolved centre `(0,200,0)`, edge `r=128` at
+    the blend pixel). Full `ctest -R "OpenGL1_"` regression sweep: 38/38 passed after this change.
 
 ## Bugs found while adding test coverage (2026-07-19)
 

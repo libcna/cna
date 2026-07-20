@@ -16,8 +16,24 @@ namespace CNA::Internal::Backends::OpenGL1
      * deliberately not supported: effectively unreachable on any GPU/driver from this decade,
      * and supporting it would meaningfully complicate this file for near-zero practical benefit.
      *
-     * Does not support MSAA (GetMultiSampleCount() always 0, matching
-     * SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing) == false).
+     * plan_opengl1.md item 25 (further improvement beyond EasyGL parity, found 2026-07-20): real
+     * MSAA. A REQUESTED multiSampleCount>1 builds a SEPARATE multisample draw FBO (msaaFbo_ --
+     * multisample color+depth/stencil renderbuffers, glRenderbufferStorageMultisample) alongside
+     * the single-sample fbo_/colorTex_ pair above -- BindAsRenderTarget() targets msaaFbo_ so all
+     * rendering goes to the multisample buffers; UnbindAsRenderTarget() resolves msaaFbo_ into
+     * fbo_/colorTex_ via glBlitFramebuffer (a multisample->single-sample blit is the standard,
+     * only-legal way to resolve; the driver box-filters per spec) BEFORE the existing mip-chain
+     * regeneration, since mips must be generated FROM the resolved image. Sampling/GetData()
+     * always reads the single-sample colorTex_/fbo_ -- a multisample target is never directly
+     * sampled, matching real GPU/FNA3D semantics. glRenderbufferStorageMultisample/
+     * glBlitFramebuffer are part of the SAME ARB_framebuffer_object/core-3.0 entry-point family
+     * RenderTarget2D's own basic FBO support already requires (unlike glGenerateMipmap, no
+     * separate capability check needed -- if framebufferObject is true, these are expected to
+     * load too). If the msaa FBO build fails or genuinely can't be built (extremely unlikely
+     * given the above), this backend gracefully falls back to single-sample only
+     * (GetMultiSampleCount()==0) rather than failing RenderTarget2D construction outright --
+     * matches FNA3D's own "real, device-clamped value, possibly 0" MultiSampleCount semantics.
+     * Requested sample counts are clamped to the driver's real GL_MAX_SAMPLES.
      *
      * plan_opengl1.md item 21 (EasyGL parity, found 2026-07-20): mipMap now genuinely regenerates
      * the color texture's mip chain from level 0 every time the target is unbound, following
@@ -43,12 +59,18 @@ namespace CNA::Internal::Backends::OpenGL1
          *                    (None=0, Depth16=1, Depth24=2, Depth24Stencil8=3).
          * @param mipMap      Whether UnbindAsRenderTarget() should regenerate a full mip chain
          *                    from level 0 each time the target stops being active.
+         * @param multiSampleCount Requested MSAA sample count (already power-of-two-rounded by
+         *                    RenderTarget2D::ClosestMSAAPower); 0 or 1 for no MSAA. Clamped to
+         *                    the driver's real GL_MAX_SAMPLES; see GetMultiSampleCount() for the
+         *                    actual applied value.
          * @param registry    Context-loss recovery registry to register with, or nullptr when
          *                    context recovery is disabled (IGraphicsBackend::
          *                    SetContextRecoveryEnabled(false)).
-         * @throws std::runtime_error if the resulting framebuffer is incomplete.
+         * @throws std::runtime_error if the resulting single-sample framebuffer is incomplete
+         *         (an incomplete MSAA framebuffer specifically is NOT fatal -- see the class doc
+         *         comment's own "gracefully falls back to single-sample only" note).
          */
-        OpenGL1RenderTargetBackend(int width, int height, int depthFormat, bool mipMap, OpenGL1ResourceRegistry* registry);
+        OpenGL1RenderTargetBackend(int width, int height, int depthFormat, bool mipMap, int multiSampleCount, OpenGL1ResourceRegistry* registry);
         ~OpenGL1RenderTargetBackend() override;
 
         int GetWidth() const override { return width_; }
@@ -60,6 +82,8 @@ namespace CNA::Internal::Backends::OpenGL1
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] unsigned int GetColorGLHandle() const override { return colorTex_; }
+        /** @brief The actual, device-clamped MSAA sample count; 0 if none/unsupported. */
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
 
         /** @brief True if the last UnbindAsRenderTarget() call generated a complete mip chain. */
         bool HasMips() const { return hasMips_; }
@@ -78,9 +102,19 @@ namespace CNA::Internal::Backends::OpenGL1
 
     private:
         void Build();
+        void BuildMsaa();
         unsigned int fbo_ = 0;
         unsigned int colorTex_ = 0;
         unsigned int depthRbo_ = 0;
+        // plan_opengl1.md item 25: the separate multisample draw FBO/renderbuffers -- only
+        // allocated when requestedMultiSampleCount_>1 and the driver genuinely supports it (see
+        // the class doc comment). multiSampleCount_ is the honest, possibly-lower-than-requested
+        // applied value (0 if the msaa path isn't active at all).
+        unsigned int msaaFbo_ = 0;
+        unsigned int msaaColorRbo_ = 0;
+        unsigned int msaaDepthRbo_ = 0;
+        int requestedMultiSampleCount_ = 0;
+        int multiSampleCount_ = 0;
         int width_ = 0;
         int height_ = 0;
         int depthFormat_ = 0;
