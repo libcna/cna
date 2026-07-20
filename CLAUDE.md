@@ -385,6 +385,19 @@ Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vu
 
 ---
 
+## Existence-Gate Spikes — Persistent Directories Too
+
+Standalone existence-gate spike programs (throwaway-looking probes proving a new backend's
+underlying API works before any backend code is written — see `DX1-0`, `DX2-0`, `D9-0`) follow
+the same build-location rule as CMake builds (see *Build locations & caching* above): write and
+compile them in a `<name>-spike/` directory at the repo root (see `dx9-spike/README.md` for the
+precedent), never in the session scratchpad. Once a spike's finding is settled, keep its `.cpp`
+source and a short `README.md` of what it proved committed there; gitignore only the built
+binaries (`*.exe`, `*.o`) inside that directory. `ccache` works for MinGW cross-compiles too
+(`ccache x86_64-w64-mingw32-g++ …`), same as the native launcher.
+
+---
+
 ## Git Commits — Always Commit After Finishing a Task
 
 **Always create a commit as soon as a task is finished** (build verified, tests passing,
