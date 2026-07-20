@@ -24,10 +24,12 @@
 // diffuseColor.rgb * tex.rgb` formula to exactly `light0Diffuse` when DiffuseColor is left at its
 // default white and NdotL=1.
 //
-// Unlike the Bgfx sibling, no RasterizerState::CullNone override is needed here -- per this
-// project's established Task 364/896 finding, Vulkan's default cull state already behaves like
-// EasyGL's effectively-no-culling default (confirmed empirically: no other Vulkan SkinnedEffect
-// pixel test in this family sets it, e.g. vulkan_skinnedeffect_identity_bones_test.cpp).
+// REMED-GFX-052: this test DOES need RasterizerState::CullNone (like its siblings
+// vulkan_skinnedeffect_multilight/_specular and every vulkan_basiceffect_*_fog test). The prior
+// comment here claimed it was unnecessary; empirically the quad's post-Y-flip winding is culled by
+// the real default RasterizerState and the center pixel read back as the black clear color, which
+// is what made this test fail (formerly recorded as a hang). With CullNone the skinned fog quad
+// renders and all three cases pass.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -136,6 +138,7 @@ class SkinnedEffectFogVulkanTest : public Game
         VertexBuffer vb(dev, 6);
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
 
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
         Color got(0, 0, 0, 0);
         for (int i = 0; i < 20; ++i)
         {
