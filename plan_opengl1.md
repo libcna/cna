@@ -36,9 +36,8 @@ Target platforms: Linux and Windows desktop compatibility-profile drivers. The b
   edge-weighting/`EnvironmentMapSpecular` -- item 5), or arbitrary custom vertex declarations.
 - No MRT (`SetRenderTargets()` falls back to the shared `IGraphicsBackend` single-target default).
 - No instancing.
-- No native modern occlusion-query guarantee.
 - No `RenderTargetCube` (no `CreateRenderTargetCube()` override).
-- RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. No MSAA.
+- RenderTarget2D is implemented via `ARB_framebuffer_object`/core (>=3.0), detected at runtime (`OpenGL1Capabilities::framebufferObject`); `CreateRenderTarget2D()` returns nullptr on a driver without it. `EXT_framebuffer_object` (the older, narrower extension) is not supported. No `RenderTarget2D` MSAA (item 22's backbuffer MSAA is a separate, window-visual-based mechanism that does not extend to FBO-based render targets -- EasyGL's own manual offscreen-FBO resolve for that case correctly stays out of OPENGL1's scope).
 - `DualTextureEffect` is implemented via `ARB_multitexture`/core (>=1.3), detected at runtime (`OpenGL1Capabilities::multitexture`) with the entry points (`glActiveTexture`/`glMultiTexCoord2f`) loaded through `SDL_GL_GetProcAddress`; a strict 1.1 driver silently falls back to texture unit 0 only (`texture1` ignored, matching every other textured draw).
 - Blend equations beyond additive blending and constant blend color need later extension/version detection.
 - Anisotropic filtering requires `GL_EXT_texture_filter_anisotropic`, detected at runtime (`OpenGL1Capabilities::anisotropicFiltering`, `GraphicsCapability::AnisotropicFiltering`); silently falls back to no anisotropy (clamped to 1.0x) when the driver lacks it.
@@ -219,12 +218,61 @@ shader, no modern-only extension) and were simply never implemented yet:
     correctly, matching this repo's existing precedent of trusting driver-reported capabilities
     that this sandbox's software rasterizer cannot itself fully exercise. Full
     `ctest -R "OpenGL1_"` regression sweep: 29/29 passed after this change.
-23. Add real occlusion queries via `ARB_occlusion_query`/core GL 1.5 (`glGenQueries`/
+23. ~~Add real occlusion queries via `ARB_occlusion_query`/core GL 1.5 (`glGenQueries`/
     `glBeginQuery(GL_SAMPLES_PASSED)`/`glEndQuery`/`glGetQueryObjectuiv`, ratified 2001/core 2003,
     same `SDL_GL_GetProcAddress` loading pattern already used for `ARB_framebuffer_object`) --
     genuinely pre-shader-era and fixed-function-orthogonal, not a "second modern OpenGL backend"
     concern any more than the existing FBO-based `RenderTarget2D` support already is. Supersedes
-    phase 11/12's "no native modern occlusion-query guarantee" framing, which predates this finding.
+    phase 11/12's "no native modern occlusion-query guarantee" framing, which predates this
+    finding.~~ **Done**: new `OpenGL1OcclusionQueryBackend` (`OpenGL1OcclusionQueryBackend.hpp`/
+    `.cpp`) implements `IOcclusionQueryBackend` via `glGenQueries`/`glBeginQuery(GL_SAMPLES_
+    PASSED)`/`glEndQuery`/`glGetQueryObjectiv(GL_QUERY_RESULT_AVAILABLE)`/`glGetQueryObjectuiv
+    (GL_QUERY_RESULT)`, entry points loaded via `TryLoadOpenGL1OcclusionQueryFunctions()`
+    (`SDL_GL_GetProcAddress`, same pattern as `TryLoadOpenGL1FramebufferObjectFunctions()`), gated
+    on a new `OpenGL1Capabilities::occlusionQuery` flag (`coreAtLeast(1,5) ||
+    GL_ARB_occlusion_query`). `OpenGL1GraphicsBackend::CreateOcclusionQuery()` returns nullptr when
+    unavailable (the documented `IGraphicsBackend` contract, matching `CreateRenderTarget2D`'s own
+    capability-gated fallback); `SupportsCapability(OcclusionQuery)` now returns the real detected
+    value instead of hardcoded `false`. Uses `GL_SAMPLES_PASSED` (not `GL_ANY_SAMPLES_PASSED`) --
+    on a non-multisampled target this is a real, exact visible-sample count, more XNA-faithful
+    than EasyGL's own GLES3-constrained implementation (`IOcclusionQueryBackend`'s own doc comment:
+    "On OpenGL ES 3.0 (EasyGL) ... 0 or 1"). No context-loss recovery: an occlusion query is an
+    ephemeral, single-use GPU measurement with no persistent content to restore, unlike
+    `Texture2D`/`TextureCube`/`RenderTarget2D` -- documented as an intentional scope decision, not
+    an oversight.
+
+    `OpenGL1_GraphicsCapability` (`examples/opengl1_graphics_capability_test.cpp`) extended with a
+    real, functionally meaningful verification, not just "some query object exists": cross-checks
+    `SupportsCapability(OcclusionQuery)` against an independent raw `GL_VERSION`/`GL_EXTENSIONS`
+    scan (same style as the file's own pre-existing `AnisotropicFiltering` check), then draws a
+    full-viewport quad with nothing else present (must report `PixelCount()` close to the real
+    viewport pixel area -- got exactly `512` for a `32x16` viewport) and the SAME quad fully
+    covered by a nearer opaque occluder with real depth testing enabled (must report
+    `PixelCount()==0` -- real `GL_LESS_EQUAL` depth-test rejection, not a placeholder). Found while
+    writing this: `Matrix::CreateOrthographicOffCenter`'s `M33`/`M43` map world Z to clip-space Z
+    with a NEGATIVE slope for near/far arguments `(-1,1)` -- a LARGER world Z is NEARER (passes
+    `LessEqual`) under this convention, the opposite of the more common "larger Z = farther"
+    intuition; confirmed empirically (occluder at world Z=0.9 in front of a target at Z=0.5
+    correctly occludes; the reverse assignment did not). Mutation-tested both fixes independently:
+    reverting `OpenGL1Capabilities::occlusionQuery` detection to always `false` reproduces the
+    predicted `SupportsCapability` mismatch (test still structurally passes via its own honest
+    degraded-behavior branch, but the capability cross-check itself correctly fails); separately
+    hardcoding `OpenGL1OcclusionQueryBackend::PixelCount()` to always return a nonzero placeholder
+    (999) with detection intact reproduces the predicted failure (occluded case reads `999` instead
+    of `0`) -- confirming both the capability detection and the real `GL_SAMPLES_PASSED` mechanism
+    are independently load-bearing. The shared `GraphicsDeviceCapabilityTests.cpp`
+    (`CnaTests`)'s own `CNA_BACKEND_OPENGL1`-gated `SupportsOcclusionQuery` expectation (previously
+    `EXPECT_FALSE`, a phase-12 finding predating this item) is now `EXPECT_TRUE` unconditionally --
+    OcclusionQuery is no longer one of the capabilities that legitimately differs between OPENGL1
+    and EasyGL, both real, 3D-capable backends. Full `ctest -R "OpenGL1_"` regression sweep: 29/29
+    passed after this change; `CnaTests --gtest_filter="GraphicsDeviceCapabilityTest.*"`: 8/8
+    passed under `CNA_GRAPHICS_BACKEND=OPENGL1`.
+
+This closes item 23, the last of items 20-23 completed so far from the 11-item EasyGL parity list
+(items 13-23) found 2026-07-20. Items 13-19 (virtual-resolution/presentation-mode scaling,
+`BasicEffect` `DirectionalLight1`/`DirectionalLight2`, `BasicEffect` specular highlights,
+`TextureAddressMode.Mirror`, constant blend color, blend equation beyond add, separate alpha blend
+factors) remain open.
 
 ## Bugs found while adding test coverage (2026-07-19)
 

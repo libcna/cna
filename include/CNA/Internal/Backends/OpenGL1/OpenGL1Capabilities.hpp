@@ -34,6 +34,8 @@ namespace CNA::Internal::Backends::OpenGL1
         bool anisotropicFiltering = false;
         /** @brief GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, the driver's real ceiling. 1.0f (no-op value) when anisotropicFiltering is false. */
         float maxAnisotropy = 1.0f;
+        /** @brief ARB_occlusion_query or core (>=1.5) -- needed for real OcclusionQuery support (item 23). */
+        bool occlusionQuery = false;
     };
 
     /**

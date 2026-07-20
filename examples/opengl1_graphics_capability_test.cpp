@@ -8,16 +8,32 @@
 // sdlrenderer_graphics_capability_test.cpp/dx3_graphics_capability_test.cpp/
 // canvas_graphics_capability_test.cpp do for their own (much narrower) 2D-only backends.
 //
+// plan_opengl1.md item 23 (EasyGL parity, found 2026-07-20): OcclusionQuery is no longer
+// unconditionally false -- real ARB_occlusion_query/core-1.5 support is now cross-checked the
+// same way AnisotropicFiltering already is (a raw GL_VERSION/GL_EXTENSIONS scan independent of
+// OpenGL1Capabilities' own bookkeeping), and backed by a real, functionally meaningful occlusion
+// query: an unoccluded draw must report a large PixelCount(), and the SAME draw fully covered by
+// a nearer opaque quad (real GL_LESS depth-test rejection) must report PixelCount()==0 -- not
+// just "some query object exists", but that GL_SAMPLES_PASSED genuinely reflects real per-pixel
+// visibility.
+//
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_opengl.h>
@@ -77,13 +93,83 @@ protected:
         // Not implemented by this backend at all -- must not over-report.
         check(!dev.SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing), "MultiSampleAntiAliasing not supported");
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets not supported");
-        check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery not supported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported");
 
-        // Back the OcclusionQuery=false claim with the actual degraded behavior it describes:
-        // the backend's CreateOcclusionQuery() returns nullptr (shared IGraphicsBackend
-        // default), so a real OcclusionQuery object silently no-ops instead of ever completing.
+        // plan_opengl1.md item 23: OcclusionQuery must track the REAL driver version/extension,
+        // not a hardcoded guess in either direction -- same cross-check style as
+        // AnisotropicFiltering above, independent of OpenGL1Capabilities' own bookkeeping.
+        int glMajor = 1, glMinor = 1;
+        std::sscanf(reinterpret_cast<const char*>(glGetString(GL_VERSION)), "%d.%d", &glMajor, &glMinor);
+        const bool realOcclusionQuery = (glMajor > 1 || (glMajor == 1 && glMinor >= 5))
+            || HasExtensionToken("GL_ARB_occlusion_query");
+        check(dev.SupportsCapability(GraphicsCapability::OcclusionQuery) == realOcclusionQuery,
+              "OcclusionQuery matches real ARB_occlusion_query/core-1.5 presence");
+
+        if (dev.SupportsCapability(GraphicsCapability::OcclusionQuery))
         {
+            // Real, functionally meaningful occlusion query: GL_SAMPLES_PASSED must genuinely
+            // reflect per-pixel depth-test visibility, not just "some query object exists".
+            dev.SetDepthTestEnabled(true);
+            dev.setDepthStencilStateProperty(DepthStencilState::Default); // LessEqual, write-enabled
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+
+            const auto& vp = dev.getViewportProperty();
+            const float W = (float)vp.getWidthProperty(), H = (float)vp.getHeightProperty();
+            Matrix world = Matrix::getIdentityProperty();
+            Matrix view = Matrix::getIdentityProperty();
+            Matrix proj = Matrix::CreateOrthographicOffCenter(0.0f, W, H, 0.0f, -1.0f, 1.0f);
+
+            auto drawFullViewportQuad = [&](float z)
+            {
+                const VertexPositionColor q[6] = {
+                    { Vector3(0.0f, 0.0f, z), Color::White }, { Vector3(0.0f, H, z), Color::White },
+                    { Vector3(W, H, z), Color::White },       { Vector3(0.0f, 0.0f, z), Color::White },
+                    { Vector3(W, H, z), Color::White },       { Vector3(W, 0.0f, z), Color::White },
+                };
+                BasicEffect fx(dev);
+                fx.setWorldProperty(world); fx.setViewProperty(view); fx.setProjectionProperty(proj);
+                fx.VertexColorEnabled = true;
+                fx.Apply();
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, q, 0, 2);
+            };
+
+            dev.Clear(Color::Black, 1.0f);
+            OcclusionQuery unoccluded(dev);
+            unoccluded.Begin();
+            drawFullViewportQuad(0.5f); // z=0.5, nothing else drawn -- must all pass depth test.
+            unoccluded.End();
+            for (int i = 0; i < 100000 && !unoccluded.getIsCompleteProperty(); ++i) {}
+            check(unoccluded.getIsCompleteProperty(), "unoccluded query becomes complete (bounded poll)");
+            const int unoccludedCount = unoccluded.getPixelCountProperty();
+            std::printf("unoccluded PixelCount=%d (viewport=%dx%d=%d)\n",
+                        unoccludedCount, vp.getWidthProperty(), vp.getHeightProperty(),
+                        vp.getWidthProperty() * vp.getHeightProperty());
+            check(unoccludedCount >= (vp.getWidthProperty() * vp.getHeightProperty() * 9) / 10,
+                  "unoccluded full-viewport quad: PixelCount() close to the real viewport area");
+
+            dev.Clear(Color::Black, 1.0f);
+            // Matrix::CreateOrthographicOffCenter's M33/M43 (Matrix.cpp) map world Z LINEARLY to
+            // clip-space Z with a NEGATIVE slope for these near/far arguments (-1,1) -- a LARGER
+            // world Z produces a SMALLER (nearer, under LessEqual) resulting depth value here, the
+            // opposite of the more common "larger Z = farther" intuition. Confirmed empirically
+            // (0.9 in front of 0.5 correctly occludes; the reverse assignment did not).
+            drawFullViewportQuad(0.9f); // real occluder (nearer), NOT wrapped in a query.
+            OcclusionQuery occluded(dev);
+            occluded.Begin();
+            drawFullViewportQuad(0.5f); // same quad again, now entirely behind the occluder.
+            occluded.End();
+            for (int i = 0; i < 100000 && !occluded.getIsCompleteProperty(); ++i) {}
+            check(occluded.getIsCompleteProperty(), "occluded query becomes complete (bounded poll)");
+            const int occludedCount = occluded.getPixelCountProperty();
+            std::printf("occluded PixelCount=%d\n", occludedCount);
+            check(occludedCount == 0,
+                  "fully occluded quad: PixelCount()==0 -- real GL_LESS_EQUAL depth-test "
+                  "rejection, not just a nonzero placeholder");
+        }
+        else
+        {
+            // Honest degraded-behavior check for a driver that genuinely lacks the extension --
+            // matches this file's own pre-item-23 assertion.
             OcclusionQuery q(dev);
             q.Begin();
             q.End();

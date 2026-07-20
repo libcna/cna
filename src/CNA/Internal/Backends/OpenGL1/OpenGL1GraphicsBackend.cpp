@@ -200,7 +200,7 @@ int msBuffers=0,msSamples=0;SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS,&msBuf
 multiSampleCount_=(msBuffers>0&&msSamples>1)?msSamples:0;
 if(multiSampleCount_>1)glEnable(GL_MULTISAMPLE);
 }
-OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();DetectMultiSampleCount();
+OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();DetectMultiSampleCount();
 std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.versionMinor
  <<"; framebuffer object: "<<(caps_.framebufferObject?"yes":"no")
  <<"; multitexture: "<<(caps_.multitexture?"yes":"no")
@@ -230,7 +230,7 @@ if(glContext_){SDL_GL_MakeCurrent(window_,nullptr);SDL_GL_DestroyContext(glConte
 glContext_=SDL_GL_CreateContext(window_);
 if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed during debug context loss: ")+SDL_GetError());
 SDL_GL_MakeCurrent(window_,glContext_);
-caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();DetectMultiSampleCount();
+caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();DetectMultiSampleCount();
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);
 registry_.NotifyContextRestored();
 // The new context defaults to FBO 0 (the backbuffer) regardless of what was bound before the
@@ -245,6 +245,7 @@ std::cout<<"CNA: OpenGL1 desktop GL context recreated and all tracked resources 
 }
 void OpenGL1GraphicsBackend::DebugRestoreContext(){DebugSimulateContextLoss();}
 std::unique_ptr<ITextureCubeBackend>OpenGL1GraphicsBackend::CreateTextureCube(int size,bool mipMap,int surfaceFormat){if(!caps_.textureCubeMap)return nullptr;return std::make_unique<OpenGL1TextureCubeBackend>(size,mipMap,surfaceFormat,RegistryIfEnabled(),caps_.generateMipmap);}
+std::unique_ptr<IOcclusionQueryBackend>OpenGL1GraphicsBackend::CreateOcclusionQuery(){if(!caps_.occlusionQuery)return nullptr;return std::make_unique<OpenGL1OcclusionQueryBackend>();}
 void OpenGL1GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend*rt){if(currentRt_&&currentRt_!=rt)currentRt_->UnbindAsRenderTarget();currentRt_=rt;if(rt)rt->BindAsRenderTarget();}
 void OpenGL1GraphicsBackend::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1GraphicsBackend::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1GraphicsBackend::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1GraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepth(float d){glClearDepth(d);glClear(GL_DEPTH_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearStencil(int s){glClearStencil(s);glClear(GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);glClear(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1GraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
 void OpenGL1GraphicsBackend::ApplyBlendState(int cs,int,int cd,int,int,int){glEnable(GL_BLEND);glBlendFunc(BlendF(cs),BlendF(cd));}void OpenGL1GraphicsBackend::ApplyDepthStencilState(bool de,bool dw,int df,bool se,int sf,int sp,int sfa,int sdf,int sm,int sw,int ref,bool,int,int,int,int){de?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);glDepthMask(dw);glDepthFunc(Cmp(df));se?glEnable(GL_STENCIL_TEST):glDisable(GL_STENCIL_TEST);stencilRef_=ref;glStencilFunc(Cmp(sf),ref,(GLuint)sm);glStencilMask((GLuint)sw);glStencilOp(StencilOp(sfa),StencilOp(sdf),StencilOp(sp));}
@@ -343,8 +344,8 @@ void OpenGL1GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,
   case CNA::GraphicsCapability::WireFrame: return true;
   case CNA::GraphicsCapability::AnisotropicFiltering: return caps_.anisotropicFiltering;
   case CNA::GraphicsCapability::MultiSampleAntiAliasing: return multiSampleCount_>1;
+  case CNA::GraphicsCapability::OcclusionQuery: return caps_.occlusionQuery;
   case CNA::GraphicsCapability::MultipleRenderTargets:
-  case CNA::GraphicsCapability::OcclusionQuery:
   case CNA::GraphicsCapability::CustomEffects: return false;
  }
  return false;

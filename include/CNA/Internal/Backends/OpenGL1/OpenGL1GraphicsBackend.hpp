@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1Capabilities.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1ContextRecovery.hpp"
+#include "CNA/Internal/Backends/OpenGL1/OpenGL1OcclusionQueryBackend.hpp"
 #include "CNA/Internal/Backends/OpenGL1/OpenGL1RenderTargetBackend.hpp"
 #include <SDL3/SDL.h>
 #include <cstddef>
@@ -100,6 +101,10 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  std::unique_ptr<ITextureBackend>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchBackend>CreateSpriteBatch()override;
  std::unique_ptr<IRenderTargetBackend>CreateRenderTarget2D(int,int,int,bool,bool,int)override;void SetRenderTarget2D(IRenderTargetBackend*)override;
  std::unique_ptr<ITextureCubeBackend>CreateTextureCube(int,bool,int)override;
+ // plan_opengl1.md item 23 (EasyGL parity): real ARB_occlusion_query/core-1.5 occlusion queries --
+ // returns nullptr (the documented IGraphicsBackend contract, matching CreateRenderTarget2D's own
+ // capability-gated fallback) when the driver genuinely lacks it.
+ std::unique_ptr<IOcclusionQueryBackend>CreateOcclusionQuery()override;
  void ApplyBlendState(int,int,int,int,int,int)override;void ApplyDepthStencilState(bool,bool,int,bool,int,int,int,int,int,int,int,bool,int,int,int,int)override;
  void ApplyRasterizerState(int,int,bool,float,float)override;void ApplySamplerState(int,int,int,int,int)override;void SetBlendFactor(float,float,float,float)override;void SetReferenceStencil(int)override;
  void SetScissorRect(int,int,int,int)override;void SetViewport(int,int,int,int,float,float)override;
