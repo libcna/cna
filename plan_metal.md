@@ -1735,6 +1735,32 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     own eventual extraction — but the one concrete, real instance this session could find and fix from
     Linux alone is now genuinely closed.
 
+67. **`METAL-89`/`METAL-90` (Phase 8's remaining CTest coverage/doc-ownership tasks) — both closed**:
+    `METAL-90` resolved outright (a pure decision, no code): `plan_cnj.md`'s existing `CNB-103`–`109`
+    per-backend PBR table is already the natural single source of truth for cross-backend PBR support
+    tracking — added `CNB-110`/`111` rows there instead of creating a second, separately-maintained
+    doc, and pointed `docs/metal-backend.md`'s own PBR bullet at it rather than duplicating. `METAL-89`
+    (real known-material probe-pixel `CTest`s) was writable but not verifiable from this Linux sandbox
+    — `CNA_GRAPHICS_BACKEND=METAL` hard-fails off-Apple by design, so this is source-complete-only,
+    same discipline as every `.mm`-touching change tonight. Rather than deriving new pixel math blind,
+    reused the exact precedent `VulkanTests.cmake` already established for its own `Vulkan_PbrEffect_
+    Golden`/`Vulkan_SkinnedPbrEffect_Golden` tests: `examples/easygl_pbreffect_golden_test.cpp`/
+    `easygl_skinnedpbreffect_golden_test.cpp` are genuinely backend-agnostic (confirmed by reading
+    both files in full — public XNA API and `examples/common/PixelTestGame.hpp` only, zero EasyGL/
+    Vulkan-specific includes or preprocessor guards), so Metal can reuse them verbatim rather than
+    writing new ones, comparing against the same already-checked-in golden PNGs at the same
+    already-cross-backend-tolerant thresholds (20–35, chosen by that harness's own documented survey
+    of ~98 existing tests' driver/rasterizer variance). Added `cna_test_metal_pbreffect_golden`/
+    `cna_test_metal_skinnedpbreffect_golden` executables and `Metal_PbrEffect_Golden`/`Metal_
+    SkinnedPbrEffect_Golden` `CTest`s to `cmake/Tests/MetalTests.cmake`, mirroring `Metal_Smoke`'s own
+    existing registration style exactly. `cmake/Tests/MetalTests.cmake` is already in `metal-macos-
+    ci.yml`'s push path filter, so no CI config change was needed — these two new tests will
+    automatically be picked up by the existing `ctest -R "^Metal"` step on the next run. Confirmed
+    `PixelTestGame.hpp`'s own mechanics (`GraphicsDevice::GetBackBufferData`, `Texture2D::FromStream`/
+    `SaveAsPng`) rely only on Metal capabilities already real-hardware-verified this session (Phase
+    12/13's GPU readback work) — a reasoned, not just hopeful, basis for expecting this to work,
+    though genuinely unconfirmed until the next CI run reports back.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -2140,8 +2166,8 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-86 | `pbrOcclusionMap` sampling (R channel) darkening term | 🟨 |
 | METAL-87 | Default-white / default-flat-normal fallback textures for unbound PBR maps, mirroring `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()` exactly | 🟨 |
 | METAL-88 | Dispatch: `params.pbr && params.skinned` → PBR-skinned, `params.pbr` alone → PBR-unskinned, both checked before the plain `skinned` branch, matching EasyGL's top-of-function precedence | 🟨 |
-| METAL-89 | `CTest`: `Metal_Pbr`/`Metal_PbrSkinned` — known-material probe-pixel checks (fully metallic vs. dielectric, rough vs. smooth), same fixture as Vulkan/EasyGL's own PBR tests | ⬜ |
-| METAL-90 | Confirm whether a project-wide PBR support doc should exist (out of Metal's own scope) or `plan_cnj.md` remains the single source of truth — note the decision | ⬜ |
+| METAL-89 | `CTest`: `Metal_Pbr`/`Metal_PbrSkinned` — known-material probe-pixel checks (fully metallic vs. dielectric, rough vs. smooth), same fixture as Vulkan/EasyGL's own PBR tests | 🟨 landed 2026-07-20 — see narrative item 67; `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden` registered in `cmake/Tests/MetalTests.cmake`, reusing Vulkan's own already-proven EasyGL-source-reuse pattern; not yet confirmed passing on real hardware, see `plan_cnj.md CNB-110` |
+| METAL-90 | Confirm whether a project-wide PBR support doc should exist (out of Metal's own scope) or `plan_cnj.md` remains the single source of truth — note the decision | ✅ closed 2026-07-20 — `plan_cnj.md` remains the single source of truth (`CNB-111`); `docs/metal-backend.md` now links to it instead of duplicating |
 
 ## Phase 9 — Instancing (METAL-91 – METAL-97)
 

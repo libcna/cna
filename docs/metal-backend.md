@@ -62,6 +62,8 @@ carry a genuine ✅, extracted specifically so they could earn one without Apple
   variants, lit/fog/specular/emissive (Phase 7).
 - `PbrEffect`/`SkinnedPbrEffect` (NOXNA): glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, 4 optional PBR maps with safe default-texture fallbacks (Phase 8).
+  Cross-backend PBR support/verification status lives in `plan_cnj.md`'s `CNB-103`–`111` table
+  (one row per backend), not duplicated here.
 - Instancing (Phase 9, blocked downstream on Phase 14's generic descriptor builder for anything
   beyond the fixed `PipelineKind` set).
 - `RenderTarget2D`/`RenderTargetCube` bind/unbind, sampleable afterward, `DiscardContents`/
