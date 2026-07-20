@@ -422,11 +422,12 @@ shader, no modern-only extension) and were simply never implemented yet:
     passed after this change; `CnaTests --gtest_filter="GraphicsDeviceCapabilityTest.*"`: 8/8
     passed under `CNA_GRAPHICS_BACKEND=OPENGL1`.
 
-This closes item 23, the last of items 20-23 completed so far from the 11-item EasyGL parity list
-(items 13-23) found 2026-07-20. Items 13-19 (virtual-resolution/presentation-mode scaling,
-`BasicEffect` `DirectionalLight1`/`DirectionalLight2`, `BasicEffect` specular highlights,
+This closed item 23. Items 13-19 (virtual-resolution/presentation-mode scaling, `BasicEffect`
+`DirectionalLight1`/`DirectionalLight2`, `BasicEffect` specular highlights,
 `TextureAddressMode.Mirror`, constant blend color, blend equation beyond add, separate alpha blend
-factors) remain open.
+factors) were completed the same day in the same session -- see each item's own entry above for
+its full writeup. **All 11 items in the EasyGL parity list (13-23) found 2026-07-20 are now
+Done.**
 
 ## Bugs found while adding test coverage (2026-07-19)
 
