@@ -63,3 +63,17 @@ TEST(GraphicsDeviceCapabilityTest, AnisotropicFilteringQueryDoesNotThrow)
     GraphicsDevice gd;
     EXPECT_NO_THROW({ (void)gd.SupportsCapability(GraphicsCapability::AnisotropicFiltering); });
 }
+
+// REMED-CONTENT-001: GetMaxTextureDimension() must report a real, positive, sane ceiling -- shared
+// content-reading code (Texture2DContentTypeReader) relies on this to reject malformed/adversarial
+// XNB dimensions before any backend-specific texture creation is attempted.
+TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValue)
+{
+    GraphicsDevice gd;
+    const int maxDim = gd.GetMaxTextureDimension();
+    EXPECT_GT(maxDim, 0);
+    // Comfortably above any legitimate real-world game asset, and comfortably below the
+    // adversarial int32 values a corrupt/malicious .xnb could declare.
+    EXPECT_GE(maxDim, 2048);
+    EXPECT_LT(maxDim, 0x7FFFFFFF);
+}

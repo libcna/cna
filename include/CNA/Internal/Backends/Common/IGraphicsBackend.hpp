@@ -852,6 +852,19 @@ namespace CNA::Internal::Backends
             return true;
         }
 
+        /// REMED-CONTENT-001: returns this backend's real maximum single-axis texture dimension
+        /// (width or height), used by shared content-reading code to reject an XNB-declared size
+        /// before any backend-specific texture creation is attempted. Default of 16384 matches the
+        /// guaranteed ceiling on every native API this project targets (D3D11/D3D12 feature level
+        /// 11_0's REQ_TEXTURE2D_U_OR_V_DIMENSION, and the value real-world Vulkan/Metal/GL
+        /// implementations report) -- no backend currently needs a tighter or looser override.
+        /// D3D9's own narrower Reach/HiDef profile ceiling (2048/4096) is enforced separately by
+        /// Texture2D.cpp's existing ValidateTextureSizeForProfileEXT and is unaffected by this.
+        [[nodiscard]] virtual int GetMaxTextureDimension() const
+        {
+            return 16384;
+        }
+
         // ---- Debug / testing ----
 
         /// Inserts a named GPU debug label into the command stream.

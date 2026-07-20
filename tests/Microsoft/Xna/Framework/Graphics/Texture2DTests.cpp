@@ -17,6 +17,7 @@
 #include "System/Environment.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
+#include "System/NotSupportedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -220,6 +221,43 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
                 << " must throw std::runtime_error, not silently succeed with the wrong GPU format";
         }
     }
+}
+
+// -----------------------------------------------------------------------
+// REMED-CONTENT-001 -- dimension guard, defense in depth for any direct caller (not just the
+// XNB content-reader path, which has its own equivalent ContentLoadException check)
+// -----------------------------------------------------------------------
+
+class DimensionGuardTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice gd;
+};
+
+TEST_F(DimensionGuardTest, WidthExceedingMaxTextureDimensionThrowsNotSupportedException)
+{
+    const int overSize = gd.GetMaxTextureDimension() + 1;
+    EXPECT_THROW(Texture2D(gd, overSize, 4), System::NotSupportedException);
+}
+
+TEST_F(DimensionGuardTest, HeightExceedingMaxTextureDimensionThrowsNotSupportedException)
+{
+    const int overSize = gd.GetMaxTextureDimension() + 1;
+    EXPECT_THROW(Texture2D(gd, 4, overSize), System::NotSupportedException);
+}
+
+TEST_F(DimensionGuardTest, WidthExceedingMaxTextureDimensionThrowsOnFormatConstructorToo)
+{
+    const int overSize = gd.GetMaxTextureDimension() + 1;
+    EXPECT_THROW(Texture2D(gd, overSize, 4, false, SurfaceFormat::Color), System::NotSupportedException);
+}
+
+TEST_F(DimensionGuardTest, DimensionAtTheLimitDoesNotThrow)
+{
+    const int maxDim = gd.GetMaxTextureDimension();
+    // A 1-pixel-tall texture at exactly the limit avoids allocating maxDim*maxDim*4 bytes of CPU
+    // shadow storage for this test while still exercising the exact boundary value.
+    EXPECT_NO_THROW(Texture2D(gd, maxDim, 1));
 }
 
 // -----------------------------------------------------------------------

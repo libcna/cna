@@ -748,6 +748,17 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
 
         /**
+         * @brief Returns the active backend's real maximum single-axis texture dimension.
+         *
+         * REMED-CONTENT-001: query this before creating or accepting a texture of
+         * caller-/file-supplied size, instead of trusting the value and letting the native
+         * graphics API fail (or, on some backends, corrupt memory) at creation time.
+         *
+         * @return The maximum width or height, in pixels, this device's backend supports.
+         */
+        NOXNA [[nodiscard]] int GetMaxTextureDimension() const;
+
+        /**
          * @brief Sets the currently active Effect for draw calls.
          *
          * Called automatically by Effect::Apply(). Accepts any Effect subclass;

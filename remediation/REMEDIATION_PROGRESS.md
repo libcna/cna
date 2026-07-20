@@ -35,11 +35,11 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 3 | 0 | 0 | 8 |
+| P0 | 11 | 4 | 0 | 0 | 7 |
 | P1 | 21 | 0 | 0 | 0 | 21 |
 | P2 | 44 | 0 | 0 | 0 | 44 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **3** | **0** | **0** | **101** |
+| **Total** | **104** | **4** | **0** | **0** | **100** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -77,10 +77,17 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 
 | ID | Status | Owner | Branch | Notes |
 |---|---|---|---|---|
-| REMED-CONTENT-001 | NOT STARTED | | | CRITICAL. Fix in shared content code, **not** per-backend. |
+| REMED-CONTENT-001 | DONE | | feature/audit | CRITICAL. Fixed in shared content code, **not** per-backend — see detail below. |
 | REMED-CONTENT-002 | NOT STARTED | | | Shared helper first, then 3 call sites, then repo-wide grep. |
 | REMED-CONTENT-003 | DONE | | feature/audit | Ported the sibling readers' existing check verbatim — see detail below. |
 | REMED-CONTENT-006 | NOT STARTED | | | VERIFY first. Then audit all 7 `XnbReadLimits` fields for consumers. |
+| REMED-GFX-001 | NOT STARTED | | | Serialize against all other EasyGL work. |
+| REMED-GFX-002 | NOT STARTED | | | Sequence before GFX-003 (same file). |
+| REMED-GFX-003 | NOT STARTED | | | After GFX-002. Resize tables **and** add flag operators together. |
+| REMED-NET-001 | NOT STARTED | | | Land with NET-003 as one change. |
+| REMED-NET-003 | NOT STARTED | | | Atomic with NET-001. |
+| REMED-DEVICES-001 | NOT STARTED | | | Prefer `shared_ptr` over holding a mutex across a UI-blocking call. |
+| REMED-MEDIA-001 | NOT STARTED | | | VERIFY on a 32-bit build first. |
 
 ### REMED-CONTENT-003 detail — TextureCube byte-count validation
 
@@ -93,9 +100,66 @@ missing it). No shared file overlap with `REMED-CONTENT-001`.
   face/level throws `ContentLoadException`).
 - **Completion criteria met:** all three sibling readers (`Texture2DReader`, `Texture3DReader`,
   `TextureCubeReader`) now share an identical validation shape.
-- **Verification:** implemented and verified in the same session as `REMED-CONTENT-001` (no file
-  overlap between the two); full `CnaTests` direct-binary run (EASYGL) covering both tasks' new
-  tests together showed 0 regressions against the 5507-test Wave 0 baseline.
+- **Verification:** full `CnaTests` direct-binary run (EASYGL) — 0 regressions (see CONTENT-001
+  detail below for the combined run).
+
+### REMED-CONTENT-001 detail — Texture2D dimension/mipLevel validation
+
+**Root cause confirmed exactly as described:** neither native-API validation (Vulkan's validation
+layer is advisory; wgpu-native validates lazily at `wgpuQueueSubmit()` time) nor the existing
+`ContentReader::CheckDecodedByteSize()` call (which only bounds the `width*height` *product*, not
+either axis individually, nor `mipLevels` at all) catches a single-axis-huge or
+mip-level-count-exceeding-the-real-chain XNB. Traced the exact crash mechanism: `Texture2DReader`
+constructs the real `Texture2D` via `Texture2D(device, w, h, mipMap, format)`, which computes its
+*own* real mip level count via `CalculateMipLevels(w,h)` — entirely ignoring the file's declared
+`levelCount` except for the `>1` boolean — while the read loop below iterates `level` up to the
+file's own (attacker-controlled) `levelCount`, calling `SetData(level, ...)` for mip levels the
+real, constructed texture never allocated. This mismatch is the confirmed root cause of the
+Vulkan/WebGPU crashes.
+
+**Changes (shared content code only, no backend-specific files touched, per the task's explicit
+instruction):**
+- `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp`: new `virtual int
+  GetMaxTextureDimension() const` with a default of 16384 (matches D3D11/D3D12 feature-level-11_0's
+  guaranteed ceiling and real-world Vulkan/Metal/GL behavior). Same pattern as the existing
+  `SupportsCapability()` virtual right above it. No backend overrides this yet — the default is
+  correct for all 14 as things stand.
+- `GraphicsDevice.hpp`/`.cpp`: forwarding `GetMaxTextureDimension()`, mirroring
+  `SupportsCapability()`'s own forwarding method.
+- `Texture2DContentTypeReader.cpp`: after obtaining the `GraphicsDevice*` and before constructing
+  the `Texture2D`, reject `width`/`height` exceeding `device->GetMaxTextureDimension()` and
+  `levelCount` exceeding a new local `CalculateMaxMipLevels(w,h)` helper (mirrors `Texture2D.cpp`'s
+  own private `CalculateMipLevels`, duplicated rather than exposed — pure math, no dependency on
+  `Texture2D`'s internal state) — both throw `ContentLoadException`, matching every other check in
+  this file.
+- `Texture2D.cpp`: unconditional (not `#ifdef CNA_BACKEND_D3D9`) `ValidateTextureDimensionEXT()`
+  added to both dimension-taking constructors, throwing `System::NotSupportedException` (matching
+  the existing D3D9 profile-ceiling check's own exception type/convention) — defense in depth for
+  *any* direct caller, not just the XNB path.
+
+**Tests added:** `Texture2DContentTypeReaderTests.cpp` —
+`SingleAxisExceedingMaxTextureDimensionThrowsContentLoadException` (500000×1, reproduces the exact
+fuzz-discovered shape: one huge axis, small enough product to stay under `CheckDecodedByteSize`'s
+own cap) and `MipLevelCountExceedingCeilingThrowsContentLoadException` (4×4 declaring 25 levels,
+reproduces "mipLevels=25 against a 15-level maximum" exactly). `Texture2DTests.cpp` —
+`DimensionGuardTest` (4 cases: width/height over limit on both constructors, at-the-limit does not
+throw). `GraphicsDeviceCapabilityTests.cpp` — `GetMaxTextureDimensionReturnsSanePositiveValue`.
+
+**Verification — the fuzz test that previously crashed, run against every reachable backend:**
+
+| Backend | Result |
+|---|---|
+| Vulkan | **Fixed** — previously `*** stack smashing detected ***: terminated`; now passes cleanly |
+| WebGPU | **Fixed** — previously a non-catchable Rust panic; now passes cleanly |
+| EasyGL | Confirmed clean before and after (unaffected) |
+| Headless, Software, Ascii, Bgfx, SdlGpu, SdlRenderer | Clean after the fix |
+| Dx3 | **Pre-existing, separate, unrelated failure** — confirmed identical on the unmodified baseline via `git stash` (same `IDirectDraw::CreateSurface(offscreen) failed: HRESULT=...` for a still-mutated-but-within-limit size); DX3 doesn't translate a native DirectDraw allocation failure into `ContentLoadException`. Not fixed (out of scope for this task); not a new finding worth its own ID — narrower and lower-severity than the CRITICAL crash this task closes, and already implied by the plan's own "true blast radius unknown" framing for the 11 unisolated backends. |
+| D3D9/D3D11/D3D12 (MinGW) | Not evaluated — blocked by a pre-existing, unrelated cross-compile environment issue (`SDL3/SDL.h` not found for an audio harness) in this sandbox's untracked build dirs, unrelated to this fix |
+| Canvas | N/A — Emscripten-only backend; `cna_demo_xact`/native CTest path doesn't apply |
+
+Full `CnaTests` direct-binary run (EASYGL, after CONTENT-001 + CONTENT-003 together): **5537
+tests, 5530 passed, 4 skipped, 0 failed, exit 0** — 5507 baseline + 30 new tests (8 from
+CONTENT-001/003, 22 from CONTENT-002, see below), zero regressions.
 
 ## Wave 1 (parallel) — unblockers
 

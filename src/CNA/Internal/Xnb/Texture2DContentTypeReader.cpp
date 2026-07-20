@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -46,6 +47,25 @@ namespace CNA::Internal::Xnb
         {
             return format == SurfaceFormat::Dxt1 || format == SurfaceFormat::Dxt3 ||
                    format == SurfaceFormat::Dxt5;
+        }
+
+        // REMED-CONTENT-001: the maximum mip level count a real width x height texture can ever
+        // have -- mirrors Texture2D.cpp's own private CalculateMipLevels() (duplicated rather than
+        // exposed, since it's a pure math helper with no dependency on Texture2D's internal state).
+        // A file-declared levelCount above this ceiling would make the read loop below call
+        // SetData() for a mip level the actual constructed texture (whose own real level count is
+        // computed the same way) does not have -- confirmed root cause of the Vulkan/WebGPU crashes
+        // this task closes.
+        int32_t CalculateMaxMipLevels(int32_t w, int32_t h)
+        {
+            int32_t levels = 1;
+            while (w > 1 || h > 1)
+            {
+                w = std::max(1, w / 2);
+                h = std::max(1, h / 2);
+                ++levels;
+            }
+            return levels;
         }
     }
 
@@ -86,6 +106,29 @@ namespace CNA::Internal::Xnb
             throw ContentLoadException(
                 "Texture2DReader: no GraphicsDevice available (ContentManager was not set on "
                 "this ContentReader).");
+        }
+
+        // REMED-CONTENT-001: reject dimensions/mip counts the active backend cannot actually
+        // create, before any backend-specific texture creation is attempted. Neither the native
+        // graphics APIs' own validation (Vulkan's validation layer is advisory; wgpu-native
+        // validates lazily at submit time) nor CheckDecodedByteSize() above (which only bounds the
+        // width*height product, not either axis individually) catches these -- confirmed
+        // reproducible process crashes (Vulkan stack smashing, WebGPU non-catchable panic) via
+        // XnbContainerFuzzTest before this check existed.
+        const int maxDim = device->GetMaxTextureDimension();
+        if (width > maxDim || height > maxDim)
+        {
+            throw ContentLoadException(
+                "Texture2DReader: " + std::to_string(width) + "x" + std::to_string(height) +
+                " exceeds this device's maximum texture dimension of " + std::to_string(maxDim) + ".");
+        }
+        const int32_t maxLevels = CalculateMaxMipLevels(width, height);
+        if (levelCount > maxLevels)
+        {
+            throw ContentLoadException(
+                "Texture2DReader: declared mip level count (" + std::to_string(levelCount) +
+                ") exceeds the maximum of " + std::to_string(maxLevels) + " for a " +
+                std::to_string(width) + "x" + std::to_string(height) + " texture.");
         }
 
         Texture2D texture = existingInstance.has_value()

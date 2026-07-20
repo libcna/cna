@@ -55,6 +55,22 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 #endif
 
+    // REMED-CONTENT-001: the native graphics APIs' own validation does not substitute for this --
+    // Vulkan's validation layer is advisory (RADV proceeds anyway), and wgpu-native validates
+    // lazily at submit time, past CNA's own creation-time null checks. Reject before any
+    // backend-specific texture creation is attempted, using the active backend's real reported
+    // maximum rather than a value guessed independently of it.
+    static void ValidateTextureDimensionEXT(const GraphicsDevice& device, int w, int h)
+    {
+        const int maxDim = device.GetMaxTextureDimension();
+        if (w > maxDim || h > maxDim)
+        {
+            throw System::NotSupportedException(
+                "Texture2D: " + std::to_string(w) + "x" + std::to_string(h) +
+                " exceeds this device's maximum texture dimension of " + std::to_string(maxDim));
+        }
+    }
+
     static int mipDim(int base, int level)
     {
         return std::max(1, base >> level);
@@ -139,6 +155,7 @@ namespace Microsoft::Xna::Framework::Graphics
 #ifdef CNA_BACKEND_D3D9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
 #endif
+        ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ImageData data;
         data.width  = w;
         data.height = h;
@@ -163,6 +180,7 @@ namespace Microsoft::Xna::Framework::Graphics
 #ifdef CNA_BACKEND_D3D9
         ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
 #endif
+        ValidateTextureDimensionEXT(graphicsDevice, w, h);
         ValidateFormat(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;

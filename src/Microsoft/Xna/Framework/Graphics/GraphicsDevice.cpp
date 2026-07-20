@@ -1325,6 +1325,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return GetBackend().SupportsCapability(capability);
     }
 
+    int GraphicsDevice::GetMaxTextureDimension() const
+    {
+        return GetBackend().GetMaxTextureDimension();
+    }
+
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;
