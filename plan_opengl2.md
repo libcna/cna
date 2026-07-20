@@ -689,6 +689,9 @@ possibilities of OpenGL 2"):
     renders correctly (not solid black) under `TextureFilter::Anisotropic`. 1/1 PASS.
   - `OpenGL2_Texture3D_Mip` -- real per-level GL storage + GPU readback round-trip across a
     4x4x4/2x2x2/1x1x1 mip chain. 73/73 texel checks PASS.
+  - `OpenGL2_MRT` -- genuine simultaneous multi-attachment output: a custom `ShaderEffect` writes
+    two DIFFERENT colours to `gl_FragData[0]`/`gl_FragData[1]` in one draw call across 2 bound
+    render targets. 1/1 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -697,17 +700,18 @@ possibilities of OpenGL 2"):
   except `cna_demo_xact`, which fails only at its Content-copy POST_BUILD step because
   `examples/demo_xact/Content/` does not exist in this checkout at all (never committed to git) --
   pre-existing, unrelated to this backend or this branch.
-- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5539 cases
-  as of session 8) has 226 pre-existing/expected failures, none an actual regression: ~220 are
-  missing local test fixture files (media/audio/video/XNB content assets absent from this
-  checkout, e.g. `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`)
-  that fail identically regardless of graphics backend, and 2 (`GraphicsDeviceCapabilityTest.
-  DoesNotSupportWireFrame`/`.SupportsMultipleRenderTargets`) are that same shared test file's own
-  documented EasyGL-only assumption ("this test target only ever builds against a fully
-  3D-capable backend (EasyGL by default on Linux)") -- `SupportsMultipleRenderTargets` newly joined
-  this category in session 8 specifically BECAUSE `SupportsCapability(MultipleRenderTargets)` was
-  fixed to truthfully report `false` on OpenGL2 (see above); this is the correct, expected
-  consequence of that fix, not a regression it introduced.
+- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5540 cases
+  as of session 9) has ~225 pre-existing/expected failures (± the pre-existing
+  `ENetDiscoveryServiceTest` parallel-execution flakiness noted below), none an actual regression:
+  ~220 are missing local test fixture files (media/audio/video/XNB content assets absent from this
+  checkout, e.g. `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`) that
+  fail identically regardless of graphics backend, and 1 (`GraphicsDeviceCapabilityTest.
+  DoesNotSupportWireFrame`) is that same shared test file's own documented EasyGL-only assumption
+  ("this test target only ever builds against a fully 3D-capable backend (EasyGL by default on
+  Linux)"). Session 8 briefly added a second case here (`.SupportsMultipleRenderTargets`, while
+  `MultipleRenderTargets` correctly but temporarily reported `false`); session 9's real MRT
+  implementation (see above) made that assertion pass again, so only `DoesNotSupportWireFrame`
+  remains in this category.
 
 ## Status: EasyGL capability audit + 6 real gaps fixed (2026-07-20, session 8)
 With all 6 explicitly-requested follow-up items from session 7 complete, per the standing
@@ -781,6 +785,59 @@ All 29 `OpenGL2`-labeled CTests pass after every fix in this round (up from 24 a
 session); each fix landed as its own commit with its own new test, verified against this sandbox's
 real GL driver (not just compiled) before committing.
 
+## Status: real Multiple Render Targets (MRT) (2026-07-20, session 9)
+User-directed follow-up: implement real MRT via `IGraphicsBackend::SetRenderTargets()` (session 8's
+biggest deferred item, user picked this one first when asked to prioritize).
+
+Implementation: a shared FBO (`mrtFbo_`), re-attached fresh on every `SetRenderTargets()` call
+(`glFramebufferTexture2D(GL_COLOR_ATTACHMENT0+i, ...)` per target + `glDrawBuffers`) rather than
+cached per render-target-set -- mirrors `EasyGLGraphicsBackend::SetRenderTargets`'s own `mrtFbo_`
+precedent, including its accepted gap (MRT targets are not tracked as `currentRt_`/`currentRtCube_`,
+so per-target mip regeneration on switching away from MRT mode is not supported). `count<=0`
+delegates to `SetRenderTarget2D(nullptr)`; `count==1` delegates to `SetRenderTarget2D(rts[0])` (no
+shared FBO needed for the common single-target case). Added `glDrawBuffers` to the Windows GL
+loader (GL 2.0 core, not exported beyond GL 1.1 by `opengl32.dll`). `SupportsCapability
+(MultipleRenderTargets)` reverted to the blanket `default: return true` (session 8's explicit
+`false` case removed) now that it's genuinely true.
+
+**Real bug found and fixed along the way, not just ported:** porting `easygl_mrt_test.cpp`'s exact
+scene (draw only writes attachment 0 via a stock effect; attachment 1 is expected to keep its PRIOR
+content untouched) failed -- attachment 1 read back as black instead of staying blue. Root-caused
+via a diagnostic pixel readback added mid-investigation (confirmed attachment 1's content was
+genuinely blue right up until the MRT draw, then became black immediately after): this is a real
+GLSL-1.10-vs-GLES3/GL3+ platform semantic difference, not a bug in the `glDrawBuffers`/attachment
+wiring. GLES3/GL3+ (EasyGL's target) has explicit semantics for this -- no user-defined `out`
+variable bound to a given attachment index means that attachment is genuinely not written. GLSL
+1.10's `gl_FragData[]` model has no such guarantee: the GLSL 1.10 spec calls an unassigned
+`gl_FragData[n]` "undefined", and this sandbox's real GL driver was empirically observed to write
+black/zero into it rather than preserve prior framebuffer content. Also discovered along the way:
+every one of OpenGL2's built-in stock-effect fragment shaders used `gl_FragColor` (not
+`gl_FragData[0]`) -- functionally identical for a single active draw buffer (every existing test),
+but `gl_FragColor` BROADCASTS to every active draw buffer when more than one is bound, which would
+have made a stock-effect MRT draw write the SAME colour to every attachment instead of just
+attachment 0. Fixed by switching all 26 occurrences to `gl_FragData[0]` (mechanical, global,
+behavior-preserving for the single-buffer case -- confirmed via a full 29-test OpenGL2 regression
+pass immediately after, before even starting the MRT implementation itself).
+
+Given the "unwritten attachment stays untouched" scenario is not portably well-defined for GLSL
+1.10, `opengl2_mrt_test.cpp` does NOT port `easygl_mrt_test.cpp`'s exact scene. Instead it uses the
+pattern real MRT-using shaders actually rely on (G-buffer style: every bound attachment is
+explicitly written in the same draw) -- a custom `ShaderEffect` whose fragment shader assigns
+`gl_FragData[0]` and `gl_FragData[1]` to two DIFFERENT colours (red/blue) in one draw call, then
+blits both render targets to screen halves for pixel verification. This is a stronger, more
+portable proof of genuine simultaneous multi-attachment output than the "prior content survives an
+unrelated draw" edge case, and it is what confirmed the attachment/`glDrawBuffers` wiring itself
+was correct all along -- `OpenGL2_MRT` 1/1 PASS.
+
+`opengl2_graphics_capability_test.cpp`'s `MultipleRenderTargets` assertion flipped back to
+`EXPECT_TRUE`. Full unfiltered `CnaTests` sweep re-run (5540 cases, +1 from the new `OpenGL2_MRT`
+test): `GraphicsDeviceCapabilityTest.SupportsMultipleRenderTargets` (session 8's expected new
+failure) now passes again; failure count differs from session 8's 226 only by the pre-existing,
+already-documented `ENetDiscoveryServiceTest` parallel-execution flakiness (unrelated Net-module
+UDP test, not this backend) -- no real regression from either the `gl_FragData[0]` shader switch or
+the MRT implementation itself, confirmed via a dedicated `ctest -R GraphicsDeviceCapabilityTest`
+re-run and the full `OpenGL2`-labeled suite (30/30 PASS, up from 29).
+
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
 - SDL-created OpenGL 2.1 compatibility context. SDL is only window/context glue; rendering is direct OpenGL.
@@ -843,6 +900,11 @@ real GL driver (not just compiled) before committing.
   `OpenGL2_Texture2D_Anisotropic_SingleLevel` above).
 - Real `Texture3D` mip-level GPU storage (per-level `glTexImage3D` allocation, `GL_TEXTURE_MAX_LEVEL`
   clamp, and a correct per-level `GetData` readback; see `OpenGL2_Texture3D_Mip` above).
+- Real Multiple Render Targets (MRT) via a shared FBO (`glFramebufferTexture2D` per target +
+  `glDrawBuffers`; see `OpenGL2_MRT` above). Every built-in stock-effect fragment shader was
+  switched from `gl_FragColor` to `gl_FragData[0]` as part of this (behavior-identical for the
+  single-draw-buffer case, but required so a single-output built-in effect drawn under MRT writes
+  only its intended attachment instead of broadcasting to every bound draw buffer).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -859,14 +921,7 @@ real GL driver (not just compiled) before committing.
   PbrEffect's 4 golden images, texture-filter/sampler-state scenes, ...). Each additional scene is
   mechanically similar to the four already ported (reuse the existing golden PNG + its exact scene
   setup verbatim) but real, incremental effort per scene, not a single remaining task.
-- **Real Multiple Render Targets (MRT).** `IGraphicsBackend::SetRenderTargets()` is not overridden
-  (falls back to the shared single-target default); `SupportsCapability(MultipleRenderTargets)` now
-  correctly reports `false` (session 8, see above) rather than misleadingly `true`. GL 2.1's
-  `EXT_framebuffer_object` genuinely supports multiple color attachments + `glDrawBuffers`
-  (`glDrawBuffers` itself is GL 2.0 core, so no extra extension needed beyond what this backend
-  already requires) -- implementable, but touches the `RenderTarget`/FBO class's single-attachment
-  design and needs its own new test (`easygl_mrt_test.cpp` is the reference scene to port). Bigger
-  and more architecturally invasive than any single fix in session 8; scope as its own task.
+- ~~Real Multiple Render Targets (MRT)~~ -- **DONE (session 9, see status section below)**.
 - **`DrawInstancedPrimitivesEx` (hardware instancing) throws `std::runtime_error` on OpenGL2.**
   This IS the documented, acceptable default for backends that don't support it (the interface's own
   doc comment says so) -- not a bug, unlike the 5 gaps fixed in session 8. EasyGL implements it for

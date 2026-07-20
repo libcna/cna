@@ -107,6 +107,7 @@ namespace CNA::Internal::Backends::OpenGL2
         PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glRenderbufferStorageMultisample = nullptr;
         PFNGLGENERATEMIPMAPPROC glGenerateMipmap = nullptr;
         PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer = nullptr;
+        PFNGLDRAWBUFFERSPROC glDrawBuffers = nullptr;
 
         // Called once, right after SDL_GL_MakeCurrent() in the constructor -- every function
         // pointer above must be resolved before ensurePrograms() (or any other GL call in this
@@ -177,6 +178,7 @@ namespace CNA::Internal::Backends::OpenGL2
             CNA_LOAD_GL(glRenderbufferStorageMultisample);
             CNA_LOAD_GL(glGenerateMipmap);
             CNA_LOAD_GL(glBlitFramebuffer);
+            CNA_LOAD_GL(glDrawBuffers);
 #undef CNA_LOAD_GL
         }
 #endif
@@ -1582,7 +1584,7 @@ namespace CNA::Internal::Backends::OpenGL2
                     "void main(){gl_Position=vec4(aPosition,1.0);vColor=aColor;vTex=aTexCoord;}";
                 static const char* fragmentSrc =
                     "varying vec4 vColor;varying vec2 vTex;uniform sampler2D uTex;"
-                    "void main(){gl_FragColor=texture2D(uTex,vTex)*vColor;}";
+                    "void main(){gl_FragData[0]=texture2D(uTex,vTex)*vColor;}";
                 program_ = LinkProgram(vertexSrc, fragmentSrc);
                 glGenBuffers(1, &vbo_);
             }
@@ -1726,6 +1728,7 @@ namespace CNA::Internal::Backends::OpenGL2
         if (defaultWhiteTexture2D_) glDeleteTextures(1, &defaultWhiteTexture2D_);
         if (defaultWhiteTextureCube_) glDeleteTextures(1, &defaultWhiteTextureCube_);
         if (defaultFlatNormalTexture2D_) glDeleteTextures(1, &defaultFlatNormalTexture2D_);
+        if (mrtFboReady_) glDeleteFramebuffers(1, &mrtFbo_);
         if (context_) SDL_GL_DestroyContext(context_);
     }
 
@@ -1744,11 +1747,11 @@ namespace CNA::Internal::Backends::OpenGL2
             "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;";
         const char* kFogFragmentChunk =
             "varying float vFogFactor;uniform vec3 uFogColor;";
-        const char* kFogFragmentApply = "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);";
+        const char* kFogFragmentApply = "gl_FragData[0].rgb=mix(uFogColor,gl_FragData[0].rgb,vFogFactor);";
         const char* kAlphaTestFragmentChunk = "uniform vec4 uAlphaTest;";
         const char* kAlphaTestFragmentApply =
-            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
-            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;";
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragData[0].a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragData[0].a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;";
     }
 
     void OpenGL2GraphicsBackend::ensurePrograms()
@@ -1759,7 +1762,7 @@ namespace CNA::Internal::Backends::OpenGL2
             "void main(){gl_Position=uWVP*vec4(aPosition,1.0);vColor=aColor;" + kFogVertexCompute + "}";
         const std::string colorFragmentSrc = std::string(
             "varying vec4 vColor;uniform vec4 uDiffuse;") + kFogFragmentChunk +
-            "void main(){gl_FragColor=vColor*uDiffuse;" + kFogFragmentApply + "}";
+            "void main(){gl_FragData[0]=vColor*uDiffuse;" + kFogFragmentApply + "}";
 
         const std::string texturedVertexSrc = std::string(
             "attribute vec3 aPosition;attribute vec4 aColor;attribute vec2 aTexCoord;uniform mat4 uWVP;"
@@ -1768,7 +1771,7 @@ namespace CNA::Internal::Backends::OpenGL2
         const std::string texturedFragmentSrc = std::string(
             "varying vec4 vColor;varying vec2 vTex;uniform vec4 uDiffuse;uniform sampler2D uTex;") +
             kAlphaTestFragmentChunk + kFogFragmentChunk +
-            "void main(){gl_FragColor=texture2D(uTex,vTex)*vColor*uDiffuse;" +
+            "void main(){gl_FragData[0]=texture2D(uTex,vTex)*vColor*uDiffuse;" +
             kAlphaTestFragmentApply + kFogFragmentApply + "}";
 
         // DualTextureEffect: two samplers at the SAME texcoord, the classic lightmap technique
@@ -1778,7 +1781,7 @@ namespace CNA::Internal::Backends::OpenGL2
             "varying vec4 vColor;varying vec2 vTex;uniform vec4 uDiffuse;uniform sampler2D uTex;uniform sampler2D uTex2;") +
             kAlphaTestFragmentChunk + kFogFragmentChunk +
             "void main(){vec4 base=texture2D(uTex,vTex);base.rgb*=2.0;"
-            "gl_FragColor=base*texture2D(uTex2,vTex)*vColor*uDiffuse;" +
+            "gl_FragData[0]=base*texture2D(uTex2,vTex)*vColor*uDiffuse;" +
             kAlphaTestFragmentApply + kFogFragmentApply + "}";
 
         // BasicEffect lighting: per-pixel Blinn-Phong, 3 directional lights + ambient + emissive +
@@ -1823,11 +1826,11 @@ namespace CNA::Internal::Backends::OpenGL2
             "vec3 h2=normalize(E-uLight2Dir);float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);"
             "vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;"
             "vec4 texColor=uTextureEnabled?texture2D(uTex,vTex):vec4(1.0,1.0,1.0,1.0);"
-            "gl_FragColor=texColor*vec4(litRGB,uDiffuse.a);"
-            "gl_FragColor.rgb+=specularRGB*gl_FragColor.a;"
-            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
-            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
-            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "gl_FragData[0]=texColor*vec4(litRGB,uDiffuse.a);"
+            "gl_FragData[0].rgb+=specularRGB*gl_FragData[0].a;"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragData[0].a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragData[0].a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragData[0].rgb=mix(uFogColor,gl_FragData[0].rgb,vFogFactor);"
             "}";
 
         // EnvironmentMapEffect: reflection-mapped shading (matches
@@ -1878,10 +1881,10 @@ namespace CNA::Internal::Backends::OpenGL2
             "vec3 baseColor=litRGB*texColor.rgb;"
             "float combinedAlpha=uDiffuse.a*texColor.a;"
             "vec3 rgb=mix(baseColor,envSample.rgb*combinedAlpha,vFresnel)+uEnvMapSpecular*envSample.a*combinedAlpha;"
-            "gl_FragColor=vec4(rgb,combinedAlpha);"
-            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
-            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
-            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "gl_FragData[0]=vec4(rgb,combinedAlpha);"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragData[0].a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragData[0].a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragData[0].rgb=mix(uFogColor,gl_FragData[0].rgb,vFogFactor);"
             "}";
 
         // SkinnedEffect: bone-palette vertex skinning (matches
@@ -1941,12 +1944,12 @@ namespace CNA::Internal::Backends::OpenGL2
             "vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;"
             "vec4 texColor=texture2D(uTex,vTex);"
             "vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"
-            "gl_FragColor=vec4(litRGB*texColor.rgb,uDiffuse.a*texColor.a*vc.a);"
-            "gl_FragColor.rgb+=specularRGB*gl_FragColor.a;"
-            "gl_FragColor.rgb*=vc.rgb;"
-            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
-            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
-            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "gl_FragData[0]=vec4(litRGB*texColor.rgb,uDiffuse.a*texColor.a*vc.a);"
+            "gl_FragData[0].rgb+=specularRGB*gl_FragData[0].a;"
+            "gl_FragData[0].rgb*=vc.rgb;"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragData[0].a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragData[0].a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragData[0].rgb=mix(uFogColor,gl_FragData[0].rgb,vFogFactor);"
             "}";
 
         // PbrEffect/SkinnedPbrEffect: metallic-roughness BRDF, matching
@@ -2004,10 +2007,10 @@ namespace CNA::Internal::Backends::OpenGL2
             "float occlusion=texture2D(uOcclusionMap,vTex).r;"
             "vec3 ambient=uAmbientColor*albedo*occlusion;"
             "vec3 emissive=uEmissiveColor*texture2D(uEmissiveMap,vTex).rgb;"
-            "gl_FragColor=vec4(ambient+Lo+emissive,alpha);"
-            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
-            "((gl_FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
-            "gl_FragColor.rgb=mix(uFogColor,gl_FragColor.rgb,vFogFactor);"
+            "gl_FragData[0]=vec4(ambient+Lo+emissive,alpha);"
+            "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragData[0].a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
+            "((gl_FragData[0].a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
+            "gl_FragData[0].rgb=mix(uFogColor,gl_FragData[0].rgb,vFogFactor);"
             "}";
 
         const char* pbrVertexSrc =
@@ -2243,6 +2246,45 @@ namespace CNA::Internal::Backends::OpenGL2
             currentRtWidth_ = 0;
             currentRtHeight_ = 0;
         }
+    }
+
+    void OpenGL2GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (count <= 0) { SetRenderTarget2D(nullptr); return; }
+        if (count == 1) { SetRenderTarget2D(rts[0]); return; }
+
+        // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed) --
+        // mirrors EasyGLGraphicsBackend::SetRenderTargets's identical ordering.
+        unbindCurrentRenderTarget();
+
+        if (!mrtFboReady_)
+        {
+            glGenFramebuffers(1, &mrtFbo_);
+            mrtFboReady_ = true;
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, mrtFbo_);
+
+        // Every IRenderTargetBackend this backend ever creates (CreateRenderTarget2D) is a
+        // concrete OpenGL2::RenderTarget -- safe to downcast to reach its raw color-texture
+        // handle, matching EasyGLGraphicsBackend::SetRenderTargets's own static_cast precedent.
+        constexpr int kMaxMRT = 8;
+        const int n = count < kMaxMRT ? count : kMaxMRT;
+        GLenum drawBufs[kMaxMRT];
+        for (int i = 0; i < n; ++i)
+        {
+            auto* target = static_cast<RenderTarget*>(rts[i]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, target->colorTex, 0);
+            drawBufs[i] = GL_COLOR_ATTACHMENT0 + i;
+        }
+        glDrawBuffers(n, drawBufs);
+
+        // Sized after attachment 0 (matches XNA's own convention -- FNA validates every binding
+        // in a MRT set shares the same size, so attachment 0's size represents them all).
+        currentRtWidth_ = rts[0]->GetWidth();
+        currentRtHeight_ = rts[0]->GetHeight();
+        // MRT targets are deliberately NOT tracked as currentRt_/currentRtCube_ -- see this
+        // method's own header-comment precedent (mrtFbo_'s doc comment) for the accepted gap
+        // this shares with EasyGL: switching away from MRT mode cannot regenerate per-target mips.
     }
 
     void OpenGL2GraphicsBackend::unbindCurrentRenderTarget()
@@ -2893,14 +2935,6 @@ namespace CNA::Internal::Backends::OpenGL2
                 const auto* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
                 return extensions && std::strstr(extensions, "GL_EXT_texture_filter_anisotropic") != nullptr;
             }
-            // IGraphicsBackend::SetRenderTargets() is not overridden here -- the shared
-            // base-class default binds only rts[0] via SetRenderTarget2D and silently drops
-            // every other target, so this backend does NOT genuinely support MRT yet (plan_opengl2.md
-            // follow-up work). Must report false: SupportsCapability() exists specifically so
-            // callers can check before relying on a feature instead of discovering a silent partial
-            // failure at draw time.
-            case CNA::GraphicsCapability::MultipleRenderTargets:
-                return false;
             default:
                 return true;
         }

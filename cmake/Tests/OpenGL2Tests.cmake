@@ -185,4 +185,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_texture3d_mip examples/opengl2_texture3d_mip_test.cpp)
     cna_register_backend_test(NAME OpenGL2_Texture3D_Mip COMMAND cna_test_opengl2_texture3d_mip
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: real Multiple Render Targets (MRT) proof via SetRenderTargets.
+    cna_opengl2_test(cna_test_opengl2_mrt examples/opengl2_mrt_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_MRT COMMAND cna_test_opengl2_mrt
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -45,6 +45,7 @@ namespace CNA::Internal::Backends::OpenGL2
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
         void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
 
         // NOXNA: backend-internal helper (not part of IGraphicsBackend) mirroring
         // EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize -- lets Sprite::Draw size its
@@ -137,6 +138,13 @@ namespace CNA::Internal::Backends::OpenGL2
         IRenderTargetCubeBackend* currentRtCube_{};
         int currentRtWidth_{};
         int currentRtHeight_{};
+        // MRT (SetRenderTargets, count > 1): one shared FBO, re-attached (glFramebufferTexture2D
+        // per target + glDrawBuffers) on every call rather than cached per render-target-set --
+        // mirrors EasyGLGraphicsBackend::SetRenderTargets's own mrtFbo_ precedent, including its
+        // documented gap (MRT targets are never tracked as currentRt_/currentRtCube_, so mip
+        // regeneration on switching away from MRT mode is not supported).
+        unsigned mrtFbo_{};
+        bool mrtFboReady_{};
 
         // Calls UnbindAsRenderTarget() on whichever render target (2D or cube) is currently
         // active, if any, and clears both tracking pointers -- shared by SetRenderTarget2D() and

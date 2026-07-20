@@ -11,10 +11,9 @@
 // treatment as GraphicsDeviceCapabilityTests.cpp's own MultiSampleAntiAliasingQueryDoesNotThrow:
 // don't assert a specific value, just that querying doesn't throw.
 //
-// MultipleRenderTargets: IGraphicsBackend::SetRenderTargets() is not overridden on OpenGL2 -- the
-// shared base-class default binds only rts[0] via SetRenderTarget2D and silently drops every
-// other target, so real MRT is a genuine, documented gap here (plan_opengl2.md follow-up work),
-// asserted false below rather than left to silently mislead a caller that checks first.
+// MultipleRenderTargets: real MRT via a shared FBO (glFramebufferTexture2D per target +
+// glDrawBuffers), see OpenGL2GraphicsBackend::SetRenderTargets -- asserted true below; see
+// opengl2_mrt_test.cpp for the actual multi-attachment rendering proof.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -55,8 +54,8 @@ protected:
 
         check(dev.SupportsCapability(GraphicsCapability::ThreeD), "ThreeD supported");
         check(dev.SupportsCapability(GraphicsCapability::DepthStencilBuffer), "DepthStencilBuffer supported");
-        check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets),
-              "MultipleRenderTargets NOT supported (SetRenderTargets falls back to single-target default)");
+        check(dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets),
+              "MultipleRenderTargets supported (real shared-FBO MRT)");
         check(dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery supported");
         check(dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects supported");
         check(dev.SupportsCapability(GraphicsCapability::WireFrame),
