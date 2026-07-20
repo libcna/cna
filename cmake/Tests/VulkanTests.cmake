@@ -26,6 +26,28 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
+        # REMED-GFX-011: orientation oracle. Pins "XNA +Y is up" and "readback row 0 is top"
+        # against colored3d, a family whose Y-flip is already correct, so that the per-family
+        # orientation tests below assert a calibrated convention rather than an assumed one.
+        cna_vulkan_test(cna_test_vulkan_orientation_calibration
+                        examples/vulkan_orientation_calibration_test.cpp)
+        cna_register_backend_test(NAME Vulkan_Orientation_Calibration COMMAND cna_test_vulkan_orientation_calibration
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-011: per-family orientation regression for env_map3d / pbr3d /
+        # pbr3d_skinned / instanced3d — asymmetric quadrant geometry, four-corner sampling.
+        cna_vulkan_test(cna_test_vulkan_orientation_effects
+                        examples/vulkan_orientation_effects_test.cpp)
+        cna_register_backend_test(NAME Vulkan_Orientation_Effects COMMAND cna_test_vulkan_orientation_effects
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-011: same four families rendered into a RenderTarget2D, calibrated against
+        # colored3d — proves the RT path is not double-flipped relative to the backbuffer path.
+        cna_vulkan_test(cna_test_vulkan_orientation_rendertarget
+                        examples/vulkan_orientation_rendertarget_test.cpp)
+        cna_register_backend_test(NAME Vulkan_Orientation_RenderTarget COMMAND cna_test_vulkan_orientation_rendertarget
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 124: DrawInstancedPrimitives — 3 instances at different X positions
         cna_vulkan_test(cna_test_vulkan_instanced
                         examples/vulkan_instanced_test.cpp)
