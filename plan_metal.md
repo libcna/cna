@@ -946,6 +946,23 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     something this Linux sandbox can trigger or observe itself, so it stays reported here rather than
     claimed as a verified pass.
 
+37. **`docs/metal-backend.md` created (`METAL-234`)**: this backend had no durable
+    capability-boundary reference document, unlike `docs/webgpu-backend.md`/`docs/dx3-backend.md`/
+    `docs/d3d11-backend.md` — CLAUDE.md's own WebGPU precedent points to exactly this kind of doc.
+    Unlike those three, the new doc leads with an explicit, unavoidable caveat before any status
+    table: every `.mm` file in this backend has never been compiled, linked, or run anywhere, since
+    every session on it has been Linux-only — so every 🟨 in the doc means "carefully written
+    against the EasyGL reference, never built" rather than "verified," a materially different claim
+    than what 🟨 means in most of this project's other backend docs. The one exception is the same 7
+    plain-C++ extractions items 29–35 cover, called out as this doc's own dedicated "Real,
+    machine-verified subset" section with the header/test table repeated for a reader who lands on
+    this doc without having read `plan_metal.md`'s full narrative. Also checked `METAL-237`
+    (`docs/coverage.md`/`docs/xna-4-api-coverage.md`): `docs/coverage.md`'s "Per-backend Graphics
+    capability" table columns are all real-machine-verified backends (EasyGL/Vulkan/Bgfx/WebGPU) —
+    adding a mostly-unverified Metal column now would be the identical premature-comparison problem
+    `METAL-235` already explicitly defers for the sibling feature-matrix doc, so deferred for the
+    same reason rather than actioned or silently skipped.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1517,7 +1534,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-178 | `SetContextRecoveryEnabled(bool)` — Metal has no OpenGL-style context loss on desktop macOS; confirm this should stay a documented intentional no-op | 🟨 (confirmed correct, matches Vulkan/D3D11/D3D12/WebGPU/Bgfx/SdlGpu/DX3's own established precedent — only D3D9/EasyGL override it, both genuinely context-loss-prone APIs) |
 | METAL-179 | `DebugSimulateContextLoss()`/`DebugRestoreContext()` — same reasoning as `METAL-178`, document as an intentional no-op with justification | 🟨 (confirmed correct, same precedent) |
 | METAL-180 | Audit whether the current one-command-buffer-per-frame model scales once render-target switches (Phase 10) force ending/starting encoders mid-frame — get this right architecturally before Phase 10 lands, not as a retrofit | 🟨 (found and fixed a real premature-present bug — see narrative) |
-| METAL-181 | Document the final command-buffer/encoder lifecycle model once `METAL-173`–`METAL-180` resolve — currently only exists as scattered `ensureFrame()`/`endFrame()`/`clear()` logic with no written model, despite being the single most safety-critical part of this backend | 🟨 (written below; to be extracted into `docs/metal-backend.md` when `METAL-234` lands) |
+| METAL-181 | Document the final command-buffer/encoder lifecycle model once `METAL-173`–`METAL-180` resolve — currently only exists as scattered `ensureFrame()`/`endFrame()`/`clear()` logic with no written model, despite being the single most safety-critical part of this backend | 🟨 (written below; extracted into `docs/metal-backend.md`'s own dedicated section 2026-07-20, `METAL-234`) |
 | METAL-256 | *(new, found during this audit)* Fix `MetalTexture::UpdatePixels()`/`UpdatePixelsLevel()`'s in-place `replaceRegion:` CPU/GPU synchronization hazard (`METAL-175`) — genuinely non-trivial: a naive "always reallocate the `id<MTLTexture>`" fix (mirroring the already-safe `MetalVertexBuffer`/`MetalIndexBuffer` pattern) would silently lose any *other*, already-uploaded mip level's content, since a fresh `newTextureWithDescriptor:` texture starts uninitialized and `UpdatePixels()` only ever rewrites level 0 — needs either a per-level blit-copy of untouched levels into the new texture, or an explicit GPU-completion-gated update queue; deliberately not attempted without a compiler to verify against | ⬜ |
 
 ## Phase 19 — SpriteBatch full parity (METAL-182 – METAL-188)
@@ -1616,10 +1633,10 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-234 | Create `docs/metal-backend.md` (does not exist today, unlike `docs/webgpu-backend.md`/`docs/dx3-backend.md`/`docs/d3d11-backend.md`) — the durable capability-boundary reference CLAUDE.md's WebGPU precedent points to | ⬜ |
+| METAL-234 | Create `docs/metal-backend.md` (does not exist today, unlike `docs/webgpu-backend.md`/`docs/dx3-backend.md`/`docs/d3d11-backend.md`) — the durable capability-boundary reference CLAUDE.md's WebGPU precedent points to | ✅ created 2026-07-20, see narrative item 37 |
 | METAL-235 | Add a `Metal` column to `docs/graphics-backend-feature-matrix.md` only once the feature set is broad enough for a meaningful row-by-row comparison — the doc's own header excludes Headless/Software for the identical reason; do not add prematurely with a column full of ❌ | ⬜ |
 | METAL-236 | Add Metal rows/columns to each relevant per-effect `docs/*-support.md` as its own phase lands (13 files identified: basiceffect/alphatesteffect/dualtextureeffect/environmentmapeffect/skinnedeffect/occlusionquery/rendertarget/texture3d-texturecube/sampler-state/depthstencilstate/rasterizerstate/surface-format/vertex-format-support.md) | ⬜ |
-| METAL-237 | Update `docs/coverage.md`/`docs/xna-4-api-coverage.md` if either tracks per-backend Graphics coverage at a level Metal should appear in | ⬜ |
+| METAL-237 | Update `docs/coverage.md`/`docs/xna-4-api-coverage.md` if either tracks per-backend Graphics coverage at a level Metal should appear in | 🟨 checked 2026-07-20: `docs/coverage.md`'s "Per-backend Graphics capability" table uses real-machine-verified columns (EasyGL/Vulkan/Bgfx/WebGPU) — adding Metal now would mean a column of mostly 🟨/unverified entries next to genuinely-verified ones, the same premature-comparison problem `METAL-235` already defers for the sibling feature-matrix doc. Deferred for the identical reason, not forgotten. |
 | METAL-238 | Hold this plan document itself to the same status-legend/correction-note discipline as `plan_dx3.md`/`plan_webgpu.md` — any future ✅ claim must cite the actual CTest name and check letters that proved it | ⬜ |
 
 ## Phase 28 — Cross-backend pixel parity (METAL-239 – METAL-242)
