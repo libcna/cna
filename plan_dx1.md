@@ -86,14 +86,38 @@ don't assume" bar.
 | `DX1-0b` | Extend `DX1-0a` into a real, running program: create an SDL3 (mingw-built) window → real `HWND` via `SDL_PROP_WINDOW_WIN32_HWND_POINTER` → `DirectDrawCreate` → `SetCooperativeLevel(hwnd, DDSCL_NORMAL)` → `CreateSurface` (`DDSCAPS_PRIMARYSURFACE`) → `Lock()` the primary → write one solid color → `Unlock()` → observe, run for real under Wine (a fresh, vanilla prefix — **no DXVK, no `free-direct`, nothing else in the process**) | Whether `Lock()` on the *primary* surface in windowed (`DDSCL_NORMAL`) mode is genuinely writable under Wine's `ddraw.dll` — the exact question `DX3` got burned by with `free-direct` (see `plan_dx3.md`'s "Real, confirmed finding" note) and must not assume away here just because the library is different |
 | `DX1-0c` | Confirm, by reading `ddraw.h` plus Microsoft's own historical DirectDraw programming-model documentation (not assumed): a windowed (`DDSCL_NORMAL`) `IDirectDraw` app legitimately never calls `SetDisplayMode` at all (that call is exclusive-fullscreen-only in the real historical API) | Settles design decision 4 below — confirms the windowed present path needs no display-mode change, only `CreateSurface`+`Blt` |
 
-Record the **actual** `DX1-0b` finding here once run (this is not hypothetical — write down what
-really happened, the same "prove it, don't assume" bar `plan_dx3.md`'s own correction history sets):
+**`DX1-0` result (run 2026-07-20, all three spikes passed):**
 
-> `DX1-0b` result: _(fill in at spike time)_. If `Lock()` on the primary is **not** genuinely
-> writable in this environment, design decision 4's shadow-backbuffer fallback (already the
-> default plan below, adopted proactively from `DX3`'s own discovery rather than re-hitting the
-> same wall from scratch) is what ships; if it **is** writable, the shadow-backbuffer step can be
-> simplified away in a later cleanup task — but ship the safe default first either way.
+- `DX1-0a`: a throwaway MinGW-w64 `.cpp` naming only `IDirectDraw`/`IDirectDrawSurface`/
+  `DDSURFACEDESC`/`DirectDrawCreate` compiled and linked cleanly against `-lddraw -ldxguid`
+  (`x86_64-w64-mingw32-g++`, zero warnings/errors) — confirms §1's symbol table is real, not a
+  guess.
+- `DX1-0b`: run for real under a fresh, vanilla `~/.wine-cna-dx1` prefix (`wineboot --init`, no
+  DXVK, no `free-direct` anywhere in the process), against Xvfb `:99`. **Every step succeeded**,
+  including `Lock()` on the primary surface — a genuinely *better* result than `DX3` got from
+  `free-direct` (`plan_dx3.md`'s own "Lock() on primary never returns a writable pointer" finding
+  does **not** reproduce here; real Wine `ddraw.dll` genuinely honors it). One real, load-bearing
+  wrinkle found along the way, **not anticipated by design decision 4's original wording**: with no
+  `SetDisplayMode` call (windowed `DDSCL_NORMAL`, per `DX1-0c`), the primary surface Wine hands
+  back represents the **whole screen** (`lPitch=3200` for Xvfb's real `800x480` mode — `800*4`
+  bytes/row — not the 64×64 window), exactly matching real historical DirectDraw semantics (the
+  primary surface is always the *display*, not "your window"; windowed apps position their `Blt`
+  destination rect at their own client area's *screen* coordinates). Consequence for `DX1-15`
+  (`Present()`): the shadow→primary `Blt()` destination rect must be computed via
+  `ClientToScreen(hwnd, &topLeft)` on the window's real client-area origin, not a `{0,0,w,h}`
+  rect assumed relative to the window — this plan's Phase O2 table is updated accordingly. The
+  shadow-backbuffer design (decision 4) stays exactly as planned regardless — it is still the
+  correct destination for `Clear()`/the compositor even though `Lock()`-on-primary itself works
+  here, since the primary is desktop-sized, not window-sized, and every offscreen `Lock()` in the
+  spike returned a real, writable, correctly-sized (64×64, `dwRGBBitCount=32`) buffer with no
+  caveats.
+- `DX1-0c`: confirmed by inspection of `ddraw.h` (no forced-mode-set requirement anywhere in the
+  `IDirectDraw` v1 vtable for `DDSCL_NORMAL` cooperative level) and empirically — the spike never
+  calls `SetDisplayMode` and every subsequent call still succeeds. Windowed mode needs no display
+  mode change, exactly as expected.
+
+**Net effect**: Route B is fully viable for `DX1` in this environment, verified empirically, not
+assumed. Phase O1 is now unblocked.
 
 ---
 
@@ -229,7 +253,7 @@ actually passing.
 | `DX1-12` | Primary `CreateSurface` (`DDSCAPS_PRIMARYSURFACE`) | ⬜ | No `SetDisplayMode` call — `DX1-0c` confirms windowed mode doesn't need one. |
 | `DX1-13` | Shadow-backbuffer offscreen `CreateSurface` (`DDSCAPS_OFFSCREENPLAIN`, 32bpp, sized to the requested backbuffer) — design decision 4 | ⬜ | |
 | `DX1-14` | `Clear(r,g,b,a)`: real `Lock()`/write all 4 channels/`Unlock()` against the shadow surface (not `DDBLT_COLORFILL`, which historically hardcodes alpha on some drivers — verify directly rather than assume, `DX3-14`'s own correction is exactly this class of bug) | ⬜ | |
-| `DX1-15` | `Present()`: `Blt()` shadow → primary (identity copy, full-surface rect) | ⬜ | |
+| `DX1-15` | `Present()`: `Blt()` shadow → primary. **`DX1-0b` finding**: the primary surface is desktop-sized, not window-sized — the destination rect must be the window's client area translated to screen coordinates via `ClientToScreen(hwnd, &topLeft)`, not `{0,0,w,h}` | ⬜ | |
 | `DX1-16` | `GetViewportSize()`/`SetVirtualResolution()`/`SetPresentationMode()`: reuse the shared backend-agnostic logical-resolution/letterbox math every other backend shares | ⬜ | |
 | `DX1-17` | `GetWindowInternal()` returns the real `SDL_Window*`; `GetRendererInternal()` returns `nullptr` | ⬜ | |
 | `DX1-18` | `Dx1_Smoke` CTest (through `scripts/run-wine-dx1.sh`): construct backend, clear to a known color, present, read back via `Lock()`, assert exact pixel match | ⬜ | |
