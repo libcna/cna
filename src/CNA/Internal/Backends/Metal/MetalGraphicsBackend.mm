@@ -3,6 +3,7 @@
 #include "CNA/Internal/Backends/Metal/MetalNormalMatrix.hpp"
 #include "CNA/Internal/Backends/Metal/MetalPrimitiveVertexCount.hpp"
 #include "CNA/Internal/Backends/Metal/MetalLogicalViewport.hpp"
+#include "CNA/Internal/Backends/Metal/MetalMat4.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -809,25 +810,14 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // to match MSL's `constant` address-space layout rules).
     struct UMaterialParams { float diffuseColor[4]; float alphaTest[4]; float flags[4]; };
 
-    struct Mat4 { float m[16]; };
-    static Mat4 multiply(const Mat4& a, const Mat4& b)
-    {
-        Mat4 r{};
-        for (int row=0; row<4; ++row)
-            for (int col=0; col<4; ++col)
-                for (int k=0; k<4; ++k)
-                    r.m[row*4+col] += a.m[row*4+k] * b.m[k*4+col];
-        return r;
-    }
-    static Mat4 fromXna(const Matrix& x)
-    {
-        return {{x.M11,x.M12,x.M13,x.M14, x.M21,x.M22,x.M23,x.M24,
-                 x.M31,x.M32,x.M33,x.M34, x.M41,x.M42,x.M43,x.M44}};
-    }
-    static Mat4 transpose(const Mat4& x)
-    {
-        Mat4 r{}; for(int i=0;i<4;++i) for(int j=0;j<4;++j) r.m[j*4+i]=x.m[i*4+j]; return r;
-    }
+    // plan_metal.md METAL-34-style extraction: this row-major 4x4 matrix helper set's real logic
+    // now lives in the plain-C++ MetalMat4.hpp (no Objective-C, buildable and unit-tested on any
+    // platform without an Apple toolchain) -- kept as thin same-name aliases/wrappers here so every
+    // existing call site in this file is unaffected.
+    using Mat4 = MetalMat4;
+    static Mat4 multiply(const Mat4& a, const Mat4& b) { return MetalMat4Multiply(a, b); }
+    static Mat4 fromXna(const Matrix& x) { return MetalMat4FromXna(x); }
+    static Mat4 transpose(const Mat4& x) { return MetalMat4Transpose(x); }
 
     // Plain C++ mirrors of kMetalShaderSource's `LitTransform`/`LitUniforms` -- see that struct's
     // own comment for why every logical vec3 is carried as a 4-float (xyz+pad) group and the

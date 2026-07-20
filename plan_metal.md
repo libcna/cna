@@ -828,6 +828,26 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     a real, previously-undocumented behavior this test now locks in precisely rather than glossing
     over. All 8 pass on this Linux machine. A fourth genuinely real, fully-earned ✅ tier tonight.
 
+32. **The WVP matrix helper set — `Mat4`/`multiply`/`fromXna`/`transpose` — a fifth real ✅, and the
+    strongest cross-validation of the night**: `drawMetal3D()` builds every single 3D draw's WVP
+    matrix via `transpose(multiply(multiply(fromXna(world),fromXna(view)),fromXna(projection)))` —
+    genuinely foundational, load-bearing infrastructure underneath every `PipelineKind` this whole
+    plan implements, not tied to one specific `METAL-N` task the way the previous four extractions
+    were. Extracted to `MetalMat4.hpp` (row-major `float[16]` storage plus
+    `Microsoft::Xna::Framework::Matrix`, itself plain C++). The strongest available check isn't a
+    hand-derived expected value at all: it's cross-validating `MetalMat4Multiply(MetalMat4FromXna(A),
+    MetalMat4FromXna(B))` against `Microsoft::Xna::Framework::Matrix::Multiply(A,B)` — the REAL,
+    independently-implemented, already-in-production XNA `Matrix` type this whole engine already
+    relies on — for translation×scale, scale×translation (proving the two truly differ, since matrix
+    multiplication doesn't commute — a real sanity check on the test itself, not just the function),
+    and a rotation×translation×scale chain shaped like a genuine WVP computation. 7 tests total:
+    field-order copy fidelity (`FromXna`, using 16 distinct values so a transposition bug would be
+    caught), identity-multiply is a no-op, the two cross-validation cases above, and transpose
+    correctness (identity, involution — `transpose(transpose(X))==X` — and a hand-verified concrete
+    asymmetric case using a translation matrix's own real M14/M41 row↔column swap). All 7 passed on
+    the very first run. Ran the full Metal-tagged `ctest` subset again afterward (38 tests across all
+    5 extracted headers) to confirm zero regressions: 100% pass.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -968,6 +988,13 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   independently, not both together) after an initial wrong test expectation caught it — a fourth
   genuinely real, fully-earned ✅ tier tonight, alongside `METAL-13`/`34` (✅ landed 2026-07-19 —
   `METAL-155`'s formula).
+- The foundational WVP-matrix helper set (`Mat4`/`multiply`/`fromXna`/`transpose`, underlying every
+  single 3D draw path this whole plan implements) machine-verified via `MetalMat4.hpp` and 7 real
+  `CnaTests`/`ctest` tests — the strongest cross-validation of the night, checking the extracted
+  `multiply`/`fromXna` combination against `Microsoft::Xna::Framework::Matrix::Multiply`'s own real,
+  independently-implemented, already-in-production arithmetic rather than only hand-derived expected
+  values — a fifth genuinely real, fully-earned ✅ tier tonight (🟨→✅, no single dedicated `METAL-N`
+  task ID, foundational infrastructure underneath Phase 1's own WVP computation).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
