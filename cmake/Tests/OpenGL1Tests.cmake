@@ -223,4 +223,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_SamplerState_BindOrder COMMAND cna_test_opengl1_samplerstate_bind_order
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 20 (EasyGL parity): runtime SetSwapInterval() override.
+    cna_opengl1_test(cna_test_opengl1_swapinterval
+                      examples/opengl1_swapinterval_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_SwapInterval COMMAND cna_test_opengl1_swapinterval
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

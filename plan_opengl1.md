@@ -89,8 +89,18 @@ shader, no modern-only extension) and were simply never implemented yet:
     always implicit `GL_FUNC_ADD`.
 19. Add separate alpha blend factors via `glBlendFuncSeparate` (core GL 1.4/`EXT_blend_func_separate`)
     -- `ApplyBlendState()` currently reuses the color factors for alpha too.
-20. Add a runtime `SetSwapInterval()` override (`SDL_GL_SetSwapInterval`) -- currently only the
-    construction-time value ever reaches SDL; changing vsync mid-session silently does nothing.
+20. ~~Add a runtime `SetSwapInterval()` override (`SDL_GL_SetSwapInterval`) -- currently only the
+    construction-time value ever reaches SDL; changing vsync mid-session silently does nothing.~~
+    **Done**: `OpenGL1GraphicsBackend::SetSwapInterval(int)` now calls `SDL_GL_SetSwapInterval(interval)`
+    directly, overriding the `IGraphicsBackend` no-op default. New test `OpenGL1_SwapInterval`
+    (`examples/opengl1_swapinterval_test.cpp`) verifies against the real driver via
+    `SDL_GL_GetSwapInterval()`, not just "no exception thrown": calls `SetSwapInterval(0)` then asserts
+    the driver reports `0`, then `SetSwapInterval(1)` and asserts `1` -- the second call proves this is a
+    genuine runtime change and not a value that merely happened to already match construction time.
+    Mutation-tested: reverting the override to a no-op reproduces the predicted failure
+    (`SDL_GL_GetSwapInterval=1` after `SetSwapInterval(0)`, i.e. the driver's prior value was never
+    touched); restoring the fix reproduces the predicted correct values (`0` then `1`). Full
+    `ctest -R "OpenGL1_"` regression sweep: 27/27 passed after this change.
 21. Add `RenderTarget2D` mip-chain generation on unbind, reusing the existing `Texture2D` mip
     machinery (`glGenerateMipmap`/`GL_GENERATE_MIPMAP`/CPU box-filter, phase 6) -- `CreateRenderTarget2D`
     currently silently drops its own `mipMap` parameter (unnamed `bool`).

@@ -83,6 +83,10 @@ private:OpenGL1GraphicsBackend& owner_;bool begun_=false;Matrix transform_=Matri
 class OpenGL1GraphicsBackend final : public IGraphicsBackend {
 public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenGL1GraphicsBackend()override;
  void Clear(float,float,float,float)override;void Present()override;void GetViewportSize(int&,int&)override;void SetVirtualResolution(int,int)override;void SetPresentationMode(int)override;
+ // plan_opengl1.md item 20 (EasyGL parity): only the constructor's swapInterval ever reached SDL
+ // before this -- a runtime GraphicsDevice.PresentationParameters/vsync change silently did
+ // nothing.
+ void SetSwapInterval(int)override;
  void ReadBackbuffer(int,int,int,int,uint8_t*)override;
  SDL_Window* GetWindowInternal()const override{return window_;} SDL_Renderer* GetRendererInternal()const override{return nullptr;}
  std::unique_ptr<ITextureBackend>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchBackend>CreateSpriteBatch()override;
