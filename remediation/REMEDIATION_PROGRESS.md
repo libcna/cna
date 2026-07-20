@@ -2617,3 +2617,22 @@ cross-backend scope should own. Flagging so GFX-010 is not scoped as D3D9-only.
   FAILS on the pre-fix shader and PASSES after. All 8 Vulkan env-map tests pass; zero regressions.
 - **Remaining GFX-007 scope:** Bgfx, WebGPU, SdlGpu (incl. its extra alpha-squaring), D3DCommon
   (D3D11/D3D12) — bytecode regen blocked in this sandbox.
+
+### REMED-GFX-011 — Vulkan NDC Y-flip — CONFIRMED AT SOURCE, not yet implemented
+
+Verified this session (grep + read of every Vulkan 3D `.vert.glsl`): the flip convention splits exactly
+as the plan states. **Have the flip:** `colored3d`/`textured3d` (`pos.y = -pos.y` before assignment),
+`skinned3d` (`gl_Position.y = -gl_Position.y`, line 59), and the other lit/dual/alpha variants.
+**Missing the flip (the defect):** `env_map3d.vert.glsl` (l.35), `pbr3d.vert.glsl` (l.55, with a comment
+justifying only PBR-internal consistency), `pbr3d_skinned.vert.glsl` (l.62, comment falsely claims
+"skinned3d.vert.glsl never Y-flips" — it DOES, l.59), `instanced3d.vert.glsl` (l.28, no comment).
+`sprite2d` computes NDC directly (verified non-bug).
+
+**Fix (ready):** add `gl_Position.y = -gl_Position.y;` after the `mvp*pos` line in those 4 shaders;
+delete the two false/incomplete justifying comments; regen `spirv_shaders.hpp`.
+**Why deferred here:** proper verification needs an **off-center / orientation** test per effect family
+(the existing tests sample the center pixel, which structurally cannot detect a vertical mirror — the
+same blind spot that hid the bug). Adding correct orientation tests (careful about XNA +y-up vs Vulkan
++y-down NDC vs readback pixel rows) is new infra best built as its own focused step, not rushed. The
+existing symmetric env-map/pbr tests will still pass after the flip (a vertical flip doesn't move a
+symmetric full-screen quad's center pixel), so they cannot serve as the regression guard either.
