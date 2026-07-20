@@ -35,11 +35,11 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 4 | 0 | 0 | 7 |
+| P0 | 11 | 5 | 0 | 0 | 6 |
 | P1 | 21 | 0 | 0 | 0 | 21 |
 | P2 | 44 | 0 | 0 | 0 | 44 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **4** | **0** | **0** | **100** |
+| **Total** | **104** | **5** | **0** | **0** | **99** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -78,7 +78,7 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 | ID | Status | Owner | Branch | Notes |
 |---|---|---|---|---|
 | REMED-CONTENT-001 | DONE | | feature/audit | CRITICAL. Fixed in shared content code, **not** per-backend — see detail below. |
-| REMED-CONTENT-002 | NOT STARTED | | | Shared helper first, then 3 call sites, then repo-wide grep. |
+| REMED-CONTENT-002 | DONE | | feature/audit | Shared helper + 3 call sites + repo-wide grep sweep — see detail below. 2 genuinely new findings recorded (`REMED-CONTENT-007`, `-008`), not fixed (out of this task's scope). |
 | REMED-CONTENT-003 | DONE | | feature/audit | Ported the sibling readers' existing check verbatim — see detail below. |
 | REMED-CONTENT-006 | NOT STARTED | | | VERIFY first. Then audit all 7 `XnbReadLimits` fields for consumers. |
 | REMED-GFX-001 | NOT STARTED | | | Serialize against all other EasyGL work. |
@@ -160,6 +160,87 @@ throw). `GraphicsDeviceCapabilityTests.cpp` — `GetMaxTextureDimensionReturnsSa
 Full `CnaTests` direct-binary run (EASYGL, after CONTENT-001 + CONTENT-003 together): **5537
 tests, 5530 passed, 4 skipped, 0 failed, exit 0** — 5507 baseline + 30 new tests (8 from
 CONTENT-001/003, 22 from CONTENT-002, see below), zero regressions.
+
+### REMED-CONTENT-002 detail — `fs::path` containment sweep
+
+**Shared helper:** new `include/CNA/Internal/PathContainment.hpp` (header-only, `inline`, matching
+`CnjSourceFile.hpp`'s established convention) with two pieces:
+- `IsDisallowedAbsolutePath(normalized)` — absolute/drive-letter/UNC detection, extracted as its own
+  building block because `ContentReader`'s site (below) needs it standalone.
+- `ResolveContainedPath(baseDir, relativeOrAbsolute, canonicalize=true)` — joins onto `baseDir` and
+  verifies containment; `canonicalize=false` skips real filesystem access (`weakly_canonical`) for
+  callers resolving a purely logical/virtual path. **Always returns the lexically-normalized join,
+  never the canonicalized form** — canonicalization is used only for the containment *check* — this
+  mattered in practice (see "regression caught and fixed" below).
+
+**Three call sites:**
+- `StorageDevice::DeleteContainer()` — now rejects absolute/escaping `titleName` with
+  `std::invalid_argument`, via `ResolveContainedPath(storageRoot, titleName)`. CNA-introduced (FNA's
+  own `DeleteContainer` always throws `NotImplementedException`), fixed freely.
+- `ContentReader::ResolveRelativeAssetPath()` (private helper behind `ReadExternalReference<T>()`)
+  — now rejects an absolute reference via `IsDisallowedAbsolutePath()` **directly**, not
+  `ResolveContainedPath()`: this site's join base (the current asset's own directory) and its real
+  containment root (the content root above it) are different, and a legitimate sibling reference
+  like `"../textures/foo"` from `"effects/myeffect"` must climb out of `effects/` by design — the
+  existing `..`-prefix root-escape check (already correct) is kept unchanged, only the missing
+  absolute-rejection was added.
+- `PlaylistParser::Parse()` — every `.m3u`/`.m3u8` entry now goes through
+  `ResolveContainedPath(playlistDir, entry)`; an absolute or escaping entry is silently skipped,
+  same as a missing entry (documented as a deliberate security-over-compatibility divergence from
+  standard M3U in `PlaylistParser.hpp`'s own class docs, per the plan's explicit instruction not to
+  do this silently).
+
+**Regression caught and fixed during implementation:** the first version of `ResolveContainedPath`
+returned the `weakly_canonical`-canonicalized absolute path. `MediaLibrary.cpp` looks up parsed
+playlist song paths in a `songByPath_` map keyed by the same lexical/relative form
+`PlaylistParser`'s *old* code produced — the canonicalized form no longer matched those keys,
+silently zeroing every playlist's song count (`MediaLibraryTestFixture.FavoritesResolvesTo...` etc.,
+3 tests, caught by the full-suite run before this was committed). Fixed by returning the lexical
+join always, canonicalizing only for the internal containment check. Full suite re-verified clean
+afterward.
+
+**Tests added:**
+- `tests/CNA/Internal/PathContainmentTests.cpp` (new file) — 14 tests: absolute RHS, `..` traversal
+  (both escaping and non-escaping), `.`-only, empty, Windows drive-letter (`C:/...` and
+  `C:\...`), UNC (`\\server\share\...`), empty-baseDir-as-cwd, real symlink escape (skips if the
+  sandbox disallows symlink creation), and result-path usability — matches the plan's required test
+  list for the shared helper exactly.
+- `tests/Microsoft/Xna/Framework/Storage/StorageDeviceTests.cpp` (new file — no prior test coverage
+  existed for `StorageDevice` at all): 5 tests — empty/absolute/escaping/`.`-titleName all throw and
+  leave the storage root's contents untouched (proven via a sentinel marker file), plus a legitimate
+  simple title name still deletes only that container.
+- `ContentReaderExternalReferenceTests.cpp` — `AbsolutePathReferenceThrowsContentLoadException`.
+- `PlaylistParserTests.cpp` — `AbsoluteEntryIsSkippedNotResolved`,
+  `EscapingEntryIsSkippedNotResolved`.
+
+**Repo-wide sweep** (`grep -rn "fs::path(\|std::filesystem::path(" ... | grep " / "`, project-wide,
+excluding `audit/`/vendor/third_party): every hit classified below.
+
+| Site | Classification |
+|---|---|
+| `StorageDevice::DeleteContainer` | **Fixed** (this task) |
+| `ContentReader::ResolveRelativeAssetPath` | **Fixed** (this task) |
+| `PlaylistParser::Parse` | **Fixed** (this task) |
+| `ContentManager::BuildAssetPath` (`ContentManager.cpp:306`) | **Confirmed FNA-faithful, not fixed.** Matches real .NET `Path.Combine`'s own identical "absolute RHS discards LHS" behavior, which real FNA's `ContentManager.Load` relies on unchecked — same precedent as `StorageContainer`'s equivalent joins (per this task's own instructions). |
+| `StorageContainer.cpp:56,86` (`rootPath/displayName/playerFolder`, `storagePath_/relative`) | **Already exempted by the plan itself** — "confirmed FNA-faithful (FNA's own `StorageContainer.cs` uses unchecked `Path.Combine` for every equivalent method)." Not re-litigated. |
+| `StorageDevice.cpp:94,100` (XDG/HOME fallback root construction) | Not a hit — `app` is the developer-set app name (`SetAppNameEXT`), not untrusted file/caller input, and this constructs the root itself rather than resolving a reference into an existing one. |
+| `TitleContainer::CombineTitlePath`/`ResolveRealPath` | **Confirmed FNA/XNA-faithful, not fixed.** Real XNA's documented `TitleContainer` behavior explicitly allows a rooted path to bypass the title location entirely (`IsPathRooted(name)` check already present, returns the rooted path as-is) — intentional, documented API behavior games rely on, not a bug. |
+| `SavedPictureStore.cpp:59,80` | Not a hit — line 59's RHS is a hardcoded literal (`"Saved Pictures"`); line 80's `name` is already reduced to a single safe path segment by `SanitizePictureName()` (rejects `.`/`..`/empty) before the join — this file was one of the two reference implementations named in the task's own suggested strategy. |
+| `MediaLibrary.cpp:332,522` | Not a hit — hardcoded literal RHS (`"Saved Pictures"`). |
+| `LocalGamerServicesStore.cpp:31` | Not a hit — hardcoded literal RHS (`"GamerServices"`). |
+| `VideoContentTypeReader.cpp:76`, `SongContentTypeReader.cpp:76` (+ each file's own private `ResolveRelativeFilePath` helper) | **Genuinely new finding — recorded as `REMED-CONTENT-007`, NOT fixed** (out of this task's 3-site scope). See "Discovered during remediation" below. |
+| `ContentManager.cpp:560,779-780,1364,2167,2267,2269,2312` (8 sites: `.cnj`/JSON manifest fields — `dataField->stringValue`, `vertRel`/`fragRel`, `clipFileField->stringValue`, `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile`) | **Genuinely new finding — recorded as `REMED-CONTENT-008`, NOT fixed** (out of this task's 3-site scope). See "Discovered during remediation" below. |
+
+**Completion criteria met:** all three named sites reject absolute and `..`-escaping paths; the
+repo-wide sweep is complete and every hit is either fixed, confirmed FNA-faithful, or recorded as a
+new finding (2 new IDs, not silently absorbed).
+
+**Verification:** `DeleteContainer("../../../x")` and `DeleteContainer("/etc")` both throw and
+delete nothing (proven with a sentinel file, not just "no exception"); a crafted external reference
+with an absolute path is rejected; the sweep's hit list is documented above. Full `CnaTests`
+direct-binary run (EASYGL): 5537/5530/4/0, 0 regressions (same run as CONTENT-001's, all three
+CONTENT tasks verified together).
+
 
 ## Wave 1 (parallel) — unblockers
 

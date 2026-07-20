@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/PathContainment.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -32,13 +33,33 @@ namespace Microsoft::Xna::Framework::Content
                 return s;
             };
 
+            const std::string normalizedRelativeFile = normalizeSeparators(relativeFile);
+
+            // REMED-CONTENT-002/XNB-35 hardening, no FNA equivalent (FNA just lets the OS fail to
+            // find an escaping path): reject a reference that is itself absolute outright, rather
+            // than attempting to load whatever happens to be there. This method's own doc comment
+            // already promised such paths are "rejected outright"; previously only the ".."-
+            // escaping case (below) was actually enforced -- an absolute reference (e.g.
+            // "/etc/passwd") passed straight through unchanged, since fs::path::operator/ silently
+            // discards `base` for an absolute right-hand operand.
+            //
+            // Deliberately NOT ResolveContainedPath(base, ...): that function's containment root is
+            // the same directory the string is joined onto, but here the join base is the CURRENT
+            // asset's own directory while the containment root is the content root above it -- a
+            // legitimate sibling reference like "../textures/foo" from "effects/myeffect" climbs
+            // out of "effects/" by design and must not be rejected just for containing "..".
+            if (CNA::Internal::IsDisallowedAbsolutePath(normalizedRelativeFile))
+            {
+                throw ContentLoadException(
+                    "ContentReader::ReadExternalReference(): '" + relativeFile + "' (relative to '" +
+                    filePath + "') resolves outside the content root.");
+            }
+
             const fs::path base = fs::path(normalizeSeparators(filePath)).parent_path();
-            const fs::path combined = base / normalizeSeparators(relativeFile);
+            const fs::path combined = base / normalizedRelativeFile;
             const std::string resolved = combined.lexically_normal().generic_string();
 
-            // XNB-35 hardening, no FNA equivalent (FNA just lets the OS fail to find an escaping
-            // path): reject a reference that climbs above the content root's own logical space
-            // outright, rather than attempting to load whatever happens to be there.
+            // Reject a reference that climbs above the content root's own logical space outright.
             if (resolved == ".." || resolved.rfind("../", 0) == 0)
             {
                 throw ContentLoadException(

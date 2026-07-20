@@ -126,9 +126,10 @@ namespace Microsoft::Xna::Framework::Content
          * `MonoGame.Utilities.FileHelpers.ResolveRelativePath`), then loaded via
          * `ContentManager::Load<T>()` -- so it goes through the exact same `.xnb`/`.cnj`/native
          * resolution order a direct `Load<T>()` call would. As a hardening addition with no FNA
-         * equivalent (FNA simply lets the OS fail to find an escaping path), a reference that
-         * resolves above the content root's own logical space is rejected outright rather than
-         * attempting to load whatever happens to be there.
+         * equivalent (FNA simply lets the OS fail to find an escaping path), a reference that is
+         * itself absolute, or that resolves above the content root's own logical space, is
+         * rejected outright rather than attempting to load whatever happens to be there
+         * (REMED-CONTENT-002).
          *
          * Returns `std::optional<T>` rather than FNA's literal bare `T`: real FNA callers check
          * the result against C#'s reference-type `null` (`if (texture != null)`) to tell "no

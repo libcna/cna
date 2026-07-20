@@ -10,6 +10,7 @@
 
 #include <SDL3/SDL.h>
 
+#include "CNA/Internal/PathContainment.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 
 namespace Microsoft::Xna::Framework::Storage
@@ -195,7 +196,21 @@ namespace Microsoft::Xna::Framework::Storage
     {
         if (titleName.empty())
             throw std::invalid_argument("titleName must not be empty.");
-        fs::remove_all(fs::path(EnsureStorageRoot()) / titleName);
+
+        // REMED-CONTENT-002: titleName is caller-supplied. fs::path::operator/ silently discards
+        // the storage root for an absolute titleName, and does not reject ".." segments -- either
+        // one previously let DeleteContainer("../../../SomeOtherAppData") (or an absolute path)
+        // recursively delete anything the process can reach, not just this game's own storage.
+        // CNA-introduced (FNA's own DeleteContainer always throws NotImplementedException), so no
+        // FNA behavior constrains this fix.
+        const auto contained = CNA::Internal::ResolveContainedPath(EnsureStorageRoot(), titleName);
+        if (!contained.ok)
+        {
+            throw std::invalid_argument(
+                "titleName must be a simple name within the storage root, not an absolute path "
+                "or one that escapes it.");
+        }
+        fs::remove_all(contained.resolvedPath);
     }
 
     // -------------------------------------------------------------------------

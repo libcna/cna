@@ -6,6 +6,8 @@
 #include <fstream>
 #include <sstream>
 
+#include "CNA/Internal/PathContainment.hpp"
+
 namespace CNA::Internal::Media
 {
     namespace
@@ -49,16 +51,23 @@ namespace CNA::Internal::Media
                 continue; // blank line or a comment/#EXTINF/#EXTM3U directive
             }
 
-            std::filesystem::path entryPath(trimmed);
-            if (entryPath.is_relative())
+            // REMED-CONTENT-002: standard M3U allows absolute entries and would let one playlist
+            // reference songs anywhere on disk -- CNA deliberately tightens this (a security-over-
+            // compatibility choice, not FNA/XNA-faithful behavior to preserve, since M3U parsing
+            // has no XNA equivalent at all): an untrusted/hostile playlist file must not be able to
+            // make the engine open and decode an arbitrary readable file. Every entry is contained
+            // to the playlist's own directory, matching the pattern already used for
+            // ContentReader::ReadExternalReference and StorageDevice::DeleteContainer.
+            const auto contained = CNA::Internal::ResolveContainedPath(baseDir.string(), trimmed);
+            if (!contained.ok)
             {
-                entryPath = baseDir / entryPath;
+                continue; // absolute or escaping entry -- skipped, same as a missing entry below
             }
 
             std::error_code ec;
-            if (std::filesystem::exists(entryPath, ec) && !ec)
+            if (std::filesystem::exists(contained.resolvedPath, ec) && !ec)
             {
-                result.songPaths.push_back(entryPath.string());
+                result.songPaths.push_back(contained.resolvedPath);
             }
             // A missing entry is skipped, not fatal (plan_media.md MEDIA-57 acceptance).
         }
