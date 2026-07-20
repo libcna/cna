@@ -1971,6 +1971,36 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     no evidence for, but real execution is the only way to be sure). The next CI run's result decides
     which branch of investigation continues.
 
+74. **Real twenty-third CI signal — decisive: `Metal_DrawUserPrimitives_VPC` fails identically to the
+    PBR tests, proving the root cause is generic to any real 3D draw + same-process readback on
+    Metal, not PBR-specific**: both its sub-tests (`offset=0` and `offset=1`) read back `centre=
+    (0,255,0)` — the literal `Clear` color, exactly the same failure signature as `Metal_PbrEffect_
+    Golden`, on a test using `PipelineKind::Colored16` (the simplest pipeline in the whole file:
+    straight `position`→clip-space passthrough via `wvp`, vertex color output directly, no lighting,
+    no texture sampling, no BRDF) and a **full-NDC quad covering the entire screen**, not a narrow
+    per-quad region — ruling out even a partial/positional miss as an explanation, since a full-
+    screen quad can only fail to cover the center pixel if nothing rasterizes at all. Also confirmed,
+    while investigating, that `BasicEffect`'s `World`/`View`/`Projection` all default to `Matrix::
+    getIdentityProperty()` (real Identity, not a zero-initialized `Matrix()`), so this test's implicit
+    (never explicitly set) transform genuinely matches the PBR test's explicit one — both tests are
+    verified equivalent in transform setup, reinforcing that this is the same underlying bug, not two
+    coincidentally-identical-looking separate ones.
+    This conclusively rules out every PBR-specific candidate this whole investigation considered
+    (BRDF math, PBR uniform fill, alpha-test discard, PBR-specific texture fallbacks) and narrows the
+    remaining search to whatever `ensureFrame()`/`resolveActiveAttachments()`/`drawMetal3D()`'s shared
+    setup/`ReadBackbuffer()` still gets wrong — all of which have now been read and re-read multiple
+    times this session without finding a further issue, despite every individually-checkable
+    hypothesis (pipeline selection, viewport, cull, fill, scissor, vertex offsets, vertex descriptor,
+    shader attribute indices, pixel format match, alpha-test discard logic, and now confirmed-correct
+    default transform matrices) independently confirmed correct. This is the point where this
+    session's own "read the code, don't guess blindly" discipline has run out of new, well-reasoned
+    hypotheses to check from source alone — genuinely requires either a physical Mac with a GPU frame
+    debugger (to see what the GPU actually received, not infer it from before/after log lines around
+    an opaque Metal API call), or a fundamentally different diagnostic technique this session hasn't
+    tried yet (e.g., an `MTLCaptureManager` programmatic GPU trace dumped to a file the next CI run
+    could upload as an artifact). Twenty-third real, observed CI signal — a decisive, valuable result
+    (definitively not PBR-specific) even though the underlying root cause itself remains open.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
