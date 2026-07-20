@@ -36,28 +36,30 @@ context, GL 3.3.
   sample** (`plan_glbackends.md` GLB-22, upgraded from an earlier 7-binary sample). Built all 241
   (`cmake --build --target <all 241 names>`, exit 0) and ran every one of them
   (`DISPLAY=:99` Xvfb, from the repo root so relative-path golden-image/fixture lookups resolve
-  correctly): **235/241 pass, 0 crash, 6 fail.**
-  - **5 of the 6 failures are pre-existing, confirmed by building and running the exact same 6
-    binaries under `OPENGLES` for direct comparison — they fail identically there too**:
+  correctly): **236/241 pass, 0 crash, 5 fail** (updated after the `GLB-40` fix below — was
+  235/241, 6 fail, before it).
+  - **The remaining 5 failures (of the original 6) are all pre-existing, confirmed by building and
+    running the exact same 6 binaries under `OPENGLES` for direct comparison — they fail
+    identically there too**:
     `cna_oracle_render_easygl`, `cna_test_avatar_tint_routing` (documented pre-existing bug,
     `plan_graphics.md` Task 1115 — a real `AvatarRenderer` tint-doubling defect, unrelated to GL
     profile), `cna_test_easygl_graphicsdevicemanager_vsync`,
     `cna_test_easygl_graphicsdevice_reference_stencil` (also a documented pre-existing gap,
     `plan_graphics.md` Task 872), `cna_test_easygl_mrt`.
-  - **1 failure is real and `OPENGL33`-specific, but not a regression in this plan's shader-adapter
-    work**: `cna_test_easygl_shipgame_particle_shader` passes under `OPENGLES` but fails under
-    `OPENGL33` (`[FAIL] Check A/D`, no rendered content — background color only). Root cause:
-    `examples/easygl_shipgame_particle_shader_test.cpp` hardcodes `#version 300 es` directly in a
-    **custom `ShaderEffect`** (raw user-authored GLSL passed straight to
-    `EasyGLEffectBackend::CompileProgram()`, which — by design, matching every other backend —
-    does **not** run shader source through `AdaptGlslEs300ForActiveProfile()`; that adapter only
-    covers this file's own ~26 *stock* effect shaders). `#version 300 es` is not valid syntax for a
-    real desktop GL 3.3 core-profile driver, so the shader fails to compile silently (no
-    `std::cerr` output reached this test's own stdout capture — worth a follow-up to make custom
-    `ShaderEffect` compile failures under `OPENGL33` less silent, not investigated further here).
-    This is the same, already-existing "custom `ShaderEffect` shaders are not portable across GL
-    flavors, the caller owns that" limitation every backend already has — this specific example
-    was simply never exercised against a desktop-core-profile target before `OPENGL33` existed.
+  - **1 failure was real and `OPENGL33`-specific — root-caused and fixed as `GLB-40`** (not the
+    shader-compile-failure explanation first guessed, which turned out wrong — see below).
+    `cna_test_easygl_shipgame_particle_shader` uses a `GL_POINTS`/`gl_PointSize`/`gl_PointCoord`
+    particle-sprite shader. GLES/WebGL always honor a vertex shader's `gl_PointSize` output
+    automatically; desktop GL requires an explicit `glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)`, which
+    `EasyGLGraphicsBackend` never called — every point silently rendered at the fixed 1.0-pixel
+    default instead of the shader's requested size, invisible at the test's sampled pixel.
+    (The initial guess — that the shader's hardcoded `#version 300 es` fails to compile under a
+    desktop core-profile driver — was verified wrong with a standalone test program: Mesa accepts
+    that version pragma leniently even under a core-profile context.) Fixed with a
+    `#ifdef CNA_GL_PROFILE_OPENGL33`-gated `glEnable` call, loaded via a runtime function pointer
+    (matching this project's "no static `libGL` linkage" convention). All 4 of the test's checks
+    now `[PASS]` under `OPENGL33`; re-verified no regression under `OPENGLES`. See
+    `plan_glbackends.md`'s `GLB-40` entry for full detail.
 
 ## What's not yet done
 - ⬜ **CI/CTest identity** — `cmake/Tests/EasyGLTests.cmake`'s guard was widened to cover both

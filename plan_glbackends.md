@@ -250,14 +250,15 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 > exactly what `OPENGL33` needed (no shader in `EasyGLGraphicsBackend.cpp` had a real GLES-only
 > body construct beyond the header two lines — see Phase B's status note for the empirical
 > `highp`/`mediump` finding). **`GLB-22` upgraded from a 7-binary sample to the full registered
-> suite, all 241 `cna_easygl_test` binaries, built and run for real**: `235/241 pass, 0 crash,
-> 6 fail`. 5 of the 6 failures were confirmed pre-existing (identical failure under `OPENGLES`,
-> including 2 already-documented bugs, `plan_graphics.md` Tasks 1115/872). The 6th
-> (`cna_test_easygl_shipgame_particle_shader`) is real and `OPENGL33`-specific but not a
-> regression in this plan's own shader-adapter work — it's a custom `ShaderEffect` example that
-> hardcodes `#version 300 es` directly, a code path the adapter deliberately does not touch (custom
-> `ShaderEffect` shaders are user-authored and were never portable across GL flavors, for any
-> backend). Full detail in `docs/opengl33-backend.md`.
+> suite, all 241 `cna_easygl_test` binaries, built and run for real**: originally `235/241 pass,
+> 0 crash, 6 fail`. 5 of the 6 failures were confirmed pre-existing (identical failure under
+> `OPENGLES`, including 2 already-documented bugs, `plan_graphics.md` Tasks 1115/872). The 6th
+> (`cna_test_easygl_shipgame_particle_shader`) was real and `OPENGL33`-specific — root-caused
+> (missing `glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)` for `gl_PointSize`-driven point-sprite
+> rendering, **not** the shader-compile-failure explanation first guessed here, which was verified
+> wrong) and fixed as `GLB-40`. **Final re-verified count: `236/241 pass, 0 crash, 5 fail`**, the
+> same 5 pre-existing failures, zero new regressions. Full detail in `docs/opengl33-backend.md` and
+> the `GLB-40` entry below.
 - ✅ **GLB-20** — Implement `GLB-11`/`GLB-12`'s header-swap mechanism for the `OPENGL33` profile
   specifically (closest to today's ES path syntactically — likely just `in`/`out`/`texture()` all
   still valid, only `#version`/precision-qualifier differences). Build and smoke-test one simple
@@ -266,7 +267,8 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
 - ✅ **GLB-21** — Work through remaining shaders one by one, fixing any real GLES-only construct
   found in `GLB-10`'s survey.
 - ✅ **GLB-22** — Run the full EasyGL-family GTest suite under `OPENGL33` and record pass/fail —
-  **done: 235/241, see status note above and `docs/opengl33-backend.md` for the full breakdown.**
+  **done: 236/241 (final, post-GLB-40), see status note above and `docs/opengl33-backend.md` for
+  the full breakdown.**
 - ✅ **GLB-23** — `docs/opengl33-backend.md` — new doc, same shape as `docs/webgpu-backend.md`/
   `docs/dx3-backend.md`: what's verified, what's deferred, how it differs from `OPENGLES`.
 
@@ -310,17 +312,35 @@ Public CNA_GRAPHICS_BACKEND values:      OPENGLES | OPENGL33 | WEBGL1 | WEBGL2
   link failure — see this Phase's status note above for the full root cause and fix (CNA's own
   top-level `CMakeLists.txt`, not `meta-gl-followup-audit` as first suspected).
 - ✅ **GLB-26** — `docs/webgl2-backend.md`.
-- ⬜ **GLB-40** — **New, found 2026-07-19 while running the full `OPENGL33` example suite
-  (`GLB-22`).** `EasyGLEffectBackend::CompileProgram()` (the custom `ShaderEffect` runtime-compile
-  path) silently produces no visible `std::cerr` compile-error output reaching a caller's own
-  stdout capture when a shader fails to compile (reproduced by
-  `cna_test_easygl_shipgame_particle_shader`'s `#version 300 es` source under a real desktop
-  `OPENGL33` core-profile context — the test's own `[FAIL]` output shows no rendered content, with
-  no accompanying shader-compile-error diagnostic surfaced anywhere in the captured output). Worth
-  a small follow-up making custom `ShaderEffect` compile failures more visible/debuggable under
-  `OPENGL33` specifically (not a blocker — same class of "you must write GLSL your target
-  understands" limitation every backend already has for custom shaders — just harder to diagnose
-  than it should be).
+- ✅ **GLB-40** — **New, found 2026-07-19, root-caused and fixed 2026-07-20.** Originally filed as
+  "custom `ShaderEffect` compile failures are silent under `OPENGL33`"
+  (`cna_test_easygl_shipgame_particle_shader` failing with no diagnostic). **That description was
+  wrong** — investigated further before implementing anything, since `ShaderEffect.cpp`'s
+  constructor already does print `effectBackend_->GetCompileError()` via `std::cerr` whenever
+  `IsValid()` is false, which should have caught a real compile failure. Verified directly against
+  a real Mesa desktop core-profile GL context (a standalone test program linking `easy-gl`/
+  `meta-gl`, bypassing the whole CNA stack) that Mesa's compiler **silently accepts
+  `"#version 300 es"` even under a `#version 330 core`-negotiated context** (`is_compiled: 1`, no
+  error log) — so there never was a compile failure to report.
+  **Real root cause**: `cna_test_easygl_shipgame_particle_shader` is a `GL_POINTS`/`gl_PointSize`/
+  `gl_PointCoord` particle-sprite shader. GLES/WebGL always honor a vertex shader's `gl_PointSize`
+  output automatically; desktop GL (both compatibility and core profile) requires
+  `glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)` to be called explicitly, or `gl_PointSize` is silently
+  ignored and every point renders at the fixed 1.0-pixel default — invisible at the test's sampled
+  pixel, exactly matching the observed "no rendered content" symptom. `EasyGLGraphicsBackend` never
+  called this (confirmed via a full grep — no `PROGRAM_POINT_SIZE` anywhere in the file before this
+  fix), and it isn't in `meta-gl`'s typed `Capability` enum at all (GLES/WebGL have no equivalent
+  constant, so `meta-gl` never needed to expose it).
+  **Fix**: a new `EnableVertexProgramPointSize()` helper (`EasyGLGraphicsBackend.cpp`,
+  `#ifdef CNA_GL_PROFILE_OPENGL33`-gated), calling `glEnable(0x8642)` via a runtime function
+  pointer loaded through `SDL_GL_GetProcAddress` (matching this project's existing "no static
+  `libGL` linkage" convention — `meta-gl` itself loads every GL entry point the same way), called
+  after both `device.initialize()` sites (normal startup and context-loss recovery).
+  **Verified**: `cna_test_easygl_shipgame_particle_shader` now `[PASS]`es all 4 checks under
+  `OPENGL33` (previously 2/4 `[FAIL]`); re-verified still `[PASS]`es under `OPENGLES` (no
+  regression, the new code is `#ifdef`-gated to `OPENGL33` only); re-ran the **full 241-binary
+  `OPENGL33` suite** from `GLB-22` — **`236/241 pass, 0 crash, 5 fail`** (up from 235/241), the
+  same 5 pre-existing/unrelated failures as before, zero new regressions.
 
 ### Phase F — `WEBGL1` (new, needs easy-gl fixes first)
 
@@ -451,11 +471,14 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
 - `GLB-38` (push/merge `easy-glrvc`'s commits into `easy-gl`'s real default branch so `cnagl` can
   drop the temporary `../easy-glrvc` dependency): **Decided: leave to the project owner — do not
   attempt to merge/push between repos autonomously.** (Reconfirmed 2026-07-20 morning.)
-- `GLB-40` (custom `ShaderEffect` compile failures are silent under `OPENGL33`, no visible error
-  diagnostic reaches the caller): **Decided 2026-07-20 morning: investigate.** See the dedicated
-  status note under Phase D / the `GLB-40` task entry for findings — this needed a look at every
-  backend's `CreateEffectBackend()` error-handling contract before proposing a fix, not a
-  same-backend-only change.
+- `GLB-40` (originally filed as "custom `ShaderEffect` compile failures are silent under
+  `OPENGL33`"): **Decided 2026-07-20 morning: investigate — done, and the original description
+  turned out to be wrong.** There was no silent compile failure at all (Mesa accepts
+  `"#version 300 es"` leniently even under core profile); the real bug was a missing
+  `glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)` for `gl_PointSize`-driven point-sprite rendering under
+  desktop GL. Fixed — see the `GLB-40` task entry under Phase D for full root cause and
+  verification. (The `CreateEffectBackend()` error-handling contract across backends turned out
+  not to be the relevant question here — noted in case it resurfaces for a real future case.)
 - Whether `OPENGLES` should default to GLES 3.0 (today's behavior, kept in this plan) or whether a
   true "OpenGL ES" public name should support ES 2.0 as well — this plan assumes ES 3.0-only
   scope for `OPENGLES` (matching current behavior) and treats ES2-class support as exclusively the
