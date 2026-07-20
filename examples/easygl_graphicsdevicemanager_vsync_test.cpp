@@ -17,7 +17,7 @@
 // Check B -- SynchronizeWithVerticalRetrace=true + ApplyChanges() -> SDL_GL_GetSwapInterval()!=0
 //   (1 for standard vsync, -1 for adaptive vsync -- either is "on", unlike 0).
 //
-// Exit code 0 = both PASS, 1 = any FAIL.
+// Exit code 0 = both PASS, 1 = any FAIL, 77 = SKIPPED (see REMED-BUILD-014 note in Draw() below).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -26,6 +26,14 @@
 
 #include <cstdio>
 #include <memory>
+
+namespace
+{
+    // Matches examples/common/PixelTestGame.hpp's own kSkipExitCode -- this project's established
+    // SKIP_RETURN_CODE 77 convention (cmake/UnitTests.cmake's Task 470 comment) applied uniformly
+    // to every registered CTest, this one included.
+    constexpr int kSkipExitCode = 77;
+}
 
 using namespace Microsoft::Xna::Framework;
 
@@ -58,6 +66,35 @@ protected:
         gdm_->ApplyChanges();
         int intervalOn = 0;
         SDL_GL_GetSwapInterval(&intervalOn);
+
+        if (intervalOn == 0)
+        {
+            // REMED-BUILD-014: a virtual framebuffer (Xvfb + a software GL rasterizer) has no real
+            // vertical-retrace signal to synchronize to -- SDL/the GL driver can silently refuse to
+            // engage vsync there for reasons entirely outside CNA's own code. Before concluding this
+            // is a regression in GraphicsDeviceManager/GraphicsDevice::Reset()'s own forwarding
+            // (the thing this test exists to catch), probe the SAME real GL context directly with a
+            // raw, CNA-uninvolved SDL_GL_SetSwapInterval(1) call. If even that can't make the
+            // interval stick, the environment itself is incapable of real vsync here -- skip
+            // cleanly (SKIP_RETURN_CODE 77, this project's established headless-skip convention,
+            // see cmake/UnitTests.cmake's own Task 470 comment) rather than reporting a false
+            // product regression. If the raw call DOES work, CNA's own forwarding is genuinely
+            // broken and this must still fail loudly.
+            const int rawSetResult = SDL_GL_SetSwapInterval(1);
+            int rawProbedInterval = 0;
+            SDL_GL_GetSwapInterval(&rawProbedInterval);
+            if (rawSetResult != 0 || rawProbedInterval == 0)
+            {
+                std::printf("[SKIP] real vertical retrace is not available in this GL context "
+                            "(a raw SDL_GL_SetSwapInterval(1) call, bypassing CNA entirely, also "
+                            "could not make SDL_GL_GetSwapInterval() report non-zero here) -- "
+                            "environment limitation, not a CNA regression\n");
+                result_ = kSkipExitCode;
+                Exit();
+                return;
+            }
+        }
+
         Check(intervalOn != 0, "SynchronizeWithVerticalRetrace=true reaches the real GL context", intervalOn);
 
         std::printf("=== %d/2 PASS ===\n", passCount_);
