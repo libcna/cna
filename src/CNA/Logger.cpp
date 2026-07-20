@@ -171,19 +171,20 @@ namespace CNA
     {
         switch (level)
         {
-        // case LogLevel::FATAL:
-        //     return SDL_LOG_PRIORITY_CRITICAL;
-        // case LogLevel::ERROR:
-        //     return SDL_LOG_PRIORITY_ERROR;
-        // case LogLevel::WARN:
-        //     return SDL_LOG_PRIORITY_WARN;
-        // case LogLevel::INFO:
-        //     return SDL_LOG_PRIORITY_INFO;
-
-        //todo
+        case LogLevel::FATAL:
+            return SDL_LOG_PRIORITY_CRITICAL;
+        case LogLevel::ERROR:
+            return SDL_LOG_PRIORITY_ERROR;
+        case LogLevel::WARN:
+            return SDL_LOG_PRIORITY_WARN;
+        case LogLevel::INFO:
+            return SDL_LOG_PRIORITY_INFO;
         case LogLevel::DEBUG:
         case LogLevel::TRACE:
         case LogLevel::EXPERIMENT:
+            // DEBUG/TRACE/EXPERIMENT intentionally share SDL_LOG_PRIORITY_DEBUG: this project
+            // does not otherwise use SDL's finer-grained TRACE/VERBOSE priorities anywhere, so
+            // there is nothing for a finer split to plug into yet.
             return SDL_LOG_PRIORITY_DEBUG;
         default:
             return SDL_LOG_PRIORITY_INFO;
