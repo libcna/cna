@@ -1602,6 +1602,77 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     resolves the link, or whether more Metal-source bugs of this same "compiles clean, links wrong"
     class remain undiscovered elsewhere in this 2300+ line file. Fourteenth real, observed CI signal.
 
+62. **Real fifteenth CI signal — item 61's namespace fix DID work, confirming both `cna_demo_2d` and
+    `cna_demo_sound` now compile AND link successfully on real Apple hardware for the first time ever
+    — and the next failure is a genuine, pre-existing, Metal-unrelated repo gap**: the next run's log
+    contained zero `error:`/`Undefined symbols` output at all for the first time this whole session —
+    only benign `ld: warning: ignoring duplicate libraries` noise (an expected, harmless side effect
+    of `SHARP_RUNTIME` appearing twice in the flattened link line via both a direct and a transitive
+    path). The actual failure moved to `cna_demo_xact`'s `POST_BUILD` step: `Error copying directory
+    from ".../examples/demo_xact/Content" to ".../build-metal/Content": No such file or directory`.
+    Verified locally: `examples/demo_xact/Content` genuinely does not exist anywhere in this
+    repository — not on disk, not tracked by git (`git ls-files examples/demo_xact/Content` returns
+    nothing) — unlike `demo_2d`'s (2 files) and `demo_sound`'s (5 files) real, populated `Content`
+    directories. This is a pre-existing gap, not introduced by anything this session touched, and not
+    Metal-specific at all: `cmake/Examples.cmake`'s `cna_demo_xact` block has unconditionally
+    referenced a `copy_directory` from that path on every backend/platform since it was written; it
+    only surfaced now because this is the first time this session's CI has ever gotten far enough
+    through the build to reach it.
+
+    Fixed by wrapping the `add_custom_command(... POST_BUILD copy_directory ...)` call in `if(EXISTS
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_xact/Content")` — the minimal, honest fix: does not
+    fabricate placeholder content for a demo whose real XACT audio assets were simply never authored,
+    and will transparently start copying real content the moment someone adds it, with zero further
+    CMake change required. Verified with a real local Linux build of `cna_demo_xact` (configures and
+    links cleanly, `POST_BUILD` step correctly skipped, zero regression). Not filed under `METAL-*`
+    since it is a general example-build gap, not part of this plan's own scope — noted here only
+    because it was blocking this plan's own CI signal. Fifteenth real, observed CI signal, and the
+    most encouraging one yet: two of this plan's core executables now build and link end-to-end on
+    real Apple hardware.
+
+63. **Real sixteenth CI signal — another pre-existing, Metal-unrelated harness-target gap, same class
+    as item 62 but a compile failure this time, not a `POST_BUILD` one**: the very next failure after
+    `cna_demo_xact`'s `Content` fix was `AudioMixer.hpp:5:10: fatal error: 'SDL3/SDL.h' file not
+    found` while compiling `tools/audio/mixer_destroy_active_static_voice_harness.cpp`. Traced to
+    `cmake/Harnesses.cmake`: this harness (and its dynamic-voice counterpart,
+    `cna_audio_mixer_destroy_active_dynamic_voice_harness`) both `#include
+    "CNA/Internal/Audio/AudioMixer.hpp"` — an internal CNA header that itself `#include`s
+    `<SDL3/SDL.h>` — yet both harness targets only ever linked `CNA SHARP_RUNTIME`, never
+    `SDL3::SDL3`. `CNA` itself links SDL3 `PRIVATE` (`cmake/CnaLibrary.cmake`), so that include path
+    was never meant to propagate to consumers — this only ever "worked" on every prior CI run because
+    of a coincidental system-wide SDL3 dev package on the Linux/GHA-hosted-runner include path,
+    exactly the same class of gap `cmake/Examples.cmake`'s own `cna_demo_devices` comment already
+    documents for an unrelated Android cross-compile case. `tools/devices/shutdown_ordering_harness.cpp`
+    (which also directly touches `<SDL3/SDL.h>`) already correctly links `SDL3::SDL3` explicitly —
+    used that as the fix template.
+
+    Fixed by adding `SDL3::SDL3` to both harnesses' `target_link_libraries()` in
+    `cmake/Harnesses.cmake`. Verified with a real local Linux build of both harness targets (clean
+    compile + link, zero regression). Also added `cmake/Harnesses.cmake` itself to
+    `metal-macos-ci.yml`'s push path filter (missing, same class of gap as item 58's `Examples.cmake`/
+    `CnaLibrary.cmake` omission) so a future change to this file reliably re-triggers this workflow.
+    Not filed under `METAL-*`, same reasoning as item 62. Sixteenth real, observed CI signal.
+
+64. **Real seventeenth CI signal — every executable/harness now links; the build reached the actual
+    `CnaTests` GTest binary for the first time this session, and hit a genuine glibc-vs-strict-POSIX
+    portability gap, the same class this whole session already found repeatedly in `sharp-runtime`,
+    just now inside `cnametal`'s own test sources**: `tests/CNA/Internal/Audio/AudioMixerTests.cpp:84:
+    17: error: use of undeclared identifier 'kill'`. `<unistd.h>` was already included; `kill()` and
+    `SIGKILL` are POSIX-specified in `<signal.h>`, not `<unistd.h>` — glibc's `<unistd.h>` happens to
+    transitively declare `kill()` anyway (a long-standing GNU/glibc convenience, not POSIX-mandated),
+    which is why this has silently compiled on every Linux host so far; Apple's strict-POSIX libc
+    does not. Proactively grepped the whole `tests/`/`tools/` tree for every other `kill(`/`SIGKILL`/
+    `SIGTERM` use before fixing just the one reported error, rather than waiting for each remaining
+    instance to surface one CI round-trip at a time: found two more with the identical gap —
+    `tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp` and
+    `tests/Microsoft/Devices/Detail/DevicesShutdownOrderingTests.cpp` (both, like `AudioMixerTests
+    .cpp`, watchdog-timeout helpers that `kill(pid, SIGKILL)` a spawned harness process). Added
+    `#include <csignal>` to all three. Verified with a real local Linux build of the full `CnaTests`
+    target (not just these three files in isolation) — links successfully, confirming no other
+    translation unit in the whole suite was silently depending on the same glibc leniency. Seventeenth
+    real, observed CI signal, and the first one located inside `cnametal`'s own test sources rather
+    than its CMake plumbing or `sharp-runtime`.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

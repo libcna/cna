@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <csignal>
 #include <cstring>
 #include <poll.h>
 #include <spawn.h>
