@@ -35,11 +35,15 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 9 | 0 | 0 | 2 |
+| P0 | 12 | 10 | 0 | 0 | 2 |
 | P1 | 21 | 1 | 0 | 0 | 20 |
 | P2 | 44 | 3 | 0 | 1 | 40 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **13** | **0** | **1** | **90** |
+| **Total** | **105** | **14** | **0** | **1** | **90** |
+
+*P0's total was corrected 11→12 while closing `REMED-GFX-001`: `REMED-GFX-001`, `-002`, and `-003`
+are all `Priority: P0-SAFETY` per `MASTER_REMEDIATION_PLAN.md`, so the row's prior total had
+undercounted one of the three by one.*
 
 ## Wave 0 — make the tests trustworthy
 
@@ -81,7 +85,7 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 | REMED-CONTENT-002 | DONE | | feature/audit | Shared helper + 3 call sites + repo-wide grep sweep — see detail below. 2 genuinely new findings recorded (`REMED-CONTENT-007`, `-008`), not fixed (out of this task's scope). |
 | REMED-CONTENT-003 | DONE | | feature/audit | Ported the sibling readers' existing check verbatim — see detail below. |
 | REMED-CONTENT-006 | DONE | | feature/audit | VERIFY passed (reproduced a real segfault before fixing) — see detail below. |
-| REMED-GFX-001 | NOT STARTED | | | Serialize against all other EasyGL work. |
+| REMED-GFX-001 | DONE | | feature/audit | `RegisterForWindow` moved to last constructor statement — see detail below. |
 | REMED-GFX-002 | NOT STARTED | | | Sequence before GFX-003 (same file). |
 | REMED-GFX-003 | NOT STARTED | | | After GFX-002. Resize tables **and** add flag operators together. |
 | REMED-NET-001 | DONE | | feature/audit | Landed atomically with NET-003, same file/change — see detail below. |
@@ -287,6 +291,54 @@ test (5 already did; the 2 previously-dead ones now do too).
 maximum generic-argument nesting depth (256)."`), exit 0, zero ASan/UBSan-reported issues. Full
 `CnaTests` direct-binary run (EASYGL): 5544 tests, 5540 passed, 4 skipped, 0 failed, exit 0 — 5537
 baseline (after CONTENT-001/002/003) + 7 new tests, 0 regressions.
+
+### REMED-GFX-001 detail — EasyGL `RegisterForWindow` ordering (UAF)
+
+**Root cause confirmed exactly as described in the audit:**
+`EasyGLGraphicsBackend::EasyGLGraphicsBackend` called `IGraphicsBackend::RegisterForWindow(window,
+this)` immediately after the null-window check, before `SDL_GL_CreateContext` (which explicitly
+throws `std::runtime_error` on failure) and every other fallible step. A constructor that throws
+never runs its destructor, so a failure after registration left a dangling `window → this` entry in
+`IGraphicsBackend`'s static window registry — later dereferenced unconditionally by
+`SdlInputBridge.cpp:524`/`Mouse.cpp:48`'s `GetForWindow(window)` call sites on the next mouse/input
+event for that window. Confirmed the other three `RegisterForWindow` callers
+(`CanvasGraphicsBackend`, `SdlGpuGraphicsBackend`, `WebGPUGraphicsBackend`) already register last —
+EasyGL was the sole outlier.
+
+**Change (`src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` only):** moved
+`RegisterForWindow(window, this)` to the very last statement of the constructor, after GL context
+creation, `device.initialize()`, MSAA buffer setup, and the Emscripten context-loss callback
+install — matching `SdlGpuGraphicsBackend`'s existing register-last pattern (register, then only a
+non-fallible log statement). No `IGraphicsBackend.hpp` registry-contract (RAII guard) hardening was
+added — the master plan listed it as a "consider," not a completion requirement, and the ordering
+fix alone closes the confirmed defect.
+
+**Required backend parity check:** re-grepped all graphics backend directories for
+`RegisterForWindow` call sites. Only `Canvas`, `SdlGpu`, `WebGPU`, and `EasyGL` call it at all;
+`Ascii`, `Software`, `Headless`, `SdlRenderer`, `Dx3`, `D3D9`, `D3D11`, `D3D12`, `Bgfx`, and `Vulkan`
+do not call it — confirmed clean by construction, not re-audited line-by-line (nothing to check).
+
+**Tests added:** `tests/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackendTests.cpp` (new file,
+`#if defined(CNA_BACKEND_EASYGL)`-guarded, gtest) —
+`FailedContextCreationLeavesNoDanglingRegistryEntry`: constructs a real (Xvfb) `SDL_Window` **without**
+`SDL_WINDOW_OPENGL` — `SDL_GL_CreateContext` fails deterministically on such a window
+(`SDL_video.c`'s own `NOT_AN_OPENGL_WINDOW` check, confirmed by reading the vendored SDL3 source
+directly rather than assumed) — reproducing the exact throwing path without needing a dedicated
+test-only injection seam. Asserts `IGraphicsBackend::GetForWindow(window) == nullptr` after the
+throw (the core regression check — pre-fix this returned a dangling non-null pointer), then
+dispatches a real public-API mouse event (`Mouse::SetPosition`) against the same window and asserts
+no crash.
+
+**Verification criteria met:** temporarily reverted just the production ordering change (kept the
+new test) and rebuilt under `cmake-build-devices-asan` (ASan+UBSan, EASYGL) — the test reliably
+reproduces `AddressSanitizer: stack-use-after-scope` in `Mouse::SetPosition` → `logical_to_window`
+→ the dangling backend pointer, confirming the test is a real regression guard, not a tautology.
+Re-applied the fix — same ASan build now passes clean (0 issues). `EasyGL_TexturedQuad_Readback`
+(real successful-construction path) still passes unchanged, confirming the reorder doesn't affect
+normal startup. Full `CnaTests` direct-binary run (EASYGL, non-ASan): 5574 tests, 5568 passed, 4
+skipped, 2 failed — both pre-existing, already tracked (`GameTest.DisposingDeviceInvokesUnloadContent`,
+`GraphicsDeviceManagerTest.BackendDetectedDeviceLostIsForwardedToManagerListeners`, `REMED-TEST-002`'s
+own intentional reproductions of `REMED-CORE-006`/`-014`, unrelated to GRAPHICS) — 0 regressions.
 
 ### REMED-NET-001 + REMED-NET-003 detail — `ENetBackend` host-authority checks
 

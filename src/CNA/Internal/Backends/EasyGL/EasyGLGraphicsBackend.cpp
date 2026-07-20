@@ -1287,10 +1287,6 @@ void main()
     {
         if (!window) throw std::runtime_error("EasyGLGraphicsBackend initialized with null window.");
 
-        // Register this backend so SdlInputBridge can apply the same
-        // physical→logical coordinate transform for mouse/touch input.
-        IGraphicsBackend::RegisterForWindow(window, this);
-
         // NOTE: SDL_Window is NOT owned by EasyGL backend.
         // It is owned by GraphicsDevice or higher level platform layer.
 
@@ -1345,6 +1341,12 @@ void main()
 #if defined(__EMSCRIPTEN__)
         metagl::InstallEmscriptenContextLossCallbacks();
 #endif
+
+        // Register last, after every fallible step above has succeeded (matches
+        // WebGPU/Canvas/SdlGpu) -- a constructor that throws never runs its destructor, so
+        // registering earlier would leave a dangling entry in IGraphicsBackend's static window
+        // registry, later dereferenced unconditionally by SdlInputBridge.cpp/Mouse.cpp.
+        IGraphicsBackend::RegisterForWindow(window, this);
     }
 
     void EasyGLGraphicsBackend::CreateMsaaBuffers(int w, int h)
