@@ -1359,6 +1359,25 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     other fix so far, this one's correctness genuinely depends on the next macOS CI run, not
     already-confirmed-by-local-testing. Eighth real, observed CI signal.
 
+55. **Real ninth CI signal — a sixth `sharp-runtime` gap, a security-sensitive one**:
+    `RandomNumberGenerator.cpp` failed with `no member named 'getrandom' in the global namespace`.
+    `getrandom()` is a Linux-only syscall wrapper (glibc 2.25+, kernel 3.17+) — undeclared on
+    Apple/BSD platforms entirely. BSD/Darwin's real equivalent is `getentropy()` (same header,
+    already included) — same cryptographic-quality guarantee, but a simpler signature (no flags
+    parameter, no partial-read return value) and a hard 256-byte-per-call maximum (requesting more
+    fails with `EIO` rather than partially filling the buffer, per its own documented contract).
+
+    Added a `getentropy()`-based branch chunked into ≤256-byte calls for exactly that reason,
+    gated `#elif defined(__linux__)` rather than folded into the existing generic branch, so the
+    proven Linux `getrandom()` path (with its own real `EINTR` retry loop) stays completely
+    unchanged. `getentropy()` is documented as non-interruptible by signals, so no `EINTR`
+    handling was added there — matching the real API contract rather than blindly copying Linux's
+    retry logic onto a function that doesn't need it. Verified zero regression: all 6
+    `RandomNumberGeneratorTests` pass (including a large-buffer fill test exercising the Linux
+    chunking loop), full `SharpRuntimeTests` suite (12,481 tests) passes. Same caveat as item 54:
+    the `getentropy()` branch itself is unverified from this Linux sandbox until the next macOS CI
+    run. Ninth real, observed CI signal.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
