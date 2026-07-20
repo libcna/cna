@@ -37,9 +37,9 @@ disproved finding is a real result and should be recorded with the same rigor as
 |---|---|---|---|---|---|
 | P0 | 12 | 12 | 0 | 0 | 0 |
 | P1 | 21 | 3 | 0 | 0 | 18 |
-| P2 | 44 | 3 | 0 | 1 | 40 |
+| P2 | 44 | 4 | 0 | 1 | 39 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **105** | **18** | **0** | **1** | **86** |
+| **Total** | **105** | **19** | **0** | **1** | **85** |
 
 *P0's total was corrected 11→12 while closing `REMED-GFX-001`: `REMED-GFX-001`, `-002`, and `-003`
 are all `Priority: P0-SAFETY` per `MASTER_REMEDIATION_PLAN.md`, so the row's prior total had
@@ -48,6 +48,11 @@ undercounted one of the three by one. P0 is now fully closed (all 12 DONE).*
 *P1's Done count 1→3 reflects `REMED-CORE-006`/`-007` closing (see "Wave 1 (parallel) — CORE lane"
 below). `REMED-CORE-014` (a `Discovered during remediation` finding, not one of the 105 counted
 tasks) closed in the same change but is not part of this table.*
+
+*P2's Done count 3→4 reflects `REMED-BUILD-005` closing (see "Wave 2 — BUILD_TEST_CI lane" below).
+`REMED-BUILD-010`/`-011`/`-013`/`-014` (all `Discovered during remediation` findings, not among the
+105 counted tasks) also closed in this same tranche but are not part of this table, matching
+`REMED-CORE-014`'s own precedent above.*
 
 ## Wave 0 — make the tests trustworthy
 
@@ -1730,6 +1735,317 @@ owner decision, not silently declared "done."
 `CnjTexture3DTest.LoadsRealCnjFixture`) now behave correctly — real data on capable backends, a clean
 exception on incapable ones — confirmed on Software, Headless, EasyGL, Vulkan, and WebGPU.
 
+## Wave 2 — BUILD_TEST_CI lane (2026-07-20)
+
+**Scope determination (per this tranche's own explicit instruction):** read
+`MASTER_REMEDIATION_PLAN.md`, `REMEDIATION_INDEX.md`, `REMEDIATION_DEPENDENCIES.md`, and this
+file's own Wave 0/1/POST-WAVE-1/CONTENT-lane sections in full before starting. Assigned/likely-relevant
+findings named in the tranche instruction: `REMED-BUILD-010`, `-011`, `-013`, `-014` (all P2/P3
+`Discovered during remediation` entries, `NOT STARTED`), plus real 32-bit CI coverage for
+width-dependent arithmetic (a follow-up on `REMED-MEDIA-001`'s own Wave 1 gap — no dedicated REMED
+ID existed for this before this tranche; assigned `REMED-BUILD-015` below for traceability).
+`REMED-BUILD-005` (a `Waves 2-5` P2 task, not originally named in the tranche instruction) was
+pulled in **because it turned out to be a hard, unavoidable blocker for verifying `REMED-BUILD-013`**
+— the same "prerequisite, not scope creep" reasoning already established for cross-lane blockers
+elsewhere in this file. No other Wave 3+ task was pulled forward; the GRAPHICS shader campaign
+remains untouched, per instruction.
+
+| ID | Status | Owner | Branch | Notes |
+|---|---|---|---|---|
+| REMED-BUILD-005 | DONE | | feature/audit | Root cause of a hard D3D9/D3D11 `CnaTests` build blocker, not just a `-013` "nice to have" — see detail below. |
+| REMED-BUILD-013 | DONE | | feature/audit | Root cause was narrower than originally recorded — see detail below. |
+| REMED-BUILD-011 | DONE | | feature/audit | Presets + CI workflow both fixed — see detail below. |
+| REMED-BUILD-010 | DONE | | feature/audit | Re-investigated, reclassified, fixed at the harness level — see detail below. |
+| REMED-BUILD-014 | DONE | | feature/audit | Environment-capability probe added — see detail below. |
+| REMED-BUILD-015 | DONE | | feature/audit | New: real (not simulated) 32-bit CI coverage for `AudioTagParser.cpp`'s width-dependent bounds check — see detail below. |
+
+### REMED-BUILD-005 + REMED-BUILD-013 detail — getting a real D3D9/D3D11 `CnaTests` to build and run under Wine
+
+**Reproduced first, per instruction.** Rebuilding `cmake-build-d3d11-mingw`'s `CnaTests` target from
+a clean `cmake .` reconfigure surfaced a **chain of four independent, previously-latent build
+defects**, each hiding the next — none reachable before because `CnaTests.exe` had never actually
+finished building on a MinGW cross-compile target in this project's history:
+
+1. **`REMED-BUILD-005` itself** — `cna_audio_mixer_destroy_active_static_voice_harness` /
+   `..._dynamic_voice_harness` (`cmake/Harnesses.cmake`) `#include` `AudioMixer.hpp` directly, which
+   needs `<SDL3/SDL.h>`/`<SDL3_mixer/SDL_mixer.h>`. `CNA` links `SDL3::SDL3` `PRIVATE`
+   (`cmake/CnaLibrary.cmake`), so that include path never propagates to CNA's own consumers — masked
+   on every native GCC build in this sandbox by an accidental system-wide `/usr/local/include/SDL3`,
+   but a hard `fatal error: SDL3/SDL.h: No such file or directory` under MinGW, exactly as
+   `MASTER_REMEDIATION_PLAN.md`'s own evidence already recorded ("independently rediscovered by 3 of
+   3 non-native-GCC toolchains"). **Fix:** link `SDL3::SDL3` explicitly on both targets, matching
+   `cna_devices_shutdown_ordering_harness`'s own already-correct pattern in the same file.
+2. **Windows.h `ERROR` macro collision** — `include/CNA/Internal/Net/ENetHostHandle.hpp` includes
+   `<enet/enet.h>`, which transitively pulls in `<windows.h>` (via enet's own `win32.h`) on MinGW —
+   `windows.h`'s `wingdi.h` `#define`s `ERROR`, colliding with `CNA::LogLevel::ERROR` /
+   `CNA::LogCategory::ERROR` wherever this header is included before `CNA/Logger.hpp` in the same
+   translation unit (`ENetBackend.cpp`), breaking both enums' declarations with `expected identifier
+   before numeric constant`. **Fix:** `#undef ERROR` immediately after the `enet.h` include, the
+   standard idiom for this well-known pitfall — a no-op on every non-Windows build.
+3. **`geteuid()` used unconditionally in 2 test files** — `MediaLibraryIndexTests.cpp` /
+   `PictureLibraryIndexTests.cpp`'s own `SkipsAnUnreadableSubdirectoryWithoutCrashing` cases call
+   POSIX `::geteuid()` with no platform guard; doesn't exist on Windows/MinGW. Their whole premise
+   (`std::filesystem::perms::none` denying traversal) is a Unix permission-bits mechanism with no
+   reliable NTFS/MinGW equivalent either. **Fix:** guard the `<unistd.h>` include and the `geteuid()`
+   call with `#ifndef _WIN32`, `GTEST_SKIP()` on Windows with a clear message.
+4. **`VideoContentTypeReader.cpp` missing from the `CNA_FFMPEG_AVAILABLE` exclusion list** —
+   `cmake/CnaLibrary.cmake` already excludes `VideoDecoder.cpp`/`VideoPlayer.cpp`/`Video.cpp` from
+   `CNA_SOURCES` on FFmpeg-unavailable platforms (MinGW/Emscripten/Android all set
+   `CNA_FFMPEG_AVAILABLE=OFF`), but not their sibling `VideoContentTypeReader.cpp`, which constructs
+   a `Media::Video` — an undefined-reference chain (`Video::Video()`, `VideoPlayer::Play()`, etc.)
+   through `libCNA.a` itself, not just test code. **Fix:** add the missing exclusion (mirroring the
+   existing three); guard `XnbBuiltInReaders.cpp`'s `RegisterVideoXnbReader()` call with `#ifdef
+   CNA_FFMPEG_AVAILABLE` (the macro is already propagated via `target_compile_definitions`, no new
+   plumbing needed); exclude the 5 now-orphaned test files (`VideoDecoderTests.cpp`,
+   `VideoContentTypeReaderTests.cpp`, `VideoTests.cpp`, `VideoPlayerTests.cpp`,
+   `ContentManagerVideoXnbTests.cpp`) from `CNA_TEST_SOURCES` under the same condition —
+   `VideoSoundtrackTypeTests.cpp` is unaffected (pure enum, no `.cpp`, no FFmpeg dependency).
+
+All four are guarded behind conditions (`NOT CNA_FFMPEG_AVAILABLE`, `ifdef ERROR`, `ifndef _WIN32`)
+that are false/no-op on every native Linux/EasyGL/Vulkan/etc. build already exercised in this
+project's other baselines — **zero blast radius on any previously-passing configuration.**
+
+**With all four fixed, `CnaTests.exe` builds successfully on both D3D9 and D3D11 MinGW
+cross-compile for the first time in this project's history.** `gtest_discover_tests`'s own `PRE_TEST`
+discovery, which previously fell back to CMake/GoogleTest's own `CnaTests_NOT_BUILT` placeholder
+(a real, already-understood GoogleTest-module mechanism for "the target's `PRE_TEST` discovery run
+itself couldn't execute," not a CTest-wiring gap at all), now genuinely enumerates **5490 real gtest
+cases** on both backends.
+
+**`REMED-BUILD-013`'s own actual root cause, once verifiable:** narrower than originally recorded.
+- `CnaInputTests` needed **no fix at all** — CMake's built-in `CROSSCOMPILING_EMULATOR`
+  target-property auto-injection (already set on the `CnaTests` target itself,
+  `cmake/UnitTests.cmake`) already applies correctly to any `add_test(COMMAND CnaTests ...)`
+  registration once the target actually builds. Verified: `CnaInputTests` (the
+  `--gtest_shuffle --gtest_repeat=5` input-suite subset) **passes cleanly** on both D3D9 (20.66s) and
+  D3D11 (12.57s).
+- `StrictXnaApiSurfaceCheck_Compile_Run` (a **separate** target, `cna_strict_xna_api_check`,
+  `cmake/Harnesses.cmake`) genuinely did need two fixes: (a) it never had `CROSSCOMPILING_EMULATOR`
+  set at all (unlike `CnaTests`), so `ctest` tried to exec the `.exe` natively on the Linux host
+  ("unable to find an interpreter") — fixed by setting the same D3D9/D3D11/D3D12
+  `*_SKIP_*_GATE=1`-wrapped `CROSSCOMPILING_EMULATOR` pattern `CnaTests` already uses (this target
+  never creates a device, so the skip-gate applies the same way); (b) once Wine could actually launch
+  it, it failed with `libgcc_s_seh-1.dll`/`libstdc++-6.dll not found` (status `c0000135`) — the same
+  static-runtime-linking treatment every `cna_d3d9_test()`/`cna_d3d11_test()` executable already gets
+  (`-static-libgcc -static-libstdc++`, `cna_copy_mingw_runtime`, `cna_copy_sdl_runtime`) was missing
+  from this one target. Verified: **passes on both D3D9 (0.58s) and D3D11 (2.33s)**, alongside its
+  sibling `StrictXnaApiSurfaceLeakCheck_MustFailToCompile` (already passing, unaffected).
+
+**Verification:**
+- D3D11: `CnaTests.exe` builds clean. `CnaInputTests` PASS (12.57s). `StrictXnaApiSurfaceCheck_Compile_Run`
+  + `StrictXnaApiSurfaceLeakCheck_MustFailToCompile` PASS (2.33s / 1.99s).
+- D3D9: `CnaTests.exe` builds clean (only pre-existing `[[nodiscard]]`-ignored warnings, no errors).
+  `CnaInputTests` PASS (20.66s). `StrictXnaApiSurfaceCheck_Compile_Run` PASS (0.58s, after rebuilding
+  the target — the exe present before this fix predated it and needed an explicit rebuild).
+  `StrictXnaApiSurfaceLeakCheck_MustFailToCompile` PASS (4.13s, unaffected throughout).
+- D3D12 not separately re-verified (`REMED-BUILD-012`'s own already-documented Wine/vkd3d-proton
+  swap-chain-crash makes any real-window D3D12 test unusable in this environment regardless); the
+  `cna_strict_xna_api_check` fix was applied identically to the D3D12 branch on the same reasoning
+  (never creates a device), but this specific claim is unverified — flag for whoever next touches
+  D3D12 test infra.
+- **Full-suite `ctest` runs were started on both D3D9 and D3D11 (`-j1`, matching every other
+  Wine-wrapped backend's serial convention) but deliberately stopped partway through, not run to
+  completion** — Wine's own per-process startup overhead makes a full ~5500-test run impractically
+  slow (~1.3-1.8s/test observed, projecting to 2+ hours per backend) for verifying a CTest-wiring fix
+  whose own scope is exactly two named tests. The partial runs (D3D11: 1305/5495; D3D9: 728/5507) are
+  still valuable evidence: **zero new failures outside one already-bounded, precisely-characterized
+  cluster** — see `REMED-MEDIA-005` below, a new finding, not fixed here (out of BUILD_TEST_CI scope).
+- No regression: every configuration this project's own baselines already covered
+  (EasyGL/Vulkan/WebGPU/Software/Headless/Bgfx/SdlGpu/Ascii/Dx3/SdlRenderer/`CNA_DEVICES=ON`) is
+  unaffected by all four fixes above, since every one of them is conditioned on
+  `NOT CNA_FFMPEG_AVAILABLE` / `MINGW` / `CMAKE_CROSSCOMPILING`, all false there.
+
+**Completion criteria met:** `CnaInputTests` and `StrictXnaApiSurfaceCheck_Compile_Run` are both
+registered and runnable on D3D9/D3D11, and both pass. **Verification criteria met:** failures
+propagate correctly (confirmed by observing each of the 4 blocking build errors surface distinctly
+before being fixed, and by the partial full-suite runs' one bounded, correctly-surfaced new finding).
+
+### REMED-BUILD-011 detail — devices sanitizer presets
+
+**Two distinct gaps, both fixed:**
+1. `CMakePresets.json`'s `devices-asan`/`devices-tsan`/`devices-ubsan` presets never set
+   `CNA_DEVICES=ON` in their own `cacheVariables`, despite each preset's `displayName`/`description`
+   explicitly promising "Microsoft::Devices hardening" coverage. **Fix:** added `"CNA_DEVICES":
+   "ON"` to all three, plus a one-line note in each `description` cross-referencing this finding.
+2. `.github/workflows/devices-tests.yml` — the one CI job meant to prove Devices sanitizer coverage
+   in real CI — had the **same** gap (it configures via `cmake --preset devices-ubsan`, so it
+   inherited fix #1 automatically), **plus its own, additional, previously-undiscovered gap**: its
+   `paths:` triggers and `DEVICES_GTEST_FILTER` only ever covered `Microsoft::Devices`
+   (Sensors/VibrateController — always compiled regardless of `CNA_DEVICES`), never
+   `CNA::Devices` (`FileDialog`/`MessageBox`/`Clipboard`/`SystemTray`/`Camera`/`DisplayInfo`/
+   `PowerInfo`/`SystemInfo`/`Locale`/`UrlLauncher` — the actual `CNA_DEVICES`-gated NOXNA surface,
+   under `tests/CNA/Devices/`). This means `REMED-DEVICES-001`'s own FileDialog/MessageBox
+   mutex-lifetime regression tests **never ran in real CI, under any sanitizer, even after fix #1
+   alone.** **Fix:** added `include/CNA/Devices/**`/`src/CNA/Devices/**`/`tests/CNA/Devices/**` to
+   both `paths:` triggers, and a new `CNA_DEVICES_GTEST_FILTER` (the 10 `tests/CNA/Devices/*.cpp`
+   suite names) run as its own CI step.
+
+**Verification (per this task's explicit "do not trust preset names alone" instruction):**
+- Confirmed via `nm`/symbol inspection that `FileDialogTests`/`MessageBoxTests` bodies are actually
+  compiled into `CnaTests` under the fixed preset (558 matching symbol references) — not just
+  linking cleanly by coincidence.
+- **Fresh** configure (`cmake --preset devices-asan` into a brand-new build directory, no manual
+  `-D` override at any point) confirms `CNA_DEVICES:BOOL=ON` in `CMakeCache.txt` from the preset
+  alone — proving fix #1 genuinely works, not just that an already-`ON` cache masked the test.
+  Repeated for `devices-tsan`/`devices-ubsan` identically.
+- All three presets built `CnaTests` fresh and both gtest filters (`DEVICES_GTEST_FILTER` and the
+  new `CNA_DEVICES_GTEST_FILTER`) were run under each:
+  - **ASan:** `CNA_DEVICES_GTEST_FILTER` — 50/50 tests PASSED functionally, but the **process exit
+    code is 1** due to AddressSanitizer-reported leaks (12032 bytes, 16 allocations) — bisected to
+    `CameraTests`' 4 `TryAcquireFrame*` cases specifically (excluding just `CameraTests.*` from the
+    filter makes the run exit 0 with the same 46 tests still passing). Every leak's stack trace
+    bottoms out in `libdrm.so.2`/`<unknown module>` (GL/DRI driver initialization, triggered by these
+    tests' real `Texture2D`/`GraphicsDevice` construction for pixel upload) — not CNA's own
+    `Camera.cpp`/`CameraTests.cpp` code. Matches this project's own already-documented Wave 1
+    decision that ASan+real-GPU-rendering paths are known-noisy and out of scope
+    ("no sanitizer coverage of GPU-runtime rendering paths ... not appropriate per the task's own
+    instruction"). **Recorded as `REMED-DEVICES-004` below, not fixed** (out of this task's scope;
+    likely a GL-driver-teardown-ordering artifact, not a CNA defect, but not confirmed further).
+  - **TSan:** `CNA_DEVICES_GTEST_FILTER` — 50/50 tests PASSED (exit code 66, TSan's own
+    non-zero-on-any-report convention). 8 data-race warnings reported, **all 8 the identical shape**
+    to `REMED-DEVICES-004`'s ASan leak — `pthread_barrier_init`/`_destroy` racing inside
+    `libgallium-25.0.7-2.so`/`libEGL_mesa.so` during real `GraphicsDevice` construction/teardown,
+    triggered by the same 4 `CameraTests.TryAcquireFrame*` cases; full stack traces confirm every
+    frame bottoms out in Mesa/EGL internals, never `CNA::Devices::Camera`/`CameraTests.cpp` itself.
+    Same root class as the ASan finding, not a second one — folded into `REMED-DEVICES-004`.
+  - **UBSan:** `CNA_DEVICES_GTEST_FILTER` — **50/50 PASSED, exit code 0, zero UBSan reports.**
+  - **Both sanitizers, `DEVICES_GTEST_FILTER` (`Microsoft::Devices`/Sensors, unchanged scope):**
+    clean — 442/446 PASSED + 4 expected hardware skips (`Accelerometer`/`GyroscopeTests`'s own
+    no-hardware-present skips), **zero ASan/TSan reports**, under both presets.
+- `Microsoft::Devices` (`DEVICES_GTEST_FILTER`) suite unaffected throughout — same coverage as
+  before, now simply alongside a genuinely-compiled `CNA::Devices` surface rather than a silently
+  absent one.
+
+**Completion criteria met:** all three presets genuinely enable `CNA_DEVICES` from the preset alone;
+the CI workflow that is supposed to prove this in practice now actually compiles and runs both
+Devices surfaces. **Verification criteria met:** demonstrated via fresh, preset-only configures (no
+manual override) plus symbol-level and behavioral confirmation that the previously-compiled-out code
+now runs.
+
+### REMED-BUILD-010 detail — `EasyGL_RealWindowResize`, re-investigated
+
+**This tranche's own re-investigation materially changed this finding's classification.** The
+previously-recorded evidence ("100% reproducible" hang under `DISPLAY=:0`, this sandbox's real
+logged-in GNOME/Mutter session) was re-tested directly per this task's explicit authorization to use
+the real display for this specific investigation: **20/20 consecutive runs of the built binary
+against the real `:0` session completed cleanly (4/4 PASS) with zero hangs**, confirmed to be a
+genuine Xwayland/Mutter session (`ps` shows `gnome-shell`/`mutter-x11-frames`/rootless `Xwayland :0`,
+not a bare X server) — not a masked/different environment. This directly contradicts a strict
+"deterministic environment incompatibility" classification.
+
+**Reclassified as:** a real, but state/focus-dependent, compositor-timing sensitivity — consistent
+with the original hypothesis ("Mutter defers/never delivers a `ConfigureNotify` to a window that
+isn't focused/mapped the way a bare Xvfb server does") being a *conditional* race, not a guaranteed
+outcome. Not a CNA logic bug: the resize/viewport/event-firing code this test checks is proven
+correct both under Xvfb (pre-existing) and now under 20 repeated real-display runs. Not purely a
+"needs Xvfb" test either, since it does NOT reliably fail under a real display.
+
+**Fix implemented (option (b) from this finding's own previously-recorded "suggested remediation
+directions," not option (a)):** the test's `kMaxWaitFrames`-only loop is now backstopped by an
+independent 20-second wall-clock deadline (`std::chrono::steady_clock`), checked every `Draw()` call
+regardless of frame count. If the resize doesn't propagate within that window (whether the
+underlying cause is compositor frame-throttling of an unfocused window, as observed, or a genuine
+future regression), the test fails fast with an actionable message distinguishing this from a
+generic timeout, rather than silently consuming CTest's full 60s `TIMEOUT`. This makes the test's
+*failure mode* deterministic even though the underlying compositor interaction is not.
+
+**Verification:** rebuilt and re-ran the modified binary directly — 5/5 clean PASS on real `:0`
+(unchanged from before the fix, confirming no regression to the success path), 1/1 clean PASS
+against a freshly-started, isolated Xvfb instance (`:98`, avoided `:99` — occupied by a concurrent,
+unrelated session's own test run at the time, confirmed via `ps`/lock-file inspection before
+touching anything).
+
+**Completion criteria met:** the test's failure mode no longer depends on CTest's own blunt
+`TIMEOUT`; a stalled resize now fails within ~20s with a diagnostic message, on any display.
+**Verification criteria met:** unchanged PASS behavior confirmed under both real `:0` and Xvfb.
+
+### REMED-BUILD-014 detail — `EasyGL_GraphicsDeviceManager_Vsync` under Xvfb
+
+**Fix:** when `SynchronizeWithVerticalRetrace=true` + `ApplyChanges()` still reports
+`SDL_GL_GetSwapInterval()==0`, the test now probes the *same real GL context* directly with a raw
+`SDL_GL_SetSwapInterval(1)` call — bypassing `GraphicsDeviceManager`/CNA entirely. If even that raw
+call can't make the interval stick, the environment itself cannot provide real vertical retrace here
+(exactly Xvfb's own documented limitation), and the test exits via this project's established
+`SKIP_RETURN_CODE 77` convention (`cmake/UnitTests.cmake`'s own Task 470 mechanism, applied uniformly
+to every registered CTest) rather than reporting a false regression. If the raw call *does* work,
+`GraphicsDeviceManager`/`GraphicsDevice::Reset()`'s own forwarding is genuinely broken and the test
+still fails loudly — the exact defect this test exists to catch is not masked.
+
+**Verification:**
+- Real `:0` display: still **2/2 real PASS** (`SDL_GL_GetSwapInterval()=0`/`=1` as expected) —
+  confirms the fix does not mask a genuine regression on a vsync-capable environment.
+- Fresh, isolated Xvfb instance (`:98`): **`[SKIP]`**, exit code 77, with the diagnostic message
+  distinguishing an environment limitation from a CNA regression.
+- Via `ctest` itself (isolated Xvfb `:99`, after confirming the previous occupant — an unrelated
+  concurrent session's own test run — had finished): CTest reports **`Skipped`**, not `Failed`,
+  confirming the `SKIP_RETURN_CODE 77` convention correctly propagates through the full CTest
+  pipeline, not just the raw exit code.
+
+**Completion criteria met:** the Xvfb-specific vsync limitation no longer reads as a product
+regression; real-vsync coverage is preserved (still asserted, not skipped, whenever the environment
+can actually provide it). **Verification criteria met:** demonstrated on both a capable (real
+display) and incapable (Xvfb) environment, plus end-to-end through `ctest`.
+
+### REMED-BUILD-015 detail — real 32-bit CI coverage for `AudioTagParser.cpp`'s width-dependent bounds check
+
+**Context:** `REMED-MEDIA-001` (Wave 1, DONE) fixed `AudioTagParser.cpp`'s unsigned-integer-overflow
+bounds checks, but its own regression tests could only *simulate* the 32-bit `std::size_t`
+wraparound via explicit `uint32_t` arithmetic on this project's 64-bit sandbox — that file's own
+comment already documented "no 32-bit toolchain is available in this sandbox" as the reason. This
+tranche's instruction asked to "evaluate the most practical way to compile and execute the relevant
+width-sensitive tests on a true 32-bit target/toolchain" and "prefer CI-native architecture coverage
+over ad hoc arithmetic simulation where practical."
+
+**Feasibility check (this sandbox):** confirmed `gcc-multilib`/`g++-multilib`/`libc6-dev-i386` are
+still not installed and this session has no passwordless `sudo` to install them (`gcc -m32` fails
+with "cannot find Scrt1.o"/"cannot find crti.o"); `docker info` also fails (daemon not accessible).
+**Genuine 32-bit compile+execute cannot be verified from inside this sandbox** — matches the task's
+own anticipated fallback ("if full 32-bit runtime coverage is not feasible in current CI, create the
+strongest truthful partial coverage and document the gap").
+
+**What was built instead — real coverage, verified everywhere except the actual `-m32` leg:**
+- `AudioTagParser.cpp`/`.hpp` and `Microsoft::Xna::Framework::Content::ContentLoadException` have
+  **zero SDL/FFmpeg/graphics dependency** (confirmed by reading every `#include` in both files) —
+  genuinely separable from the rest of `CNA`'s heavy toolchain requirements.
+- New standalone, non-GTest executable:
+  `tools/media/audio_tag_parser_32bit_overflow_check.cpp` — reuses the *exact* crafted
+  ID3v2.3/FLAC fixtures `AudioTagParserTests.cpp`'s own
+  `CraftedId3v23WrapInducingFrameSizeIsRejectedCleanly`/`CraftedFlacWrapInducingVendorLenIsRejectedCleanly`
+  cases use, asserting `AudioTagParser::TryReadId3v2`/`TryReadFlacComments` reject them cleanly.
+  Also asserts `sizeof(std::size_t) == 4` as its own first check, so a CI misconfiguration that
+  silently drops `-m32` fails loudly rather than reporting false confidence.
+- New standalone CMake project, deliberately **not** `add_subdirectory()`'d into the main build:
+  `tools/media/arithmetic32bit/CMakeLists.txt` compiles only the harness +
+  `AudioTagParser.cpp`/`ContentLoadException.cpp` directly — building a full 32-bit `CNA` (with
+  32-bit SDL3/SDL3_image/SDL3_mixer/FFmpeg, none of which this project has for a 32-bit target)
+  would be a much larger, slower undertaking for no additional coverage of the thing under test.
+- New `.github/workflows/32bit-arithmetic-ci.yml`: installs `gcc-multilib`/`g++-multilib` (available
+  via `apt` on `ubuntu-latest`, unlike this sandbox), configures with `CMAKE_C_FLAGS`/
+  `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS=-m32`, builds, and runs the check.
+
+**Verification actually performed:**
+- Native (64-bit) build of the new standalone project: configures and builds cleanly, zero SDL/
+  FFmpeg dependency pulled in.
+- Ran natively: `sizeof(std::size_t) == 4` check **correctly FAILS** (`sizeof=8`, as expected on this
+  64-bit host) — proving the self-check is meaningful, not a rubber stamp — while the two
+  overflow-rejection assertions PASS (expected either way at 64-bit width; not meaningful proof of
+  the fix at this width, same limitation the existing simulated tests already documented).
+- New workflow YAML parsed successfully (`python3 -c "import yaml; yaml.safe_load(...)"`) — same
+  practical ceiling `REMED-BUILD-004`'s own new CI job was verified to, no live GitHub Actions runner
+  available from this sandbox.
+- **Not verified (explicitly flagged, not silently assumed):** an actual `-m32` compile+execute.
+  Whoever next has real root/CI access to this repo should run the new workflow (or
+  `sudo apt-get install gcc-multilib g++-multilib` locally) once to confirm the `-m32` leg itself
+  works end-to-end — the harness and CMake project are ready and reasoned through, but this specific
+  claim rests on inspection, not execution.
+
+**Completion criteria (partial, explicitly bounded):** real (non-simulated) 32-bit-targeting
+infrastructure now exists and is ready to execute; the actual 32-bit execution itself remains
+unverified from this sandbox specifically, documented here rather than claimed. **Verification
+criteria:** native-mode dry run confirms the harness's own logic and self-check are sound; YAML
+validity confirmed; the `-m32` leg itself requires a real CI run or a root-capable environment to
+close out.
+
 ## Waves 2-5 — remaining tasks
 
 | ID | Pri | Status | Owner | Branch | Notes |
@@ -1737,7 +2053,7 @@ exception on incapable ones — confirmed on Software, Headless, EasyGL, Vulkan,
 | REMED-AUDIO-001 | P3 | NOT STARTED | | | |
 | REMED-AUDIO-002 | P3 | NOT STARTED | | | |
 | REMED-BUILD-003 | P1 | NOT STARTED | | | |
-| REMED-BUILD-005 | P2 | NOT STARTED | | | |
+| REMED-BUILD-005 | P2 | DONE | | feature/audit | Both mixer-destroy harnesses now link `SDL3::SDL3` explicitly (`cmake/Harnesses.cmake`) — see "Wave 2 — BUILD_TEST_CI lane" below. |
 | REMED-BUILD-006 | P2 | NOT STARTED | | | |
 | REMED-BUILD-007 | P3 | NOT STARTED | | | |
 | REMED-BUILD-009 | P3 | NOT STARTED | | | |
@@ -1829,7 +2145,7 @@ existing task.
 
 | ID | Title | Sev | Pri | Found while working on | Status |
 |---|---|---|---|---|---|
-| REMED-BUILD-010 | `EasyGL_RealWindowResize` hangs the full 60s CTest `TIMEOUT` under a real desktop compositor (`DISPLAY` = a real logged-in GNOME/Mutter session, not an isolated Xvfb) | MEDIUM | P2 | REMED-BUILD-001 (full unfiltered `ctest` baseline run) | NOT STARTED — recorded, not fixed (out of scope for Wave 0) |
+| REMED-BUILD-010 | `EasyGL_RealWindowResize` hangs the full 60s CTest `TIMEOUT` under a real desktop compositor (`DISPLAY` = a real logged-in GNOME/Mutter session, not an isolated Xvfb) | MEDIUM | P2 | REMED-BUILD-001 (full unfiltered `ctest` baseline run) | **DONE** — investigated and given a deterministic wall-clock watchdog. See "Wave 2 — BUILD_TEST_CI lane" below; **this session's own re-investigation found the hang does NOT reproduce reliably** (20/20 clean runs under the real GNOME/Mutter `:0` session that previously produced a 100%-reproducible hang) — re-classified from "deterministic environment incompatibility" to "real but state/focus-dependent compositor timing sensitivity," and fixed at the root (the test's own reliance on an unbounded frame-count loop) rather than by asserting Xvfb-only. |
 | REMED-BUILD-011 | `CMakePresets.json`'s `devices-asan`/`devices-tsan`/`devices-ubsan` configure presets (description explicitly says "Microsoft::Devices hardening") never set `CNA_DEVICES=ON` in their own `cacheVariables` — configuring with any of the three as documented (`cmake --preset devices-asan`) silently builds with the entire `CNA::Devices`/`Microsoft::Devices::Sensors` surface compiled out, so none of the sanitizer coverage the preset names promise actually exists unless the caller separately remembers `-DCNA_DEVICES=ON` | MEDIUM | P2 | REMED-DEVICES-001 (setting up ASan/TSan runs for the new concurrent tests) | NOT STARTED — recorded, not fixed (out of DEVICES-001's scope; worked around this task's own verification by passing `-DCNA_DEVICES=ON` on the configure command line into ad hoc `cmake-build-devices-asan`/`cmake-build-devices-tsan` build dirs rather than the named presets — a BUILD_TEST_CI-lane fix, not a DEVICES one) |
 | REMED-CONTENT-007 | `VideoContentTypeReader.cpp`/`SongContentTypeReader.cpp` each duplicate a `ResolveRelativeFilePath()` helper with **zero** containment check (not even the partial one `ContentReader.cpp` had before this task) — a `Video`/`Song` `.xnb`'s own embedded filename field can be absolute or `..`-escaping and is joined onto the content root unchecked | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; same root cause, same fix shape — reuse `CNA::Internal::IsDisallowedAbsolutePath`/the `ResolveRelativeAssetPath` pattern) |
 | REMED-CONTENT-008 | `ContentManager.cpp` joins 8 `.cnj`/JSON-manifest-supplied path fields (`dataField->stringValue` for `Texture3D`; `vertRel`/`fragRel` for `ShaderEffect`; `clipFileField->stringValue` for `AnimationClip`; `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile` for skinned-model morph/animation data) onto the content root with no containment check — same `fs::path::operator/` pitfall as the 3 sites `-002` fixed, at file-supplied (not caller-supplied) untrusted strings | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; notably, this is the *same* `.cnj`-manifest subsystem that already has one field, `sourceFile`, correctly hardened via `CnjSourceFile.hpp` — these 8 fields were simply never given the same treatment) |
@@ -1841,11 +2157,13 @@ existing task.
 | REMED-GFX-052 | `Vulkan_SkinnedEffect_Fog` hangs reproducibly (CTest 30s `TIMEOUT`) on the Vulkan backend — confirmed not resource contention (reproduces identically on an idle system, load avg 0.46, 43°C) and not a display/environment artifact (reproduces identically via direct binary execution of `cna_test_vulkan_skinnedeffect_fog`, bypassing CTest entirely). Both runs hang with zero output past `[Vulkan] Backend initialised`. Distinct root cause from `REMED-GFX-005` (mirrored fog *formula*, a values defect) — this is a hang, not a wrong-value defect, and no existing remediation ID covers it | HIGH | P1 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — Vulkan full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; needs root-cause triage before scheduling — candidate for the GRAPHICS lane's fog/skinned-effect work, but should not be silently absorbed into `REMED-GFX-005`/`-006` without confirming the hang shares their root cause) |
 | REMED-GFX-053 | WebGPU rejects custom-GLSL `ShaderEffect` content: `CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks` both fail (`shaderEffect->IsEffectValid()` false, no crash). Distinct from the same two tests' failure on Vulkan/Bgfx (there, `glslc`/`glslangValidator` are simply absent from this sandbox — an environment gap, not a code defect) — WebGPU consumes WGSL, not GLSL/SPIR-V, so the toolchain-absence explanation does not apply here; the actual root cause is unconfirmed (custom user-authored GLSL `ShaderEffect` content may simply not be implemented yet on this experimental backend) | MEDIUM | P2 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — WebGPU full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; root-cause triage needed; given `CLAUDE.md`'s own framing of WebGPU as an experimental backend with baseline SpriteBatch/Texture2D support and explicitly not yet full effect parity, this may belong in `plan_webgpu.md`'s own WEBGPU-* task series rather than the general GRAPHICS remediation lane — whoever triages should route it to the correct owner) |
 | REMED-GFX-054 | Three `ContentManagerSkinnedModelTest` cases (`PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`, `TextureLoadsFromNestedButUnderRootManifestDirectory`, `TextureLoadsFromManifestOutsideContentRoot`) throw `"CNA WebGPU: invalid index buffer upload"` on the WebGPU backend. No existing remediation ID covers WebGPU skinned-model index-buffer handling | MEDIUM-HIGH | P2 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — WebGPU full-suite ctest run | NOT STARTED — recorded, not fixed (verification-only pass; same WebGPU-experimental-backend routing question as `REMED-GFX-053` — triage owner should decide general GRAPHICS lane vs. `plan_webgpu.md`) |
-| REMED-BUILD-013 | `StrictXnaApiSurfaceCheck_Compile_Run` and `CnaInputTests` CTest registrations are missing the Wine-runner wrapper macro every other cross-compiled D3D9/D3D11 test uses — confirmed identically on both backends (`StrictXnaApiSurfaceCheck_Compile_Run` fails "unable to find an interpreter"; `CnaInputTests` fails `wine: ... CnaTests.exe: c0000135`, downstream of the same `CnaTests_NOT_BUILT` placeholder fact). `StrictXnaApiSurfaceCheck_Compile_Run` is registered in `cmake/Harnesses.cmake` via a plain `add_test(COMMAND cna_strict_xna_api_check)`; `CnaInputTests` is registered in `cmake/UnitTests.cmake` with a hardcoded `COMMAND CnaTests`, unconditional on cross-compiling. A structural CTest-wiring gap, not a backend-specific code defect | LOW | P3 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — D3D9/D3D11 Wine ctest runs | NOT STARTED — recorded, not fixed (verification-only pass; BUILD_TEST_CI-lane fix, cheap — candidate to bundle with `REMED-BUILD-010`/`-011` cleanup) |
+| REMED-BUILD-013 | `StrictXnaApiSurfaceCheck_Compile_Run` and `CnaInputTests` CTest registrations are missing the Wine-runner wrapper macro every other cross-compiled D3D9/D3D11 test uses — confirmed identically on both backends (`StrictXnaApiSurfaceCheck_Compile_Run` fails "unable to find an interpreter"; `CnaInputTests` fails `wine: ... CnaTests.exe: c0000135`, downstream of the same `CnaTests_NOT_BUILT` placeholder fact). `StrictXnaApiSurfaceCheck_Compile_Run` is registered in `cmake/Harnesses.cmake` via a plain `add_test(COMMAND cna_strict_xna_api_check)`; `CnaInputTests` is registered in `cmake/UnitTests.cmake` with a hardcoded `COMMAND CnaTests`, unconditional on cross-compiling. A structural CTest-wiring gap, not a backend-specific code defect | LOW | P3 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — D3D9/D3D11 Wine ctest runs | **DONE** — root cause was more precise than originally recorded: `CnaInputTests`'s own registration needed **no fix at all** (CMake's built-in `CROSSCOMPILING_EMULATOR` target-command auto-injection already works for it); the true blocker was that `CnaTests.exe` never built at all under D3D9/D3D11 MinGW, for reasons unrelated to CTest wiring (see `REMED-BUILD-005` and this tranche's own `AudioTagParser`-adjacent findings below). Only `StrictXnaApiSurfaceCheck_Compile_Run` (a separate target, `cna_strict_xna_api_check`, never given `CnaTests`'s own `CROSSCOMPILING_EMULATOR`/MinGW-runtime treatment) needed a real fix. See "Wave 2 — BUILD_TEST_CI lane" below for the full chain and both backends' verification. |
 | REMED-GFX-055 | `IndexBuffer::SetData(unsigned short const*, int)` (`src/Microsoft/Xna/Framework/Graphics/IndexBuffer.cpp:61`) passes a null pointer to a parameter position UBSan reports as "declared to never be null" (both argument 1 and argument 2 independently reported) — confirmed live under UBSan via `ContentManagerSkinnedModelTest.PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`, reached through `ContentManager.cpp:2707`'s `SkinnedModelEXT` loader for a mesh part with zero indices. Almost certainly a `memcpy`/`std::copy`-family call receiving a null source and/or destination for a zero-length copy — technically UB per the C standard even though it is a no-op in every practical implementation, and likely reproducible for any skinned-model part with an empty index buffer, not only this one crafted fixture | MEDIUM | P2 | Wave 2 CONTENT lane, `REMED-CONTENT-009`'s own broader Content/XNB ASan+UBSan sweep (`*Content*:*Xnb*:*Texture*:*Cnj*` under `cmake-build-media-asan`) | NOT STARTED — recorded, not fixed (out of the CONTENT lane's scope — the defective code is in `IndexBuffer.cpp`, a GRAPHICS-owned file, even though it's reached via a CONTENT code path; GRAPHICS lane should own the fix, likely a null-guard before the copy call rather than a logic change) |
 | REMED-NA-016 | `third_party/cgltf/cgltf.h:2250` (`cgltf_component_read_float`) performs a misaligned 4-byte-aligned `float` load — confirmed live under UBSan via `GltfToCnjToolTest.ResolvesSparseAccessorOverride` (`load of misaligned address ... which requires 4 byte alignment`) | LOW | — | Wave 2 CONTENT lane, `REMED-CONTENT-009`'s own broader Content/XNB ASan+UBSan sweep | **OUT OF SCOPE, not fixed.** Vendored third-party header (`third_party/cgltf/`), not CNA-authored — same disposition as `REMED-NA-011`'s external easy-gl sibling repo: report upstream / patch only if a real crash (not just a UBSan advisory finding) is ever observed on a target where unaligned loads actually fault, rather than patching a vendored file and diverging from upstream |
-| REMED-BUILD-014 | `EasyGL_GraphicsDeviceManager_Vsync`'s `SynchronizeWithVerticalRetrace=true` check (`SDL_GL_GetSwapInterval()` expected non-zero) fails under Xvfb `:99` + software/llvmpipe GL rendering (`SDL_GL_GetSwapInterval()=0` even after enabling vsync) — the mirror-image case of `REMED-BUILD-010`'s already-documented real-compositor-vs-Xvfb sensitivity: that finding is tests that only pass under Xvfb, not a real compositor; this is a test that (per its own pre-existing passing history under `DISPLAY=:0`) needs a *real* display/compositor and fails specifically under Xvfb, since a virtual framebuffer has no real vertical-retrace timing to synchronize to. Surfaced only because this session switched test execution from `DISPLAY=:0` to Xvfb `:99` mid-task, at the user's request, to stop disrupting their real desktop session — not caused by any code change in this session | LOW | P3 | Wave 2 CONTENT lane's own full-suite regression run (`cmake-build-debug`, `DISPLAY=:99`), unrelated to any CONTENT-lane code change | NOT STARTED — recorded, not fixed (environment limitation, not a CNA code defect; BUILD_TEST_CI-lane concern — candidate directions: skip/mark this one CTest under a known-Xvfb-incompatible list, or document that a real display is required for vsync-specific tests, mirroring `REMED-BUILD-010`'s own eventual resolution) |
+| REMED-BUILD-014 | `EasyGL_GraphicsDeviceManager_Vsync`'s `SynchronizeWithVerticalRetrace=true` check (`SDL_GL_GetSwapInterval()` expected non-zero) fails under Xvfb `:99` + software/llvmpipe GL rendering (`SDL_GL_GetSwapInterval()=0` even after enabling vsync) — the mirror-image case of `REMED-BUILD-010`'s already-documented real-compositor-vs-Xvfb sensitivity: that finding is tests that only pass under Xvfb, not a real compositor; this is a test that (per its own pre-existing passing history under `DISPLAY=:0`) needs a *real* display/compositor and fails specifically under Xvfb, since a virtual framebuffer has no real vertical-retrace timing to synchronize to. Surfaced only because this session switched test execution from `DISPLAY=:0` to Xvfb `:99` mid-task, at the user's request, to stop disrupting their real desktop session — not caused by any code change in this session | LOW | P3 | Wave 2 CONTENT lane's own full-suite regression run (`cmake-build-debug`, `DISPLAY=:99`), unrelated to any CONTENT-lane code change | **DONE** — the test now probes the same real GL context directly with a raw `SDL_GL_SetSwapInterval(1)` call (bypassing CNA/GraphicsDeviceManager entirely) whenever CNA's own path reports interval 0; if even that can't make vsync stick, it's a genuine environment limitation and the test exits via this project's own `SKIP_RETURN_CODE 77` convention instead of failing. Verified: still 2/2 real PASS under the real `:0` display (proving the fix under test — GraphicsDevice::Reset()'s own SetSwapInterval forwarding — is not masked), and SKIPPED (not FAILED) under a fresh Xvfb instance, both via direct binary execution and via `ctest`. See "Wave 2 — BUILD_TEST_CI lane" below. |
 | REMED-GFX-056 | `HeadlessTextureCubeBackend::SetData`/`GetData` (`src/CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.cpp`) validate arguments and record a trace but never actually store or return pixel data — the identical "validates but never stores" shape confirmed and fixed for `HeadlessTexture3DBackend` under `REMED-CONTENT-004`, but a different file/backend-type. Confirmed via `Texture3DTextureCubeContentTypeReaderTest.TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd` still failing on Headless after `REMED-CONTENT-004` landed (root-caused, not just observed: `HeadlessTextureBackend`, the 2D path, has a real `pixels_` member and genuinely stores data — Headless implements 2D texture storage for real but never implemented Cube storage) | MEDIUM | P2 | `REMED-CONTENT-004`'s own Headless full-suite verification run | NOT STARTED — recorded, not fixed (`ITextureCubeBackend` is GRAPHICS-owned, out of the CONTENT lane's scope; candidate fix mirrors `REMED-CONTENT-004`'s own: add `GraphicsCapability::TextureCube`, or extend a "real 2D storage but not Cube/3D" capability shape, and make `TextureCube`'s constructor fail cleanly on Headless the same way `Texture3D`'s now does) |
+| REMED-MEDIA-005 | `MediaLibraryTestFixture`'s 6 dependent test cases (`AlbumDurationIsARealNonZeroSumOfMemberSongDurations`, `FavoritesResolvesToThreeRealSongsSkippingTheMissingOne`, `InternationalResolvesTheNonAsciiEntry`, `LibrarySongsCarryTheirRealTrackNumberFromTags`, `PlaylistDurationIsARealNonZeroSumOfMemberSongDurations`, `RockGenreHasThreeSongs`) all fail identically on **both** D3D9 and D3D11 (Wine cross-compile) — `MediaLibrary`'s song count resolves to 0 where 3+ are expected — while every single-file Media read test (`AudioTagParserTest.*`, `MediaQueueTest.*`, `MediaPlayerNoSoundFallbackTest.*`, etc.) in the same partial run passes cleanly on both backends. `MediaLibraryTestFixture::SetUp()` redirects `MediaLibraryPaths` at a relative directory (`tests/assets/media/music`) and constructs a real `MediaLibrary`, which recursively scans it — the failure is isolated to this directory-scan path, not single-file reads, suggesting a Wine-specific `std::filesystem::directory_iterator`/`recursive_directory_iterator` behavior against a relative path under Wine's own Z:-drive translation, not a path-separator or WORKING_DIRECTORY bug (which would affect single-file reads too, and doesn't since the `WORKING_DIRECTORY` fix from `REMED-BUILD-001` is confirmed intact and correct). Not reachable/observable before this tranche — `CnaTests` never built on D3D9/D3D11 until `REMED-BUILD-005`/`-013` landed | MEDIUM | P2 | This tranche's own D3D9/D3D11 partial full-suite verification runs (`REMED-BUILD-005`/`-013`) | NOT STARTED — recorded, not fixed (out of BUILD_TEST_CI scope; MEDIA/CONTENT-lane investigation needed into `MediaLibraryIndex`'s real-directory-scan behavior specifically under Wine; isolated to Wine/Windows cross-compile targets only — every native Linux backend's `MediaLibraryTestFixture` coverage is unaffected) |
+| REMED-DEVICES-004 | `devices-asan` preset's `CNA_DEVICES_GTEST_FILTER` run (all 50 `tests/CNA/Devices/*.cpp` cases) exits process code 1 despite **all 50 gtest cases reporting PASSED** — AddressSanitizer reports 12032 bytes leaked in 16 allocations. Bisected precisely: excluding `CameraTests.*` alone makes the same run exit 0 with the other 46 tests still passing; within `CameraTests`, the leak is specific to the 4 `TryAcquireFrame*` cases (which construct a real `Texture2D`/`GraphicsDevice` for pixel upload), not the other 4 `CameraTests` cases. Every leak's stack trace bottoms out in `libdrm.so.2`/`<unknown module>` (GL/DRI driver initialization), not any `CNA::Devices::Camera`/`CameraTests` source line. **Extended under `devices-tsan`:** the same run there (exit 66, TSan's own convention) reports 8 data-race warnings, **all 8 in the identical shape** — `pthread_barrier_init`/`pthread_barrier_destroy` racing inside `libgallium-25.0.7-2.so`/`libEGL_mesa.so` during real `GraphicsDevice`/`EasyGLGraphicsBackend` construction/teardown, triggered by the exact same `CameraTests.TryAcquireFrame*` cases (confirmed via full stack traces: `GraphicsDevice::GraphicsDevice()`/`::Dispose()`/`::~GraphicsDevice()` → Mesa/EGL internals, never a `CNA::Devices::Camera`/`CameraTests.cpp` frame) — the same root class as the ASan leak, not a second, independent finding | MEDIUM | P3 | `REMED-BUILD-011`'s own devices-asan/devices-tsan verification runs (this tranche) | NOT STARTED — recorded, not fixed (out of BUILD_TEST_CI scope; both the ASan leak and the TSan races point at Mesa/libgallium/libEGL driver-internal synchronization during real GL context construction/teardown, not `CNA::Devices::Camera` code — matches this project's own already-documented Wave 1 decision that ASan/TSan+real-GPU-rendering paths are known-noisy and intentionally out of sanitizer-coverage scope. DEVICES lane should still confirm this directly before permanently dismissing it, since a driver false positive vs. a real bug in `Camera.cpp`'s own texture-upload/device-lifecycle path have very different remediations) |
 
 #### REMED-BUILD-010 detail
 
