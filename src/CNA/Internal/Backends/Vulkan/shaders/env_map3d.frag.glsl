@@ -36,7 +36,11 @@ void main() {
     vec3 lightSum = ep.light0Diff_fresnelEn.xyz * NdotL0
                   + ep.light1Diff_pad.xyz * NdotL1
                   + ep.light2Diff_pad.xyz * NdotL2;
-    vec3 litRGB = (ep.emissive_em.xyz + lightSum) * ep.diffuseColor.rgb;
+    // REMED-GFX-007: FNA Lighting.fxh adds emissive UNSCALED (litRGB = lightSum*Diffuse +
+    // Emissive), not (Emissive + lightSum)*Diffuse -- the latter re-scales the already
+    // ambient-folded emissive by DiffuseColor a second time. emissive_em.xyz is the CPU-side
+    // pre-folded (EmissiveColor + AmbientLightColor*DiffuseColor)*alpha (EnvironmentMapEffect.cpp).
+    vec3 litRGB = lightSum * ep.diffuseColor.rgb + ep.emissive_em.xyz;
     vec4 texColor  = texture(uTexture,  vUV);
     vec3 reflDir   = reflect(-E, N);
     vec4 envSample = texture(uEnvMap, reflDir);

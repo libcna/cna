@@ -130,6 +130,21 @@ protected:
               "EnvironmentMapAmount=0 with green cube → cube ignored, texture-only result",
               got, Color(100, 50, 25, 255));
 
+        // REMED-GFX-007: emissive must be added UNSCALED (FNA Lighting.fxh:
+        // litRGB = lightSum*Diffuse + Emissive), not (Emissive + lightSum)*Diffuse. The bug is
+        // invisible above because DiffuseColor is white. Repeat with a non-white DiffuseColor:
+        // no lights (lightSum=0), Diffuse=(0.5,0.5,0.5), Emissive=(0.5,0.5,0.5), ambient=0 →
+        // correct litRGB = 0*0.5 + 0.5 = 0.5 → pixel = tex*0.5 = (100,50,25);
+        // the (Emissive+lightSum)*Diffuse bug gives litRGB = (0.5)*0.5 = 0.25 → (50,25,12).
+        dev.Clear(kBlack);
+        fx.setDiffuseColorProperty(Vector3(0.5f, 0.5f, 0.5f));
+        fx.Apply();
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+        Color got2 = readCenter(dev);
+        check(colourMatch(got2, Color(100, 50, 25, 255)),
+              "REMED-GFX-007: non-white Diffuse + Emissive → emissive added unscaled",
+              got2, Color(100, 50, 25, 255));
+
         Exit();
     }
 
