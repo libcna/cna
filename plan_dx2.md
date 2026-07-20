@@ -1,0 +1,399 @@
+# DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
+
+> **Status (2026-07-20): `DX2-0` existence-gate spike complete, design settled, implementation not
+> yet started.**
+>
+> Owner's own words (translated from Czech): *"Now please implement DirectX 2, and it should be
+> able to do 3D as well (within what's possible)."* Unlike `DX1` (2D-only by construction — DX1
+> shipped before Direct3D existed), DX2 (1996) is the **first** DirectX release with any Direct3D
+> at all, so this plan's job is different from `plan_dx1.md`'s: prove *how much* real 3D is
+> actually reachable here, not confirm there is none.
+>
+> **The `DX2-0` spike took a hard detour worth recording plainly.** The literal DirectX-2-SDK
+> Direct3D surface — `IDirect3D`/`IDirect3DDevice`'s execute-buffer model
+> (`IDirect3DDevice::Execute`, `D3DOP_TRIANGLE` instruction streams) — was tried first, exhaustively
+> (14 distinct variants: different vertex formats, render states, render-target types, device
+> GUIDs, readback paths — full table in `dx2-spike/README.md`). **Every one produced black,
+> despite every API call succeeding and Wine's own `+d3d,+ddraw` trace confirming a mechanically
+> correct pipeline** (real FBO, correct vertex stride, correct instruction parsing, real draw call
+> issued). Following the project owner's own suggestion to isolate the failure to one specific
+> capability/call rather than conclude "old D3D is broken in Wine" wholesale, a different code path
+> was tried: `IDirect3DDevice2::DrawPrimitive`/`DrawIndexedPrimitive` — the immediate-mode API added
+> one interface revision later, in the DirectX 3 SDK's `IDirect3D2`/`IDirect3DDevice2`. **It works
+> correctly** — real Gouraud interpolation, genuine Z-test occlusion, correct texture sampling, all
+> reproducible across repeated runs (`dx2_spike6_v2.cpp`, `dx2_spike7_full.cpp`). The project owner
+> confirmed (via direct question) that `DX2`'s 3D layer should be built on `IDirect3D2`/
+> `IDirect3DDevice2` rather than staying strictly within the DirectX-2-SDK execute-buffer surface —
+> a deliberate scope choice to deliver genuine working 3D over literal SDK-version purity. See
+> `dx2-spike/README.md` for the full spike record; this plan's design decisions below assume that
+> resolution and do not re-litigate it.
+>
+> **Status legend** (matches this repo's convention): ✅ implemented *and* verified against its
+> stated acceptance criteria; 🟨 code/doc exists but hasn't met that bar yet; ⬜ not implemented.
+
+---
+
+## 0. TL;DR
+
+- New backend: `CNA_GRAPHICS_BACKEND=DX2`.
+- **2D layer: port `DX1` verbatim.** Per `plan_dxold.md`'s roadmap, DirectDraw v1 is unchanged
+  between DX1 and DX2 — `Dx2GraphicsBackend`'s `Clear`/`Present`/texture/render-target/
+  `SpriteBatch`/blend-mode/`SpriteFont` code is a straight copy of `Dx1GraphicsBackend`'s, with
+  the class/file names renamed. No new 2D design risk; `DX1-0` through `DX1-88` already proved
+  this surface.
+- **3D layer: new, real, built on `IDirect3D2`/`IDirect3DDevice2`/`IDirect3DViewport2`/
+  `IDirect3DTexture2`.** Not execute buffers (proven broken here, see the status note above).
+- **3D architecture: CPU transform + clip, submit pre-transformed `D3DTLVERTEX` via
+  `DrawPrimitive`/`DrawIndexedPrimitive`.** Ported from the `Software` backend's own proven
+  CPU pipeline (`BuildPositionColorClipVertex`, `ClipTriangleNearPlane`,
+  `ClipVertexToRasterVertex`'s viewport-mapping math) — reused up through the point where
+  `Software` hands vertices to its own rasterizer; `DX2` instead packs the same post-clip,
+  post-viewport-map vertices into `D3DTLVERTEX` and lets real Direct3D rasterize, Z-test, and
+  texture-sample them. This sidesteps depending on Wine's fixed-function `SetTransform`/
+  `SetLight`/`SetMaterial` pipeline at all — an entirely separate, unspiked risk surface — by
+  reusing CNA's own already-correct, already-tested transform math instead.
+- **Lighting/fog: out of scope for `DX2`'s v1, matching the `Software` backend's own identical,
+  already-documented scope boundary** (`SoftwareGraphicsBackend.cpp`'s own comment: *"…without any
+  per-light diffuse lighting sum — lightingEnabled/fogEnabled remain out of scope for v1"*). Not a
+  new gap invented for this backend — the same precedent, same reasoning, same place in the
+  codebase already accepts it. `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` deliver real geometry +
+  real texture0 modulation + real Z-test/alpha-blend with the vertex's own diffuse color, but do
+  not evaluate `light0/1/2Dir/Diffuse/Specular`/`ambientColor`/`fogEnabled` — a documented,
+  precedented gap, not silently dropped.
+- **Existence-gate spike done first** (`DX2-0`, §2), same discipline `plan_dx1.md`'s `DX1-0` used
+  — and it changed the plan's own architecture based on what it found, exactly what the discipline
+  is for.
+
+---
+
+## 1. What "DirectX 2" concretely means for this backend
+
+DirectX version numbers name SDK *releases*, not single COM interfaces (`plan_dx1.md` §1 makes
+the same point for DX1). The literal, checkable technical scope this plan uses:
+
+| Layer | Symbol(s) used | Introduced in | Never used here |
+|---|---|---|---|
+| DirectDraw (2D) | `IDirectDraw`, `IDirectDrawSurface`, `DDSURFACEDESC` | DX1 | `IDirectDraw2`+/`...Surface2`+/`DDSURFACEDESC2` — same boundary `DX1-1`'s grep CTest already enforces |
+| Direct3D device/object | `IDirect3D2`, `IDirect3DDevice2` | **DX3 SDK** (not DX2 SDK — see status note) | `IDirect3D`/`IDirect3DDevice` (execute-buffer only, proven broken here), `IDirect3D3`+/`IDirect3DDevice3`+ |
+| Viewport | `IDirect3DViewport2` | DX3 SDK | `IDirect3DViewport` (v1)/`IDirect3DViewport3`+ |
+| Texture | `IDirect3DTexture2` | DX3 SDK | `IDirect3DTexture` (v1)/`IDirect3DTexture3`+ (doesn't exist) |
+| Vertex format | `D3DTLVERTEX` (pre-transformed, `D3DVT_TLVERTEX`) | DX2 SDK (`d3dtypes.h`), submitted via the DX3-SDK `DrawPrimitive` call | `D3DVERTEX`/`D3DLVERTEX` (would require Wine's own fixed-function T&L pipeline — unspiked, unnecessary here since CNA does its own CPU transform) |
+| Draw call | `IDirect3DDevice2::DrawPrimitive`/`DrawIndexedPrimitive` | DX3 SDK | `IDirect3DDevice::Execute` (execute buffers) |
+
+**Why this is still named `DX2` despite `IDirect3DDevice2` being a DX3-SDK addition:** the
+project's own `plan_dxold.md` roadmap slots "the first real 3D" at the DX2 position, and DX2/DX3
+share the *exact same* execute-buffer 3D capability ceiling per `docs/directx-legacy-backends-
+analysis.md` §3.1 — DX3's execute-buffer 3D is "essentially the same" as DX2's. Since real
+execute-buffer 3D doesn't render in this environment (status note above) but the very next,
+contemporaneous interface (`IDirect3DDevice2`, still DirectDraw-v1-based, still pre-`DrawPrimitive`-
+model-boundary in spirit) does, using it here is the pragmatic, owner-confirmed way to deliver
+"DX2 3D, to the extent feasible" rather than ship a second `ThrowNo3D` backend indistinguishable
+from `DX1`. `plan_dxold.md`'s DX3 row (the existing `../free-direct`-based `DX3` backend) is
+untouched by this — this plan only concerns the new `DX2` backend in this repo.
+
+Confirmed present in this environment's MinGW-w64 headers before writing this plan (not assumed):
+`IID_IDirect3D2`, `IID_IDirect3DRGBDevice`, `IID_IDirect3DTexture2`, the `IDirect3D2` vtable
+(`EnumDevices`/`CreateLight`/`CreateMaterial`/`CreateViewport`/`FindDevice`/`CreateDevice`), the
+`IDirect3DDevice2` vtable (`AddViewport`/`SetCurrentViewport`/`SetRenderState`/`BeginScene`/
+`DrawPrimitive`/`DrawIndexedPrimitive`/`EndScene`/…), `D3DVIEWPORT2`'s real field layout
+(`dvClipX/Y/Width/Height`, not v1's `dvScaleX/dvMaxX`), and `D3DTLVERTEX`'s v1 layout (still valid,
+unchanged) all live in `/usr/x86_64-w64-mingw32/include/d3d.h`/`d3dtypes.h`, and `libddraw.a`/
+`libdxguid.a` both exist in the same sysroot — no separate `d3d.lib`/DLL import needed (Direct3D
+objects are obtained purely via `QueryInterface`/`CreateDevice` on DirectDraw objects/surfaces,
+same finding `plan_dx1.md` design decision 10 made for the DirectDraw-only case).
+
+---
+
+## 2. Existence-gate spike — `DX2-0` (run before any backend code)
+
+Mirrors `plan_dx1.md`'s `DX1-0` discipline; full detail and the complete ruled-out-hypothesis table
+live in `dx2-spike/README.md`, not duplicated here.
+
+| # | Spike | What it proves | Result |
+|---|---|---|---|
+| `DX2-0a` | `IDirect3D`/`IDirect3DDevice` execute-buffer `D3DOP_TRIANGLE` render, offscreen `DDSCAPS_3DDEVICE` target, `D3DTLVERTEX` (`dx2_spike2.cpp`) + 13 more variants (`dx2_spike.cpp`/`3`/`4`/`5_hal`) | Whether the literal DirectX-2-SDK execute-buffer 3D API renders anything real under this environment's Wine | ❌ **Fails** — black in all 14 variants, despite a verified-correct pipeline at every traced layer (see status note above) |
+| `DX2-0b` | `IDirect3DDevice2::DrawPrimitive`, `D3DPT_TRIANGLELIST`+`D3DVT_TLVERTEX`, same render-target setup (`dx2_spike6_v2.cpp`) | Whether the DX3-SDK immediate-mode API renders correctly where execute buffers don't | ✅ **Works** — real Gouraud-interpolated output, reproducible across runs |
+| `DX2-0c` | `IDirect3DDevice2::DrawIndexedPrimitive` + genuinely enabled Z-test (`D3DZB_TRUE`/`D3DCMP_LESS`), two overlapping full-viewport quads at different depths (`dx2_spike7_full.cpp`, test A) | Whether depth-test occlusion is real, not just "doesn't crash" | ✅ **Works** — the nearer quad (drawn second) correctly occludes the farther one (drawn first) everywhere |
+| `DX2-0d` | Real 2x2 texture bound via `IDirect3DTexture2::GetHandle`+`D3DRENDERSTATE_TEXTUREHANDLE`, sampled via `DrawIndexedPrimitive` (`dx2_spike7_full.cpp`, test B) | Whether texture sampling works via the immediate-mode path (a live open question from the execute-buffer investigation) | ✅ **Works** — all 4 texture quadrants read back exactly correct, no color-key/blend artifacts |
+
+**Net effect**: real 3D via `IDirect3DDevice2` is fully viable in this environment for the scope
+this plan commits to (geometry, Z-test, one texture, alpha blend via vertex/texture color) —
+verified empirically, not assumed. Phase O1 is unblocked.
+
+---
+
+## 3. Design decisions (recorded before implementation)
+
+1. **Platform gate, same as `DX1`.** `ddraw.h`/`d3d.h`'s Windows-only content means
+   `CNA_GRAPHICS_BACKEND=DX2` needs the same Windows-native-or-MinGW-cross-compile `FATAL_ERROR`
+   gate `DX1`/`D3D9`/`D3D11`/`D3D12` already share.
+
+2. **2D layer: verbatim port of `Dx1GraphicsBackend`.** Copy `Dx1GraphicsBackend.hpp`/`.cpp`
+   (device bring-up, shadow-backbuffer present, textures/render targets, `SpriteBatch` compositor,
+   4 blend modes, `SpriteFont`, `TransformWindowToLogical`/`TransformLogicalToWindow`) into
+   `Dx2GraphicsBackend`, renaming only the class/file names. No re-derivation, no re-verification
+   of already-proven 2D math — the same `LockedSurfaceCache`/`DetectChannelLayout`/`CompositeQuad`
+   machinery, unchanged. `DX1`'s own two post-ship bug fixes (pixel channel-order detection,
+   Lock/Unlock batching) are inherited automatically since the code is copied post-fix.
+
+3. **3D device bring-up.** `dd->QueryInterface(IID_IDirect3D2, &d3d2)` on the same `IDirectDraw`
+   object the 2D layer already owns; `d3d2->CreateDevice(IID_IDirect3DRGBDevice, renderTargetSurface,
+   &device2)` where `renderTargetSurface` is a `DDSCAPS_OFFSCREENPLAIN | DDSCAPS_3DDEVICE` surface
+   with an attached `DDSCAPS_ZBUFFER` surface (`AddAttachedSurface`), exactly as `DX2-0` spiked.
+   `IID_IDirect3DRGBDevice` (software rasterizer) is used, not `IID_IDirect3DHALDevice` — `DX2-0`
+   found both route to the same internal Wine path, and `RGBDevice` is the historically-correct,
+   no-hardware-required choice (matching `DX1`'s own reasoning for its DirectDraw device GUID
+   choice).
+
+4. **3D render target = the 2D layer's shadow-backbuffer surface, given `DDSCAPS_3DDEVICE`.** Not
+   a separate surface — `Dx2GraphicsBackend` requests `DDSCAPS_OFFSCREENPLAIN | DDSCAPS_3DDEVICE`
+   (instead of `DX1`'s plain `DDSCAPS_OFFSCREENPLAIN`) for its one shadow-backbuffer surface, so 2D
+   `SpriteBatch` draws and 3D `DrawIndexedPrimitive` draws land on the same surface and composite
+   naturally within a frame (matching real XNA's own single-backbuffer model) — `Present()`'s
+   `Blt()` shadow→primary is unchanged from `DX1`.
+
+5. **A `DDSCAPS_ZBUFFER` surface is always created and attached**, sized to match the
+   shadow-backbuffer, 16-bit depth (`dwZBufferBitDepth=16`, matching the spike) — created once at
+   backend construction, resized alongside the shadow-backbuffer on any resize/reset
+   (`UpdatePresentationFormatEXT`/`SetVirtualResolution`), same lifecycle as the shadow-backbuffer
+   itself.
+
+6. **3D draw architecture: CPU transform + clip, ported from the `Software` backend, submit via
+   `D3DTLVERTEX`.** For `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/
+   `DrawIndexedPrimitivesEx`:
+   - Compute `combined = world * view * projection` (CNA's own row-major/row-vector convention,
+     matching `IGraphicsBackend.hpp`'s documented order) — identical to `Software`'s own line.
+   - Per vertex: `Vector4::Transform(position, combined)` → clip space (port
+     `BuildPositionColorClipVertex`'s exact math, extended for `DrawPrimitivesEx`'s richer vertex
+     layouts the same way `Software`'s own generic path already does).
+   - Near-plane clip: port `ClipTriangleNearPlane` verbatim (`SOFTWARE-83`'s already-verified
+     Sutherland–Hodgman-style near-plane-only clip) — real Direct3D triangle setup in this
+     environment has not been spiked for its own clipping robustness at extreme W values, so
+     clipping before submission removes that as a risk entirely, matching why `Software` clips
+     itself despite `Execute`'s hypothetical (unverified, and now known-fragile) internal clipper.
+   - Per clipped vertex: perspective-divide (`x/w, y/w, z/w`, matching `ClipVertexToRasterVertex`'s
+     math) then map to a `D3DTLVERTEX`: `sx = (ndcX*0.5+0.5) * viewportWidth`,
+     `sy = (1 - (ndcY*0.5+0.5)) * viewportHeight` (Y-flip, D3D screen-space convention — matches
+     `ClipVertexToRasterVertex`'s own viewport mapping), `sz = ndcZ` (already 0..1, XNA/D3D
+     convention, no remap — same comment `Software`'s own header carries), `rhw = 1/w`, `color`
+     packed as `D3DCOLOR` (`0xAARRGGBB` — **the exact bug found and fixed during the spike**, watch
+     for it again here), `tu`/`tv` copied through unmodified (already 0..1 UV space, no
+     perspective-divide needed on texcoords beyond what feeds into `RasterVertex.u/v` in `Software`
+     — mirror that exactly).
+   - Submit the resulting triangle(s) via `device2->DrawIndexedPrimitive(D3DPT_TRIANGLELIST,
+     D3DVT_TLVERTEX, verts, count, indices, indexCount, 0)` (or `DrawPrimitive` for the
+     non-indexed calls) inside a `BeginScene()`/`EndScene()` pair, `D3DEXECUTE_UNCLIPPED`-equivalent
+     behavior achieved by the CPU clip step already having clipped, not by any execute-buffer flag
+     (there is none for `DrawPrimitive`).
+   - Render state applied once per backend lifetime (not per-draw): `D3DRENDERSTATE_CULLMODE`
+     (mapped from CNA's `RasterizerState.cullMode`, matching `ApplyRasterizerState`'s existing
+     contract), `D3DRENDERSTATE_LIGHTING = FALSE` (design decision 8), `D3DRENDERSTATE_ZENABLE`/
+     `ZFUNC`/`ZWRITEENABLE` (mapped from `ApplyDepthStencilState`), texture stage state
+     (`D3DRENDERSTATE_TEXTUREHANDLE`/`TEXTUREMAPBLEND=D3DTBLEND_MODULATE` when `params.textureEnabled`,
+     `TEXTUREHANDLE=0` otherwise) applied per-draw since it varies per-draw.
+
+7. **Lighting/fog out of scope for v1, matching `Software`'s own precedent exactly.**
+   `GpuDrawParams::lightingEnabled`/`ambientColor`/`light{0,1,2}{Dir,Diffuse,Specular}`/
+   `fogEnabled`/`fogColor`/`fogStart`/`fogEnd`/`specularColor`/`specularPower`/`emissiveColor` are
+   read but **not evaluated** — the vertex's own diffuse color (already present in every CNA vertex
+   layout) is used as-is, exactly as `DrawColoredPrimitives` already does and exactly as
+   `Software`'s `DrawPrimitivesEx` already documents doing. `dualTexture`/`envMapping`/`skinned`
+   are therefore also out of scope for v1 (they only matter once lighting/multitexture math is
+   real) — `params.dualTexture`/`envMapping`/`skinned` being `true` with the required texture/bone
+   data present does not throw (matching the "accept and ignore" pattern
+   `docs/directx-legacy-backends-analysis.md` §3.2 documents as already-blessed), it simply
+   renders diffuse-texture-only, matching `~15%`→ now measurably more (real Z-test, real geometry,
+   real one-texture modulation) of `docs/directx-legacy-backends-analysis.md`'s DX2/3 estimate —
+   this plan's own empirical findings supersede that doc's *assumed* execute-buffer-only figure and
+   should be reflected back into it (`DX2-90`).
+
+8. **`VertexBuffer`/`IndexBuffer`: plain CPU-side storage**, same approach `Software`'s own
+   `SoftwareVertexBufferBackend`/`SoftwareIndexBufferBackend` already use (a `std::vector<uint8_t>`
+   holding raw vertex/index bytes) — `Dx2`'s 3D draw calls read directly from this CPU buffer each
+   draw (matching the CPU-transform architecture, decision 6) rather than uploading to any
+   `IDirect3DVertexBuffer`-style GPU object (that interface doesn't exist until DX6 per
+   `docs/directx-legacy-backends-analysis.md` §3.1's table, and would be moot here anyway since the
+   transform is CPU-side).
+
+9. **32-bit surfaces only, `DirectSound`/`DirectInput`/`DirectPlay` out of scope, header
+   containment, CMake integration shape** — identical to `plan_dx1.md` design decisions 7/8/9/10,
+   ported without change; only the link-set and test-wrapper differ (below).
+
+10. **CMake integration**: add `"DX2"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + a
+    `CNA_BACKEND_DX2` option; a `cna_backend_graphics_dx2` static library target under
+    `src/CNA/Internal/Backends/Dx2/`, same Windows-only `FATAL_ERROR` gate. Link set: `ddraw` +
+    `dxguid` + `SDL3::SDL3` — same as `DX1`, confirmed empirically that no separate Direct3D
+    import library is needed (§1).
+
+11. **Testing: `scripts/run-wine-dx2.sh`**, modeled on `scripts/run-wine-dx1.sh` — same
+    `~/.wine-cna-dx1` prefix is reusable (confirmed by this plan's own spike work, which ran
+    entirely against it), same `WINEDEBUG=+ddraw` engagement-gate trace check, **plus** a second
+    engagement-gate check for the 3D CTests specifically (`WINEDEBUG=+d3d` trace containing a
+    `d3d:` channel line from a real `DrawIndexedPrimitive`/`DrawPrimitive` call) — proof a 3D CTest
+    genuinely exercised Direct3D, not a silent `ThrowNo3D`-equivalent no-op.
+
+12. **No execute-buffer code anywhere in this backend.** A grep-based discipline CTest (`DX2-1`,
+    mirroring `DX1-1`'s style) asserts `src/CNA/Internal/Backends/Dx2/` never references
+    `IDirect3DDevice::Execute`/`D3DEXECUTEBUFFERDESC`/`IDirect3DExecuteBuffer`/`D3DINSTRUCTION`/
+    `D3DOP_` — a real, automated proof this backend never quietly reaches for the proven-broken
+    execute-buffer path instead of the working `DrawPrimitive` one.
+
+---
+
+## 4. Active execution order
+
+1. **`DX2-0`** (existence-gate spike, §2) — done, unblocks everything else.
+2. **Phase O1** (CMake integration + skeleton) — same shape as `DX1-1`..`DX1-6`.
+3. **Phase O2** (2D layer: verbatim port from `Dx1GraphicsBackend`, decision 2) — must land and be
+   pixel-verified (reuse `DX1`'s own CTests, renamed) before 3D work starts, so 3D development has
+   a known-good 2D foundation (shadow-backbuffer, present, textures) to build on top of.
+4. **Phase O3** (3D device bring-up: `IDirect3D2`/`IDirect3DDevice2`/viewport/Z-buffer, decisions
+   3–5) — the 3D equivalent of `DX1`'s Phase O2, same "prove the foundation first" order.
+5. **Phase O4** (CPU transform/clip pipeline ported from `Software`, decision 6) — the core 3D
+   draw path; verify against Phase O3 continuously, not left to the end (same discipline
+   `plan_dx1.md`'s Phase O4 used for its compositor).
+6. **Phase O5** (`VertexBuffer`/`IndexBuffer` backends, decision 8) can happen any time after O1;
+   O4 depends on it existing.
+7. **Phase O6** (state mapping: render states, blend, depth/stencil, rasterizer, sampler) builds on
+   O4.
+8. **Phase O7** (remaining `IGraphicsBackend` 3D defaults not covered above — occlusion query,
+   `Texture3D`/`TextureCube`, MRT, custom effects — all inherited "not supported" defaults or real
+   throws, same shape as `DX1`'s Phase O7) can happen any time after O1.
+9. **Phase O8** (tests + `docs/dx2-backend.md`) — add test coverage in the same task that
+   implements each capability, this family's standing convention.
+
+For every task: build the affected target (`-DCNA_GRAPHICS_BACKEND=DX2`, MinGW cross-compile), run
+the relevant CTest through `scripts/run-wine-dx2.sh`, and do not mark a task ✅ without both
+actually passing.
+
+---
+
+## Phase O1 — CMake integration and skeleton
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-1` | Add `"DX2"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property + `CNA_BACKEND_DX2` option; extend the Windows-only `FATAL_ERROR` gate; add the execute-buffer-discipline grep CTest (design decision 12) | ⬜ | |
+| `DX2-2` | `cna_backend_graphics_dx2` static library target; confirm minimal link set empirically | ⬜ | |
+| `DX2-3` | `include/CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.hpp` (pimpl-only) + `src/CNA/Internal/Backends/Dx2/Dx2GraphicsBackend.cpp` skeleton: every `IGraphicsBackend` pure virtual implemented — real where O2/O3/O4 land, honest defaults/throws elsewhere | ⬜ | |
+| `DX2-4` | Factory dispatch for `DX2` in `CreateGraphicsBackend()` | ⬜ | |
+| `DX2-5` | `scripts/run-wine-dx2.sh` (design decision 11) | ⬜ | |
+| `DX2-6` | Confirm `CnaTests`/the new MinGW test binaries link cleanly against the new backend target under cross-compilation | ⬜ | |
+
+## Phase O2 — 2D layer (verbatim port from `Dx1GraphicsBackend`)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-10` | Device/window bring-up: `DirectDrawCreate`/`SetCooperativeLevel`/primary surface/shadow-backbuffer (now `DDSCAPS_3DDEVICE`-flagged, decision 4)/`Clear`/`Present` | ⬜ | Port `DX1-10`..`DX1-18`. |
+| `DX2-11` | Texture/render-target backends | ⬜ | Port `DX1-20`..`DX1-28`. |
+| `DX2-12` | `SpriteBatch` CPU compositor, all rotation/scale/flip/blend/sampling paths | ⬜ | Port `DX1-30`..`DX1-46`. |
+| `DX2-13` | `SpriteFont` | ⬜ | Port `DX1-50`..`DX1-54`. |
+| `DX2-14` | `TransformWindowToLogical`/`TransformLogicalToWindow`/letterbox present math | ⬜ | Port `DX1-68`. |
+| `DX2-15` | Renamed 2D CTests (`Dx2_Smoke`, `Dx2_TextureRenderTarget`, `Dx2_SpriteBatch`, `Dx2_Blend`, `Dx2_AddressMode`, `Dx2_SpriteFont`) passing, pixel-verified, before Phase O3 starts | ⬜ | |
+
+## Phase O3 — Direct3D v2 device bring-up
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-20` | `dd->QueryInterface(IID_IDirect3D2, &d3d2_)` at backend construction (or lazily, first 3D call — decide during implementation which matches `IGraphicsBackend`'s existing construction-time-vs-lazy convention for other backends) | ⬜ | |
+| `DX2-21` | `DDSCAPS_ZBUFFER` surface creation + `AddAttachedSurface` onto the shadow-backbuffer (decision 5) | ⬜ | |
+| `DX2-22` | `d3d2_->CreateDevice(IID_IDirect3DRGBDevice, shadowSurface, &device2_)` (decision 3) | ⬜ | |
+| `DX2-23` | `IDirect3DViewport2` creation, `SetViewport2` (`dvClipX/Y/Width/Height` full-viewport, decision 6's mapping math needs no viewport scale since `D3DTLVERTEX` is pre-transformed — confirm the viewport is still required for `Clear()`/`AddViewport`/`SetCurrentViewport` bookkeeping even though its scale fields go unused) | ⬜ | |
+| `DX2-24` | `viewport->Clear()` wired into `Dx2`'s existing `ClearColorAndDepth`/etc. entry points instead of throwing (unlike `DX1`'s permanent `ThrowNo3D`) | ⬜ | |
+| `DX2-25` | `SupportsDepthStencil()` → `true` (unlike `DX1`'s `false`) | ⬜ | |
+| `DX2-26` | `Dx2_Device3DSmoke` CTest: construct the 3D device, clear color+depth, confirm no throw and a pixel-verified clear color | ⬜ | |
+
+## Phase O4 — CPU transform/clip pipeline + `DrawPrimitive` submission
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-30` | Port `BuildPositionColorClipVertex`/`ClipVertex`/`LerpClipVertex`/`ClipTriangleNearPlane`/`ClipVertexToRasterVertex`'s math from `SoftwareGraphicsBackend.cpp` (decision 6) — but stop at "produce a screen-space+color+uv vertex," do not port the rasterizer itself | ⬜ | |
+| `DX2-31` | `D3DTLVERTEX` packing: `sx`/`sy` from the ported viewport-map math, `sz`=post-divide Z (0..1, no remap), `rhw`=1/w, `color` packed `0xAARRGGBB` (**watch the alpha-byte-position bug found during the spike**) | ⬜ | |
+| `DX2-32` | `DrawColoredPrimitives`: `VertexPositionColor` stride, `TriangleList` only (matching `Software`'s own v1 scope), submit via `DrawPrimitive` | ⬜ | |
+| `DX2-33` | `DrawIndexedColoredPrimitives`: same, via `DrawIndexedPrimitive`, 16-bit and 32-bit index buffers both supported (confirm `IDirect3DDevice2::DrawIndexedPrimitive`'s index parameter width — spike-confirm if 32-bit indices need a fallback, same discipline `DX1-88`-style "don't assume" applied to this one remaining unconfirmed detail) | ⬜ | |
+| `DX2-34` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: stride-dispatched vertex layouts (16/20/24/32/52 bytes, matching `Software`'s own set), texture0 sampled via real `D3DRENDERSTATE_TEXTUREHANDLE`+`TEXTUREMAPBLEND` (decision 7) | ⬜ | |
+| `DX2-35` | `Dx2_ColoredPrimitives` CTest: triangle/quad pixel-verified (color, position) | ⬜ | |
+| `DX2-36` | `Dx2_IndexedPrimitives` CTest | ⬜ | |
+| `DX2-37` | `Dx2_ZTest` CTest: two overlapping primitives at different depths, correct occlusion pixel-verified (mirrors `DX2-0c`'s spike test directly) | ⬜ | |
+| `DX2-38` | `Dx2_Texture3D` CTest: `DrawPrimitivesEx` with `textureEnabled=true`, sampled texture pixel-verified (mirrors `DX2-0d`) | ⬜ | |
+| `DX2-39` | Near-plane clipping CTest: a triangle straddling the near plane renders its visible portion only, no crash/garbage | ⬜ | |
+
+## Phase O5 — `VertexBuffer`/`IndexBuffer` backends
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-40` | `Dx2VertexBufferBackend : IVertexBufferBackend` — CPU `std::vector<uint8_t>` storage, matching `SoftwareVertexBufferBackend` (decision 8) | ⬜ | |
+| `DX2-41` | `Dx2IndexBufferBackend : IIndexBufferBackend` — 16-bit and 32-bit variants | ⬜ | |
+| `DX2-42` | `SetData`/`GetData` round-trip tests for both | ⬜ | |
+
+## Phase O6 — State mapping
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-50` | `ApplyDepthStencilState` → `D3DRENDERSTATE_ZENABLE`/`ZFUNC`/`ZWRITEENABLE` (stencil ops themselves: not supported until DX6 per the analysis doc — `stencilEnable=true` is accepted-and-ignored, matching decision 7's "accept and ignore" pattern, not a throw) | ⬜ | |
+| `DX2-51` | `ApplyRasterizerState` → `D3DRENDERSTATE_CULLMODE`/`FILLMODE` | ⬜ | |
+| `DX2-52` | `ApplyBlendState` → texture/vertex alpha via `D3DRENDERSTATE_ALPHABLENDENABLE`/`SRCBLEND`/`DESTBLEND` (map CNA's `Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` presets to the nearest real D3D2 blend-factor pair; document any lossy mapping) | ⬜ | |
+| `DX2-53` | `ApplySamplerState` → `D3DRENDERSTATE_TEXTUREADDRESS`/`TEXTUREMAG`/`MINFILTER` texture-stage states | ⬜ | |
+| `DX2-54` | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` (the simpler boolean entry points `DX1` throws on) wired to the same render states as `DX2-50`/`52` | ⬜ | |
+
+## Phase O7 — Remaining `IGraphicsBackend` defaults
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-60` | `CreateOcclusionQuery()` → `nullptr` (inherited default — DX9-only feature per the analysis doc, not available at any version this backend targets) | ⬜ | |
+| `DX2-61` | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` → `nullptr` (inherited default; volume/cube textures are DX7/DX8+ per the analysis doc) | ⬜ | |
+| `DX2-62` | `CreateEffectBackend()` → `nullptr` (no programmable shaders exist at this DirectX era) | ⬜ | |
+| `DX2-63` | `SetRenderTargets` with 2+ bindings (MRT) → throw, matching `DX1-27` | ⬜ | |
+| `DX2-64` | `DrawInstancedPrimitivesEx` → throw (no instancing concept exists) | ⬜ | |
+| `DX2-65` | `ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`: real depth clear via `viewport->Clear(D3DCLEAR_ZBUFFER)`, stencil component accepted-and-ignored (decision 7's pattern — no real stencil buffer exists at this era) | ⬜ | |
+| `DX2-66` | `DebugSimulateContextLoss`/`DebugRestoreContext` → no-op, matching `DX1-69` | ⬜ | |
+
+## Phase O8 — Tests and documentation
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-80` | Full renamed-2D CTest suite passing (`DX2-15`) | ⬜ | |
+| `DX2-81` | Full 3D CTest suite passing (`DX2-26`, `DX2-35`..`39`, `DX2-42`) | ⬜ | |
+| `DX2-82` | `docs/dx2-backend.md`: mirror `docs/dx1-backend.md`'s completeness-table structure, plus a new "3D capability" section documenting exactly what's real (geometry/Z-test/one-texture/blend) vs. accepted-and-ignored (lighting/fog/multitexture/skinning/stencil) vs. thrown (MRT/instancing/custom effects) | ⬜ | |
+| `DX2-83` | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring, `README.md`, and `plan_dxold.md`'s status row for DX2 | ⬜ | |
+| `DX2-84` | Full `CnaTests`/DX2 CTest suite regression run under `-DCNA_GRAPHICS_BACKEND=DX2` (MinGW cross-compile) — confirm no unrelated suite breaks, same rigor `DX1-88` applied | ⬜ | |
+| `DX2-90` | Update `docs/directx-legacy-backends-analysis.md` §3.1's DX2/3 row: the ~15%/execute-buffer-only estimate was analysis-level and is now superseded by this plan's empirical finding (real `DrawPrimitive`-based rendering, not execute buffers) — record the actual delivered capability instead of the earlier assumption, and cross-reference `dx2-spike/README.md` | ⬜ | |
+
+---
+
+## Boundaries — explicitly out of scope for `DX2` v1
+
+- **Execute-buffer Direct3D** (`IDirect3D`/`IDirect3DDevice`/`IDirect3DExecuteBuffer`) — proven
+  non-functional in this environment; permanently excluded by design decision 12's discipline
+  CTest, not merely avoided by convention.
+- **Fixed-function lighting/fog** (`lightingEnabled`, `ambientColor`, `light{0,1,2}*`,
+  `fogEnabled`/`fogColor`/`fogStart`/`fogEnd`, `specularColor`/`specularPower`, `emissiveColor`) —
+  design decision 7, matching `Software`'s own identical precedent.
+- **Multitexture, env-mapping, skinning** (`dualTexture`, `envMapping`, `skinned`) — design
+  decision 7; accepted-and-ignored, not thrown, but not rendered with real per-feature math either.
+- **Stencil operations** — no real stencil buffer exists at this DirectX era (DX6+); accepted and
+  ignored per decision 7/`DX2-50`.
+- **`IDirectDraw2`+/`IDirectDrawSurface2`+ features** — permanently out of scope for the `DX2` name
+  specifically, same as `DX1-1`'s boundary; belongs to a later `plan_dxold.md` roadmap entry.
+- **`DirectSound`/`DirectInput`/`DirectPlay`** — design decision 9 (ported from `DX1` design
+  decision 8).
+- **MRT, instancing, occlusion query, volume/cube textures, custom programmable effects** — none
+  exist at this DirectX era; Phase O7's throws/defaults are permanent, not a "not yet implemented"
+  gap.
+- **Real Windows/macOS hardware verification** — proven via MinGW cross-compile + Wine on Linux in
+  this dev environment only, same caveat every Route-B CNA backend carries.
+
+---
+
+## See also
+
+- `plan_dxold.md` — the roadmap this plan is row 2 of.
+- `plan_dx1.md`, `docs/dx1-backend.md` — the 2D architecture this backend ports verbatim (Phase
+  O2), and the existence-gate-spike discipline this plan's `DX2-0` follows.
+- `src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp` — the CPU transform/clip
+  pipeline this backend's 3D layer ports from (Phase O4), and the precedent for scoping
+  lighting/fog out of a "v1" (design decision 7).
+- `dx2-spike/README.md` — the full `DX2-0` spike record: all 14 ruled-out execute-buffer variants,
+  and the `IDirect3DDevice2` `DrawPrimitive` breakthrough that unblocked this plan.
+- `docs/directx-legacy-backends-analysis.md` — the feasibility analysis that authorized this whole
+  backend family; §3.1's DX2/3 capability estimate is superseded by this plan's empirical finding
+  (`DX2-90`).
