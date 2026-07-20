@@ -2098,6 +2098,17 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+        // plan_opengl1.md item 22 (EasyGL parity): same GLX-visual-fixed-at-window-creation-time
+        // constraint as the depth/stencil attributes above -- SDL_GL_MULTISAMPLEBUFFERS/SAMPLES
+        // must also be requested before SDL_CreateWindow() below, or the window's X visual is
+        // fixed without a multisample buffer and OpenGL1GraphicsBackend's own constructor (which
+        // runs after the window already exists) can never recover it.
+        if (presentationParameters_.getMultiSampleCountProperty() > 1)
+        {
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES,
+                                 presentationParameters_.getMultiSampleCountProperty());
+        }
 #endif
 
         const int width = presentationParameters_.getBackBufferWidthProperty() > 0

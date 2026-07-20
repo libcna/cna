@@ -87,6 +87,14 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  // before this -- a runtime GraphicsDevice.PresentationParameters/vsync change silently did
  // nothing.
  void SetSwapInterval(int)override;
+ // plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA. SDL_GL_MULTISAMPLEBUFFERS/SAMPLES
+ // are requested before SDL_CreateWindow() (GraphicsDevice.cpp, same GLX-visual-fixed-at-window-
+ // creation-time constraint as depth/stencil) -- the constructor here only reads back whatever
+ // the driver actually granted, since GLX can silently clamp/refuse the request. Cannot be
+ // reconfigured post-construction (same reason), so ApplyMultiSampleCount() is intentionally not
+ // overridden -- the IGraphicsBackend default (echo GetMultiSampleCount() back unchanged) is
+ // already the honest answer, matching EasyGL's own established behavior for the same reason.
+ [[nodiscard]] int GetMultiSampleCount()const override{return multiSampleCount_;}
  void ReadBackbuffer(int,int,int,int,uint8_t*)override;
  SDL_Window* GetWindowInternal()const override{return window_;} SDL_Renderer* GetRendererInternal()const override{return nullptr;}
  std::unique_ptr<ITextureBackend>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchBackend>CreateSpriteBatch()override;
@@ -117,6 +125,13 @@ public: explicit OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&);~OpenG
  void DebugRestoreContext()override;
  OpenGL1ResourceRegistry* RegistryIfEnabled(){return contextRecoveryEnabled_?&registry_:nullptr;}
 private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawInternal(const OpenGL1VertexBufferBackend&,const OpenGL1IndexBufferBackend*,PrimitiveType,int,const GpuDrawParams*);
+ // plan_opengl1.md item 22: reads back the ACTUAL SDL_GL_MULTISAMPLEBUFFERS/SAMPLES the driver
+ // granted for the current GL context (not just echoing back what was requested -- GLX can
+ // silently clamp/refuse), enables GL_MULTISAMPLE when genuinely present. Shared by the
+ // constructor and DebugSimulateContextLoss() (same window, same fixed visual, but re-detected
+ // for consistency rather than assumed unchanged).
+ void DetectMultiSampleCount();
+ int multiSampleCount_=0;
  // Fixes a real, pre-existing bug found while implementing phase 6's mip-aware filtering:
  // ApplySamplerState() used to write glTexParameteri directly, once per draw for every sampler
  // slot, called (via GraphicsDevice::applySamplerStatesToBackend()) BEFORE DrawInternal actually

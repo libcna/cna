@@ -191,13 +191,23 @@ void OpenGL1TextureCubeBackend::SetData(int face,int level,int x,int y,int w,int
 // face/level image -- no sub-rectangle readback exists at the GL API level -- so the requested
 // [x,y,w,h] box is copied out of a full-image temporary rather than read directly.
 void OpenGL1TextureCubeBackend::GetData(int face,int level,int x,int y,int w,int h,void*data,int /*dataLength*/)const{if(face<0||face>=6||!data)return;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levelSize=size_;for(int i=0;i<level;i++)levelSize=std::max(1,levelSize/2);std::vector<uint8_t>full((size_t)levelSize*levelSize*4);glPixelStorei(GL_PACK_ALIGNMENT,1);glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,GL_RGBA,GL_UNSIGNED_BYTE,full.data());uint8_t*dest=static_cast<uint8_t*>(data);for(int row=0;row<h;++row)std::memcpy(dest+(size_t)row*w*4,full.data()+((size_t)(y+row)*levelSize+x)*4,(size_t)w*4);}
-OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();
+// plan_opengl1.md item 22: SDL_GL_MULTISAMPLEBUFFERS/SAMPLES only report what the driver
+// GENUINELY granted for the visual the current GL context is bound to -- GLX can silently clamp
+// or altogether refuse the request GraphicsDevice.cpp made before SDL_CreateWindow(), so this is
+// read back empirically rather than trusted from GraphicsBackendCreateArgs::multiSampleCount.
+void OpenGL1GraphicsBackend::DetectMultiSampleCount(){
+int msBuffers=0,msSamples=0;SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS,&msBuffers);SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES,&msSamples);
+multiSampleCount_=(msBuffers>0&&msSamples>1)?msSamples:0;
+if(multiSampleCount_>1)glEnable(GL_MULTISAMPLE);
+}
+OpenGL1GraphicsBackend::OpenGL1GraphicsBackend(const GraphicsBackendCreateArgs&a):window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();DetectMultiSampleCount();
 std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.versionMinor
  <<"; framebuffer object: "<<(caps_.framebufferObject?"yes":"no")
  <<"; multitexture: "<<(caps_.multitexture?"yes":"no")
  <<"; texture cube map: "<<(caps_.textureCubeMap?"yes":"no")
  <<"; mipmap generation: "<<(caps_.generateMipmap?"yes":"no")
  <<"; anisotropic filtering: "<<(caps_.anisotropicFiltering?("supported, up to "+std::to_string((int)caps_.maxAnisotropy)+"x"):std::string("not supported"))
+ <<"; MSAA: "<<(multiSampleCount_>1?(std::to_string(multiSampleCount_)+"x"):std::string("no"))
  <<std::endl;
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);IGraphicsBackend::RegisterForWindow(window_,this);}
 OpenGL1GraphicsBackend::~OpenGL1GraphicsBackend(){IGraphicsBackend::UnregisterForWindow(window_);if(glContext_)SDL_GL_DestroyContext(glContext_);}void OpenGL1GraphicsBackend::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1GraphicsBackend::Present(){SDL_GL_SwapWindow(window_);}void OpenGL1GraphicsBackend::GetViewportSize(int&w,int&h){SDL_GetWindowSizeInPixels(window_,&w,&h);}void OpenGL1GraphicsBackend::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1GraphicsBackend::SetPresentationMode(int){}
@@ -220,7 +230,7 @@ if(glContext_){SDL_GL_MakeCurrent(window_,nullptr);SDL_GL_DestroyContext(glConte
 glContext_=SDL_GL_CreateContext(window_);
 if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed during debug context loss: ")+SDL_GetError());
 SDL_GL_MakeCurrent(window_,glContext_);
-caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();
+caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();DetectMultiSampleCount();
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);
 registry_.NotifyContextRestored();
 // The new context defaults to FBO 0 (the backbuffer) regardless of what was bound before the
@@ -332,7 +342,7 @@ void OpenGL1GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&v,
   case CNA::GraphicsCapability::DepthStencilBuffer:
   case CNA::GraphicsCapability::WireFrame: return true;
   case CNA::GraphicsCapability::AnisotropicFiltering: return caps_.anisotropicFiltering;
-  case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+  case CNA::GraphicsCapability::MultiSampleAntiAliasing: return multiSampleCount_>1;
   case CNA::GraphicsCapability::MultipleRenderTargets:
   case CNA::GraphicsCapability::OcclusionQuery:
   case CNA::GraphicsCapability::CustomEffects: return false;

@@ -235,4 +235,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_RenderTarget2D_Mip COMMAND cna_test_opengl1_rendertarget2d_mip
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA.
+    cna_opengl1_test(cna_test_opengl1_msaa
+                      examples/opengl1_msaa_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_MSAA COMMAND cna_test_opengl1_msaa
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

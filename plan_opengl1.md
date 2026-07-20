@@ -152,11 +152,73 @@ shader, no modern-only extension) and were simply never implemented yet:
     generation call. Restoring both fixes reconfirms the predicted correct values (native: sharp
     aliased white `(255,255,255)`; minified: exact mid-gray `(128,128,128)`). Full
     `ctest -R "OpenGL1_"` regression sweep: 28/28 passed after this change.
-22. Add backbuffer multisampling via `SDL_GL_MULTISAMPLEBUFFERS`/`SAMPLES` context attributes +
+22. ~~Add backbuffer multisampling via `SDL_GL_MULTISAMPLEBUFFERS`/`SAMPLES` context attributes +
     `GL_MULTISAMPLE` (`WGL`/`GLX_ARB_multisample`, ratified 1998, same era as `ARB_multitexture`
     already used here) -- `multiSampleCount` is currently read by nothing, `SupportsCapability
     (MultiSampleAntiAliasing)` hardcoded false. Backbuffer-only; `RenderTarget2D` MSAA (EasyGL's own
-    manual offscreen-FBO resolve) correctly stays out of scope -- genuinely needs modern extensions.
+    manual offscreen-FBO resolve) correctly stays out of scope -- genuinely needs modern extensions.~~
+    **Done**: `GraphicsDevice.cpp` now requests `SDL_GL_MULTISAMPLEBUFFERS`/`SDL_GL_MULTISAMPLESAMPLES`
+    before `SDL_CreateWindow()` for `CNA_BACKEND_OPENGL1` (same GLX-visual-fixed-at-window-creation-
+    time block the depth/stencil fix already lives in), when `PresentationParameters.MultiSampleCount
+    > 1`. `OpenGL1GraphicsBackend::DetectMultiSampleCount()` (called from the constructor and from
+    `DebugSimulateContextLoss()`) reads back whatever the driver GENUINELY granted via
+    `SDL_GL_GetAttribute` -- not just echoing the request, since GLX can silently clamp/refuse it --
+    and calls `glEnable(GL_MULTISAMPLE)` when real. `GetMultiSampleCount()` now returns the honest
+    applied count; `SupportsCapability(MultiSampleAntiAliasing)` now returns `multiSampleCount_>1`
+    instead of hardcoded `false`. `ApplyMultiSampleCount()` is deliberately NOT overridden -- the
+    `IGraphicsBackend` default (echo `GetMultiSampleCount()` back unchanged) is already the honest
+    answer, since a GLX window visual cannot be reconfigured post-construction, matching EasyGL's
+    own established behavior for the identical reason (`examples/easygl_msaa_change_test.cpp`'s own
+    comments).
+
+    **Scoping finding, found while writing the regression test**: `GraphicsDeviceManager.
+    PreferMultiSampling` -- the common `Game`-based idiom every other OPENGL1 test in this suite
+    uses -- cannot actually reach this fix. `Game::GraphicsDevice_` (`Game.hpp`) is a plain VALUE
+    member, constructed with a fully-default `PresentationParameters` (`MultiSampleCount=0`) as
+    part of `Game`'s own base-class construction -- this happens before a derived `Game` subclass's
+    constructor body (where `GraphicsDeviceManager` is constructed and `PreferMultiSampling` is set)
+    ever runs. By the time `GraphicsDeviceManager::CreateDevice()` later tries to push its computed
+    `MultiSampleCount` into the ALREADY-CONSTRUCTED device via `Reset()`/`ApplyMultiSampleCount()`,
+    the window (and its GLX visual) already exists without a multisample buffer --
+    `RecreateBackendForMultiSampleCount()` only recreates the GL context, not the window itself, so
+    a window-visual-based mechanism genuinely cannot be reconfigured in place. This is a pre-existing
+    `Game`/`GraphicsDeviceManager` construction-order constraint (not OPENGL1-specific, not
+    introduced by this change, and well outside this item's scope to fix). What DOES work: a
+    `PresentationParameters` with `MultiSampleCount` already set BEFORE being passed to
+    `GraphicsDevice`'s own `(adapter, profile, presentationParameters)` constructor directly (a
+    real, valid XNA construction path independent of `Game`/`GraphicsDeviceManager`, following the
+    same direct-construction pattern `examples/d3d12_smoke_test.cpp`'s own windowless-device test
+    already established) -- the new `OpenGL1_MSAA` test uses this path.
+
+    A second, smaller finding along the way: `GraphicsDevice::createBackend()` (the path used by
+    the INITIAL device construction) never writes the backend's honestly-applied `MultiSampleCount`
+    back into `PresentationParameters` the way `GraphicsDevice::Reset()`/
+    `RecreateBackendForMultiSampleCount()` does via `ApplyMultiSampleCount()` -- so
+    `PresentationParameters.MultiSampleCount` read right after initial construction is only ever an
+    echo of what was requested, not proof of what was granted. `IGraphicsBackend::
+    GetMultiSampleCount()` (reachable via the NOXNA `GraphicsDevice::GetBackend()`) is the only
+    authoritative source in that case; the test uses it as its primary check rather than the PP
+    echo. Also a pre-existing, cross-backend `GraphicsDevice`-level gap, out of scope here.
+
+    New test `OpenGL1_MSAA` (`examples/opengl1_msaa_test.cpp`) asserts `GetMultiSampleCount()==4`
+    (the exact requested count) and `SupportsCapability(MultiSampleAntiAliasing)==true`, both
+    mutation-tested independently (reverting `DetectMultiSampleCount()` to always report 0, and
+    separately reverting just the `SupportsCapability` mapping to hardcoded `false` with detection
+    intact) -- both reproduce the predicted failure, confirming each fix is independently
+    load-bearing. The test also draws a triangle whose hypotenuse is exactly the line `x+y=65` in
+    screen-pixel space (passing exactly through pixel (32,32)'s continuous center) and prints
+    (diagnostic only, not asserted) whether the read-back edge shows genuine per-sample coverage
+    blending. It does not on this sandbox: confirmed via a minimal, CNA-independent standalone
+    SDL3+OpenGL program that even raw `glReadPixels` from a driver-confirmed 4x multisample GLX
+    visual (`GL_SAMPLE_BUFFERS=1`, `GL_SAMPLES=4`, `GL_MULTISAMPLE` enabled, zero GL errors -- all
+    independently verified) reads back perfectly binary on this sandbox's Mesa llvmpipe software
+    rasterizer under Xvfb -- a real environment/driver limitation in resolve-on-read for a
+    window-system multisample framebuffer, not a bug in this fix. Everything actually within
+    OPENGL1's own control (the request reaching the driver, the capability correctly reporting it)
+    is independently, empirically verified above; real hardware/drivers are expected to resolve
+    correctly, matching this repo's existing precedent of trusting driver-reported capabilities
+    that this sandbox's software rasterizer cannot itself fully exercise. Full
+    `ctest -R "OpenGL1_"` regression sweep: 29/29 passed after this change.
 23. Add real occlusion queries via `ARB_occlusion_query`/core GL 1.5 (`glGenQueries`/
     `glBeginQuery(GL_SAMPLES_PASSED)`/`glEndQuery`/`glGetQueryObjectuiv`, ratified 2001/core 2003,
     same `SDL_GL_GetProcAddress` loading pattern already used for `ARB_framebuffer_object`) --
