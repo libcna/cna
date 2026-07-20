@@ -13,6 +13,15 @@
 //
 // Check points for Draw 2 are chosen to discriminate a correct non-uniform implementation from
 // 2 plausible bugs: using only scale.X for both axes, or only scale.Y for both axes.
+//
+//   Draw 3 (scalar overload, non-zero origin): position=(300,150), origin=(10,10) (the source
+//     rectangle's own centre), scale=2.0f -> expected 40x40 destination rectangle CENTRED on
+//     position, spanning screen x:[280,320), y:[130,170). Regression check for a real bug (see
+//     ComputeSpriteScreenCorners()'s own fix comment, OpenGL2GraphicsBackend.cpp): origin is
+//     defined in SOURCE-rectangle pixel units and must be scaled by (destination/source) before
+//     being applied against the destination rectangle -- using it unscaled shifts the sprite by
+//     `origin - origin*(dest/source)` = a 10px down-right offset here (destination would instead
+//     span x:[290,330), y:[140,180), asymmetric around position instead of centred on it).
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -77,6 +86,9 @@ protected:
         sb.Draw(*tex_, Vector2(200.0f, 50.0f), std::optional<Rectangle>{}, Color::White,
                 0.0f, Vector2::Zero, Vector2(2.0f, 4.0f), SpriteEffects::None, 0.0f);
 
+        sb.Draw(*tex_, Vector2(300.0f, 150.0f), std::optional<Rectangle>{}, Color::White,
+                0.0f, Vector2(10.0f, 10.0f), 2.0f, SpriteEffects::None, 0.0f);
+
         sb.End();
 
         ExpectPixel("scalar-scale-3-interior", Rectangle(100, 100, 1, 1), kRed, /*tolerance=*/60);
@@ -84,6 +96,10 @@ protected:
         ExpectPixel("vector2-scale-2-4-interior", Rectangle(220, 110, 1, 1), kRed, /*tolerance=*/60);
         ExpectPixel("vector2-scale-2-4-past-edge", Rectangle(245, 70, 1, 1), kGreen, /*tolerance=*/60);
         ExpectPixel("far-from-both-sprites", Rectangle(50, 250, 1, 1), kGreen, /*tolerance=*/60);
+        // Draw 3: origin scaled correctly -> centred 40x40 square, x:[280,320) y:[130,170).
+        ExpectPixel("origin-scale-2-centre", Rectangle(300, 150, 1, 1), kRed, /*tolerance=*/60);
+        ExpectPixel("origin-scale-2-left-of-unscaled-origin-shift", Rectangle(285, 150, 1, 1), kRed, /*tolerance=*/60);
+        ExpectPixel("origin-scale-2-right-past-correct-edge", Rectangle(325, 150, 1, 1), kGreen, /*tolerance=*/60);
     }
 
 public:

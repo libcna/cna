@@ -171,6 +171,10 @@ namespace CNA::Internal::Backends::OpenGL2
         unsigned pbrSkinnedProgram_{};
         IRenderTargetBackend* currentRt_{};
         IRenderTargetCubeBackend* currentRtCube_{};
+        // Set alongside currentRtCube_ by SetRenderTargetCubeFace() -- DebugSimulateContextLoss()
+        // needs this to re-select the correct face after recreate_gl_resource() resets the cube
+        // target's own internal boundFace back to 0 (see that resource's release_gl_handle_only()).
+        int currentRtCubeFace_{};
         int currentRtWidth_{};
         int currentRtHeight_{};
         // MRT (SetRenderTargets, count > 1): one shared FBO, re-attached (glFramebufferTexture2D

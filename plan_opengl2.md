@@ -1099,6 +1099,118 @@ sweep was a genuine (not rhetorical) check, not an assumption. `OpenGL2_SpriteBa
 same established baseline; `GraphicsDeviceCapabilityTest` re-run again confirms only
 `DoesNotSupportWireFrame` remains failed.
 
+## Status: adversarial 5-way audit + 5 real bugs fixed (2026-07-20, session 13)
+User asked for a fresh, independent "find problems" pass over the whole backend. Ran 5 parallel
+review agents, each assigned a disjoint ~500-700 line slice of `OpenGL2GraphicsBackend.cpp`
+(textures/render-targets/cube/3D; VB/IB/SpriteBatch; the 8 embedded GLSL programs; drawInternal
+dispatch + render-target switching; instancing/state-application), each cross-checking claims
+against `EasyGLGraphicsBackend.cpp` and the real FNA source rather than trusting this file's own
+"mirrors EasyGL" comments. Every finding below was independently re-derived by hand (not just
+trusted from the agent reports) against FNA source before fixing.
+
+**5 real, previously-undiscovered bugs found and fixed:**
+
+1. **`ComputeSpriteScreenCorners()` used `origin` unscaled against the DESTINATION rectangle** --
+   a residual bug in the same function session 12 partially fixed (that session fixed origin being
+   double-counted in the translation; this is a separate, independent bug in the same corner
+   math). FNA's `SpriteBatch.cs` normalizes origin to a fraction of the SOURCE rectangle
+   (`originX = origin.X / sourceRect.Width`, see every `PushSprite()` call site) before scaling it
+   by the destination size (`cornerX = -originX * destinationW`). Using `origin.X` verbatim against
+   `destination.Width` is only correct when destination size == source size (no stretch) --
+   `SpriteBatch.Draw(..., origin, scale, ...)` with any `scale != 1.0` and non-zero origin (a very
+   common real pattern: scaling a sprite around its own centre) pivoted around the wrong point.
+   Not caught by the existing test suite because no existing test combined non-zero origin with
+   non-1 scale. Fixed by scaling origin by `destination.{Width,Height} / source.{Width,Height}`
+   before subtracting. Verified with a genuine regression test (see below), including confirming
+   the test actually fails without the fix (temporarily reverted, rebuilt, re-ran, restored).
+2. **`DebugSimulateContextLoss()` never re-selected the render target that was ACTIVE at the
+   moment of loss.** `RenderTarget`/`RenderTargetCubeBackend::CreateResources()` both end with
+   `glBindFramebuffer(...,0)`, and the recreate loop only rebuilds each resource's OWN fbo handle
+   -- it never re-binds it as current. `currentRt_`/`currentRtCube_` are untouched by context loss
+   (nothing at the GraphicsDevice/game layer runs), so the very first draw after recovery would
+   silently go to the backbuffer instead of the render target the game still believes is bound.
+   `EasyGLGraphicsBackend::DebugSimulateContextLoss` has the identical omission (verified by
+   reading it) -- not fixed there, out of this backend's scope, but worth a follow-up. Fixed by
+   re-binding `currentRt_`/`currentRtCube_` (new `currentRtCubeFace_` field tracks which face,
+   since `RenderTargetCubeBackend::release_gl_handle_only()` resets its own internal `boundFace`
+   to -1 before the information would otherwise be readable) after the recreate loop.
+3. **`litProgram_` (BasicEffect) silently dropped per-vertex color whenever `LightingEnabled` was
+   also true.** `BasicEffect.cpp` already unconditionally populates `GpuDrawParams::
+   vertexColorEnabled` regardless of `LightingEnabled` (a real, legal FNA combination -- see
+   `VSBasicPixelLightingVc` in FNA's own `BasicEffect.fx`), but `litVertexSrc`/`litFragmentSrc`
+   never declared an `aColor`/`vColor` at all (unlike `skinnedVertexSrc`/`skinnedFragmentSrc`,
+   which already do this correctly), and `drawInternal()` only uploaded `uVertexColorEnabled` for
+   the `skinned` case. Reachable via a custom `VertexDeclaration` carrying both Normal and Color
+   (`BindVertexAttributesForDeclaration()` binds by name, so it silently skipped the absent
+   `aColor`) -- the built-in `VertexPositionNormalTexture` stride path has no color data to begin
+   with, so this never affected that far more common case. Fixed by mirroring the skinned
+   program's own `aColor`/`vColor`/`uVertexColorEnabled` pattern and extending the uniform upload
+   to `lit || skinned`.
+4. **PbrEffect/SkinnedPbrEffect's 4 secondary textures (NormalMap/MetallicRoughnessMap/
+   EmissiveMap/OcclusionMap, sampler slots 1-4) never got `applySampler()` called on them** --
+   only slot 0 (base color) did. `GraphicsDevice.SamplerStates[1..4]` was silently ignored;
+   these 4 maps always sampled with the hardcoded `GL_LINEAR`/`GL_CLAMP_TO_EDGE` constructor
+   defaults from `Tex`'s own constructor, regardless of what `SamplerState` the game actually set.
+   Fixed by calling `applySampler(1..4)` alongside each of the 4 binds.
+5. **`Sprite::DrawWithCustomEffect()`'s screen->clip ortho projection remapped `layerDepth`
+   through a NON-identity Z transform, disagreeing with both the built-in (non-custom-effect)
+   `Sprite::Draw()` path (which writes `gl_Position.z = layerDepth` raw) and real FNA's own
+   `SpriteEffect` convention.** FNA's `SpriteBatch.cs::PrepRenderState` inlines `Ortho *
+   transformMatrix` but its own Z/W row is `transformMatrix`'s Z/W row VERBATIM -- i.e. real FNA
+   applies NO projection-driven Z scaling at all, so clip-Z ends up equal to raw `layerDepth`
+   whenever `transformMatrix` is identity-in-Z (as `SpriteBatch.Begin()` almost always receives).
+   The old `CreateOrthographicOffCenter(0,w,h,0,-1,1)` here instead remapped `layerDepth` through
+   `-0.5*z+0.5`. Fixed by using `zNear=0, zFar=-1` instead of `(-1,1)` -- `Matrix::
+   CreateOrthographicOffCenter`'s own Z row (`M33=1/(zNear-zFar)`, `M43=zNear/(zNear-zFar)`)
+   becomes an exact identity mapping (`M33=1,M43=0`) with that pair, matching both the built-in
+   path and real FNA. Only visibly matters when `DepthStencilState` has depth testing enabled
+   while mixing custom-Effect and built-in SpriteBatch draws (or 2D/3D draw order) in the same
+   scene -- harmless with the far more common `DepthStencilState.None`.
+
+**Real gaps found and documented (not fixed this session -- see rationale for each):**
+- `ApplyRasterizerState()` never calls `glFrontFace()` (winding stays at GL's default `GL_CCW`
+  always); FNA3D's real OpenGL driver explicitly flips CW/CCW when a render target (vs. the
+  backbuffer) is bound. Net effect: `CullMode::CullClockwiseFace`/`CullCounterClockwiseFace`
+  combined with an active `RenderTarget2D`/`RenderTargetCube` culls the opposite winding from real
+  FNA (shadow maps/reflections/portals/minimaps with backface culling would render inside-out).
+  Confirmed `EasyGLGraphicsBackend.cpp` has the identical gap -- shared, pre-existing, not an
+  OpenGL2-only regression. Not fixed: changing only OpenGL2 risks diverging from EasyGL's own
+  (currently passing) golden-image parity tests; a real fix needs to touch both backends together
+  plus a re-run of the full cross-backend golden sweep.
+- `ApplyRasterizerState()` passes XNA's raw `DepthBias`/`SlopeScaleDepthBias` straight to
+  `glPolygonOffset()` with no unit conversion; FNA3D's real driver scales `DepthBias` by
+  `(1<<24)-1` first (24-bit depth buffer convention). Typical XNA `DepthBias` values (~0.0001) are
+  effectively a no-op unscaled. `EasyGLGraphicsBackend.cpp` has the identical convention (its own
+  comment cites it as "this project's own already-established convention") -- a deliberate,
+  repo-wide choice, not an OpenGL2-only bug; flagged for whoever owns that convention decision.
+- `GraphicsDevice.ReferenceStencil`'s own setter only calls `SetReferenceStencil()`, which neither
+  OpenGL2 nor EasyGL override (both inherit the `IGraphicsBackend` base no-op) -- changing just
+  `ReferenceStencil` between stencil-shadow-volume passes (a common XNA pattern) silently has no
+  effect on either backend until the next full `DepthStencilState` reassignment. Not fixed: this
+  needs an `IGraphicsBackend.hpp` interface change affecting every backend, which per this
+  project's own established practice should not be done unsupervised in a single-backend session
+  (see the OpenGL1 `TextureCube` context-loss precedent).
+- `SetRenderTargets()` (MRT) always attaches `target->colorTex` (the single-sample resolve
+  texture) directly, never `target->msaaColorRbo` -- an MSAA-configured `RenderTarget2D` used in
+  an MRT set silently renders single-sampled, with no error or fallback notice. Not fixed: a
+  correct MSAA-MRT resolve needs a real per-target blit-resolve step (N separate
+  `glBlitFramebuffer` calls, each isolating one attachment via `glReadBuffer`/`glDrawBuffers`),
+  meaningfully more complex than the other fixes here and not something to rush without dedicated
+  MRT+MSAA test coverage.
+- (SUSPECTED, not confirmed reachable) VB/IB `recreate_gl_resource()` after context loss allocates
+  only `cpuShadow_.size()` bytes, not the buffer's original full `capacity` -- if a prior
+  `SetDataOptions::Discard` upload was smaller than capacity, a later `NoOverwrite` upload sized
+  against the ORIGINAL capacity could exceed the recreated (shadow-sized) buffer.
+
+**New regression test:** extended `OpenGL2_SpriteBatch_Scale` (`examples/
+opengl2_spritebatch_scale_test.cpp`) with a 3rd draw combining non-zero origin (the source
+rectangle's own centre) with a 2x scale, checking the destination is centred on `position` rather
+than shifted -- confirmed this new check genuinely fails without fix #1 above (temporarily
+reverted the fix, rebuilt, re-ran, saw the exact predicted failure, restored the fix).
+
+**Build/test result:** `cna_backend_graphics_opengl2` + all 46 `OpenGL2`-labeled ctest cases build
+and pass, 0 regressions (`ctest -L OpenGL2`: 46/46 PASS, including the extended scale test).
+
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
 - SDL-created OpenGL 2.1 compatibility context. SDL is only window/context glue; rendering is direct OpenGL.

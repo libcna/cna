@@ -1622,11 +1622,26 @@ namespace CNA::Internal::Backends::OpenGL2
             if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) std::swap(u0, u1);
             if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) std::swap(v0, v1);
 
+            // FNA's SpriteBatch.Draw() overloads never use `origin` in destination-pixel units
+            // directly -- they first normalize it to a FRACTION of the source rectangle
+            // (`originX = origin.X / sourceRect.Width`, see SpriteBatch.cs's own `PushSprite`
+            // call sites: `origin.X / sourceW / texture.Width` where `sourceW` is itself
+            // `sourceRect.Width / texture.Width`, so the two divisions cancel to
+            // `origin.X / sourceRect.Width`), THEN scales that fraction back up by the
+            // DESTINATION size (`cornerX = -originX * destinationW`). Using `origin.X` verbatim
+            // against `destination.Width` below (previously: no scale factor at all) is only
+            // correct when destination.Width == source.Width -- i.e. no stretch. Any stretched
+            // draw (the `scale`/`Vector2 scale` overloads, or an explicit destinationRectangle
+            // whose size differs from sourceRectangle) pivoted around the wrong point.
+            const float originScaleX = destination.Width / static_cast<float>(source.Width != 0 ? source.Width : 1);
+            const float originScaleY = destination.Height / static_cast<float>(source.Height != 0 ? source.Height : 1);
+            const float ox = origin.X * originScaleX;
+            const float oy = origin.Y * originScaleY;
             const float localCorners[4][2] = {
-                {-origin.X, -origin.Y},
-                {destination.Width - origin.X, -origin.Y},
-                {destination.Width - origin.X, destination.Height - origin.Y},
-                {-origin.X, destination.Height - origin.Y},
+                {-ox, -oy},
+                {destination.Width - ox, -oy},
+                {destination.Width - ox, destination.Height - oy},
+                {-ox, destination.Height - oy},
             };
             const float uv[4][2] = {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
             // Task (plan_opengl2.md follow-up): the translation term used to be
@@ -1842,8 +1857,25 @@ namespace CNA::Internal::Backends::OpenGL2
                 };
                 const SpriteVertex quad[6] = {corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]};
 
+                // zNear=0, zFar=-1 (NOT the more obvious -1/1) is deliberate: Matrix::
+                // CreateOrthographicOffCenter's Z row is M33=1/(zNear-zFar), M43=zNear/(zNear-zFar)
+                // -- with (0,-1) that's M33=1, M43=0, i.e. an IDENTITY Z/W mapping (clipZ==inputZ).
+                // That matters here because real FNA's own SpriteEffect MatrixTransform (see
+                // SpriteBatch.cs's PrepRenderState, "Inlined CreateOrthographicOffCenter *
+                // transformMatrix") only ever remaps X/Y through the orthographic projection --
+                // its inlined Z/W row is `transformMatrix`'s OWN Z/W row verbatim, with NO
+                // projection-driven Z scaling at all, so a real XNA custom SpriteBatch effect's
+                // clip-space Z ends up equal to its raw vertex Z (layerDepth) whenever
+                // transformMatrix is the identity-in-Z 2D matrix SpriteBatch.Begin() almost always
+                // receives. A more "natural"-looking (-1,1) near/far here would instead remap
+                // layerDepth through `-0.5*z+0.5`, silently disagreeing with the layerDepth this
+                // same file's OWN built-in (non-custom-effect) Sprite::Draw() path writes as a raw,
+                // untransformed gl_Position.z (see that code) -- the two paths must produce the
+                // SAME clip-space Z for the same layerDepth input, or mixing custom-Effect and
+                // built-in SpriteBatch draws under an enabled DepthStencilState (a legitimate XNA
+                // pattern for interleaving 2D/3D draw order) would sort inconsistently.
                 const Matrix ortho = Matrix::CreateOrthographicOffCenter(
-                    0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight), 0.0f, -1.0f, 1.0f);
+                    0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight), 0.0f, 0.0f, -1.0f);
                 const Matrix combined = transform_ * ortho;
                 float matColMajor[16];
                 combined.ToColumnMajor(matColMajor);
@@ -1995,23 +2027,34 @@ namespace CNA::Internal::Backends::OpenGL2
         // own documented, accepted convention (see that field's doc comment: every backend except
         // D3D9 always renders per-pixel). uNormalMatrix is the real inverse-transpose of World's
         // upper-3x3 (see ComputeNormalMatrix3x3 below), correct under non-uniform scale too.
+        // Task follow-up: BasicEffect.LightingEnabled=true combined with VertexColorEnabled=true
+        // is a real, legal FNA/XNA combination (see BasicEffect.cpp's own unconditional
+        // `p.vertexColorEnabled = VertexColorEnabled;`, uploaded regardless of LightingEnabled) --
+        // aColor/vColor/uVertexColorEnabled below mirror skinnedVertexSrc/skinnedFragmentSrc's
+        // own identical pattern (see those programs' doc comment) so a custom VertexDeclaration
+        // carrying both Normal and Color (bound via BindVertexAttributesForDeclaration(), which
+        // matches attributes by name) is no longer silently dropped under lighting. Harmless for
+        // the far more common VertexPositionNormalTexture case (stride 32, no real color data):
+        // BindVertexAttributesForStride()'s own stride>=32 branch still disables location 1 and
+        // sets it to a constant white via glVertexAttrib4f, so vColor reads (1,1,1,1) there.
         const char* litVertexSrc =
-            "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;"
+            "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aTexCoord;attribute vec4 aColor;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
             "uniform float uFogEnabled;uniform float uFogStart;uniform float uFogEnd;"
-            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;"
+            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
             "void main(){"
             "gl_Position=uWVP*vec4(aPosition,1.0);"
             "vNormal=uNormalMatrix*aNormal;"
             "vTex=aTexCoord;"
             "vWorldPos=(uWorld*vec4(aPosition,1.0)).xyz;"
+            "vColor=aColor;"
             "vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:"
             "clamp((aPosition.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;"
             "}";
         const char* litFragmentSrc =
-            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;"
+            "varying vec3 vNormal;varying vec2 vTex;varying vec3 vWorldPos;varying float vFogFactor;varying vec4 vColor;"
             "uniform sampler2D uTex;uniform bool uTextureEnabled;uniform vec4 uDiffuse;"
-            "uniform vec3 uAmbientColor;"
+            "uniform vec3 uAmbientColor;uniform float uVertexColorEnabled;"
             "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;uniform vec3 uLight0Specular;"
             "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;uniform vec3 uLight1Specular;"
             "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;uniform vec3 uLight2Specular;"
@@ -2031,7 +2074,8 @@ namespace CNA::Internal::Backends::OpenGL2
             "vec3 h2=normalize(E-uLight2Dir);float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);"
             "vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;"
             "vec4 texColor=uTextureEnabled?texture2D(uTex,vTex):vec4(1.0,1.0,1.0,1.0);"
-            "gl_FragData[0]=texColor*vec4(litRGB,uDiffuse.a);"
+            "vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);"
+            "gl_FragData[0]=vec4(litRGB*texColor.rgb*vc.rgb,uDiffuse.a*texColor.a*vc.a);"
             "gl_FragData[0].rgb+=specularRGB*gl_FragData[0].a;"
             "float _at=(uAlphaTest.y>0.0)?((abs(gl_FragData[0].a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):"
             "((gl_FragData[0].a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);if(_at<0.0)discard;"
@@ -2459,6 +2503,20 @@ namespace CNA::Internal::Backends::OpenGL2
         // each class's own recreate_gl_resource() doc comment for why).
         for (RecoverableResource* resource : recoverableResources_)
             resource->recreate_gl_resource();
+
+        // 5. Re-select whichever render target was ACTIVE at the moment of loss. Step 4 only
+        // rebuilds each resource's OWN fbo handle (RenderTarget::CreateResources()/
+        // RenderTargetCubeBackend::CreateResources() both end with glBindFramebuffer(...,0)) --
+        // it does not re-bind it as the CURRENTLY BOUND target. currentRt_/currentRtCube_ are
+        // themselves untouched by context loss (nothing at the GraphicsDevice/game layer ran),
+        // so without this, the very first draw issued after recovery would silently render into
+        // the backbuffer instead of the render target the game still believes is active. This
+        // was a real, previously-undocumented gap (EasyGLGraphicsBackend::DebugSimulateContextLoss
+        // has the identical omission -- not fixed here, out of this backend's scope).
+        if (currentRt_)
+            currentRt_->BindAsRenderTarget();
+        else if (currentRtCube_)
+            currentRtCube_->BindAsRenderTargetFace(currentRtCubeFace_);
     }
 
     void OpenGL2GraphicsBackend::DebugRestoreContext()
@@ -2518,6 +2576,7 @@ namespace CNA::Internal::Backends::OpenGL2
             currentRtWidth_ = rt->GetSize();
             currentRtHeight_ = rt->GetSize();
             currentRtCube_ = rt;
+            currentRtCubeFace_ = face;
         }
         else
         {
@@ -2843,13 +2902,18 @@ namespace CNA::Internal::Backends::OpenGL2
             glUniform1f(glGetUniformLocation(program, "uFresnelFactor"), params->fresnelFactor);
             glUniform3fv(glGetUniformLocation(program, "uEnvMapSpecular"), 1, params->envMapSpecular);
 
+            // litProgram_/skinnedProgram_ both declare uVertexColorEnabled (see litFragmentSrc's
+            // own doc comment above for why BasicEffect needs this too, not just SkinnedEffect);
+            // ignored (-1 location, silent no-op) by every other program in this `if` block.
+            if (lit || skinned)
+                glUniform1f(glGetUniformLocation(program, "uVertexColorEnabled"), params->vertexColorEnabled ? 1.0f : 0.0f);
+
             // SkinnedEffect-only uniforms (silently ignored by litProgram_/envMapProgram_).
             if (skinned)
             {
                 glUniformMatrix4fv(glGetUniformLocation(program, "uBones[0]"), params->boneCount,
                                    GL_FALSE, params->boneTransforms);
                 glUniform1i(glGetUniformLocation(program, "uWeightsPerVertex"), params->weightsPerVertex);
-                glUniform1f(glGetUniformLocation(program, "uVertexColorEnabled"), params->vertexColorEnabled ? 1.0f : 0.0f);
             }
 
             // SkinnedPbrEffect shares SkinnedEffect's own bone-palette uniforms (same names,
@@ -2978,21 +3042,25 @@ namespace CNA::Internal::Backends::OpenGL2
             glActiveTexture(GL_TEXTURE1);
             if (params->pbrNormalMap) params->pbrNormalMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture2D_);
+            applySampler(1);
             glUniform1i(glGetUniformLocation(program, "uNormalMap"), 1);
 
             glActiveTexture(GL_TEXTURE2);
             if (params->pbrMetallicRoughnessMap) params->pbrMetallicRoughnessMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(2);
             glUniform1i(glGetUniformLocation(program, "uMetallicRoughnessMap"), 2);
 
             glActiveTexture(GL_TEXTURE3);
             if (params->pbrEmissiveMap) params->pbrEmissiveMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(3);
             glUniform1i(glGetUniformLocation(program, "uEmissiveMap"), 3);
 
             glActiveTexture(GL_TEXTURE4);
             if (params->pbrOcclusionMap) params->pbrOcclusionMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(4);
             glUniform1i(glGetUniformLocation(program, "uOcclusionMap"), 4);
 
             glActiveTexture(GL_TEXTURE0);
