@@ -1805,6 +1805,55 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     signal, and the most significant correctness bug found by this session's testing (as opposed to
     its CI-infrastructure) work.
 
+69. **Real nineteenth CI signal — item 68's `vertexStart` fix compiled and ran, but
+    `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden` still failed, with the same
+    "reads back either the literal `Clear` color or fully-transparent-black, never an actual shaded
+    value" symptom, just at slightly shifted sample points — leading to a second, deeper,
+    independent bug: `ReadBackbuffer()` presented and ended the frame as an unwanted side effect of
+    every call, so the 2nd through 8th of this test's 8 `ExpectPixel`/`CompareGoldenImage` calls per
+    frame each silently read a brand-new, never-drawn swapchain image instead of the one that was
+    actually rendered**: re-pulled the CI log the same way and confirmed the build itself stayed
+    green — only the two new tests still failed, values shuffled but still confined to exactly the
+    same two "impossible" readings as before. Before assuming the `vertexStart` fix was wrong or
+    incomplete, re-examined `MetalGraphicsBackend::ReadBackbuffer()` line by line: it calls
+    `[p.command presentDrawable:p.drawable]` and nils both `p.command`/`p.drawable` on **every**
+    call — its own header comment even documented this as an accepted "documented tradeoff", framing
+    it as merely ending the frame "slightly earlier than the game intended". That framing understated
+    the real impact: `PixelTestGame`'s established pattern (used by ~330 example test files across
+    every other backend) calls `ExpectPixel`/`CompareGoldenImage` — each of which calls
+    `GraphicsDevice::GetBackBufferData()` → `ReadBackbuffer()` — multiple times per single rendered
+    frame, and this test's own 4 quads make exactly that pattern unavoidable (8 total read calls
+    after 4 draws). Traced `ensureFrame()`/`resolveActiveAttachments()`: nil'ing `drawable` makes the
+    *next* `ensureFrame()` call fetch a genuinely new drawable via `[layer nextDrawable]`, whose
+    `MTLLoadActionLoad` render pass then preserves whatever **stale, undefined content** was already
+    in that swapchain slot from an unrelated prior present cycle — not the frame this test just
+    rendered. With a small (2–3 image) swapchain rotation, repeatedly hitting this across 8 reads
+    naturally lands on a small set of stale values, matching the observed "only ever two distinct
+    wrong readings" symptom exactly.
+    Fixed by mirroring `endActiveEncoding(bool presentBackbuffer)`'s own already-established
+    METAL-180 pattern (documented in this same file, just never applied to `ReadBackbuffer()`
+    itself): commit and wait for the blit's command buffer so the read is accurate, but **do not**
+    call `presentDrawable:` and **do not** nil `drawable` — it stays alive so the *next*
+    `ensureFrame()` reuses the identical drawable with `MTLLoadActionLoad`, correctly continuing from
+    everything already rendered into it. This has one necessary knock-on consequence, also fixed in
+    the same pass: `endFrame()` (the sole real `Present()` call site) previously guarded on `if
+    (!command) return;`, which would now skip presenting entirely — and leave a stale,
+    should-have-been-shown `drawable` for the *next* frame to incorrectly inherit — whenever the most
+    recent frame's last action was a `ReadBackbuffer()` call rather than a draw. Fixed `endFrame()`
+    to check `!command && !drawable` and, if `command` is nil but `drawable` is still pending, call
+    `ensureFrame()` first to reacquire a fresh command buffer bound to that same drawable before
+    presenting — verified only `Present()` and the destructor call `endFrame()` (grepped both call
+    sites), and that `Metal_Smoke` itself never calls `GetBackBufferData()`/`ReadBackbuffer()` at all
+    (confirmed by reading `metal_smoke_test.cpp` in full), so this change cannot regress the one test
+    already known to pass. Also confirmed exactly one real `presentDrawable:` call site remains in
+    the whole file afterward (inside `endActiveEncoding`, matching its own "the only call site
+    allowed to present" claim) — the fix consolidates presentation to a single place rather than
+    leaving two inconsistent code paths. Cannot be build-verified from this Linux sandbox; re-checked
+    brace/bracket balance (still 324/324, 762/762) as the only available sanity check. This is now
+    two independent, real, substantive rendering-correctness bugs found back-to-back purely from this
+    session's first-ever real Metal pixel tests — the next CI run will show whether both are now
+    actually fixed, or whether a third layer remains. Nineteenth real, observed CI signal.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

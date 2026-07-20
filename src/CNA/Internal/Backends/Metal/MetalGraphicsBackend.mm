@@ -1258,7 +1258,17 @@ struct MetalGraphicsBackend::Impl
 
     void endFrame()
     {
-        if(!command) return;
+        if(!command && !drawable) return;
+        // plan_metal.md: real bug found and fixed 2026-07-20, alongside ReadBackbuffer()'s own
+        // fix (see its note) -- ReadBackbuffer() deliberately commits and releases `command`
+        // (single-use, cannot be resumed) while keeping `drawable` alive so the frame it already
+        // rendered can still be presented normally. Without this, `command` being nil here would
+        // skip presenting entirely (leaving that frame never shown) and, worse, the NEXT frame's
+        // ensureFrame() would incorrectly reuse the same already-should-have-been-presented
+        // drawable instead of fetching a fresh one. Reacquire a fresh command buffer bound to that
+        // same drawable (ensureFrame()'s own existing `if (!drawable) ...nextDrawable` reuse logic
+        // already does the right thing here unmodified) so it can actually be presented below.
+        if(!command) ensureFrame();
         endActiveEncoding(true); // real end-of-frame -- the only call site allowed to present.
     }
 
@@ -1925,16 +1935,26 @@ bool MetalGraphicsBackend::TransformLogicalToWindow(float logX,float logY,float&
 // origin is already top-left, matching D3D/XNA convention directly, the same reason
 // MTLRegionMake2D()-based texture uploads elsewhere in this file never need one either.
 //
-// Documented tradeoff, not a hidden bug: since the drawable's color texture lives in
-// MTLStorageModePrivate (GPU-only) memory, the only way to get it CPU-readable is a blit into a
-// MTLResourceStorageModeShared staging buffer within the SAME command buffer, which then has to
-// be committed and waited on -- and once a command buffer is committed there is no way to resume
-// encoding into it for a later, separate Present(). So this function ends the current encoder,
-// blits, and commits+presents+waits as one unit (i.e., behaves like an early, forced end-of-frame)
-// -- the game's own subsequent Present() call becomes a safe no-op (Impl::endFrame()'s own
-// `if(!command) return;` guard) rather than a double-present. Net effect: calling ReadBackbuffer
-// mid-Draw() ends that frame slightly earlier than the game intended -- a real, minor, documented
-// behavioral quirk, not a memory-safety or correctness bug.
+// plan_metal.md: real bug found and fixed 2026-07-20 -- since the drawable's color texture lives
+// in MTLStorageModePrivate (GPU-only) memory, the only way to get it CPU-readable is a blit into a
+// MTLResourceStorageModeShared staging buffer within the SAME command buffer, which then has to be
+// committed and waited on (a Metal command buffer cannot resume encoding once committed). The
+// original version additionally called `presentDrawable:` and nil'd `p.drawable` here, on the
+// mistaken assumption that "ends this command buffer" and "ends this logical frame" were the same
+// thing -- they are not, and every other backend's PixelTestGame-based test relies on calling
+// GetBackBufferData() (which calls this) multiple times per rendered frame (one per ExpectPixel()/
+// CompareGoldenImage(), the established pattern across ~330 example test files). Presenting here
+// handed the CAMetalLayer that drawable back and nil'd the field, so the *next* read within the
+// same RunTest() call went through ensureFrame() -> resolveActiveAttachments() -> `if (!drawable)
+// drawable=[layer nextDrawable]`, fetching a brand-new, undrawn swapchain image and reading its
+// stale/undefined MTLLoadActionLoad content instead of the frame that was actually just rendered --
+// exactly what Metal_PbrEffect_Golden/Metal_SkinnedPbrEffect_Golden's alternating clear-color/
+// transparent-black failures showed. Fixed to mirror endActiveEncoding(false)'s own already-
+// established METAL-180 pattern: commit and wait so the blit (and every draw so far) actually
+// executes, but do NOT present and do NOT nil `drawable` -- it stays alive so the next
+// ensureFrame() reuses the SAME drawable with MTLLoadActionLoad, correctly preserving everything
+// rendered into it, and the game's own eventual real Present() (endFrame(), the only call site
+// still allowed to present) presents it exactly once, same as before this function was ever called.
 void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixels)
 {
     if (w<=0 || h<=0) return;
@@ -1969,12 +1989,11 @@ void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixel
                   toBuffer:staging destinationOffset:0
     destinationBytesPerRow:bytesPerRow destinationBytesPerImage:length];
     [blit endEncoding];
-    [p.command presentDrawable:p.drawable];
     [p.command commit];
     [p.command waitUntilCompleted];
     std::memcpy(pixels,[staging contents],length);
     [staging release];
-    [p.command release]; p.command=nil; p.drawable=nil;
+    [p.command release]; p.command=nil; // command buffers are single-use; drawable stays alive.
 }
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
