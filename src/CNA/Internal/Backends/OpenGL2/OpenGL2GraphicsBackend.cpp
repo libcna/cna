@@ -32,6 +32,26 @@
 
 namespace CNA::Internal::Backends::OpenGL2
 {
+    // plan_opengl2.md (context-loss recovery): mirrors easy-gl's RecoverableResource.hpp exactly
+    // (release_gl_handle_only()/recreate_gl_resource()), reimplemented locally rather than
+    // depending on EasyGL/easy-gl. Defined here (not inside the anonymous namespace below) so it
+    // matches the forward declaration in OpenGL2GraphicsBackend.hpp and is visible both to the
+    // anonymous-namespace resource classes below and to OpenGL2GraphicsBackend's own methods.
+    class RecoverableResource
+    {
+    public:
+        virtual ~RecoverableResource() = default;
+        // Drop the GPU handle without calling any gl* function -- the context is already gone by
+        // the time this runs. The resource must keep whatever CPU-side data it needs intact so
+        // recreate_gl_resource() can restore it later.
+        virtual void release_gl_handle_only() = 0;
+        // Recreate the GPU resource using the stored CPU-side data (if any -- RenderTarget/
+        // RenderTargetCubeBackend/OcclusionQuery have none to restore and simply recreate blank).
+        // Called after a fresh GL context is current and this file's own GL function pointers
+        // have been reloaded.
+        virtual void recreate_gl_resource() = 0;
+    };
+
     namespace
     {
         // Not aliased by IGraphicsBackend.hpp (unlike VertexElement itself) -- only needed
@@ -808,7 +828,7 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         }
 
-        class Tex final : public ITextureBackend
+        class Tex final : public ITextureBackend, public RecoverableResource
         {
         public:
             GLuint id{};
@@ -817,9 +837,18 @@ namespace CNA::Internal::Backends::OpenGL2
             // Task 924 precedent (EasyGLTextureBackend's own identical field): real mip level
             // count this texture was created for (1 = no mipmapping).
             int mipLevels{1};
+            // plan_opengl2.md (context-loss recovery): Texture2D.cpp already unconditionally calls
+            // backend_->ShareCpuPixels(cpuPixels_) on every pixel upload -- previously silently
+            // discarded by the shared base-class no-op default. Storing it here lets
+            // recreate_gl_resource() restore level 0 exactly like EasyGLTextureBackend::
+            // recreate_gl_resource() does (mip levels beyond 0 are NOT restored -- matches that
+            // same, real, pre-existing EasyGL limitation exactly, not a new gap introduced here).
+            std::shared_ptr<std::vector<uint8_t>> sharedPixels_;
+            OpenGL2GraphicsBackend* backend_ = nullptr;
 
-            explicit Tex(const ImageData& data)
+            explicit Tex(OpenGL2GraphicsBackend* backend, const ImageData& data)
                 : w(data.width), h(data.height), mipLevels(data.mipLevels > 0 ? data.mipLevels : 1)
+                , backend_(backend)
             {
                 glGenTextures(1, &id);
                 glBindTexture(GL_TEXTURE_2D, id);
@@ -834,14 +863,24 @@ namespace CNA::Internal::Backends::OpenGL2
                 // beyond 0.
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.pixels.data());
+                if (backend_) backend_->RegisterRecoverable(this);
             }
 
-            ~Tex() override { if (id) glDeleteTextures(1, &id); }
+            ~Tex() override
+            {
+                if (backend_) backend_->UnregisterRecoverable(this);
+                if (id) glDeleteTextures(1, &id);
+            }
 
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
             SDL_Texture* GetNativeTexture() const override { return nullptr; }
             void BindGL() const override { glBindTexture(GL_TEXTURE_2D, id); }
+
+            void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override
+            {
+                sharedPixels_ = std::move(pixels);
+            }
 
             void UpdatePixels(const uint8_t* pixels, int stride) override
             {
@@ -867,6 +906,23 @@ namespace CNA::Internal::Backends::OpenGL2
             {
                 glBindTexture(GL_TEXTURE_2D, id);
                 glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, levelW, levelH, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+            }
+
+            void release_gl_handle_only() override { id = 0; }
+
+            void recreate_gl_resource() override
+            {
+                glGenTextures(1, &id);
+                glBindTexture(GL_TEXTURE_2D, id);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
+                if (sharedPixels_ && !sharedPixels_->empty())
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, sharedPixels_->data());
+                else
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
             }
         };
 
@@ -898,7 +954,7 @@ namespace CNA::Internal::Backends::OpenGL2
         // full mip chain is pre-allocated, then regenerated from level 0 on unbind) -- mirrors
         // EasyGLRenderTargetBackend's identical resolve-then-mipmap order (FNA3D's own
         // OPENGL_ResolveTarget behavior).
-        class RenderTarget final : public IRenderTargetBackend
+        class RenderTarget final : public IRenderTargetBackend, public RecoverableResource
         {
         public:
             GLuint fbo{};
@@ -911,10 +967,25 @@ namespace CNA::Internal::Backends::OpenGL2
             int h{};
             int levelCount{1};
             int multiSampleCount{};
+            int depthFormat{};
+            OpenGL2GraphicsBackend* backend_ = nullptr;
 
-            RenderTarget(int width, int height, int depthFormat, bool mipMap, int requestedSamples)
+            RenderTarget(OpenGL2GraphicsBackend* backend, int width, int height, int depthFmt,
+                        bool mipMap, int requestedSamples)
                 : w(width), h(height), levelCount(mipMap ? CalculateRenderTargetMipLevels(width, height) : 1),
-                  multiSampleCount(requestedSamples)
+                  multiSampleCount(requestedSamples), depthFormat(depthFmt), backend_(backend)
+            {
+                CreateResources();
+                if (backend_) backend_->RegisterRecoverable(this);
+            }
+
+            // plan_opengl2.md (context-loss recovery): the constructor's own allocation logic,
+            // extracted so recreate_gl_resource() can reuse it verbatim -- mirrors
+            // EasyGLRenderTargetBackend::CreateResources()'s identical role. A render target's
+            // GPU-rendered content cannot be CPU-shadowed (unlike VB/IB/Texture2D), so recreation
+            // is always blank -- matches EasyGLRenderTargetBackend::recreate_gl_resource()'s own
+            // real, pre-existing limitation exactly, not a new gap introduced here.
+            void CreateResources()
             {
                 if (multiSampleCount > 0)
                 {
@@ -983,12 +1054,20 @@ namespace CNA::Internal::Backends::OpenGL2
 
             ~RenderTarget() override
             {
+                if (backend_) backend_->UnregisterRecoverable(this);
                 if (depthRbo) glDeleteRenderbuffers(1, &depthRbo);
                 if (msaaColorRbo) glDeleteRenderbuffers(1, &msaaColorRbo);
                 if (resolveFbo) glDeleteFramebuffers(1, &resolveFbo);
                 if (fbo) glDeleteFramebuffers(1, &fbo);
                 if (colorTex) glDeleteTextures(1, &colorTex);
             }
+
+            void release_gl_handle_only() override
+            {
+                fbo = colorTex = depthRbo = msaaColorRbo = msaaDepthRbo = resolveFbo = 0;
+            }
+
+            void recreate_gl_resource() override { CreateResources(); }
 
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
@@ -1041,13 +1120,22 @@ namespace CNA::Internal::Backends::OpenGL2
         // Desktop GL 2.1 has the real ARB_occlusion_query GL_SAMPLES_PASSED target (core since
         // GL 1.5), giving an exact pixel count -- unlike EasyGLGraphicsBackend's GLES3
         // GL_ANY_SAMPLES_PASSED, which can only report 0 or 1.
-        class OcclusionQuery final : public IOcclusionQueryBackend
+        class OcclusionQuery final : public IOcclusionQueryBackend, public RecoverableResource
         {
         public:
             GLuint id{};
+            OpenGL2GraphicsBackend* backend_ = nullptr;
 
-            OcclusionQuery() { glGenQueries(1, &id); }
-            ~OcclusionQuery() override { if (id) glDeleteQueries(1, &id); }
+            explicit OcclusionQuery(OpenGL2GraphicsBackend* backend) : backend_(backend)
+            {
+                glGenQueries(1, &id);
+                if (backend_) backend_->RegisterRecoverable(this);
+            }
+            ~OcclusionQuery() override
+            {
+                if (backend_) backend_->UnregisterRecoverable(this);
+                if (id) glDeleteQueries(1, &id);
+            }
 
             void Begin() override { glBeginQuery(GL_SAMPLES_PASSED, id); }
             void End() override { glEndQuery(GL_SAMPLES_PASSED); }
@@ -1067,6 +1155,13 @@ namespace CNA::Internal::Backends::OpenGL2
                 glGetQueryObjectuiv(id, GL_QUERY_RESULT, &result);
                 return static_cast<int>(result);
             }
+
+            // plan_opengl2.md (context-loss recovery): a query result is inherently ephemeral
+            // (valid only for the single draw sequence between Begin/End) -- there is no CPU-side
+            // "content" to shadow, matching EasyGLOcclusionQueryBackend's own identical
+            // regen-only recreate_gl_resource().
+            void release_gl_handle_only() override { id = 0; }
+            void recreate_gl_resource() override { glGenQueries(1, &id); }
         };
 
         // GL_TEXTURE_CUBE_MAP (ARB_texture_cube_map, core since GL 1.3). CubeMapFace's own
@@ -1133,7 +1228,7 @@ namespace CNA::Internal::Backends::OpenGL2
         // across all 6 faces (matches the common convention of clearing depth per-face rather
         // than needing 6 independent depth buffers). Single-sample only -- MSAA cube render
         // targets are a follow-up item (plan_opengl2.md), unlike RenderTarget2D's own MSAA support.
-        class RenderTargetCubeBackend final : public IRenderTargetCubeBackend
+        class RenderTargetCubeBackend final : public IRenderTargetCubeBackend, public RecoverableResource
         {
         public:
             GLuint fbo{};
@@ -1142,9 +1237,20 @@ namespace CNA::Internal::Backends::OpenGL2
             int size{};
             int levelCount{1};
             int boundFace{-1};
+            int depthFormat{};
+            OpenGL2GraphicsBackend* backend_ = nullptr;
 
-            RenderTargetCubeBackend(int cubeSize, int depthFormat, bool mipMap)
+            RenderTargetCubeBackend(OpenGL2GraphicsBackend* backend, int cubeSize, int depthFmt, bool mipMap)
                 : size(cubeSize), levelCount(mipMap ? CalculateRenderTargetMipLevels(cubeSize, cubeSize) : 1)
+                , depthFormat(depthFmt), backend_(backend)
+            {
+                CreateResources();
+                if (backend_) backend_->RegisterRecoverable(this);
+            }
+
+            // plan_opengl2.md (context-loss recovery): see RenderTarget::CreateResources's
+            // identical doc comment -- content is not shadow-able, recreation is always blank.
+            void CreateResources()
             {
                 glGenTextures(1, &colorTex);
                 glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex);
@@ -1183,10 +1289,15 @@ namespace CNA::Internal::Backends::OpenGL2
 
             ~RenderTargetCubeBackend() override
             {
+                if (backend_) backend_->UnregisterRecoverable(this);
                 if (depthRbo) glDeleteRenderbuffers(1, &depthRbo);
                 if (fbo) glDeleteFramebuffers(1, &fbo);
                 if (colorTex) glDeleteTextures(1, &colorTex);
             }
+
+            void release_gl_handle_only() override { fbo = colorTex = depthRbo = 0; boundFace = -1; }
+
+            void recreate_gl_resource() override { CreateResources(); }
 
             int GetSize() const override { return size; }
             void BindGL() const override { glBindTexture(GL_TEXTURE_CUBE_MAP, colorTex); }
@@ -1298,7 +1409,7 @@ namespace CNA::Internal::Backends::OpenGL2
             }
         };
 
-        class VB final : public IVertexBufferBackend
+        class VB final : public IVertexBufferBackend, public RecoverableResource
         {
         public:
             GLuint id{};
@@ -1315,9 +1426,23 @@ namespace CNA::Internal::Backends::OpenGL2
             // VertexBuffer::SetDataRaw() -- see SetVertexDeclaration() below and
             // BindVertexAttributesForDeclaration()'s own doc comment for how this is consumed.
             std::vector<VertexElement> declaration;
+            // plan_opengl2.md (context-loss recovery): full copy of the last uploaded content,
+            // used by recreate_gl_resource() to restore it after a lost GL context -- mirrors
+            // EasyGLVertexBufferBackend's own cpu_data_ member exactly.
+            std::vector<uint8_t> cpuShadow_;
+            OpenGL2GraphicsBackend* backend_ = nullptr;
 
-            explicit VB(int vertexCapacity = 0) : capacity(vertexCapacity) { glGenBuffers(1, &id); }
-            ~VB() override { if (id) glDeleteBuffers(1, &id); }
+            explicit VB(OpenGL2GraphicsBackend* backend, int vertexCapacity = 0)
+                : capacity(vertexCapacity), backend_(backend)
+            {
+                glGenBuffers(1, &id);
+                if (backend_) backend_->RegisterRecoverable(this);
+            }
+            ~VB() override
+            {
+                if (backend_) backend_->UnregisterRecoverable(this);
+                if (id) glDeleteBuffers(1, &id);
+            }
 
             void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override
             {
@@ -1330,6 +1455,11 @@ namespace CNA::Internal::Backends::OpenGL2
                 count = vertex_count;
                 stride = stride_in_bytes;
                 const auto byteCount = static_cast<GLsizeiptr>(vertex_count) * static_cast<GLsizeiptr>(stride_in_bytes);
+                if (byteCount > 0)
+                {
+                    cpuShadow_.resize(static_cast<std::size_t>(byteCount));
+                    std::memcpy(cpuShadow_.data(), data, static_cast<std::size_t>(byteCount));
+                }
                 glBindBuffer(GL_ARRAY_BUFFER, id);
                 if (options == SetDataOptions::Discard)
                 {
@@ -1362,9 +1492,23 @@ namespace CNA::Internal::Backends::OpenGL2
             }
 
             int GetVertexCount() const override { return count; }
+
+            void release_gl_handle_only() override { id = 0; gpuAllocated = false; }
+
+            void recreate_gl_resource() override
+            {
+                glGenBuffers(1, &id);
+                if (!cpuShadow_.empty())
+                {
+                    glBindBuffer(GL_ARRAY_BUFFER, id);
+                    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cpuShadow_.size()),
+                                cpuShadow_.data(), GL_DYNAMIC_DRAW);
+                    gpuAllocated = true;
+                }
+            }
         };
 
-        class IB final : public IIndexBufferBackend
+        class IB final : public IIndexBufferBackend, public RecoverableResource
         {
         public:
             GLuint id{};
@@ -1372,15 +1516,31 @@ namespace CNA::Internal::Backends::OpenGL2
             bool thirtyTwoBit{};
             int capacity{};   // index capacity requested at CreateIndexBufferNN() time; see VB::capacity.
             bool gpuAllocated{};
+            // plan_opengl2.md (context-loss recovery): see VB::cpuShadow_'s identical doc comment.
+            std::vector<uint8_t> cpuShadow_;
+            OpenGL2GraphicsBackend* backend_ = nullptr;
 
-            explicit IB(bool isThirtyTwoBit, int indexCapacity = 0)
-                : thirtyTwoBit(isThirtyTwoBit), capacity(indexCapacity) { glGenBuffers(1, &id); }
-            ~IB() override { if (id) glDeleteBuffers(1, &id); }
+            explicit IB(OpenGL2GraphicsBackend* backend, bool isThirtyTwoBit, int indexCapacity = 0)
+                : thirtyTwoBit(isThirtyTwoBit), capacity(indexCapacity), backend_(backend)
+            {
+                glGenBuffers(1, &id);
+                if (backend_) backend_->RegisterRecoverable(this);
+            }
+            ~IB() override
+            {
+                if (backend_) backend_->UnregisterRecoverable(this);
+                if (id) glDeleteBuffers(1, &id);
+            }
 
             void uploadWithOptions(const void* data, int index_count, GLsizeiptr elemSize, SetDataOptions options)
             {
                 count = index_count;
                 const auto byteCount = static_cast<GLsizeiptr>(index_count) * elemSize;
+                if (byteCount > 0)
+                {
+                    cpuShadow_.resize(static_cast<std::size_t>(byteCount));
+                    std::memcpy(cpuShadow_.data(), data, static_cast<std::size_t>(byteCount));
+                }
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, id);
                 if (options == SetDataOptions::Discard)
                 {
@@ -1428,6 +1588,20 @@ namespace CNA::Internal::Backends::OpenGL2
 
             int GetIndexCount() const override { return count; }
             bool IsThirtyTwoBit() const override { return thirtyTwoBit; }
+
+            void release_gl_handle_only() override { id = 0; gpuAllocated = false; }
+
+            void recreate_gl_resource() override
+            {
+                glGenBuffers(1, &id);
+                if (!cpuShadow_.empty())
+                {
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, id);
+                    glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(cpuShadow_.size()),
+                                cpuShadow_.data(), GL_DYNAMIC_DRAW);
+                    gpuAllocated = true;
+                }
+            }
         };
 
         // Shared by Sprite::Draw()'s built-in path and DrawWithCustomEffect(): the sprite quad's
@@ -1706,8 +1880,10 @@ namespace CNA::Internal::Backends::OpenGL2
     }
 
     OpenGL2GraphicsBackend::OpenGL2GraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                     CnaPresentationMode presentationMode, int swapInterval)
+                                                     CnaPresentationMode presentationMode, bool contextRecoveryEnabled,
+                                                     int swapInterval)
         : window_(window), virtualWidth_(virtualWidth), virtualHeight_(virtualHeight), presentationMode_(presentationMode)
+        , contextRecoveryEnabled_(contextRecoveryEnabled)
     {
         if (!window_)
             throw std::runtime_error("OPENGL2 backend: null SDL window");
@@ -2211,11 +2387,85 @@ namespace CNA::Internal::Backends::OpenGL2
     }
 
     void OpenGL2GraphicsBackend::SetPresentationMode(int mode) { presentationMode_ = static_cast<CnaPresentationMode>(mode); }
-    void OpenGL2GraphicsBackend::SetSwapInterval(int interval) { SDL_GL_SetSwapInterval(interval); }
+    void OpenGL2GraphicsBackend::SetSwapInterval(int interval) { swapInterval_ = interval; SDL_GL_SetSwapInterval(interval); }
 
-    std::unique_ptr<ITextureBackend> OpenGL2GraphicsBackend::CreateTexture(const ImageData& data) { return std::make_unique<Tex>(data); }
+    void OpenGL2GraphicsBackend::RegisterRecoverable(RecoverableResource* resource)
+    {
+        if (contextRecoveryEnabled_ && resource) recoverableResources_.push_back(resource);
+    }
+
+    void OpenGL2GraphicsBackend::UnregisterRecoverable(RecoverableResource* resource)
+    {
+        auto it = std::find(recoverableResources_.begin(), recoverableResources_.end(), resource);
+        if (it != recoverableResources_.end()) recoverableResources_.erase(it);
+    }
+
+    void OpenGL2GraphicsBackend::SetContextRecoveryEnabled(bool enabled) { contextRecoveryEnabled_ = enabled; }
+
+    void OpenGL2GraphicsBackend::DebugSimulateContextLoss()
+    {
+        // 1. Every registered resource drops its GL handle WITHOUT calling any gl* function --
+        // the context is still technically valid here, but about to be destroyed, and per
+        // RecoverableResource's own contract no gl* call is safe once this loop starts (matches
+        // EasyGLGraphicsBackend::DebugSimulateContextLoss's identical ordering/reasoning).
+        for (RecoverableResource* resource : recoverableResources_)
+            resource->release_gl_handle_only();
+
+        // Built-in lazily-created programs/textures are backend-owned, not registry-tracked --
+        // reset directly so ensurePrograms()/ensureDefaultWhiteTextures() recreate them below
+        // (mirrors EasyGLGraphicsBackend's own prog_colored_.reset_no_gl() etc. pattern exactly).
+        colorProgram_ = texturedProgram_ = dualTextureProgram_ = litProgram_ = 0;
+        envMapProgram_ = skinnedProgram_ = pbrProgram_ = pbrSkinnedProgram_ = 0;
+        defaultWhiteTexture2D_ = defaultWhiteTextureCube_ = defaultFlatNormalTexture2D_ = 0;
+        mrtFboReady_ = false;
+        mrtFbo_ = 0;
+
+        // 2. Destroy and recreate the SDL GL context.
+        if (context_)
+        {
+            SDL_GL_MakeCurrent(window_, nullptr);
+            SDL_GL_DestroyContext(context_);
+            context_ = nullptr;
+        }
+        context_ = SDL_GL_CreateContext(window_);
+        if (!context_)
+            throw std::runtime_error(std::string("OPENGL2: SDL_GL_CreateContext failed during debug context loss: ") + SDL_GetError());
+        SDL_GL_MakeCurrent(window_, context_);
+
+        // 3. Reload GL function pointers (matches LoadWin32GLExtensions()/LoadInstancingExtensions()'s
+        // own constructor-time call, since a fresh context has no previously-resolved proc
+        // addresses -- reassigning these to nullptr first isn't needed, SDL_GL_GetProcAddress is
+        // safe to call again and simply re-resolves the same (or now-current-context) addresses).
+#if defined(_WIN32)
+        LoadWin32GLExtensions();
+#endif
+        LoadInstancingExtensions();
+        SetSwapInterval(swapInterval_);
+        ensurePrograms();
+        ensureDefaultWhiteTextures();
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+
+        // 4. Every registered resource recreates its GL object from whatever CPU-side shadow it
+        // kept (VB/IB/Tex) or blank (RenderTarget/RenderTargetCubeBackend/OcclusionQuery -- see
+        // each class's own recreate_gl_resource() doc comment for why).
+        for (RecoverableResource* resource : recoverableResources_)
+            resource->recreate_gl_resource();
+    }
+
+    void OpenGL2GraphicsBackend::DebugRestoreContext()
+    {
+        // Desktop loss+restore is a single atomic operation (matches
+        // EasyGLGraphicsBackend::DebugRestoreContext's identical delegation) -- there is no
+        // separate "restore" step on desktop GL the way there is for WebGL's asynchronous
+        // browser-driven context-restore event.
+        DebugSimulateContextLoss();
+    }
+
+    std::unique_ptr<ITextureBackend> OpenGL2GraphicsBackend::CreateTexture(const ImageData& data) { return std::make_unique<Tex>(this, data); }
     std::unique_ptr<ISpriteBatchBackend> OpenGL2GraphicsBackend::CreateSpriteBatch() { return std::make_unique<Sprite>(this); }
-    std::unique_ptr<IOcclusionQueryBackend> OpenGL2GraphicsBackend::CreateOcclusionQuery() { return std::make_unique<OcclusionQuery>(); }
+    std::unique_ptr<IOcclusionQueryBackend> OpenGL2GraphicsBackend::CreateOcclusionQuery() { return std::make_unique<OcclusionQuery>(this); }
 
     std::unique_ptr<ITextureCubeBackend> OpenGL2GraphicsBackend::CreateTextureCube(int size, bool mipMap, int /*surfaceFormat*/)
     {
@@ -2238,7 +2488,7 @@ namespace CNA::Internal::Backends::OpenGL2
     std::unique_ptr<IRenderTargetBackend> OpenGL2GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<RenderTarget>(w, h, depthFormat, mipMap, multiSampleCount);
+        return std::make_unique<RenderTarget>(this, w, h, depthFormat, mipMap, multiSampleCount);
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> OpenGL2GraphicsBackend::CreateRenderTargetCube(
@@ -2247,7 +2497,7 @@ namespace CNA::Internal::Backends::OpenGL2
         // plan_opengl2.md follow-up: MSAA cube render targets are not implemented (unlike
         // RenderTarget2D's own MSAA support) -- multiSampleCount is accepted (matching the
         // interface signature) but ignored.
-        return std::make_unique<RenderTargetCubeBackend>(size, depthFormat, mipMap);
+        return std::make_unique<RenderTargetCubeBackend>(this, size, depthFormat, mipMap);
     }
 
     void OpenGL2GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
@@ -2429,9 +2679,9 @@ namespace CNA::Internal::Backends::OpenGL2
     void OpenGL2GraphicsBackend::SetBlendEnabled(bool enabled) { enabled ? glEnable(GL_BLEND) : glDisable(GL_BLEND); }
     void OpenGL2GraphicsBackend::SetDepthWriteEnabled(bool enabled) { glDepthMask(enabled ? GL_TRUE : GL_FALSE); }
 
-    std::unique_ptr<IVertexBufferBackend> OpenGL2GraphicsBackend::CreateVertexBuffer(int vertex_capacity) { return std::make_unique<VB>(vertex_capacity); }
-    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer16(int index_capacity) { return std::make_unique<IB>(false, index_capacity); }
-    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer32(int index_capacity) { return std::make_unique<IB>(true, index_capacity); }
+    std::unique_ptr<IVertexBufferBackend> OpenGL2GraphicsBackend::CreateVertexBuffer(int vertex_capacity) { return std::make_unique<VB>(this, vertex_capacity); }
+    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer16(int index_capacity) { return std::make_unique<IB>(this, false, index_capacity); }
+    std::unique_ptr<IIndexBufferBackend> OpenGL2GraphicsBackend::CreateIndexBuffer32(int index_capacity) { return std::make_unique<IB>(this, true, index_capacity); }
 
     namespace
     {
@@ -3065,6 +3315,7 @@ namespace CNA::Internal::Backends
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
         return std::make_unique<OpenGL2::OpenGL2GraphicsBackend>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
+            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
+            args.contextRecoveryEnabled, args.swapInterval);
     }
 }

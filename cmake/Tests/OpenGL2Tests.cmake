@@ -195,4 +195,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL2")
     cna_opengl2_test(cna_test_opengl2_instancedmodel examples/opengl2_instancedmodel_test.cpp)
     cna_register_backend_test(NAME OpenGL2_InstancedModel COMMAND cna_test_opengl2_instancedmodel
         TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl2.md: real context-loss recovery proof via DebugSimulateContextLoss().
+    cna_opengl2_test(cna_test_opengl2_context_loss_recovery examples/opengl2_context_loss_recovery_test.cpp)
+    cna_register_backend_test(NAME OpenGL2_ContextLossRecovery COMMAND cna_test_opengl2_context_loss_recovery
+        TIMEOUT 60 LABELS "OpenGL2" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -696,6 +696,10 @@ possibilities of OpenGL 2"):
     own 4x4 world transform from a per-instance vertex stream, drawn in ONE
     `DrawInstancedPrimitives` call; a per-instance-varying lighting readback (translate-only vs.
     rotated-away-from-light) proves genuine per-instance data. 2/2 PASS.
+  - `OpenGL2_ContextLossRecovery` -- real `DebugSimulateContextLoss()` recovery: pre-existing
+    VertexBuffer/IndexBuffer/Texture2D content survives (CPU-shadow restore), brand-new resources
+    created after the loss work correctly, a RenderTarget2D created after the loss renders and
+    samples correctly. 8/8 PASS.
 - The pre-existing `examples/demo_2d` app (`cna_demo_2d`, window title "CNA 2D Demo") builds and
   runs end-to-end against this backend: real PNG texture load, ~50-100 animated rotating/scaling
   alpha-blended sprites, audio, `--smoke N` clean exit. Screenshot captured via a temporary
@@ -704,18 +708,20 @@ possibilities of OpenGL 2"):
   except `cna_demo_xact`, which fails only at its Content-copy POST_BUILD step because
   `examples/demo_xact/Content/` does not exist in this checkout at all (never committed to git) --
   pre-existing, unrelated to this backend or this branch.
-- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5541 cases
-  as of session 10) has ~225 pre-existing/expected failures (± the pre-existing
+- The generic (backend-agnostic) `CnaTests` gtest target run in full under this build (5542 cases
+  as of session 11) has ~225 pre-existing/expected failures (± the pre-existing
   `ENetDiscoveryServiceTest` parallel-execution flakiness noted below), none an actual regression:
   ~220 are missing local test fixture files (media/audio/video/XNB content assets absent from this
   checkout, e.g. `tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_16bit`) that
-  fail identically regardless of graphics backend, and 1 (`GraphicsDeviceCapabilityTest.
+  fail identically regardless of graphics backend, 1 (`GraphicsDeviceCapabilityTest.
   DoesNotSupportWireFrame`) is that same shared test file's own documented EasyGL-only assumption
   ("this test target only ever builds against a fully 3D-capable backend (EasyGL by default on
-  Linux)"). Session 8 briefly added a second case here (`.SupportsMultipleRenderTargets`, while
+  Linux)") -- session 8 briefly added a second case here (`.SupportsMultipleRenderTargets`, while
   `MultipleRenderTargets` correctly but temporarily reported `false`); session 9's real MRT
-  implementation (see above) made that assertion pass again, so only `DoesNotSupportWireFrame`
-  remains in this category.
+  implementation made that assertion pass again -- and 1
+  (`GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected`) is an unrelated
+  compile-definition check already failing in session 8's own captured baseline, untouched by any
+  work in this plan.
 
 ## Status: EasyGL capability audit + 6 real gaps fixed (2026-07-20, session 8)
 With all 6 explicitly-requested follow-up items from session 7 complete, per the standing
@@ -915,6 +921,86 @@ differs from session 9's 226 only by ±1, consistent with the same pre-existing
 `ctest -R GraphicsDeviceCapabilityTest` re-run confirms only the already-documented
 `DoesNotSupportWireFrame` remains failed in that suite, no new regression.
 
+## Status: context-loss recovery (2026-07-20, session 11)
+User-directed follow-up: implement real context-loss recovery (the last of the 3 big items
+deferred in session 8), picked last after MRT and instancing.
+
+Investigated EasyGL's own real architecture before implementing anything (easy-gl's
+`ResourceRegistry.hpp`/`RecoverableResource.hpp`, both external to this repo) rather than guessing
+at scope: a `RecoverableResource` interface (`release_gl_handle_only()`/`recreate_gl_resource()`)
+plus a simple `std::vector`-based registry that every resource registers with at construction and
+unregisters from at destruction. Reimplemented this locally in OpenGL2 (a plain
+`class RecoverableResource` forward-declared in the header, fully defined in the .cpp) rather than
+depending on EasyGL/easy-gl, consistent with this backend's own "deliberately independent of
+EasyGL" design.
+
+Critically, checking EasyGL's OWN real scope FIRST (rather than assuming "recover everything")
+avoided over-building: EasyGL registers `VB`/`IB`/`Tex`(Texture2D)/`RenderTarget`/
+`RenderTargetCubeBackend`/`OcclusionQuery` with its registry, but does **NOT** register
+`TextureCube`/`Texture3D` backends or custom `ShaderEffect` programs at all -- those are simply not
+recoverable in EasyGL either. OpenGL2 matches this exact real boundary rather than inventing a
+broader one:
+- `VB`/`IB`: a new `cpuShadow_` (full copy of the last uploaded content, mirrors
+  `EasyGLVertexBufferBackend::cpu_data_`) lets `recreate_gl_resource()` fully restore content.
+- `Tex` (Texture2D): implements `ITextureBackend::ShareCpuPixels()` for the first time --
+  `Texture2D.cpp` already unconditionally calls `backend_->ShareCpuPixels(cpuPixels_)` on every
+  pixel upload, previously silently discarded by the shared base-class no-op default. Storing the
+  shared `shared_ptr` lets level 0 be restored exactly like `EasyGLTextureBackend::
+  recreate_gl_resource()` does (mip levels beyond 0 are NOT restored -- matches that same,
+  real, pre-existing EasyGL limitation, not a new gap).
+- `RenderTarget`/`RenderTargetCubeBackend`: GPU-rendered content can't be CPU-shadowed --
+  `recreate_gl_resource()` just re-runs the constructor's own allocation logic (extracted into a
+  reusable `CreateResources()` method, mirroring `EasyGLRenderTargetBackend::CreateResources()`),
+  producing a fresh, correctly-sized, but BLANK target -- matches EasyGL's own real limitation
+  exactly.
+- `OcclusionQuery`: trivial regen, no data to restore (a query result is inherently ephemeral).
+- `TextureCube`/`Texture3D`/custom `ShaderEffect` (`EffectBackend`): deliberately NOT made
+  recoverable, matching EasyGL's own real, current limitation for these types exactly.
+
+`DebugSimulateContextLoss()`: notifies every registered resource (`release_gl_handle_only()`),
+resets the backend's own lazily-created built-in program handles and default white/normal-map
+textures to 0 (these are backend-owned, not registry-tracked -- mirrors
+`EasyGLGraphicsBackend::DebugSimulateContextLoss()`'s own direct `prog_colored_.reset_no_gl()`-
+style reset for the same category of resource), destroys and recreates the SDL GL context, reloads
+this file's own GL function pointers (`LoadWin32GLExtensions()`/`LoadInstancingExtensions()`),
+reapplies the swap interval (added a new `swapInterval_` member -- `SDL_GL_SetSwapInterval` is
+per-CONTEXT state that needed remembering across the destroy/recreate, previously only ever a
+constructor parameter, never stored), rebuilds programs/default textures, then notifies every
+registered resource again (`recreate_gl_resource()`). `DebugRestoreContext()` simply delegates
+back to `DebugSimulateContextLoss()` -- desktop loss+restore is atomic, matching EasyGL's own
+identical design (distinct from D3D9's real two-phase `DeviceLostException` lifecycle, which is a
+D3D9-specific real API constraint EasyGL doesn't have either).
+
+Also wired `GraphicsBackendCreateArgs::contextRecoveryEnabled` through to the constructor (matches
+`EasyGLGraphicsBackend`'s own identical constructor parameter -- previously silently dropped, the
+member always defaulted to `true` regardless of what a game's `GraphicsDeviceManager`/
+`PresentationParameters` actually requested). Deliberately did NOT wire
+`GraphicsBackendCreateArgs::deviceEventCallback` (the mechanism that fires real
+`GraphicsDevice.DeviceLost`/`DeviceResetting`/`DeviceReset` XNA events) -- confirmed EasyGL itself
+doesn't wire this either (it is a D3D9-specific enhancement per that enum's own doc comment: "Nine
+of the ten backends never call this"), so adding it here would be scope creep beyond the
+EasyGL-parity mandate this whole session has followed.
+
+No existing EasyGL reference test exercises `DebugSimulateContextLoss()` directly (only
+`dx3_no3d_test.cpp`/`d3d9_smoke_test.cpp` do, for their own very different 2D-only-no-op and D3D9
+two-phase-lifecycle models) -- `opengl2_context_loss_recovery_test.cpp` is authored fresh: baseline
+VB/IB (red quad) and Texture2D (green pixel) render correctly; `DebugSimulateContextLoss()` doesn't
+throw; the SAME pre-existing VB/IB/Texture2D objects (no `SetData` call after the loss) still
+render correctly, proving genuine CPU-shadow-based content restoration; brand-new VB/IB/Texture2D
+created AFTER the loss also render correctly, proving the backend itself is fully functional
+post-recovery; a `RenderTarget2D` created after the loss can be rendered into and sampled back
+correctly. `OpenGL2_ContextLossRecovery` 8/8 PASS on the first real run.
+
+Full `OpenGL2` suite: 32/32 PASS (up from 31). Full unfiltered `CnaTests` sweep (5542 cases): 226
+failures, same as session 10's count; a dedicated `ctest -R GraphicsDeviceCapabilityTest` re-run
+confirms only the already-documented `DoesNotSupportWireFrame` remains failed, and
+`GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected`'s failure was already
+present in session 8's own captured failure list (a pre-existing, compile-definition-related
+failure, unrelated to anything touched this session) -- no new regression from the resource-class
+constructor signature changes (`VB`/`IB`/`Tex`/`RenderTarget`/`RenderTargetCubeBackend`/
+`OcclusionQuery` all now take a backend pointer) or the `OpenGL2GraphicsBackend` constructor's new
+`contextRecoveryEnabled`/`swapInterval_` handling.
+
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
 - SDL-created OpenGL 2.1 compatibility context. SDL is only window/context glue; rendering is direct OpenGL.
@@ -984,6 +1070,11 @@ differs from session 9's 226 only by ±1, consistent with the same pre-existing
   only its intended attachment instead of broadcasting to every bound draw buffer).
 - Real GPU hardware instancing (`DrawInstancedPrimitivesEx`, custom-`ShaderEffect` path only, via
   `GL_ARB_draw_instanced`/`GL_ARB_instanced_arrays`; see `OpenGL2_InstancedModel` above).
+- Real context-loss recovery (`DebugSimulateContextLoss`/`DebugRestoreContext`/
+  `SetContextRecoveryEnabled`): VertexBuffer/IndexBuffer/Texture2D content genuinely survives via a
+  CPU shadow; RenderTarget2D/RenderTargetCube/OcclusionQuery recreate (blank, matching EasyGL's own
+  real limitation); TextureCube/Texture3D/custom ShaderEffect programs are not recoverable, also
+  matching EasyGL's own real limitation exactly (see `OpenGL2_ContextLossRecovery` above).
 - No EasyGL dependency.
 
 ## Follow-up work (toward EasyGL feature parity, within OpenGL 2.1's real capabilities)
@@ -1003,17 +1094,8 @@ differs from session 9's 226 only by ±1, consistent with the same pre-existing
 - ~~Real Multiple Render Targets (MRT)~~ -- **DONE (session 9, see status section below)**.
 - ~~`DrawInstancedPrimitivesEx` (hardware instancing)~~ -- **DONE (session 10, see status section
   below)**.
-- **Context-loss recovery (`DebugSimulateContextLoss`/`DebugRestoreContext`/
-  `SetContextRecoveryEnabled`) is entirely unimplemented on OpenGL2** (all three fall back to
-  no-op base-class defaults). EasyGL's version of this is a substantial, cross-cutting
-  architectural feature -- every EasyGL resource class (`VB`/`IB`/`Tex`/render targets/programs)
-  implements a `release_gl_handle_only()`/`recreate_gl_resource()` pair plus a shared
-  `ResourceRegistry` that iterates every live resource on simulated loss/restore, and
-  `ShareCpuPixels()` exists specifically so a lost texture can re-upload from a shared CPU shadow
-  instead of a duplicate copy. OpenGL2's resource classes (`VB`/`IB`/`Tex`/`RenderTarget`/
-  `RenderTargetCube`/`EffectBackend`) have no such registry today. This is NOT a small bounded fix
-  like anything in session 8 -- it is a full resource-lifecycle redesign touching every backend
-  resource type. Scope as its own multi-part task if ever prioritized; do not attempt piecemeal.
+- ~~Context-loss recovery (`DebugSimulateContextLoss`/`DebugRestoreContext`/
+  `SetContextRecoveryEnabled`)~~ -- **DONE (session 11, see status section below)**.
 - ~~`Texture3D` mip-level support~~ -- **DONE (session 8, see above)**: real per-level GL storage,
   `GL_TEXTURE_MAX_LEVEL` clamp, and a fixed `GetData` readback (`OpenGL2_Texture3D_Mip`).
 - **`TextureCube` mip-level support was re-audited this session and found to already be correct** --

@@ -9,13 +9,21 @@
 
 namespace CNA::Internal::Backends::OpenGL2
 {
+    // plan_opengl2.md (context-loss recovery): mirrors EasyGL's own RecoverableResource/
+    // ResourceRegistry design exactly (see easy-gl's ResourceRegistry.hpp/RecoverableResource.hpp),
+    // deliberately reimplemented locally rather than depending on EasyGL/easy-gl -- consistent with
+    // this backend's own "deliberately independent of EasyGL" scope. Defined fully in the .cpp;
+    // only forward-declared here so OpenGL2GraphicsBackend can hold a registry of them.
+    class RecoverableResource;
+
     // Native desktop OpenGL 2.1 (compatibility profile) backend. See plan_opengl2.md for scope
     // and known follow-up work. Deliberately independent of EasyGL/easy-gl.
     class OpenGL2GraphicsBackend final : public IGraphicsBackend
     {
     public:
         OpenGL2GraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                               CnaPresentationMode presentationMode, int swapInterval);
+                               CnaPresentationMode presentationMode, bool contextRecoveryEnabled,
+                               int swapInterval);
         ~OpenGL2GraphicsBackend() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -105,6 +113,24 @@ namespace CNA::Internal::Backends::OpenGL2
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
+        // plan_opengl2.md (context-loss recovery): scope mirrors EasyGLGraphicsBackend's own real
+        // limitation exactly -- VertexBuffer/IndexBuffer/Texture2D content is restored from a CPU
+        // shadow; RenderTarget2D/RenderTargetCube/OcclusionQuery recreate but their GPU-only
+        // content is genuinely lost (not shadow-able); TextureCube/Texture3D/custom ShaderEffect
+        // programs are NOT recoverable at all (EasyGL itself doesn't register these with its own
+        // ResourceRegistry either -- this is a real, established boundary, not a gap introduced
+        // here). Desktop loss+restore is atomic (matches EasyGL): DebugRestoreContext() delegates
+        // to DebugSimulateContextLoss().
+        void DebugSimulateContextLoss() override;
+        void DebugRestoreContext() override;
+        void SetContextRecoveryEnabled(bool enabled) override;
+
+        // NOXNA: called by every recoverable resource's constructor/destructor (VB/IB/Tex/
+        // RenderTarget/RenderTargetCubeBackend/OcclusionQuery) -- not part of IGraphicsBackend.
+        void RegisterRecoverable(RecoverableResource* resource);
+        void UnregisterRecoverable(RecoverableResource* resource);
+        [[nodiscard]] bool IsContextRecoveryEnabled() const { return contextRecoveryEnabled_; }
+
         // NOXNA: mirrors SdlGpuGraphicsBackend::LogicalViewport/ComputeLogicalViewport exactly
         // (see that backend's own implementation -- the established reference for real
         // Letterbox/Overscan/Stretch semantics in this codebase; EasyGL's own equivalent is a
@@ -127,6 +153,11 @@ namespace CNA::Internal::Backends::OpenGL2
     private:
         SDL_Window* window_{};
         SDL_GLContext context_{};
+        // plan_opengl2.md (context-loss recovery): SDL_GL_SetSwapInterval is per-CONTEXT state --
+        // remembered here so DebugSimulateContextLoss() can reapply the game's actual current
+        // setting to the freshly-created context instead of silently reverting to SDL's own
+        // context-creation default.
+        int swapInterval_{};
         int virtualWidth_{};
         int virtualHeight_{};
         CnaPresentationMode presentationMode_{};
@@ -149,6 +180,17 @@ namespace CNA::Internal::Backends::OpenGL2
         // regeneration on switching away from MRT mode is not supported).
         unsigned mrtFbo_{};
         bool mrtFboReady_{};
+
+        // plan_opengl2.md (context-loss recovery): every currently-live recoverable resource
+        // (VB/IB/Tex/RenderTarget/RenderTargetCubeBackend/OcclusionQuery), registered/unregistered
+        // by its own constructor/destructor -- mirrors EasyGL's own ResourceRegistry exactly,
+        // reimplemented locally (see RecoverableResource's own forward-declaration comment).
+        std::vector<RecoverableResource*> recoverableResources_;
+        // SetContextRecoveryEnabled(false): gates future registrations only (matches
+        // EasyGLGraphicsBackend::SetContextRecoveryEnabled's own doc comment -- "safe to call
+        // after backend creation when no resources have been loaded yet"); resources already
+        // registered before the call stay tracked.
+        bool contextRecoveryEnabled_ = true;
 
         // Calls UnbindAsRenderTarget() on whichever render target (2D or cube) is currently
         // active, if any, and clears both tracking pointers -- shared by SetRenderTarget2D() and
