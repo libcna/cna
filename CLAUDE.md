@@ -370,6 +370,19 @@ After making changes:
 
 Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
 
+### Build locations & caching (mandatory)
+
+- **Always build into the stable in-repo `cmake-build-<variant>/` directories** (one per backend
+  variant). They survive across sessions and allow **incremental** rebuilds — never do a full rebuild
+  when a handful of files changed.
+- **Never build in the session scratchpad / a system temp dir.** Scratchpad is only for throwaway
+  scripts and backups; build artifacts there are discarded, forcing wasteful full rebuilds.
+- **Use `ccache`** when available (`CNA_USE_CCACHE=ON`; pass
+  `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` on a fresh configure if the cache shows it NOTFOUND).
+- **bgfx:** do not re-clone. Prefer a reusable `~/deps/bgfx`; the bgfx `shaderc` tool (needed to
+  regenerate `bgfx_shaders.hpp`) can also be built from `cmake-build-bgfx/_deps/bgfx_cmake-src/`.
+- Cap build parallelism at `-j4` in this sandbox.
+
 ---
 
 ## Git Commits — Always Commit After Finishing a Task
