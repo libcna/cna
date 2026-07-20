@@ -1465,6 +1465,51 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     charreader`'s 3 previously-unpushed commits to `origin` for the first time, as an unavoidable
     side effect of the chosen resolution. Eleventh real, observed CI signal.
 
+58. **Real twelfth CI signal — a genuine `cnametal`-side CMake bug, not a `sharp-runtime` portability
+    gap: `-Wl,--start-group`/`--end-group` is unconditionally unsupported by Apple's linker,
+    regardless of whether a target actually needs it**: with `ReadDecimal()` (item 57) resolved, the
+    build got past `libCNA.a` for the first time and failed linking `cna_demo_2d`/`cna_demo_sound`
+    with `ld: unknown options: --start-group --end-group` / `clang: error: linker command failed`.
+    Authenticated `gh` CLI in this sandbox (user ran `gh auth login` interactively) specifically so
+    CI logs could be pulled directly instead of relayed through pasted, sometimes-truncated terminal
+    output — `gh run view --log-failed` returned nothing usable (empty output, no error, still
+    unexplained), but `gh api /repos/openeggbert/cna/actions/jobs/<id>/logs` fetched the complete
+    raw log successfully, which is what actually located the real `ld:` error two steps before the
+    generic `make: *** [all] Error 2` the pasted log had ended on.
+
+    Traced the cause to `cmake/Examples.cmake`: 25 identical guards of the form
+    `if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)` wrap each demo executable's
+    `target_link_libraries()` call in a hand-written `-Wl,--start-group CNA ${BACKEND_TARGET}
+    -Wl,--end-group`, added historically to resolve a genuine circular symbol dependency for
+    backends where `${BACKEND_TARGET}` calls back into `CNA`-defined symbols (documented at
+    `cmake/CnaLibrary.cmake`'s own D3D11/D3D12/D3D9/SDL_GPU comment block). `MATCHES "GNU|Clang"` is
+    unanchored regex, so it also matches `AppleClang` as a substring — meaning this branch is taken
+    on every macOS build too, unconditionally, even though `METAL` never adds the reverse
+    `BACKEND_TARGET → CNA` edge that makes grouping necessary in the first place (confirmed by
+    checking `cmake/BackendLibraries.cmake`'s `METAL` block, which links only `SDL3::SDL3` and the
+    three Metal frameworks). Reproduced the actual root cause locally, without a Mac, by configuring
+    (not building — `CNA_GRAPHICS_BACKEND=METAL` hard-fails off-Apple by design) a `HEADLESS` build
+    and inspecting the generated `CMakeFiles/cna_demo_2d.dir/link.txt`: it contained the identical
+    `-Wl,--start-group libCNA.a libcna_backend_graphics_headless.a -Wl,--end-group` on this GCC/Linux
+    machine too, proving the bug is generic to the guard's condition, not Metal-specific — Metal is
+    simply the first backend whose CI ever reaches Apple's linker at all.
+
+    Fixed by adding `AND NOT APPLE` to all 25 guards (`sed -i 's/AND NOT WIN32)/AND NOT WIN32 AND NOT
+    APPLE)/'`), routing Apple builds into the same plain `target_link_libraries(target PRIVATE CNA
+    SHARP_RUNTIME)` fallback branch Windows/MSVC already uses successfully — verified safe for every
+    one of the 25 sites by reading the full file end-to-end (every guard has a matching `else()`
+    fallback, none left dangling). Verified two ways: (1) configuring with `-DAPPLE=1` on this Linux
+    machine and confirming `link.txt` no longer contains `--start-group` and instead falls back to
+    CMake's own repeated-archive resolution (`libCNA.a ... libcna_backend_graphics_headless.a
+    SHARP_RUNTIME/libSHARP_RUNTIME.a` listed twice, no group flags) — the same technique Apple's own
+    linker already handles natively; (2) a full real build of `cna_demo_2d`/`cna_demo_sound` on this
+    machine's actual GCC/Linux toolchain (where `NOT APPLE` was already true before this change, so
+    behavior must be provably unchanged) — both link successfully, zero regressions. `SDL_GPU`
+    (which, unlike `METAL`, *does* add the genuine reverse edge and *can* target macOS) is not
+    exercised by any current CI job, so its Apple-linker-group story remains an open, documented gap
+    rather than something this fix silently papered over — flagged here rather than solved
+    speculatively for a combination nothing currently tests. Twelfth real, observed CI signal.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
