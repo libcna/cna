@@ -1070,6 +1070,21 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     stay correctly blocked on Phase 14 (custom `ShaderEffect`), the same conclusion this plan
     reached before, just backed by real code now instead of an open task.
 
+43. **`METAL-30`'s regression-proof trace, done against real pre-rewrite source**: read the actual
+    original pipeline-dispatch code via `git show 08707f81:.../MetalGraphicsBackend.mm` (the very
+    first Metal commit, before Phase 1/2's pipeline-cache rewrite) rather than relying on memory or
+    assumption. Old dispatch: `textured=params&&params->texture0; if(textured){stride==20→pipe3Tex20;
+    ==24→pipe3ColorTex24; ==32→pipe3NormalTex32; else throw} else if(stride!=16) throw; else
+    pipe3Color`. Byte-identical to `SelectMetalPipelineKind()`'s current dispatch for strides
+    16/20/24 — same throw conditions, same textured-gate, only the destination name changed. Stride
+    32 is the one real divergence, and it's already fully documented elsewhere in this plan
+    (`METAL-38`): the old `pipe3NormalTex32` reused the same flat unlit fragment shader as strides
+    20/24 (no lighting existed anywhere in the pre-rewrite backend at all), the new `LitTex32`/
+    `LitTex32VertexLit` is genuinely lit — Phase 3's own deliberate addition, not a silent
+    regression this trace uncovered. `MetalSelectPipelineKindTests.cpp`'s 15 already-passing tests
+    (item 33) now lock the traced dispatch in going forward, closing a task that had been open since
+    Phase 2 first landed.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1363,7 +1378,7 @@ already works and must not be redesigned by mistake.
 | METAL-27 | Build a generic `MTLVertexDescriptor` from a `VertexElement` list via `METAL-14`'s format table — replaces the 4 hand-written `vd16`/`vd20`/`vd24`/`vd32` descriptors with a path that also covers strides 28/36/40/44/48/52/56/68 once Phases 5–8 need them | 🟨→partial ✅ 2026-07-20 — the core attribute-plan logic (`BuildMetalVertexDescriptorPlan`) is real, machine-verified (6/6 `MetalVertexDescriptorPlan.*` tests, cross-validated against the existing hand-written stride-48/52 cases); the final `MTLVertexDescriptor` object construction itself (`vertexDescriptorFromElements()`) is real code but Objective-C-only, so stays 🟨 like every other `.mm`-side piece — see narrative |
 | METAL-28 | Fallback: when `SetVertexDeclaration` was never called, keep the existing stride-based inference for the 4 strides that already work — no regression | 🟨 the existing 8-stride `vertexDescriptorForStride()` switch is completely untouched (provably zero regression), but no live draw path yet *chooses* between it and the new generic builder — see narrative for why that choice is correctly still deferred to Phase 14 |
 | METAL-29 | `selectPipelineKey(stride, elements, GpuDrawParams)` dispatcher replicating `EasyGLGraphicsBackend::SelectProgram()`'s exact precedence (pbr+skinned → pbr → skinned(±vertexlit) → envMapping → dualTexture(stride-24 colored variant) → stride switch 20/24/32(±vertexlit) → default colored) | 🟨 |
-| METAL-30 | Regression-proof: every existing stride-16/20/24/32 path must select byte-identical pipelines before/after the cache rewrite — a Linux-side manual trace against the current 5-pipeline logic, ahead of any macOS build | ⬜ |
+| METAL-30 | Regression-proof: every existing stride-16/20/24/32 path must select byte-identical pipelines before/after the cache rewrite — a Linux-side manual trace against the current 5-pipeline logic, ahead of any macOS build | ✅ **real trace done 2026-07-20**, against the actual pre-rewrite source (`git show 08707f81:.../MetalGraphicsBackend.mm`, the original commit, not assumed from memory): old dispatch was `textured=params&&params->texture0; if(textured){stride==20→pipe3Tex20; ==24→pipe3ColorTex24; ==32→pipe3NormalTex32; else throw} else if(stride!=16) throw; else pipe3Color`. Byte-identical to `SelectMetalPipelineKind()`'s current dispatch for strides 16/20/24 (same throw conditions, same textured-gate, only the destination name changed: `pipe3Color→Colored16`/`pipe3Tex20→Textured20`/`pipe3ColorTex24→ColorTex24`). Stride 32 is the one real, already-fully-documented divergence: old `pipe3NormalTex32` reused the same flat unlit `cna_f3d_texture` fragment shader as strides 20/24 (no lighting existed anywhere in the pre-rewrite backend), new `LitTex32`/`LitTex32VertexLit` is genuinely lit — Phase 3's deliberate, intentional addition (`METAL-38`'s own note already documents this exact swap), not a silent regression. `MetalSelectPipelineKindTests.cpp`'s 15 already-passing tests (item 33's own narrative) lock the new dispatch in going forward. |
 | METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ⬜ |
 | METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ |
 | METAL-33 | Document the expected cache size/no-eviction-needed-for-v1 assumption (mirrors EasyGL's own per-field `Prog3D` bound-variant assumption); flag unbounded-growth as a NOXNA follow-up only if a real pathological case appears | ⬜ |
