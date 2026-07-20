@@ -10,6 +10,17 @@ name: Devices and Sensors Tests
 # GTEST_SKIP() when getIsSupportedProperty() is false, which is always the
 # case on a CI runner with no accelerometer/gyroscope, so they show up as
 # "SKIPPED" rather than needing a separate hardware-only filter.
+#
+# REMED-BUILD-011: also covers CNA::Devices (Clipboard/FileDialog/MessageBox/
+# SystemTray/Camera/DisplayInfo/PowerInfo/SystemInfo/Locale/UrlLauncher —
+# tests/CNA/Devices/), the NOXNA extension surface gated by CNA_DEVICES. Before
+# this fix, this job silently never compiled that surface at all (the
+# devices-ubsan preset never set CNA_DEVICES=ON) and never ran its suites
+# either (DEVICES_GTEST_FILTER below named only Microsoft::Devices suites) —
+# REMED-DEVICES-001's own FileDialog/MessageBox mutex-lifetime regression
+# tests never actually executed under a sanitizer in real CI. Every CNA::Devices
+# test here exercises an injectable test backend (SetBackendForTesting()), not
+# a real native dialog/tray, so this runs headless-safe on a plain runner.
 
 on:
   push:
@@ -18,6 +29,9 @@ on:
       - 'include/Microsoft/Devices/**'
       - 'src/Microsoft/Devices/**'
       - 'tests/Microsoft/Devices/**'
+      - 'include/CNA/Devices/**'
+      - 'src/CNA/Devices/**'
+      - 'tests/CNA/Devices/**'
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'cmake/**'
@@ -27,6 +41,9 @@ on:
       - 'include/Microsoft/Devices/**'
       - 'src/Microsoft/Devices/**'
       - 'tests/Microsoft/Devices/**'
+      - 'include/CNA/Devices/**'
+      - 'src/CNA/Devices/**'
+      - 'tests/CNA/Devices/**'
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'cmake/**'
@@ -38,6 +55,11 @@ env:
   # (DEV-BUILD-002) — every TEST(...) under tests/Microsoft/Devices/, no more
   # and no fewer. Update both places together if a suite is added/renamed.
   DEVICES_GTEST_FILTER: "AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
+  # REMED-BUILD-011: exact-suite-name filter for tests/CNA/Devices/ (the CNA_DEVICES-gated NOXNA
+  # surface) — kept as a second, separate variable rather than folded into DEVICES_GTEST_FILTER so
+  # each stays independently traceable to its own directory, matching this file's existing
+  # one-variable-per-scope convention.
+  CNA_DEVICES_GTEST_FILTER: "CameraTests.*:ClipboardTests.*:DisplayInfoTests.*:FileDialogTests.*:LocaleTests.*:MessageBoxTests.*:PowerInfoTests.*:SystemInfoTests.*:SystemTrayTests.*:UrlLauncherTests.*"
 
 jobs:
   build-and-test:
@@ -110,6 +132,13 @@ jobs:
         working-directory: cna_devices
         run: |
           ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${DEVICES_GTEST_FILTER}"
+
+      # REMED-BUILD-011: separate step (not merged into the filter above) so a failure here is
+      # attributable to the CNA::Devices surface specifically, not the Microsoft::Devices one.
+      - name: Run CNA::Devices test suite
+        working-directory: cna_devices
+        run: |
+          ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${CNA_DEVICES_GTEST_FILTER}"
 
       # Task DEVPERF-001: this job is this project's clean-room reproducibility
       # evidence -- a fresh actions/checkout (no access to any contributor's
