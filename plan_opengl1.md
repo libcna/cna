@@ -74,8 +74,23 @@ shader, no modern-only extension) and were simply never implemented yet:
     logical size; `SetPresentationMode()` a no-op; `TransformWindowToLogical`/
     `TransformLogicalToWindow` never overridden) via the same `FixedHeightDynamicWidth`
     aspect-correct recomputation EasyGL's own `getLogicalSize()` already does.
-14. Add `BasicEffect.DirectionalLight1`/`DirectionalLight2` via `GL_LIGHT1`/`GL_LIGHT2` (`DrawInternal`
-    only ever configures `GL_LIGHT0`, despite `GpuDrawParams` already carrying all 3 lights' data).
+14. ~~Add `BasicEffect.DirectionalLight1`/`DirectionalLight2` via `GL_LIGHT1`/`GL_LIGHT2` (`DrawInternal`
+    only ever configures `GL_LIGHT0`, despite `GpuDrawParams` already carrying all 3 lights' data).~~
+    **Done**: `DrawInternal`'s lit path now also configures `GL_LIGHT1`/`GL_LIGHT2` from
+    `GpuDrawParams::light1Dir`/`light1Diffuse`/`light2Dir`/`light2Diffuse`, the exact same
+    `glEnable`/`glLightfv(GL_DIFFUSE)`/`glLightfv(GL_POSITION)` pattern `GL_LIGHT0` already used.
+    Both are unconditionally enabled whenever the lit path runs -- safe because
+    `FillGpuDrawParams` already zeroes a disabled light's diffuse color (mirroring FNA's own
+    `DirectionalLight.Enabled` setter), so a disabled light1/light2 contributes nothing, matching
+    every other lit-path field's own "zeroed when disabled" convention; no extra per-light enable
+    branching needed. New test `OpenGL1_DirectionalLight12`
+    (`examples/opengl1_directionallight12_test.cpp`) explicitly disables `DirectionalLight0` (so
+    the test cannot pass via the already-working light0 path alone), sets `DirectionalLight1`=red
+    and `DirectionalLight2`=blue both shining straight at a camera-facing quad, and asserts the
+    result is exactly magenta `(255,0,255)` -- matched exactly on the first attempt. Mutation-
+    tested: removing the new `GL_LIGHT1`/`GL_LIGHT2` configuration reproduces the predicted failure
+    (pure black `(0,0,0)`, both lights silently dropped); restoring reconfirms `(255,0,255)`. Full
+    `ctest -R "OpenGL1_"` regression sweep: 30/30 passed after this change.
 15. Add `BasicEffect` specular highlights via `GL_SPECULAR` material/light state (`GpuDrawParams::
     specularColor`/`specularPower`/`light0-2Specular` are never read by `DrawInternal` at all).
 16. Add `TextureAddressMode.Mirror` via `GL_MIRRORED_REPEAT` (core GL 1.4) -- currently silently

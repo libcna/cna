@@ -318,7 +318,15 @@ glActiveTexture_(GL_TEXTURE0);glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_MO
 }else{resetUnit1EnvGen();glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_MODULATE);if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_2D);glActiveTexture_(GL_TEXTURE0);}}
 }else{glDisable(GL_TEXTURE_2D);resetUnit1EnvGen();if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_2D);glActiveTexture_(GL_TEXTURE0);}}
 normal?glEnable(GL_NORMALIZE):glDisable(GL_NORMALIZE);
-if(params&&params->lightingEnabled&&normal){glEnable(GL_LIGHTING);glEnable(GL_LIGHT0);float amb[4]={params->ambientColor[0],params->ambientColor[1],params->ambientColor[2],1};float dif[4]={params->light0Diffuse[0],params->light0Diffuse[1],params->light0Diffuse[2],1};float pos[4]={-params->light0Dir[0],-params->light0Dir[1],-params->light0Dir[2],0};glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);glLightfv(GL_LIGHT0,GL_POSITION,pos);glEnable(GL_COLOR_MATERIAL);glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE);
+if(params&&params->lightingEnabled&&normal){glEnable(GL_LIGHTING);glEnable(GL_LIGHT0);float amb[4]={params->ambientColor[0],params->ambientColor[1],params->ambientColor[2],1};float dif[4]={params->light0Diffuse[0],params->light0Diffuse[1],params->light0Diffuse[2],1};float pos[4]={-params->light0Dir[0],-params->light0Dir[1],-params->light0Dir[2],0};glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);glLightfv(GL_LIGHT0,GL_POSITION,pos);
+// plan_opengl1.md item 14 (EasyGL parity): BasicEffect.DirectionalLight1/DirectionalLight2 via
+// GL_LIGHT1/GL_LIGHT2, the same mechanism GL_LIGHT0 already uses -- GpuDrawParams::light1Diffuse/
+// light2Diffuse are zeroed by FillGpuDrawParams when a light is Enabled=false (mirrors FNA's own
+// DirectionalLight.Enabled setter), so unconditionally enabling both here is safe: a disabled
+// light's zero diffuse contributes nothing, matching every other lit-path field's own convention.
+float dif1[4]={params->light1Diffuse[0],params->light1Diffuse[1],params->light1Diffuse[2],1};float pos1[4]={-params->light1Dir[0],-params->light1Dir[1],-params->light1Dir[2],0};glEnable(GL_LIGHT1);glLightfv(GL_LIGHT1,GL_DIFFUSE,dif1);glLightfv(GL_LIGHT1,GL_POSITION,pos1);
+float dif2[4]={params->light2Diffuse[0],params->light2Diffuse[1],params->light2Diffuse[2],1};float pos2[4]={-params->light2Dir[0],-params->light2Dir[1],-params->light2Dir[2],0};glEnable(GL_LIGHT2);glLightfv(GL_LIGHT2,GL_DIFFUSE,dif2);glLightfv(GL_LIGHT2,GL_POSITION,pos2);
+glEnable(GL_COLOR_MATERIAL);glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE);
 // plan_opengl1.md phase 5 finding: the lit (stride 32) path never set GL_EMISSION, so
 // EnvironmentMapEffect's EmissiveColor/AmbientLightColor contribution (pre-combined into
 // GpuDrawParams::emissiveColor by FillGpuDrawParams -- EnvironmentMapEffect does not populate

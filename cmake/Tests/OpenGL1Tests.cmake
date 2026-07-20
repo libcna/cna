@@ -241,4 +241,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGL1_MSAA COMMAND cna_test_opengl1_msaa
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengl1.md item 14 (EasyGL parity): BasicEffect.DirectionalLight1/DirectionalLight2.
+    cna_opengl1_test(cna_test_opengl1_directionallight12
+                      examples/opengl1_directionallight12_test.cpp)
+    cna_register_backend_test(NAME OpenGL1_DirectionalLight12 COMMAND cna_test_opengl1_directionallight12
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()
