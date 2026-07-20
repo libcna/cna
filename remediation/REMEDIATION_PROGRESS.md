@@ -37,9 +37,9 @@ disproved finding is a real result and should be recorded with the same rigor as
 |---|---|---|---|---|---|
 | P0 | 11 | 8 | 0 | 0 | 3 |
 | P1 | 21 | 1 | 0 | 0 | 20 |
-| P2 | 44 | 1 | 0 | 0 | 43 |
+| P2 | 44 | 2 | 0 | 0 | 42 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **10** | **0** | **0** | **94** |
+| **Total** | **104** | **11** | **0** | **0** | **93** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -572,8 +572,75 @@ stress run.
 |---|---|---|---|---|
 | REMED-BUILD-004 | DONE | | feature/audit | New `.github/workflows/general-tests-ci.yml` — see detail below. |
 | REMED-BUILD-008 | NOT STARTED | | | **Blocks GFX-014 and GFX-015.** |
-| REMED-TEST-002 | NOT STARTED | | | **Blocks CORE-006 and CORE-007.** Follow `GameWindowTests.cpp`'s pattern. |
+| REMED-TEST-002 | DONE | | feature/audit | `GameTests.cpp`/`GraphicsDeviceManagerTests.cpp` rewritten, `GameCrashTest.cpp` deleted — see detail below. |
 | REMED-TEST-004 | NOT STARTED | | | Write each test **before** its production fix, so it fails first. |
+
+### REMED-TEST-002 detail — Game/GraphicsDeviceManager lifecycle coverage
+
+**`GameTests.cpp`** (previously a 2-line "no tests" stub): a `LifecycleTestGame : public Game` tracks
+`Initialize`/`LoadContent`/`Update`/`Draw`/`UnloadContent` call counts. Guarded by a
+`VideoSubsystemAvailable()` probe matching `GameWindowTests.cpp`'s own `SDL_InitSubSystem`/
+`SDL_CreateWindow`-then-`GTEST_SKIP()` idiom (added on top of the initial draft — see below), since
+`Game::Game()` unconditionally constructs a real `GraphicsDevice_` member (own backend/window) at
+construction time, before any test body code runs.
+- `GameTest.RunExecutesLifecycleInDocumentedOrder` — `game.Run()` (exits itself after the first
+  `Draw()`) reaches `Initialize()` → `LoadContent()` → ≥1 `Update()`/`Draw()`. **PASSES.**
+- `GameTest.DisposingDeviceInvokesUnloadContent` — `game.Dispose()` after a real run; asserts
+  `UnloadContent()` was invoked exactly once. This is `REMED-CORE-006`'s own required test
+  ("dispose the device, assert it was called"), via the *real* public disposal path
+  (`Game::Dispose()` → `Dispose(true)` → disposes `graphicsDeviceService_`), not a synthetic event
+  raise. **FAILS as expected** (confirmed live): `game.unloadContentCalls == 0`. Not fixed — CORE
+  lane's task, out of this task's scope.
+
+**`GraphicsDeviceManagerTests.cpp`** (same prior 2-line stub): an `OneFrameGame` (exits after its
+first `Draw()`) gives `Game::DoInitialize()`/`CreateDevice()` a real, non-blocking run.
+- `GraphicsDeviceManagerTest.CreateDeviceIsReachableAfterRun` — **PASSES.**
+- `GraphicsDeviceManagerTest.ApplyChangesRaisesResettingAndResetExactlyOnce` — regression guard:
+  the manager's own self-initiated `ApplyChanges()` path already correctly raises
+  `DeviceResetting`/`DeviceReset` exactly once each (unconditional on device ownership, unlike
+  `Dispose()`/`CreateDevice()` — see the new `REMED-CORE-014` finding below). **PASSES today** and
+  protects against a future double-raise once `REMED-CORE-007`'s forwarding fix lands.
+- `GraphicsDeviceManagerTest.BackendDetectedDeviceLostIsForwardedToManagerListeners` —
+  `REMED-CORE-007`'s own required test ("simulate a backend-detected device-lost via the
+  `deviceEventCallback` seam"): since `GraphicsDevice::DeviceResetting`/`DeviceReset` are public
+  `EventHandler` members, and `GraphicsDevice.cpp`'s `deviceEventCallback` lambda (only ever invoked
+  by the D3D9 backend) does nothing but raise those same public events on a real backend-detected
+  device-lost, raising them directly from test code portably simulates the identical signal on
+  every backend, not just D3D9. **FAILS as expected** (confirmed live): neither event forwards to
+  the manager's own `DeviceResetting`/`DeviceReset` listeners. Not fixed — CORE lane's task.
+
+**`GameCrashTest.cpp`** — deleted outright (the "revive or delete" choice the task explicitly
+allows): its 23 lines were entirely commented out behind `#ifdef XNA5`, an API shape (`nullptr`
+`TargetElapsedTime`) the current `Game` class does not expose (`setTargetElapsedTimeProperty` takes
+a `const TimeSpan&`, not a pointer) — reviving it faithfully would mean inventing a different crash
+scenario, not restoring the original one. A permanently-commented file implying coverage that does
+not exist is worse than none, per the task's own framing.
+
+**New finding recorded, not fixed** — see `REMED-CORE-014` below: `GraphicsDeviceManager`'s private
+`ownsGraphicsDevice_` flag is initialized `false` and never set `true` anywhere in
+`GraphicsDeviceManager.cpp` (confirmed by grep and by a live probe program), so `Dispose()`'s and
+`CreateDevice()`'s only branch that raises `DeviceDisposing` and releases the owned device is
+permanently dead code for every `GraphicsDeviceManager`, not just the `Game`-attached case this
+whole codebase always uses. This compounds with `REMED-CORE-006`: even after `Game::Initialize()`
+subscribes to `DeviceDisposing` (that task's own stated fix), a real `GraphicsDeviceManager::
+Dispose()` call still would not raise it for a `Game`-attached manager without this dead-code path
+also being addressed — worth the CORE-lane owner knowing before scoping `REMED-CORE-006`'s fix.
+
+**Regression verification:** full direct `CnaTests` binary run (EASYGL, `DISPLAY=:0`): **5556 tests,
+5549 passed, 4 skipped, 3 failed** — 5551 baseline (after CONTENT-001/002/003/006 + NET-001/003) + 5
+new tests (2 in `GameTests.cpp`, 3 in `GraphicsDeviceManagerTests.cpp`; `ExposesWindowProperty` is
+pre-existing in `GameWindowTests.cpp`, just the same `GameTest` suite name, and still passes
+unmodified; `GameCrashTest.cpp`'s deletion removes 0 active tests, it was 100% commented out). The 3
+failures: `GameTest.DisposingDeviceInvokesUnloadContent` and
+`GraphicsDeviceManagerTest.BackendDetectedDeviceLostIsForwardedToManagerListeners` (both new,
+intentional, documented above) plus `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndThe
+OtherReconnectsAcrossRealProcesses` — pre-existing, already documented under `REMED-NET-001`'s own
+detail section as network-discovery-port flakiness, unrelated to this task, not touched. **Zero
+unexpected regressions.**
+
+**Completion criteria met:** both files have real coverage; the dead file is resolved (deleted).
+**Verification criteria met:** the two new tests targeting `REMED-CORE-006`/`REMED-CORE-007` fail
+against the current buggy behavior, proving they test the right thing; all other new tests pass.
 
 ### REMED-BUILD-004 detail — general-tests-ci.yml
 
@@ -751,6 +818,7 @@ existing task.
 | REMED-CONTENT-008 | `ContentManager.cpp` joins 8 `.cnj`/JSON-manifest-supplied path fields (`dataField->stringValue` for `Texture3D`; `vertRel`/`fragRel` for `ShaderEffect`; `clipFileField->stringValue` for `AnimationClip`; `skeletonRel`, `vertFile`/`idxFile`, `morphTargetsFile` for skinned-model morph/animation data) onto the content root with no containment check — same `fs::path::operator/` pitfall as the 3 sites `-002` fixed, at file-supplied (not caller-supplied) untrusted strings | HIGH | P1 | REMED-CONTENT-002 (repo-wide sweep) | NOT STARTED — recorded, not fixed (out of `-002`'s 3-site scope; notably, this is the *same* `.cnj`-manifest subsystem that already has one field, `sourceFile`, correctly hardened via `CnjSourceFile.hpp` — these 8 fields were simply never given the same treatment) |
 | REMED-NET-008 | A "client"-role `NetworkSession`'s own incidental listening `ENetHost` (bound on every non-Emscripten `ConnectToHost()` call, so a peer can be promoted to host later via migration without rebinding — see `ENetHostHandle`'s own doc comment) still accepts and fully processes `ClientHello` from *any* third party that connects to it, not just its real host — `HandleClientHello` has no "am I actually supposed to be hosting anyone" check. A rogue peer can connect directly to a client's own bound port (`ENetBackend::GetBoundPort()` is non-zero for a client-role session too) and get a real `ServerWelcomeMessage` snapshotting that peer's own roster, plus get added as a real `NetworkGamer`/fire a real `GamerJoined` event on that peer's session — despite that peer never intending to host anyone | MEDIUM | P2 | REMED-NET-001 (host-authority audit sweep) | NOT STARTED — recorded, not fixed (distinct root cause from NET-001: `ClientHello` is not one of the four host-authoritative broadcast types NET-001 covers; this is a missing role-check on the *accept* side of a client-scoped session, not a missing sender-authority check on a broadcast-only message. Confirmed real via manual reasoning about `ConnectToHost`'s own non-Emscripten `StartHosting()` call and `HandleClientHello`'s unconditional accept — not separately reproduced with a new test, since fixing/proving it is out of this task's scope; the closest existing coverage is `ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer`, new in this task, which proves the same rogue-third-party-on-a-client-socket attack surface is real for the four NET-001 message types specifically) |
 | REMED-TEST-008 | `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails under a full unfiltered `ctest -j4` run but passes 10/10 in isolation (`--gtest_filter` + `--gtest_repeat=10`) — a real-time audio buffer-starvation-count assertion is timing-sensitive under heavy 4-way parallel CPU load on this sandbox. Extends `REMED-NET-001`'s already-documented `ctest -j4` transient-failure finding (previously only `ENetDiscoveryServiceTest.*` ×4 and 2 `TwoProcessLoopbackTest`/`NetworkSessionTest` cases, all network-port contention) to a second, previously-undocumented flakiness class (audio timing, not networking) | LOW | P3 | REMED-BUILD-004 (establishing a full local `ctest -j4` baseline before designing the new CI job) | NOT STARTED — recorded, not fixed (test-reliability finding, not a production defect; `REMED-BUILD-004`'s own new CI job runs `ctest` serially specifically to avoid this and the already-known network-port class, rather than allowlisting either) |
+| REMED-CORE-014 | `GraphicsDeviceManager`'s private `ownsGraphicsDevice_` flag is initialized `false` in both constructors and never set `true` anywhere in `GraphicsDeviceManager.cpp` (confirmed by grep of the whole file, and independently by a live probe program: construct `Game` + `GraphicsDeviceManager(&game)`, subscribe to `getDeviceDisposingEvent()`, call `gdm->Dispose()` — the subscriber never fires). Both of `Dispose()`'s and `CreateDevice()`'s only conditional branches that raise `DeviceDisposing` and release the owned `GraphicsDevice` are therefore permanently dead code, for **every** `GraphicsDeviceManager` instance, not only the `Game`-attached case this entire codebase always constructs. This directly compounds `REMED-CORE-006`: even after `Game::Initialize()` subscribes to `DeviceDisposing` (that task's own stated fix strategy), a real `GraphicsDeviceManager::Dispose()` call on a `Game`-attached manager still would not raise the event without this dead-code path also being addressed — the CORE-lane owner should know this before scoping `REMED-CORE-006`'s fix as "just add the subscription" | HIGH | P1 | REMED-TEST-002 (investigating how to trigger `REMED-CORE-006`'s own required test, "dispose the device, assert `UnloadContent()` was called") | NOT STARTED — recorded, not fixed (CORE-lane production defect, out of BUILD_TEST_CI's scope; `REMED-TEST-002`'s own `GameTest.DisposingDeviceInvokesUnloadContent` test already exercises the real, compounded failure end-to-end via `Game::Dispose()`, so no separate reproduction is needed for whoever picks this up) |
 
 #### REMED-BUILD-010 detail
 
