@@ -1329,6 +1329,36 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     Apple's macro-not-function byte-order conversions), none of them in `cnametal` itself, none of
     them the Metal backend's own source — which this CI still has not reached.
 
+54. **Real eighth CI signal — a fifth `sharp-runtime` gap, and the first genuinely architectural
+    one (not a portability shim)**: `Ping.cpp` failed with `use of undeclared identifier
+    'ICMP_DEST_UNREACH'` (and 5 sibling constants) plus `unknown type name 'icmphdr'`/`no member
+    named 'type'/'code'/'checksum'/'un' in 'icmp6_hdr'` (Clang's own confused "did you mean
+    icmp6_hdr?" suggestion, since `icmphdr` genuinely doesn't exist on Apple's headers at all).
+    Unlike items 50–53 (flag/symbol/macro-name fixes), this is a real architectural gap: BSD/
+    Darwin's `<netinet/ip_icmp.h>` defines a genuinely different ICMPv4 header ABI from Linux's —
+    the struct itself is named `struct icmp` (not `icmphdr`), with fields `icmp_type`/`icmp_code`/
+    `icmp_cksum`/`icmp_id`/`icmp_seq` (the last two reached via the system header's own
+    convenience macros over a nested union) rather than Linux's `type`/`code`/`checksum`/
+    `un.echo.id`/`un.echo.sequence`. The Destination-Unreachable/Time-Exceeded sub-code constants
+    also have different names on BSD (`ICMP_UNREACH`/`ICMP_UNREACH_NET`/etc.) for the identical
+    RFC 792 values. ICMPv6 (`icmp6_hdr`) needed no changes — that struct is standardized
+    identically across Linux and BSD.
+
+    Fixed with a genuine dual implementation, not a workaround: an `IcmpV4Header` type alias
+    (`::icmphdr` on Linux, `::icmp` on BSD/Darwin) so `sizeof`/pointer-cast call sites stay
+    identical on both platforms; the 6 constants aliased onto BSD's own real macros
+    (`ICMP_DEST_UNREACH → ICMP_UNREACH`, etc.) — deliberately not hand-typed numeric values, so
+    the actual RFC 792 numbers always come from the system's own header, never guessed; and
+    explicit per-platform `#if` branches for the handful of field-name-dependent construction/
+    parsing lines, deliberately not hidden behind further macros so each platform's real field
+    names stay directly readable. Verified the Linux path both compiles AND works correctly
+    end-to-end: all 14 `Ping`-related tests pass, including a real loopback ICMP echo round-trip
+    (not a mock — an actual packet sent and received). Full `SharpRuntimeTests` suite (12,481
+    tests) passes with zero regressions. **The BSD/Darwin path itself is written from documented
+    FreeBSD/Darwin API knowledge and cannot be verified from this Linux sandbox** — unlike every
+    other fix so far, this one's correctness genuinely depends on the next macOS CI run, not
+    already-confirmed-by-local-testing. Eighth real, observed CI signal.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
