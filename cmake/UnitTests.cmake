@@ -22,6 +22,21 @@ if(CNA_BUILD_TESTS)
             "tests/*.cpp"
     )
 
+    # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
+    # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
+    # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
+    # exist in the built CNA library on an FFmpeg-unavailable platform (MinGW/Emscripten/Android),
+    # and previously failed to link there (never hit before this task: no FFmpeg-unavailable CnaTests
+    # build had gotten this far). VideoSoundtrackTypeTests.cpp is unaffected -- that enum has no .cpp
+    # and no FFmpeg dependency.
+    if(NOT CNA_FFMPEG_AVAILABLE)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoderTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Xnb/VideoContentTypeReaderTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoPlayerTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Content/ContentManagerVideoXnbTests\\.cpp$")
+    endif()
+
     # TwoProcessLoopbackTest.cpp (Task 6.1) uses POSIX-only process APIs (posix_spawn, poll,
     # sys/wait.h) to orchestrate two independent OS processes. Compiles under mingw-w64 and
     # Emscripten (both provide POSIX-ish libc stubs) but can't actually work under either: no real

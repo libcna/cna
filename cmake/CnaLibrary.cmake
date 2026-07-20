@@ -51,6 +51,11 @@ if(NOT CNA_FFMPEG_AVAILABLE)
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoder\\.cpp$")
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoPlayer\\.cpp$")
     list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/Media/Video/Video\\.cpp$")
+    # REMED-BUILD-013 (discovered while verifying it): VideoContentTypeReader.cpp constructs a
+    # Video (Media::Video::Video(...)) -- a genuine, previously-latent gap in this same exclusion
+    # list, never hit before because every FFmpeg-unavailable target (MinGW D3D9/D3D11/D3D12,
+    # Emscripten, Android) that links a full CNA never got far enough in a real build to reach it.
+    list(FILTER CNA_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Xnb/VideoContentTypeReader\\.cpp$")
 endif()
 
 add_library(CNA STATIC

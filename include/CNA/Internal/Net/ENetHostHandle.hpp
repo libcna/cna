@@ -8,6 +8,17 @@
 
 #include <enet/enet.h>
 
+// REMED-BUILD-013 (discovered while verifying it): on Windows/MinGW, enet.h transitively pulls in
+// <windows.h> (via its own win32.h), which defines the macro ERROR (wingdi.h) -- colliding with
+// CNA::LogLevel::ERROR / CNA::LogCategory::ERROR wherever this header is included before
+// CNA/Logger.hpp in the same translation unit (e.g. ENetBackend.cpp), breaking their enum
+// declarations under any MinGW cross-compile (D3D9/D3D11/D3D12). Undefine it locally, the standard
+// idiom for this well-known Windows.h pitfall -- native/non-Windows builds are unaffected (the
+// macro is never defined there).
+#ifdef ERROR
+#undef ERROR
+#endif
+
 namespace CNA::Internal::Net
 {
     /**

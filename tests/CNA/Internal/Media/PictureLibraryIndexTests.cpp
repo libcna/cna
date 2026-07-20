@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <filesystem>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <gtest/gtest.h>
 #include "CNA/Internal/Media/PictureLibraryIndex.hpp"
 
@@ -125,10 +127,17 @@ TEST(PictureLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
 // bits entirely and the scenario genuinely can't be exercised there.
 TEST(PictureLibraryIndexTest, SkipsAnUnreadableSubdirectoryWithoutCrashing)
 {
+#ifdef _WIN32
+    // REMED-BUILD-013 (discovered while verifying it): see MediaLibraryIndexTests.cpp's own
+    // sibling test for the full rationale -- geteuid() doesn't exist on Windows/MinGW, and Unix
+    // permission bits aren't the enforcement mechanism there either.
+    GTEST_SKIP() << "Unix permission-bits scenario does not apply on Windows";
+#else
     if (::geteuid() == 0)
     {
         GTEST_SKIP() << "running as root -- permission bits don't restrict access, can't exercise this";
     }
+#endif
 
     std::filesystem::path root = "tests/assets/media/.picture_permission_denied_test_fixture";
     std::error_code ec;
