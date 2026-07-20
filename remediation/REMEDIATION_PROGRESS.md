@@ -37,9 +37,9 @@ disproved finding is a real result and should be recorded with the same rigor as
 |---|---|---|---|---|---|
 | P0 | 11 | 8 | 0 | 0 | 3 |
 | P1 | 21 | 1 | 0 | 0 | 20 |
-| P2 | 44 | 2 | 0 | 0 | 42 |
+| P2 | 44 | 3 | 0 | 0 | 41 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **11** | **0** | **0** | **93** |
+| **Total** | **104** | **12** | **0** | **0** | **92** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -573,7 +573,67 @@ stress run.
 | REMED-BUILD-004 | DONE | | feature/audit | New `.github/workflows/general-tests-ci.yml` — see detail below. |
 | REMED-BUILD-008 | NOT STARTED | | | **Blocks GFX-014 and GFX-015.** |
 | REMED-TEST-002 | DONE | | feature/audit | `GameTests.cpp`/`GraphicsDeviceManagerTests.cpp` rewritten, `GameCrashTest.cpp` deleted — see detail below. |
-| REMED-TEST-004 | NOT STARTED | | | Write each test **before** its production fix, so it fails first. |
+| REMED-TEST-004 | DONE | | feature/audit | (a)/(b) already satisfied by `REMED-CONTENT-002`/`REMED-DEVICES-001`'s own regression tests (see detail below). (c) `PictureLibraryIndexTests.cpp` done — see detail below. |
+
+### REMED-TEST-004 detail — three missing tests for already-confirmed defects
+
+**(a) `ContentReaderExternalReferenceTests.cpp` absolute-path case:** already added as part of
+`REMED-CONTENT-002`'s own implementation — `AbsolutePathReferenceThrowsContentLoadException`
+(see that task's detail section above). No further action needed; recording here so this task's
+own completion criteria are traceable against where the work actually landed.
+
+**(b) `FileDialogTests.cpp`/`MessageBoxTests.cpp` concurrent race:** already added as part of
+`REMED-DEVICES-001`'s own implementation — `ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls`
+in both files (see that task's detail section above). Same note as (a).
+
+**(c) `PictureLibraryIndexTests.cpp` symlink-cycle/permission-denied gap — done in this task.**
+`PictureLibraryIndex.cpp` already has both mechanisms correctly implemented in production code
+(a `weakly_canonical`-keyed `visited` set, explicitly commented "cycle guard, matching
+MediaLibraryIndex's own approach", and `std::filesystem::directory_options::skip_permission_denied`
+on its `directory_iterator`) — this is a coverage gap, not a live bug, so both new tests are
+expected to (and do) **pass**, unlike (a)/(b)'s own "expected to fail first" framing, which applies
+to unconfirmed-until-tested defects, not to already-correct production code lacking a regression
+guard.
+- `PictureLibraryIndexTest.TerminatesOnASelfReferentialSymlinkCycle` — ported verbatim in spirit
+  from `MediaLibraryIndexTest.TerminatesOnASelfReferentialSymlinkCycle` (same shard, sibling music
+  scanner): a self-referential directory symlink must not hang the constructor.
+- `PictureLibraryIndexTest.SkipsAnUnreadableSubdirectoryWithoutCrashing` — ported verbatim in
+  spirit from `MediaLibraryIndexTest.SkipsAnUnreadableSubdirectoryWithoutCrashing`: a real
+  `perms::none` subdirectory (copies of the existing `beach.jpg`/`portrait.png` fixtures) must be
+  silently skipped, not thrown/crashed on. Both new tests self-skip via `GTEST_SKIP()` if symlink
+  creation fails (sandboxed environment) or if running as root (permission bits don't restrict root).
+
+**Verification — full binary run, `cmake-build-devices` (EASYGL, `CNA_DEVICES=ON`):**
+`PictureLibraryIndexTest.*` — **6/6 passed** (the 4 pre-existing + the 2 new), 1ms total (confirms
+no hang from the symlink cycle). Full `CnaTests` binary run, same `cmake-build-devices`
+(`CNA_DEVICES=ON`): **5608 tests, 5601 passed, 4 skipped, 3 failed** — the same 3 already-documented
+failures (`GameTest.DisposingDeviceInvokesUnloadContent`/`GraphicsDeviceManagerTest.
+BackendDetectedDeviceLostIsForwardedToManagerListeners`, both intentional per `REMED-TEST-002`'s own
+detail above, plus the pre-existing `TwoProcessLoopbackTest` network-port flake). **Zero
+unexpected regressions.**
+
+**Note on `cmake-build-debug` (the default `CNA_DEVICES=OFF` build dir) being unusable for this
+verification:** a full rebuild there currently fails unrelated to any change in this task —
+`src/CNA/Internal/Xnb/{Primitive,DecimalDateTime}ContentTypeReaders.cpp` fail to compile
+(`ContentReader has no member named ReadChar/ReadDecimal`). Root-caused to the sibling
+`sharp-runtime` checkout (an "Additional working directory", not part of this repo): `git log`/
+`git reflog` there show it currently sitting on `fix/clang-format-truncation-flag`, which lacks
+these two methods, with reflog evidence of very recent, repeated switching between that branch and
+`feature/xnb-charreader` (which presumably adds them) — i.e. a different, concurrent, unrelated
+process actively using that shared sibling checkout, not anything this session's own file changes
+touched (confirmed: zero diff in `ContentReader.hpp`/its callers against `HEAD`). Deliberately **did
+not** check out a different branch there myself to unblock this build, to avoid clobbering
+whatever concurrent work is using that shared directory — out of this task's scope to fix or even
+work around via a shared sibling repo's branch state. Verified my new test code compiles cleanly
+against current headers regardless (`c++ -fsyntax-only -std=c++23` with the project's own real
+include flags extracted from `cmake-build-debug`'s `flags.make`: exit 0, zero errors/warnings), and
+ran the actual tests successfully via `cmake-build-devices` instead (a different, already-built
+build dir whose cached `CNA` object files predate this sharp-runtime branch state and did not need
+recompiling for this task's changes).
+
+**Completion criteria met:** all three now exist. **Verification criteria met:** (a)/(b) already
+verified under their own tasks; (c)'s two new tests pass, proving the already-correct production
+behavior they cover is real and reachable.
 
 ### REMED-TEST-002 detail — Game/GraphicsDeviceManager lifecycle coverage
 
