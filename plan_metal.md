@@ -2001,6 +2001,60 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     could upload as an artifact). Twenty-third real, observed CI signal — a decisive, valuable result
     (definitively not PBR-specific) even though the underlying root cause itself remains open.
 
+75. **At the user's explicit direction, tried the GPU-capture route item 74 flagged as the next real
+    option**: added a `CNA_METAL_GPU_CAPTURE=<path>` env-var-gated diagnostic to
+    `MetalGraphicsBackend`'s constructor/destructor — when set, starts a real `MTLCaptureManager`
+    capture (`MTLCaptureDestinationGPUTraceDocument`, targeting the device's whole command queue for
+    the process lifetime) and finalizes it via `stopCapture()` in the destructor, writing a genuine
+    `.gputrace` document a physical Mac's Xcode can open. Wired to `Metal_DrawUserPrimitives_VPC`
+    only (via `cna_register_backend_test`'s `ENVIRONMENT`), the single most decisive of the three
+    failing tests (item 74) — a unique filename avoids a `startCapture` failure from a stale file a
+    different test process might have left (Apple's own API refuses to overwrite an existing
+    document). `metal-macos-ci.yml` uploads the resulting file as a workflow artifact
+    (`actions/upload-artifact@v4`, `if: always()` since the whole point is capturing the currently-
+    *failing* run, not a passing one) — this sandbox cannot open a `.gputrace` itself, so the file
+    exists for the user (or a future session with real Mac/Xcode access) to inspect directly, which
+    is the one class of evidence this investigation has not yet had access to.
+    Also added a second, directly-actionable-from-CI-logs diagnostic while investigating this same
+    area: `ReadBackbuffer()` now checks `MTLCommandBuffer.status`/`.error` after `waitUntilCompleted`
+    and `NSLog`s if either indicates a runtime GPU error — `MTL_SHADER_VALIDATION`/`MTL_DEBUG_LAYER`
+    (already enabled in this workflow) catch API-*misuse* at validation time, but a genuine runtime
+    execution failure (a real GPU-side error, not a validation-time one) would silently leave the
+    read-back buffer with stale/undefined content while `ReadBackbuffer()` otherwise proceeds
+    normally — exactly matching the observed symptom — and this check is the one place that would
+    surface it directly in the CI log text, without needing to open the `.gputrace` at all. Neither
+    diagnostic is a fix. Cannot be build-verified from this Linux sandbox; re-checked brace/bracket/
+    paren balance (333/333, 784/784, 1685/1685) and validated the workflow YAML parses
+    (`python3 -c "import yaml; yaml.safe_load(...)"`) as the only sanity checks available here.
+    Twenty-fourth real, observed CI signal.
+
+76. **Real twenty-fifth CI signal — both item 75 diagnostics ran, and both came back inconclusive-
+    but-informative: GPU capture is unsupported on this specific CI runner (an environment limit, not
+    a coding mistake), and the command-buffer error check came back completely clean across all 15
+    `ReadBackbuffer` calls in this run**: `[METAL-89 diag] GPU capture: device does not support
+    MTLCaptureDestinationGPUTraceDocument` — the macOS CI runner's own Metal device (very plausibly a
+    virtualized/headless GPU context specific to GitHub-hosted `macos-14` runners, not something a
+    physical Mac would necessarily also hit) declined `MTLCaptureDestinationGPUTraceDocument`, so no
+    `.gputrace` was ever produced — the uploaded artifact exists but is empty. The command-buffer
+    `status`/`.error` check, however, DID run for real, on every one of the 3 tests' `ReadBackbuffer`
+    calls (5 for each PBR test, 2 for the reduced VPC test — the same log confirmed the VPC test's
+    two draws both correctly use `PipelineKind::Colored16`/`vertexStart=0`; also clarified while
+    reading closely that `DrawUserPrimitives<VertexPositionColor>`'s `offset` parameter is applied by
+    re-packing the relevant vertex slice into a fresh CPU-side buffer before upload, not via GPU-side
+    `vertexStart` at all — so its own `vertexOffset=1` sub-test does *not* actually exercise item 68's
+    fix path the way this narrative's item 73 originally assumed; a documentation correction, not a
+    new bug) — and zero of them logged a runtime GPU error. This rules out a genuine GPU-side
+    execution failure as the cause, on top of every other hypothesis this whole investigation has
+    already ruled out by reading or by diagnostic.
+    With both the GPU-capture and command-buffer-error avenues now exhausted without a positive
+    result, and roughly ten CI round-trips spent on this single investigation across items 67–76,
+    this session has reached the genuine limit of what's determinable from this Linux sandbox without
+    either a physical Mac (ideally with Xcode's interactive GPU Frame Debugger, since programmatic
+    capture-to-file is confirmed unavailable on the CI runner specifically — a real Mac's own GPU may
+    not have the same limitation) or a fundamentally different, more invasive technique this session
+    has not yet identified. Pausing here and reporting back rather than continuing to spend further CI
+    cycles on decreasingly-well-grounded guesses. Twenty-fifth real, observed CI signal.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
