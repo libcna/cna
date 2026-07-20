@@ -766,7 +766,7 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `-DCNA_BUILD_TESTS=ON`, and built the actual `CnaTests` binary end to end (SDL3/SDL3_mixer built
     from source as part of the same configure step, ~13 minutes total). **All 8 tests pass, both via
     direct `CnaTests --gtest_filter=...` invocation and via the officially blessed `ctest -R
-    'MetalBlendKey\|MetalPipelineCacheKey'` path (CTest #83–90, 100% pass, 1.03s total)** — a real,
+    'MetalBlendKey\|MetalPipelineCacheKey'` path (CTest #102–109, 100% pass, 1.03s total)** — a real,
     reproducible, CI-equivalent result, not a simulation or a standalone scratch compile (an earlier,
     faster `g++`-only compile was used first for quick iteration confidence, then superseded by this
     full, real `CnaTests` integration build as the actual, final verification). The entire rest of
@@ -845,8 +845,11 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     caught), identity-multiply is a no-op, the two cross-validation cases above, and transpose
     correctness (identity, involution — `transpose(transpose(X))==X` — and a hand-verified concrete
     asymmetric case using a translation matrix's own real M14/M41 row↔column swap). All 7 passed on
-    the very first run. Ran the full Metal-tagged `ctest` subset again afterward (38 tests across all
-    5 extracted headers) to confirm zero regressions: 100% pass.
+    the very first run. Ran the full Metal-tagged `ctest` subset again afterward (32 real tests across
+    all 5 extracted headers at this point — `ctest -R "Metal"` itself reports 38 since that filter is
+    a substring match and also catches 6 unrelated, pre-existing `PbrEffectDefaultsTest.Metallic*`/
+    `SkinnedPbrEffectDefaultsTest.Metallic*` tests; a later independent audit caught this filter
+    imprecision, see the end of this session's narrative) to confirm zero regressions: 100% pass.
 
 33. **`selectPipelineKind()` — a sixth real ✅, and the single highest-value extraction of the
     night**: this is the actual shader-variant dispatch decision every 3D draw call goes through —
@@ -864,7 +867,8 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     selected (e.g. `pbr && skinned && envMapping && dualTexture` all `true` at once must still select
     `SkinnedPbr68`, not silently fall through to a lower-precedence branch). All 15 passed on the very
     first run, CTest #115–129, no bugs found in either the extraction or the tests this time. Ran the
-    full Metal-tagged `ctest` subset again afterward (53 tests across all 6 extracted headers) to
+    full Metal-tagged `ctest` subset again afterward (47 real tests across all 6 extracted headers —
+    `ctest -R "Metal"` itself reports 53 due to the substring-match filter imprecision noted above) to
     confirm zero regressions: 100% pass. A sixth genuinely real, fully-earned ✅ tier tonight — same
     discipline as the WVP matrix helpers: foundational dispatch infrastructure, not tied to one single
     pre-existing `METAL-N` task ID.
@@ -898,8 +902,29 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `fillPbrUniforms` is real (fragment-side fields compared byte-for-byte against a direct
     `fillPbrUniforms` call with the same inputs) rather than merely coincidentally matching. All 8
     passed on the very first run, CTest #130–137 — no bugs found in either the extraction or the
-    tests. Ran the full Metal-tagged `ctest` subset again afterward (61 tests across all 7 extracted
-    headers) to confirm zero regressions: 100% pass.
+    tests. Ran the full Metal-tagged `ctest` subset again afterward (55 real tests across all 7
+    extracted headers — `ctest -R "Metal"` itself reports 61 due to the substring-match filter
+    imprecision noted above) to confirm zero regressions: 100% pass.
+
+35. **Independent adversarial audit of all 7 extractions (items 29–34 above)**: a separate review
+    pass, deliberately skeptical rather than self-confirming, diffed every extracted header's logic
+    against the exact pre-extraction inline code in git history (byte-for-byte/logic-for-logic
+    identical in all 7 cases — one cosmetic-only rewrite in `MetalLogicalViewport.hpp`, `pw > 0 ? pw :
+    0` instead of the original `std::max(0, pw)`, mathematically equivalent, not a bug), grepped every
+    `using`-alias/wrapper call site in `MetalGraphicsBackend.mm` for dangling or duplicate references
+    (none found), independently re-derived every `MetalUniformFillTests.cpp` expected value against
+    the real `GpuDrawParams` struct definition rather than trusting the implementation under test
+    (all correct, full field coverage), and rebuilt + reran the full Metal-tagged `ctest` subset from
+    scratch. Found two genuine but purely documentation-accuracy issues, both fixed in this same pass:
+    stale `METAL-34` CTest citations (`#83–90`, from before 6 more Metal test files shifted CTest's
+    alphabetical numbering — corrected to the real current `#102–109`), and the "38/53/61 tests"
+    figures above, which were inflated by 6 every time because `ctest -R "Metal"` is a substring match
+    that also catches 6 unrelated, pre-existing `PbrEffectDefaultsTest.Metallic*`/
+    `SkinnedPbrEffectDefaultsTest.Metallic*` tests — the real, extracted-header-only counts (32/47/55)
+    are now cited alongside the filter's own reported number for transparency. Neither issue ever
+    masked a regression (a full 5572-test whole-suite run, separately, already confirmed zero
+    Metal-related failures) — both were citation-accuracy problems only, not functional bugs. No
+    functional defects found in any of the 7 extractions after a genuine attempt to find one.
 
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
@@ -1020,7 +1045,7 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
 - **The one genuine ✅ this entire plan earns tonight**: `MetalPipelineKey.hpp`, a plain-C++
   extraction of the pipeline-cache key/hash types with zero Objective-C dependency, real-built and
   real-tested via the actual `CnaTests` binary and `ctest` on this Linux machine — 8/8 tests, CTest
-  #83–90, 100% pass (✅ landed 2026-07-19 — `METAL-34`).
+  #102–109, 100% pass (✅ landed 2026-07-19 — `METAL-34`).
 - `METAL-40`'s CPU-side normal-matrix formula machine-verified the same way: `MetalNormalMatrix.hpp`,
   4 real `CnaTests`/`ctest` tests (identity, uniform scale, a hand-derived-via-independent-adjugate
   non-diagonal case, and a property-based perpendicularity-preservation check with an explicit
@@ -1186,7 +1211,7 @@ already works and must not be redesigned by mistake.
 | METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ⬜ |
 | METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ |
 | METAL-33 | Document the expected cache size/no-eviction-needed-for-v1 assumption (mirrors EasyGL's own per-field `Prog3D` bound-variant assumption); flag unbounded-growth as a NOXNA follow-up only if a real pathological case appears | ⬜ |
-| METAL-34 | Extract `MetalPipelineKey`'s hash/equality into an `#ifdef __OBJC__`-free plain-C++ header so it can be exercised by a normal GoogleTest binary **without an Apple toolchain** — the one piece of Phase 2 genuinely build-verifiable on this Linux machine today | ✅ **real, on this Linux machine, 2026-07-19** — 8/8 new tests (`MetalBlendKey.*`/`MetalPipelineCacheKey.*`/`MetalPipelineCacheKeyHash.*`, CTest #83–90) pass under the real `CnaTests` binary (`cmake -DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON`, `cmake --build --target CnaTests`, `ctest -R 'MetalBlendKey\|MetalPipelineCacheKey'`) — the first, and only, task in this entire plan to genuinely earn this tier tonight, matching `METAL-238`'s own "cite the actual CTest name" discipline |
+| METAL-34 | Extract `MetalPipelineKey`'s hash/equality into an `#ifdef __OBJC__`-free plain-C++ header so it can be exercised by a normal GoogleTest binary **without an Apple toolchain** — the one piece of Phase 2 genuinely build-verifiable on this Linux machine today | ✅ **real, on this Linux machine, 2026-07-19** — 8/8 new tests (`MetalBlendKey.*`/`MetalPipelineCacheKey.*`/`MetalPipelineCacheKeyHash.*`, CTest #102–109) pass under the real `CnaTests` binary (`cmake -DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON`, `cmake --build --target CnaTests`, `ctest -R 'MetalBlendKey\|MetalPipelineCacheKey'`) — the first of 7 extractions to genuinely earn this tier tonight (6 more plain-C++ pieces followed the same pattern, see the numbered narrative items below), matching `METAL-238`'s own "cite the actual CTest name" discipline |
 
 ## Phase 3 — BasicEffect full shader parity (METAL-35 – METAL-50)
 
@@ -1629,7 +1654,7 @@ consistently across every phase above:
    be extracted into a plain-C++, Apple-toolchain-free unit. Code produced this way is marked 🟨,
    never ✅ — it has not been compiled here, let alone run — **with exactly one earned exception**:
    `METAL-34` was actually extracted, built, and tested via the real `CnaTests` binary and `ctest`
-   on this Linux machine on 2026-07-19 (8/8 tests, CTest #83–90) — the one task in this whole plan
+   on this Linux machine on 2026-07-19 (8/8 tests, CTest #102–109) — the one task in this whole plan
    that genuinely reached ✅ from tier 1 alone, because unlike every other Metal task its logic has
    zero Objective-C/Apple-framework dependency to begin with.
 2. **GitHub-hosted macOS runners** (`metal-macos-ci.yml`, currently `macos-14`) — real Apple Clang
