@@ -57,7 +57,12 @@ void main() {
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     gl_Position.y = -gl_Position.y; // Vulkan NDC Y is inverted vs OpenGL (matches textured3d.vert.glsl)
-    vNormal     = normalize(mat3(skinMat) * aNormal);
+    // REMED-GFX-006: FNA composes the bone-skin 3x3 with the outer world normal matrix
+    // (SkinnedEffect.fx Skin() then Lighting.fxh's mul(normal, WorldInverseTranspose)).
+    // The world factor was missing entirely, so any rotated or non-uniformly-scaled
+    // skinned model was lit as if World were identity.
+    mat3 skinNormalMatrix = transpose(inverse(mat3(fog.world)));
+    vNormal     = normalize(skinNormalMatrix * (mat3(skinMat) * aNormal));
     vUV         = aUV;
     vWorldPos   = (fog.world * skinnedPos).xyz;
     // Task 899: fog factor from the PRE-SKIN raw object-space Z. REMED-GFX-005: corrected to

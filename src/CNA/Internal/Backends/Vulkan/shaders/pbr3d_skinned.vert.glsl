@@ -60,11 +60,17 @@ void main() {
     // REMED-GFX-011: matches skinned3d.vert.glsl, which does flip (the comment previously here
     // claimed it never does). Backend-wide convention -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
-    // EasyGLGraphicsBackend::EnsurePbrSkinnedProgram() uses plain mat3(uWorld) here (NOT the
-    // inverse-transpose uNormalMatrix the unskinned PbrEffect vertex shader uses) -- preserved
-    // exactly rather than "corrected", per this port's own behavior-fidelity requirement.
     mat3 skinNormalMat = mat3(skinMat);
-    vNormal = normalize(mat3(pbr.world) * (skinNormalMat * aNormal));
+    // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose of World, not raw World.
+    // The previous comment justified raw mat3(pbr.world) as deliberate fidelity to
+    // EasyGLGraphicsBackend::EnsurePbrSkinnedProgram(), but EasyGL has the same defect -- raw World
+    // is only correct for rotation and uniform scale, and diverges from FNA's
+    // mul(normal, WorldInverseTranspose) under non-uniform scale. It also contradicted this
+    // backend's own unskinned pbr3d.vert.glsl, which already uses the inverse transpose.
+    mat3 worldNormalMat = transpose(inverse(mat3(pbr.world)));
+    vNormal = normalize(worldNormalMat * (skinNormalMat * aNormal));
+    // Tangent stays on raw World: tangents transform as directions, not as normals (glTF
+    // convention, and unchanged from the previous behaviour).
     vTangent = mat3(pbr.world) * (skinNormalMat * aTangent.xyz);
     vBitangentSign = aTangent.w;
     vUV = aUV;

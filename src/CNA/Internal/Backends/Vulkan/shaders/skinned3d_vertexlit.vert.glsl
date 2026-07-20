@@ -64,7 +64,12 @@ void main() {
         ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((aPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
         : 1.0;
 
-    vec3 N = normalize(mat3(skinMat) * aNormal);
+    // REMED-GFX-006: FNA composes the bone-skin 3x3 with the outer world normal matrix
+    // (SkinnedEffect.fx Skin() then Lighting.fxh's mul(normal, WorldInverseTranspose)).
+    // The world factor was missing entirely, so any rotated or non-uniformly-scaled
+    // skinned model was lit as if World were identity.
+    mat3 skinNormalMatrix = transpose(inverse(mat3(fog.world)));
+    vec3 N = normalize(skinNormalMatrix * (mat3(skinMat) * aNormal));
     vec3 E = normalize(fog.eyePos_pad.xyz - worldPos);
     float dotL0 = dot(N, -normalize(pc.light0Dir));           float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
     float dotL1 = dot(N, -normalize(fog.light1Dir_pad.xyz));  float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
