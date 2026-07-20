@@ -50,9 +50,6 @@ layout(set = 0, binding = 6) uniform PbrParams {
 } pbr;
 
 void main() {
-    // Task 899-family precedent: skinned3d.vert.glsl never Y-flips (unlike lit_textured3d.vert.glsl
-    // et al.) -- this shader is a direct extension of that exact skinning transform, so it mirrors
-    // that convention exactly rather than introducing a mismatched Y-flip here.
     float weightsPerVertex = pbr.fogStartEnd_weights.z;
     mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
     if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y;
@@ -60,6 +57,9 @@ void main() {
                                           + bb.bones[aBoneIndices.w] * aBoneWeights.w;
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
+    // REMED-GFX-011: matches skinned3d.vert.glsl, which does flip (the comment previously here
+    // claimed it never does). Backend-wide convention -- see pbr3d.vert.glsl.
+    gl_Position.y = -gl_Position.y;
     // EasyGLGraphicsBackend::EnsurePbrSkinnedProgram() uses plain mat3(uWorld) here (NOT the
     // inverse-transpose uNormalMatrix the unskinned PbrEffect vertex shader uses) -- preserved
     // exactly rather than "corrected", per this port's own behavior-fidelity requirement.

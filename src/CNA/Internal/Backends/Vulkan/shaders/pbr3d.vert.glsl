@@ -47,12 +47,12 @@ layout(set = 0, binding = 5) uniform PbrParams {
 } pbr;
 
 void main() {
-    // No Y-flip here (unlike lit_textured3d.vert.glsl et al.) -- kept consistent with
-    // pbr3d_skinned.vert.glsl's own convention (which itself mirrors skinned3d.vert.glsl, never
-    // Y-flipped) so PbrEffect and SkinnedPbrEffect render an identical scene identically
-    // oriented, matching easygl_skinnedpbreffect_golden_test.cpp's own "identity bind pose is a
-    // no-op, output must equal the unskinned PbrEffect's own golden values" oracle.
     gl_Position = pc.mvp * vec4(aPos, 1.0);
+    // REMED-GFX-011: Vulkan NDC Y is inverted vs OpenGL and the C++ side supplies no correction,
+    // so every 3D vertex shader in this backend flips here. This is a backend-wide convention,
+    // not a per-family choice -- omitting it renders PbrEffect vertically mirrored relative to
+    // every other effect in the same frame.
+    gl_Position.y = -gl_Position.y;
     // World's inverse-transpose upper-left 3x3 (mirrors lit_textured3d.vert.glsl's Task 898 fix
     // and EnvironmentMapEffect's own already-correct env_map3d.vert.glsl pattern).
     mat3 normalMatrix = transpose(inverse(mat3(pbr.world)));

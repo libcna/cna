@@ -33,6 +33,8 @@ layout(set = 0, binding = 2) uniform EnvMapParams {
 
 void main() {
     gl_Position = pc.mvp * vec4(aPos, 1.0);
+    // REMED-GFX-011: backend-wide Vulkan NDC Y-flip -- see pbr3d.vert.glsl.
+    gl_Position.y = -gl_Position.y;
     vec3 worldPos    = (pc.world * vec4(aPos, 1.0)).xyz;
     mat3 nm          = transpose(inverse(mat3(pc.world)));
     vWorldNormal     = normalize(nm * aNormal);

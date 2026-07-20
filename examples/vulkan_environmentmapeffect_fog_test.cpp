@@ -17,10 +17,14 @@
 // EnvironmentMapSpecular=0 removes its additive specular term, so the pre-fog color reduces to
 // exactly EmissiveColor -- isolating fog cleanly from the reflection math. Direct port of
 // examples/bgfx_environmentmapeffect_fog_test.cpp / examples/easygl_environmentmapeffect_fog_test.cpp
-// (Task 900) -- no RasterizerState::CullNone override needed here (unlike the Bgfx sibling), per
-// this project's established Task 364/896 finding that Vulkan's default cull state already behaves
-// like EasyGL's effectively-no-culling default (confirmed empirically: no other Vulkan
-// EnvironmentMapEffect pixel test in this family sets it).
+// (Task 900).
+//
+// REMED-GFX-011: this test previously omitted RasterizerState::CullNone, justified by a comment
+// claiming Vulkan's default cull state is effectively no-culling and that no sibling test sets it.
+// Both claims were false -- all nine other Vulkan EnvironmentMapEffect pixel tests do set it. The
+// quad survived only because env_map3d.vert.glsl was missing the backend-wide NDC Y-flip, and that
+// omission also inverted the effective winding. With the flip restored this quad is back-facing
+// under the real default state and is culled to black, exactly as in REMED-GFX-052.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -36,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -139,6 +144,7 @@ class VulkanEnvironmentMapEffectFogTest : public Game
         {
             dev.Clear(kBlack);
             dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             fx.Apply();
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);
