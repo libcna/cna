@@ -869,6 +869,38 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     discipline as the WVP matrix helpers: foundational dispatch infrastructure, not tied to one single
     pre-existing `METAL-N` task ID.
 
+34. **`fillLitUniforms`/`fillEnvUniforms`/`fillSkinnedUniforms`/`fillPbrUniforms`/
+    `fillSkinnedPbrUniforms` — a seventh real ✅, the largest single extraction of the night by field
+    count**: these 5 functions are the connective tissue between `GpuDrawParams` (backend-agnostic
+    per-draw state) and the actual float arrays `memcpy`'d into a real `MTLBuffer` for each shader
+    family — `METAL-38`–`47`/`66`–`68`/`73`/`74`/`76`–`78`/`81`/`83`–`86`. With dozens of individual
+    field assignments per function, the single biggest real risk is a copy-paste mistake (e.g.
+    `light1Diffuse` accidentally reading `params.light2Diffuse`, or a light's `Specular` landing in
+    another light's slot) — exactly the class of bug that compiles cleanly, never crashes, and would
+    only ever show up as subtly wrong lighting on real hardware, i.e. never on this Linux machine.
+    Extracted verbatim to `MetalUniformFill.hpp` (the 9 plain-C++ mirror structs — `LitTransform`/
+    `LitUniforms`/`EnvTransform`/`EnvUniforms`/`SkinnedTransform`/`SkinnedUniforms`/`PbrTransform`/
+    `PbrUniforms`/`SkinnedPbrTransform` — plus all 5 fill functions), `MetalGraphicsBackend.mm`
+    reduced to `using` aliases and one-line wrappers, all existing call sites unaffected. 8 new
+    `CnaTests`: one exhaustive "every field correctly mapped" test per function, built from a
+    `GpuDrawParams` where every relevant field is set to its **own distinct numeric value** (not
+    identical placeholders) so a wrong-field or wrong-light-index mapping produces a visibly wrong
+    number instead of a coincidental match — every expected value re-derived independently by reading
+    `GpuDrawParams`' own field list and each function's real mapping directly, not by copying the
+    implementation being tested. The normal-matrix columns (`Lit`/`Env`/`Pbr`, not `Skinned` — which
+    correctly has none, the skinned shader has no world-normal-matrix step) are cross-validated
+    against a direct, independent call to the already-tested `ComputeMetalNormalMatrixCols` with the
+    same `worldColMajor` buffer, using a genuinely non-identity invertible matrix specifically so a
+    wrong-buffer wiring bug couldn't hide behind a trivial identity result. 3 further tests cover the
+    boolean-gated fields' *false* branch (`fogEnabled=false`, `fresnelEnabled=false`,
+    `vertexColorEnabled=false` plus a different `weightsPerVertex`) since the main test only exercises
+    each gate's `true` side, and one test proves `fillSkinnedPbrUniforms`' delegation to
+    `fillPbrUniforms` is real (fragment-side fields compared byte-for-byte against a direct
+    `fillPbrUniforms` call with the same inputs) rather than merely coincidentally matching. All 8
+    passed on the very first run, CTest #130–137 — no bugs found in either the extraction or the
+    tests. Ran the full Metal-tagged `ctest` subset again afterward (61 tests across all 7 extracted
+    headers) to confirm zero regressions: 100% pass.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1022,6 +1054,14 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
   between `pbr`/`skinned`/`envMapping`/`dualTexture`/`textured`/`colored` by setting multiple flags at
   once and asserting only the highest-precedence kind wins — a sixth genuinely real, fully-earned ✅
   tier tonight (🟨→✅, no single dedicated `METAL-N` task ID, foundational dispatch infrastructure).
+- `fillLitUniforms`/`fillEnvUniforms`/`fillSkinnedUniforms`/`fillPbrUniforms`/`fillSkinnedPbrUniforms`
+  — the `GpuDrawParams`-to-GPU-uniform mapping layer, the largest single extraction of the night by
+  field count — machine-verified via `MetalUniformFill.hpp` and 8 real `CnaTests`/`ctest` tests (CTest
+  #130–137), each built from a `GpuDrawParams` where every relevant field holds its own distinct
+  numeric value so a wrong-field or wrong-light-index mapping bug produces a visibly wrong number
+  instead of a coincidental match, plus dedicated boolean-false-branch and delegation-correctness
+  tests — a seventh genuinely real, fully-earned ✅ tier tonight (🟨→✅ — `METAL-38`–`47`/`66`–`68`/
+  `73`/`74`/`76`–`78`/`81`/`83`–`86`).
 - Real `PbrEffect`, both unskinned and skinned (glTF 2.0 metallic-roughness Cook-Torrance BRDF,
   tangent-space normal mapping, all 4 optional PBR maps with safe default-texture fallbacks,
   `SkinnedPbrEffect` sharing the same fragment shader as its unskinned counterpart while adding the
