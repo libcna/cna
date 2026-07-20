@@ -1157,6 +1157,34 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     finds real problems specifically because it's applied uniformly, not because everything it
     touches turns out broken.
 
+47. **Shader-math cross-check (alpha test / fog / diffuse-lighting sign / specular half-vector) —
+    all confirmed correct**: continued the same reference-comparison discipline into the actual MSL
+    formulas embedded in `kMetalShaderSource`, not just enum-mapping tables — the highest-risk area
+    left, since a sign or operand-order slip here produces plausible-looking but wrong lighting, not
+    a crash. Compared four formulas against `EasyGLGraphicsBackend`'s own embedded GLSL source,
+    read directly (not from memory): the alpha-test discard formula (`cna_alpha_test_fails` vs. the
+    GLSL `_at` computation — algebraically identical), the object-space fog factor (`(z+fogEnd)/
+    (fogEnd-fogStart)` clamped 0–1, identical epsilon guard for `fogStart≈fogEnd`), the diffuse
+    lighting sign convention (`dot(N,-lightDir)` — both backends negate the light's own travel
+    direction before dotting with the normal, the correct Lambertian convention, not an inverted
+    one), and the Blinn-Phong specular half-vector (`normalize(eye-lightDir)` — identical in both).
+    All four match exactly. No new bug found here, but this is real, positive evidence — the
+    lighting/fog/alpha-test math genuinely was ported correctly, not just assumed to be.
+
+48. **Real second CI signal — build progressed further, hit a new, unrelated blocker, fixed**: the
+    submodule fix (item 45) worked — the macOS runner successfully built SDL3/SDL3_mixer this time
+    — but then failed at `third_party/enet/CMakeLists.txt`'s own `cmake_minimum_required(VERSION
+    2.6)`: tolerated as a mere deprecation warning by the CMake version on this Linux dev machine
+    (3.31), but a hard, build-stopping error under CMake ≥4.0 ("Compatibility with CMake < 3.5 has
+    been removed from CMake"), which this `macos-14` runner's own toolchain apparently provides.
+    Fixed with CMake's own suggested escape hatch, `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`, added to
+    `metal-macos-ci.yml`'s own configure step rather than editing the vendored `third_party/enet`
+    source directly (`enet` isn't Metal-specific — editing it risks being an out-of-lane change
+    affecting every other backend's own CI, whereas a configure-flag scoped to this one workflow
+    doesn't). This is the second real, observed CI signal this plan has received, and — like the
+    first — a toolchain/config-level blocker, not a code-level one; whether the Metal backend's own
+    source actually compiles remains unknown until a run gets past this too.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):

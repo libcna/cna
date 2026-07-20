@@ -35,7 +35,14 @@ jobs:
           path: sharp-runtime
       - name: Configure native Metal backend
         working-directory: cna
-        run: cmake -S . -B build-metal -DCNA_GRAPHICS_BACKEND=METAL -DCNA_BUILD_TESTS=ON
+        # CMAKE_POLICY_VERSION_MINIMUM=3.5: third_party/enet/CMakeLists.txt (vendored, not a
+        # submodule) declares cmake_minimum_required(VERSION 2.6) -- tolerated as a deprecation
+        # warning by this project's usual CMake (3.31 on this Linux dev machine), but hard-rejected
+        # by CMake >=4.0, which this macos-14 runner's own toolchain provides (confirmed by a real
+        # CI run: "Compatibility with CMake < 3.5 has been removed from CMake", CMake's own
+        # suggested fix). Scoped to this workflow's own configure step rather than editing the
+        # vendored file, matching this plan's own stay-in-Metal's-lane discipline.
+        run: cmake -S . -B build-metal -DCNA_GRAPHICS_BACKEND=METAL -DCNA_BUILD_TESTS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - name: Build native Metal backend
         working-directory: cna
         run: cmake --build build-metal --parallel 3
