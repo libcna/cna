@@ -37,9 +37,9 @@ disproved finding is a real result and should be recorded with the same rigor as
 |---|---|---|---|---|---|
 | P0 | 11 | 8 | 0 | 0 | 3 |
 | P1 | 21 | 1 | 0 | 0 | 20 |
-| P2 | 44 | 3 | 0 | 0 | 41 |
+| P2 | 44 | 3 | 0 | 1 | 40 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **12** | **0** | **0** | **92** |
+| **Total** | **104** | **12** | **0** | **1** | **91** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -571,9 +571,73 @@ stress run.
 | ID | Status | Owner | Branch | Notes |
 |---|---|---|---|---|
 | REMED-BUILD-004 | DONE | | feature/audit | New `.github/workflows/general-tests-ci.yml` — see detail below. |
-| REMED-BUILD-008 | NOT STARTED | | | **Blocks GFX-014 and GFX-015.** |
+| REMED-BUILD-008 | BLOCKED | | | Attempted; genuinely blocked by a newly-discovered environment constraint, not abandoned. See detail below and the new `REMED-BUILD-012` finding. |
 | REMED-TEST-002 | DONE | | feature/audit | `GameTests.cpp`/`GraphicsDeviceManagerTests.cpp` rewritten, `GameCrashTest.cpp` deleted — see detail below. |
 | REMED-TEST-004 | DONE | | feature/audit | (a)/(b) already satisfied by `REMED-CONTENT-002`/`REMED-DEVICES-001`'s own regression tests (see detail below). (c) `PictureLibraryIndexTests.cpp` done — see detail below. |
+
+### REMED-BUILD-008 detail — D3D12 test coverage, genuinely blocked
+
+**Attempted approach, per the task's own suggested strategy:** reuse
+`examples/easygl_depthstencilstate_stencil_enable_test.cpp` and `examples/easygl_scissor_test.cpp`
+verbatim for D3D12 (both already confirmed backend-agnostic — public `Game`/`GraphicsDevice`/
+`DepthStencilState`/`RasterizerState`/`BasicEffect` API only — and already reused verbatim by D3D11,
+per `D3D11Tests.cmake`'s own comment), plus a new backend-agnostic multi-draw `OcclusionQuery` test
+(`examples/occlusion_query_multidraw_test.cpp`, modeled on `examples/
+easygl_occlusion_query_visible_quad_test.cpp`'s own construction/readback style: draws a
+single-quad baseline in its own `Begin()`/`End()`, then two non-overlapping quads inside ONE shared
+`Begin()`/`End()`, asserting the multi-draw `PixelCount()` is meaningfully greater than the
+single-draw baseline — the exact property `REMED-GFX-015`'s last-draw-only bug breaks). Registered
+all three in `cmake/Tests/D3D12Tests.cmake` following `D3D12_Smoke`'s own
+`cna_d3d12_test`/`cna_register_backend_test`/`CMAKE_CROSSCOMPILING` pattern.
+
+**Build:** all three compiled and linked cleanly against the existing `cmake-build-d3d12-mingw` +
+`~/.wine-cna-d3d12` (vkd3d-proton) setup (after working around an unrelated, transient sibling-repo
+build issue — see the note in `REMED-TEST-004`'s own detail above for the same root cause; resolved
+here opportunistically once the shared `sharp-runtime` checkout happened to be on a compatible
+branch, without touching it myself).
+
+**Run — genuinely blocked, not a stencil/scissor bug:** both the stencil-enable and scissor
+executables **crash identically** under `scripts/run-wine-vkd3d.sh` with `wine: Unhandled page fault
+on read access to 0000000000000000` at the identical fault address in both runs. The backtrace is
+conclusive and has nothing to do with `DepthStencilState`/`RasterizerState` at all:
+```
+0 vkd3d_instance_get_vk_instance(instance=0000000000000000) [.../vkd3d/device.c:804] in wined3d
+1 d3d12_swapchain_init [.../dxgi/swapchain.c:3287] in dxgi
+2 d3d12_swapchain_create [.../dxgi/swapchain.c:3446] in dxgi
+3 dxgi_factory_CreateSwapChainForHwnd [.../dxgi/factory.c:311] in dxgi
+```
+This is **real window-attached DXGI swap-chain creation crashing inside vanilla Wine's own
+`dxgi.dll`** — exactly the failure mode `cmake/Tests/D3D12Tests.cmake`'s own pre-existing comment on
+`cna_diag_d3d12_swapchain` already documents ("DX-100's own spike already found this crashes under
+vanilla Wine's dxgi.dll... a permanently-registered, always-crashing CTest would just be noise").
+That comment previously read as describing one specific diagnostic tool's own known limitation; this
+task's work confirms it is actually a **blanket constraint on this dev environment**: *any* test that
+constructs a real window via `Game`+`GraphicsDeviceManager` (i.e. anything other than `D3D12_Smoke`'s
+own deliberately-off-screen, `window=nullptr` construction) will hit this identical crash on D3D12,
+regardless of what XNA feature it's actually trying to test. `D3D12_Smoke` itself only avoids this by
+never touching a window/swap chain at all, and does so via a much lower-level, hand-rolled internal
+API (`BindOffscreenColorTargetEXT()`, direct command-list/PSO/root-signature/barrier calls) rather
+than the public `Game`/`GraphicsDevice`/`BasicEffect` surface every other backend's tests use.
+
+**Recorded as a new finding, not fixed here** — see `REMED-BUILD-012` below.
+
+**Why this is BLOCKED, not abandoned:** the master plan's own suggested strategy for this task
+("reuse the same backend-agnostic EasyGL-authored sources... D3D11 already reuses verbatim") rests
+on an assumption — that a real-window D3D12 test is possible at all in this dev loop — this task's
+own work disproves. Reaching `REMED-GFX-014`/`REMED-GFX-015`'s trigger conditions on D3D12 now
+requires writing genuinely off-screen tests in `D3D12_Smoke`'s own bespoke, much lower-level style
+(hand-rolling PSO/root-signature/barrier/render-target-binding calls through internal `EXT` methods,
+not the public API), which is substantially larger than this task's own `MEDIUM` complexity estimate
+assumed — a `LARGE` undertaking uncovered by doing the work, not a scope choice. **Reverted all
+CMake registrations and deleted the new test source** rather than leave crashing/unregistered code
+behind: registering permanently-crashing CTests is the exact anti-pattern `cna_diag_d3d12_swapchain`
+itself already exists to avoid, and an unregistered, never-verified-on-any-backend source file left
+in the tree would be a half-finished addition. `git status` confirms a clean working tree for this
+task (no `cmake/Tests/D3D12Tests.cmake` diff, no new `examples/*.cpp`).
+
+**Completion/verification criteria: NOT met.** D3D12 still has exactly one CTest (`D3D12_Smoke`);
+`REMED-GFX-014`/`REMED-GFX-015` remain unverifiable on D3D12 in this dev environment specifically
+(not necessarily on real Windows/real hardware, which this sandbox cannot test either way).
 
 ### REMED-TEST-004 detail — three missing tests for already-confirmed defects
 
@@ -879,6 +943,7 @@ existing task.
 | REMED-NET-008 | A "client"-role `NetworkSession`'s own incidental listening `ENetHost` (bound on every non-Emscripten `ConnectToHost()` call, so a peer can be promoted to host later via migration without rebinding — see `ENetHostHandle`'s own doc comment) still accepts and fully processes `ClientHello` from *any* third party that connects to it, not just its real host — `HandleClientHello` has no "am I actually supposed to be hosting anyone" check. A rogue peer can connect directly to a client's own bound port (`ENetBackend::GetBoundPort()` is non-zero for a client-role session too) and get a real `ServerWelcomeMessage` snapshotting that peer's own roster, plus get added as a real `NetworkGamer`/fire a real `GamerJoined` event on that peer's session — despite that peer never intending to host anyone | MEDIUM | P2 | REMED-NET-001 (host-authority audit sweep) | NOT STARTED — recorded, not fixed (distinct root cause from NET-001: `ClientHello` is not one of the four host-authoritative broadcast types NET-001 covers; this is a missing role-check on the *accept* side of a client-scoped session, not a missing sender-authority check on a broadcast-only message. Confirmed real via manual reasoning about `ConnectToHost`'s own non-Emscripten `StartHosting()` call and `HandleClientHello`'s unconditional accept — not separately reproduced with a new test, since fixing/proving it is out of this task's scope; the closest existing coverage is `ClientRejectsForgedGamerLeaveBroadcastFromRogueThirdPartyPeer`, new in this task, which proves the same rogue-third-party-on-a-client-socket attack surface is real for the four NET-001 message types specifically) |
 | REMED-TEST-008 | `DynamicSoundEffectInstanceTest.BufferNeededFiresExactlyTheStarvedCount` fails under a full unfiltered `ctest -j4` run but passes 10/10 in isolation (`--gtest_filter` + `--gtest_repeat=10`) — a real-time audio buffer-starvation-count assertion is timing-sensitive under heavy 4-way parallel CPU load on this sandbox. Extends `REMED-NET-001`'s already-documented `ctest -j4` transient-failure finding (previously only `ENetDiscoveryServiceTest.*` ×4 and 2 `TwoProcessLoopbackTest`/`NetworkSessionTest` cases, all network-port contention) to a second, previously-undocumented flakiness class (audio timing, not networking) | LOW | P3 | REMED-BUILD-004 (establishing a full local `ctest -j4` baseline before designing the new CI job) | NOT STARTED — recorded, not fixed (test-reliability finding, not a production defect; `REMED-BUILD-004`'s own new CI job runs `ctest` serially specifically to avoid this and the already-known network-port class, rather than allowlisting either) |
 | REMED-CORE-014 | `GraphicsDeviceManager`'s private `ownsGraphicsDevice_` flag is initialized `false` in both constructors and never set `true` anywhere in `GraphicsDeviceManager.cpp` (confirmed by grep of the whole file, and independently by a live probe program: construct `Game` + `GraphicsDeviceManager(&game)`, subscribe to `getDeviceDisposingEvent()`, call `gdm->Dispose()` — the subscriber never fires). Both of `Dispose()`'s and `CreateDevice()`'s only conditional branches that raise `DeviceDisposing` and release the owned `GraphicsDevice` are therefore permanently dead code, for **every** `GraphicsDeviceManager` instance, not only the `Game`-attached case this entire codebase always constructs. This directly compounds `REMED-CORE-006`: even after `Game::Initialize()` subscribes to `DeviceDisposing` (that task's own stated fix strategy), a real `GraphicsDeviceManager::Dispose()` call on a `Game`-attached manager still would not raise the event without this dead-code path also being addressed — the CORE-lane owner should know this before scoping `REMED-CORE-006`'s fix as "just add the subscription" | HIGH | P1 | REMED-TEST-002 (investigating how to trigger `REMED-CORE-006`'s own required test, "dispose the device, assert `UnloadContent()` was called") | NOT STARTED — recorded, not fixed (CORE-lane production defect, out of BUILD_TEST_CI's scope; `REMED-TEST-002`'s own `GameTest.DisposingDeviceInvokesUnloadContent` test already exercises the real, compounded failure end-to-end via `Game::Dispose()`, so no separate reproduction is needed for whoever picks this up) |
+| REMED-BUILD-012 | Any test that constructs a real window via `Game`+`GraphicsDeviceManager` on the D3D12 backend crashes identically under this dev environment's Wine+vkd3d-proton setup: `wine: Unhandled page fault on read access to 0000000000000000`, backtrace bottoming out in `vkd3d_instance_get_vk_instance(instance=nullptr)` inside `dxgi_factory_CreateSwapChainForHwnd` → `d3d12_swapchain_create` → `d3d12_swapchain_init` — real window-attached DXGI swap-chain creation crashing inside vanilla Wine's own `dxgi.dll`, confirmed identically for two independent test executables (a reused `DepthStencilState` test and a reused `RasterizerState`/scissor test). `cmake/Tests/D3D12Tests.cmake`'s own pre-existing comment on `cna_diag_d3d12_swapchain` already documented this exact crash for **one specific diagnostic tool** ("DX-100's own spike..."); this generalizes it to a blanket constraint — **no** D3D12 test using the public `Game`/`GraphicsDeviceManager`/real-window API can run in this dev loop at all, only `D3D12_Smoke`'s own deliberately off-screen (`window=nullptr`), much lower-level, hand-rolled internal-`EXT`-API style avoids it | HIGH | P1 | REMED-BUILD-008 (attempting to reuse D3D11's own backend-agnostic public-API test sources for D3D12) | NOT STARTED — recorded, not fixed (a Wine/vkd3d-proton dev-environment limitation, not a CNA code defect fixable in this repo; blocks `REMED-BUILD-008`/`REMED-GFX-014`/`REMED-GFX-015` from being verified via the public-API test style every other backend uses — whoever picks these up needs `D3D12_Smoke`'s own off-screen internal-`EXT` construction style instead, a substantially larger undertaking than a simple test-source reuse) |
 
 #### REMED-BUILD-010 detail
 
