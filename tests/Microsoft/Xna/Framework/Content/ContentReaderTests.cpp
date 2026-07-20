@@ -66,6 +66,54 @@ namespace
         }
     };
 
+    // REMED-CONTENT-006: a self-referential node type, used to drive InnerReadObject<T>()'s own
+    // recursion (each node's Read() may call input.ReadObject<T>() again for a "child") -- the
+    // same class of unbounded recursion as XnbTypeName::ParseOne()'s (see that file's own fix),
+    // just triggered by nested object dispatch instead of nested generic-argument brackets.
+    struct RecursiveNode
+    {
+        int32_t depth = 0;
+        std::shared_ptr<RecursiveNode> child;
+    };
+
+    class RecursiveNodeReader : public ContentTypeReader<std::shared_ptr<RecursiveNode>>
+    {
+    public:
+        RecursiveNodeReader() : ContentTypeReader<std::shared_ptr<RecursiveNode>>("CNA.Test.RecursiveNode") {}
+
+    protected:
+        std::shared_ptr<RecursiveNode> Read(
+            ContentReader& input, std::optional<std::shared_ptr<RecursiveNode>> existingInstance) override
+        {
+            auto node = (existingInstance && *existingInstance) ? *existingInstance : std::make_shared<RecursiveNode>();
+            node->depth = input.ReadInt32();
+            const bool hasChild = input.ReadInt32() != 0;
+            if (hasChild)
+            {
+                node->child = input.ReadObject<std::shared_ptr<RecursiveNode>>();
+            }
+            return node;
+        }
+    };
+
+    // Writes remainingDepth+1 nested RecursiveNode dispatch calls (root plus remainingDepth
+    // children), each preceded by its own 1-based type-reader index -- matching the object
+    // dispatch protocol InnerReadObject<T>() expects at every nesting level, not just the root.
+    void WriteRecursiveNode(System::IO::BinaryWriter& w, int remainingDepth)
+    {
+        w.Write7BitEncodedInt(1); // -> table entry 0, CNA.Test.RecursiveNodeReader
+        w.Write(static_cast<int32_t>(remainingDepth));
+        if (remainingDepth > 0)
+        {
+            w.Write(static_cast<int32_t>(1)); // has child
+            WriteRecursiveNode(w, remainingDepth - 1);
+        }
+        else
+        {
+            w.Write(static_cast<int32_t>(0)); // no child
+        }
+    }
+
     class ContentReaderTest : public ::testing::Test
     {
     protected:
@@ -76,6 +124,8 @@ namespace
                 "CNA.Test.TestPayloadReader", [] { return std::make_unique<TestOnlyPayloadReader>(); });
             ContentTypeReaderManager::AddTypeCreator(
                 "CNA.Test.TestNodeReader", [] { return std::make_unique<TestOnlyNodeReader>(); });
+            ContentTypeReaderManager::AddTypeCreator(
+                "CNA.Test.RecursiveNodeReader", [] { return std::make_unique<RecursiveNodeReader>(); });
         }
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
@@ -196,6 +246,45 @@ TEST_F(ContentReaderTest, OutOfRangeRootIndexThrowsContentLoadException)
     ContentReader reader(nullptr, &ms, "test", 5, 'w');
 
     EXPECT_THROW(reader.ReadAsset<TestPayload>(), ContentLoadException);
+}
+
+// REMED-CONTENT-006: InnerReadObject<T>() previously recursed with no depth limit whenever a type
+// reader called back into ReadObject<U>() for a nested member -- the same unbounded-recursion
+// class as XnbTypeName::ParseOne()'s. A tiny custom limit keeps this test fast and deterministic
+// rather than constructing thousands of real nested dispatch calls.
+TEST_F(ContentReaderTest, ObjectNestingDepthExceedingLimitThrowsContentLoadException)
+{
+    CNA::Internal::Xnb::XnbReadLimits tightLimits;
+    tightLimits.maxObjectNestingDepth = 3;
+
+    const auto bytes = BuildBody(
+        {{"CNA.Test.RecursiveNodeReader", 0}}, 0,
+        [](System::IO::BinaryWriter& w) { WriteRecursiveNode(w, 4); }); // 5 nested dispatch calls: 0..4
+
+    System::IO::MemoryStream ms(bytes.data(), (int32_t)bytes.size());
+    ContentReader reader(nullptr, &ms, "test", 5, 'w', nullptr, tightLimits);
+
+    EXPECT_THROW(reader.ReadAsset<std::shared_ptr<RecursiveNode>>(), ContentLoadException);
+}
+
+TEST_F(ContentReaderTest, ObjectNestingDepthAtLimitDoesNotThrow)
+{
+    CNA::Internal::Xnb::XnbReadLimits tightLimits;
+    tightLimits.maxObjectNestingDepth = 3;
+
+    const auto bytes = BuildBody(
+        {{"CNA.Test.RecursiveNodeReader", 0}}, 0,
+        [](System::IO::BinaryWriter& w) { WriteRecursiveNode(w, 3); }); // 4 nested dispatch calls: 0..3
+
+    System::IO::MemoryStream ms(bytes.data(), (int32_t)bytes.size());
+    ContentReader reader(nullptr, &ms, "test", 5, 'w', nullptr, tightLimits);
+
+    const auto root = reader.ReadAsset<std::shared_ptr<RecursiveNode>>();
+    ASSERT_NE(root, nullptr);
+    EXPECT_EQ(root->depth, 3);
+    ASSERT_NE(root->child, nullptr);
+    EXPECT_EQ(root->child->child->child->depth, 0);
+    EXPECT_EQ(root->child->child->child->child, nullptr);
 }
 
 TEST_F(ContentReaderTest, SharedResourceFixupRunsAfterRootObjectWithResolvedValue)

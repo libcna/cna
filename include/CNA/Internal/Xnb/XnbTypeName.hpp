@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "CNA/Internal/Xnb/XnbReadLimits.hpp"
+
 namespace CNA::Internal::Xnb
 {
     /**
@@ -63,9 +65,27 @@ namespace CNA::Internal::Xnb
          * @brief Parses one assembly-qualified .NET type name starting at @p pos, stopping at
          *        the end of @p s or at the first top-level `,`/`]` that isn't part of this
          *        type's own generic-argument list.
+         *
+         * REMED-CONTENT-006: recurses once per nested generic-argument level with no limit of its
+         * own -- @p nestingDepth/@p maxDepth close that (a crafted type name costs ~4 bytes per
+         * nesting level, so a sub-1MB file previously exhausted the C++ call stack; confirmed
+         * empirically before this fix, see REMEDIATION_PROGRESS.md).
+         *
+         * @param nestingDepth Current nesting depth (0 at the top-level call). Deliberately not
+         *                     named `depth` -- this function already has an unrelated local
+         *                     `depth` used for bracket-matching inside the generic-argument loop
+         *                     below, which would otherwise silently shadow it.
+         * @param maxDepth     Bound from @c XnbReadLimits::maxObjectNestingDepth.
          */
-        inline XnbTypeName ParseOne(std::string_view s, std::size_t& pos)
+        inline XnbTypeName ParseOne(std::string_view s, std::size_t& pos, int32_t nestingDepth, int32_t maxDepth)
         {
+            if (nestingDepth > maxDepth)
+            {
+                throw std::invalid_argument(
+                    "XnbTypeName: exceeds the maximum generic-argument nesting depth (" +
+                    std::to_string(maxDepth) + ").");
+            }
+
             XnbTypeName result;
 
             const std::size_t nameStart = pos;
@@ -106,7 +126,7 @@ namespace CNA::Internal::Xnb
                     }
                     const std::string_view argText = s.substr(argStart, pos - argStart);
                     std::size_t argPos = 0;
-                    result.genericArguments.push_back(ParseOne(argText, argPos));
+                    result.genericArguments.push_back(ParseOne(argText, argPos, nestingDepth + 1, maxDepth));
                     ++pos; // consume the argument's closing ']'
 
                     SkipSpaces(s, pos);
@@ -143,21 +163,26 @@ namespace CNA::Internal::Xnb
      *
      * @param rawTypeName The type-reader name exactly as read from a `.xnb` type-reader table
      *                    entry (or an already-bare name; the parser tolerates both).
+     * @param limits      Bounds the generic-argument nesting depth (REMED-CONTENT-006,
+     *                    plan_xnb.md XNB-43); defaults to @ref DefaultXnbReadLimits().
      * @return The parsed name, ready for ToCanonicalString() or direct field inspection.
-     * @throws std::invalid_argument if @p rawTypeName has unbalanced or malformed brackets.
+     * @throws std::invalid_argument if @p rawTypeName has unbalanced or malformed brackets, or
+     *         nests generic arguments deeper than @p limits.maxObjectNestingDepth.
      */
-    inline XnbTypeName ParseXnbTypeName(const std::string& rawTypeName)
+    inline XnbTypeName ParseXnbTypeName(const std::string& rawTypeName,
+                                         const XnbReadLimits& limits = DefaultXnbReadLimits())
     {
         std::size_t pos = 0;
-        return Detail::ParseOne(rawTypeName, pos);
+        return Detail::ParseOne(rawTypeName, pos, 0, limits.maxObjectNestingDepth);
     }
 
     /**
      * @brief Convenience wrapper: parses @p rawTypeName and returns its canonical registry key
      *        string directly (see ParseXnbTypeName() and XnbTypeName::ToCanonicalString()).
      */
-    inline std::string NormalizeXnbTypeReaderName(const std::string& rawTypeName)
+    inline std::string NormalizeXnbTypeReaderName(const std::string& rawTypeName,
+                                                   const XnbReadLimits& limits = DefaultXnbReadLimits())
     {
-        return ParseXnbTypeName(rawTypeName).ToCanonicalString();
+        return ParseXnbTypeName(rawTypeName, limits).ToCanonicalString();
     }
 }

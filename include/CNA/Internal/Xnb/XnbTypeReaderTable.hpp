@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -38,7 +39,8 @@ namespace CNA::Internal::Xnb
      * @return The parsed table, in file order (index 0 is table entry 1 in the 1-based dispatch
      *         protocol used by XNB-16's root/object dispatch).
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the encoded count is
-     *         negative or exceeds @p limits.maxTypeReaderCount, or an entry's name is not a
+     *         negative or exceeds @p limits.maxTypeReaderCount, an entry's raw name exceeds
+     *         @p limits.maxStringBytes (REMED-CONTENT-006), or an entry's name is not a
      *         well-formed (possibly generic) .NET type name (plan_xnb.md XNB-43) -- matching every
      *         other malformed-input case in this pipeline, a caller only ever needs to catch this
      *         one exception type for "this .xnb file is malformed", never
@@ -65,9 +67,20 @@ namespace CNA::Internal::Xnb
         {
             XnbTypeReaderTableEntry entry;
             entry.rawName = reader.ReadString();
+            // REMED-CONTENT-006: BinaryReader::ReadString() has no cap of its own -- only its
+            // coarse whole-stream limit applies (up to limits.maxFileSize), not the much tighter
+            // limits.maxStringBytes this field is specifically meant to enforce. Checked after the
+            // read (BinaryReader::ReadString() has no way to pass a cap in), which still rejects
+            // the file with a clean exception rather than silently accepting an oversized name.
+            if (static_cast<int64_t>(entry.rawName.size()) > limits.maxStringBytes)
+            {
+                throw ContentLoadException(
+                    "'" + path + "' has a type-reader name of " + std::to_string(entry.rawName.size()) +
+                    " bytes, exceeding the maximum of " + std::to_string(limits.maxStringBytes) + ".");
+            }
             try
             {
-                entry.normalizedName = NormalizeXnbTypeReaderName(entry.rawName);
+                entry.normalizedName = NormalizeXnbTypeReaderName(entry.rawName, limits);
             }
             catch (const std::invalid_argument& ex)
             {

@@ -95,3 +95,43 @@ TEST(XnbTypeNameTest, MissingOpenBracketForArgumentThrowsInvalidArgument)
     EXPECT_THROW(ParseXnbTypeName("Microsoft.Xna.Framework.Content.ListReader`1[Microsoft.Xna.Framework.Vector3]]"),
                  std::invalid_argument);
 }
+
+namespace
+{
+    // Builds a well-formed nested single-argument generic type name of the given depth, e.g.
+    // depth=3 -> "X[[X[[X[[X]]]]]]" -- each level is exactly the shape a real nested generic like
+    // ListReader`1[[ListReader`1[[...]]]] takes, just with a minimal base name.
+    std::string BuildNestedTypeName(int depth)
+    {
+        std::string s;
+        for (int i = 0; i < depth; ++i) s += "X[[";
+        s += "X";
+        for (int i = 0; i < depth; ++i) s += "]]";
+        return s;
+    }
+}
+
+// REMED-CONTENT-006: ParseOne() previously recursed once per nesting level with no limit at all --
+// confirmed empirically (before this fix) to segfault the process via C++ call-stack exhaustion on
+// a crafted, well-under-1MB type name. Reproduces that shape at the default limit's own boundary,
+// proving it now throws cleanly instead of crashing.
+TEST(XnbTypeNameTest, NestingDepthExceedingDefaultLimitThrowsInvalidArgumentNotCrash)
+{
+    const std::string deep = BuildNestedTypeName(300); // default maxObjectNestingDepth is 256
+    EXPECT_THROW(ParseXnbTypeName(deep), std::invalid_argument);
+}
+
+TEST(XnbTypeNameTest, NestingDepthAtDefaultLimitDoesNotThrow)
+{
+    const std::string atLimit = BuildNestedTypeName(256); // exactly CNA::Internal::Xnb::XnbReadLimits{}.maxObjectNestingDepth
+    EXPECT_NO_THROW(ParseXnbTypeName(atLimit));
+}
+
+TEST(XnbTypeNameTest, CustomLimitsRejectsNestingThatWouldBeAllowedByDefault)
+{
+    CNA::Internal::Xnb::XnbReadLimits tightLimits;
+    tightLimits.maxObjectNestingDepth = 2;
+
+    EXPECT_NO_THROW(ParseXnbTypeName(BuildNestedTypeName(2), tightLimits));
+    EXPECT_THROW(ParseXnbTypeName(BuildNestedTypeName(3), tightLimits), std::invalid_argument);
+}

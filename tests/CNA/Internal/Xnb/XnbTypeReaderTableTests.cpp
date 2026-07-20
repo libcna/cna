@@ -112,6 +112,50 @@ TEST(XnbTypeReaderTableTest, RealMonoGameFixturePreservesRawNameAlongsideNormali
 // plan_xnb.md XNB-43: a malformed generic-argument name (XnbTypeName's own std::invalid_argument)
 // must surface as this pipeline's one consistent malformed-input error type, not leak the
 // lower-level exception a caller catching ContentLoadException around Load<T>() would miss.
+// REMED-CONTENT-006: maxStringBytes previously had zero consumers anywhere -- only
+// BinaryReader::ReadString()'s own much coarser whole-stream clamp (up to maxFileSize) applied to
+// this field. Uses a deliberately tiny limit so the test itself stays fast and deterministic
+// rather than constructing a real 1MB+ string.
+TEST(XnbTypeReaderTableTest, RawNameExceedingMaxStringBytesThrowsContentLoadException)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write7BitEncodedInt(1);
+    writer.Write(std::string("Microsoft.Xna.Framework.Content.Texture2DReader"));
+    writer.Write((int32_t)0);
+    writer.Flush();
+    auto buf = ms.ToArray();
+    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
+    System::IO::BinaryReader reader(&ms2, true);
+
+    XnbReadLimits tinyLimits;
+    tinyLimits.maxStringBytes = 10; // shorter than the real name above
+
+    EXPECT_THROW(ParseXnbTypeReaderTable(reader, "test.xnb", tinyLimits), ContentLoadException);
+}
+
+// REMED-CONTENT-006: confirms the maxObjectNestingDepth limit propagates all the way from
+// ParseXnbTypeReaderTable's own `limits` parameter through to XnbTypeName::ParseOne(), not just
+// when ParseXnbTypeName() is called directly (see XnbTypeNameTests.cpp for that half).
+TEST(XnbTypeReaderTableTest, NestingDepthExceedingLimitThrowsContentLoadException)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write7BitEncodedInt(1);
+    // "X[[X[[X]]]]" -- 2 levels of nesting.
+    writer.Write(std::string("X[[X[[X]]]]"));
+    writer.Write((int32_t)0);
+    writer.Flush();
+    auto buf = ms.ToArray();
+    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
+    System::IO::BinaryReader reader(&ms2, true);
+
+    XnbReadLimits tightLimits;
+    tightLimits.maxObjectNestingDepth = 1; // the fixture above nests 2 levels deep
+
+    EXPECT_THROW(ParseXnbTypeReaderTable(reader, "test.xnb", tightLimits), ContentLoadException);
+}
+
 TEST(XnbTypeReaderTableTest, MalformedGenericTypeNameThrowsContentLoadExceptionNotInvalidArgument)
 {
     System::IO::MemoryStream ms;

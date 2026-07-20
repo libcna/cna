@@ -35,11 +35,11 @@ disproved finding is a real result and should be recorded with the same rigor as
 
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
-| P0 | 11 | 5 | 0 | 0 | 6 |
+| P0 | 11 | 6 | 0 | 0 | 5 |
 | P1 | 21 | 0 | 0 | 0 | 21 |
 | P2 | 44 | 0 | 0 | 0 | 44 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **104** | **5** | **0** | **0** | **99** |
+| **Total** | **104** | **6** | **0** | **0** | **98** |
 
 ## Wave 0 — make the tests trustworthy
 
@@ -80,7 +80,7 @@ production fixes were made for any of the 4 already-tracked findings, per instru
 | REMED-CONTENT-001 | DONE | | feature/audit | CRITICAL. Fixed in shared content code, **not** per-backend — see detail below. |
 | REMED-CONTENT-002 | DONE | | feature/audit | Shared helper + 3 call sites + repo-wide grep sweep — see detail below. 2 genuinely new findings recorded (`REMED-CONTENT-007`, `-008`), not fixed (out of this task's scope). |
 | REMED-CONTENT-003 | DONE | | feature/audit | Ported the sibling readers' existing check verbatim — see detail below. |
-| REMED-CONTENT-006 | NOT STARTED | | | VERIFY first. Then audit all 7 `XnbReadLimits` fields for consumers. |
+| REMED-CONTENT-006 | DONE | | feature/audit | VERIFY passed (reproduced a real segfault before fixing) — see detail below. |
 | REMED-GFX-001 | NOT STARTED | | | Serialize against all other EasyGL work. |
 | REMED-GFX-002 | NOT STARTED | | | Sequence before GFX-003 (same file). |
 | REMED-GFX-003 | NOT STARTED | | | After GFX-002. Resize tables **and** add flag operators together. |
@@ -241,6 +241,52 @@ with an absolute path is rejected; the sweep's hit list is documented above. Ful
 direct-binary run (EASYGL): 5537/5530/4/0, 0 regressions (same run as CONTENT-001's, all three
 CONTENT tasks verified together).
 
+### REMED-CONTENT-006 detail — XnbReadLimits dead controls
+
+**Verification (required — done before any fix):** audited all 7 declared `XnbReadLimits` fields
+for consumers via targeted grep; confirmed exactly the 2 the plan named have zero consumers
+anywhere (`maxStringBytes`, `maxObjectNestingDepth`) and the other 5 (`maxFileSize`,
+`maxDecompressedSize`, `maxTypeReaderCount`, `maxSharedResourceCount`,
+`maxCollectionElementCount`) are all genuinely wired up already. Then **reproduced the
+stack-overflow live**, as required, with a standalone throwaway program (not part of the test
+suite, since it was expected to crash) calling `XnbTypeName::ParseOne()` with a crafted,
+well-formed nested-generic type name: depth 20,000 (80,001 bytes) parsed fine; depth 50,000
+(200,001 bytes) segfaulted (`exit 139`); depth 200,000 (800,001 bytes, still comfortably under
+`maxFileSize`'s 64MB and even under `maxStringBytes`'s own intended-but-unenforced 1MB cap)
+segfaulted reliably. Confirmed real, not merely reasoned from the recursion shape.
+
+**Changes:**
+- `XnbTypeName.hpp`: `Detail::ParseOne()` takes an explicit `nestingDepth`/`maxDepth` pair (deliberately
+  *not* named `depth` — the function already has an unrelated local `depth` used for bracket-
+  matching inside the generic-argument loop, which silently shadowed an earlier attempt at this fix
+  during implementation and made the depth check a no-op; caught by 3 failing new tests before
+  being fixed). Throws `std::invalid_argument` past the bound, consistent with this file's existing
+  malformed-input exception type. `ParseXnbTypeName()`/`NormalizeXnbTypeReaderName()` both gained an
+  `XnbReadLimits` parameter (default `DefaultXnbReadLimits()`) to thread the bound through.
+- `XnbTypeReaderTable.hpp`: passes its own `limits` through to `NormalizeXnbTypeReaderName()`
+  instead of the default; added a post-read `entry.rawName.size() > limits.maxStringBytes` check
+  (thrown as `ContentLoadException`) — `BinaryReader::ReadString()` has no way to accept a cap
+  itself, so this is checked immediately after the read rather than preventing the read.
+- `ContentReader.hpp`: `InnerReadObject<T>()` — the same unbounded-recursion shape, driven by
+  nested object dispatch instead of nested generic brackets — gained an `objectNestingDepth_`
+  member and an RAII `ObjectDepthGuard`, checked against the same `limits_.maxObjectNestingDepth`
+  bound, throwing `ContentLoadException`.
+
+**Tests added:** `XnbTypeNameTests.cpp` — 3 tests (exceeds default limit throws, at-limit does not
+throw, custom tight limit rejects nesting the default would allow). `XnbTypeReaderTableTests.cpp` —
+2 tests (`maxStringBytes` enforcement; confirms `maxObjectNestingDepth` propagates through this
+entry point too, not just direct `ParseXnbTypeName()` calls). `ContentReaderTests.cpp` — 2 tests
+using a new self-referential `RecursiveNode`/`RecursiveNodeReader` test fixture (exceeds a tight
+custom limit throws; at-limit succeeds and produces the correct nested structure).
+
+**Completion criteria met:** all 7 `XnbReadLimits` fields now have a real enforcement site and a
+test (5 already did; the 2 previously-dead ones now do too).
+
+**Verification criteria met:** re-compiled the crafted deep-nesting fixture under
+`-fsanitize=address,undefined` — throws `std::invalid_argument` cleanly (`"XnbTypeName: exceeds the
+maximum generic-argument nesting depth (256)."`), exit 0, zero ASan/UBSan-reported issues. Full
+`CnaTests` direct-binary run (EASYGL): 5544 tests, 5540 passed, 4 skipped, 0 failed, exit 0 — 5537
+baseline (after CONTENT-001/002/003) + 7 new tests, 0 regressions.
 
 ## Wave 1 (parallel) — unblockers
 

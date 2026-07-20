@@ -358,9 +358,31 @@ namespace Microsoft::Xna::Framework::Content
         // no default constructor (e.g. SpriteFont), unlike C#'s free default(T) for reference
         // types. nullopt uniformly represents "no existing instance" regardless of whether T
         // happens to be default-constructible.
+        // REMED-CONTENT-006: InnerReadObject() recurses whenever a type reader's own ReadUntyped()
+        // calls back into ReadObject<U>() for a nested member (e.g. a Model's meshes, each
+        // containing effects, each containing parameters...) with no depth limit -- unbounded
+        // recursion driven entirely by attacker-controlled file structure, the same class of bug
+        // as XnbTypeName::ParseOne()'s (see that file's own fix). This RAII guard bounds it by
+        // limits_.maxObjectNestingDepth; decrements on every exit path, including an exception
+        // thrown deeper in the call stack.
+        struct ObjectDepthGuard
+        {
+            ContentReader& self;
+            explicit ObjectDepthGuard(ContentReader& s) : self(s) { ++self.objectNestingDepth_; }
+            ~ObjectDepthGuard() { --self.objectNestingDepth_; }
+        };
+
         template <typename T>
         T InnerReadObject(std::optional<T> existingInstance)
         {
+            if (objectNestingDepth_ > limits_.maxObjectNestingDepth)
+            {
+                throw ContentLoadException(
+                    "'" + assetName_ + "' exceeds the maximum object nesting depth (" +
+                    std::to_string(limits_.maxObjectNestingDepth) + ").");
+            }
+            ObjectDepthGuard depthGuard(*this);
+
             const int32_t typeReaderIndex = Read7BitEncodedInt();
             if (typeReaderIndex == 0)
             {
@@ -443,5 +465,6 @@ namespace Microsoft::Xna::Framework::Content
         int32_t sharedResourceCount_ = 0;
         std::vector<std::any> sharedResources_;
         std::vector<std::vector<std::function<void(const std::any&)>>> sharedResourceFixups_;
+        int32_t objectNestingDepth_ = 0;
     };
 }
