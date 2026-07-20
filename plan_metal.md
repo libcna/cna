@@ -1429,6 +1429,42 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     backend's own source code correctness, not this repo's build/CI plumbing or a sibling repo's
     portability.
 
+57. **Real eleventh CI signal — genuinely not a bug, a cross-repo branch-pinning gap involving the
+    user's own concurrent work, resolved with the user rather than guessed at**: with both Metal
+    bugs (item 56) fixed, the build reached `CNA.dir` (the main library) and failed on
+    `DecimalDateTimeContentTypeReaders.cpp`: `no member named 'ReadDecimal' in
+    'Microsoft::Xna::Framework::Content::ContentReader'`. Unlike every prior finding, this class of
+    error ("no member named", on an ordinary C++ class) is almost never platform-specific — worth
+    checking directly rather than assuming another Apple/Clang quirk. Reproduced locally on this
+    Linux/GCC machine by deleting and forcing a fresh rebuild of the exact same object file: it
+    **compiled successfully** here, which ruled out a genuine compiler difference immediately (a
+    "no member named" error is either universally true or universally false — it cannot depend on
+    which compiler is asking). Traced the real cause: `ContentReader : public
+    System::IO::BinaryReader`, and `BinaryReader::ReadDecimal()` — confirmed via `git show` against
+    3 refs — exists only on `sharp-runtime`'s local, **never-pushed** `feature/xnb-charreader`
+    branch (the user's own in-progress work, the branch this whole session has been careful to
+    leave untouched between fixes), not on `origin/develop` nor on the `fix/clang-format-
+    truncation-flag` branch item 50 created (based on `develop`). This Linux sandbox's own build
+    happened to succeed only because `feature/xnb-charreader` was the branch already checked out on
+    disk here — not because of anything about this machine's toolchain.
+
+    This is a genuine cross-repo dependency on the user's own unmerged, unpublished work — not a
+    bug this session's usual "find it, fix it, verify locally, push" pattern applies to, and not a
+    decision to make unilaterally (rebasing onto someone else's in-progress branch, and publishing
+    previously-unpushed commits as a side effect, are both consequential enough to ask first).
+    Asked; the user chose to rebase the fix branch onto `feature/xnb-charreader`. Executed via `git
+    rebase --onto feature/xnb-charreader develop fix/clang-format-truncation-flag` — all 6 of this
+    session's fix commits replayed cleanly with zero conflicts (they touch entirely disjoint files
+    from `feature/xnb-charreader`'s own 3 `BinaryReader` commits). Rebuilt and reran the full test
+    suite with both branches' work combined: 12,494 tests pass (13 more than before, the new
+    `ReadDecimal`/`ReadChar`/length-prefix-guard tests), zero regressions. Pushed with
+    `--force-with-lease` (not a blind `--force`) since this rewrites an already-pushed branch's
+    history — `metal-macos-ci.yml`'s own `ref:` pin needed no change, since it already points at
+    this same branch name and `ref:` resolves to whatever a branch's current head is at run time.
+    **Explicitly flagged to the user, not silently done**: this action published `feature/xnb-
+    charreader`'s 3 previously-unpushed commits to `origin` for the first time, as an unavoidable
+    side effect of the chosen resolution. Eleventh real, observed CI signal.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
