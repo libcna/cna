@@ -2198,17 +2198,23 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         id<MTLTexture> mrMap=nativeTextureFor(params->pbrMetallicRoughnessMap);
         id<MTLTexture> emissiveMap=nativeTextureFor(params->pbrEmissiveMap);
         id<MTLTexture> occlusionMap=nativeTextureFor(params->pbrOcclusionMap);
-        id<MTLSamplerState> smp=(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler);
+        // plan_metal.md METAL-3: each of the 5 PBR texture units gets its own SamplerState slot
+        // (samplerSlots[0..4]), matching EasyGLGraphicsBackend's own real PBR binding exactly
+        // (each map bound to its own GL texture unit, each unit sampled through its own
+        // independently-configured GL sampler object, samplers_[0..4]) -- NOT one shared sampler
+        // broadcast across all 5 units, which this block previously did (a real, silent divergence:
+        // a game setting a distinct SamplerState on, say, the metallic-roughness slot would have
+        // been ignored, since every unit sampled through whatever was set on slot 0 instead).
         [p.encoder setFragmentTexture:(tex0?tex0:p.defaultWhiteTexture) atIndex:0];
-        [p.encoder setFragmentSamplerState:smp atIndex:0];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
         [p.encoder setFragmentTexture:(normalMap?normalMap:p.defaultFlatNormalTexture) atIndex:1];
-        [p.encoder setFragmentSamplerState:smp atIndex:1];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
         [p.encoder setFragmentTexture:(mrMap?mrMap:p.defaultWhiteTexture) atIndex:2];
-        [p.encoder setFragmentSamplerState:smp atIndex:2];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[2]?p.samplerSlots[2]:p.sampler) atIndex:2];
         [p.encoder setFragmentTexture:(emissiveMap?emissiveMap:p.defaultWhiteTexture) atIndex:3];
-        [p.encoder setFragmentSamplerState:smp atIndex:3];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[3]?p.samplerSlots[3]:p.sampler) atIndex:3];
         [p.encoder setFragmentTexture:(occlusionMap?occlusionMap:p.defaultWhiteTexture) atIndex:4];
-        [p.encoder setFragmentSamplerState:smp atIndex:4];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
     } else if (kind == PipelineKind::SkinnedPbr68) {
         // plan_metal.md METAL-82: real SkinnedPbrEffect path -- same bone-buffer handling as
         // Skinned52/56, same 5-texture PBR-map binding as Pbr48.
@@ -2225,17 +2231,17 @@ static void drawMetal3D(MetalGraphicsBackend::Impl& p,const MetalVertexBuffer& v
         id<MTLTexture> mrMap=nativeTextureFor(params->pbrMetallicRoughnessMap);
         id<MTLTexture> emissiveMap=nativeTextureFor(params->pbrEmissiveMap);
         id<MTLTexture> occlusionMap=nativeTextureFor(params->pbrOcclusionMap);
-        id<MTLSamplerState> smp=(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler);
+        // plan_metal.md METAL-3: same per-slot sampler fix as Pbr48 above, see its own comment.
         [p.encoder setFragmentTexture:(tex0?tex0:p.defaultWhiteTexture) atIndex:0];
-        [p.encoder setFragmentSamplerState:smp atIndex:0];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
         [p.encoder setFragmentTexture:(normalMap?normalMap:p.defaultFlatNormalTexture) atIndex:1];
-        [p.encoder setFragmentSamplerState:smp atIndex:1];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
         [p.encoder setFragmentTexture:(mrMap?mrMap:p.defaultWhiteTexture) atIndex:2];
-        [p.encoder setFragmentSamplerState:smp atIndex:2];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[2]?p.samplerSlots[2]:p.sampler) atIndex:2];
         [p.encoder setFragmentTexture:(emissiveMap?emissiveMap:p.defaultWhiteTexture) atIndex:3];
-        [p.encoder setFragmentSamplerState:smp atIndex:3];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[3]?p.samplerSlots[3]:p.sampler) atIndex:3];
         [p.encoder setFragmentTexture:(occlusionMap?occlusionMap:p.defaultWhiteTexture) atIndex:4];
-        [p.encoder setFragmentSamplerState:smp atIndex:4];
+        [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
     } else {
         // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
         // actually reach the shader (previously silently ignored for every draw). Defaults below

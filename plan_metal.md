@@ -1085,6 +1085,25 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     (item 33) now lock the traced dispatch in going forward, closing a task that had been open since
     Phase 2 first landed.
 
+44. **`METAL-3`: a real PBR sampler-slot bug found and fixed, by reading the reference
+    implementation rather than assuming**: while checking whether Phase 5/6/8 (all landed) had
+    actually closed out `METAL-3`'s own "extend sampler-slot consultation beyond unit 0" task,
+    found that `DualTextureEffect`/`EnvironmentMapEffect` already correctly consult
+    `samplerSlots[0]`/`[1]` for their own 2 texture units each — but the `Pbr48`/`SkinnedPbr68`
+    draw paths, which bind 5 distinct PBR texture units (base color/normal/metallic-roughness/
+    emissive/occlusion), broadcast a single `samplerSlots[0]` sampler across all 5 instead of
+    consulting `samplerSlots[1]`–`[4]` for units 1–4. Confirmed this is a real divergence, not a
+    stylistic choice, by reading `EasyGLGraphicsBackend`'s own already-tested PBR texture-binding
+    code (the `p.loc_pbr_normalmap`/`p.loc_pbr_mr`/etc. block): it binds each PBR map to its own
+    GL texture unit and samples each through its own independently-created GL sampler object
+    (`samplers_[0..4]`) — the real, established reference behavior this whole backend has been
+    ported from all session. A game setting a distinct `SamplerState` on, say, the
+    metallic-roughness slot (e.g. `GraphicsDevice.SamplerStates[2] = SamplerState.PointClamp`)
+    would have had it silently ignored, with every PBR map sampling through whatever was set on
+    slot 0 instead. Fixed both `Pbr48` and `SkinnedPbr68` to use `samplerSlots[0..4]` respectively.
+    `.mm`-only, so — like every functional fix this whole plan has made — correct on inspection and
+    by reference-comparison, but genuinely unverified without a Mac to actually run it.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -1339,7 +1358,7 @@ that replace it; do not re-derive scope from this table, use the phases:
 |---|---|---|
 | METAL-1 | `ApplySamplerState(slot,filter,addressU,addressV,maxAnisotropy)` + `Impl::samplerFor()` cache (`TextureFilter`→min/mag/mip, `TextureAddressMode`→address mode, `Anisotropic`→`maxAnisotropy`), wired into `drawMetal3D` texture unit 0 | 🟨 |
 | METAL-2 | Wire the same cache into `MetalSpriteBatch::Draw()` via a new `SetSamplerAddressMode()` override (previously `filter_` was set but never read, and address mode had no override at all) | 🟨 |
-| METAL-3 | Extend sampler-slot consultation beyond unit 0 in `drawMetal3D` — needed once DualTextureEffect (Phase 5, unit 1) / EnvironmentMapEffect (Phase 6) / PBR (Phase 8, up to 4 map units) land | ⬜ |
+| METAL-3 | Extend sampler-slot consultation beyond unit 0 in `drawMetal3D` — needed once DualTextureEffect (Phase 5, unit 1) / EnvironmentMapEffect (Phase 6) / PBR (Phase 8, up to 4 map units) land | 🟨 **real bug found and fixed 2026-07-20**: `DualTextureEffect`/`EnvironmentMapEffect` already correctly consulted `samplerSlots[0]`/`[1]` per unit, but the `Pbr48`/`SkinnedPbr68` paths bound all 5 PBR texture units (base color/normal/metallic-roughness/emissive/occlusion) through a single `samplerSlots[0]` broadcast to every unit — confirmed as a real divergence by reading `EasyGLGraphicsBackend`'s own PBR binding code, which correctly uses a distinct GL sampler object per unit (`samplers_[0..4]`). Fixed to `samplerSlots[0..4]` respectively, matching the reference. `.mm`-only, so like every other fix in this plan, correct-on-inspection but genuinely unverified without a Mac — see narrative |
 | METAL-4 | Audit `TextureFilter::Anisotropic` mapping (min/mag/mip = Linear + `maxAnisotropy`) against real Apple GPU behavior — no surprising clamp/driver quirk | ⬜ |
 | METAL-5 | `CullMode`→`MTLCullMode` + `MTLWinding` audit: current code (`c==1?Front:(c==2?Back:None)`) never calls `setFrontFacingWinding:`, relying on Metal's default winding — cross-check against `VulkanGraphicsBackend`'s tested `VkFrontFace`/`VkCullModeFlags` mapping and set winding explicitly instead of assuming a default | 🟨 |
 | METAL-6 | `Blend`/`BlendFunction`→`MTLBlendFactor`/`MTLBlendOperation` full table (Zero/One/SourceColor/InverseSourceColor/SourceAlpha/InverseSourceAlpha/DestinationAlpha/InverseDestinationAlpha/DestinationColor/InverseDestinationColor/SourceAlphaSaturation/BlendFactor/InverseBlendFactor; Add/Subtract/ReverseSubtract/Max/Min) — `ApplyBlendState` is currently a complete no-op | 🟨 |
