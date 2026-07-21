@@ -49,7 +49,11 @@ static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 static constexpr float kFogStart = -0.9f;
 static constexpr float kFogEnd   =  0.9f;
 
-// Expected: mix(FogColor, MaterialColor, clamp((FogEnd-z)/(FogEnd-FogStart),0,1)), where
+// REMED-GFX-005: fog factor corrected to FNA/EasyGL's Task-1111 form (the prior (FogEnd-z) formula
+// was the mirror image). The FogStart=-0.9/FogEnd=0.9 range does NOT collapse under the correction;
+// it simply swaps the two endpoints (z=-0.9 → full fog, z=+0.9 → no fog), so the endpoint
+// expectations are swapped vs. the pre-fix asserts and each still discriminates the mirror.
+// Expected: mix(FogColor, MaterialColor, clamp((z+FogEnd)/(FogEnd-FogStart),0,1)), where
 // MaterialColor ≈ white*2*gray(0.502)*DiffuseColor ≈ DiffuseColor (the *2/gray cancellation is
 // not exact -- 2*128/255=1.00392 -- so expected material color is (205,51,102), not (204,51,102)).
 static const Color kExpectedNoFog(205, 51, 102, 255);
@@ -133,13 +137,16 @@ protected:
         Texture2D texWhite(dev, 1, 1); texWhite.SetData(&kWhite, 1);
         Texture2D texGray(dev, 1, 1);  texGray.SetData(&kGrayHalf, 1);
 
-        const Color noFogGot = renderAtZ(dev, texWhite, texGray, kFogStart);
-        check(matches(noFogGot, kExpectedNoFog),
-              "z=-0.9 (at FogStart): unblended material color", noFogGot, "(205,51,102)");
-
-        const Color fullFogGot = renderAtZ(dev, texWhite, texGray, kFogEnd);
+        // REMED-GFX-005: corrected formula maps z=-0.9 → geomFraction=0 → FULL fog (mirror gave
+        // material color: the discriminating case).
+        const Color fullFogGot = renderAtZ(dev, texWhite, texGray, kFogStart);
         check(matches(fullFogGot, kExpectedFullFog),
-              "z=0.9 (at FogEnd): pure fog color", fullFogGot, "(26,153,230)");
+              "z=-0.9: full fog color (corrected (z+FogEnd) formula)", fullFogGot, "(26,153,230)");
+
+        // z=0.9 → geomFraction=1 → NO fog, material color (mirror gave fog color).
+        const Color noFogGot = renderAtZ(dev, texWhite, texGray, kFogEnd);
+        check(matches(noFogGot, kExpectedNoFog),
+              "z=0.9: unblended material color (corrected formula)", noFogGot, "(205,51,102)");
 
         const Color halfFogGot = renderAtZ(dev, texWhite, texGray, 0.0f);
         check(matches(halfFogGot, kExpectedHalfFog),

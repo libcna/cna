@@ -9,9 +9,10 @@
 // here mirroring vs/fs_lit_textured3d.sc's already-proven pattern exactly. Direct port of
 // examples/easygl_environmentmapeffect_fog_test.cpp (Task 900).
 //
-// Formula (matches Task 888's established formula exactly):
-//   fogFactor = clamp((FogEnd - Z) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
-//   finalRGB  = mix(FogColor, geomRGB, fogFactor)
+// REMED-GFX-005: fog factor corrected to FNA/EasyGL's Task-1111 form (the prior Task 888/899
+// (FogEnd - Z) formula was the mirror image and wrong):
+//   geomFraction = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
+//   finalRGB     = mix(FogColor, geomRGB, geomFraction)
 //
 // EnvironmentMapAmount=0 removes the cube map's contribution entirely, and
 // EnvironmentMapSpecular=0 removes its additive specular term, so the pre-fog color reduces to
@@ -161,14 +162,17 @@ protected:
         const Color gotOff = renderQuad(dev, tex, *cube, 0.0f, false, Vector3(1, 0, 0), 0.0f, 1.0f);
         check(matches(gotOff, kBlue), "(a) fog OFF: blue quad -> pure blue", gotOff, "(0,0,255)");
 
-        // (b) Fog 50%: Z=0.5, FogStart=0, FogEnd=1, FogColor=red -> mix(red,blue,0.5)=(128,0,128).
-        const Color gotHalf = renderQuad(dev, tex, *cube, 0.5f, true, Vector3(1, 0, 0), 0.0f, 1.0f);
+        // REMED-GFX-005: retargeted from FogStart=0/FogEnd=1 (which collapses to no-fog under the
+        // corrected (Z+FogEnd)/(FogEnd-FogStart) formula) to FogStart=0/FogEnd=-0.9. Asserted pixels
+        // unchanged; the corrected formula gives half/full fog while the mirror gives no fog.
+        // (b) Fog 50%: Z=0.45, FogStart=0, FogEnd=-0.9 -> (0.45-0.9)/(-0.9)=0.5 -> mix(red,blue,0.5).
+        const Color gotHalf = renderQuad(dev, tex, *cube, 0.45f, true, Vector3(1, 0, 0), 0.0f, -0.9f);
         check(matches(gotHalf, Color(128, 0, 128, 255)),
-              "(b) fog 50%: Z=0.5 -> purple mix", gotHalf, "(128,0,128)");
+              "(b) fog 50%: Z=0.45 -> purple mix", gotHalf, "(128,0,128)");
 
-        // (c) Full fog: FogEnd=0.5, Z=0.9 -> fogFactor=clamp(-0.8,0,1)=0 -> pure red.
-        const Color gotFull = renderQuad(dev, tex, *cube, 0.9f, true, Vector3(1, 0, 0), 0.0f, 0.5f);
-        check(matches(gotFull, kRed), "(c) full fog: FogEnd=0.5, Z=0.9 -> full red", gotFull, "(255,0,0)");
+        // (c) Full fog: FogStart=0, FogEnd=-0.9, Z=0.9 -> (0.9-0.9)/(-0.9)=0 -> pure red.
+        const Color gotFull = renderQuad(dev, tex, *cube, 0.9f, true, Vector3(1, 0, 0), 0.0f, -0.9f);
+        check(matches(gotFull, kRed), "(c) full fog: FogEnd=-0.9, Z=0.9 -> full red", gotFull, "(255,0,0)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();

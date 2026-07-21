@@ -143,6 +143,44 @@ protected:
               "EnvironmentMapAmount=0 with green cube → cube ignored, texture-only result",
               got, Color(100, 50, 25, 255));
 
+        // REMED-GFX-007: discriminating case for the emissive-composition defect. With white
+        // DiffuseColor (the case above) the buggy `(emissive+lightSum)*diffuse` and FNA's correct
+        // `lightSum*diffuse + emissive` coincide, so it cannot detect the bug. Here DiffuseColor is
+        // (0.5,0.5,0.5) and EmissiveColor (0.5,0.5,0.5), no lights (lightSum=0), EnvironmentMapAmount=0
+        // (isolates litRGB), tex=(200,100,50):
+        //   correct: litRGB = 0*0.5 + 0.5 = 0.5 ; baseColor = 0.5*tex → (100,50,25)
+        //   buggy  : litRGB = (0.5+0)*0.5 = 0.25; baseColor = 0.25*tex → (50,25,13)
+        // So this sub-test FAILS on the pre-fix shader and PASSES after.
+        {
+            EnvironmentMapEffect fx2(dev);
+            fx2.setTextureProperty(&tex);
+            fx2.setEnvironmentMapProperty(greenCube.get());
+            fx2.setDiffuseColorProperty(Vector3(0.5f, 0.5f, 0.5f));
+            fx2.setEmissiveColorProperty(Vector3(0.5f, 0.5f, 0.5f));
+            fx2.setEnvironmentMapAmountProperty(0.0f);
+            fx2.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
+            fx2.setWorldProperty(Matrix::getIdentityProperty());
+            fx2.setViewProperty(Matrix::getIdentityProperty());
+            fx2.setProjectionProperty(Matrix::getIdentityProperty());
+
+            Color got2(0, 0, 0, 0);
+            for (int i = 0; i < 20; ++i)
+            {
+                dev.Clear(Color(0, 0, 0, 255));
+                dev.setBlendStateProperty(BlendState::Opaque);
+                dev.setRasterizerStateProperty(RasterizerState::CullNone);
+                fx2.Apply();
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+                got2 = readCenter(dev);
+                if (got2.getRProperty() != 0 || got2.getGProperty() != 0 || got2.getBProperty() != 0)
+                    break; // skip blank/black frames
+            }
+
+            check(colourMatch(got2, Color(100, 50, 25, 255)),
+                  "non-white Diffuse + non-zero Emissive → emissive added UNSCALED (lightSum*Diffuse + Emissive)",
+                  got2, Color(100, 50, 25, 255));
+        }
+
         Exit();
     }
 

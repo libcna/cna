@@ -9,17 +9,28 @@
 // applicable pipelines (colored3d, textured3d, colored_textured3d, lit_textured3d, alpha_test3d,
 // alpha_test_colored3d, dual_texture3d) in this same task, unlike Vulkan's partial rollout.
 //
-// Formula: fogFactor = clamp((FogEnd - Z) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
-//          finalRGB  = mix(FogColor, geomRGB, fogFactor)
+// REMED-GFX-005: fog factor corrected to FNA/EasyGL's Task-1111 form
+//   geomFraction = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
+//   finalRGB     = mix(FogColor, geomRGB, geomFraction)
+// The prior Task 888 (FogEnd - Z) formula was the mirror image and wrong. Zero-length range
+// (FogStart == FogEnd) → fully fogged, matching FNA SetFogVector.
 //
 // NDC range is [-1, 1] — all quads kept within Z ∈ [-0.9, 0.9].
 //
+// The old scenes (FogStart=0, FogEnd=1) collapse to a constant under the correct formula
+// ((Z+1)/1 ≥ 1 for every Z ≥ 0 → no fog), which is exactly why the mirror survived here. Retargeted
+// to FogStart=0, FogEnd=-0.9 (the analog of EasyGL's own -0.9/0.9 design), which discriminates:
+// the corrected formula gives no/half/full fog at Z ∈ {0, 0.45, 0.9}, while the mirror gives no fog
+// at all three. Asserted pixel values are unchanged; only the inputs (and the mirror-formula
+// comment) changed.
+//
 // Sub-tests (VertexPositionColor stride=16, identity WVP, exercises colored3d):
 //   (a) Fog disabled: blue quad at Z=0 → pixel = pure blue
-//   (b) Fog enabled: FogStart=0, FogEnd=1, FogColor=red, geom=blue, Z=0.5
-//       fogFactor = 0.5 → pixel = mix(red,blue,0.5) = (128, 0, 128), tolerance ±30
-//   (c) Full fog: FogStart=0, FogEnd=0.5, Z=0.9 → fogFactor = clamp(-0.8,0,1) = 0
-//       → pixel = full fog red
+//   (b) Fog enabled: FogStart=0, FogEnd=-0.9, FogColor=red, geom=blue, Z=0.45
+//       geomFraction = (0.45-0.9)/(-0.9) = 0.5 → pixel = mix(red,blue,0.5) = (128, 0, 128), tol ±30
+//       (mirror gives (0.45+0.9)/0.9 = 1.5 → clamp 1 → blue: the discriminating case)
+//   (c) Full fog: FogStart=0, FogEnd=-0.9, Z=0.9 → geomFraction = (0.9-0.9)/(-0.9) = 0
+//       → pixel = full fog red   (mirror gives clamp(2.0)=1 → blue)
 //
 // Bgfx-only note (Task 364/896 finding): RasterizerState::CullNone is required, matching every
 // other Bgfx pixel test in this family.
@@ -141,8 +152,8 @@ protected:
             check(isBlue, "(a) fog OFF: blue quad → pure blue", got, kBlue);
         }
 
-        // ── (b) Fog 50%: Z=0.5, FogStart=0, FogEnd=1, FogColor=red ──────
-        // fogFactor = (1-0.5)/(1-0) = 0.5
+        // ── (b) Fog 50%: Z=0.45, FogStart=0, FogEnd=-0.9, FogColor=red ──
+        // geomFraction = (0.45 + (-0.9))/((-0.9)-0) = (-0.45)/(-0.9) = 0.5
         // pixel = mix(red,blue,0.5) = (128, 0, 128) ± 30
         {
             BasicEffect fx(dev);
@@ -150,21 +161,21 @@ protected:
             fx.setFogEnabledProperty(true);
             fx.setFogColorProperty(Vector3(1.0f, 0.0f, 0.0f));
             fx.setFogStartProperty(0.0f);
-            fx.setFogEndProperty(1.0f);
+            fx.setFogEndProperty(-0.9f);
             fx.Apply();
 
-            makeQuad(0.5f, kBlue);
+            makeQuad(0.45f, kBlue);
             Color got = renderAndRead(dev);
             const int r = got.getRProperty(), g = got.getGProperty(), b = got.getBProperty();
             const bool isMix = std::abs(r - 128) <= 30
                             && g < 30
                             && std::abs(b - 128) <= 30;
             const Color kMix(128, 0, 128, 255);
-            check(isMix, "(b) fog 50%: Z=0.5 → purple mix", got, kMix);
+            check(isMix, "(b) fog 50%: Z=0.45 → purple mix", got, kMix);
         }
 
-        // ── (c) Full fog: FogEnd=0.5, Z=0.9 → fogFactor=0 → red ─────────
-        // fogFactor = clamp((0.5-0.9)/(0.5-0), 0, 1) = clamp(-0.8, 0, 1) = 0
+        // ── (c) Full fog: FogStart=0, FogEnd=-0.9, Z=0.9 → geomFraction=0 → red ─
+        // geomFraction = clamp((0.9 + (-0.9))/((-0.9)-0), 0, 1) = clamp(0, 0, 1) = 0
         // pixel = mix(red,blue,0) = red  (Z=0.9 is within NDC range [-1,1])
         {
             BasicEffect fx(dev);
@@ -172,7 +183,7 @@ protected:
             fx.setFogEnabledProperty(true);
             fx.setFogColorProperty(Vector3(1.0f, 0.0f, 0.0f));
             fx.setFogStartProperty(0.0f);
-            fx.setFogEndProperty(0.5f);
+            fx.setFogEndProperty(-0.9f);
             fx.Apply();
 
             makeQuad(0.9f, kBlue);
@@ -180,7 +191,7 @@ protected:
             const bool isRed = got.getRProperty() > 200
                             && got.getGProperty() < 50
                             && got.getBProperty() < 50;
-            check(isRed, "(c) full fog: FogEnd=0.5, Z=0.9 → full red", got, kRed);
+            check(isRed, "(c) full fog: FogEnd=-0.9, Z=0.9 → full red", got, kRed);
         }
 
         Exit();

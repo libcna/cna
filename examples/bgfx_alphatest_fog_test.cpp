@@ -6,9 +6,14 @@
 // vs/fs_alpha_test3d.sc (also picked up by vs_alpha_test_colored3d.sc, which shares the same
 // fragment shader).
 //
-// Formula (matches EasyGL's already-tested formula exactly, Task 378):
-//   fogFactor = clamp((FogEnd - Z) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
-//   finalRGB  = mix(FogColor, geomRGB, fogFactor)
+// REMED-GFX-005: fog factor corrected to FNA/EasyGL's Task-1111 form (the prior Task 378/888
+// (FogEnd - Z) formula was the mirror image and wrong):
+//   geomFraction = clamp((Z + FogEnd) / (FogEnd - FogStart), 0, 1)   (raw object-space Z)
+//   finalRGB     = mix(FogColor, geomRGB, geomFraction)
+// This test's FogStart=-0.9/FogEnd=0.9 range is asymmetric enough that it does NOT collapse under
+// the correction: the corrected formula maps z=-0.9 → full fog and z=+0.9 → no fog (the mirror
+// mapped them the opposite way), so the two endpoint expectations are simply swapped vs. the
+// pre-fix asserts. Each endpoint discriminates the mirror from the correct formula.
 //
 // Uses a stride-20 VertexPositionTexture quad (Bgfx's alpha_test3d shader requires a_texcoord0,
 // so a texture must be bound for this pipeline to be meaningfully exercised) with a white 1x1
@@ -52,7 +57,7 @@ static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 static constexpr float kFogStart = -0.9f;
 static constexpr float kFogEnd   =  0.9f;
 
-// Expected: mix(FogColor, MaterialColor, clamp((FogEnd-z)/(FogEnd-FogStart),0,1)), where
+// Expected: mix(FogColor, MaterialColor, clamp((z+FogEnd)/(FogEnd-FogStart),0,1)), where
 // MaterialColor = white(identity) * DiffuseColor = DiffuseColor*255 = (204,51,102).
 static const Color kExpectedNoFog(204, 51, 102, 255);
 static const Color kExpectedFullFog(26, 153, 230, 255);
@@ -132,13 +137,16 @@ protected:
         Texture2D tex(dev, 1, 1);
         tex.SetData(&kWhite, 1);
 
-        const Color noFogGot = renderAtZ(dev, tex, kFogStart);
-        check(matches(noFogGot, kExpectedNoFog),
-              "z=-0.9 (at FogStart): unblended material color", noFogGot, "(204,51,102)");
-
-        const Color fullFogGot = renderAtZ(dev, tex, kFogEnd);
+        // REMED-GFX-005: corrected formula maps z=-0.9 → geomFraction=(−0.9+0.9)/1.8=0 → FULL fog
+        // (the mirror gave (0.9+0.9)/1.8=1 → material color: the discriminating case).
+        const Color fullFogGot = renderAtZ(dev, tex, kFogStart);
         check(matches(fullFogGot, kExpectedFullFog),
-              "z=0.9 (at FogEnd): pure fog color", fullFogGot, "(26,153,230)");
+              "z=-0.9: full fog color (corrected (z+FogEnd) formula)", fullFogGot, "(26,153,230)");
+
+        // z=0.9 → geomFraction=(0.9+0.9)/1.8=1 → NO fog, material color (mirror gave fog color).
+        const Color noFogGot = renderAtZ(dev, tex, kFogEnd);
+        check(matches(noFogGot, kExpectedNoFog),
+              "z=0.9: unblended material color (corrected formula)", noFogGot, "(204,51,102)");
 
         const Color halfFogGot = renderAtZ(dev, tex, 0.0f);
         check(matches(halfFogGot, kExpectedHalfFog),

@@ -239,6 +239,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_SkinnedEffect_IdentityBones COMMAND cna_test_bgfx_skinnedeffect_identity_bones
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-006: SkinnedEffect world-space normal transform (inverse-transpose after the bone
+    # skin) on Bgfx -- the non-identity-World harness the existing identity-World skinned tests
+    # structurally cannot cover. Fails pre-fix (Variant A/B), passes post-fix. Covers both the
+    # per-pixel (vs_skinned3d) and per-vertex (vs_skinned3d_vertexlit) skinned programs.
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_world_normal
+                  examples/bgfx_skinnedeffect_world_normal_test.cpp)
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_WorldNormal COMMAND cna_test_bgfx_skinnedeffect_world_normal
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 407: SkinnedEffect single translation bone should shift the mesh
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_translation_bone
                   examples/bgfx_skinnedeffect_translation_bone_test.cpp)
