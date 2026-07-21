@@ -171,10 +171,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 309: BlendState.BlendFactor propagation (reuses the backend-agnostic EasyGL source).
-        # NOTE: expected to FAIL on Vulkan per Task 868 - ApplyBlendState hardcodes a single blend
-        # equation that never selects VK_BLEND_FACTOR_CONSTANT_COLOR, so Blend::BlendFactor is moot
-        # here regardless of the Task 309 propagation fix. Kept registered as a further documented
-        # confirmation of Task 868, not a new bug.
+        # This DrawUserPrimitives (3D-path) test PASSES: Task 868's FillBlendAttachmentState +
+        # per-draw draw.blendParams made the 3D pipeline honor Blend::BlendFactor
+        # (VK_BLEND_FACTOR_CONSTANT_COLOR), and REMED-GFX-070 made the constant per-draw-correct.
+        # (A prior note here claiming this was "expected to FAIL per Task 868" was stale — the 3D
+        # path was fixed. The remaining limitation is SpriteBatch-only: the 2D sprite pipeline still
+        # hardcodes alpha-blend and ignores the BlendState — tracked as REMED-GFX-071.)
         cna_vulkan_test(cna_test_vulkan_blendstate_blendfactor
                         examples/easygl_blendstate_blendfactor_test.cpp)
         cna_register_backend_test(NAME Vulkan_BlendState_BlendFactor COMMAND cna_test_vulkan_blendstate_blendfactor
@@ -486,6 +488,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         examples/vulkan_rendertarget_viewport_test.cpp)
         cna_register_backend_test(NAME Vulkan_RenderTarget_Viewport COMMAND cna_test_vulkan_rendertarget_viewport
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-070: GraphicsDevice.BlendFactor (the constant blend color) must be applied per
+        # draw/batch, not once per frame — RT passes must set it, and multiple values in one frame
+        # must not collapse to last-wins.
+        cna_vulkan_test(cna_test_vulkan_rendertarget_blendfactor
+                        examples/vulkan_rendertarget_blendfactor_test.cpp)
+        cna_register_backend_test(NAME Vulkan_RenderTarget_BlendFactor COMMAND cna_test_vulkan_rendertarget_blendfactor
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
         cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
