@@ -68,6 +68,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_Instanced COMMAND ${_d3d9_instanced_cmd}
         TIMEOUT 60 LABELS "D3D9")
 
+    # REMED-GFX-060: non-zero draw-offset regressions -- every effect-aware D3D9 draw path honors
+    # DrawPrimitives(vertexStart)/DrawIndexedPrimitives(baseVertex,startIndex) instead of hardcoding
+    # 0 into DrawPrimitive/DrawIndexedPrimitive (the D3D9 counterpart of REMED-GFX-020's D3D11 fix).
+    cna_d3d9_test(cna_test_d3d9_drawoffset examples/d3d9_drawoffset_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_drawoffset_cmd cna_test_d3d9_drawoffset)
+    cna_register_backend_test(NAME D3D9_DrawOffset COMMAND ${_d3d9_drawoffset_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
     # D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA PbrEffect/
     # SkinnedPbrEffect (params.pbr) through CNA's own custom Pbr3D/PbrSkinned3D vs_3_0/ps_3_0
     # shaders (D3D9PbrDraw.cpp).
