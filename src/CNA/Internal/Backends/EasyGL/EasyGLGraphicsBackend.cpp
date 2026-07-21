@@ -3286,6 +3286,7 @@ void main()
 "layout(location=5) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
+"uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uBones[72];\n"
 "uniform int uWeightsPerVertex;\n"
 "uniform float uFogEnabled;\n"
@@ -3317,7 +3318,14 @@ void main()
 // not a deviation from its intended per-vertex transform.
 "    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
-"    vNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
+"    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
+// REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+// (uNormalMatrix = transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams() exactly as
+// every non-skinned lit program here already receives it). FNA's SkinnedEffect.fx Skin() applies
+// the bone 3x3, then Lighting.fxh applies mul(normal, WorldInverseTranspose); this shader dropped
+// the outer world factor entirely (audit Variant A), so any rotated or non-uniformly-scaled
+// skinned model was lit as if World were identity. The fragment stage re-normalizes vNormal.
+"    vNormal=uNormalMatrix*boneNormal;\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
 "    vColor=aColor;\n"
@@ -3401,6 +3409,7 @@ void main()
         auto& p = prog_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
+        p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
         p.loc_bones     = p.prog.uniform_location("uBones[0]");
         p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
         p.loc_texture   = p.prog.uniform_location("uTexture");
@@ -3459,6 +3468,7 @@ void main()
 "layout(location=5) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
+"uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uBones[72];\n"
 "uniform int uWeightsPerVertex;\n"
 "uniform float uFogEnabled;\n"
@@ -3511,7 +3521,13 @@ void main()
 // and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
 "    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
 "    float skinnedNormalLen=length(skinnedNormal);\n"
-"    vec3 N=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
+"    vec3 boneNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
+// REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix (uNormalMatrix =
+// transpose(inverse(World3x3)), CPU-precomputed in BindDrawParams()). This vertex-lit sibling had
+// the identical missing-world-factor defect (audit Variant A) as EnsureSkinnedProgram; unlike that
+// per-pixel program (whose fragment stage re-normalizes vNormal), lighting here is evaluated in
+// this stage, so the world-transformed normal must be re-normalized before the dot products.
+"    vec3 N=normalize(uNormalMatrix*boneNormal);\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
 "    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
@@ -3557,6 +3573,7 @@ void main()
         auto& p = prog_skinned_vertexlit_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
+        p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
         p.loc_bones     = p.prog.uniform_location("uBones[0]");
         p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
         p.loc_texture   = p.prog.uniform_location("uTexture");
@@ -3759,6 +3776,7 @@ void main()
 "layout(location=5) in uvec4 aBoneIndices;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
+"uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uBones[72];\n"
 "uniform int uWeightsPerVertex;\n"
 "uniform float uFogEnabled;\n"
@@ -3777,7 +3795,12 @@ void main()
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    gl_Position=uWVP*skinnedPos;\n"
 "    mat3 skinNormalMat=mat3(skinMat);\n"
-"    vNormal=normalize(mat3(uWorld)*(skinNormalMat*aNormal));\n"
+// REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix (uNormalMatrix),
+// not raw mat3(uWorld). Raw World is only correct for rotation and uniform scale and diverges from
+// FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it also contradicted this
+// file's own unskinned EnsurePbrProgram, which already uses uNormalMatrix. The tangent stays on
+// raw World: tangents transform as directions, not as normals (glTF convention, unchanged).
+"    vNormal=normalize(uNormalMatrix*(skinNormalMat*aNormal));\n"
 "    vTangent=mat3(uWorld)*(skinNormalMat*aTangent.xyz);\n"
 "    vBitangentSign=aTangent.w;\n"
 "    vUV=aUV;\n"
@@ -3863,6 +3886,7 @@ void main()
         auto& p = prog_pbr_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
+        p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
         p.loc_bones     = p.prog.uniform_location("uBones[0]");
         p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
         p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
