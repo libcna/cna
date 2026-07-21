@@ -66,6 +66,9 @@ namespace CNA
          * object, direct texture binding). */
         Dx7,
 
+        /** @brief DX8 (real Direct3D 8, DXVK-delivered, fixed-function only -- no DirectDraw). */
+        Dx8,
+
         /** @brief SDL_GPU. */
         SdlGpu
     };
@@ -119,6 +122,8 @@ namespace CNA
         return GraphicsBackendType::Dx6;
 #elif defined(CNA_BACKEND_DX7)
         return GraphicsBackendType::Dx7;
+#elif defined(CNA_BACKEND_DX8)
+        return GraphicsBackendType::Dx8;
 #elif defined(CNA_BACKEND_SDL_GPU)
         return GraphicsBackendType::SdlGpu;
 #else
@@ -159,6 +164,7 @@ namespace CNA
             case GraphicsBackendType::Dx5:            return "DX5";
             case GraphicsBackendType::Dx6:            return "DX6";
             case GraphicsBackendType::Dx7:            return "DX7";
+            case GraphicsBackendType::Dx8:            return "DX8";
             case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
         }
         return "UNKNOWN";

@@ -148,6 +148,20 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX7")
     # ddraw + dxguid + SDL3::SDL3. DirectDrawCreateEx/IDirectDraw7/IDirect3D7 all resolve from the
     # same import libraries, spike-confirmed (DX7-0) with no new link dependency.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX8")
+    # plan_dx8.md design decision 2/14: mingw-w64's x86_64 target ships NO real d3d8 import
+    # library at all (only the unrelated libd3d8thk.a "thunk" library; only the i686/32-bit target
+    # has a real one) -- DXVK's own d3d8.dll.a (D8VK, merged into DXVK 2.0+) exports the real
+    # Direct3DCreate8 symbol and is linked against directly instead, spike-confirmed (DX8-0a).
+    set(CNA_DX8_DXVK_LIB "/usr/lib/dxvk/wine64/d3d8.dll.a" CACHE FILEPATH
+        "Path to DXVK's own d3d8 import library (exports Direct3DCreate8) -- no MinGW x86_64 import library exists for real d3d8.")
+    if(NOT EXISTS "${CNA_DX8_DXVK_LIB}")
+        message(FATAL_ERROR
+            "CNA: DX8 backend requires DXVK's own d3d8 import library, not found at "
+            "${CNA_DX8_DXVK_LIB} -- install the dxvk package (providing /usr/lib/dxvk/wine64/"
+            "d3d8.dll.a) or set -DCNA_DX8_DXVK_LIB=<path> to point at it explicitly.")
+    endif()
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 "${CNA_DX8_DXVK_LIB}")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

@@ -193,6 +193,10 @@ include(cmake/Tests/Dx6Tests.cmake)
 # removed, texture binding simplified; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 include(cmake/Tests/Dx7Tests.cmake)
 
+# plan_dx8.md: real DirectX 8 backend -- DXVK-delivered (not DirectDraw-based), fixed-function 3D
+# only, real GPU-quad SpriteBatch; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx8Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

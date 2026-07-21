@@ -271,6 +271,12 @@ if(CNA_BUILD_TESTS)
             # plan_dx7.md: same proactive wiring as DX30/DX5/DX6.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX7_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx7.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX8")
+            # plan_dx8.md: DXVK-delivered (not DirectDraw-based), same proactive wiring shape as
+            # D3D9's own run-wine-dxvk9.sh gate -- CNA_DX8_SKIP_DXVK_GATE for a binary that
+            # legitimately never opens a real D3D8 device (e.g. a bare --gtest_list_tests call).
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx8.sh")
         endif()
     endif()
 
