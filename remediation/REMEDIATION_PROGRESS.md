@@ -2327,6 +2327,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-018 | P1 | NOT STARTED | | | |
 | REMED-GFX-019 | P1 | NOT STARTED | | | |
 | REMED-GFX-020 | P2 | **DONE (2026-07-21)** | GRAPHICS | feature/audit | Two UNRELATED root causes, neither a shader-math bug. Specular (DX-125) = **test-oracle defect**: check asserted the per-pixel 255 but ran the vertex-lit (Gouraud, correct ~228) variant because it left `preferPerPixelLighting=false`; per-pixel variant verified = exactly 255. Black-vertex-color (PBR quad D) = **real production bug**: `Draw`/`DrawIndexed` hardcoded StartVertex/StartIndex/BaseVertex=0, ignoring `params.vertexStart/startIndex/baseVertex`, so `DrawPrimitives(...,startVertex=6,...)` silently redrew vertices 0..5. `D3D11_Pbr_VertexColor` 6/6, `D3D11_Smoke` 154/154, D3D11 shard 11/11 on real DXVK. Commits `ed1d906b`, `796885b3`. The 8 co-failing fog checks split out as **REMED-GFX-055** (`0453dc1c`). See detail below. |
+| REMED-GFX-060 | P2 | **DONE (2026-07-21)** | GRAPHICS | feature/audit | D3D9 counterpart of GFX-020 (split out from its Phase-12 sweep). Every effect-aware D3D9 draw site hardcoded StartVertex=0 / BaseVertexIndex=0/StartIndex=0, dropping `params.vertexStart/startIndex/baseVertex`. 15 sites across 4 files fixed (`D3D9EffectDraw` ×10, `D3D9PbrDraw` ×2, `D3D9SkinnedVertexColorDraw` ×2, `D3D9InstancedDraw` ×1); colored-primitive + SpriteBatch paths carry no offsets (NOT_APPLICABLE). New `D3D9_DrawOffset` test **0/7 → 7/7** on real DXVK 2.6.0; full D3D9 shard **20/20**; D3D11 GFX-020 regression still 6/6 (change is D3D9-local); EasyGL vertexStart control green; Vulkan honors by construction. Fog-comment/scalar-field cleanup split as **REMED-GFX-061**. Commits `aa23eed2` (test), `d2491a17` (fix). See detail below. |
 | REMED-GFX-021 | P2 | NOT STARTED | | | |
 | REMED-GFX-022 | P1 | NOT STARTED | | | |
 | REMED-GFX-023 | P2 | NOT STARTED | | | |
@@ -2401,6 +2402,8 @@ existing task.
 | REMED-BUILD-016 | This project's `-fsanitize=undefined` build configuration (`cmake-build-media-asan`'s ad hoc flags, and by the same shape `devices-ubsan` in `CMakePresets.json`) does not include `-fsanitize=float-cast-overflow`. GCC (unlike Clang, which bundles it into `undefined`) requires this check named explicitly. Confirmed empirically while verifying `REMED-CORE-004`: the exact UB that task fixed (`static_cast<bytecs>(NaN * 255.0f)` etc.) produced **zero** sanitizer output under the project's own `cmake-build-media-asan`, and only reproduced (12 distinct runtime-error reports) once `float-cast-overflow` was added explicitly to an ad hoc standalone build. Any out-of-range/NaN float→integer cast anywhere in the codebase currently passes this project's own UBSan coverage silently | MEDIUM | P1 (suggested — same leverage precedent as `REMED-BUILD-001`/`-002`: a build-config fix that makes an entire defect class newly detectable project-wide) | `REMED-CORE-004`'s own UBSan verification pass | NOT STARTED — recorded, not fixed (BUILD_TEST_CI-owned: `CMakePresets.json` and this session's own ad hoc `cmake-build-*-asan` `CMAKE_CXX_FLAGS` convention) |
 | REMED-GFX-057 | `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`'s `DrawString`/`Draw` (`static_cast<intcs>(dw * scale)`/`static_cast<intcs>(dh * scale)` ~line 311, the `Vector2`-scale siblings ~line 329, and the glyph-width/height `std::lround(...)`-wrapped casts ~lines 514-515) share the identical unguarded-float-to-`intcs`-cast root cause `Color::Lerp`/`Color::Multiply` had before `REMED-CORE-004`: a NaN or extreme `scale`/`Vector2 scale` argument reaching `DrawString`/`Draw` is undefined behavior with no guard | MEDIUM | P2 (suggested — same defect class as `REMED-CORE-004`, UB not memory corruption; fold into whichever GRAPHICS batch next touches `SpriteBatch.cpp`) | `REMED-CORE-004`'s own "verify all constructors/operators touched by the same root cause" sweep, extended past `Color.cpp` to other unguarded-float-cast sites project-wide | NOT STARTED — recorded, not fixed (GRAPHICS-owned file, out of the CORE lane's scope) |
 | REMED-GFX-059 | The SdlGpu backend emits a Vulkan validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw (confirmed via `VK_LAYER_KHRONOS_validation` under `SDL_GPU`). Confirmed **pre-existing** and independent of `REMED-GFX-006`: the existing `SdlGpu_Skinned` test emits it 6× against unchanged (pre-fix) shaders, and readback pixel values are correct throughout, so it is a render-pass/pipeline attachment-compatibility validation issue in `SdlGpuGraphicsBackend`, not a normal-transform or rendering-correctness defect | LOW-MEDIUM | P2 (SdlGpu-lane; validation-cleanliness, not a visible-output defect) | `REMED-GFX-006` SdlGpu slice (first `VK_LAYER_KHRONOS_validation` run of the new world-normal harness) | NOT STARTED — recorded, not fixed (out of GFX-006's normal-transform scope; SdlGpu-backend owner should reconcile the SDL_GPU render-pass/pipeline attachment description that 02684 flags) |
+| REMED-GFX-060 | Every effect-aware D3D9 draw site hardcoded the vertex/index offsets (`DrawPrimitive(…, 0 /*StartVertex*/)` and `DrawIndexedPrimitive(…, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount, 0 /*StartIndex*/, …)`), silently dropping the XNA `DrawPrimitives(vertexStart)` / `DrawIndexedPrimitives(baseVertex, startIndex)` offsets that `GraphicsDevice` threads through `GpuDrawParams`. Same defect class as `REMED-GFX-020` (D3D11/D3D12), spread across 15 sites in 4 files (`D3D9EffectDraw`/`D3D9PbrDraw`/`D3D9SkinnedVertexColorDraw`/`D3D9InstancedDraw`) | HIGH | P2 | `REMED-GFX-020` Phase-12 cross-backend draw-offset sweep | **DONE (2026-07-21, `aa23eed2`+`d2491a17`)** — fixed + runtime-verified on real DXVK 2.6.0 (new `D3D9_DrawOffset` 0/7→7/7, full D3D9 shard 20/20, D3D11 GFX-020 regression still 6/6). See detail section below. |
+| REMED-GFX-061 | The scalar `GpuDrawParams::fogStart`/`fogEnd` fields and the `IGraphicsBackend.hpp` (~`:454`) fog documentation ("D3D backends … keep using fogStart/fogEnd") are stale/vestigial for the D3D family after the GFX-005/010 view-space-fog campaign: D3D9 custom shaders compute view-space fog in-backend (`ComputeFogVectorEXT`) and D3D11/D3D12 D3DCommon stock effects bake the `fogVector` CPU-side, so the scalar object-space fields are consumed only by the few direct-`DrawPrimitivesEx` callers that set them (and by non-D3D backends that predate GFX-010). Not a rendering defect — a documentation/ABI-hygiene item | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | NOT STARTED — recorded, not fixed (a precise comment correction is not unquestionably safe and Phase 11 forbids redesigning the fog ABI in the offset tranche; recommended resolution: documentation cleanup + formally mark `fogStart`/`fogEnd` as retained accepted-and-ignored compat fields, not removal, since direct-backend callers still set them) |
 
 #### REMED-BUILD-010 detail
 
@@ -3679,4 +3682,132 @@ with no real consumer. Commit `0453dc1c`. `D3D11_Smoke` 154/154.
 **Follow-up (not done here):** D3D9 honors scalar fog in-backend (`ComputeFogVectorEXT`) while D3D11/D3D12
 now require `fogVector` — the `IGraphicsBackend.hpp:454` "D3D backends keep using fogStart/fogEnd" comment
 is stale for D3D11/D3D12. A dedicated task could either restore scalar-fog parity across the D3D family
-or formally deprecate the scalar fields for D3DCommon.
+or formally deprecate the scalar fields for D3DCommon. **Now tracked as `REMED-GFX-061`** (allocated by
+the `REMED-GFX-060` D3D9 draw-offset tranche, which reached the same stale comment; see below).
+
+### REMED-GFX-060 — D3D9 draw paths drop DrawPrimitives/DrawIndexedPrimitives vertex offsets (DONE, 2026-07-21)
+
+**Origin.** Split out from `REMED-GFX-020`'s Phase-12 cross-backend sweep, which confirmed D3D9 carried
+the identical hardcoded-zero draw-offset defect class as D3D11/D3D12 but left it unfixed (out of GFX-020's
+D3D11/D3DCommon scope; D3D9 is a separate shader model spread across several draw sites vs D3D11/D3D12's
+single `DrawPrimitivesExImpl`). D3D9 runtime is verifiable via Wine + DXVK9 (unlike D3D12, blocked by
+REMED-BUILD-012), so unlike GFX-020's build-only D3D12 half these are genuine runtime-verified pixel
+regressions.
+
+**Root cause.** `GraphicsDevice::DrawPrimitives(vertexStart)` / `DrawIndexedPrimitives(baseVertex,
+minVertexIndex, numVertices, startIndex, primitiveCount)` thread the offsets into
+`GpuDrawParams::vertexStart` / `startIndex` / `baseVertex` and dispatch through `DrawPrimitivesEx` /
+`DrawIndexedPrimitivesEx`. Every effect-aware D3D9 draw site then issued the underlying D3D9 call with
+those offsets **hardcoded to 0** — `DrawPrimitive(topology, 0 /*StartVertex*/, primCount)` and
+`DrawIndexedPrimitive(topology, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount /*NumVertices*/,
+0 /*StartIndex*/, primCount)` — so any draw with a non-zero offset silently drew from vertex/index 0.
+
+**Exhaustive D3D9 draw-site matrix (Phase 2).** Every `IDirect3DDevice9::DrawPrimitive` /
+`DrawIndexedPrimitive` call in the backend, classified:
+
+| # | Site | Draw call | Carries `GpuDrawParams`? | Class |
+|---|---|---|---|---|
+| 1-2 | `D3D9EffectDraw.cpp` BasicEffect (`:780`/`:786`) | indexed + non-idx | yes | HARDCODED_ZERO_BUG |
+| 3-4 | `D3D9EffectDraw.cpp` AlphaTestEffect (`:860`/`:866`) | indexed + non-idx | yes | HARDCODED_ZERO_BUG |
+| 5-6 | `D3D9EffectDraw.cpp` DualTextureEffect (`:923`/`:929`) | indexed + non-idx | yes | HARDCODED_ZERO_BUG |
+| 7-8 | `D3D9EffectDraw.cpp` EnvironmentMapEffect (`:1024`/`:1030`) | indexed + non-idx | yes | HARDCODED_ZERO_BUG |
+| 9-10 | `D3D9EffectDraw.cpp` SkinnedEffect (`:1154`/`:1160`) | indexed + non-idx | yes | HARDCODED_ZERO_BUG |
+| 11-12 | `D3D9SkinnedVertexColorDraw.cpp` (`:188`/`:194`) | indexed + non-idx | yes | HARDCODED_ZERO_BUG |
+| 13-14 | `D3D9PbrDraw.cpp` (`:289`/`:295`) | indexed + non-idx | yes | HARDCODED_ZERO_BUG |
+| 15 | `D3D9InstancedDraw.cpp` (`:130`) | indexed | yes | HARDCODED_ZERO_BUG |
+| 16 | `D3D9GraphicsBackend.cpp` `DrawColoredPrimitives` (`:707`) | non-idx | **no** | NOT_APPLICABLE |
+| 17 | `D3D9GraphicsBackend.cpp` `DrawIndexedColoredPrimitives` (`:754`) | indexed | **no** | NOT_APPLICABLE |
+| 18 | `D3D9SpriteBatch.cpp` flush (`:249`) | indexed | **no** (internal batch, always from 0) | NOT_APPLICABLE |
+
+`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` have **no `GpuDrawParams` parameter at all** (the
+public XNA offsets never reach them), and `SpriteBatch` uploads and draws its whole accumulated batch
+from offset 0 — all three legitimately keep hardcoded 0 (mirrors D3D11's own untouched
+`DrawColoredPrimitives` at `D3D11GraphicsBackend.cpp:904`/`:963`). No `DrawPrimitiveUP`/
+`DrawIndexedPrimitiveUP` or other draw entry points exist in the D3D9 backend.
+
+**D3D9 parameter mapping (Phase 3).** D3D9 exposes more indexing-range parameters than D3D11's
+`Draw`/`DrawIndexed`, so the arguments were mapped explicitly, not copied from D3D11:
+- `DrawPrimitive(StartVertex)` ← `params.vertexStart`.
+- `DrawIndexedPrimitive(BaseVertexIndex ← params.baseVertex, MinIndex = 0, NumVertices =
+  GetVertexCount() − baseVertex, StartIndex ← params.startIndex, PrimitiveCount unchanged)`.
+  `BaseVertexIndex` is D3D9's signed offset added to every index before vertex fetch (≡ `baseVertex`);
+  `StartIndex` is the first index read from the IBO (≡ `startIndex`). `MinIndex`/`NumVertices` are only
+  software-vertex-processing/validation hints in D3D9 and CNA carries no tighter min-vertex range
+  (`GraphicsDevice::DrawIndexedPrimitives` discards its own `minVertexIndex`/`numVertices` args —
+  `(void)minVertexIndex; (void)numVertices;`), so `MinIndex` stays 0 and `NumVertices` is set to the
+  in-buffer remainder `vertexCount − baseVertex`. That remainder (rather than the old full `vertexCount`)
+  is **required**: with `BaseVertexIndex` now non-zero, keeping the full count would declare a vertex
+  range `[baseVertex, baseVertex+vertexCount−1]` that overruns the buffer and DXVK9 can reject; the
+  remainder declares exactly `[baseVertex, vertexCount−1]`. The `baseVertex = 0` common case yields the
+  full `vertexCount` again — byte-identical to the previous behavior.
+
+**Pre-fix evidence (Phase 5).** New `D3D9_DrawOffset` test, real DXVK 2.6.0 (Wine, `DISPLAY=:0`):
+**0/7 PASS** before the fix — every one of the 7 checks (vertexStart / startIndex / baseVertex /
+startIndex+baseVertex on BasicEffect; vertexStart on PbrEffect; baseVertex on SkinnedVertexColor3D;
+startIndex+baseVertex on the instanced path) read the RIGHT probe as the blue clear color and the LEFT
+(zero-offset) probe as painted — i.e. the draw started at vertex/index 0 regardless of the requested
+offset. Position-based, shader-independent discrimination (a LEFT and a RIGHT full-screen half-triangle
+laid out so the requested offset must select RIGHT); the combined and instanced checks put the middle
+range off-screen so **only applying both offsets** hits the RIGHT probe, ruling out single-offset-only.
+
+**Tests added (Phase 4).** `examples/d3d9_drawoffset_test.cpp` (registered `D3D9_DrawOffset`,
+`cmake/Tests/D3D9Tests.cmake`) — 7 checks covering all three offset kinds across all four affected files.
+Commit `aa23eed2`.
+
+**Production fix (Phase 6/7).** 15 sites across 4 files threaded through `params.vertexStart` /
+`params.startIndex` / `params.baseVertex` with the mapping above. The instanced path keeps the
+per-vertex stream-0 offsets independent of the per-instance stream-1 offset (`SetStreamSource(1, …, 0, …)`
+unchanged). Commit `d2491a17`.
+
+**Post-fix runtime results (Phase 8), real DXVK 2.6.0:**
+- `D3D9_DrawOffset` **0/7 → 7/7**.
+- Full **D3D9 ctest shard 20/20** (250 s), zero regressions. Directly-affected suites individually:
+  `D3D9_DrawEx` 19/19 (all 5 stock effects), `D3D9_Pbr` 4/4, `D3D9_SkinnedVertexColor` 4/4,
+  `D3D9_Instanced` 4/4; NOT_APPLICABLE controls `D3D9_Draw` 6/6, `D3D9_SpriteBatch` 10/10, plus
+  `D3D9_Smoke`/`D3D9_XNA_Diff`/`D3D9_EffectBackend`/`D3D9_SpriteBatch_CustomEffect` all Passed.
+  *Bonus:* `D3D9_Pbr`/`D3D9_SkinnedVertexColor` were authored-but-never-run when written (no live D3D9
+  device then) — this tranche is their first real DXVK execution, and they pass.
+
+**Parity / cross-backend (Phases 9-10).**
+- **Change locality:** `git status` confirms only D3D9 backend files + the new test + its cmake changed —
+  no `D3DCommon`/D3D11/D3D12/shared edits, so D3D11/D3D12 are parity-preserved by construction.
+- **D3D11 (Phase 9):** re-ran `d3d11_pbr_vertexcolor` (GFX-020's regression) on real DXVK — **6/6**,
+  including `startvertex-offset-right-quad-drawn` (255,0,0) and `startvertex-offset-left-quad-untouched`
+  (0,255,0). Still green after GFX-020.
+- **D3D12 (Phase 9):** no D3D12 code changed in this tranche (its offset fix landed under GFX-020,
+  `5d20f374`, build-verified). Runtime remains blocked by REMED-BUILD-012 — **not** runtime-verified here,
+  and not claimed to be.
+- **EasyGL (Phase 10):** `cna_test_easygl_pbreffect_golden` (drives the public
+  `DrawPrimitives(TriangleList, 6/12/18, 2)` — non-zero `vertexStart`) **8/8**, quads B/C/D at non-zero
+  offsets render distinct correct pixels + golden-image match. Confirms the already-correct reference
+  backend honors the offset; D3D9 now matches it.
+- **Vulkan (Phase 10):** honors all three by construction (confirmed by inspection —
+  `VulkanGraphicsBackend.cpp` offsets the mapped VB ptr by `params.vertexStart*stride` (`:7393`), the IBO
+  ptr by `params.startIndex*indexSize` (`:7635`/`:7868`), and threads `params.baseVertex` into the draw
+  (`:7637`/`:7895`)).
+
+**Validation / overflow analysis (Phase 12).** The change alters only integer draw arguments. All three
+offsets are validated `>= 0` at the public `GraphicsDevice` layer (`ArgumentOutOfRangeException::
+ThrowIfNegative`), so the `static_cast<INT>`/`static_cast<UINT>` conversions are sign-safe.
+`NumVertices = vertexCount − baseVertex` is non-negative for every well-formed draw (`baseVertex <=
+vertexCount`); the only underflow path needs `baseVertex > vertexCount`, which the public layer permits
+(it bounds only `>= 0`, matching real XNA's own thin wrapper — XNA does not range-check draw args against
+buffer sizes either) but which is already a malformed draw, and `NumVertices` is a D3D9 hint-only
+parameter (no OOB/memory-safety consequence in DXVK; at worst a validation warning). No new validation was
+added, because tightening it would diverge from XNA's documented behavior and there is no memory-safety
+issue — recorded as an **observation, not a defect** (no ID allocated: the missing upper-bound check is
+XNA-consistent and backend-agnostic, present identically on every backend).
+
+**Fog scalar-field decision (Phase 11).** Inspected `IGraphicsBackend.hpp` (~`:454`) fog documentation.
+Decision: the stale "D3D backends … keep using fogStart/fogEnd" wording + the now-vestigial scalar
+`fogStart`/`fogEnd` fields for the D3D family are a **separate remediation task**, newly allocated as
+`REMED-GFX-061` (formalizing GFX-055's dangling follow-up). **No source edit made in this tranche** — a
+precise correction is *not* unquestionably safe (the field doc must correctly distinguish D3D9's in-backend
+`ComputeFogVectorEXT` scalar path, D3D11/D3D12's CPU-baked `fogVector` from stock effects, and the
+direct-`DrawPrimitivesEx` callers that still set only scalars), and Phase 11 forbids redesigning the fog
+ABI here. Leaning: documentation cleanup + formally mark the scalar fields as retained accepted-and-ignored
+compat, not removal (direct-backend callers still set them). Deferred to `REMED-GFX-061`.
+
+**New findings.** `REMED-GFX-061` (fog scalar-field/comment cleanup — see Phase 11 above). No new
+hardcoded-zero site, index-range miscalculation, or instancing-offset confusion was found beyond the 15
+fixed. Commits: test `aa23eed2`, fix `d2491a17`, docs (this entry) — see the docs commit.

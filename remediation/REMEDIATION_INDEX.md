@@ -151,7 +151,7 @@ A backend's count is not a quality ranking — the most-tested backends surface 
 | **Bgfx** | 7 | Cull mode, ClearOptions, fog, skinned normal, env-map, 2 unannotated failing tests |
 | **SdlGpu** | 7 | Fog absent entirely, GLSL dialect, constructor leak, skinned normal, env-map, cube mips, depth bias |
 | **WebGPU** | 4 | Texture2D crash (non-catchable panic), SpriteBatch clip space, skinned normal, env-map |
-| **D3D9** | 3 | Object-space fog in custom shaders, PBR skinned normal. Vendored stock effects immune by construction |
+| **D3D9** | 3 (+`GFX-060` post-audit) | Object-space fog in custom shaders, PBR skinned normal. Vendored stock effects immune by construction. **`REMED-GFX-060`** (DONE): draw paths dropped `DrawPrimitives`/`DrawIndexedPrimitives` vertex offsets (15 sites, the D3D9 counterpart of GFX-020) — runtime-verified on Wine+DXVK9 |
 | **SdlRenderer** | 3 | Fullscreen crash, stale test expectations, depth-decision ambiguity |
 | **Software** | 3 | Depth write/function inert, rotation formula (shared with Dx3), Texture3D |
 | **Dx3** | 2 | Rotation defect, resize destroys-before-replace |

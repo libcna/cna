@@ -1780,6 +1780,40 @@ boundary bug from a general one.
 **Completion** Both checks pass; root cause documented. **Verification** `D3D11_Smoke` 153/153 and
 `D3D11_Pbr_VertexColor` pass under real DXVK.
 
+### REMED-GFX-060 — D3D9 draw paths drop `DrawPrimitives`/`DrawIndexedPrimitives` vertex offsets
+
+**Sev** HIGH · **Pri** P2 · **Owner** GRAPHICS · **Status** DONE (2026-07-21) — post-audit follow-up, split
+out of `REMED-GFX-020`'s Phase-12 cross-backend draw-offset sweep.
+**Root cause** Every effect-aware D3D9 draw site hardcoded the vertex/index offsets into the underlying
+`IDirect3DDevice9` call — `DrawPrimitive(topology, 0 /*StartVertex*/, primCount)` and
+`DrawIndexedPrimitive(topology, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount /*NumVertices*/,
+0 /*StartIndex*/, primCount)` — dropping the XNA `DrawPrimitives(vertexStart)` /
+`DrawIndexedPrimitives(baseVertex, startIndex)` offsets that `GraphicsDevice` threads through
+`GpuDrawParams::vertexStart/startIndex/baseVertex`. Identical defect class to `REMED-GFX-020`
+(D3D11/D3D12), left unfixed there because D3D9 spreads it across several draw sites in a separate shader
+model.
+**Affected files (15 sites)** `src/CNA/Internal/Backends/D3D9/D3D9EffectDraw.cpp` (10: BasicEffect/
+AlphaTestEffect/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect, indexed + non-indexed),
+`D3D9PbrDraw.cpp` (2), `D3D9SkinnedVertexColorDraw.cpp` (2), `D3D9InstancedDraw.cpp` (1). The
+colored-primitive path (`D3D9GraphicsBackend.cpp` `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`)
+and `D3D9SpriteBatch.cpp` carry no `GpuDrawParams` offsets and are correctly untouched.
+**D3D9 parameter mapping** `DrawPrimitive(StartVertex ← vertexStart)`; `DrawIndexedPrimitive(BaseVertexIndex
+← baseVertex, MinIndex = 0, NumVertices = vertexCount − baseVertex, StartIndex ← startIndex, PrimitiveCount
+unchanged)`. `NumVertices` uses the in-buffer remainder (not full `vertexCount`) so a non-zero
+`BaseVertexIndex` cannot declare an out-of-buffer range; `baseVertex = 0` reproduces the old value exactly.
+**Backends / Platforms** D3D9 confirmed + fixed + runtime-verified / Windows (Wine + DXVK9).
+**XNA/FNA impact** `DrawPrimitives`/`DrawIndexedPrimitives` with any non-zero offset silently drew from
+vertex/index 0 on D3D9. **Security** N/A. **Memory/resource** N/A (integer draw-arg change only).
+**Verification** New `D3D9_DrawOffset` test (7 checks, all 3 offset kinds × BasicEffect/Pbr/SkinnedVertexColor/
+Instanced) **0/7 → 7/7** on real DXVK 2.6.0; full **D3D9 ctest shard 20/20**, zero regressions; D3D11
+`d3d11_pbr_vertexcolor` (GFX-020 startVertex regression) still 6/6 (change is D3D9-local); EasyGL
+public-API `vertexStart` control green; Vulkan honors by construction. D3D12 unchanged (fixed under
+GFX-020; runtime still blocked by REMED-BUILD-012).
+**Cx** MEDIUM · **PS** NO · **Verify** done. **Commits** `aa23eed2` (test), `d2491a17` (fix).
+**Spawned** `REMED-GFX-061` (D3D-family scalar fog-field / stale `IGraphicsBackend.hpp` comment cleanup —
+Phase-11 decision: separate documentation/deprecation task, not an offset-tranche change). Full detail in
+`REMEDIATION_PROGRESS.md` § REMED-GFX-060.
+
 ### REMED-GFX-021 — Dx3 `SpriteBatch` 180° rotation defect, possibly shared with `SoftwareGraphicsBackend`
 
 **Sev** MEDIUM · **Pri** P2 · **Owner** GRAPHICS · **Status** NOT STARTED
