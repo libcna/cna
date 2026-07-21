@@ -18,6 +18,7 @@ layout(location = 1) out vec3  fragNormal;
 layout(location = 2) out vec3  fragTangent;
 layout(location = 3) out float fragBitangentSign;
 layout(location = 4) out vec3  fragWorldPos;
+layout(location = 5) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
 
 // 72 * mat4 = 4608 bytes, a real storage buffer rather than a uniform push -- see
 // skinned3d.vert.glsl's own doc comment for why (SDL_gpu's real ~4096-byte push-uniform cap on
@@ -54,6 +55,14 @@ layout(set = 1, binding = 1) uniform SkinnedLightParams {
     vec4 specularColorPower;
 } lp;
 
+// REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
+// packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
+// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+layout(set = 1, binding = 2) uniform FogParams {
+    vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
+    vec4 fogStartEnd;      // x = FogStart, y = FogEnd, zw = unused
+} fog;
+
 void main() {
     // Matches skinned3d.vert.glsl: FNA's real Skin(vin, boneCount) only sums the first
     // WeightsPerVertex (1, 2, or 4) weight/index pairs.
@@ -78,4 +87,12 @@ void main() {
     fragTangent = mat3(lp.world) * (skinNormalMat * inTangent.xyz);
     fragBitangentSign = inTangent.w;
     fragWorldPos = (lp.world * skinnedPos).xyz;
+    // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
+    // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
+    // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
+    float fogKeep = (fog.fogColorEnabled.w > 0.5)
+        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0
+            : clamp((inPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
+        : 1.0;
+    fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }

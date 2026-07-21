@@ -319,12 +319,26 @@ namespace CNA::Internal::Backends::SdlGpu
             out[31] = p.vertexColorEnabled ? 1.0f : 0.0f;
         }
 
+        // REMED-GFX-009: shared 32-byte FogParams block, byte-identical to VulkanGraphicsBackend's
+        // own FogParams shape -- vec4 fogColorEnabled (xyz = FogColor, w = fogEnabled 0/1) + vec4
+        // fogStartEnd (x = FogStart, y = FogEnd, zw = pad). Bound to the vertex stage only; the
+        // vertex shader computes the keep-factor from raw object-space Z (the GFX-005 convention)
+        // and forwards FogColor + keep to the fragment stage as a varying. A default-constructed
+        // all-zero block means fog disabled -- correct for the no-GpuDrawParams FillColoredUniforms
+        // path (DrawColoredPrimitives), which never sets fog.
+        void FillFogUniforms(std::array<float, 8>& out, const GpuDrawParams& p)
+        {
+            out[0] = p.fogColor[0]; out[1] = p.fogColor[1]; out[2] = p.fogColor[2];
+            out[3] = p.fogEnabled ? 1.0f : 0.0f;
+            out[4] = p.fogStart; out[5] = p.fogEnd; out[6] = 0.0f; out[7] = 0.0f;
+        }
+
         // Secondary UBO for lit_textured3d.glsl: DirectionalLight1/DirectionalLight2, EmissiveColor,
         // World (the vertex shader computes its own normal matrix via GLSL's built-in inverse(),
         // unlike WebGPUGraphicsBackend's WGSL-forced CPU-side precomputation -- no normal-matrix
         // slots needed here), EyePosition, per-light SpecularColor, material SpecularColor/Power.
-        // Mirrors VulkanGraphicsBackend's LitLightParams UBO field-for-field (minus fog,
-        // deliberately deferred like the other SDL_GPU 3D shaders).
+        // Mirrors VulkanGraphicsBackend's LitLightParams UBO field-for-field. Fog is not carried
+        // here -- REMED-GFX-009 supplies it in a separate FogParams block (FillFogUniforms).
         void FillLitLightUniforms(std::array<float, 56>& out, const GpuDrawParams& p)
         {
             out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.0f;
@@ -380,8 +394,8 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         // env_map3d.glsl's secondary EnvMapParams block: world(16) + 8 vec4 (32) = 48 floats.
-        // Mirrors VulkanGraphicsBackend::env_map3d's EnvMapParams field-for-field (minus fog,
-        // deliberately deferred here like lit_textured3d.glsl already defers it for this backend).
+        // Mirrors VulkanGraphicsBackend::env_map3d's EnvMapParams field-for-field. Fog is not
+        // carried here -- REMED-GFX-009 supplies it via a separate FogParams block.
         void FillEnvMapParams(std::array<float, 48>& out, const GpuDrawParams& p)
         {
             for (int wi = 0; wi < 16; ++wi) out[wi] = p.worldColMajor[wi];
@@ -1732,7 +1746,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 1;
+        vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
         coloredVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (coloredVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create colored3d vertex shader: ") + SDL_GetError());
@@ -1817,7 +1831,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 1;
+        vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
         texturedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (texturedVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create textured3d vertex shader: ") + SDL_GetError());
@@ -1828,7 +1842,7 @@ namespace CNA::Internal::Backends::SdlGpu
         cvsInfo.entrypoint = "main";
         cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        cvsInfo.num_uniform_buffers = 1;
+        cvsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
         coloredTexturedVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
         if (coloredTexturedVertexShader_ == nullptr)
         {
@@ -1971,7 +1985,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 2;
+        vsInfo.num_uniform_buffers = 3;  // + FogParams (REMED-GFX-009)
         litTexturedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (litTexturedVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create lit_textured3d vertex shader: ") + SDL_GetError());
@@ -2073,6 +2087,7 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             const Matrix wvp = world * view * projection;
             FillExtUniforms(command.uniforms, wvp, *params);
+            FillFogUniforms(command.fogUniforms, *params);  // REMED-GFX-009
         }
         else
         {
@@ -2120,6 +2135,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
         // SDLGPU-21: real per-slot dynamic sampler state (GraphicsDevice.SamplerStates[0]).
         command.textureFilter = samplerSlots_[0].filter;
@@ -2168,6 +2184,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillLitLightUniforms(command.lightUniforms, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
         command.textureFilter = samplerSlots_[0].filter;
@@ -2205,7 +2222,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 1;
+        vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
         alphaTestVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (alphaTestVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test3d vertex shader: ") + SDL_GetError());
@@ -2216,7 +2233,7 @@ namespace CNA::Internal::Backends::SdlGpu
         cvsInfo.entrypoint = "main";
         cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        cvsInfo.num_uniform_buffers = 1;
+        cvsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
         alphaTestColoredVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
         if (alphaTestColoredVertexShader_ == nullptr)
         {
@@ -2361,7 +2378,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 1;
+        vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
         dualTextureVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (dualTextureVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture3d vertex shader: ") + SDL_GetError());
@@ -2372,7 +2389,7 @@ namespace CNA::Internal::Backends::SdlGpu
         cvsInfo.entrypoint = "main";
         cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        cvsInfo.num_uniform_buffers = 1;
+        cvsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
         dualTextureColoredVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
         if (dualTextureColoredVertexShader_ == nullptr)
         {
@@ -2481,7 +2498,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 2;
+        vsInfo.num_uniform_buffers = 3;  // + FogParams (REMED-GFX-009)
         envMapVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (envMapVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create env_map3d vertex shader: ") + SDL_GetError());
@@ -2570,7 +2587,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 2;  // PC, SkinnedLightParams
+        vsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
         vsInfo.num_storage_buffers = 1;  // BoneBlock (4608 bytes) -- see SkinnedDrawCommand's doc comment
         skinnedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (skinnedVertexShader_ == nullptr)
@@ -2582,7 +2599,7 @@ namespace CNA::Internal::Backends::SdlGpu
         colVsInfo.entrypoint = "main";
         colVsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         colVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        colVsInfo.num_uniform_buffers = 2;  // PC, SkinnedLightParams
+        colVsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
         colVsInfo.num_storage_buffers = 1;  // BoneBlock
         skinnedColoredVertexShader_ = SDL_CreateGPUShader(device_, &colVsInfo);
         if (skinnedColoredVertexShader_ == nullptr)
@@ -2709,7 +2726,7 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.entrypoint = "main";
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        vsInfo.num_uniform_buffers = 2;  // PC, LitLightParams
+        vsInfo.num_uniform_buffers = 3;  // PC, LitLightParams + FogParams (REMED-GFX-009)
         pbrVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (pbrVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr3d vertex shader: ") + SDL_GetError());
@@ -2720,7 +2737,7 @@ namespace CNA::Internal::Backends::SdlGpu
         skinnedVsInfo.entrypoint = "main";
         skinnedVsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         skinnedVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-        skinnedVsInfo.num_uniform_buffers = 2;  // PC, SkinnedLightParams
+        skinnedVsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
         skinnedVsInfo.num_storage_buffers = 1;  // BoneBlock
         pbrSkinnedVertexShader_ = SDL_CreateGPUShader(device_, &skinnedVsInfo);
         if (pbrSkinnedVertexShader_ == nullptr)
@@ -2841,6 +2858,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillAlphaTestUniforms(command.uniforms, wvp, params);
+        FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
@@ -2887,6 +2905,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         command.texture0 = static_cast<const SdlGpuTextureBackend*>(params.texture0);
         command.texture1 = static_cast<const SdlGpuTextureBackend*>(params.texture1);
         // SDLGPU-21: texture0/texture1 are independent slots (GraphicsDevice.SamplerStates[0]/[1]
@@ -2954,6 +2973,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillEnvMapUniforms(command.uniforms, wvp, params);
+        FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillEnvMapParams(command.envMapUniforms, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
         command.envMapTexture = envMapTexture;
@@ -3008,6 +3028,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillSkinnedBoneUniforms(command.boneUniforms, params);
         FillSkinnedLightUniforms(command.lightUniforms, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
@@ -3066,6 +3087,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
+        FillFogUniforms(command.fogUniforms, params);  // REMED-GFX-009
         FillLitLightUniforms(command.lightUniforms, params);
         if (skinned)
         {
@@ -3114,6 +3136,7 @@ namespace CNA::Internal::Backends::SdlGpu
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         SDL_GPUBufferBinding vbBinding{};
@@ -3148,6 +3171,7 @@ namespace CNA::Internal::Backends::SdlGpu
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
@@ -3186,6 +3210,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
+        SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
 
@@ -3227,6 +3252,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         // Both the stride-52 (litTexturedFragmentShader_, reused unchanged) and stride-56
         // (skinnedColoredFragmentShader_) fragment shaders expect PC at slot 0 and a
         // LitLightParams-shaped block at slot 1 -- SkinnedLightParams is byte-identical to both.
@@ -3269,6 +3295,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
         SDL_PushGPUFragmentUniformData(cmd, 2, command.pbrParams.data(), sizeof(command.pbrParams));
@@ -3456,6 +3483,7 @@ namespace CNA::Internal::Backends::SdlGpu
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
@@ -3485,6 +3513,7 @@ namespace CNA::Internal::Backends::SdlGpu
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
         SDL_GPUBufferBinding vbBinding{};
@@ -3520,6 +3549,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        SDL_PushGPUVertexUniformData(cmd, 2, command.fogUniforms.data(), sizeof(command.fogUniforms));  // REMED-GFX-009
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
 

@@ -13,6 +13,7 @@ layout(location = 1) in vec3  fragNormal;
 layout(location = 2) in vec4  fragTint;
 layout(location = 3) in vec3  fragWorldPos;
 layout(location = 4) in vec4  fragVertexColor;
+layout(location = 5) in vec4 fragFog;    // REMED-GFX-009
 
 layout(location = 0) out vec4 outColor;
 
@@ -78,4 +79,6 @@ void main() {
     vec4 vertexColor = (pc.vertexColorEnabled > 0.5) ? fragVertexColor : vec4(1.0);
     color *= vertexColor;
     outColor = color;
+    // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
+    outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);
 }

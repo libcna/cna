@@ -21,6 +21,7 @@ layout(location = 1) out vec3  fragNormal;
 layout(location = 2) out vec4  fragTint;
 layout(location = 3) out vec3  fragWorldPos;
 layout(location = 4) out vec4  fragVertexColor;
+layout(location = 5) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
 
 layout(std430, set = 0, binding = 0) readonly buffer BoneBlock {
     mat4 bones[72];
@@ -51,6 +52,14 @@ layout(set = 1, binding = 1) uniform SkinnedLightParams {
     vec4 specularColorPower;
 } lp;
 
+// REMED-GFX-009: fog forwarded to the fragment stage as a varying (the shared PC block is fully
+// packed, no spare bytes). Keep-factor computed from raw object-space Z, matching
+// VulkanGraphicsBackend's FogParams shape byte-for-byte.
+layout(set = 1, binding = 2) uniform FogParams {
+    vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
+    vec4 fogStartEnd;      // x = FogStart, y = FogEnd, zw = unused
+} fog;
+
 void main() {
     float weightsPerVertex = lp.eyePos_weightsPerVertex.w;
     mat4 skinMat = bb.bones[inBoneIndices.x] * inBoneWeights.x;
@@ -68,4 +77,12 @@ void main() {
     fragWorldPos = (lp.world * skinnedPos).xyz;
     fragTint = pc.diffuseColor;
     fragVertexColor = inColor;
+    // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
+    // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
+    // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
+    float fogKeep = (fog.fogColorEnabled.w > 0.5)
+        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0
+            : clamp((inPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
+        : 1.0;
+    fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }
