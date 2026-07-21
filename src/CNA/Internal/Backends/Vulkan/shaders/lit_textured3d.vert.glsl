@@ -40,7 +40,7 @@ layout(set = 0, binding = 1) uniform LitLightParams {
     vec4 specularColorPower;
     // Task 888: fog, packed into the UBO's previously-unused trailing 32 bytes.
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;      // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } lp;
 
 void main() {
@@ -59,7 +59,5 @@ void main() {
     // Task 888: fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL
     // Task-1111 form (z+FogEnd)/(FogEnd-FogStart); prior (FogEnd-z) was the mirror image and
     // wrong. 1.0 = no fog, 0.0 = full fog. Zero-length range -> fully fogged (FNA parity).
-    fragFogFactor = (lp.fogColorEnabled.w > 0.5)
-        ? ((abs(lp.fogStartEnd.y - lp.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((inPos.z + lp.fogStartEnd.y) / (lp.fogStartEnd.y - lp.fogStartEnd.x), 0.0, 1.0))
-        : 1.0;
+    fragFogFactor = 1.0 - clamp(dot(vec4(inPos, 1.0), lp.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

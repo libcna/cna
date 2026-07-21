@@ -22,7 +22,7 @@ layout(push_constant) uniform PC {
 
 layout(set = 0, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;      // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
     // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
     vec4 light1Dir_pad;
     vec4 light1Diff_pad;

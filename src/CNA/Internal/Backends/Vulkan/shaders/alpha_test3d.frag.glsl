@@ -17,10 +17,11 @@ layout(push_constant) uniform PC {
     float alphaFailW;          // offset 92 — weight when test fails   (< 0 = discard)
     float vertexColorEnabled;  // offset 96 — unused here (read only in the VS)
     // Task 888: fog, packed into what was previously unused padding.
-    float fogEnabled;          // offset 100
-    float fogStart;            // offset 104
-    float fogEnd;              // offset 108
-    vec3  fogColor;            // offset 112
+    // REMED-GFX-010: FogColor as 3 floats + FNA fog vector vec4 (offset 112). Layout must match the VS.
+    float fogColorR;           // offset 100
+    float fogColorG;           // offset 104
+    float fogColorB;           // offset 108
+    vec4  fogVector;           // offset 112
 } pc;
 
 // Alpha test uses the same encoding as EasyGL:
@@ -43,5 +44,5 @@ void main() {
     if (w < 0.0) discard;
 
     // Task 888: mix toward FogColor as fragFogFactor -> 0 (matches EasyGL's established formula).
-    outColor.rgb = mix(pc.fogColor, outColor.rgb, fragFogFactor);
+    outColor.rgb = mix(vec3(pc.fogColorR, pc.fogColorG, pc.fogColorB), outColor.rgb, fragFogFactor);
 }

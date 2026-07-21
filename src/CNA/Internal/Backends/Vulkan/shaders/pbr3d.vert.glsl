@@ -42,8 +42,8 @@ layout(set = 0, binding = 5) uniform PbrParams {
     mat4 world;
     vec4 eyePos_metallic;       // xyz = EyePosition, w = MetallicFactor
     vec4 emissive_roughness;    // xyz = EmissiveFactor, w = RoughnessFactor
-    vec4 fogColorEnabled;       // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd_pad;       // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogColorEnabled;       // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010; skinned only)
+    vec4 fogVector;             // REMED-GFX-010: FNA fog vector (xyz + w)
 } pbr;
 
 void main() {
@@ -64,7 +64,5 @@ void main() {
     vBitangentSign = aTangent.w;
     vUV = aUV;
     vWorldPos = (pbr.world * vec4(aPos, 1.0)).xyz;
-    vFogFactor = (pbr.fogColorEnabled.w > 0.5)
-        ? ((abs(pbr.fogStartEnd_pad.y - pbr.fogStartEnd_pad.x) < 1e-6) ? 0.0 : clamp((aPos.z + pbr.fogStartEnd_pad.y) / (pbr.fogStartEnd_pad.y - pbr.fogStartEnd_pad.x), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

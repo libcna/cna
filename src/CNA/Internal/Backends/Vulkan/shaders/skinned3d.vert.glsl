@@ -30,7 +30,7 @@ layout(set = 0, binding = 1) uniform BoneBlock {
 // at binding=2.
 layout(set = 0, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;      // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
     // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
     vec4 light1Dir_pad;
     vec4 light1Diff_pad;
@@ -69,7 +69,5 @@ void main() {
     // FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); prior (FogEnd-z) was the mirror
     // image and wrong. (Bgfx/D3DCommon are still mirrored until their own REMED-GFX-005 pass,
     // so this no longer claims parity with them.)
-    vFogFactor = (fog.fogColorEnabled.w > 0.5)
-        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((aPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

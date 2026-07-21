@@ -10,7 +10,7 @@ layout(location = 0) out vec4 outColor;
 // (fog) is actually read here.
 layout(set = 0, binding = 1) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;      // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } fog;
 
 void main() {

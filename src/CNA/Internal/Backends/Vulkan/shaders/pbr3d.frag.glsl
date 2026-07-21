@@ -40,8 +40,8 @@ layout(set = 0, binding = 5) uniform PbrParams {
     mat4 world;
     vec4 eyePos_metallic;
     vec4 emissive_roughness;
-    vec4 fogColorEnabled;
-    vec4 fogStartEnd_pad;
+    vec4 fogColorEnabled;       // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010; skinned only)
+    vec4 fogVector;             // REMED-GFX-010: FNA fog vector
 } pbr;
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and

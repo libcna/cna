@@ -25,9 +25,9 @@ layout(set = 0, binding = 1) uniform LitLightParams {
     vec4 light2Specular_pad;
     vec4 specularColorPower;     // xyz = material SpecularColor, w = SpecularPower
     // Task 888: fog, packed into the UBO's previously-unused trailing 32 bytes. Vertex-stage
-    // computes fragFogFactor from fogColorEnabled.w/fogStartEnd; only fogColorEnabled.xyz needed here.
+    // computes fragFogFactor from fogColorEnabled.w/fogVector; only fogColorEnabled.xyz needed here.
     vec4 fogColorEnabled;        // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;            // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;            // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } lp;
 
 layout(push_constant) uniform PC {

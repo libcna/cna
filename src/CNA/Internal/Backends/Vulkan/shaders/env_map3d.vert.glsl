@@ -23,7 +23,7 @@ layout(set = 0, binding = 2) uniform EnvMapParams {
     vec4 envMapSpec_pad;
     // Task 899's noted cheap leftover: fog packed into this UBO's spare tail bytes.
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;      // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
     // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
     vec4 light1Dir_pad;
     vec4 light1Diff_pad;
@@ -43,7 +43,5 @@ void main() {
     // Fog factor from raw object-space Z. REMED-GFX-005: corrected to FNA/EasyGL Task-1111
     // form (z+FogEnd)/(FogEnd-FogStart); the prior Task 888/899 (FogEnd-z) formula was the
     // mirror image and wrong. Zero-length range -> fully fogged, matching FNA SetFogVector.
-    vFogFactor = (ep.fogColorEnabled.w > 0.5)
-        ? ((abs(ep.fogStartEnd.y - ep.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((aPos.z + ep.fogStartEnd.y) / (ep.fogStartEnd.y - ep.fogStartEnd.x), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), ep.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

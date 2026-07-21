@@ -49,7 +49,7 @@ layout(set = 0, binding = 1) uniform LitLightParams {
     vec4 light2Specular_pad;
     vec4 specularColorPower;
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;      // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } lp;
 
 void main() {
@@ -57,9 +57,7 @@ void main() {
     pos.y = -pos.y;
     gl_Position = pos;
     fragUV = inUV;
-    fragFogFactor = (lp.fogColorEnabled.w > 0.5)
-        ? ((abs(lp.fogStartEnd.y - lp.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((inPos.z + lp.fogStartEnd.y) / (lp.fogStartEnd.y - lp.fogStartEnd.x), 0.0, 1.0))
-        : 1.0;
+    fragFogFactor = 1.0 - clamp(dot(vec4(inPos, 1.0), lp.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 
     mat3 normalMatrix = transpose(inverse(mat3(lp.world)));
     vec3 N = normalize(normalMatrix * inNormal);

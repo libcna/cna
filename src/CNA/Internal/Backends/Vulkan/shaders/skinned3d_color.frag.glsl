@@ -30,7 +30,7 @@ layout(push_constant) uniform PC {
 
 layout(set = 0, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;
-    vec4 fogStartEnd;
+    vec4 fogVector;
     vec4 light1Dir_pad;
     vec4 light1Diff_pad;
     vec4 light2Dir_pad;

@@ -40,7 +40,7 @@ layout(set = 0, binding = 1) uniform LitLightParams {
     vec4 light2Specular_pad;
     vec4 specularColorPower;
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;
+    vec4 fogVector;
 } lp;
 
 void main() {

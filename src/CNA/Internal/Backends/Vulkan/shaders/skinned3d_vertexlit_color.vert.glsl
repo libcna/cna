@@ -35,7 +35,7 @@ layout(set = 0, binding = 1) uniform BoneBlock {
 
 layout(set = 0, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;
-    vec4 fogStartEnd;
+    vec4 fogVector;
     vec4 light1Dir_pad;
     vec4 light1Diff_pad;
     vec4 light2Dir_pad;
@@ -60,9 +60,7 @@ void main() {
     vUV = aUV;
     vColor = aColor;
     vec3 worldPos = (fog.world * skinnedPos).xyz;
-    vFogFactor = (fog.fogColorEnabled.w > 0.5)
-        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0 : clamp((aPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
-        : 1.0;
+    vFogFactor = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 
     // REMED-GFX-006: FNA composes the bone-skin 3x3 with the outer world normal matrix
     // (SkinnedEffect.fx Skin() then Lighting.fxh's mul(normal, WorldInverseTranspose)).

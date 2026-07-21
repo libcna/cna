@@ -3609,11 +3609,13 @@ namespace CNA::Internal::Backends::Vulkan
         out[36] = p.emissiveColor[0]; out[37] = p.emissiveColor[1]; out[38] = p.emissiveColor[2];
         out[39] = p.pbrRoughnessFactor;
         out[40] = p.fogColor[0]; out[41] = p.fogColor[1]; out[42] = p.fogColor[2];
-        out[43] = p.fogEnabled ? 1.f : 0.f;
-        out[44] = p.fogStart; out[45] = p.fogEnd;
-        // [46]: WeightsPerVertex (pbr3d_skinned.vert.glsl's fogStartEnd_weights.z; unused/0 for
-        // the unskinned pbr3d.vert.glsl, whose fogStartEnd_pad.z is simply never read).
-        out[46] = weightsPerVertex; out[47] = 0.f;
+        // REMED-GFX-010: fogColorEnabled.w (was fogEnabled, now folded into the fog vector) carries
+        // WeightsPerVertex instead (pbr3d_skinned reads it; unused/0 for the unskinned pbr3d).
+        out[43] = weightsPerVertex;
+        // [44..47]: REMED-GFX-010 FNA fog vector, dotted with the object/skinned position -> true
+        // view-space fog. Zero when disabled, (0,0,0,1) for the fogStart==fogEnd degenerate case.
+        out[44] = p.fogVector[0]; out[45] = p.fogVector[1];
+        out[46] = p.fogVector[2]; out[47] = p.fogVector[3];
     }
 
     void VulkanGraphicsBackend::FillInstancedPushConst(float (&pc)[32], const Matrix& view,
@@ -3646,11 +3648,11 @@ namespace CNA::Internal::Backends::Vulkan
         pc[22] = p.alphaTest[2]; pc[23] = p.alphaTest[3];
         // [24]: vertexColorEnabled (Task 887, read only by the stride-24 colored variant's VS)
         pc[24] = p.vertexColorEnabled ? 1.f : 0.f;
-        // [25..30]: fog (Task 888) {fogEnabled, fogStart, fogEnd, fogColor.xyz}; [31]: padding
-        pc[25] = p.fogEnabled ? 1.f : 0.f;
-        pc[26] = p.fogStart; pc[27] = p.fogEnd;
-        pc[28] = p.fogColor[0]; pc[29] = p.fogColor[1]; pc[30] = p.fogColor[2];
-        pc[31] = 0.f;
+        // [25..27]: FogColor.xyz; [28..31]: REMED-GFX-010 FNA fog vector (dotted with object-space
+        // pos in the VS -> true view-space fog; zero when disabled, (0,0,0,1) for fogStart==fogEnd).
+        pc[25] = p.fogColor[0]; pc[26] = p.fogColor[1]; pc[27] = p.fogColor[2];
+        pc[28] = p.fogVector[0]; pc[29] = p.fogVector[1];
+        pc[30] = p.fogVector[2]; pc[31] = p.fogVector[3];
     }
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
@@ -7466,8 +7468,8 @@ namespace CNA::Internal::Backends::Vulkan
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
             d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
             d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.skinnedFogUboData[4] = params.fogStart; d.skinnedFogUboData[5] = params.fogEnd;
-            d.skinnedFogUboData[6] = 0.f; d.skinnedFogUboData[7] = 0.f;
+            d.skinnedFogUboData[4] = params.fogVector[0]; d.skinnedFogUboData[5] = params.fogVector[1];
+            d.skinnedFogUboData[6] = params.fogVector[2]; d.skinnedFogUboData[7] = params.fogVector[3];
             // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
             d.skinnedFogUboData[8]  = params.light1Dir[0]; d.skinnedFogUboData[9]  = params.light1Dir[1];
             d.skinnedFogUboData[10] = params.light1Dir[2]; d.skinnedFogUboData[11] = 0.f;
@@ -7518,8 +7520,8 @@ namespace CNA::Internal::Backends::Vulkan
             // Task 899's noted cheap leftover: fog packed into EnvMapParams' spare tail bytes.
             d.envMapUboData[24] = params.fogColor[0]; d.envMapUboData[25] = params.fogColor[1];
             d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
-            d.envMapUboData[28] = params.fogStart; d.envMapUboData[29] = params.fogEnd;
-            d.envMapUboData[30] = 0.f; d.envMapUboData[31] = 0.f;
+            d.envMapUboData[28] = params.fogVector[0]; d.envMapUboData[29] = params.fogVector[1];
+            d.envMapUboData[30] = params.fogVector[2]; d.envMapUboData[31] = params.fogVector[3];
             // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
             d.envMapUboData[32] = params.light1Dir[0]; d.envMapUboData[33] = params.light1Dir[1];
             d.envMapUboData[34] = params.light1Dir[2]; d.envMapUboData[35] = 0.f;
@@ -7537,8 +7539,8 @@ namespace CNA::Internal::Backends::Vulkan
             d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
             d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
             d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.dualTexFogUboData[4] = params.fogStart; d.dualTexFogUboData[5] = params.fogEnd;
-            d.dualTexFogUboData[6] = 0.f; d.dualTexFogUboData[7] = 0.f;
+            d.dualTexFogUboData[4] = params.fogVector[0]; d.dualTexFogUboData[5] = params.fogVector[1];
+            d.dualTexFogUboData[6] = params.fogVector[2]; d.dualTexFogUboData[7] = params.fogVector[3];
         } else if (needsLitTextured) {
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -7571,8 +7573,8 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
             d.litUboData[56] = params.fogColor[0]; d.litUboData[57] = params.fogColor[1];
             d.litUboData[58] = params.fogColor[2]; d.litUboData[59] = params.fogEnabled ? 1.f : 0.f;
-            d.litUboData[60] = params.fogStart; d.litUboData[61] = params.fogEnd;
-            d.litUboData[62] = 0.f; d.litUboData[63] = 0.f;
+            d.litUboData[60] = params.fogVector[0]; d.litUboData[61] = params.fogVector[1];
+            d.litUboData[62] = params.fogVector[2]; d.litUboData[63] = params.fogVector[3];
         } else {
             // Shared fallback fill: reached both by alpha-test draws (whose pipeline also uses
             // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
@@ -7585,8 +7587,8 @@ namespace CNA::Internal::Backends::Vulkan
                 d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view);
                 d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
                 d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
-                d.fogTex3DUboData[4] = params.fogStart; d.fogTex3DUboData[5] = params.fogEnd;
-                d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
+                d.fogTex3DUboData[4] = params.fogVector[0]; d.fogTex3DUboData[5] = params.fogVector[1];
+                d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
             }
         }
         PushPending3DDraw(std::move(d));
@@ -7704,8 +7706,8 @@ namespace CNA::Internal::Backends::Vulkan
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
             d.skinnedFogUboData[0] = params.fogColor[0]; d.skinnedFogUboData[1] = params.fogColor[1];
             d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.skinnedFogUboData[4] = params.fogStart; d.skinnedFogUboData[5] = params.fogEnd;
-            d.skinnedFogUboData[6] = 0.f; d.skinnedFogUboData[7] = 0.f;
+            d.skinnedFogUboData[4] = params.fogVector[0]; d.skinnedFogUboData[5] = params.fogVector[1];
+            d.skinnedFogUboData[6] = params.fogVector[2]; d.skinnedFogUboData[7] = params.fogVector[3];
             // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
             d.skinnedFogUboData[8]  = params.light1Dir[0]; d.skinnedFogUboData[9]  = params.light1Dir[1];
             d.skinnedFogUboData[10] = params.light1Dir[2]; d.skinnedFogUboData[11] = 0.f;
@@ -7754,8 +7756,8 @@ namespace CNA::Internal::Backends::Vulkan
             // Task 899's noted cheap leftover: fog packed into EnvMapParams' spare tail bytes.
             d.envMapUboData[24] = params.fogColor[0]; d.envMapUboData[25] = params.fogColor[1];
             d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
-            d.envMapUboData[28] = params.fogStart; d.envMapUboData[29] = params.fogEnd;
-            d.envMapUboData[30] = 0.f; d.envMapUboData[31] = 0.f;
+            d.envMapUboData[28] = params.fogVector[0]; d.envMapUboData[29] = params.fogVector[1];
+            d.envMapUboData[30] = params.fogVector[2]; d.envMapUboData[31] = params.fogVector[3];
             // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
             d.envMapUboData[32] = params.light1Dir[0]; d.envMapUboData[33] = params.light1Dir[1];
             d.envMapUboData[34] = params.light1Dir[2]; d.envMapUboData[35] = 0.f;
@@ -7774,8 +7776,8 @@ namespace CNA::Internal::Backends::Vulkan
             d.dualTexDescSet = GetOrCreateDualTexDescSet(currentFrame_, v0, v1, slotSamplers_[0], slotSamplers_[1]);
             d.dualTexFogUboData[0] = params.fogColor[0]; d.dualTexFogUboData[1] = params.fogColor[1];
             d.dualTexFogUboData[2] = params.fogColor[2]; d.dualTexFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
-            d.dualTexFogUboData[4] = params.fogStart; d.dualTexFogUboData[5] = params.fogEnd;
-            d.dualTexFogUboData[6] = 0.f; d.dualTexFogUboData[7] = 0.f;
+            d.dualTexFogUboData[4] = params.fogVector[0]; d.dualTexFogUboData[5] = params.fogVector[1];
+            d.dualTexFogUboData[6] = params.fogVector[2]; d.dualTexFogUboData[7] = params.fogVector[3];
         } else if (needsLitTextured) {
             EnsureLitTexturedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -7806,8 +7808,8 @@ namespace CNA::Internal::Backends::Vulkan
             d.litUboData[54] = params.specularColor[2]; d.litUboData[55] = params.specularPower;
             d.litUboData[56] = params.fogColor[0]; d.litUboData[57] = params.fogColor[1];
             d.litUboData[58] = params.fogColor[2]; d.litUboData[59] = params.fogEnabled ? 1.f : 0.f;
-            d.litUboData[60] = params.fogStart; d.litUboData[61] = params.fogEnd;
-            d.litUboData[62] = 0.f; d.litUboData[63] = 0.f;
+            d.litUboData[60] = params.fogVector[0]; d.litUboData[61] = params.fogVector[1];
+            d.litUboData[62] = params.fogVector[2]; d.litUboData[63] = params.fogVector[3];
         } else {
             // Shared fallback fill: reached both by alpha-test draws (whose pipeline also uses
             // the plain single-sampler descriptorSetLayout_/d.descSet) and, when !needsAlphaTest,
@@ -7820,8 +7822,8 @@ namespace CNA::Internal::Backends::Vulkan
                 d.fogTex3DDescSet = GetOrCreateFogTex3DDescSet(currentFrame_, view);
                 d.fogTex3DUboData[0] = params.fogColor[0]; d.fogTex3DUboData[1] = params.fogColor[1];
                 d.fogTex3DUboData[2] = params.fogColor[2]; d.fogTex3DUboData[3] = params.fogEnabled ? 1.f : 0.f;
-                d.fogTex3DUboData[4] = params.fogStart; d.fogTex3DUboData[5] = params.fogEnd;
-                d.fogTex3DUboData[6] = 0.f; d.fogTex3DUboData[7] = 0.f;
+                d.fogTex3DUboData[4] = params.fogVector[0]; d.fogTex3DUboData[5] = params.fogVector[1];
+                d.fogTex3DUboData[6] = params.fogVector[2]; d.fogTex3DUboData[7] = params.fogVector[3];
             }
         }
         PushPending3DDraw(std::move(d));

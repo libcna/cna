@@ -23,7 +23,7 @@ layout(push_constant) uniform PC {
 // dynamic UBO (set=0, binding=1) -- the 128-byte push constant above has zero spare bytes.
 layout(set = 0, binding = 1) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 fogVector;      // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } fog;
 
 void main() {
