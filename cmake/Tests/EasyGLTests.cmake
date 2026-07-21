@@ -1547,4 +1547,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_GraphicsDeviceManager_Vsync COMMAND cna_test_easygl_graphicsdevicemanager_vsync
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-006: SkinnedEffect world-space normal transform under non-identity World
+        # (rotation, non-uniform scale, and both) for BOTH skinned programs (per-pixel-lit
+        # EnsureSkinnedProgram and per-vertex-lit EnsureSkinnedVertexLitProgram) -- the cases every
+        # existing skinned test, all of which use World = Identity, structurally cannot detect.
+        cna_easygl_test(cna_test_easygl_skinnedeffect_world_normal
+                        examples/easygl_skinnedeffect_world_normal_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_WorldNormal COMMAND cna_test_easygl_skinnedeffect_world_normal
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
