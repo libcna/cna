@@ -56,6 +56,9 @@ namespace CNA
          * named DX30, see plan_dx30.md's own status note for why). */
         Dx30,
 
+        /** @brief DX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, no execute buffers). */
+        Dx5,
+
         /** @brief SDL_GPU. */
         SdlGpu
     };
@@ -103,6 +106,8 @@ namespace CNA
         return GraphicsBackendType::Dx2;
 #elif defined(CNA_BACKEND_DX30)
         return GraphicsBackendType::Dx30;
+#elif defined(CNA_BACKEND_DX5)
+        return GraphicsBackendType::Dx5;
 #elif defined(CNA_BACKEND_SDL_GPU)
         return GraphicsBackendType::SdlGpu;
 #else
@@ -140,6 +145,7 @@ namespace CNA
             case GraphicsBackendType::Dx1:            return "DX1";
             case GraphicsBackendType::Dx2:            return "DX2";
             case GraphicsBackendType::Dx30:           return "DX30";
+            case GraphicsBackendType::Dx5:            return "DX5";
             case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
         }
         return "UNKNOWN";

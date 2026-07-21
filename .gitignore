@@ -40,10 +40,13 @@ cmake-build-tests/*
 cmake-build-ubsan/*
 cmake-build-dx2/*
 cmake-build-dx30/*
+cmake-build-dx5/*
 dx2-spike/*.exe
 dx2-spike/*.o
 dx30-spike/*.exe
 dx30-spike/*.o
+dx5-spike/*.exe
+dx5-spike/*.o
 __pycache__/
 *.pyc
 

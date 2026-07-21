@@ -259,6 +259,10 @@ if(CNA_BUILD_TESTS)
             # time) -- same DX2-84 finding/fix, applied up front for this new backend.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX30_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx30.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX5")
+            # plan_dx5.md: same proactive wiring as DX30.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx5.sh")
         endif()
     endif()
 

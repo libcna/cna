@@ -181,6 +181,10 @@ include(cmake/Tests/Dx2Tests.cmake)
 # Windows-only/MinGW-cross-compile/Wine-wrapper shape as Dx2Tests.cmake.
 include(cmake/Tests/Dx30Tests.cmake)
 
+# plan_dx5.md: real DirectX 5 backend -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, a further
+# port of DX30's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx5Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

@@ -133,6 +133,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX30")
     # IDirect3D2/IDirect3DDevice2 are still obtained purely via QueryInterface/CreateDevice, now off
     # an IDirectDraw2 object instead of v1 -- see plan_dx30.md section 1).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX5")
+    # plan_dx5.md design decision 9: same confirmed minimal link set as DX1/DX2/DX30 -- ddraw +
+    # dxguid + SDL3::SDL3. No separate Direct3D import library is needed here either (DX5-0 spike
+    # confirmed IDirect3D3/IDirect3DDevice3 are still obtained purely via QueryInterface/
+    # CreateDevice, now off an IDirectDraw4 object instead of v2 -- see plan_dx5.md section 1).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package
