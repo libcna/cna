@@ -94,7 +94,8 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 | `REMED-GFX-065` | Bgfx per-view rect can't represent 2+ viewports on one view in a frame (affects backbuffer too) | LOW | GRAPHICS | NEW |
 | `REMED-GFX-066` | Bgfx per-draw `bgfx::setScissor` on FBO/render-target views — **NOT A DEFECT** (false finding; RT scissor clips correctly on bgfx-GL + Vulkan; regression added) | MEDIUM | GRAPHICS | DONE |
 | `REMED-GFX-067` | Bgfx RT→backbuffer SpriteBatch-sample readback Y-mirrors for some RT sizes | MEDIUM | GRAPHICS | NEW |
-| `REMED-GFX-064` | SdlGpu + D3D12 never wire `GraphicsDevice.Viewport` (base no-op `SetViewport`; full-target hardcoded) | MEDIUM | GRAPHICS | NEW |
+| `REMED-GFX-064` | SdlGpu + D3D12 never wire `GraphicsDevice.Viewport` (base no-op `SetViewport`; full-target hardcoded) — **DONE** (SdlGpu per-draw capture; D3D12 store+consume) | MEDIUM | GRAPHICS | DONE |
+| `REMED-GFX-068` | SdlGpu per-pass scissor reset to full-**backbuffer** on RT unbind (deferred-model, analog of Vulkan GFX-013) — discovered during GFX-064 | LOW | GRAPHICS | NEW |
 | `REMED-GFX-016` | EasyGL MRT second attachment never drawn | HIGH | GRAPHICS | NO |
 | `REMED-GFX-017` | Bgfx default cull mode culls nothing | HIGH | GRAPHICS | YES |
 | `REMED-GFX-018` | Bgfx `Clear` ignores `ClearOptions` | HIGH | GRAPHICS | YES |
