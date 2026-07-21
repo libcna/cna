@@ -68,11 +68,14 @@ void main() {
     vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     fragUV = inUV;
-    // The normal is transformed by the skin matrix alone, with no additional World normal-matrix
-    // contribution -- mirrors VulkanGraphicsBackend's own skinned3d.vert.glsl exactly (an
-    // established simplification already shared by every backend implementing SkinnedEffect in
-    // this codebase, not something introduced here).
-    fragNormal = normalize(mat3(skinMat) * inNormal);
+    // REMED-GFX-006: FNA composes the bone-skin 3x3 with the outer world normal matrix
+    // (SkinnedEffect.fx Skin() then Lighting.fxh's mul(normal, WorldInverseTranspose)). The world
+    // factor was missing entirely (audit Variant A), so any rotated or non-uniformly-scaled skinned
+    // model was lit as if World were identity. Computed in-shader as transpose(inverse(mat3(world)))
+    // because lp.world is already present and this backend mirrors VulkanGraphicsBackend's own
+    // (now-fixed) skinned3d.vert.glsl.
+    mat3 skinNormalMatrix = transpose(inverse(mat3(lp.world)));
+    fragNormal = normalize(skinNormalMatrix * (mat3(skinMat) * inNormal));
     fragWorldPos = (lp.world * skinnedPos).xyz;
     fragTint = pc.diffuseColor;
 }

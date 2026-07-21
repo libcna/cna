@@ -60,10 +60,11 @@ void main() {
     vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
     gl_Position = pc.mvp * skinnedPos;
     fragUV = inUV;
-    // Matches skinned3d.vert.glsl exactly: the normal is transformed by the skin matrix alone,
-    // with no additional World normal-matrix contribution (established SkinnedEffect
-    // simplification shared by every backend, unchanged here).
-    fragNormal = normalize(mat3(skinMat) * inNormal);
+    // REMED-GFX-006: matches skinned3d.vert.glsl -- compose the bone-skin 3x3 with the outer world
+    // normal matrix transpose(inverse(mat3(world))). The world factor was missing entirely (audit
+    // Variant A); see skinned3d.vert.glsl for the full rationale.
+    mat3 skinNormalMatrix = transpose(inverse(mat3(lp.world)));
+    fragNormal = normalize(skinNormalMatrix * (mat3(skinMat) * inNormal));
     fragWorldPos = (lp.world * skinnedPos).xyz;
     fragTint = pc.diffuseColor;
     fragVertexColor = inColor;

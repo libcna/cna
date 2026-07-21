@@ -66,14 +66,15 @@ void main() {
     gl_Position = pc.mvp * skinnedPos;
     fragUV = inUV;
 
-    // Unlike skinned3d.vert.glsl's plain (non-PBR) SkinnedEffect path -- which transforms the
-    // normal by the skin matrix alone, with no World contribution, an established simplification
-    // shared by every backend's own SkinnedEffect shader -- a skinned normal map needs a real
-    // world-space TBN basis, so both Normal and Tangent additionally go through World's own
-    // normal-safe 3x3 here, exactly mirroring EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()'s
-    // own vTangent/vNormal computation (mat3(uWorld)*(skinNormalMat*aNormal/aTangent.xyz)).
+    // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix
+    // transpose(inverse(mat3(world))), not raw mat3(lp.world). Raw World is correct only for
+    // rotation and uniform scale and diverges from FNA's mul(normal, WorldInverseTranspose) under
+    // non-uniform scale; it also contradicted this backend's own unskinned pbr3d.vert.glsl and its
+    // (now-fixed) Vulkan sibling pbr3d_skinned.vert.glsl. The tangent stays on raw World: tangents
+    // transform as directions, not as normals (glTF convention, unchanged).
     mat3 skinNormalMat = mat3(skinMat);
-    fragNormal = normalize(mat3(lp.world) * (skinNormalMat * inNormal));
+    mat3 worldNormalMat = transpose(inverse(mat3(lp.world)));
+    fragNormal = normalize(worldNormalMat * (skinNormalMat * inNormal));
     fragTangent = mat3(lp.world) * (skinNormalMat * inTangent.xyz);
     fragBitangentSign = inTangent.w;
     fragWorldPos = (lp.world * skinnedPos).xyz;
