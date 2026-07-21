@@ -2663,6 +2663,22 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     Markdown-table edits, not code, with no build-verification concept to apply. Pushed alongside
     whatever `.mm` state is current for a real CI compile/run of `Metal_Capabilities` specifically.
 
+92. **Real thirty-third CI signal — `Metal_Capabilities` passes cleanly on real Apple hardware, all
+    8 checks, the first Metal `CTest` this whole session to reach a clean ✅ with zero caveats**: CI
+    run `29814126178` shows "Build native Metal backend" passing with no errors, and `ctest`
+    reports `95% tests passed, 7 tests failed out of 143` — 142→143 (the one new test), the same 7
+    pre-existing failures unchanged, and `Metal_Capabilities` itself explicitly absent from the
+    failure list: `143/143 Test #5646: Metal_Capabilities ... Passed`. Because this test never
+    touches `GetBackBufferData()` (a pure `SupportsCapability()` query, no draw/readback involved),
+    its pass is not just "ran without the known bug's own symptom" the way every other Metal test
+    landed this session has had to be qualified — it is a genuine, unqualified, independently-
+    confirmed correctness result: `MultipleRenderTargets`, `CustomEffects`, and
+    `MultiSampleAntiAliasing` (items 86/83/88 — real MRT, real `SpriteBatch`-scoped custom
+    effects, real MSAA) really are correctly reported as supported by this backend on real Apple
+    hardware, not merely believed correct from source review. `METAL-198` closes as ✅, joining
+    `METAL-13`/`34`/`40`/`155` and the whole plain-C++ extraction subset as one of the small number
+    of items in this entire plan verified end-to-end without any lingering caveat.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -3297,7 +3313,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-195 | `GraphicsCapability::OcclusionQuery` — **fixed**: was a false-positive blanket `true` (`CreateOcclusionQuery()` still returns `nullptr`), now correctly answers `false` until Phase 13 lands | 🟨 |
 | METAL-196 | `GraphicsCapability::CustomEffects` — **fixed**: was a false-positive blanket `true` (`CreateEffectBackend()` still returns `nullptr`), now correctly answers `false` until Phase 14 lands | 🟨 |
 | METAL-197 | `SupportsCapability()` override added to `MetalGraphicsBackend`, covering the 3 known-wrong cases above and deferring to the (correct) base default otherwise | 🟨 |
-| METAL-198 | `CTest`: `Metal_Capabilities` — one assertion per `GraphicsCapability`, meant to be extended incrementally as each phase's real behavior lands, not written once and left stale | 🟨 landed 2026-07-21 — see narrative item 91: 8 assertions, all expecting `true` (Metal is the first CNA backend expected to support every currently-enumerated capability, including `WireFrame` — unlike EasyGL, GLES3 genuinely has no wireframe fill mode). Routes no readback through `GetBackBufferData()` at all, so unlike every other Metal `CTest` added this session, this one is NOT exposed to the known Clear-color-only readback bug — a real, independent regression guard, pending CI |
+| METAL-198 | `CTest`: `Metal_Capabilities` — one assertion per `GraphicsCapability`, meant to be extended incrementally as each phase's real behavior lands, not written once and left stale | ✅ **landed and passing on real CI 2026-07-21** — see narrative items 91/92: all 8 assertions pass on real Apple hardware (CI run `29814126178`), confirming `CustomEffects`/`MultipleRenderTargets`/`MultiSampleAntiAliasing` (items 83/86/88) are genuinely correct, not just source-complete — the first Metal `CTest` this whole session to reach a clean, unqualified ✅ |
 
 ## Phase 21 — Argument buffers / bindless NOXNA (METAL-199 – METAL-204)
 
