@@ -2314,14 +2314,14 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-DOCS-002 | P2 | NOT STARTED | | | |
 | REMED-DOCS-003 | P3 | NOT STARTED | | | |
 | REMED-GFX-004 | P1 | NOT STARTED | | | |
-| REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4, _bgfx-test_, _bgfx-fix_ | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass**). **Bgfx slice DONE and VERIFIED** — all **14** fog-capable `vs_*.sc` corrected to `(z+FogEnd)/(FogEnd-FogStart)` + zero-length guard; `bgfx_shaders.hpp` regenerated with a **from-source-built bgfx shaderc 1.19.150** (byte-reproducible: an unchanged-source regen is byte-identical to the committed header; the fix touches exactly the 15 intended shaders' 60 arrays, other 48 byte-identical). All 6 Bgfx fog tests retargeted to non-collapsing scenes and go pre→post: 4 collapsing tests 2/3→3/3, alphatest/dualtexture (endpoint-swap) 1/3→3/3. D3DCommon (D3D11/D3D12) + D3D9 slices PENDING (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
-| REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450 | feature/audit | **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx slice DONE and VERIFIED** — `vs_skinned3d`, `vs_skinned3d_vertexlit` (both Variant A) + `vs_pbr_skinned3d` (Variant B) now apply the World inverse-transpose after the bone skin, supplied CPU-side via the existing `u_normalMatrix` (bgfx's shaderc lacks in-shader `inverse()`/`transpose()`; the 4 skinned draw sites now upload `ComputeNormalMatrix3x3`). New Bgfx analytic world-normal harness (pixel- **and** vertex-lit) **2/8→8/8**; scale case reads 228 (inverse-transpose), not 180 (Variant A) or 114 (raw-World). `vs_skinned3d_vertexlit` was **not** in the audit's Bgfx evidence list — found by exhaustive inspection. **D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
-| REMED-GFX-007 | P1 | IN PROGRESS (only D3DCommon BYTECODE-BLOCKED remains) | 31668819, _bgfx-fix_, 7f3e82bf, 38a1008d, e30868eb | feature/audit | **Vulkan / Bgfx / WebGPU / SdlGpu slices ALL DONE and VERIFIED** — all four add emissive unscaled (`lightSum*Diffuse + Emissive`). **WebGPU slice DONE+VERIFIED** (`38a1008d`) — `env_map3d.wgsl` fs_main corrected; new `webgpu_environmentmapeffect_emissive_test.cpp` is transfer-function-agnostic (WebGPU surface is sRGB here; calibrates T() via env-map full-replace), 2/4→4/4. **SdlGpu slice DONE+VERIFIED** (`e30868eb`) — `env_map3d.frag.glsl` corrected + `spirv_shaders.hpp` regenerated (1/23 arrays changed, `kEnvMap3dFragSpv` only); new `sdlgpu_environmentmapeffect_emissive_test.cpp` (linear RT readback) 2/4→4/4. **Alpha-squaring RESOLVED as inseparable** — the audit's SdlGpu-specific "also squares Alpha" symptom is a direct arithmetic consequence of the *same* line (both operands CPU-prefolded with Alpha); the one-line fix removes it, no separate finding raised. Cross-backend conformance proven: Vulkan/Bgfx/SdlGpu raw (100,50,25) linear; WebGPU raw (168,122,88) sRGB → decodes to (100,50,25). SdlGpu 23/23, WebGPU 25/25 shard, zero regressions. **Only D3DCommon (D3D11/D3D12) remains — BYTECODE-BLOCKED** (`env_map3d.frag.hlsl:46` has the identical defect; no fxc/dxc in repo). See "Wave 3 — GRAPHICS shader campaign, WebGPU/SdlGpu GFX-007 slices". |
+| REMED-GFX-005 | P1 | **DONE (all backends; D3D slices closed via reproducible toolchain)** | 58a7d0bb, c11c6ce4, 2967df76, 24f20513, 26e7b812 | feature/audit | **STATUS RECONCILED (2026-07-21):** the prior "IN PROGRESS / D3DCommon+D3D9 PENDING (fxc/dxc absent)" text is superseded by the later section "D3D shader slices CLOSED with the reproducible toolchain" — the D3D shader-compiler blocker was resolved (D3DCommon DXBC reproducible via Wine vkd3d-shader 1.14; D3D9 via d3dcompiler_47), and the D3D fog slices landed (`2967df76`, `24f20513` D3DCommon; `26e7b812` D3D9), `D3D11_ViewSpaceFog` 9/9, `D3D11_AlphaTest_Fog` 3/3. Original detail retained below for history. **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass**). **Bgfx slice DONE and VERIFIED** — all **14** fog-capable `vs_*.sc` corrected to `(z+FogEnd)/(FogEnd-FogStart)` + zero-length guard; `bgfx_shaders.hpp` regenerated with a **from-source-built bgfx shaderc 1.19.150** (byte-reproducible: an unchanged-source regen is byte-identical to the committed header; the fix touches exactly the 15 intended shaders' 60 arrays, other 48 byte-identical). All 6 Bgfx fog tests retargeted to non-collapsing scenes and go pre→post: 4 collapsing tests 2/3→3/3, alphatest/dualtexture (endpoint-swap) 1/3→3/3. D3DCommon (D3D11/D3D12) + D3D9 slices PENDING (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
+| REMED-GFX-006 | P1 | **DONE (all backends; D3D slices closed via reproducible toolchain)** | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450, b5c3fdf6 | feature/audit | **STATUS RECONCILED (2026-07-21):** the prior "D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED (fxc/dxc absent)" text is superseded by "D3D shader slices CLOSED with the reproducible toolchain" — D3DCommon (5 skinned verts) + D3D9 (SkinnedVertexColor3D/PbrSkinned3D, Variant B cofactor inverse-transpose) landed in `b5c3fdf6`; `D3D11_SkinnedEffect_WorldNormal` 4/4. Original detail retained below for history. **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx slice DONE and VERIFIED** — `vs_skinned3d`, `vs_skinned3d_vertexlit` (both Variant A) + `vs_pbr_skinned3d` (Variant B) now apply the World inverse-transpose after the bone skin, supplied CPU-side via the existing `u_normalMatrix` (bgfx's shaderc lacks in-shader `inverse()`/`transpose()`; the 4 skinned draw sites now upload `ComputeNormalMatrix3x3`). New Bgfx analytic world-normal harness (pixel- **and** vertex-lit) **2/8→8/8**; scale case reads 228 (inverse-transpose), not 180 (Variant A) or 114 (raw-World). `vs_skinned3d_vertexlit` was **not** in the audit's Bgfx evidence list — found by exhaustive inspection. **D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
+| REMED-GFX-007 | P1 | **DONE (all backends; D3DCommon slice closed via reproducible toolchain)** | 31668819, _bgfx-fix_, 7f3e82bf, 38a1008d, e30868eb, ef63b2b7 | feature/audit | **STATUS RECONCILED (2026-07-21):** the prior "only D3DCommon remains — BYTECODE-BLOCKED" text is superseded by "D3D shader slices CLOSED with the reproducible toolchain" — `env_map3d.frag` (1 array) corrected in `ef63b2b7`; `D3D11_EnvironmentMapAmountZero` (50,25,12)→(100,50,25) PASS. Original detail retained below for history. **Vulkan / Bgfx / WebGPU / SdlGpu slices ALL DONE and VERIFIED** — all four add emissive unscaled (`lightSum*Diffuse + Emissive`). **WebGPU slice DONE+VERIFIED** (`38a1008d`) — `env_map3d.wgsl` fs_main corrected; new `webgpu_environmentmapeffect_emissive_test.cpp` is transfer-function-agnostic (WebGPU surface is sRGB here; calibrates T() via env-map full-replace), 2/4→4/4. **SdlGpu slice DONE+VERIFIED** (`e30868eb`) — `env_map3d.frag.glsl` corrected + `spirv_shaders.hpp` regenerated (1/23 arrays changed, `kEnvMap3dFragSpv` only); new `sdlgpu_environmentmapeffect_emissive_test.cpp` (linear RT readback) 2/4→4/4. **Alpha-squaring RESOLVED as inseparable** — the audit's SdlGpu-specific "also squares Alpha" symptom is a direct arithmetic consequence of the *same* line (both operands CPU-prefolded with Alpha); the one-line fix removes it, no separate finding raised. Cross-backend conformance proven: Vulkan/Bgfx/SdlGpu raw (100,50,25) linear; WebGPU raw (168,122,88) sRGB → decodes to (100,50,25). SdlGpu 23/23, WebGPU 25/25 shard, zero regressions. **Only D3DCommon (D3D11/D3D12) remains — BYTECODE-BLOCKED** (`env_map3d.frag.hlsl:46` has the identical defect; no fxc/dxc in repo). See "Wave 3 — GRAPHICS shader campaign, WebGPU/SdlGpu GFX-007 slices". |
 | REMED-GFX-008 | P1 | **DONE and VERIFIED (Vulkan/EasyGL/Bgfx/D3D11/D3D9-custom pixel-verified; D3D12 source-verified)** | 47092ce6, b73f0a52, 26363ca1, 3790886d, 545192c0, 44db37af, b94631be | feature/audit | Analytic harness (9 cases) + AFFECTED-backend fix (Vulkan, D3D11/D3D12) + two audit-missed emissive×diffuse variants (Bgfx, D3D9-custom) + AvatarRenderer XNA single-light recalibration. Harness 9/9 on Vulkan/EasyGL/Bgfx/D3D11 (all agree ≤1 LSB); AvatarRenderer_TintRouting rewritten to 2 non-cancelling scenes, passes on EasyGL+Vulkan (also fixes the tracked avatar-tint bug); D3D9-custom 5/5 with new discriminating case. D3D12 shares D3D11's verified DXBC + compiles (windowed readback not runnable under Wine dxgi). SdlGpu/EasyGL/D3D9-stock confirmed ALREADY_CORRECT. Regression: Vulkan skinned+avatar 17/17, EasyGL 21/21, Bgfx 12/12, SdlGpu 5/5. See "REMED-GFX-008 — SkinnedEffect Ambient/Emissive (joint shader + AvatarRenderer)". |
 | REMED-GFX-009 | P1 | **DONE and VERIFIED (SdlGpu — the only affected backend)** | dda6249f, 8cfdd8b9 | feature/audit | Fog implemented from scratch across **all 13** fog-capable SdlGpu shader families (13 vert + 8 frag SPIR-V arrays) using the REMED-GFX-005 corrected formula, adapted to SdlGpu's set convention. New shared 32-byte FogParams UBO (vertex-stage only, binding 1 for basic/alpha/dual, binding 2 for env/lit/skinned/pbr); keep-factor from raw object-space pre-skin `inPos.z`; forwarded to the fragment as a `fragFog` varying; `outColor.rgb = mix(FogColor, rgb, keep)` (RGB only). CPU: `FillFogUniforms()` + `fogUniforms` on all 8 DrawCommand structs + push in every Issue path + `num_uniform_buffers` +1 on all 13 vertex shaders (no fragment/API change; existing layouts untouched). SPIR-V regen byte-reproducible: exactly **21 of 23 arrays changed** (2 sprite2d byte-identical), no drift. 3 new conformance tests **0→43/43** (BasicEffect 16/16, Effects 16/16, Skinned/PBR 11/11). Full SdlGpu shard **26/26**, zero regressions (incl. GFX-006 WorldNormal + GFX-007 EnvMapEmissive controls). Validation clean (only the known pre-existing REMED-GFX-059 VUID-02684). Cross-backend: byte-identical to Vulkan on the shared scene. See "REMED-GFX-009 — SdlGpu stock-effect fog". |
-| REMED-GFX-010 | P2 | **DONE+VERIFIED on all 4 directly-editable backends (EasyGL/Vulkan/SdlGpu/Bgfx); D3D9/D3DCommon BYTECODE-BLOCKED** | _easygl t+f_, _vulkan t+f_, _sdlgpu t+f_, _bgfx t+f_ | feature/audit | Cross-backend move of stock-effect fog from object-space Z to true FNA view-space fog (the plan's D3D9-only scope was already flagged as broader). Shared layer: `GpuDrawParams.fogVector[4]` + FNA `EffectHelpers.SetFogVector` port in all 7 stock effects. **EasyGL** 9/9 + existing fog 3/3×5. **Vulkan** 16 shaders, SPIR-V byte-reproducible (17-array diff), 9/9 + 68/68. **SdlGpu** 13 shaders, SPIR-V reproducible (13-array diff), 9/9 + 15/15. **Bgfx** 14 shaders, bgfx_shaders.hpp reproducible (56-array diff over glsl/essl/spv/wgsl), 9/9 + 56/56. Cross-backend conformance: identical canonical scenes → identical colors on all 4. Skinned fog now uses POST-skin position. Instanced fog N/A (not fog-capable anywhere). Unit suite 5613 pass (3 pre-existing non-fog failures). D3D slices bytecode-blocked. See "REMED-GFX-010 — view-space stock-effect fog". |
+| REMED-GFX-010 | P2 | **DONE (all backends; D3D slices closed via reproducible toolchain)** | _easygl t+f_, _vulkan t+f_, _sdlgpu t+f_, _bgfx t+f_, 2967df76, 24f20513, 26e7b812 | feature/audit | **STATUS RECONCILED (2026-07-21):** the prior "D3D9/D3DCommon BYTECODE-BLOCKED" text is superseded by "D3D shader slices CLOSED with the reproducible toolchain" — D3DCommon 13 fog verts + alpha_test restructure (`2967df76`, `24f20513`) and D3D9 3 custom shaders (`26e7b812`) landed; `D3D11_ViewSpaceFog` 9/9, `D3D11_AlphaTest_Fog` 3/3 (done jointly with GFX-005 for D3D). Original detail retained below for history. Cross-backend move of stock-effect fog from object-space Z to true FNA view-space fog (the plan's D3D9-only scope was already flagged as broader). Shared layer: `GpuDrawParams.fogVector[4]` + FNA `EffectHelpers.SetFogVector` port in all 7 stock effects. **EasyGL** 9/9 + existing fog 3/3×5. **Vulkan** 16 shaders, SPIR-V byte-reproducible (17-array diff), 9/9 + 68/68. **SdlGpu** 13 shaders, SPIR-V reproducible (13-array diff), 9/9 + 15/15. **Bgfx** 14 shaders, bgfx_shaders.hpp reproducible (56-array diff over glsl/essl/spv/wgsl), 9/9 + 56/56. Cross-backend conformance: identical canonical scenes → identical colors on all 4. Skinned fog now uses POST-skin position. Instanced fog N/A (not fog-capable anywhere). Unit suite 5613 pass (3 pre-existing non-fog failures). D3D slices bytecode-blocked. See "REMED-GFX-010 — view-space stock-effect fog". |
 | REMED-GFX-011 | P1 | **DONE (Vulkan — the only affected backend)** | c9e96813, 633a2e17 | feature/audit | Flip added to all 4 families; both false justifying comments deleted; SPIR-V regenerated and verified (exactly 4 of 35 arrays changed). Orientation harness 0/4 → 4/4 on backbuffer AND render target. Zero regressions. See "Wave 3 — GRAPHICS shader campaign". |
-| REMED-GFX-012 | P1 | NOT STARTED | | | |
+| REMED-GFX-012 | P1 | **DONE and VERIFIED (Vulkan — the only affected backend)** | 21f6c4af, 6985b2fe | feature/audit | Audit hypothesis CONFIRMED exactly: `VulkanSpriteBatchBackend` never overrode `SetTransformMatrix()` (zero matches at HEAD), so `SpriteBatch.Begin(transformMatrix)` fell through to `IGraphicsBackend`'s no-op default and was silently dropped. Fix mirrors `D3D11SpriteBatchBackend` (identical Sprite2DVertex/viewportSize shader contract): store the matrix, apply per vertex in `Draw()` via `Vector2::Transform` in pixel space before upload. New `Vulkan_SpriteBatch_TransformMatrix` (scale+translate, two-sided discrimination) **1/3 → 3/3**. Identity default ⇒ byte-identical non-transform path (all existing sprite tests unchanged). Backend-parity sweep: Vulkan was the sole gap of 14; D3D12 (audit-unchecked) has a real working override identical to D3D11; Ascii delegates to SdlRenderer's real backend. No shader/SPIR-V change (CPU-side only). See "REMED-GFX-012 — Vulkan SpriteBatch transformMatrix". |
 | REMED-GFX-013 | P1 | NOT STARTED | | | |
 | REMED-GFX-014 | P1 | NOT STARTED | | | |
 | REMED-GFX-015 | P2 | NOT STARTED | | | |
@@ -4002,3 +4002,130 @@ compat, not removal (direct-backend callers still set them). Deferred to `REMED-
 **New findings.** `REMED-GFX-061` (fog scalar-field/comment cleanup — see Phase 11 above). No new
 hardcoded-zero site, index-range miscalculation, or instancing-offset confusion was found beyond the 15
 fixed. Commits: test `aa23eed2`, fix `d2491a17`, docs (this entry) — see the docs commit.
+
+---
+
+### REMED-GFX-012 — Vulkan `SpriteBatch.Begin(transformMatrix)` silently dropped (DONE + VERIFIED, 2026-07-21)
+
+**Exact problem.** On the Vulkan backend, the `transformMatrix` argument to
+`SpriteBatch.Begin(...)` — the standard XNA idiom for camera-relative 2D (scrolling worlds,
+zoom) — had no effect: sprites always rendered as if the transform were Identity.
+
+**Audit hypothesis: CONFIRMED, exactly.** The audit
+(`AUDIT_CROSS_CUTTING_FINDINGS.md` §"Vulkan-specific: `VulkanSpriteBatchBackend` never overrides
+`SetTransformMatrix()`") claimed `VulkanSpriteBatchBackend` never overrode the method and fell
+through to `IGraphicsBackend::SetTransformMatrix()`'s shared **no-op default**. Independently
+re-verified at current HEAD: `grep -rn SetTransformMatrix src/…/Vulkan include/…/Vulkan` → **zero
+matches** (despite the whole Vulkan backend having been rewritten by GFX-005/006/007/008/010/011
+since the audit). `SpriteBatch::Begin()` unconditionally calls `backend_->SetTransformMatrix(...)`
+(`SpriteBatch.cpp:116`); with no override, the call did nothing.
+
+**Affected backends/paths.** Vulkan **only** — the sole affected backend of 14. Path:
+`SpriteBatch.Begin(transformMatrix)` → `ISpriteBatchBackend::SetTransformMatrix` →
+`VulkanSpriteBatchBackend` (no override) → dropped. 2D sprite rendering only; 3D effects unaffected.
+
+**Root-cause classification.** Backend-specific implementation gap (a missing method override), not
+a shader/upload/state/binding defect. No shader, SPIR-V, matrix-convention, or resource-binding
+change is involved — the transform is applied CPU-side to vertex positions.
+
+**Expected XNA/FNA behavior.** `SpriteBatch` composes `transformMatrix * projection`; the transform
+operates in the same client/pixel-space domain the sprite positions are expressed in. Vulkan's
+sprite vertices are stored in **pixel space** (`Sprite2DVertex{x,y,…}`, e.g. `dest.X/dest.Y`
+directly) and `sprite2d.vert.glsl` maps them straight to NDC via a `viewportSize` push constant —
+there is **no projection-matrix uniform**. So the correct place to apply the transform is CPU-side,
+per vertex, in pixel space before upload — mathematically identical to XNA's `transformMatrix *
+orthographicProjection`. This is exactly what `D3D11SpriteBatchBackend` (identical
+`Sprite2DVertex`/`viewportSize` contract) already does, and D3D11 is the reference the task cites.
+
+**Cross-backend comparison (Phase 4).** Two valid mechanisms exist across the 14 backends:
+(a) stateful override consumed at flush — EasyGL, Bgfx, D3D9, **D3D11**, **D3D12**, Canvas, Dx3,
+Software, Headless, and now Vulkan; (b) transform threaded as a `Draw()` param — WebGPU, SdlGpu,
+SdlRenderer; Ascii delegates its whole `SpriteBatch` to a wrapped SdlRenderer backend. Vulkan was
+the only one implementing **neither**. D3D11 chosen as the reference: same vertex/shader contract,
+same CPU-side `Vector2::Transform` application.
+
+**Test (test-first, Phase 5).** New `examples/vulkan_transform_matrix_test.cpp` (registered
+`Vulkan_SpriteBatch_TransformMatrix`, `cmake/Tests/VulkanTests.cmake`; commit `21f6c4af`).
+Deliberately stronger than the pure-translation EasyGL/Bgfx precedents (Tasks 168/808):
+- 400×200 black backbuffer; a 1×1 red texture drawn into `dest=(10,10,20,20)`.
+- transform `= CreateScale(2,2,1) * CreateTranslation(50,30,0)` ⇒ XNA row-vector
+  `Vector2::Transform` maps `(x,y) → (2x+50, 2y+30)`; the block's corners `(10,10)`/`(30,30)` map
+  to `(70,50)`/`(110,90)`, so the transformed red block covers pixels `x∈[70,110), y∈[50,90)`,
+  **disjoint** from the untransformed block `[10,30)×[10,30)`.
+- Three probes: **(90,70)→Red** (interior of the *transformed* block — primary discriminator),
+  **(20,20)→Black** (interior of the *untransformed* block — reverse discriminator: the sprite must
+  have moved away), **(200,150)→Black** (far control). Two-sided so the two failure modes cannot
+  cancel; the 2× scale discriminates the full affine map, not just translation.
+
+**Pre-fix vs post-fix evidence (llvmpipe, Xvfb :99 — RADV needs DRI3 the Xvfb server lacks; this is
+a CPU-side geometry defect so software rasterization is a valid oracle).**
+- **Pre-fix (HEAD `3278d69f`): 1/3.** `(90,70)` got `(0,0,0)` want Red — nothing at the transformed
+  position; `(20,20)` got `(255,0,0)` want Black — sprite still at the identity position; control
+  passed. Both discriminators fired, in opposite directions — the exact signature of a dropped
+  transform.
+- **Post-fix: 3/3.** `(90,70)=(255,0,0)`, `(20,20)=(0,0,0)`, `(200,150)=(0,0,0)`.
+
+**Production fix (Phase 6, commit `6985b2fe`).** Narrowest correct layer — `VulkanGraphicsBackend`
+only, no shared/interface change:
+- `include/…/VulkanGraphicsBackend.hpp`: `void SetTransformMatrix(const Matrix& m) override {
+  transform_ = m; }` + `Matrix transform_ = Matrix::getIdentityProperty();` field.
+- `src/…/VulkanGraphicsBackend.cpp` `Draw()`: after the existing rotate/origin/scale math, transform
+  the 4 pixel-space corners via `Vector2::Transform(Vector2(vNx,vNy), transform_)` and push the
+  transformed coords. Mirrors `D3D11SpriteBatch.cpp:297-307` line-for-line.
+- **No reset of `transform_` in `Begin()`** (deliberate): `SpriteBatch::Begin()` always calls
+  `SetTransformMatrix()` *before* the backend's `Begin()`, so the field is never stale; resetting in
+  `Begin()` would re-introduce the bug. The no-transform overload passes `Matrix::Identity`, and
+  `Vector2::Transform` by Identity is exact (`x·1+y·0+0`, `x·0+y·1+0`), so the existing sprite paths
+  produce **byte-identical** vertices — verified by the untouched pass of every other Vulkan sprite
+  test.
+
+**Interface note (not changed here).** The task suggested *considering* making
+`IGraphicsBackend::SetTransformMatrix()` pure virtual to prevent future silent no-op fall-throughs.
+That is a cross-backend interface change touching all 14 backends and is owned by **REMED-GFX-026**
+(the "silent-default-degradation" architecture task). Intentionally **not** done here to keep this a
+minimal, backend-local root-cause fix; recorded as belonging to GFX-026.
+
+**Generated shaders (Phase 7).** None. CPU-side only — no GLSL/SPIR-V touched, nothing to
+regenerate.
+
+**Backend-parity sweep (Phases 4/10).** Swept every backend's SpriteBatch for the same
+missing-override pattern:
+- **Vulkan** — was the only gap; now fixed.
+- **D3D12** (the one backend the audit never checked) — has a **real working** override:
+  `D3D12SpriteBatch.cpp:71` `transform_ = m` + `Vector2::Transform` per vertex at `:391-394`,
+  identical to D3D11. Correct; no change needed.
+- **Ascii** — `AsciiGraphicsBackend::CreateSpriteBatch()` returns `inner_->CreateSpriteBatch()` (the
+  wrapped SdlRenderer's real backend), so it inherits SdlRenderer's working transform. Correct.
+- All other 10 backends already override it (confirmed by the audit and re-swept). **No new finding.**
+
+**Regression matrix (Phase 9).**
+- Focused: `Vulkan_SpriteBatch_TransformMatrix` **3/3** (was 1/3).
+- Nearby 2D/SpriteBatch (102 tests, `ctest -R "TransformMatrix|SpriteBatch|Demo2D|SamplerState|TextureAddressMode|Scissor"`): **102/102**, incl. `Vulkan_SpriteBatch_MultiBeginEnd`, `_Rotation`,
+  `_Scale`, `_SourceRectangleCropping`, `_LayerDepthOrder` (all identity-transform paths — proves no
+  regression to the byte-identical non-transform path).
+- Full Vulkan shard (`ctest`, whole build dir = CnaTests unit suite + all Vulkan example tests):
+  **5765/5769 passed** (6 skipped: hardware Accelerometer/Gyroscope/WaveBank/Texture3D-unsupported).
+  The **4 failures are all pre-existing and independent** of this change — proven by reverting the
+  two source files to the parent commit `3278d69f`, rebuilding, and observing the **identical 4
+  failures**, none of which touch the SpriteBatch path:
+  - `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` = tracked **REMED-GFX-036** (WireFrame
+    capability test-authoring bug).
+  - `Vulkan_DepthBias` = pre-existing per `NEXT.md` `D9-62` (same DXVK/rasterizer stack).
+  - `CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks` = CNJ
+    effect/model-loading path (`plan_cnj.md`), unrelated to 2D sprites.
+
+**Validation (Phase 8).** No new Vulkan validation surface (no new draws/pipelines/descriptors — only
+CPU vertex math). The known pre-existing `REMED-GFX-059` (SdlGpu VUID-02684) is a different backend
+and unrelated.
+
+**Sanitizers.** N/A in spirit — the change is 4 `Vector2::Transform` calls on stack floats plus 4
+`push_back`s already present; no new index/buffer/pointer arithmetic, no conversion logic. Not
+separately ASan/UBSan-built (would only re-exercise unchanged allocation paths); pixel conformance +
+the byte-identical-identity argument cover it honestly.
+
+**New findings.** None. The sweep found no other backend with this gap and no adjacent defect.
+
+**GFX-061 status.** Untouched — remains deferred (fog scalar-field/comment cleanup, unrelated to
+this task).
+
+**Commits.** test `21f6c4af`, fix `6985b2fe`, docs (this entry).
