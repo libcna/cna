@@ -2316,7 +2316,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-007 | P1 | IN PROGRESS (only D3DCommon BYTECODE-BLOCKED remains) | 31668819, _bgfx-fix_, 7f3e82bf, 38a1008d, e30868eb | feature/audit | **Vulkan / Bgfx / WebGPU / SdlGpu slices ALL DONE and VERIFIED** — all four add emissive unscaled (`lightSum*Diffuse + Emissive`). **WebGPU slice DONE+VERIFIED** (`38a1008d`) — `env_map3d.wgsl` fs_main corrected; new `webgpu_environmentmapeffect_emissive_test.cpp` is transfer-function-agnostic (WebGPU surface is sRGB here; calibrates T() via env-map full-replace), 2/4→4/4. **SdlGpu slice DONE+VERIFIED** (`e30868eb`) — `env_map3d.frag.glsl` corrected + `spirv_shaders.hpp` regenerated (1/23 arrays changed, `kEnvMap3dFragSpv` only); new `sdlgpu_environmentmapeffect_emissive_test.cpp` (linear RT readback) 2/4→4/4. **Alpha-squaring RESOLVED as inseparable** — the audit's SdlGpu-specific "also squares Alpha" symptom is a direct arithmetic consequence of the *same* line (both operands CPU-prefolded with Alpha); the one-line fix removes it, no separate finding raised. Cross-backend conformance proven: Vulkan/Bgfx/SdlGpu raw (100,50,25) linear; WebGPU raw (168,122,88) sRGB → decodes to (100,50,25). SdlGpu 23/23, WebGPU 25/25 shard, zero regressions. **Only D3DCommon (D3D11/D3D12) remains — BYTECODE-BLOCKED** (`env_map3d.frag.hlsl:46` has the identical defect; no fxc/dxc in repo). See "Wave 3 — GRAPHICS shader campaign, WebGPU/SdlGpu GFX-007 slices". |
 | REMED-GFX-008 | P1 | DEFERRED (this session) | | | Vulkan root cause re-confirmed at source (skinned frag reads always-zero `pc.ambientColor`; `SkinnedEffect::FillGpuDrawParams` never writes `p.ambientColor` and pre-folds ambient into `p.emissiveColor`, which the skinned UBOs have no slot for). **Deferred, not blocked by tooling:** the FNA-correct formula double-lights `Vulkan_AvatarRenderer_TintRouting`, which drives ambient(1,1,1) AND a full head-on light and passes only because this bug cancels the double-count. Re-baselining it needs AvatarRenderer lighting recalibration — an avatar-subsystem change outside this campaign's clean scope. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-009 | P1 | **DONE and VERIFIED (SdlGpu — the only affected backend)** | dda6249f, 8cfdd8b9 | feature/audit | Fog implemented from scratch across **all 13** fog-capable SdlGpu shader families (13 vert + 8 frag SPIR-V arrays) using the REMED-GFX-005 corrected formula, adapted to SdlGpu's set convention. New shared 32-byte FogParams UBO (vertex-stage only, binding 1 for basic/alpha/dual, binding 2 for env/lit/skinned/pbr); keep-factor from raw object-space pre-skin `inPos.z`; forwarded to the fragment as a `fragFog` varying; `outColor.rgb = mix(FogColor, rgb, keep)` (RGB only). CPU: `FillFogUniforms()` + `fogUniforms` on all 8 DrawCommand structs + push in every Issue path + `num_uniform_buffers` +1 on all 13 vertex shaders (no fragment/API change; existing layouts untouched). SPIR-V regen byte-reproducible: exactly **21 of 23 arrays changed** (2 sprite2d byte-identical), no drift. 3 new conformance tests **0→43/43** (BasicEffect 16/16, Effects 16/16, Skinned/PBR 11/11). Full SdlGpu shard **26/26**, zero regressions (incl. GFX-006 WorldNormal + GFX-007 EnvMapEmissive controls). Validation clean (only the known pre-existing REMED-GFX-059 VUID-02684). Cross-backend: byte-identical to Vulkan on the shared scene. See "REMED-GFX-009 — SdlGpu stock-effect fog". |
-| REMED-GFX-010 | P2 | NOT STARTED | | | |
+| REMED-GFX-010 | P2 | **IN PROGRESS (EasyGL + Vulkan DONE+VERIFIED; SdlGpu + Bgfx pending; D3D BYTECODE-BLOCKED)** | _easygl test+fix_, _vulkan test+fix_ | feature/audit | Cross-backend move of stock-effect fog from object-space Z to true FNA view-space fog (the plan's D3D9-only scope was already flagged as broader). Shared layer: `GpuDrawParams.fogVector[4]` + FNA `EffectHelpers.SetFogVector` port in all 7 stock effects' `FillGpuDrawParams`. **EasyGL DONE** (9/9 discriminating, existing fog 3/3×5). **Vulkan DONE** (16 shaders, SPIR-V byte-reproducible, 17-array diff scoped, 9/9 + 68/68 regression, validation clean). SdlGpu + Bgfx pending. See "REMED-GFX-010 — view-space stock-effect fog". |
 | REMED-GFX-011 | P1 | **DONE (Vulkan — the only affected backend)** | c9e96813, 633a2e17 | feature/audit | Flip added to all 4 families; both false justifying comments deleted; SPIR-V regenerated and verified (exactly 4 of 35 arrays changed). Orientation harness 0/4 → 4/4 on backbuffer AND render target. Zero regressions. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-012 | P1 | NOT STARTED | | | |
 | REMED-GFX-013 | P1 | NOT STARTED | | | |
@@ -3347,3 +3347,94 @@ the already-tracked pre-existing REMED-GFX-059 (unchanged in shape/frequency).
 share the object-space approximation — EasyGL/Bgfx/Vulkan/SdlGpu/D3DCommon), which the GFX-005
 cross-cutting note already flagged as broader than "D3D9-only". It is the natural continuation of the
 fog work and does not require the blocked D3D bytecode toolchain for the GLSL/SPIR-V backends.
+
+---
+
+## REMED-GFX-010 — view-space stock-effect fog (cross-backend)
+
+### Semantic contract (XNA/FNA fog-coordinate oracle) — established BEFORE implementation
+
+Source of truth: FNA `EffectHelpers.SetFogVector` + `Common.fxh ComputeFogFactor` (read directly at
+`/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/`):
+
+```
+ComputeFogFactor(position) = saturate(dot(position, FogVector))     // position = OBJECT-space vertex
+FogVector.xyz = (World*View).{M13,M23,M33} * scale
+FogVector.w   = ((World*View).M43 + fogStart) * scale
+scale         = 1 / (fogStart - fogEnd)
+```
+
+`dot(objectPos, FogVector)` algebraically equals `scale*(viewZ + fogStart)` where
+`viewZ = (objectPos * World*View).z`. So **XNA fogs on VIEW-SPACE Z** (the eye-space Z, `d = -viewZ`),
+computed cheaply by baking `World*View`'s third column into a per-draw vector and dotting it with the
+**object-space** position. `fogStart == fogEnd` → `(0,0,0,1)` (fully fogged); fog disabled →
+`Vector4.Zero` (no fog). This is exactly what D3D9's already-correct `ComputeFogVectorEXT()` does.
+
+CNA backends carry the inverse "keep" convention (`keep = 1 - fogFactor`;
+`finalRGB = mix(FogColor, geomRGB, keep)`), so the corrected shader term is
+`keep = 1 - saturate(dot(vec4(pos,1), fogVector))`. **Under identity World/View this reduces exactly to
+the previous object-space formula**, so every existing (identity-transform) fog test stays green — the
+fix is a strict generalization, not a behavior change on the tested configs.
+
+**Skinned:** FNA `Skin()` mutates `vin.Position` (bone transform) *before* `ComputeFogFactor(vin.Position)`,
+so fog uses the **post-skin** object-space position; the fog vector itself bakes only `World*View`, never
+the bones. CNA previously fogged on the **pre-skin** raw `aPos.z` — doubly wrong.
+
+### Affected backend × family matrix (from exhaustive shader inventory)
+
+All 56 fog-capable shaders across EasyGL(12)/Vulkan(16)/SdlGpu(13)/Bgfx(15) computed fog from raw
+object-space input `.z`. Classification:
+
+- **OBJECT_SPACE_BUG** — every fog-capable BasicEffect (colored/textured/colored_textured/lit/vertex-lit),
+  AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect (all variants), PbrEffect,
+  SkinnedPbrEffect shader in EasyGL/Vulkan/SdlGpu/Bgfx. (Skinned additionally used pre-skin Z.)
+- **NOT_APPLICABLE** — instanced shaders are **not fog-capable in any backend** (no fog varying/uniform);
+  Phase-10 "instanced fog" is therefore N/A, not a bug. sprite2d (2D) and colored3d_legacy carry no fog.
+- **BYTECODE_BLOCKED** — D3D9 custom shaders (`SkinnedVertexColor3D/Pbr3D/PbrSkinned3D.hlsl`) and
+  D3DCommon stock shaders share the same object-space defect but cannot be regenerated (no fxc/dxc).
+  Source left untouched; slice recorded as blocked.
+
+No shader in any backend had a view/worldView/modelView matrix available (only combined MVP/`u_wvp`, and
+sometimes `world`), so plumbing the CPU-computed fog vector was **necessary**, not merely convenient.
+
+### Shared CPU layer (all backends)
+
+`GpuDrawParams.fogVector[4]` added; populated in every stock effect's `FillGpuDrawParams()`
+(BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, PbrEffect,
+SkinnedPbrEffect) as a faithful `SetFogVector` port from each effect's `World`/`View`. Inert until a
+backend reads it.
+
+### Test harness (Phase 4/5) — `examples/common/ViewSpaceFogRef.hpp`
+
+Canonical transformed-camera scenes (orthographic projection so negative-view-Z geometry renders
+full-screen while fog stays projection-independent): identity control, view-translate near/half/full,
+world-translate, view-rotate (LookAt), fog-disabled; plus a SkinnedEffect pre-skin discriminator
+(Z-translating bone + Z-translating view). Each discriminating scene holds object-space Z fixed while the
+camera moves and **asserts ViewKeep != ObjectKeep before checking the pixel**, so the harness cannot
+silently pass on a non-discriminating scene. Expected colors derived from first principles
+(`Vector3::Transform(objPos, World*View).Z`), not from the shader path.
+
+### Backend results
+
+- **EasyGL — DONE+VERIFIED.** 12 programs: `uFogEnabled/uFogStart/uFogEnd` (object-space) replaced by a
+  single `uFogVector` (vec4); non-skinned dot the object position, 3 skinned dot `skinnedPos`. Pre-fix
+  4/9 → post-fix **9/9**; existing BasicEffect/Skinned/EnvMap/DualTexture/AlphaTest fog tests still 3/3
+  each (no regression).
+- **Vulkan — DONE+VERIFIED.** 16 shaders; `fogStartEnd`→`fogVector` (simple UBOs), alpha_test PC
+  restructured (FogColor→3 floats, fog vector→16-aligned vec4@112), pbr UBO WeightsPerVertex relocated
+  into `fogColorEnabled.w` so `[44..47]` becomes the fog vector (no UBO growth, identical pbr3d/pbr_skinned
+  layout). **Bug found+fixed during bring-up:** leftover `[.z/.w]=0` zeroing lines (from the old
+  fogStartEnd.zw) clobbered the fog vector's depth term — deleted. SPIR-V regen byte-reproducible across
+  two runs; **exactly 17 vertex-shader arrays + alpha_test frag changed**, sprite2d/instanced3d/legacy and
+  all read-only-FogColor frags byte-identical (UBO layouts unchanged). Pre-fix 3/9 → post-fix **9/9**;
+  full Vulkan effect/fog regression **68/68** (BasicEffect/AlphaTest/DualTexture/EnvironmentMap/Skinned/
+  Pbr/Orientation fog + controls); validation layers active, no new VUID errors.
+- **SdlGpu — PENDING.**
+- **Bgfx — PENDING.**
+- **D3D9 / D3DCommon — BYTECODE-BLOCKED** (same object-space defect; no HLSL→bytecode toolchain).
+
+### New findings
+
+None separable so far. The Vulkan zeroing-line clobber was an inseparable bring-up detail of GFX-010,
+fixed in the same commit. Instanced fog confirmed N/A (not a missing-feature finding). REMED-GFX-059
+(pre-existing SdlGpu VUID) unchanged.
