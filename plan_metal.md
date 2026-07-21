@@ -2261,6 +2261,74 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     (design decision + doc, no code to verify); `METAL-147`/`148` stay open, correctly. Pushed for
     real CI verification next — genuinely unverified until that CI run reports back.
 
+84. **Real twenty-eighth CI signal — item 83's Phase 14 code compiles clean on real Apple Clang, no
+    regression, but the new `Metal_SpriteBatch_CustomEffect` test itself fails — likely the same
+    pre-existing, already-investigated "reads back only the Clear color" bug (items 67–76/82), now
+    newly observed to affect `SpriteBatch` 2D draws too, not just 3D**: CI run `29804175429` shows
+    "Build native Metal backend" passing with no errors — `MetalEffectBackend`, its two-separate-
+    `MTLLibrary` compile path, and the `MetalSpriteBatch` wiring all compile correctly, the first
+    real compiler feedback this code has ever received. `ctest` reports `97% tests passed, 4 tests
+    failed out of 132` — the test count rose from 131 to exactly 132 (the one new test), and the
+    3 pre-existing failures are unchanged (`Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden`/
+    `Metal_DrawUserPrimitives_VPC`, still showing their own identical, already-investigated
+    `centre=(0,255,0)`-reads-only-the-Clear-color symptom) — no regression in anything this session
+    already had passing.
+
+    `Metal_SpriteBatch_CustomEffect` itself reports `2/4 PASS`: Check A (compiles) and Check C (the
+    background outside the sprite's destination rectangle stays the Clear color, proving the custom
+    vertex shader's own NDC transform is genuinely correct) both **pass**. Check B (custom shader's
+    RGB-inversion result) and Check D (the fresh, no-custom-effect control case) both **fail**. Check
+    D failing is the single most informative data point here: it exercises *zero* of this session's
+    new code (`customEffect_` stays null, so `Draw()` falls straight through to the same
+    `p.getOrCreatePipeline(PipelineKind::Sprite2D)` call the stock path always used) — it is
+    literally the same "`sb.Begin(); sb.Draw(tex, rect, color); sb.End();`" pattern every other
+    passing Metal `SpriteBatch` usage already relies on, just now read back via
+    `GraphicsDevice::GetBackBufferData()` for the first time in any Metal `CTest` this whole
+    session (confirmed by grepping `cmake/Tests/MetalTests.cmake` and `examples/metal_smoke_test.
+    cpp` — no prior Metal test exercises `SpriteBatch.Draw()` + same-process readback together).
+    That a completely unmodified code path fails the identical class of check the still-open
+    `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden`/`Metal_DrawUserPrimitives_VPC`
+    investigation already spent ~10 CI round-trips on (items 67–76) is strong circumstantial
+    evidence this is the same root cause, now shown to be even more general than "any real 3D draw"
+    — plausibly "any real draw of any kind, 2D or 3D, plus same-process readback in this specific
+    process" — rather than a new bug this session's own Phase 14 code introduced. Not yet
+    definitively confirmed: the test's own `check()` helper did not print the actual observed pixel
+    values (only PASS/FAIL), so the exact failing color is not yet known from this run — **fixed**
+    in the same commit as this item, adding `std::printf` of the observed vs. expected color to all
+    three readback checks (Check B/C/D), matching every other Metal test's own established
+    informative-`[FAIL]`-message convention, so the next CI run will show whether the observed color
+    really is `(10,10,10,255)` (this test's own Clear color) — the exact signature that would
+    confirm this is the same bug, not a coincidence. Left deliberately unfixed pending that
+    confirmation, per this session's own standing rule: investigate honestly before claiming a root
+    cause, and do not blindly guess at a "fix" for a hypothesis not yet confirmed by real evidence.
+
+85. **Real twenty-ninth CI signal — item 84's hypothesis definitively confirmed: `Metal_
+    SpriteBatch_CustomEffect`'s Check B and Check D both read back exactly this test's own Clear
+    color, `(10,10,10,255)`, not the drawn sprite**: CI run `29804647754` (the diagnostic-print
+    push) shows both failing checks' now-printed observed values are byte-for-byte identical to
+    `kClear` (`Color(10,10,10,255)`), for both the custom-effect path (Check B) and the completely
+    unmodified stock path (Check D). This is the exact "reads back only the Clear color" signature
+    items 67–76/82 already spent ~10 CI round-trips investigating for 3D draws (`Metal_PbrEffect_
+    Golden`/`Metal_SkinnedPbrEffect_Golden`/`Metal_DrawUserPrimitives_VPC`, all showing the
+    identical `centre=(0,255,0)`-equals-their-own-Clear-color pattern) — now confirmed, not merely
+    suspected, to also affect `SpriteBatch` 2D draws, a genuinely new and useful data point for
+    that investigation: the underlying bug is not scoped to 3D draws, `drawMetal3D()`, or any
+    particular `PipelineKind` — it reproduces on `MetalSpriteBatch::Draw()`'s own, architecturally
+    distinct immediate-draw code path too, the first time this whole session's investigation has
+    had a 2D data point. Since Check D exercises none of Phase 14's own new code, this closes the
+    question of whether Phase 14 introduced a regression: **it did not** — `Metal_SpriteBatch_
+    CustomEffect`'s 2/4-pass result is the pre-existing, cross-cutting, already-paused-pending-a-
+    physical-Mac bug manifesting on a new draw path, not a new bug. Per the user's own standing
+    direction (paused this investigation at item 76 after ~10 round-trips, no physical Mac
+    available), not restarting the deep GPU-capture-style diagnosis that already proved
+    inconclusive there — this item exists to honestly record the new data point and correctly
+    attribute `Metal_SpriteBatch_CustomEffect`'s current failure to the same root cause, not to
+    reopen that paused investigation. `METAL-151`'s own new `CTest` is source-complete, CI-compiles
+    clean, and Check A/C (compile + correct vertex-transform positioning) are real, confirmed
+    passes — but the test as a whole cannot honestly be marked ✅ until the shared readback bug is
+    resolved, exactly the same honesty standard `Metal_PbrEffect_Golden`/`Metal_
+    SkinnedPbrEffect_Golden` have been held to since item 67.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -2277,7 +2345,10 @@ sample-count-keyed pipelines (`METAL-32`, genuinely blocked on MSAA not existing
 (see item 67) but `Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden` themselves still fail on
 real hardware for a still-undetermined reason — see item 72, paused pending either a physical Mac
 or further diagnostics, not attributable to either of the two real bugs (`vertexStart`/
-`ReadBackbuffer`) already found and fixed from this same investigation; the rest of
+`ReadBackbuffer`) already found and fixed from this same investigation; confirmed 2026-07-21 (items
+84/85) to also affect `Metal_SpriteBatch_CustomEffect`'s own `SpriteBatch`-2D-draw readback, not
+just 3D draws — the underlying bug is broader than originally scoped, still unresolved, still
+paused; the rest of
 Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
 `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108`, `RenderTargetCube`
 `METAL-109`–`111`, and `GetData()` `METAL-131` are now closed, see above); Phase 14's own
@@ -2797,7 +2868,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-148 | `customEffectBackend` (`GpuDrawParams`) — when non-null, bypass built-in shader selection and draw with the custom pipeline directly, mirroring EasyGL's Task 1079 contract exactly | ⬜ genuinely still open, corrected scope: reading `VulkanGraphicsBackend`'s own 3D draw path (`draw3DFor`) shows `customEffectBackend`/`activeCustomEffect_` is consumed *only* inside its `SpriteBatch` flush code, never in the general `DrawIndexedPrimitives`/`DrawUserPrimitives` 3D path — this task as literally worded (general 3D bypass) is not something any established structured-pipeline backend actually does either, only `EasyGLGraphicsBackend` (GL's own layout-flexible attribute binding). Metal's own `GpuDrawParams::customEffectBackend` field is therefore left unconsumed here too, consistent with precedent, not a regression |
 | METAL-149 | `SpriteBatch.SetCustomEffect(Effect*)` — real override once `MetalEffectBackend` exists (currently base no-op) | 🟨 landed 2026-07-21 — `MetalSpriteBatch::SetCustomEffect()` stores the raw `Effect*`, resolved fresh every `Draw()` call, pending CI |
 | METAL-150 | `SupportsCapability(GraphicsCapability::CustomEffects)` flips to `true` once this phase lands — remove the `false` case added in `METAL-197` | 🟨 landed 2026-07-21, pending CI |
-| METAL-151 | `CTest`: `Metal_CustomEffect` — the same color-inversion custom-shader methodology D3D9/D3D11/D3D12/Vulkan/Bgfx already use | 🟨 landed 2026-07-21 as `Metal_SpriteBatch_CustomEffect` (mirrors `D3D9_SpriteBatch_CustomEffect`'s exact 4-check methodology in real MSL; found while writing this that Vulkan/D3D12/Bgfx do not actually have their own dedicated custom-effect `CTest` registered despite this task's own text claiming they do — only `D3D9`/`SDL_Renderer` do — so that part of this task's premise was itself optimistic, not literally true; this Metal test still faithfully mirrors the one real precedent that exists, `D3D9_SpriteBatch_CustomEffect`), pending CI |
+| METAL-151 | `CTest`: `Metal_CustomEffect` — the same color-inversion custom-shader methodology D3D9/D3D11/D3D12/Vulkan/Bgfx already use | 🟨 landed 2026-07-21 as `Metal_SpriteBatch_CustomEffect` (mirrors `D3D9_SpriteBatch_CustomEffect`'s exact 4-check methodology in real MSL; found while writing this that Vulkan/D3D12/Bgfx do not actually have their own dedicated custom-effect `CTest` registered despite this task's own text claiming they do — only `D3D9`/`SDL_Renderer` do — so that part of this task's premise was itself optimistic, not literally true; this Metal test still faithfully mirrors the one real precedent that exists, `D3D9_SpriteBatch_CustomEffect`) — **registered and compiles clean on real CI, currently 2/4 PASS**, see narrative items 84/85: Check A/C pass (compiles; the custom vertex shader's own NDC transform is genuinely correct); Check B/D fail, **confirmed** (not merely suspected) to be the same pre-existing "reads back only the Clear color" bug items 67–76/82 already investigated for 3D draws — both failing checks' observed pixel values are byte-for-byte this test's own Clear color, and Check D exercises zero of Phase 14's own new code, so this is not a regression from this phase. Cannot honestly be marked ✅ until that shared, already-paused-pending-a-physical-Mac root cause is resolved |
 | METAL-152 | Document the MSL uniform-contract choice (`METAL-146`) — a new `docs/metal-shader-effect-contract.md`, genuinely Metal-specific with no FNA precedent to copy | ✅ written 2026-07-21 — `docs/metal-shader-effect-contract.md` |
 
 ## Phase 15 — Virtual resolution / letterbox / window↔logical transforms (METAL-153 – METAL-161)
