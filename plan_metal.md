@@ -2705,8 +2705,8 @@ validation error where testable — `preserveContents`/mip/`GetColorGLHandle` `M
 only `METAL-114`/`115`/`116`/`117` (the still-missing `Metal_RenderTarget2D`/`Metal_
 RenderTargetCube`/`Metal_RenderTarget_MSAA`/`Metal_RenderTarget_Mip` `CTest`s `METAL-118`'s own
 task text separately called for, distinct from the `Metal_MRT`/`Metal_MSAA`/`Metal_
-RenderTarget2D_MSAA` tests items 86/88 actually landed) and docs `METAL-119` remain genuinely
-open within Phase 10; Phase 14's own
+RenderTarget2D_MSAA` tests items 86/88 actually landed) remain genuinely open within Phase 10
+(`METAL-119`'s docs column itself closed ✅ 2026-07-21, item 91); Phase 14's own
 SpriteBatch-scoped custom `ShaderEffect` facility is now closed (item 83, 2026-07-21 — corrected,
 narrower scope than originally assumed, see this phase's own corrected blocker note); `METAL-147`
 (extra-sampler-unit `BindTexture`/`BindTextureCube`/`BindTexture3D`) and `METAL-148` (the general
