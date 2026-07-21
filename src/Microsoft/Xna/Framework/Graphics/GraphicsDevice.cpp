@@ -114,6 +114,10 @@ namespace Microsoft::Xna::Framework::Graphics
             windowFlags |= SDL_WINDOW_OPENGL;
 #endif
 
+#ifdef CNA_BACKEND_OPENGL4
+            windowFlags |= SDL_WINDOW_OPENGL;
+#endif
+
 #ifdef CNA_BACKEND_VULKAN
             windowFlags |= SDL_WINDOW_VULKAN;
 #endif

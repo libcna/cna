@@ -1,0 +1,269 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include "CNA/CNAHelper.hpp"
+#include "../Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/OpenGL4/GL4Loader.hpp"
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+struct SDL_Window;
+
+namespace CNA::Internal::Backends::OpenGL4
+{
+    class OpenGL4GraphicsBackend;
+
+    /**
+     * @brief plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics backend.
+     *
+     * Deliberately independent of the EasyGL backend/`easy-gl` sibling repository -- EasyGL
+     * requests an OpenGL ES 3.0 context (`SDL_GL_CONTEXT_PROFILE_ES`, see
+     * `EasyGLGraphicsBackend`'s constructor), which is a different, narrower feature set than a
+     * genuine desktop `SDL_GL_CONTEXT_PROFILE_CORE` context (no geometry/tessellation shaders, no
+     * `GL_ARB_*` desktop-only extensions, no compatibility with `glGetString(GL_VERSION)` ever
+     * reporting "4.x"). This backend requests a real core profile and never touches `easy-gl`.
+     *
+     * Uses a small hand-rolled loader (GL4Loader.hpp) for the GL 1.2+ entry points a core-profile
+     * program needs (buffers, VAOs, shaders/programs, `glActiveTexture`, separate blend
+     * funcs/equations) -- no third-party GL loader dependency.
+     */
+    class OpenGL4RawProgram
+    {
+    public:
+        OpenGL4RawProgram() = default;
+        ~OpenGL4RawProgram();
+
+        OpenGL4RawProgram(const OpenGL4RawProgram&) = delete;
+        OpenGL4RawProgram& operator=(const OpenGL4RawProgram&) = delete;
+        OpenGL4RawProgram(OpenGL4RawProgram&&) noexcept;
+        OpenGL4RawProgram& operator=(OpenGL4RawProgram&&) noexcept;
+
+        /// Compiles and links @p vertSrc/@p fragSrc. Returns true on success.
+        bool Compile(const std::string& vertSrc, const std::string& fragSrc);
+        void Use() const;
+        [[nodiscard]] bool IsValid() const { return program_ != 0; }
+        [[nodiscard]] const std::string& GetError() const { return error_; }
+        [[nodiscard]] int UniformLocation(const char* name) const;
+        [[nodiscard]] unsigned int Handle() const { return program_; }
+
+    private:
+        void Destroy();
+
+        unsigned int program_ = 0;
+        std::string error_;
+    };
+
+    /** @brief `OpenGL4`-backed `Texture2D`/`RenderTarget2D`-independent plain texture. */
+    class OpenGL4TextureBackend final : public ITextureBackend
+    {
+    public:
+        explicit OpenGL4TextureBackend(const ImageData& data);
+        ~OpenGL4TextureBackend() override;
+
+        OpenGL4TextureBackend(const OpenGL4TextureBackend&) = delete;
+        OpenGL4TextureBackend& operator=(const OpenGL4TextureBackend&) = delete;
+
+        [[nodiscard]] int GetWidth() const override { return width_; }
+        [[nodiscard]] int GetHeight() const override { return height_; }
+        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        void UpdatePixels(const uint8_t* rgba, int stride) override;
+        void BindGL() const override;
+
+        NOXNA [[nodiscard]] unsigned int GLHandle() const { return texture_; }
+
+    private:
+        unsigned int texture_ = 0;
+        int width_ = 0;
+        int height_ = 0;
+    };
+
+    /** @brief `OpenGL4`-backed vertex buffer (VBO + its own VAO). */
+    class OpenGL4VertexBufferBackend final : public IVertexBufferBackend
+    {
+    public:
+        explicit OpenGL4VertexBufferBackend(int vertexCapacity);
+        ~OpenGL4VertexBufferBackend() override;
+
+        OpenGL4VertexBufferBackend(const OpenGL4VertexBufferBackend&) = delete;
+        OpenGL4VertexBufferBackend& operator=(const OpenGL4VertexBufferBackend&) = delete;
+
+        void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
+                                SetDataOptions options) override;
+        [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
+
+        NOXNA [[nodiscard]] unsigned int VaoHandle() const { return vao_; }
+        NOXNA [[nodiscard]] unsigned int VboHandle() const { return vbo_; }
+
+    private:
+        void ApplyLayout(std::size_t strideInBytes);
+
+        unsigned int vao_ = 0;
+        unsigned int vbo_ = 0;
+        int capacity_ = 0;
+        int vertexCount_ = 0;
+        std::size_t strideInBytes_ = 0;
+    };
+
+    /** @brief `OpenGL4`-backed 16-bit index buffer. */
+    class OpenGL4IndexBufferBackend final : public IIndexBufferBackend
+    {
+    public:
+        explicit OpenGL4IndexBufferBackend(int indexCapacity);
+        ~OpenGL4IndexBufferBackend() override;
+
+        OpenGL4IndexBufferBackend(const OpenGL4IndexBufferBackend&) = delete;
+        OpenGL4IndexBufferBackend& operator=(const OpenGL4IndexBufferBackend&) = delete;
+
+        void SetData16(const void* data, int index_count) override;
+        void SetData16WithOptions(const void* data, int index_count, SetDataOptions options) override;
+        [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
+        [[nodiscard]] bool IsThirtyTwoBit() const override { return false; }
+
+        NOXNA [[nodiscard]] unsigned int IboHandle() const { return ibo_; }
+
+    private:
+        unsigned int ibo_ = 0;
+        int capacity_ = 0;
+        int indexCount_ = 0;
+    };
+
+    /**
+     * @brief `OpenGL4`-backed `SpriteBatch`. CPU-side per-quad vertex generation (position already
+     * transformed by rotation/origin/scale, matching `EasyGLSpriteBatchBackend`'s established
+     * convention), one dynamic VBO/IBO flushed per texture change -- same non-instanced-batching
+     * bar as this project's other backends' first-landed `SpriteBatch` milestone.
+     */
+    class OpenGL4SpriteBatchBackend final : public ISpriteBatchBackend
+    {
+    public:
+        explicit OpenGL4SpriteBatchBackend(OpenGL4GraphicsBackend& owner);
+        ~OpenGL4SpriteBatchBackend() override;
+
+        void Begin() override;
+        void End() override;
+        void SetTransformMatrix(const Matrix& m) override { transform_ = m; }
+        void SetSamplerFilter(int textureFilter) override { pendingFilter_ = textureFilter; }
+        void SetSamplerAddressMode(int addressU, int addressV) override
+        {
+            pendingAddressU_ = addressU;
+            pendingAddressV_ = addressV;
+        }
+        void Draw(const ITextureBackend& texture, float x, float y) override;
+        void Draw(const ITextureBackend& texture,
+                  const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
+                  const Color& color) override;
+        void Draw(const ITextureBackend& texture,
+                  const Rectangle& destinationRectangle,
+                  const Rectangle& sourceRectangle,
+                  const Color& color,
+                  float rotation,
+                  const Vector2& origin,
+                  SpriteEffects effects,
+                  float layerDepth) override;
+
+    private:
+        struct SpriteVertex
+        {
+            float x, y;
+            float u, v;
+            float r, g, b, a;
+        };
+
+        void FlushBatch();
+
+        OpenGL4GraphicsBackend* owner_ = nullptr;
+        unsigned int vao_ = 0;
+        unsigned int vbo_ = 0;
+        unsigned int ibo_ = 0;
+        bool begun_ = false;
+        Matrix transform_;
+        int pendingFilter_ = 0;
+        int pendingAddressU_ = 1; // TextureAddressMode::Clamp
+        int pendingAddressV_ = 1;
+        const ITextureBackend* currentTexture_ = nullptr;
+        std::vector<SpriteVertex> pendingVertices_;
+        std::vector<uint16_t> pendingIndices_;
+    };
+
+    struct GraphicsBackendCreateArgs;
+
+    /** @brief Real desktop OpenGL 4.x core-profile `IGraphicsBackend` implementation. */
+    class OpenGL4GraphicsBackend final : public IGraphicsBackend
+    {
+    public:
+        OpenGL4GraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                               CnaPresentationMode mode, int swapInterval);
+        ~OpenGL4GraphicsBackend() override;
+
+        OpenGL4GraphicsBackend(const OpenGL4GraphicsBackend&) = delete;
+        OpenGL4GraphicsBackend& operator=(const OpenGL4GraphicsBackend&) = delete;
+
+        void Clear(float r, float g, float b, float a) override;
+        void Present() override;
+        void GetViewportSize(int& width, int& height) override;
+        void SetVirtualResolution(int width, int height) override;
+        void SetPresentationMode(int mode) override;
+        void SetSwapInterval(int interval) override;
+
+        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
+        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
+
+        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
+
+        void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
+        void ClearDepth(float depth) override;
+        void ClearStencil(int stencil) override;
+        void ClearDepthAndStencil(float depth, int stencil) override;
+        void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
+        void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
+
+        void SetDepthTestEnabled(bool enabled) override;
+        void SetBlendEnabled(bool enabled) override;
+        void SetDepthWriteEnabled(bool enabled) override;
+
+        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+
+        void DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                   const Matrix& world, const Matrix& view, const Matrix& projection,
+                                   PrimitiveType primitive, int primitiveCount) override;
+        void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                                          PrimitiveType primitive, int primitiveCount) override;
+
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
+
+        /// NOXNA: physical window size, used by the SpriteBatch backend to size its ortho projection.
+        NOXNA void GetPhysicalSize(int& width, int& height) const;
+        /// NOXNA: logical (virtual) size, honoring FixedHeightDynamicWidth (mirrors EasyGL).
+        NOXNA void GetLogicalSize(int& width, int& height) const;
+        /// NOXNA: compiles (once) and returns the built-in textured-quad sprite program.
+        NOXNA OpenGL4RawProgram& GetOrCreateSpriteProgram();
+
+    private:
+        void EnsureColored3DProgram();
+
+        static constexpr int kMaxSamplerSlots = 16;
+
+        SDL_Window* window_ = nullptr;
+        void* glContext_ = nullptr;
+        int virtualWidth_ = 0;
+        int virtualHeight_ = 0;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        int swapInterval_ = 1;
+        bool depthWriteEnabled_ = true;
+
+        OpenGL4RawProgram spriteProgram_;
+        OpenGL4RawProgram colored3DProgram_;
+        int colored3DWvpLoc_ = -1;
+        unsigned int samplers_[kMaxSamplerSlots] = {};
+    };
+}

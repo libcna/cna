@@ -213,6 +213,10 @@ include(cmake/Tests/D3D10Tests.cmake)
 # D3D11/SDL_GPU entries above.
 include(cmake/Tests/OpenGLES1Tests.cmake)
 
+# plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics backend CTest
+# registration. Needs a real display/GPU, same as the Vulkan/Bgfx/D3D11/SDL_GPU entries above.
+include(cmake/Tests/OpenGL4Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)
