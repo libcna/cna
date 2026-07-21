@@ -45,6 +45,16 @@
 //       probe A-center (12,12) -> RED    probe B-center (50,36) -> GREEN
 //       probe (50,12) -> BLACK           probe (12,36)  -> BLACK
 //
+//   Frame 3 — custom Viewport + custom ScissorRectangle together (Phase 13, interaction): the two
+//     dynamic states are independent, so the visible region must be their INTERSECTION.
+//       Viewport V = (12, 7, 28, 19)   => x[12,40) y[7,26)
+//       Scissor  S = (20, 12, 30, 30)  => x[20,50) y[12,42)
+//       intersection = x[20,40) y[12,26)
+//       probe intersection (28,18) -> RED    (in both)
+//       probe (14,18) -> BLACK   (in viewport, scissored out: x<20)
+//       probe (45,18) -> BLACK   (in scissor, outside viewport: x>=40)
+//       probe (55,40) -> BLACK   (outside both)
+//
 // Backbuffer Viewport is exercised separately by Vulkan_Viewport_Subregion (Task 880, the Phase 4
 // control) and the backbuffer/RT reset transition by Vulkan_RenderTarget_ViewportScissorReset.
 //
@@ -192,6 +202,27 @@ class VulkanRenderTargetViewportTest : public Game
         blitRTToBackbuffer(dev);
     }
 
+    // Frame 3: custom viewport AND custom scissor together — visible region is the intersection.
+    void renderViewportAndScissor(GraphicsDevice& dev)
+    {
+        BasicEffect fx(dev);
+        configureEffect(fx);
+        dev.SetRenderTarget(rt_.get());
+        dev.Clear(Color(0, 0, 0, 255));
+        dev.SetDepthTestEnabled(false);
+        dev.setBlendStateProperty(BlendState::Opaque);
+        // Enable scissor test AFTER binding (SetRenderTarget resets scissor state).
+        RasterizerState rs = RasterizerState::CullNone;
+        rs.setScissorTestEnableProperty(true);
+        dev.setRasterizerStateProperty(rs);
+        dev.setViewportProperty(Viewport(kVpX, kVpY, kVpW, kVpH)); // (12,7,28,19)
+        dev.setScissorRectangleProperty(Rectangle(20, 12, 30, 30));
+        fx.Apply();
+        drawFullNdcQuad(dev, Color(255, 0, 0, 255));
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        blitRTToBackbuffer(dev);
+    }
+
 protected:
     void Initialize() override
     {
@@ -268,6 +299,27 @@ protected:
             check(isGreen(b), "RT two-viewport: B-center (50,36)", b,  "GREEN");
             check(isBlack(x0),"RT two-viewport: gap      (50,12)", x0, "BLACK");
             check(isBlack(x1),"RT two-viewport: gap      (12,36)", x1, "BLACK");
+            ++frame_;
+            return;
+        }
+
+        if (frame_ == 3)
+        {
+            // Interaction: custom viewport + custom scissor — visible region is the intersection.
+            Color inter(0,0,0,0), vOnly(0,0,0,0), sOnly(0,0,0,0), none(0,0,0,0);
+            for (int i = 0; i < 20; ++i)
+            {
+                renderViewportAndScissor(dev);
+                inter = readAt(dev, 28, 18);  // in viewport AND scissor
+                vOnly = readAt(dev, 14, 18);  // in viewport, scissored out (x<20)
+                sOnly = readAt(dev, 45, 18);  // in scissor, outside viewport (x>=40)
+                none  = readAt(dev, 55, 40);  // outside both
+                if (isRed(inter)) break;
+            }
+            check(isRed(inter),   "RT viewport+scissor: intersection (28,18)", inter, "RED");
+            check(isBlack(vOnly), "RT viewport+scissor: scissored out (14,18)", vOnly, "BLACK");
+            check(isBlack(sOnly), "RT viewport+scissor: outside vp    (45,18)", sOnly, "BLACK");
+            check(isBlack(none),  "RT viewport+scissor: outside both  (55,40)", none,  "BLACK");
 
             std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
             Exit();
