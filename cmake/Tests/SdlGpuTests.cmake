@@ -123,6 +123,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_SkinnedEffect_Fog COMMAND cna_test_sdlgpu_skinnedeffect_fog
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-010: transformed-camera view-space fog conformance (fails pre-fix).
+    cna_sdlgpu_test(cna_test_sdlgpu_viewspace_fog examples/sdlgpu_viewspace_fog_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_ViewSpace_Fog COMMAND cna_test_sdlgpu_viewspace_fog
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
     cna_sdlgpu_test(cna_test_sdlgpu_shadereffect examples/sdlgpu_shadereffect_test.cpp)
     cna_register_backend_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
