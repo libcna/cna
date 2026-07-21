@@ -2326,7 +2326,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-062 | P2 | **DONE and VERIFIED (Vulkan — the only affected backend with a backbuffer-honored/RT-hardcoded split)** | 8247f632, 42c655fc, 048270a5 | feature/audit | Confirmed at HEAD: `RecordCommandBuffer` Phase-1 RT loop hardcoded `VkViewport{0,0,rtW,rtH,0,1}` and never read `viewportSet_/X_/Y_/W_/H_/minDepth/maxDepth` (Phase-2 backbuffer honored them since Task 880). Same deferred-model root cause as GFX-013: `SetRenderTarget` resets Viewport to the target's full size on RT bind/unbind (`ResetViewportAndScissorForRenderTarget`, FNA-parity analog of Task 338), so the frame-global viewport at `Present()` is never the sub-region each RT draw was issued under. Fixed by snapshotting viewport **per draw/batch at enqueue** (`PushPending3DDraw` + `SpriteBatch::End()`) and replaying per draw via new `computeViewport` (covers RenderTarget2D/Cube/MRT — one shared path). Unlike scissor: viewport rect is **NOT** clamped (a transform, not a clip — clamping distorts placement); positive height preserves the GFX-011 shader Y-flip (XNA `Viewport.Y` → `VkViewport.y` directly, no extra flip); `minDepth/maxDepth` clamped to `[0,1]` (also fixes RT path previously ignoring them). New `Vulkan_RenderTarget_Viewport` (64×48 RT, viewport (12,7,28,19), 5-way probe + full-viewport control + two-viewport state-timing + viewport∩scissor interaction) **7/18 → 18/18**. Validation layer (confirmed loaded): zero VkViewport/dynamic-state/render-pass errors. Full shard 5765/5771 (4 stable pre-existing = GFX-013 baseline; 2 flaky AUDIO passed on retry) — **zero regressions**. No shader change. Parity: Vulkan sole *deferred-and-split* backend; **Bgfx has the same RT-viewport-hardcoded defect → GFX-063**; **SdlGpu + D3D12 never wire Viewport at all → GFX-064**; EasyGL/D3D11/D3D9 honor RT viewport (immediate); WebGPU honors per-pass. See "REMED-GFX-062 — Vulkan Viewport …". |
 | REMED-GFX-063 | P2 | **DONE and VERIFIED (Bgfx — OpenGL 2.1 + Vulkan renderers)** | 131b8a30, bba401ff | feature/audit | `ApplyViewportOverride()` gated the custom viewport on `currentViewId_ == 0` (backbuffer), so a `Viewport` set while a RenderTarget2D/Cube/MRT was bound was ignored (RT views kept their `BindAsRenderTarget()`/`EnsureViewState()` full-RT `setViewRect`). Bgfx state model is DISTINCT from Vulkan GFX-062: bgfx view rect is PER-VIEW (last `setViewRect(viewId,...)` before `bgfx::frame()` wins for the whole view), NOT per-draw — and each RT owns a distinct view id. Fix = drop the `==0` gate: `ApplyViewportOverride()` (already called right before every 3D submit, after any `EnsureViewState()`/`BindAsRenderTarget()` full-target reset) now sets the custom rect on the bound target's own view. Top-left coords, no Y-flip, no dimension arithmetic; no-op when unset. New `Bgfx_RenderTarget_Viewport` (64×48 RT, viewport (11,7,29,18), 5-way probe + full-viewport control) **6/10 → 10/10** on bgfx-OpenGL (2.1, Xvfb :99) AND bgfx-Vulkan (real GPU, :0). Backbuffer `Bgfx_Viewport_Subregion` + `Bgfx_Scissor` unchanged. No shader diff. Full shard: no regressions (2 pre-existing = bgfx-Vulkan→GL2.1-fallback MSAA/depth env failures, confirmed identical without the fix). Spawned **GFX-065** (per-view multi-viewport limit), **GFX-066** (RT scissor inert), **GFX-067** (RT-size-dependent RT-sample Y-mirror). See "REMED-GFX-063 — Bgfx Viewport …". |
 | REMED-GFX-065 | P3 | NOT STARTED (recorded during GFX-063) | | feature/audit | bgfx view rect is per-view state, so two DIFFERENT viewports submitted to one view id within a single frame collapse to the last one — a pre-existing global limitation shared with the backbuffer (view 0), not RT-specific. Correctly supporting it needs per-viewport-change view-id splitting. Not fixed. See detail below. |
-| REMED-GFX-066 | P2 | NOT STARTED (recorded during GFX-063) | | feature/audit | `bgfx::setScissor` (ApplyScissorOverride, per-draw) does NOT clip on FBO-bound (render-target) views — a scissor-only RT render fills the whole target. Existing `Bgfx_Scissor` covers only the backbuffer, so this was never runtime-verified; GFX-013's "Bgfx honors RT scissor" parity claim was source-read only. Separate from Viewport. Not fixed. See detail below. |
+| REMED-GFX-066 | P2 | **RESOLVED — NOT A DEFECT (false finding disproven at runtime; regression added)** | `<pending>` | feature/audit | Bgfx per-draw `bgfx::setScissor` **already clips correctly** on FBO/render-target views on **both** bgfx-OpenGL (2.1) and bgfx-Vulkan (real GPU). The GFX-063 bring-up "whole RT red" observation was a **test-setup artifact** — a `ScissorRectangle` set without an effective `RasterizerState.ScissorTestEnable=true`, i.e. XNA-correct no-clip (reproduced by Scenario B). New `Bgfx_RenderTarget_Scissor` (64×48 RT, asymmetric scissor (12,8,20,13)) confines red to exactly x[12,32) y[8,21): correct origin, no Y-mirror, correct dims — **13/13 on GL (×3, deterministic) and Vulkan**. bgfx intersects the per-draw scissor with the RT view rect and flips Y against the **FBO** height (renderer_gl `setFrameBuffer`→`resolutionHeight`; renderer_vk top-left); CNA never resets scissor state on RT bind. Viewport∩Scissor now works (verified in isolation). GFX-013's "Bgfx honors RT scissor" was source-read-only but **correct**; the bring-up claim was wrong. Zero production/shader change. See detail below. |
 | REMED-GFX-067 | P2 | NOT STARTED (recorded during GFX-063) | | feature/audit | The Bgfx RT→backbuffer SpriteBatch-sample + `GetBackBufferData` readback path returns Y-mirrored content for some RT sizes (48×32, 40×48, 64×56 flip; 64×48 upright); trigger not fully characterized (not simple width/height/16-alignment). Existing Bgfx RT pixel tests all use sizes that happen to read upright. Not a Viewport defect. Not fixed. See detail below. |
 | REMED-GFX-064 | P2 | NOT STARTED (recorded during GFX-062 parity) | | feature/audit | SdlGpu and D3D12 never override the (no-op) base `IGraphicsBackend::SetViewport` — SdlGpu never calls `SDL_SetGPUViewport`; D3D12 hardcodes `{0,0,boundColorWidth_,boundColorHeight_}` at all 4 `RSSetViewports` sites. `GraphicsDevice.Viewport` is a total no-op on both (backbuffer **and** RT), broader than GFX-062. D3D12 is same family as its scissor-inert gap (GFX-014). Not fixed — out of GFX-062 scope. See detail below. |
 | REMED-GFX-014 | P1 | NOT STARTED | | | |
@@ -4432,11 +4432,12 @@ finding and the DrawUserPrimitives test live. The RT-blit itself is a backbuffer
 covered (its NDC mapping is built from the full-target size in `EnsureViewState`, a distinct sprite-projection
 concern — same nuance noted for Vulkan GFX-062); not part of this fix.
 
-**Scissor interaction (Phase 12) — could not be tested; separate defect found.** Bgfx's per-draw `bgfx::setScissor`
-does **not clip on FBO/render-target views at all** (a scissor-only RT render fills the whole target). The existing
-`Bgfx_Scissor` test is backbuffer-only, so RT scissor was never runtime-verified (GFX-013's "Bgfx honors RT
-scissor" was a source read). Recorded as **REMED-GFX-066**, not fixed (out of GFX-063 scope; backbuffer scissor
-`Bgfx_Scissor` still green — no regression).
+**Scissor interaction (Phase 12) — recorded as GFX-066; SINCE DISPROVEN, see that entry.** A GFX-063-era note
+claimed Bgfx's per-draw `bgfx::setScissor` does "not clip on FBO/render-target views at all." **This was WRONG** — a
+test-setup artifact (a `ScissorRectangle` set without an effective `ScissorTestEnable=true`, i.e. XNA-correct no-clip).
+GFX-066 runtime-verified that the RT scissor **clips correctly on both bgfx-OpenGL and bgfx-Vulkan** (new
+`Bgfx_RenderTarget_Scissor` 13/13 each), and the Viewport∩Scissor RT interaction that this note said was blocked
+**works today**. GFX-013's "Bgfx honors RT scissor" source read was correct. See the REMED-GFX-066 entry.
 
 **Regression matrix (Phase 16).** `Bgfx_RenderTarget_Viewport` 10/10; backbuffer controls `Bgfx_Viewport_Subregion`
 + `Bgfx_Scissor` PASS; targeted RT/orientation/skinned/envmap/fog families green except **2 pre-existing
@@ -4453,9 +4454,10 @@ Bgfx families unaffected. No `bx`/Xvfb death. **Zero regressions.**
 
 **Generated shaders.** None — zero `.sc`/`.glsl`/`bgfx_shaders.hpp` diff (pure bgfx view-state handling).
 
-**New findings spawned (recorded, NOT fixed):** **GFX-065** (two viewports on one view per frame — bgfx per-view
-limit, affects backbuffer too), **GFX-066** (RT `setScissor` inert), **GFX-067** (RT-size-dependent RT-sample
-readback Y-mirror). None inseparable from the viewport fix.
+**New findings spawned (recorded):** **GFX-065** (two viewports on one view per frame — bgfx per-view
+limit, affects backbuffer too — still open), **GFX-066** (RT `setScissor` inert — **since DISPROVEN: NOT A DEFECT**,
+RT scissor clips correctly on both bgfx renderers; false finding, regression added), **GFX-067** (RT-size-dependent
+RT-sample readback Y-mirror — still open). None inseparable from the viewport fix.
 
 | Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`, `examples/bgfx_rendertarget_viewport_test.cpp`, `cmake/Tests/BgfxTests.cmake` |
 | Backends / Platforms | Bgfx / ALL |
@@ -4476,18 +4478,64 @@ readback Y-mirror). None inseparable from the viewport fix.
 
 ---
 
-### REMED-GFX-066 — Bgfx: per-draw `bgfx::setScissor` does not clip on render-target (FBO) views (NEW, discovered during GFX-063, NOT fixed)
+### REMED-GFX-066 — Bgfx: per-draw `bgfx::setScissor` on render-target (FBO) views — RESOLVED, NOT A DEFECT (false finding; regression added)
 
 | Field | Value |
 |---|---|
-| Sev / Pri / Owner / Status | MEDIUM / P2 / GRAPHICS / **NOT STARTED (recorded, deferred)** |
-| Root cause | `ApplyScissorOverride()` issues `bgfx::setScissor(x,y,w,h)` per 3D submit, which correctly clips on the **backbuffer** (view 0, verified by `Bgfx_Scissor`) but does **NOT clip at all** when the current view is an FBO-bound render target — a scissor-only RT render (ScissorTestEnable=true, rect a sub-region) fills the entire target. Root cause not yet pinned (bgfx FBO scissor coordinate/enable handling); characterized empirically. |
-| Evidence | Isolated during GFX-063 test bring-up: rendering a full-RT quad into a 64×48 RT with scissor (18,11,30,30) enabled left the whole RT red (no clipping on either axis). The existing `Bgfx_Scissor` test only exercises the backbuffer, so RT scissor was never runtime-verified; GFX-013's parity note ("Bgfx honors RT scissor via `bgfx::setScissor` per draw") was source-read only and is **incorrect** for FBO views. |
-| Relationship to GFX-013 / GFX-063 | The Bgfx analog of the RT-scissor gap GFX-013 fixed for Vulkan. Independent of Viewport (`setScissor` vs `setViewRect`); blocks a Viewport∩Scissor RT-interaction test until fixed. |
-| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (`ApplyScissorOverride` / RT view scissor) |
-| Backends / Platforms | Bgfx / ALL (render targets only; backbuffer scissor works) |
-| Why separable / not fixed here | Distinct state (`setScissor`), distinct root cause; GFX-063 is Viewport-only. Not inseparable. |
-| Suggested test | A Bgfx RT + `ScissorRectangle` pixel test mirroring `Vulkan_RenderTarget_Scissor` (once fixed). |
+| Sev / Pri / Owner / Status | MEDIUM / P2 / GRAPHICS / **RESOLVED — NOT A DEFECT (false finding disproven at runtime on both bgfx renderers; zero production change; regression test added)** |
+| Commits | test `<pending>` (`Bgfx_RenderTarget_Scissor`), docs (this entry) |
+| Actual root cause | **The finding does not reproduce.** The Bgfx per-draw scissor already clips **correctly** on FBO/render-target views on both bgfx-OpenGL (2.1) and bgfx-Vulkan (real GPU). The GFX-063 bring-up "whole RT red / no clipping" observation was a **test-setup artifact**: a `ScissorRectangle` was set but `RasterizerState.ScissorTestEnable=true` was not effective on the draw, so `ApplyScissorOverride()` (gated on `scissorEnabled_`) correctly no-op'd and the whole target filled — which is the **XNA-correct** result when the scissor test is disabled (reproduced exactly by Scenario B of the new test). |
+
+**Runtime disproof (Phases 1/4/5/6) — both bgfx renderers, HEAD, zero production change.**
+New pixel test `examples/bgfx_rendertarget_scissor_test.cpp` (`Bgfx_RenderTarget_Scissor`, 64×48 RT, proven
+RT-sample→blit→`GetBackBufferData` path from GFX-063): render a full-NDC quad into the RT with an asymmetric
+`ScissorRectangle (12,8,20,13)` and `ScissorTestEnable=true`, blit 1:1 to the backbuffer, probe. **The red is
+confined exactly to x[12,32) y[8,21) — correct origin, no Y-mirror, correct width/height — on bgfx-OpenGL AND
+bgfx-Vulkan (13/13 PASS each; deterministic over 3 consecutive GL runs).** Backbuffer control `Bgfx_Scissor` 7/7.
+
+**Why the source read (GFX-013 parity note) and the bring-up empirics both mislead — and what is actually true.**
+`ApplyScissorOverride()` issues `bgfx::setScissor(x,y,w,h)` (per-draw) right before every 3D `submit(currentViewId_)`,
+where `currentViewId_` is the bound RT's own view id. In **both** bgfx renderers the per-draw scissor is intersected
+with the view rect and applied against the **framebuffer** height, not the backbuffer: renderer_gl.cpp `setFrameBuffer`
+returns `frameBuffer.m_height` as `resolutionHeight` (used for the scissor Y-flip) and `scissorRect.setIntersect(viewScissorRect=viewState.m_rect, cache[scissor])`; renderer_vk.cpp sets `vkCmdSetScissor` from the same intersection with
+top-left origin. So a full-RT view rect (0,0,64,48) ∩ scissor (12,8,20,13) = (12,8,20,13) clips correctly. No
+CNA-level defect either: `scissorEnabled_`/`scissorX_..H_` are assigned **only** in `ApplyRasterizerState`/`SetScissorRect`;
+`SetRenderTarget2D`/`SetRenderTargets`/`BindAsRenderTarget` never reset them, so scissor state persists across RT binds
+exactly as XNA requires (device-global, not per-target) — there is no ordering/reset defect.
+
+**Regression scope (Phases 8/9/15) — three order-stable scenarios committed; two more verified in isolation.**
+Committed (`Bgfx_RenderTarget_Scissor`, deterministic 13/13 on GL and Vulkan): **A** scissor enabled → red only
+inside; **B** scissor disabled (rect still set) → whole target red (the false-finding symptom, XNA-correct, guards
+against over-clip); **C** two per-draw scissors in **one** RT view/frame (red under a left rect, green under a right
+rect, disjoint gap black) → proves per-draw scissor independence, which distinguishes GFX-066 from the per-view
+GFX-065 viewport limit. Two further scenarios were **verified correct in isolation** (grids captured) but deliberately
+excluded to keep the test deterministic — a 4th/5th RT-sample readback in one `Draw()` trips the separate,
+pre-existing **GFX-067** RT-readback Y-mirror (Phase-3 contamination guard): (i) a **different** scissor rect
+`(30,20,24,16)` re-enabled reads upright (proves no stale-scissor leak); (ii) **Viewport ∩ Scissor** —
+`Viewport(10,6,30,26)` (GFX-063) ∩ `Scissor(20,4,25,20)` renders red at exactly **x[20,40) y[6,24)**, i.e. the
+intersection in framebuffer coordinates (not scissor-relative-to-viewport, not viewport-overwriting-scissor). This
+**unblocks** the Viewport∩Scissor RT-interaction that GFX-063 said GFX-066 blocked: it works today.
+
+**SpriteBatch vs 3D / RT types.** The scissor path (`ApplyScissorOverride` → `setScissor` → `submit`) is shared by the
+3D draw sites and the SpriteBatch submit (`ApplyScissorOverride` before `submit(spriteViewId)`); the RT view id is the
+same mechanism for RenderTarget2D/Cube/MRT (each owns a view id, `SetRenderTarget*` points `currentViewId_` at it), so
+the correct-clipping result is not RT-type-specific. Tested via RenderTarget2D (the finding's own shape).
+
+**Regression matrix (Phase 16/18).** `Bgfx_RenderTarget_Scissor` 13/13 (GL ×3 + Vulkan). Full targeted Bgfx sweep
+**116/116** (`ctest -R Bgfx_` excluding the 3 known pre-existing bgfx-Vulkan→GL2.1-fallback env failures
+`*MsaaResolve`/`*DepthFormat`/`*CubeMap` documented under GFX-063) — includes `Bgfx_Scissor`,
+`Bgfx_Viewport_Subregion`, `Bgfx_RenderTarget_Viewport`, and the GFX-005/006/007/008/010 fog/normal/emissive/skinned
+families. **Zero regressions** (expected — the change is test-only). **Generated shaders: none** — zero `.sc`/`bgfx_shaders.hpp`
+diff; no `src/` diff at all.
+
+**Correction propagated.** The GFX-063 report's Scissor-interaction note ("Bgfx's per-draw `bgfx::setScissor` does not
+clip on FBO/render-target views at all") and GFX-013's parity claim were both **incorrect**; corrected here and in the
+GFX-063 entry. GFX-013's "Bgfx honors RT scissor via `bgfx::setScissor` per draw" was source-read-only but, unlike the
+bring-up claim, turns out to be **right**.
+
+| Affected files | `examples/bgfx_rendertarget_scissor_test.cpp` (new), `cmake/Tests/BgfxTests.cmake` (registration). **No production/shader change.** |
+| Backends / Platforms | Bgfx / ALL (verified bgfx-OpenGL 2.1 + bgfx-Vulkan) |
+| New findings | None new. Re-confirms **GFX-067** (RT-readback Y-mirror on the 4th/5th RT-sample readback in one frame-sequence — the reason two scenarios stay isolation-only) as still open and still needing its own root-cause. |
 
 ---
 
