@@ -2174,13 +2174,22 @@ namespace CNA::Internal::Backends::D3D12
 
         if (ib != nullptr)
         {
+            // REMED-GFX-020 (backend parity with D3D11): honor the XNA DrawIndexedPrimitives
+            // startIndex/baseVertex offsets (StartIndexLocation / BaseVertexLocation) instead of
+            // hardcoding 0,0. Same latent defect the D3D11 backend had; the offset-0 path (every
+            // existing draw) is unchanged. Correct-by-inspection only -- D3D12 real-window runtime
+            // stays blocked by REMED-BUILD-012, so this is not runtime-verified here.
             const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            cmdList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+            cmdList->DrawIndexedInstanced(indexCount, 1, static_cast<UINT>(params.startIndex),
+                                          static_cast<INT>(params.baseVertex), 0);
         }
         else
         {
+            // REMED-GFX-020 (backend parity with D3D11): honor DrawPrimitives' vertexStart
+            // (StartVertexLocation) instead of hardcoding 0. See the indexed branch's note re
+            // REMED-BUILD-012 (not runtime-verified on D3D12).
             const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            cmdList->DrawInstanced(vertexCount, 1, 0, 0);
+            cmdList->DrawInstanced(vertexCount, 1, static_cast<UINT>(params.vertexStart), 0);
         }
 
         if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
