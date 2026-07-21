@@ -3061,7 +3061,12 @@ Pre-fix Vulkan: **1/9** (only case A, where both formulas coincide). Post-fix Vu
 | **D3D9 custom vertex-color** | SEPARATE (audit said correct) | `(Emissive + lightSum)·diffuse` (emissive×diffuse) | FIXED — `SkinnedVertexColor3D.hlsl` PS; ps_3_0 DXBC regen (14-byte delta, VS byte-identical) |
 | EasyGL | ALREADY_CORRECT | `lightSum·diffuse + emissive` | none (harness 9/9 confirms) |
 | SdlGpu | ALREADY_CORRECT | `lightSum·diffuse + emissive` (reuses lit_textured3d.frag) | none (5/5 tests pass) |
+| WebGPU | ALREADY_CORRECT | `lightSum·diffuse + emissive` (pixel- **and** vertex-lit, WGSL lines 2968/3061) | none (source-confirmed; GFX-007 already established this form) |
 | D3D9 stock | ALREADY_CORRECT | vendored FNA `Lighting.fxh` | none |
+
+The 8 backends above are the 3D-skinned-lighting-capable set; the 2D/software backends (SDL_RENDERER,
+SOFTWARE, HEADLESS, CANVAS, ASCII, STUB, DX3) implement no skinned stock-effect lighting and are
+NOT_APPLICABLE.
 
 **Two audit misclassifications found:** the audit listed Bgfx and D3D9 as "confirmed correct," but both
 carried an emissive×diffuse defect (emissive present but wrongly scaled by DiffuseColor). Folded into
@@ -3099,7 +3104,23 @@ tint bug — EasyGL's shader was already correct, so its old test failed at 2× 
 Harness 9/9 on Vulkan, EasyGL, Bgfx, D3D11 — identical semantic inputs → identical decoded linear
 values within 1 LSB. Regression: Vulkan skinned+avatar **17/17** (was 16/17 with the intentionally-red
 TintRouting), EasyGL **21/21**, Bgfx **12/12**, SdlGpu **5/5**, AvatarRenderer+SkinnedEffect unit tests
-**94/94**. GFX-006 WorldNormal + GFX-010 Fog controls pass on every backend shard.
+**94/94**. Broad unit suite **5322 passed / 1 failed** — the one failure
+(`TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivor…`, a 30 s real-process Net host-migration
+test) is unrelated and pre-existing/flaky. GFX-006 WorldNormal + GFX-010 Fog controls pass on every
+backend shard.
+
+### Validation (Phase 12) + GFX-061 (Phase 13)
+
+- **Vulkan validation:** the skinned harness runs **VUID-clean** (0 validation errors) after the UBO
+  grew 240→256 and the descriptor range widened to 256 — the expansion is correctly sized.
+- **ASan/UBSan:** the only CPU-side change is `AvatarRenderer::DrawRealEXT`'s lighting setup — pure
+  effect-property assignment with no new allocation, pointer arithmetic, or buffer indexing — so a
+  dedicated (400–900 MB) graphics-sanitizer build was judged unwarranted for it; it is covered by the
+  94/94 device-free unit tests + the avatar integration tests.
+- **REMED-GFX-061:** inspected and left **DEFERRED**, as its own recorded assessment states a precise
+  fog-comment correction is "not unquestionably safe" (it needs exact per-backend fog-consumption
+  state across the fog subsystem, out of GFX-008's scope). No edit made — the task permits touching it
+  only for an unquestionably-safe doc change.
 
 ---
 
