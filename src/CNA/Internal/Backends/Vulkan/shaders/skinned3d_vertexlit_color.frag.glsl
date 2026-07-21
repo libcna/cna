@@ -39,6 +39,7 @@ layout(set = 0, binding = 2) uniform FogParams {
     vec4 light0Spec_pad;
     vec4 light1Spec_pad;
     vec4 light2Spec_pad;
+    vec4 emissiveColor;   // REMED-GFX-008: pre-folded (emissive + ambient*diffuse)*alpha
 } fog;
 
 void main() {

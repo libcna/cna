@@ -5154,7 +5154,8 @@ namespace CNA::Internal::Backends::Vulkan
         fogBufInfo.buffer = skinnedFogUBO_[frameIdx];
         fogBufInfo.offset = 0;
         // fogColorEnabled+fogStartEnd + light1/2 Dir/Diff (Task 893) + World/eyePos/specular (Task 894)
-        fogBufInfo.range  = 240;
+        // + emissiveColor vec4 (REMED-GFX-008) = 256 bytes; must cover offset 240 or the shader reads 0.
+        fogBufInfo.range  = 256;
 
         VkWriteDescriptorSet writes[3]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -6570,9 +6571,11 @@ namespace CNA::Internal::Backends::Vulkan
                         if (skinnedFogUBOPtr_[currentFrame_]) {
                             const uint32_t fogSlot = skinnedFogUBOSlot++;
                             fogOff = fogSlot * kSkinnedFogUBOStride;
-                            if (fogOff + 240 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
+                            // REMED-GFX-008: 256 bytes now (64 floats — added emissiveColor vec4 at
+                            // offset 240, filling the 256-byte stride exactly).
+                            if (fogOff + 256 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
                                 std::memcpy(static_cast<uint8_t*>(skinnedFogUBOPtr_[currentFrame_]) + fogOff,
-                                            draw.skinnedFogUboData, 240);
+                                            draw.skinnedFogUboData, 256);
                             }
                         }
                         const uint32_t dynOffsets[2] = { boneOff, fogOff };
@@ -7494,6 +7497,14 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
             d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
             d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
+
+            // REMED-GFX-008: emissiveColor vec4 — the CPU pre-folds (emissive + ambient*diffuse)*alpha
+            // into params.emissiveColor. The skinned shaders add it AFTER the lightSum*diffuse multiply
+            // (litRGB = lightSum*diffuse + emissiveColor), so both AmbientLightColor and EmissiveColor
+            // reach skinned draws (previously the shaders read the always-zero ambientColor and never
+            // added emissive, silently dropping both).
+            d.skinnedFogUboData[60] = params.emissiveColor[0]; d.skinnedFogUboData[61] = params.emissiveColor[1];
+            d.skinnedFogUboData[62] = params.emissiveColor[2]; d.skinnedFogUboData[63] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -7732,6 +7743,14 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
             d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
             d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
+
+            // REMED-GFX-008: emissiveColor vec4 — the CPU pre-folds (emissive + ambient*diffuse)*alpha
+            // into params.emissiveColor. The skinned shaders add it AFTER the lightSum*diffuse multiply
+            // (litRGB = lightSum*diffuse + emissiveColor), so both AmbientLightColor and EmissiveColor
+            // reach skinned draws (previously the shaders read the always-zero ambientColor and never
+            // added emissive, silently dropping both).
+            d.skinnedFogUboData[60] = params.emissiveColor[0]; d.skinnedFogUboData[61] = params.emissiveColor[1];
+            d.skinnedFogUboData[62] = params.emissiveColor[2]; d.skinnedFogUboData[63] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);

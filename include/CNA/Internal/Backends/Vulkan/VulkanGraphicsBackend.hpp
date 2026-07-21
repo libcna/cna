@@ -1087,9 +1087,10 @@ namespace CNA::Internal::Backends::Vulkan
             VkDescriptorSet         skinnedDescSet    = VK_NULL_HANDLE;
             // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899); [8..23] Task 893's
             // DirectionalLight1/2 dir+diffuse; [24..59] Task 894's World (mat4, 16 floats),
-            // eyePosition_pad, specularColor_specularPower, light0/1/2Specular_pad (4 more vec4).
-            // 60 floats = 240 bytes, still under kSkinnedFogUBOStride=256.
-            float                   skinnedFogUboData[60] = {};
+            // eyePosition_pad, specularColor_specularPower, light0/1/2Specular_pad (4 more vec4);
+            // [60..63] REMED-GFX-008's emissiveColor vec4 (pre-folded emissive+ambient*diffuse).
+            // 64 floats = 256 bytes = kSkinnedFogUBOStride exactly.
+            float                   skinnedFogUboData[64] = {};
             bool                    usePbr            = false; // true = Pbr3D pipeline (unskinned)
             bool                    usePbrSkinned     = false; // true = PbrSkinned3D pipeline (combo)
             VkDescriptorSet         pbrDescSet        = VK_NULL_HANDLE; // 5-sampler set

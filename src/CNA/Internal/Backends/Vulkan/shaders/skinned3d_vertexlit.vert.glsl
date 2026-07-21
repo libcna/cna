@@ -47,6 +47,7 @@ layout(set = 0, binding = 2) uniform FogParams {
     vec4 light0Spec_pad;
     vec4 light1Spec_pad;
     vec4 light2Spec_pad;
+    vec4 emissiveColor;   // REMED-GFX-008: pre-folded (emissive + ambient*diffuse)*alpha
 } fog;
 
 void main() {
@@ -75,7 +76,7 @@ void main() {
     vec3 lightSum = pc.light0Diffuse * NdotL0
                    + fog.light1Diff_pad.xyz * NdotL1
                    + fog.light2Diff_pad.xyz * NdotL2;
-    vLitRGB = (pc.ambientColor + lightSum) * pc.diffuseColor.rgb;
+    vLitRGB = lightSum * pc.diffuseColor.rgb + fog.emissiveColor.rgb;
 
     float specularPower = fog.specularColor_power.w;
     vec3 h0 = normalize(E - normalize(pc.light0Dir));          float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, specularPower);
