@@ -178,23 +178,34 @@ zero CNA-level cross-target validation — matching FNA's own delegate-to-native
 
 ## Summary: what actually works today, per backend
 
-| Feature | EasyGL | Vulkan | Bgfx |
-|---|---|---|---|
-| `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ | ✅ | ✅ |
-| `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ | ✅ | ❌ wrong-handle-cast bug (Task 873) |
-| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ | ❌ renders black (Task 876) | ❌ wrong-handle-cast bug (Task 874) |
-| Depth buffer functionality (does depth testing work inside an RT) | ✅ | ✅ | 🔍 not pixel-verified (no GPU readback) |
-| Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) | ❌ `hasDepth` ignored, always allocates (Task 877) | ❌ always `D24S8` (Task 877) |
-| Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) | 🔶 `LevelCount` correct, no real GPU mips (Task 878) | 🔶 same as Vulkan (Task 878) |
-| MSAA (`MultiSampleCount`, real resolve) | ✅ (fixed, Task 337) | 🔶 honestly reports `0`, not implemented (Task 879) | 🔶 same as Vulkan (Task 879) |
-| `SetRenderTarget`/`SetRenderTargets` Viewport/ScissorRectangle reset | ✅ (fixed, Task 338) | ✅ (fixed, Task 338) | ✅ (fixed, Task 338; shared code, not independently pixel-tested) |
-| `Viewport`'s actual GPU effect (any sub-region viewport) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) |
-| MRT (2+ same-size/format targets) | ❌ `EasyGL_MRT_TwoAttachments`, attachment 1 stays black (Task 145) | 🔍 not independently re-verified this phase | 🔍 not independently re-verified this phase |
-| MRT count cap matches FNA's `MAX_RENDERTARGET_BINDINGS=4` | ❌ caps at 8 instead (Task 881) | ❌ uncapped at CNA level (Task 881) | ❌ caps at 8 instead (Task 881) |
-| Vulkan `Clear()`-only RT (no draw) gets a render pass recorded | ❌ (Task 875) | N/A | N/A |
+| Feature | EasyGL | Vulkan | Bgfx | Metal |
+|---|---|---|---|---|
+| `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ | ✅ | ✅ | ✅ (shared `GraphicsDevice`-level code, backend-independent) |
+| `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ | ✅ | ❌ wrong-handle-cast bug (Task 873) | 🔍¹ real code path (`MetalRenderTargetBackend::colorTexture()`, always the resolved single-sample texture), CI-confirmed to compile/run/draw with zero Metal API validation errors — pixel-level proof blocked |
+| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ | ❌ renders black (Task 876) | ❌ wrong-handle-cast bug (Task 874) | 🔍 source-complete (`plan_metal.md` Phase 6/11, `METAL-64`–`71`/`120`ff), never pixel-tested on real hardware — no dedicated `CTest` exists yet |
+| Depth buffer functionality (does depth testing work inside an RT) | ✅ | ✅ | 🔍 not pixel-verified (no GPU readback) | 🔶 a real depth32+stencil8 (or, when MSAA-engaged, multisampled) texture is always allocated and bound as the render pass's depth attachment — GPU-level depth-test *gating* itself not independently pixel-verified |
+| Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) | ❌ `hasDepth` ignored, always allocates (Task 877) | ❌ always `D24S8` (Task 877) | ❌ always `Depth32Float_Stencil8` regardless of requested `DepthFormat` — deliberate, documented simplification (`plan_metal.md METAL-101`), matching Vulkan's own precedent exactly |
+| Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) | 🔶 `LevelCount` correct, no real GPU mips (Task 878) | 🔶 same as Vulkan (Task 878) | 🔶 real `generateMipmapsForTexture:` regeneration on every unbind (`plan_metal.md METAL-103`), source-complete and CI-compiles — no dedicated pixel test yet (`METAL-117`, still open) |
+| MSAA (`MultiSampleCount`, real resolve) | ✅ (fixed, Task 337) | 🔶 honestly reports `0`, not implemented (Task 879) | 🔶 same as Vulkan (Task 879) | 🔍² real multisample texture allocation + device-clamped `MultiSampleCount` + `MTLStoreActionStoreAndMultisampleResolve`, CI-confirmed to engage a real sample count with zero validation errors — but the resolved output does not yet show genuine anti-aliasing on the one real CI runner tested; root cause undetermined (`plan_metal.md` narrative item 90) |
+| `SetRenderTarget`/`SetRenderTargets` Viewport/ScissorRectangle reset | ✅ (fixed, Task 338) | ✅ (fixed, Task 338) | ✅ (fixed, Task 338; shared code, not independently pixel-tested) | ✅ shared `GraphicsDevice`-level code, backend-independent |
+| `Viewport`'s actual GPU effect (any sub-region viewport) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ same gap — `[encoder setViewport:...]` is always derived from the active render target's own full size, never a game-requested `GraphicsDevice.Viewport` sub-rectangle (Task 880, pre-existing/cross-backend, not Metal-specific) |
+| MRT (2+ same-size/format targets) | ❌ `EasyGL_MRT_TwoAttachments`, attachment 1 stays black (Task 145) | 🔍 not independently re-verified this phase | 🔍 not independently re-verified this phase | 🔍³ real `SetRenderTargets()` (`plan_metal.md METAL-112`/`113`), CI-confirmed a genuine 2-simultaneous-color-attachment draw completes with zero Metal API validation errors under both `MTL_SHADER_VALIDATION`/`MTL_DEBUG_LAYER` — end-to-end pixel proof (attachment 0 written, attachment 1 untouched) blocked by the same readback issue as row 2 |
+| MRT count cap matches FNA's `MAX_RENDERTARGET_BINDINGS=4` | ❌ caps at 8 instead (Task 881) | ❌ uncapped at CNA level (Task 881) | ❌ caps at 8 instead (Task 881) | ❌ caps at 8 instead (`SetRenderTargets()`'s own `std::min(count,8)`, Metal's real hardware attachment limit) — same pre-existing gap, not fixed here |
+| Vulkan `Clear()`-only RT (no draw) gets a render pass recorded | ❌ (Task 875) | N/A | N/A | N/A (Vulkan-specific) |
 
 Legend: ✅ verified working · ❌ confirmed broken/gap · 🔶 partially correct (property right, GPU
 support lags) · 🔍 not empirically verified this phase.
+
+¹ ² ³ Metal's own `🔍` rows above share one root cause, not three independent gaps: every `CTest`
+that reads pixel content back via `GraphicsDevice::GetBackBufferData()` (rows 2/7/10) currently
+reads back only the most recent `Clear()` color rather than what was actually drawn, regardless of
+what ran before it (2D `SpriteBatch` or 3D, single-target or MRT) — a real, confirmed, still-
+unresolved bug under active investigation, paused pending a physical Mac. See `plan_metal.md`
+narrative items 67–76/82/84/85/87/90 for the full investigation and exactly what has already been
+ruled out (not a `vertexStart` bug, not a premature-present bug, not a GPU-side runtime error, not
+an MRT- or MSAA-specific defect). Metal's own build/compile/API-validation status for every feature
+above is real and CI-confirmed on real Apple hardware (`macos-14` GitHub Actions runner) even where
+the pixel-level proof is not yet possible — see `docs/metal-backend.md` for the fuller picture.
 
 ## Open, tracked follow-up work
 
@@ -217,5 +228,10 @@ Pre-existing, not opened this phase, still blocking deeper MRT work: `EasyGL_MRT
 (Task 145) — even a basic same-size 2-target MRT setup doesn't render correctly on EasyGL. Needs
 its own dedicated root-cause investigation before Task 881 or any other MRT-adjacent work can be
 meaningfully extended.
+
+Metal joined this matrix later (`plan_metal.md METAL-119`) and tracks its own open work in that
+plan directly rather than duplicating a second tracking system here — see `plan_metal.md` Phase 10
+(`METAL-98`–`119`) for the full task list and narrative items 77/86/87/89/90 for the specific,
+already-investigated findings the footnotes above reference.
 
 This closes Phase 39 (`plan_graphics.md` Tasks 331–340) in full.

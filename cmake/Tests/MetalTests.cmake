@@ -113,4 +113,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "METAL")
     endif()
     cna_register_backend_test(NAME Metal_RenderTarget2D_MSAA COMMAND cna_test_metal_rendertarget2d_msaa
         TIMEOUT 30 LABELS "Metal")
+
+    # plan_metal.md Phase 20 (METAL-198): one assertion per CNA::GraphicsCapability. Metal-specific
+    # (not reused) since Metal is expected to support every currently-enumerated capability, unlike
+    # DX3/SDL_Renderer/Canvas's own dedicated capability tests (2D-only backends, everything false)
+    # or EasyGL's generic GraphicsDeviceCapabilityTests.cpp (WireFrame false -- GLES3 has no
+    # wireframe fill mode; Metal genuinely does). Doesn't route any readback through
+    # GetBackBufferData() at all, so unlike every other Metal test added this session, this one is
+    # NOT exposed to the known Clear-color-only readback bug -- a real, independent regression
+    # guard for this session's own 3 SupportsCapability() fixes (CustomEffects/
+    # MultipleRenderTargets/MultiSampleAntiAliasing).
+    add_executable(cna_test_metal_capabilities examples/metal_capabilities_test.cpp)
+    target_link_libraries(cna_test_metal_capabilities PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_capabilities PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_backend_test(NAME Metal_Capabilities COMMAND cna_test_metal_capabilities
+        TIMEOUT 30 LABELS "Metal")
 endif()

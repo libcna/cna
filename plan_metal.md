@@ -2632,6 +2632,37 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     Mac. The `[METAL-104 diag]` `NSLog` is left in place (matching this file's own established
     precedent for prior investigation diagnostics, e.g. `[METAL-89 diag]`), not reverted.
 
+91. **`METAL-198`/`119`/`129` landed — a real capabilities regression-guard `CTest`, and both
+    cross-backend support-matrix docs gained their Metal column**: `Metal_Capabilities`
+    (`examples/metal_capabilities_test.cpp`) asserts all 8 `CNA::GraphicsCapability` values are
+    `true` — Metal is the first backend in this project expected to genuinely support every
+    currently-enumerated capability, including `WireFrame` (unlike EasyGL, whose own
+    `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` correctly asserts `false`: GLES3 has no
+    wireframe fill mode at all, while Metal's `MTLTriangleFillModeLines` mapping is real,
+    `METAL-194`). A deliberately-noted, real property of this specific test: it never calls
+    `GetBackBufferData()` at all (`SupportsCapability()` is a pure query, no draw/readback
+    involved), so unlike every other Metal `CTest` landed this session it is **not** exposed to the
+    known Clear-color-only readback bug — a genuinely independent regression guard for this
+    session's own 3 capability-flag fixes (`CustomEffects`/`MultipleRenderTargets`/
+    `MultiSampleAntiAliasing`, items 83/86/88), not one more test whose failure would need the
+    usual "is this the known bug or something new" disambiguation.
+
+    `docs/rendertarget-support.md`'s own "what actually works today" table and
+    `docs/texture3d-texturecube-support.md`'s several per-feature tables both gained a Metal
+    column/row, cross-referencing `plan_metal.md`'s own phase/task numbers and narrative items
+    rather than duplicating a second tracking system — most cells are 🔍 (source-complete,
+    CI-confirmed to compile/run without a Metal API validation error, but not independently
+    pixel-verified — either because no dedicated `CTest` exists yet, e.g. `Texture3D`/`TextureCube`
+    round-trips [`METAL-127`/`128`], or because the shared Clear-color-readback bug blocks the
+    pixel-level proof even where a `CTest` does exist, e.g. `RenderTarget2D` sampling/MRT), matching
+    this session's own consistent honesty standard rather than inflating them to ✅ on the strength
+    of "the code compiles and doesn't crash" alone.
+
+    Real local verification: `examples/metal_capabilities_test.cpp` is plain C++ (no new
+    Objective-C++), balance-checked (`6/6` braces, `42/42` parens); the two doc files are prose/
+    Markdown-table edits, not code, with no build-verification concept to apply. Pushed alongside
+    whatever `.mm` state is current for a real CI compile/run of `Metal_Capabilities` specifically.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -3109,7 +3140,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-116 | `CTest`: `Metal_RenderTarget_MSAA` — device-clamped MSAA clear+resolve, pixel-verified | ⬜ |
 | METAL-117 | `CTest`: `Metal_RenderTarget_Mip` — auto-mip-on-unbind, sampled at a non-zero mip level | ⬜ |
 | METAL-118 | `CTest`: `Metal_MRT` — 2+ simultaneous targets, independent per-target clear-color proof | 🟨 landed 2026-07-21 as `Metal_MRT`, reusing `examples/easygl_mrt_test.cpp` verbatim (public XNA API only) — **CI-confirmed**: the MRT draw itself completes with zero validation errors (narrative item 87), but the test as a whole fails because its own final readback goes through `GetBackBufferData()`, hitting the same still-unresolved Clear-color-only readback bug (items 67–76/82/84/85) — not ✅ until that shared bug is resolved |
-| METAL-119 | Add a `Metal` column to `docs/rendertarget-support.md` | ⬜ |
+| METAL-119 | Add a `Metal` column to `docs/rendertarget-support.md` | ✅ done 2026-07-21 — see narrative item 91; the "Summary: what actually works today" table gained a 4th column, most rows 🔍 (source-complete/CI-runs-without-error, not pixel-verified due to the shared readback bug — footnoted) rather than ✅, matching this doc's own existing legend honestly |
 
 ## Phase 11 — TextureCube / Texture3D (METAL-120 – METAL-129)
 
@@ -3124,7 +3155,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-126 | Cross-reference: `METAL-65` (EnvironmentMapEffect) is blocked on this phase — do not attempt Phase 6's cube sampling before `METAL-120` lands | ⬜ |
 | METAL-127 | `CTest`: `Metal_TextureCube` — 6-face `SetData` round-trip + a real render-into-cube-face draw sampling it back | ⬜ |
 | METAL-128 | `CTest`: `Metal_Texture3D` — `SetData` round-trip + a minimal `texture3d<float>` sample-back shader | ⬜ |
-| METAL-129 | Add a `Metal` column to `docs/texture3d-texturecube-support.md` | ⬜ |
+| METAL-129 | Add a `Metal` column to `docs/texture3d-texturecube-support.md` | ✅ done 2026-07-21 — see narrative item 91; every relevant table gained a Metal column/row, mostly 🔍 (source-complete, no dedicated round-trip `CTest` yet — `METAL-127`/`128` still open) |
 
 ## Phase 12 — GPU readback (METAL-130 – METAL-135)
 
@@ -3266,7 +3297,7 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-195 | `GraphicsCapability::OcclusionQuery` — **fixed**: was a false-positive blanket `true` (`CreateOcclusionQuery()` still returns `nullptr`), now correctly answers `false` until Phase 13 lands | 🟨 |
 | METAL-196 | `GraphicsCapability::CustomEffects` — **fixed**: was a false-positive blanket `true` (`CreateEffectBackend()` still returns `nullptr`), now correctly answers `false` until Phase 14 lands | 🟨 |
 | METAL-197 | `SupportsCapability()` override added to `MetalGraphicsBackend`, covering the 3 known-wrong cases above and deferring to the (correct) base default otherwise | 🟨 |
-| METAL-198 | `CTest`: `Metal_Capabilities` — one assertion per `GraphicsCapability`, meant to be extended incrementally as each phase's real behavior lands, not written once and left stale | ⬜ |
+| METAL-198 | `CTest`: `Metal_Capabilities` — one assertion per `GraphicsCapability`, meant to be extended incrementally as each phase's real behavior lands, not written once and left stale | 🟨 landed 2026-07-21 — see narrative item 91: 8 assertions, all expecting `true` (Metal is the first CNA backend expected to support every currently-enumerated capability, including `WireFrame` — unlike EasyGL, GLES3 genuinely has no wireframe fill mode). Routes no readback through `GetBackBufferData()` at all, so unlike every other Metal `CTest` added this session, this one is NOT exposed to the known Clear-color-only readback bug — a real, independent regression guard, pending CI |
 
 ## Phase 21 — Argument buffers / bindless NOXNA (METAL-199 – METAL-204)
 
