@@ -89,6 +89,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_EnvMap3D COMMAND cna_test_webgpu_envmap3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-007: EnvironmentMapEffect must add EmissiveColor UNSCALED (FNA Lighting.fxh),
+    # not (Emissive+lightSum)*Diffuse. Discriminating non-white-Diffuse / non-zero-Emissive /
+    # non-default-Alpha cases; transfer-function-agnostic via env-map full-replace calibration.
+    cna_webgpu_test(cna_test_webgpu_envmap_emissive examples/webgpu_environmentmapeffect_emissive_test.cpp)
+    cna_register_backend_test(NAME WebGPU_EnvMapEmissive COMMAND cna_test_webgpu_envmap_emissive
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.
