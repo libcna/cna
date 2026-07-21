@@ -42,6 +42,7 @@ cmake-build-dx2/*
 cmake-build-dx30/*
 cmake-build-dx5/*
 cmake-build-dx6/*
+cmake-build-dx7/*
 dx2-spike/*.exe
 dx2-spike/*.o
 dx30-spike/*.exe
@@ -50,6 +51,8 @@ dx5-spike/*.exe
 dx5-spike/*.o
 dx6-spike/*.exe
 dx6-spike/*.o
+dx7-spike/*.exe
+dx7-spike/*.o
 __pycache__/
 *.pyc
 

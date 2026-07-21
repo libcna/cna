@@ -189,6 +189,10 @@ include(cmake/Tests/Dx5Tests.cmake)
 # real stencil buffer operations added; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 include(cmake/Tests/Dx6Tests.cmake)
 
+# plan_dx7.md: real DirectX 7 backend -- new IDirectDraw7/IDirect3D7 interfaces, viewport object
+# removed, texture binding simplified; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx7Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

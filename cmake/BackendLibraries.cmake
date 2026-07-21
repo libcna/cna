@@ -143,6 +143,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX6")
     # plan_dx6.md design decision 10: same confirmed minimal link set as DX1/DX2/DX30/DX5 -- ddraw +
     # dxguid + SDL3::SDL3. DX6 introduces no new interface at all, so no new link dependency either.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX7")
+    # plan_dx7.md design decision 14: same confirmed minimal link set as DX1/DX2/DX30/DX5/DX6 --
+    # ddraw + dxguid + SDL3::SDL3. DirectDrawCreateEx/IDirectDraw7/IDirect3D7 all resolve from the
+    # same import libraries, spike-confirmed (DX7-0) with no new link dependency.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package
