@@ -127,9 +127,13 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetStreamSourceFreq(0, D3DSTREAMSOURCE_INDEXEDDATA | static_cast<UINT>(instanceCount));
         device_->SetStreamSourceFreq(1, D3DSTREAMSOURCE_INSTANCEDATA | 1);
 
-        device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), 0, 0,
-                                      static_cast<UINT>(d3dVb.GetVertexCount()),
-                                      0, static_cast<UINT>(primitiveCount));
+        // REMED-GFX-060: honor DrawInstancedPrimitives baseVertex/startIndex (was hardcoded
+        // BaseVertexIndex=0/StartIndex=0). These index the PER-VERTEX geometry stream (stream 0);
+        // the per-instance stream 1's own offset stays 0 (SetStreamSource above) -- the two are
+        // independent. NumVertices is stream 0's vertex-buffer remainder from baseVertex.
+        device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), static_cast<INT>(params.baseVertex), 0,
+                                      static_cast<UINT>(d3dVb.GetVertexCount() - params.baseVertex),
+                                      static_cast<UINT>(params.startIndex), static_cast<UINT>(primitiveCount));
 
         // D3D9 stream-frequency state persists on the device until explicitly changed, and every
         // OTHER draw path in this backend reuses stream 0 -- leaving instancing semantics active
