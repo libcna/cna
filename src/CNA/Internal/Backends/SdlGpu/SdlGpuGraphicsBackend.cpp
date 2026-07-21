@@ -1201,6 +1201,18 @@ namespace CNA::Internal::Backends::SdlGpu
         slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
 
+    void SdlGpuGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        // REMED-GFX-069: store only. The value is snapshotted per draw into each QueuedDrawRef at
+        // Queue*Draw()/QueueSprite() time (PushDrawOrder) and applied at Present-time replay
+        // (ApplyBlendFactorForRef) -- never applied here, mirroring how every other per-command
+        // state (viewport, scissor rect, stencil reference) is captured on this deferred backend.
+        blendFactorR_ = r;
+        blendFactorG_ = g;
+        blendFactorB_ = b;
+        blendFactorA_ = a;
+    }
+
     void SdlGpuGraphicsBackend::SetReferenceStencil(int value)
     {
         referenceStencil_ = value;
@@ -1274,11 +1286,28 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_SetGPUScissor(pass, &rect);
     }
 
+    void SdlGpuGraphicsBackend::ApplyBlendFactorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref) const
+    {
+        // REMED-GFX-069: the constant blend color for the Blend::BlendFactor/InverseBlendFactor
+        // modes (mapped to SDL_GPU_BLENDFACTOR_CONSTANT_COLOR / ONE_MINUS_CONSTANT_COLOR in
+        // FillBlendState). SDL_FColor's channels are the same normalized [0,1] linear factors that
+        // GraphicsDevice::setBlendFactorProperty produced (Color byte / 255) -- direct R/G/B/A,
+        // no channel swap, no premultiply, no sRGB transfer (a numeric pipeline factor, not a
+        // framebuffer color). The alpha channel feeds the alpha blend factor slot when
+        // Alpha{Source,Destination}Blend uses BlendFactor (CONSTANT_COLOR uses .a for the alpha
+        // component). Applied unconditionally: it is inert for pipelines whose blend factors don't
+        // reference the constant, so no gating on the current BlendState is required -- the same
+        // "always set, harmlessly overwritten before the next real draw" property as the viewport
+        // and scissor.
+        const SDL_FColor bc{ref.blendFactorR, ref.blendFactorG, ref.blendFactorB, ref.blendFactorA};
+        SDL_SetGPUBlendConstants(pass, bc);
+    }
+
     void SdlGpuGraphicsBackend::PushDrawOrder(DrawKind kind, std::size_t index)
     {
-        // REMED-GFX-064/068: snapshot the current viewport AND scissor into the ref so a later
-        // SetRenderTarget reset / SetViewport / SetScissorRect / ApplyRasterizerState change never
-        // retroactively alters an already-queued draw's viewport or scissor.
+        // REMED-GFX-064/068/069: snapshot the current viewport, scissor AND blend factor into the
+        // ref so a later SetRenderTarget reset / SetViewport / SetScissorRect / ApplyRasterizerState
+        // / SetBlendFactor change never retroactively alters an already-queued draw's dynamic state.
         QueuedDrawRef ref{kind, index, viewportSet_, viewportX_, viewportY_,
                           viewportW_, viewportH_, viewportMinDepth_, viewportMaxDepth_};
         ref.scissorEnabled = scissorEnabled_;
@@ -1286,6 +1315,10 @@ namespace CNA::Internal::Backends::SdlGpu
         ref.scissorY = scissorY_;
         ref.scissorW = scissorW_;
         ref.scissorH = scissorH_;
+        ref.blendFactorR = blendFactorR_;
+        ref.blendFactorG = blendFactorG_;
+        ref.blendFactorB = blendFactorB_;
+        ref.blendFactorA = blendFactorA_;
         drawOrder_.push_back(ref);
     }
 
@@ -3684,6 +3717,12 @@ namespace CNA::Internal::Backends::SdlGpu
             // with the post-unbind full-backbuffer rect. Same "harmlessly overwritten for non-target
             // refs" property as the viewport.
             ApplyScissorForRef(pass, ref, static_cast<int>(viewportSize[0]), static_cast<int>(viewportSize[1]));
+            // REMED-GFX-069: apply this draw's own captured GraphicsDevice.BlendFactor before it is
+            // issued, for the same deferred-model reason as the viewport/scissor above -- SdlGpu
+            // replays queued draws at Present, so a live-member read here would give every draw the
+            // last BlendFactor set that frame. Same "harmlessly overwritten for non-target refs"
+            // property; inert for pipelines that don't use the constant blend factor.
+            ApplyBlendFactorForRef(pass, ref);
             switch (ref.kind)
             {
                 case DrawKind::Colored:

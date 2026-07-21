@@ -618,6 +618,17 @@ namespace CNA::Internal::Backends::SdlGpu
             // (no clip), matching RasterizerState.ScissorTestEnable=false.
             bool scissorEnabled = false;
             int scissorX = 0, scissorY = 0, scissorW = 0, scissorH = 0;
+            // REMED-GFX-069: the GraphicsDevice.BlendFactor (constant blend color) live when this
+            // draw was queued, captured per-draw (PushDrawOrder) and replayed via
+            // SDL_SetGPUBlendConstants in RenderQueuedDraws (ApplyBlendFactorForRef). Per-draw for
+            // the same deferred-model reason as viewport/scissor: this backend replays draws at
+            // Present, so a single live-member read there would give every queued draw the LAST
+            // BlendFactor set that frame, not the one each draw was issued under. Normalized 0..1
+            // linear factors (already divided by 255 by GraphicsDevice::setBlendFactorProperty);
+            // default 1,1,1,1 = XNA's GraphicsDevice.BlendFactor default (Color::White), so draws
+            // that predate any SetBlendFactor use White (correct XNA default) rather than SDL_gpu's
+            // arbitrary, driver-dependent uninitialized blend constant.
+            float blendFactorR = 1.0f, blendFactorG = 1.0f, blendFactorB = 1.0f, blendFactorA = 1.0f;
         };
 
         // SDLGPU-18: raw XNA Blend/BlendFunction ordinals, captured at Queue*Draw time so the
@@ -1071,6 +1082,18 @@ namespace CNA::Internal::Backends::SdlGpu
          */
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+        /** @brief Stores `GraphicsDevice.BlendFactor` (the constant blend color used by the
+         * `Blend::BlendFactor`/`Blend::InverseBlendFactor` modes), independent of a full
+         * `BlendState` re-application -- matches `IGraphicsBackend::SetBlendFactor`'s standalone
+         * contract (`REMED-GFX-069`). The r/g/b/a are already normalized to `[0,1]` linear factors
+         * by `GraphicsDevice::setBlendFactorProperty`. Store-only: captured PER DRAW into each
+         * `QueuedDrawRef` at `Queue*Draw()`/`QueueSprite()` time (`PushDrawOrder`) and applied via
+         * `SDL_SetGPUBlendConstants` per draw in `RenderQueuedDraws` (`ApplyBlendFactorForRef`).
+         * Per-draw (like the viewport `REMED-GFX-064` and scissor `REMED-GFX-068`) because this
+         * deferred backend replays draws at Present, so a live-member read there would give every
+         * queued draw the last BlendFactor set that frame -- the same deferred-model reasoning as
+         * viewport/scissor, and the reason a per-pass read would be wrong. */
+        void SetBlendFactor(float r, float g, float b, float a) override;
         /** @brief Stores `GraphicsDevice.ReferenceStencil`, independent of a full `DepthStencilState`
          * re-application -- matches `IGraphicsBackend::SetReferenceStencil`'s own documented
          * standalone-property contract. Captured into `RenderStateSnapshot::stencilReference` at
@@ -1451,6 +1474,12 @@ namespace CNA::Internal::Backends::SdlGpu
         // RenderQueuedDraws, mirroring ApplyViewportForRef.
         void ApplyScissorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
                                 int targetWidth, int targetHeight) const;
+        // REMED-GFX-069: applies SDL_SetGPUBlendConstants for one queued draw, using the ref's
+        // captured GraphicsDevice.BlendFactor. Applied unconditionally (like the viewport/scissor):
+        // it is inert for pipelines that don't reference CONSTANT_COLOR/ONE_MINUS_CONSTANT_COLOR, so
+        // no gating is needed. No target extents needed (a color factor, not a rect). Called per
+        // draw from RenderQueuedDraws, mirroring ApplyViewportForRef/ApplyScissorForRef.
+        void ApplyBlendFactorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref) const;
 
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
@@ -1616,6 +1645,16 @@ namespace CNA::Internal::Backends::SdlGpu
         bool fillModeWireframe_ = false;
         StencilKeyParams stencilParams_;  ///< readMask/writeMask live here now, see StencilKeyParams's own doc comment
         int referenceStencil_ = 0;  ///< real render-pass-time state (SDL_SetGPUStencilReference), not baked into any pipeline
+        // REMED-GFX-069: current GraphicsDevice.BlendFactor (normalized [0,1] linear factors), set by
+        // SetBlendFactor() and snapshotted into each QueuedDrawRef at Queue*Draw()/QueueSprite() time
+        // (PushDrawOrder), then applied via SDL_SetGPUBlendConstants per draw (ApplyBlendFactorForRef).
+        // Default 1,1,1,1 = XNA's GraphicsDevice.BlendFactor default (Color::White); this differs from
+        // SDL_gpu's own uninitialized blend constant, so pre-SetBlendFactor constant-color blends get
+        // the correct XNA default rather than a driver-dependent value.
+        float blendFactorR_ = 1.0f;
+        float blendFactorG_ = 1.0f;
+        float blendFactorB_ = 1.0f;
+        float blendFactorA_ = 1.0f;
         bool scissorEnabled_ = false;
         int scissorX_ = 0;
         int scissorY_ = 0;
