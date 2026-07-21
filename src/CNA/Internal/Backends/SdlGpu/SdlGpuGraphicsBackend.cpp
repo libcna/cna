@@ -736,11 +736,11 @@ namespace CNA::Internal::Backends::SdlGpu
         const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
             cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
-        // SDLGPU-20: applied once per render pass (the live scissor state as of Present() time),
-        // not re-snapshotted per queued draw -- a deliberate, documented scope simplification
-        // relative to Vulkan's own true per-draw dynamic vkCmdSetScissor (real XNA games rarely
-        // change ScissorRectangle multiple times within a single frame between different draws).
-        ApplyScissorForPass(pass, physicalWidth_, physicalHeight_);
+        // REMED-GFX-068: the scissor (like the viewport, REMED-GFX-064) is applied PER DRAW inside
+        // RenderQueuedDraws from each queued draw's own captured state, not once per pass here -- a
+        // per-pass read of the live scissor would apply the post-unbind full-backbuffer rect (see
+        // ApplyScissorForRef / QueuedDrawRef). SDL sets a default full-target scissor at pass begin,
+        // which each draw's ApplyScissorForRef then overrides.
         // Real chronological draw order (adversarial-review finding #4) -- see drawOrder_'s own
         // doc comment; replaces the old fixed "all 3D families, then all sprites" sequence.
         const DrawTarget swapchainTarget{};
@@ -852,7 +852,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, colorTargets.data(), static_cast<Uint32>(colorTargetCount),
                                                           hasDepth ? &depthStencilTarget : nullptr);
-        ApplyScissorForPass(pass, target->width, target->height);
+        // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{target.get(), nullptr, -1};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount, colorTargetCount);
         SDL_EndGPURenderPass(pass);
@@ -922,7 +922,7 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
-        ApplyScissorForPass(pass, cube->size, cube->size);
+        // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{nullptr, cube.get(), face};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
         SDL_EndGPURenderPass(pass);
@@ -1239,15 +1239,27 @@ namespace CNA::Internal::Backends::SdlGpu
         samplerSlots_[slot].maxAnisotropy = maxAnisotropy;
     }
 
-    void SdlGpuGraphicsBackend::ApplyScissorForPass(SDL_GPURenderPass* pass, int targetWidth, int targetHeight) const
+    void SdlGpuGraphicsBackend::ApplyScissorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
+                                                   int targetWidth, int targetHeight) const
     {
         SDL_Rect rect{};
-        if (scissorEnabled_ && scissorW_ > 0 && scissorH_ > 0)
+        if (ref.scissorEnabled && ref.scissorW > 0 && ref.scissorH > 0)
         {
-            rect.x = scissorX_;
-            rect.y = scissorY_;
-            rect.w = scissorW_;
-            rect.h = scissorH_;
+            // A scissor is a CLIP (unlike the viewport, which is an NDC->framebuffer transform), so
+            // clamp the captured rectangle to the target's physical extent in 64-bit space -- this
+            // keeps the SDL_Rect within [0,target] with a non-negative size even for a rect that
+            // begins outside or overhangs the target edge (SDL's Vulkan/Metal/D3D12 scissor VUIDs
+            // require offset >= 0 and offset+extent within the framebuffer). Mirrors
+            // VulkanGraphicsBackend::computeScissor (REMED-GFX-013). SDL_Rect is top-left origin,
+            // matching XNA ScissorRectangle directly -- no Y-flip.
+            const int64_t x0 = std::clamp<int64_t>(ref.scissorX, 0, targetWidth);
+            const int64_t y0 = std::clamp<int64_t>(ref.scissorY, 0, targetHeight);
+            const int64_t x1 = std::clamp<int64_t>(static_cast<int64_t>(ref.scissorX) + ref.scissorW, 0, targetWidth);
+            const int64_t y1 = std::clamp<int64_t>(static_cast<int64_t>(ref.scissorY) + ref.scissorH, 0, targetHeight);
+            rect.x = static_cast<int>(x0);
+            rect.y = static_cast<int>(y0);
+            rect.w = static_cast<int>(x1 > x0 ? x1 - x0 : 0);
+            rect.h = static_cast<int>(y1 > y0 ? y1 - y0 : 0);
         }
         else
         {
@@ -1264,10 +1276,17 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::PushDrawOrder(DrawKind kind, std::size_t index)
     {
-        // REMED-GFX-064: snapshot the current viewport into the ref so a later SetRenderTarget
-        // reset / SetViewport change never retroactively alters an already-queued draw's viewport.
-        drawOrder_.push_back(QueuedDrawRef{kind, index, viewportSet_, viewportX_, viewportY_,
-                                           viewportW_, viewportH_, viewportMinDepth_, viewportMaxDepth_});
+        // REMED-GFX-064/068: snapshot the current viewport AND scissor into the ref so a later
+        // SetRenderTarget reset / SetViewport / SetScissorRect / ApplyRasterizerState change never
+        // retroactively alters an already-queued draw's viewport or scissor.
+        QueuedDrawRef ref{kind, index, viewportSet_, viewportX_, viewportY_,
+                          viewportW_, viewportH_, viewportMinDepth_, viewportMaxDepth_};
+        ref.scissorEnabled = scissorEnabled_;
+        ref.scissorX = scissorX_;
+        ref.scissorY = scissorY_;
+        ref.scissorW = scissorW_;
+        ref.scissorH = scissorH_;
+        drawOrder_.push_back(ref);
     }
 
     void SdlGpuGraphicsBackend::ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
@@ -3659,6 +3678,12 @@ namespace CNA::Internal::Backends::SdlGpu
             // viewport at Present is not the sub-region an RT draw used. Refs not targeting this
             // pass do not draw; their apply is harmlessly overwritten before the next real draw.
             ApplyViewportForRef(pass, ref, static_cast<int>(viewportSize[0]), static_cast<int>(viewportSize[1]));
+            // REMED-GFX-068: apply this draw's own captured scissor (rect + ScissorTestEnable) for
+            // exactly the same deferred-model reason as the viewport above -- SetRenderTarget resets
+            // ScissorRectangle to the full target on unbind, so a per-pass read would clip RT draws
+            // with the post-unbind full-backbuffer rect. Same "harmlessly overwritten for non-target
+            // refs" property as the viewport.
+            ApplyScissorForRef(pass, ref, static_cast<int>(viewportSize[0]), static_cast<int>(viewportSize[1]));
             switch (ref.kind)
             {
                 case DrawKind::Colored:

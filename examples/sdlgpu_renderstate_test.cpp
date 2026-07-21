@@ -27,7 +27,7 @@
 //   interior) -- proves FillMode is no longer hardcoded to Solid.
 // Check F -- RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle: a full-screen
 //   draw with a left-half scissor rect must only affect the left half, leaving the right half as
-//   background -- proves SetScissorRect/ApplyScissorForPass genuinely clip.
+//   background -- proves SetScissorRect/ApplyScissorForRef genuinely clip.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -330,20 +330,21 @@ class SdlGpuRenderStateTest : public Game
         dev.setRasterizerStateProperty(RasterizerState());
     }
 
-    // Check F: RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle. Scissor is
-    // applied once per render pass using the LIVE state as of that pass's own flush (see
-    // SdlGpuGraphicsBackend::ApplyScissorForPass's own doc comment) -- so the readback for this
-    // target must happen BEFORE SetRenderTarget(nullptr), which (matching real FNA behaviour, see
-    // GraphicsDevice::SetRenderTarget) always resets ScissorRectangle to the new current target's
-    // full size when the render target changes -- reading after that reset would force this
-    // pass's flush with the scissor rect already clobbered back to the full backbuffer.
+    // Check F: RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle. Since
+    // REMED-GFX-068 the scissor is captured PER DRAW at enqueue time (into each QueuedDrawRef) and
+    // applied via SDL_SetGPUScissor at replay (see SdlGpuGraphicsBackend::ApplyScissorForRef), so
+    // this readback would clip correctly even after SetRenderTarget(nullptr) resets ScissorRectangle
+    // -- but it is deliberately kept BEFORE the unbind (the pre-GFX-068 requirement) as a stricter,
+    // still-valid exercise of the live-then-flush path.
     void RunScissorCheck(GraphicsDevice& dev)
     {
         // Force everything queued by the EARLIER checks (still pending -- nothing has called
-        // GetData() yet) to flush NOW, while scissor is still disabled. All pending targets
-        // share a single EnsureFrameRendered() flush, so if this check's own scissor-enabled
-        // read below were the FIRST GetData() call of the frame, it would retroactively apply
-        // THIS check's scissor rect to every other still-pending target too.
+        // GetData() yet) to flush NOW, while scissor is still disabled. Pre-REMED-GFX-068 this was
+        // required for correctness: the scissor was applied once per pass from the live state, and
+        // all pending targets share a single EnsureFrameRendered() flush, so a scissor-enabled read
+        // here as the frame's FIRST GetData() would retroactively clip every other still-pending
+        // target too. GFX-068 made scissor per-draw (each queued draw carries its own captured rect),
+        // so that contamination can no longer occur -- this early flush is kept as harmless hygiene.
         (void)ReadPixel(*rtAdditive_, 0, 0);
 
         dev.SetRenderTarget(rtScissor_.get());

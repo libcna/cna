@@ -608,6 +608,16 @@ namespace CNA::Internal::Backends::SdlGpu
             bool viewportSet = false;
             int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
             float viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
+            // REMED-GFX-068: the RasterizerState.ScissorTestEnable + GraphicsDevice.ScissorRectangle
+            // live when this draw was queued, captured per-draw (PushDrawOrder) and replayed via
+            // SDL_SetGPUScissor in RenderQueuedDraws (ApplyScissorForRef). Per-draw for the same
+            // deferred-model reason as the viewport: SetRenderTarget resets ScissorRectangle to the
+            // full target on bind/unbind, so a per-pass read of the live scissor at Present would be
+            // the post-unbind full-backbuffer rect, not the sub-rect an RT draw was issued under.
+            // scissorEnabled=false (or a zero-size rect) => the pass's full render-target extents
+            // (no clip), matching RasterizerState.ScissorTestEnable=false.
+            bool scissorEnabled = false;
+            int scissorX = 0, scissorY = 0, scissorW = 0, scissorH = 0;
         };
 
         // SDLGPU-18: raw XNA Blend/BlendFunction ordinals, captured at Queue*Draw time so the
@@ -638,10 +648,11 @@ namespace CNA::Internal::Backends::SdlGpu
         // stay as each DrawCommand's own pre-existing, separate fields (unchanged) since those
         // predate this and are already correctly threaded through; this struct only carries the
         // NEW dimensions this task adds. ScissorTestEnable/DepthBias/SlopeScaleDepthBias are
-        // deliberately NOT here -- scissor is real render-pass-time state (see SetScissorRect),
-        // and SDL_gpu has no per-draw-dynamic depth-bias equivalent to Vulkan's vkCmdSetDepthBias
-        // (only a pipeline-baked one), so depth bias is a documented, deliberate deferral (see
-        // plan_sdlgpu.md's SDLGPU-20 row).
+        // deliberately NOT here -- the scissor rect+enable are per-draw pass state carried in
+        // QueuedDrawRef instead (REMED-GFX-068, applied via SDL_SetGPUScissor in ApplyScissorForRef,
+        // exactly like the viewport), not baked into the pipeline; and SDL_gpu has no
+        // per-draw-dynamic depth-bias equivalent to Vulkan's vkCmdSetDepthBias (only a pipeline-baked
+        // one), so depth bias is a documented, deliberate deferral (see plan_sdlgpu.md's SDLGPU-20 row).
         struct RenderStateSnapshot
         {
             bool blendEnabled = false;
@@ -650,8 +661,9 @@ namespace CNA::Internal::Backends::SdlGpu
             bool wireframe = false;
             StencilKeyParams stencil;
             // SDL_gpu exposes this as a genuine per-draw dynamic value (SDL_SetGPUStencilReference),
-            // not a pipeline-baked one -- captured per-command like the rest of this snapshot rather
-            // than applied once per pass (unlike scissor, which has no per-draw SDL_gpu equivalent).
+            // not a pipeline-baked one -- captured per-command like the rest of this snapshot. (The
+            // scissor is likewise per-draw dynamic via SDL_SetGPUScissor, but it lives in
+            // QueuedDrawRef with the viewport rather than here -- REMED-GFX-068.)
             int stencilReference = 0;
         };
 
@@ -1048,8 +1060,9 @@ namespace CNA::Internal::Backends::SdlGpu
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
         /**
          * @brief Real `RasterizerState` mapping (`SDLGPU-20`) -- `cullMode`/`fillMode` are baked
-         * into every 3D/sprite pipeline's `SDL_GPURasterizerState`; `scissorTestEnable` is applied
-         * per render pass via `SDL_SetGPUScissor` (see `SetScissorRect()`). `depthBias`/
+         * into every 3D/sprite pipeline's `SDL_GPURasterizerState`; `scissorTestEnable` is captured
+         * per draw and applied via `SDL_SetGPUScissor` (`REMED-GFX-068`, see `SetScissorRect()`).
+         * `depthBias`/
          * `slopeScaleDepthBias` are stored but deliberately NOT yet applied: unlike Vulkan's
          * `vkCmdSetDepthBias` (a true per-draw dynamic state), `SDL_gpu` only exposes depth bias as
          * pipeline-baked `SDL_GPURasterizerState` fields, which would require folding two floats
@@ -1065,16 +1078,21 @@ namespace CNA::Internal::Backends::SdlGpu
          * `SDL_SetGPUStencilReference` (a genuine SDL_gpu per-draw dynamic value, not baked into
          * the pipeline) in each `Render*Draws`/`RenderSprites` function. */
         void SetReferenceStencil(int value) override;
-        /** @brief Real scissor-rect mapping (`SDLGPU-20`) -- stores the rect; actually applied via
-         * `SDL_SetGPUScissor` once per render pass in `RenderSprites`/`Render*Draws`, gated on
-         * `ApplyRasterizerState`'s own `scissorTestEnable` flag (a disabled scissor test uses the
-         * full render-target extents instead of this rect, matching "no clipping"). */
+        /** @brief Real scissor-rect mapping (`SDLGPU-20`) -- stores the rect; captured PER DRAW into
+         * each `QueuedDrawRef` at `Queue*Draw()`/`QueueSprite()` time (`PushDrawOrder`) alongside the
+         * viewport, and applied via `SDL_SetGPUScissor` per draw in `RenderQueuedDraws`
+         * (`ApplyScissorForRef`), gated on `ApplyRasterizerState`'s own `scissorTestEnable` flag (a
+         * disabled scissor test uses the full render-target extents instead of this rect, matching
+         * "no clipping"). Per-draw (not per-pass) for the same deferred-model reason as the viewport
+         * (`REMED-GFX-068`, see `SetViewport()`): `SetRenderTarget` resets `ScissorRectangle` on
+         * bind/unbind, so a per-pass read of the live scissor at Present would be the post-unbind
+         * full-backbuffer rect, not the sub-rect an RT draw was issued under. */
         void SetScissorRect(int x, int y, int w, int h) override;
         /**
          * @brief Real `GraphicsDevice.Viewport` mapping (`REMED-GFX-064`) -- stores the sub-region
          * viewport rect + depth range; captured PER DRAW into each `QueuedDrawRef` at
          * `Queue*Draw()`/`QueueSprite()` time and applied via `SDL_SetGPUViewport` per draw in
-         * `RenderQueuedDraws`. Per-draw (not per-pass like the scissor) because this deferred
+         * `RenderQueuedDraws`. Per-draw (like the scissor, `REMED-GFX-068`) because this deferred
          * backend replays draws at Present and `SetRenderTarget` resets the frame-global viewport
          * on bind/unbind, so a per-pass read of the live viewport would be wrong -- the same
          * deferred-model reasoning `VulkanGraphicsBackend` (GFX-062) uses. An unset or degenerate
@@ -1416,21 +1434,23 @@ namespace CNA::Internal::Backends::SdlGpu
         // ApplyDepthStencilState calls never retroactively change an already-queued draw's baked
         // pipeline (mirrors every other per-command uniform snapshot already established here).
         [[nodiscard]] RenderStateSnapshot CaptureRenderState() const;
-        // Applies SDL_SetGPUScissor for the current render pass, using scissorEnabled_'s rect if
-        // set, otherwise the full render-target/swapchain extents (SDLGPU-20) -- called once per
-        // render pass from RenderSprites/Render*Draws' own pass-setup code, mirroring how
-        // viewport/scissor are real render-pass-time state on this backend's Vulkan-driven peers,
-        // not baked into any pipeline.
-        void ApplyScissorForPass(SDL_GPURenderPass* pass, int targetWidth, int targetHeight) const;
-        // REMED-GFX-064: appends a QueuedDrawRef, snapshotting the current GraphicsDevice.Viewport
-        // (viewportSet_/viewportX_/...) into it so each queued draw carries the viewport it was
-        // issued under (per-draw capture, needed for this deferred backend -- see SetViewport()).
+        // REMED-GFX-068: appends a QueuedDrawRef, snapshotting the current GraphicsDevice.Viewport
+        // (viewportSet_/viewportX_/...) AND the current RasterizerState.ScissorTestEnable +
+        // GraphicsDevice.ScissorRectangle (scissorEnabled_/scissorX_/...) into it, so each queued
+        // draw carries the viewport and scissor it was issued under (per-draw capture, needed for
+        // this deferred backend -- see SetViewport()/SetScissorRect()).
         void PushDrawOrder(DrawKind kind, std::size_t index);
         // REMED-GFX-064: applies SDL_SetGPUViewport for one queued draw, using the ref's captured
         // viewport if set, otherwise the pass's full render-target extents (byte-identical to the
         // pre-fix implicit full-target viewport). Called per draw from RenderQueuedDraws.
         void ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
                                  int targetWidth, int targetHeight) const;
+        // REMED-GFX-068: applies SDL_SetGPUScissor for one queued draw, using the ref's captured
+        // scissor rect (clamped to the target's physical extent) if the scissor test was enabled,
+        // otherwise the pass's full render-target extents (no clip). Called per draw from
+        // RenderQueuedDraws, mirroring ApplyViewportForRef.
+        void ApplyScissorForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
+                                int targetWidth, int targetHeight) const;
 
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
