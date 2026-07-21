@@ -443,6 +443,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTarget_Viewport COMMAND cna_test_bgfx_rendertarget_viewport
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-066: per-draw ScissorRectangle must clip on FBO-bound (render-target) views too
+    cna_bgfx_test(cna_test_bgfx_rendertarget_scissor
+                  examples/bgfx_rendertarget_scissor_test.cpp)
+    cna_register_backend_test(NAME Bgfx_RenderTarget_Scissor COMMAND cna_test_bgfx_rendertarget_scissor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 750: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
     cna_bgfx_test(cna_test_bgfx_texture_address_mode
                   examples/bgfx_texture_address_mode_test.cpp)
