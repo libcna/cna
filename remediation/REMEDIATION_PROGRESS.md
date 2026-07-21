@@ -2326,7 +2326,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-017 | P1 | NOT STARTED | | | |
 | REMED-GFX-018 | P1 | NOT STARTED | | | |
 | REMED-GFX-019 | P1 | NOT STARTED | | | |
-| REMED-GFX-020 | P2 | NOT STARTED | | | |
+| REMED-GFX-020 | P2 | **DONE (2026-07-21)** | GRAPHICS | feature/audit | Two UNRELATED root causes, neither a shader-math bug. Specular (DX-125) = **test-oracle defect**: check asserted the per-pixel 255 but ran the vertex-lit (Gouraud, correct ~228) variant because it left `preferPerPixelLighting=false`; per-pixel variant verified = exactly 255. Black-vertex-color (PBR quad D) = **real production bug**: `Draw`/`DrawIndexed` hardcoded StartVertex/StartIndex/BaseVertex=0, ignoring `params.vertexStart/startIndex/baseVertex`, so `DrawPrimitives(...,startVertex=6,...)` silently redrew vertices 0..5. `D3D11_Pbr_VertexColor` 6/6, `D3D11_Smoke` 154/154, D3D11 shard 11/11 on real DXVK. Commits `ed1d906b`, `796885b3`. The 8 co-failing fog checks split out as **REMED-GFX-055** (`0453dc1c`). See detail below. |
 | REMED-GFX-021 | P2 | NOT STARTED | | | |
 | REMED-GFX-022 | P1 | NOT STARTED | | | |
 | REMED-GFX-023 | P2 | NOT STARTED | | | |
@@ -3589,3 +3589,84 @@ regressions. D3D9 `D3D9_Pbr` + `D3D9_SkinnedVertexColor` pass under Wine+DXVK9 (
   real-window runtime stays blocked by REMED-BUILD-012 (Wine/vkd3d-proton swap-chain crash).
 - **REMED-GFX-020** (D3D11 specular asymmetry + black vertex color) remains open — a separate task,
   surfaced again here only as the 2 pre-existing suite failures.
+
+---
+
+### REMED-GFX-020 — D3D11 specular + black-vertex-color (DONE, 2026-07-21)
+
+Both `D3D11_Smoke` (specular) and `D3D11_Pbr_VertexColor` (black vertex color) were reproduced on
+**real DXVK 2.6.0 / AMD Radeon 780M** (`DISPLAY=:0`, real monitor — Xvfb `:99` could not be used: the
+Windows SDL3 build under Wine reports "No displays available" on a virtual framebuffer, and DXVK
+needs the real GPU's Vulkan device; forcing `VK_ICD_FILENAMES=radeon_icd.json` surfaced the GPU but
+not a display). Root-caused independently — they are **not** the same bug, and neither is a shader-math
+defect. The plan's "structurally identical checks diverging → shader-line difference" hypothesis was
+**disproven**.
+
+**(a) Specular "asymmetry" (DX-125) = test-oracle defect, no production change.**
+Instrumented pixel readback: DX-125 (lit) = `(228,228,228)`, DX-151 (skinned) = `(255,255,255)`. The
+228 is *not* a wrong specular value — it is the correct **Gouraud** result. `DrawPrimitivesEx` selects
+`LitTextured3dVertexLit` whenever `lightingEnabled && !preferPerPixelLighting` (the XNA default), and
+that vertex-lit shader computes Blinn-Phong per-vertex and interpolates. Across the DX-125 screen
+triangle the three vertices have specular 0.961/0.826/0.851; at the sample pixel the barycentric
+interpolation is `0.500·0.961 + 0.238·0.826 + 0.262·0.851 = 0.900 → 229 ≈ 228`. DX-151 passed only
+because it left `lightingEnabled=false`, steering to the per-pixel `Skinned3d` base shader.
+**Confirming experiment:** the same DX-125 scene re-run with `preferPerPixelLighting=true` gives
+**exactly `(255,255,255)`** — the per-pixel `lit_textured3d` shader is correct. Fix: opt DX-125/DX-151
+into per-pixel lighting so the variant exercised matches the per-pixel value asserted, plus a
+reversed-light-direction discriminator (Light1 facing away → facing-gate zeroes the highlight → black)
+that pins the light-direction sign convention. Test-only. Commit `796885b3`.
+
+**(b) Black vertex color (PBR quad D) = real production bug, unrelated to vertex color.**
+Quad D rendered the green **clear color** `(0,255,0)` — i.e. nothing drawn. A 2-way diagnostic settled
+it: the *per-pixel* `Skinned3dColored` variant (quad C's known-good shader) **also** produced green on
+quad-D geometry at `startVertex=6`, while a fresh vb at `startVertex=0` drew correctly. So the defect
+is the **non-zero `startVertex`**, not the shader: `D3D11GraphicsBackend::DrawPrimitivesExImpl`
+hardcoded `context->Draw(vertexCount, 0)` (StartVertexLocation) and `DrawIndexed(indexCount, 0, 0)`
+(StartIndex/BaseVertex), ignoring `GpuDrawParams::vertexStart/startIndex/baseVertex` — every draw
+started at vertex 0. `DrawPrimitives(TriangleList, 6, 2)` therefore silently redrew quad C's vertices
+(0..5), leaving quad D's screen region untouched. Fix: thread the offsets into `Draw`/`DrawIndexed`
+(matching XNA semantics and EasyGL's `draw_arrays(first=params.vertexStart)`); the offset-0 path —
+every pre-existing indexed/non-indexed check — is byte-unchanged. Added a lighting-independent
+startVertex regression (2-quad PbrEffect emissive VB drawn only at `startVertex=6`; screen-right must
+be red, screen-left must stay the green clear). Commit `ed1d906b`. *Note:* the indexed
+`startIndex`/`baseVertex` half of the fix is correct-by-inspection but not yet exercised by a D3D11
+test with non-zero indexed offsets — a good follow-up (no existing D3D11 indexed test uses one).
+
+**Results:** `D3D11_Pbr_VertexColor` 6/6 PASS; `D3D11_Smoke` **154/154** (was 144/153 pre-fix); full
+**D3D11 ctest shard 11/11** on real DXVK, zero regressions. No shader source or DXBC changed (both root
+causes are CPU-side/test-side), so no bytecode regeneration was needed; `hlsl_shaders.hpp` is untouched.
+**D3D12 (backend parity, `5d20f374`):** shares `D3DCommon` shaders (unchanged here) and had the
+**identical** hardcoded-offset defect in its own `DrawPrimitivesExImpl` —
+`DrawInstanced(vertexCount, 1, 0, 0)` / `DrawIndexedInstanced(indexCount, 1, 0, 0, 0)`. Fixed for parity
+(threaded `params.vertexStart/startIndex/baseVertex`); **build-verified** (`cmake-build-d3d12-mingw`,
+CNA links) but **not runtime-verified** — D3D12 real-window runtime stays blocked by REMED-BUILD-012
+(Wine/vkd3d-proton swap-chain crash), and no D3D12 test exercises a non-zero draw offset yet.
+
+### REMED-GFX-055 — D3D11 direct-backend fog checks orphaned by the view-space fog switch (DONE, 2026-07-21)
+
+**New finding, discovered while running `D3D11_Smoke` for GFX-020.** Beyond the single specular
+failure GFX-020 catalogued (`152/153`), the smoke test now had **8** further failures — 7× DX-137
+(`colored_textured3d`/`textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/
+`skinned3d` "fogEnabled=true blends to FogColor") + 1× DX-69/DX-81. **Root cause:** the REMED-GFX-005/010
+D3D campaign switched D3DCommon fog from the old scalar object-space `fogStart`/`fogEnd` to FNA's
+view-space fog **vector** (`GpuDrawParams::fogVector`, `EffectHelpers.SetFogVector`). Stock effects bake
+that vector CPU-side, so **effect-driven fog is unaffected** — but these checks call
+`backend.DrawPrimitivesEx` directly, bypassing the effect layer, and only set the now-accepted-but-
+ignored scalar fields, so their `fogVector` stayed `{0,0,0,0}` → `dot()=0` → `keep=1` → no fog. The
+campaign's "9/11 pass, only 2 pre-existing failures" note missed these because `D3D11_Smoke` was already
+red from GFX-020 (a test-level pass/fail count hides internal check regressions — the "verify full
+output, don't trust completion claims" lesson again).
+
+**Fix (test-only, no production/shader change):** supply `fogVector` in the 8 direct-backend checks.
+The geometry sits at eye-space Z=0.5 (positive — D3D clips Z to `[0,1]`, so the realistic FNA
+negative-eyeZ vector cannot render here); full fog at `Z=fogEnd` needs `dot(float4(pos,1), fogVector)=1`
+→ `fogVector.z = 1/fogEnd = 2`. `alpha_test3d` is special-cased: its `D3DAlphaTestConstants` dropped the
+scalar fogEnabled flag (fog gated purely by a non-zero `FogVector`), so the vector is set only on its
+`fogEnabled=true` draw. A speculative in-backend scalar→vector fallback (mirroring D3D9's
+`ComputeFogVectorEXT`) was prototyped and **reverted** — it computes the FNA `(0,0,-2,0)` vector, which
+correctly does *not* fog positive-Z geometry, so it could not fix these tests and added production scope
+with no real consumer. Commit `0453dc1c`. `D3D11_Smoke` 154/154.
+**Follow-up (not done here):** D3D9 honors scalar fog in-backend (`ComputeFogVectorEXT`) while D3D11/D3D12
+now require `fogVector` — the `IGraphicsBackend.hpp:454` "D3D backends keep using fogStart/fogEnd" comment
+is stale for D3D11/D3D12. A dedicated task could either restore scalar-fog parity across the D3D family
+or formally deprecate the scalar fields for D3DCommon.

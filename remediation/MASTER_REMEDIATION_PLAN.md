@@ -1730,8 +1730,31 @@ respecting the same-submission constraint the existing comment documents. Fix th
 
 ### REMED-GFX-020 — D3D11: Blinn-Phong specular asymmetry and black-vertex-color failure
 
-**Sev** HIGH · **Pri** P2 · **Owner** GRAPHICS · **Status** NOT STARTED
-**Root cause** Not determined for either. Two runtime-confirmed defects: (a) specular fails for
+**Sev** HIGH · **Pri** P2 · **Owner** GRAPHICS · **Status** DONE (2026-07-21) — two UNRELATED root causes; neither was a shader-math bug.
+**Resolution** The two failures had **no shared root cause** (the "asymmetry" framing was a red herring):
+- **Specular (DX-125) = test-oracle defect, no production bug.** The check set `lightingEnabled=true`
+  with the default `preferPerPixelLighting=false`, which makes `DrawPrimitivesEx` dispatch the
+  **vertex-lit** `LitTextured3dVertexLit` (Gouraud) variant. Its per-vertex specular interpolated
+  across the large screen triangle to ~228 at the sample pixel (barycentric 0.900→229), a *correct*
+  Gouraud result, but the check asserted the per-pixel peak 255. DX-151 (skinned) passed only
+  incidentally: it left `lightingEnabled` at the default `false`, steering selection to the per-pixel
+  `Skinned3d` base shader. **Verified on real DXVK (Radeon 780M): the same DX-125 scene with
+  `preferPerPixelLighting=true` yields exactly 255** — the per-pixel `lit_textured3d` shader is correct.
+  Fixed by opting DX-125/DX-151 into per-pixel lighting + a reversed-light discriminator. `796885b3`.
+- **Black vertex color (PBR quad D) = real production bug in the D3D11 draw path, unrelated to vertex
+  color.** `D3D11GraphicsBackend::DrawPrimitivesExImpl` hardcoded `context->Draw(vertexCount, 0)`
+  (StartVertexLocation) and `DrawIndexed(indexCount, 0, 0)` (StartIndex/BaseVertex), ignoring
+  `GpuDrawParams::vertexStart/startIndex/baseVertex`. Quad D issues `DrawPrimitives(..., startVertex=6,
+  2)`; with the offset dropped it silently redrew vertices 0..5 (quad C's region), leaving quad D's
+  screen region at the green clear color — misread as a broken `Skinned3dVertexLitColored` shader.
+  Diagnostic proof: the per-pixel `Skinned3dColored` variant *also* produced green on quad-D geometry
+  at `startVertex=6`, while a fresh vb at `startVertex=0` drew fine. Fixed by threading the offsets
+  into `Draw`/`DrawIndexed`; added a lighting-independent startVertex regression. `ed1d906b`.
+**Verification** `D3D11_Pbr_VertexColor` 6/6 PASS; `D3D11_Smoke` **154/154**; full **D3D11 ctest shard
+11/11** on real DXVK. **New finding split out:** the 8 direct-backend fog checks that also fail in
+`D3D11_Smoke` are a *separate* regression from the GFX-005/010 fog campaign, tracked+fixed as
+**REMED-GFX-055** (`0453dc1c`) — not part of this task's root causes.
+**Original root cause (pre-investigation, retained for history)** Not determined for either. Two runtime-confirmed defects: (a) specular fails for
 non-skinned `lit_textured3d` at a geometry where `dot(H,N)=1` exactly (should be a full-white highlight),
 while the **structurally identical `skinned3d` check at the same geometry passes** — a genuine asymmetry;
 (b) `skinned3dvertexlitcolored` produces green `(0,255,0,255)` instead of the expected black for an
