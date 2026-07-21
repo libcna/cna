@@ -87,14 +87,17 @@ Vulkan test would fail without an ICD.
   backend), `DebugSimulateContextLoss()`/`DebugRestoreContext()` (destroy + recreate).
 - `Texture2D` creation and level-0 upload (`glTexImage2D`), sampler filter/wrap state
   (`glTexParameteri`).
-- Client-side vertex/16-bit index buffers (`OpenGLES1VertexBufferBackend`/
-  `OpenGLES1IndexBufferBackend`) — ES 1.1 core does not mandate GPU buffer objects
-  (`GL_OES_vertex_buffer_object` is an optional extension), so every draw uploads directly from a
-  CPU-side byte array via `glVertexPointer`/`glColorPointer`/`glTexCoordPointer`/
-  `glNormalPointer`, which the fixed-function pipeline always supports without any extension.
+- Real GPU-side vertex/16-bit index buffer objects (`OpenGLES1VertexBufferBackend`/
+  `OpenGLES1IndexBufferBackend`) — `glGenBuffers`/`glBindBuffer`/`glBufferData` turned out to be
+  **core** ES 1.1 entry points (confirmed directly against the real system `GLES/gl.h`), so every
+  draw binds the real buffer and uses byte offsets with `glVertexPointer`/`glColorPointer`/
+  `glTexCoordPointer`/`glNormalPointer`/`glDrawElements`, not client-side memory. The index buffer
+  additionally keeps a small CPU-side shadow of the raw index values, used only for wireframe
+  emulation (below).
 - `SpriteBatch` (2D): an orthographic `glOrthof` projection matching XNA's top-left-origin pixel
   convention, `GL_MODULATE` texture environment, per-vertex color, rotation/origin/flip/layer
-  handling identical to every other backend's `SpriteBatch` math.
+  handling identical to every other backend's `SpriteBatch` math. Sizes itself to a bound
+  `RenderTarget2D` instead of the window when one is active (see below).
 - `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (`BasicEffect` with
   `VertexColorEnabled=true`, no lighting/texture): loads `GL_PROJECTION`/`GL_MODELVIEW` directly
   from XNA's `Matrix::ToColumnMajor()`.
@@ -104,10 +107,27 @@ Vulkan test would fail without an ICD.
   - up to 3 directional lights (`GL_LIGHT0..2`, `glLightfv`/`glMaterialfv`/`glMaterialf`), applied
     under a view-only `GL_MODELVIEW` so world-space light directions land correctly in eye space,
   - fog (`glFog*`, `GL_LINEAR` mode, matching `BasicEffect`'s eye-space start/end convention),
-  - a best-effort `glAlphaFunc` mapping of `AlphaTestEffect`'s 4-way tolerance-band test.
+  - a best-effort `glAlphaFunc` mapping of `AlphaTestEffect`'s 4-way tolerance-band test,
+  - **`DualTextureEffect`**: real ES 1.1 multitexturing (`glActiveTexture`/`glClientActiveTexture`,
+    both core) — two `GL_COMBINE` stages reproduce the exact `(tex0*2) * tex1 * diffuseTint`
+    formula, gated on `GL_MAX_TEXTURE_UNITS >= 2`,
+  - **`EnvironmentMapEffect`**: real cube-map reflection via `GL_OES_texture_cube_map`'s
+    `glTexGeniOES(GL_TEXTURE_GEN_STR_OES, GL_TEXTURE_GEN_MODE_OES, GL_REFLECTION_MAP_OES)` —
+    genuine fixed-function automatic reflection-vector texture-coordinate generation, blended with
+    the base lit color via a `GL_INTERPOLATE` combine stage.
+  - Vertex-stride/extension preconditions not met for a requested dual-texture/env-map draw fall
+    back to the plain colored path, matching the skinned/PBR/instanced/custom-effect fallback.
+- Off-screen render targets (`OpenGLES1RenderTargetBackend`, `CreateRenderTarget2D`/
+  `SetRenderTarget2D`) via `GL_OES_framebuffer_object`, gated on the extension **and** every
+  needed entry point actually resolving via `SDL_GL_GetProcAddress` — returns `nullptr` (not a
+  `FATAL_ERROR`) when unavailable, matching `IGraphicsBackend`'s "unsupported backend" contract.
+- Wireframe emulation (`RasterizerState.FillMode = WireFrame`): re-expands `TriangleList`/
+  `TriangleStrip` draws into a `GL_LINES` edge list at draw time (reading real triangle indices
+  from the index buffer's CPU shadow for indexed draws), the same technique
+  `EasyGLGraphicsBackend::DrawWireframe` uses for its own no-`glPolygonMode` problem.
 - Render state: `ApplyBlendState` (`GL_OES_blend_func_separate`/`GL_OES_blend_subtract` resolved
   at runtime via `SDL_GL_GetProcAddress`, with a documented fallback when absent),
-  `ApplyDepthStencilState`, `ApplyRasterizerState` (cull mode, scissor), `ApplySamplerState`,
+  `ApplyDepthStencilState`, `ApplyRasterizerState` (cull mode, scissor, wireframe), `ApplySamplerState`,
   `SetScissorRect`, `SetViewport`.
 - `ReadBackbuffer()` (`glReadPixels` + row-flip, used by `GraphicsDevice::GetBackBufferData()`).
 
@@ -119,30 +139,31 @@ implemented"**, gaps for a fixed-function ES 1.1 pipeline:
 
 - **Custom `ShaderEffect` / GLSL shaders** — no shader compiler exists in ES 1.1 at all.
 - **`SkinnedEffect`/`SkinnedPbrEffect`** — no vertex skinning without the rare
-  `GL_OES_matrix_palette` extension, not assumed present.
+  `GL_OES_matrix_palette` extension, not implemented.
 - **`PbrEffect`** — metallic-roughness BRDF math has no fixed-function equivalent.
-- **`EnvironmentMapEffect`** — cube-map sampling has no fixed-function equivalent in ES 1.1 core
-  (`GL_OES_texture_cube_map` is an optional, uncommon extension on CM implementations); `envMap`
-  is accepted by `GpuDrawParams` but ignored, falling back to the plain colored path.
-- **`DualTextureEffect`** — ES 1.1 does support real multitexturing (`GL_MAX_TEXTURE_UNITS` ≥ 2 on
-  a conformant implementation), so this is technically feasible on this pipeline, but is not
-  implemented in this baseline (`dualTexture` falls back to the plain colored path). Left as
-  future work, tracked in `plan_opengles1.md`.
+- **`EnvironmentMapEffect`'s Fresnel edge-weighting and cube-alpha specular tint** — the base
+  reflection mapping itself IS implemented (real `GL_OES_texture_cube_map` reflection-vector
+  texgen, see above); only the per-pixel Fresnel weight and `EnvironmentMapSpecular` tint are not,
+  since neither has a fixed-function equivalent without much deeper `GL_COMBINE` staging than
+  this baseline implements (flat `envMapAmount` blending is used instead).
 - **Instancing** (`DrawInstancedPrimitivesEx`) — no fixed-function instancing mechanism exists;
   falls back to the plain colored path.
-- **`RenderTarget2D`/`RenderTargetCube`/`Texture3D`/`TextureCube`/`OcclusionQuery`** — ES 1.1 core
-  has none of these; `GL_OES_framebuffer_object` (a common but optional extension) could back a
-  future `RenderTarget2D`, tracked as future work in `plan_opengles1.md`. The base
-  `IGraphicsBackend` defaults (`return nullptr`) apply unchanged.
+- **`RenderTargetCube`/`Texture3D`/`TextureCube`/`OcclusionQuery`** — `RenderTarget2D` IS
+  implemented (see above); these others are not. `TextureCube` storage exists internally
+  (`OpenGLES1TextureCubeBackend`, used for `EnvironmentMapEffect`'s reflection map) but is not
+  exposed as a general-purpose `CreateTextureCube()`-only-no-render-target-cube feature beyond
+  that. `OcclusionQuery` is a **confirmed-impossible**, not "not yet implemented", gap — direct
+  inspection of the real system `GLES/gl.h`/`GLES/glext.h` found no occlusion-query mechanism
+  anywhere in the ES 1.1 CM registry.
 - **`ApplyBlendState`'s `BlendFactor`/`InverseBlendFactor`** — ES 1.1 core has no `glBlendColor`/
   `GL_CONSTANT_COLOR`; these two `Blend` ordinals fall back to `SourceAlpha`/`InverseSourceAlpha`.
 - **`BlendFunction::Max`/`Min`** — `GL_OES_blend_subtract` only defines Add/Subtract/
   ReverseSubtract; Max/Min fall back to Add.
 - **Two-sided stencil** — ES 1.1 core has no separate front/back stencil functions; only the
   clockwise (front) face's stencil state is applied.
-- **`RasterizerState.FillMode = WireFrame`** and **`DepthBias`/`SlopeScaleDepthBias`** — ES 1.1 has
-  neither `glPolygonMode` nor `glPolygonOffset`; both are silently ignored (`SupportsCapability`
-  reports `WireFrame` as unsupported).
+- **`RasterizerState.DepthBias`/`SlopeScaleDepthBias`** — ES 1.1 has no `glPolygonOffset`; both are
+  silently ignored. (`FillMode = WireFrame` IS implemented, via `GL_LINES` re-expansion — see
+  above.)
 - **MSAA** — not implemented in this baseline (`SupportsCapability(MultiSampleAntiAliasing)`
   returns `false`).
 - **Combining per-vertex `Color` with `BasicEffect.DiffuseColor` simultaneously** — the
@@ -153,10 +174,14 @@ implemented"**, gaps for a fixed-function ES 1.1 pipeline:
   `DiffuseColor` is used as the flat constant color instead.
 - **Compressed texture formats (DXT/BC)** — not implemented; same cross-backend gap every other
   CNA backend currently has.
+- **Render target mip generation and multisampling** — `CreateRenderTarget2D`'s `mipMap`/
+  `multiSampleCount` parameters are accepted but ignored (matches several other CNA backends'
+  own current gaps for these two specifically).
 
-`GraphicsCapability::CustomEffects`, `MultipleRenderTargets`, `AnisotropicFiltering`, `WireFrame`,
-`OcclusionQuery`, and `MultiSampleAntiAliasing` all report `false` from `SupportsCapability()` —
-query before relying on the corresponding feature, per that method's own documented contract.
+`GraphicsCapability::CustomEffects`, `MultipleRenderTargets`, `AnisotropicFiltering`,
+`OcclusionQuery`, and `MultiSampleAntiAliasing` all report `false` from `SupportsCapability()`;
+`WireFrame` now reports `true` (2026-07-21) — query before relying on any of these, per that
+method's own documented contract.
 
 ## Architecture notes
 
@@ -164,11 +189,21 @@ Unlike every other CNA graphics backend, there is no shader compilation, no bind
 sets, and no pipeline objects — the entire draw path is GL's global matrix stack
 (`glMatrixMode`/`glLoadMatrixf`), texture environment stage (`glTexEnv*`), and per-vertex
 lighting/fog fixed-function state, reconfigured on every draw call. Vertex/index data lives in
-plain CPU-side `std::vector`s and is re-submitted via client-array pointers on every draw
-(`glVertexPointer`/`glDrawArrays`/`glDrawElements`) rather than uploaded once to a GPU buffer —
-this is simpler and always spec-legal on ES 1.1 (real GPU buffer objects are the optional
-`GL_OES_vertex_buffer_object` extension), at the cost of re-uploading the same data every frame if
-a game does not change it — a reasonable baseline trade-off for a first working implementation of
-a legacy, fixed-function-only target.
+real GPU buffer objects (`glGenBuffers`/`glBufferData` — confirmed core ES 1.1, not the optional
+extension originally assumed during this backend's initial bring-up), bound via `glBindBuffer`
+before each draw with `glVertexPointer`/etc. taking byte offsets rather than raw pointers.
+`SpriteBatch`'s own internal quad batcher is the one place that still uses genuine CPU-side
+client arrays directly (`glVertexPointer`/`glDrawElements` from a `std::vector`) — a deliberate,
+simpler choice for a batch that's rebuilt fresh every flush anyway, not a limitation.
+
+Effects with no natural single-`GL_TEXTURE_ENV`-stage mapping (`DualTextureEffect`,
+`EnvironmentMapEffect`) are implemented via ES 1.1's real multi-stage `GL_COMBINE` texture
+environment and multitexturing (`glActiveTexture`/`glClientActiveTexture`, both core), plus, for
+environment mapping, `GL_OES_texture_cube_map`'s automatic reflection-vector texture-coordinate
+generation (`glTexGeniOES(..., GL_REFLECTION_MAP_OES)`) — the exact fixed-function technique this
+extension exists for. Wireframe rendering has no native fixed-function path at all (no
+`glPolygonMode`), so it's synthesized by re-expanding each triangle into a `GL_LINES` edge list at
+draw time instead, the same technique already established by `EasyGLGraphicsBackend::DrawWireframe`
+for its own (different) "no polygon-mode" problem.
 
 See `plan_opengles1.md` for task-level status and the remaining work.

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <string_view>
 
 namespace CNA::Internal::Backends::OpenGLES1
 {
@@ -167,21 +168,56 @@ namespace CNA::Internal::Backends::OpenGLES1
     // OpenGLES1VertexBufferBackend / OpenGLES1IndexBufferBackend
     // -------------------------------------------------------------------------
 
+    OpenGLES1VertexBufferBackend::OpenGLES1VertexBufferBackend(int vertexCapacity)
+        : vertexCapacity_(vertexCapacity)
+    {
+        glGenBuffers(1, &buffer_);
+    }
+
+    OpenGLES1VertexBufferBackend::~OpenGLES1VertexBufferBackend()
+    {
+        if (buffer_) glDeleteBuffers(1, &buffer_);
+    }
+
     void OpenGLES1VertexBufferBackend::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
     {
         stride_ = stride_in_bytes;
         vertexCount_ = vertex_count;
-        data_.resize(static_cast<std::size_t>(vertex_count) * stride_in_bytes);
-        if (vertex_count > 0)
-            std::memcpy(data_.data(), data, data_.size());
+        glBindBuffer(GL_ARRAY_BUFFER, buffer_);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(static_cast<std::size_t>(vertex_count) * stride_in_bytes),
+                    data, GL_DYNAMIC_DRAW);
+    }
+
+    void OpenGLES1VertexBufferBackend::Bind() const
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, buffer_);
+    }
+
+    OpenGLES1IndexBufferBackend::OpenGLES1IndexBufferBackend(int indexCapacity)
+        : indexCapacity_(indexCapacity)
+    {
+        glGenBuffers(1, &buffer_);
+    }
+
+    OpenGLES1IndexBufferBackend::~OpenGLES1IndexBufferBackend()
+    {
+        if (buffer_) glDeleteBuffers(1, &buffer_);
     }
 
     void OpenGLES1IndexBufferBackend::SetData16(const void* data, int index_count)
     {
         indexCount_ = index_count;
-        data_.resize(static_cast<std::size_t>(index_count));
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(static_cast<std::size_t>(index_count) * sizeof(uint16_t)),
+                    data, GL_DYNAMIC_DRAW);
+        cpuShadow_.resize(static_cast<std::size_t>(index_count));
         if (index_count > 0)
-            std::memcpy(data_.data(), data, data_.size() * sizeof(uint16_t));
+            std::memcpy(cpuShadow_.data(), data, cpuShadow_.size() * sizeof(uint16_t));
+    }
+
+    void OpenGLES1IndexBufferBackend::Bind() const
+    {
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_);
     }
 
     // -------------------------------------------------------------------------
@@ -407,12 +443,57 @@ namespace CNA::Internal::Backends::OpenGLES1
         }
     }
 
+    namespace
+    {
+        bool HasGLExtension(const char* name)
+        {
+            const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+            if (!extensions) return false;
+            return std::string_view(extensions).find(name) != std::string_view::npos;
+        }
+    }
+
     void OpenGLES1GraphicsBackend::LoadExtensionEntryPoints()
     {
         glBlendFuncSeparateOES_ = reinterpret_cast<PFNGLBLENDFUNCSEPARATEOESPROC>(
             SDL_GL_GetProcAddress("glBlendFuncSeparateOES"));
         glBlendEquationOES_ = reinterpret_cast<PFNGLBLENDEQUATIONOESPROC>(
             SDL_GL_GetProcAddress("glBlendEquationOES"));
+
+        // GL_OES_framebuffer_object (OPENGLES1-72): optional -- RenderTarget2D support is gated on
+        // every one of these resolving, not just the extension string (a driver could advertise
+        // the string but only implement part of it; resolving is the real capability check).
+        fboSupported_ = HasGLExtension("GL_OES_framebuffer_object");
+        if (fboSupported_)
+        {
+            glGenFramebuffersOES_ = reinterpret_cast<PFNGLGENFRAMEBUFFERSOESPROC>(SDL_GL_GetProcAddress("glGenFramebuffersOES"));
+            glBindFramebufferOES_ = reinterpret_cast<PFNGLBINDFRAMEBUFFEROESPROC>(SDL_GL_GetProcAddress("glBindFramebufferOES"));
+            glDeleteFramebuffersOES_ = reinterpret_cast<PFNGLDELETEFRAMEBUFFERSOESPROC>(SDL_GL_GetProcAddress("glDeleteFramebuffersOES"));
+            glFramebufferTexture2DOES_ = reinterpret_cast<PFNGLFRAMEBUFFERTEXTURE2DOESPROC>(SDL_GL_GetProcAddress("glFramebufferTexture2DOES"));
+            glFramebufferRenderbufferOES_ = reinterpret_cast<PFNGLFRAMEBUFFERRENDERBUFFEROESPROC>(SDL_GL_GetProcAddress("glFramebufferRenderbufferOES"));
+            glCheckFramebufferStatusOES_ = reinterpret_cast<PFNGLCHECKFRAMEBUFFERSTATUSOESPROC>(SDL_GL_GetProcAddress("glCheckFramebufferStatusOES"));
+            glGenRenderbuffersOES_ = reinterpret_cast<PFNGLGENRENDERBUFFERSOESPROC>(SDL_GL_GetProcAddress("glGenRenderbuffersOES"));
+            glBindRenderbufferOES_ = reinterpret_cast<PFNGLBINDRENDERBUFFEROESPROC>(SDL_GL_GetProcAddress("glBindRenderbufferOES"));
+            glDeleteRenderbuffersOES_ = reinterpret_cast<PFNGLDELETERENDERBUFFERSOESPROC>(SDL_GL_GetProcAddress("glDeleteRenderbuffersOES"));
+            glRenderbufferStorageOES_ = reinterpret_cast<PFNGLRENDERBUFFERSTORAGEOESPROC>(SDL_GL_GetProcAddress("glRenderbufferStorageOES"));
+            fboSupported_ = glGenFramebuffersOES_ && glBindFramebufferOES_ && glDeleteFramebuffersOES_
+                          && glFramebufferTexture2DOES_ && glFramebufferRenderbufferOES_
+                          && glCheckFramebufferStatusOES_ && glGenRenderbuffersOES_
+                          && glBindRenderbufferOES_ && glDeleteRenderbuffersOES_ && glRenderbufferStorageOES_;
+        }
+
+        // GL_OES_texture_cube_map (OPENGLES1-74): also gates real EnvironmentMapEffect support
+        // (glTexGeniOES + GL_REFLECTION_MAP_OES, part of the same extension).
+        cubeMapSupported_ = HasGLExtension("GL_OES_texture_cube_map");
+        if (cubeMapSupported_)
+        {
+            glTexGeniOES_ = reinterpret_cast<PFNGLTEXGENIOESPROC>(SDL_GL_GetProcAddress("glTexGeniOES"));
+            cubeMapSupported_ = glTexGeniOES_ != nullptr;
+        }
+
+        GLint maxTextureUnits = 1;
+        glGetIntegerv(GL_MAX_TEXTURE_UNITS, &maxTextureUnits);
+        maxTextureUnits_ = maxTextureUnits;
     }
 
     void OpenGLES1GraphicsBackend::DebugSimulateContextLoss()
@@ -454,15 +535,34 @@ namespace CNA::Internal::Backends::OpenGLES1
             width = virtualWidth_ > 0 ? virtualWidth_ : physW;
     }
 
+    bool OpenGLES1GraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
+    {
+        if (!currentRenderTarget_) return false;
+        width = currentRenderTarget_->GetWidth();
+        height = currentRenderTarget_->GetHeight();
+        return true;
+    }
+
     void OpenGLES1GraphicsBackend::ApplyLogicalViewportAndOrtho2D()
     {
         int physW = 0, physH = 0;
-        GetPhysicalSize(physW, physH);
-        if (physW > 0 && physH > 0)
-            glViewport(0, 0, physW, physH);
-
         int logW = 0, logH = 0;
-        GetLogicalSize(logW, logH);
+        // Task 1078-equivalent: a SpriteBatch flush while a RenderTarget2D is bound must size its
+        // viewport/orthographic projection to the RT, not the window (see
+        // EasyGLGraphicsBackend::FlushBatch's identical GetCurrentRenderTarget2DSize() check).
+        if (GetCurrentRenderTarget2DSize(physW, physH))
+        {
+            glViewport(0, 0, physW, physH);
+            logW = physW;
+            logH = physH;
+        }
+        else
+        {
+            GetPhysicalSize(physW, physH);
+            if (physW > 0 && physH > 0)
+                glViewport(0, 0, physW, physH);
+            GetLogicalSize(logW, logH);
+        }
         if (logW <= 0 || logH <= 0)
         {
             logW = physW;
@@ -662,6 +762,163 @@ namespace CNA::Internal::Backends::OpenGLES1
     }
 
     // -------------------------------------------------------------------------
+    // OpenGLES1RenderTargetBackend (OPENGLES1-72, GL_OES_framebuffer_object)
+    // -------------------------------------------------------------------------
+
+    OpenGLES1RenderTargetBackend::OpenGLES1RenderTargetBackend(OpenGLES1GraphicsBackend* owner,
+                                                                int width, int height, int depthFormat)
+        : owner_(owner), width_(width), height_(height)
+    {
+        glGenTextures(1, &colorTexture_);
+        glBindTexture(GL_TEXTURE_2D, colorTexture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        owner_->glGenFramebuffersOES_(1, &fbo_);
+        owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, fbo_);
+        owner_->glFramebufferTexture2DOES_(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_TEXTURE_2D, colorTexture_, 0);
+
+        // DepthFormat raw ordinal: None=0, Depth16=1, Depth24=2, Depth24Stencil8=3. GL_OES_depth24/
+        // GL_OES_packed_depth_stencil are separate, less-universal extensions than
+        // GL_OES_framebuffer_object itself -- silently falls back to a 16-bit depth-only
+        // renderbuffer when either is absent (documented deviation, see docs/opengles1-backend.md).
+        if (depthFormat != 0)
+        {
+            owner_->glGenRenderbuffersOES_(1, &depthRenderbuffer_);
+            owner_->glBindRenderbufferOES_(GL_RENDERBUFFER_OES, depthRenderbuffer_);
+
+            GLenum internalFormat = GL_DEPTH_COMPONENT16_OES;
+            hasDepth_ = true;
+            hasStencil_ = false;
+            if (depthFormat == 3 && HasGLExtension("GL_OES_packed_depth_stencil"))
+            {
+                internalFormat = GL_DEPTH24_STENCIL8_OES;
+                hasStencil_ = true;
+            }
+            else if (depthFormat >= 2 && HasGLExtension("GL_OES_depth24"))
+            {
+                internalFormat = GL_DEPTH_COMPONENT24_OES;
+            }
+
+            owner_->glRenderbufferStorageOES_(GL_RENDERBUFFER_OES, internalFormat, width, height);
+            owner_->glFramebufferRenderbufferOES_(GL_FRAMEBUFFER_OES, GL_DEPTH_ATTACHMENT_OES,
+                                                  GL_RENDERBUFFER_OES, depthRenderbuffer_);
+            if (hasStencil_)
+                owner_->glFramebufferRenderbufferOES_(GL_FRAMEBUFFER_OES, GL_STENCIL_ATTACHMENT_OES,
+                                                      GL_RENDERBUFFER_OES, depthRenderbuffer_);
+        }
+
+        const GLenum status = owner_->glCheckFramebufferStatusOES_(GL_FRAMEBUFFER_OES);
+        owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, 0);
+        if (status != GL_FRAMEBUFFER_COMPLETE_OES)
+        {
+            throw std::runtime_error(
+                "OpenGLES1: RenderTarget2D framebuffer incomplete (GL_OES_framebuffer_object "
+                "status 0x" + std::to_string(status) + ")");
+        }
+    }
+
+    OpenGLES1RenderTargetBackend::~OpenGLES1RenderTargetBackend()
+    {
+        if (depthRenderbuffer_) owner_->glDeleteRenderbuffersOES_(1, &depthRenderbuffer_);
+        if (fbo_) owner_->glDeleteFramebuffersOES_(1, &fbo_);
+        if (colorTexture_) glDeleteTextures(1, &colorTexture_);
+    }
+
+    void OpenGLES1RenderTargetBackend::BindGL() const
+    {
+        glBindTexture(GL_TEXTURE_2D, colorTexture_);
+    }
+
+    void OpenGLES1RenderTargetBackend::BindAsRenderTarget()
+    {
+        owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, fbo_);
+    }
+
+    void OpenGLES1RenderTargetBackend::UnbindAsRenderTarget()
+    {
+        owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, 0);
+    }
+
+    std::unique_ptr<IRenderTargetBackend> OpenGLES1GraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        (void)preserveContents;
+        // Mip generation and multisampling are not implemented on this backend (documented gap,
+        // see docs/opengles1-backend.md) -- accepted-and-ignored, matching several other CNA
+        // backends' own current state for these two parameters.
+        (void)mipMap; (void)multiSampleCount;
+        if (!fboSupported_) return nullptr;
+        return std::make_unique<OpenGLES1RenderTargetBackend>(this, w, h, depthFormat);
+    }
+
+    void OpenGLES1GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt) rt->BindAsRenderTarget();
+        else if (currentRenderTarget_) currentRenderTarget_->UnbindAsRenderTarget();
+        currentRenderTarget_ = rt;
+    }
+
+    // -------------------------------------------------------------------------
+    // OpenGLES1TextureCubeBackend (OPENGLES1-74, GL_OES_texture_cube_map)
+    // -------------------------------------------------------------------------
+
+    OpenGLES1TextureCubeBackend::OpenGLES1TextureCubeBackend(int size)
+        : size_(size)
+    {
+        glGenTextures(1, &texture_);
+        glBindTexture(GL_TEXTURE_CUBE_MAP_OES, texture_);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        static constexpr GLenum kFaces[6] = {
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_X_OES,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Y_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_OES,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Z_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_OES,
+        };
+        for (GLenum face : kFaces)
+            glTexImage2D(face, 0, GL_RGBA, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    }
+
+    OpenGLES1TextureCubeBackend::~OpenGLES1TextureCubeBackend()
+    {
+        if (texture_) glDeleteTextures(1, &texture_);
+    }
+
+    void OpenGLES1TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                              const void* data, int dataLength)
+    {
+        (void)dataLength;
+        static constexpr GLenum kFaces[6] = {
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_X_OES,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Y_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_OES,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Z_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_OES,
+        };
+        glBindTexture(GL_TEXTURE_CUBE_MAP_OES, texture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        if (x == 0 && y == 0 && w == size_ && h == size_)
+            glTexImage2D(kFaces[face], level, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        else
+            glTexSubImage2D(kFaces[face], level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    }
+
+    void OpenGLES1TextureCubeBackend::BindGL() const
+    {
+        glBindTexture(GL_TEXTURE_CUBE_MAP_OES, texture_);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> OpenGLES1GraphicsBackend::CreateTextureCube(int size, bool mipMap, int surfaceFormat)
+    {
+        (void)mipMap; (void)surfaceFormat;
+        if (!cubeMapSupported_) return nullptr;
+        return std::make_unique<OpenGLES1TextureCubeBackend>(size);
+    }
+
+    // -------------------------------------------------------------------------
     // 3D draw — fixed-function vertex layout dispatch
     // -------------------------------------------------------------------------
 
@@ -674,14 +931,17 @@ namespace CNA::Internal::Backends::OpenGLES1
         constexpr std::size_t kStrideColorTexture = 24;
         constexpr std::size_t kStrideNormalTexture = 32;
 
-        void SetupClientArraysForStride(const uint8_t* base, std::size_t stride, bool wantColor, bool wantTexture, bool wantNormal)
+        // `stride`-relative offsets, not raw pointers -- OPENGLES1-73's real VBO is bound to
+        // GL_ARRAY_BUFFER by the caller first, so glVertexPointer/glColorPointer/glTexCoordPointer/
+        // glNormalPointer all interpret their pointer argument as a byte offset into it.
+        void SetupClientArraysForStride(std::size_t stride, bool wantColor, bool wantTexture, bool wantNormal)
         {
-            glVertexPointer(3, GL_FLOAT, static_cast<GLsizei>(stride), base);
+            glVertexPointer(3, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(std::size_t{0}));
 
             if (wantColor)
             {
                 glEnableClientState(GL_COLOR_ARRAY);
-                glColorPointer(4, GL_UNSIGNED_BYTE, static_cast<GLsizei>(stride), base + 12);
+                glColorPointer(4, GL_UNSIGNED_BYTE, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(std::size_t{12}));
             }
             else
             {
@@ -692,7 +952,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             {
                 glEnableClientState(GL_TEXTURE_COORD_ARRAY);
                 const std::size_t uvOffset = stride - 8;
-                glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), base + uvOffset);
+                glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uvOffset));
             }
             else
             {
@@ -702,12 +962,160 @@ namespace CNA::Internal::Backends::OpenGLES1
             if (wantNormal)
             {
                 glEnableClientState(GL_NORMAL_ARRAY);
-                glNormalPointer(GL_FLOAT, static_cast<GLsizei>(stride), base + 12);
+                glNormalPointer(GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(std::size_t{12}));
             }
             else
             {
                 glDisableClientState(GL_NORMAL_ARRAY);
             }
+        }
+
+        // OPENGLES1-71 (DualTextureEffect): real ES 1.1 multitexturing. Both units sample the SAME
+        // UV set (matches FNA's own DualTextureEffect vertex format -- one texture-coordinate
+        // pair, not two) -- reproduces dual_texture3d.frag.glsl's exact formula
+        // `(tex0.rgb*2, tex0.a) * tex1 * diffuseTint` via two GL_COMBINE stages: unit 0 computes
+        // `tex0 * primaryColor` scaled 2x (RGB only), unit 1 modulates that by its own texture
+        // sample.
+        void SetupDualTexture(const GpuDrawParams& params, std::size_t stride)
+        {
+            glActiveTexture(GL_TEXTURE0);
+            glEnable(GL_TEXTURE_2D);
+            params.texture0->BindGL();
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_PRIMARY_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+            glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 2.0f);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_PRIMARY_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
+            glTexEnvf(GL_TEXTURE_ENV, GL_ALPHA_SCALE, 1.0f);
+
+            glActiveTexture(GL_TEXTURE1);
+            glEnable(GL_TEXTURE_2D);
+            params.texture1->BindGL();
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+            glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 1.0f);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
+            glTexEnvf(GL_TEXTURE_ENV, GL_ALPHA_SCALE, 1.0f);
+
+            const std::size_t uvOffset = stride - 8;
+            glClientActiveTexture(GL_TEXTURE0);
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uvOffset));
+            glClientActiveTexture(GL_TEXTURE1);
+            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+            glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uvOffset));
+            glClientActiveTexture(GL_TEXTURE0);
+        }
+
+        // OPENGLES1-74 (EnvironmentMapEffect): real reflection-vector cube-map sampling via
+        // GL_OES_texture_cube_map's GL_REFLECTION_MAP_OES automatic texture-coordinate generation
+        // (the classic fixed-function environment-mapping technique -- the GPU recomputes the
+        // reflection vector from the per-vertex normal and the current MODELVIEW at draw time, no
+        // vertex-side UV data needed at all). Blended with unit 0's already-lit base color via a
+        // GL_INTERPOLATE combine stage, factor = envMapAmount (a GL_CONSTANT texture-environment
+        // colour's alpha channel). Fresnel edge-weighting (`fresnelEnabled`/`fresnelFactor`) has no
+        // fixed-function equivalent (would need a genuinely per-vertex-varying blend factor, not a
+        // single constant) and is intentionally not applied -- documented deviation, see
+        // docs/opengles1-backend.md.
+        void SetupEnvironmentMap(OpenGLES1GraphicsBackend& backend, const GpuDrawParams& params)
+        {
+            glActiveTexture(GL_TEXTURE1);
+            glEnable(GL_TEXTURE_CUBE_MAP_OES);
+            params.envMap->BindGL();
+            backend.glTexGeniOES_(GL_TEXTURE_GEN_STR_OES, GL_TEXTURE_GEN_MODE_OES, GL_REFLECTION_MAP_OES);
+            glEnable(GL_TEXTURE_GEN_STR_OES);
+
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_INTERPOLATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC2_RGB, GL_CONSTANT);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND2_RGB, GL_SRC_ALPHA);
+            const float envColor[4] = {0.0f, 0.0f, 0.0f, std::clamp(params.envMapAmount, 0.0f, 1.0f)};
+            glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, envColor);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_PREVIOUS);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+
+            glClientActiveTexture(GL_TEXTURE1);
+            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+            glClientActiveTexture(GL_TEXTURE0);
+            glActiveTexture(GL_TEXTURE0);
+        }
+
+        // Resets texture unit 1 to inactive -- called at the top of the plain single-texture path
+        // so leftover multitexture state from a previous DualTextureEffect/EnvironmentMapEffect
+        // draw doesn't leak into this one.
+        void DisableSecondTextureUnit()
+        {
+            glActiveTexture(GL_TEXTURE1);
+            glDisable(GL_TEXTURE_2D);
+            glDisable(GL_TEXTURE_CUBE_MAP_OES);
+            glDisable(GL_TEXTURE_GEN_STR_OES);
+            glClientActiveTexture(GL_TEXTURE1);
+            glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+            glClientActiveTexture(GL_TEXTURE0);
+            glActiveTexture(GL_TEXTURE0);
+        }
+
+        // OPENGLES1-76: FillMode::WireFrame has no glPolygonMode equivalent in ES 1.1 -- re-expands
+        // each triangle into a GL_LINES edge list, mirroring
+        // EasyGLGraphicsBackend::DrawWireframe's identical technique. `indices` is null for a
+        // non-indexed draw (vertex sequence read directly 0..N-1).
+        std::vector<uint16_t> BuildWireframeLineIndices(PrimitiveType primitive, int primitiveCount,
+                                                        const uint16_t* indices)
+        {
+            std::vector<uint16_t> lines;
+            auto readSrc = [&](int pos) -> uint16_t
+            {
+                return indices ? indices[pos] : static_cast<uint16_t>(pos);
+            };
+            auto edge = [&](uint16_t a, uint16_t b) { lines.push_back(a); lines.push_back(b); };
+            if (primitive == PrimitiveType::TriangleList)
+            {
+                for (int t = 0; t < primitiveCount; ++t)
+                {
+                    const uint16_t a = readSrc(3 * t), b = readSrc(3 * t + 1), c = readSrc(3 * t + 2);
+                    edge(a, b); edge(b, c); edge(c, a);
+                }
+            }
+            else if (primitive == PrimitiveType::TriangleStrip)
+            {
+                for (int t = 0; t < primitiveCount; ++t)
+                {
+                    const uint16_t a = readSrc(t), b = readSrc(t + 1), c = readSrc(t + 2);
+                    edge(a, b); edge(b, c); edge(c, a);
+                }
+            }
+            return lines;
+        }
+
+        // Issues the actual GL_LINES draw for a wireframe expansion, from CPU-side memory --
+        // GL_ELEMENT_ARRAY_BUFFER must be unbound first so glDrawElements' pointer argument is
+        // interpreted as a real client pointer, not an offset into whatever IBO the real
+        // (non-wireframe) draw had bound.
+        void DrawWireframeLines(const std::vector<uint16_t>& lines)
+        {
+            if (lines.empty()) return;
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+            glDrawElements(GL_LINES, static_cast<GLsizei>(lines.size()), GL_UNSIGNED_SHORT, lines.data());
         }
 
         // Sets up GL_LIGHTn (n=0..2) from a BasicEffect-shaped GpuDrawParams, called with
@@ -795,11 +1203,16 @@ namespace CNA::Internal::Backends::OpenGLES1
         glDisable(GL_TEXTURE_2D);
         glDisable(GL_ALPHA_TEST);
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        DisableSecondTextureUnit();
 
+        vb.Bind();
         glEnableClientState(GL_VERTEX_ARRAY);
-        SetupClientArraysForStride(vb.Data(), vb.Stride(), /*color*/true, /*texture*/false, /*normal*/false);
+        SetupClientArraysForStride(vb.Stride(), /*color*/true, /*texture*/false, /*normal*/false);
 
-        glDrawArrays(ToGLPrimitive(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
+        if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, nullptr));
+        else
+            glDrawArrays(ToGLPrimitive(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
     }
 
     void OpenGLES1GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb_in, const IIndexBufferBackend& ib_in,
@@ -822,12 +1235,22 @@ namespace CNA::Internal::Backends::OpenGLES1
         glDisable(GL_TEXTURE_2D);
         glDisable(GL_ALPHA_TEST);
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        DisableSecondTextureUnit();
 
+        vb.Bind();
         glEnableClientState(GL_VERTEX_ARRAY);
-        SetupClientArraysForStride(vb.Data(), vb.Stride(), /*color*/true, /*texture*/false, /*normal*/false);
+        SetupClientArraysForStride(vb.Stride(), /*color*/true, /*texture*/false, /*normal*/false);
 
-        glDrawElements(ToGLPrimitive(primitive), VertexCountForPrimitives(primitive, primitiveCount),
-                      GL_UNSIGNED_SHORT, ib.Data());
+        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
+        {
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, ib.CpuShadow().data()));
+        }
+        else
+        {
+            ib.Bind();
+            glDrawElements(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const void*>(std::size_t{0}));
+        }
     }
 
     void OpenGLES1GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
@@ -838,11 +1261,19 @@ namespace CNA::Internal::Backends::OpenGLES1
         const auto& vb = static_cast<const OpenGLES1VertexBufferBackend&>(vb_in);
         const std::size_t stride = vb.Stride();
 
-        // Skinning/PBR/env-mapping/custom-shader have no fixed-function equivalent on this
-        // backend -- see docs/opengles1-backend.md's "Important limitations" -- fall back to the
-        // plain colored path rather than silently rendering something wrong.
-        if (params.skinned || params.pbr || params.envMapping || params.dualTexture
-            || params.customEffectBackend || params.instanceCount > 1)
+        // OPENGLES1-71/74: DualTextureEffect (real ES 1.1 multitexturing) and EnvironmentMapEffect
+        // (real GL_REFLECTION_MAP_OES cube sampling) ARE implemented -- but only when the vertex
+        // stride/extension/texture preconditions they need are actually met; otherwise this falls
+        // through to the same "no fixed-function equivalent" colored-path fallback as skinning/
+        // PBR/custom-shader/instancing (see docs/opengles1-backend.md's "Important limitations").
+        const bool wantDualTexture = params.dualTexture && params.texture0 && params.texture1
+                                    && SupportsSecondTextureUnit()
+                                    && (stride == kStrideTexture || stride == kStrideColorTexture);
+        const bool wantEnvMap = params.envMapping && params.envMap && cubeMapSupported_
+                               && stride == kStrideNormalTexture;
+
+        if (params.skinned || params.pbr || params.customEffectBackend || params.instanceCount > 1
+            || (params.dualTexture && !wantDualTexture) || (params.envMapping && !wantEnvMap))
         {
             DrawColoredPrimitives(vb_in, world, view, projection, primitive, primitiveCount);
             return;
@@ -857,7 +1288,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glLoadMatrixf(projCol);
 
         const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
-        const bool wantNormal = params.lightingEnabled && stride == kStrideNormalTexture;
+        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
         const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
 
         if (params.lightingEnabled)
@@ -894,15 +1325,24 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         ApplyAlphaTest(params);
 
-        if (wantTexture)
+        if (wantDualTexture)
         {
-            glEnable(GL_TEXTURE_2D);
-            params.texture0->BindGL();
-            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+            SetupDualTexture(params, stride);
         }
         else
         {
-            glDisable(GL_TEXTURE_2D);
+            DisableSecondTextureUnit();
+            if (wantTexture)
+            {
+                glEnable(GL_TEXTURE_2D);
+                params.texture0->BindGL();
+                glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+            }
+            else
+            {
+                glDisable(GL_TEXTURE_2D);
+            }
+            if (wantEnvMap) SetupEnvironmentMap(*this, params);
         }
 
         if (!wantColorArray && !params.lightingEnabled)
@@ -915,10 +1355,14 @@ namespace CNA::Internal::Backends::OpenGLES1
             glColor4f(params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2], params.diffuseColor[3]);
         }
 
+        vb.Bind();
         glEnableClientState(GL_VERTEX_ARRAY);
-        SetupClientArraysForStride(vb.Data(), stride, wantColorArray, wantTexture, wantNormal);
+        SetupClientArraysForStride(stride, wantColorArray, wantTexture || wantDualTexture || wantEnvMap, wantNormal);
 
-        glDrawArrays(ToGLPrimitive(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
+        if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, nullptr));
+        else
+            glDrawArrays(ToGLPrimitive(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
 
         glDisable(GL_FOG);
         glDisable(GL_ALPHA_TEST);
@@ -933,8 +1377,14 @@ namespace CNA::Internal::Backends::OpenGLES1
         const auto& ib = static_cast<const OpenGLES1IndexBufferBackend&>(ib_in);
         const std::size_t stride = vb.Stride();
 
-        if (params.skinned || params.pbr || params.envMapping || params.dualTexture
-            || params.customEffectBackend || params.instanceCount > 1)
+        const bool wantDualTexture = params.dualTexture && params.texture0 && params.texture1
+                                    && SupportsSecondTextureUnit()
+                                    && (stride == kStrideTexture || stride == kStrideColorTexture);
+        const bool wantEnvMap = params.envMapping && params.envMap && cubeMapSupported_
+                               && stride == kStrideNormalTexture;
+
+        if (params.skinned || params.pbr || params.customEffectBackend || params.instanceCount > 1
+            || (params.dualTexture && !wantDualTexture) || (params.envMapping && !wantEnvMap))
         {
             DrawIndexedColoredPrimitives(vb_in, ib_in, world, view, projection, primitive, primitiveCount);
             return;
@@ -949,7 +1399,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glLoadMatrixf(projCol);
 
         const bool wantTexture = params.textureEnabled && params.texture0 != nullptr && stride != kStrideColor;
-        const bool wantNormal = params.lightingEnabled && stride == kStrideNormalTexture;
+        const bool wantNormal = (params.lightingEnabled || wantEnvMap) && stride == kStrideNormalTexture;
         const bool wantColorArray = params.vertexColorEnabled && (stride == kStrideColor || stride == kStrideColorTexture);
 
         if (params.lightingEnabled)
@@ -983,15 +1433,24 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         ApplyAlphaTest(params);
 
-        if (wantTexture)
+        if (wantDualTexture)
         {
-            glEnable(GL_TEXTURE_2D);
-            params.texture0->BindGL();
-            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+            SetupDualTexture(params, stride);
         }
         else
         {
-            glDisable(GL_TEXTURE_2D);
+            DisableSecondTextureUnit();
+            if (wantTexture)
+            {
+                glEnable(GL_TEXTURE_2D);
+                params.texture0->BindGL();
+                glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+            }
+            else
+            {
+                glDisable(GL_TEXTURE_2D);
+            }
+            if (wantEnvMap) SetupEnvironmentMap(*this, params);
         }
 
         if (!wantColorArray && !params.lightingEnabled)
@@ -999,11 +1458,20 @@ namespace CNA::Internal::Backends::OpenGLES1
             glColor4f(params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2], params.diffuseColor[3]);
         }
 
+        vb.Bind();
         glEnableClientState(GL_VERTEX_ARRAY);
-        SetupClientArraysForStride(vb.Data(), stride, wantColorArray, wantTexture, wantNormal);
+        SetupClientArraysForStride(stride, wantColorArray, wantTexture || wantDualTexture || wantEnvMap, wantNormal);
 
-        glDrawElements(ToGLPrimitive(primitive), VertexCountForPrimitives(primitive, primitiveCount),
-                      GL_UNSIGNED_SHORT, ib.Data());
+        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
+        {
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, ib.CpuShadow().data()));
+        }
+        else
+        {
+            ib.Bind();
+            glDrawElements(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const void*>(std::size_t{0}));
+        }
 
         glDisable(GL_FOG);
         glDisable(GL_ALPHA_TEST);
@@ -1085,7 +1553,10 @@ namespace CNA::Internal::Backends::OpenGLES1
                                                         float depthBias,
                                                         float slopeScaleDepthBias)
     {
-        (void)fillMode;  // ES1.1 has no glPolygonMode; wireframe emulation is future work.
+        // FillMode::WireFrame=1 -- ES1.1 has no glPolygonMode; OPENGLES1-76 emulates it by
+        // re-expanding triangles into GL_LINES at draw time instead (see Draw*'s own wireframe_
+        // checks and BuildWireframeLineIndices()).
+        wireframe_ = (fillMode == 1);
         (void)depthBias; (void)slopeScaleDepthBias;  // ES1.1 has no glPolygonOffset.
 
         // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2.
@@ -1133,7 +1604,10 @@ namespace CNA::Internal::Backends::OpenGLES1
         case CNA::GraphicsCapability::MultiSampleAntiAliasing: return false;
         case CNA::GraphicsCapability::MultipleRenderTargets: return false;
         case CNA::GraphicsCapability::AnisotropicFiltering: return false;
-        case CNA::GraphicsCapability::WireFrame: return false;
+        // OPENGLES1-76: emulated via GL_LINES re-expansion (see ApplyRasterizerState/Draw*).
+        case CNA::GraphicsCapability::WireFrame: return true;
+        // ES 1.1 core has no occlusion-query mechanism at all (confirmed: no such extension
+        // exists in the Khronos ES1.1 CM registry) -- a permanent gap, not "not yet implemented".
         case CNA::GraphicsCapability::OcclusionQuery: return false;
         // No programmable shaders at all on this backend -- permanently unsupported, not a
         // "not yet implemented" gap.

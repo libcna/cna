@@ -46,46 +46,73 @@ namespace CNA::Internal::Backends::OpenGLES1
     };
 
     /**
-     * @brief NOXNA. Client-side vertex storage for OpenGL ES 1.1.
+     * @brief NOXNA. Real GPU-side vertex buffer object for OpenGL ES 1.1.
      *
-     * ES 1.1 core does not mandate GPU-side buffer objects (GL_OES_vertex_buffer_object is an
-     * optional extension) -- every draw uploads directly from a CPU-side byte array via
-     * glVertexPointer/glColorPointer/glTexCoordPointer/glNormalPointer, which the fixed-function
-     * pipeline always supports.
+     * `glGenBuffers`/`glBindBuffer`/`glBufferData` are core OpenGL ES 1.1 entry points (the
+     * `GL_OES_vertex_buffer_object` extension was folded into the 1.1 core spec, unlike the
+     * separately-optional `GL_OES_framebuffer_object`/`GL_OES_texture_cube_map` this backend also
+     * uses elsewhere) -- so a real VBO is always available, no runtime extension check needed.
+     * `glVertexPointer`/`glColorPointer`/`glTexCoordPointer`/`glNormalPointer` take byte offsets
+     * into the currently-bound `GL_ARRAY_BUFFER` instead of raw client pointers once one is bound.
      */
     class OpenGLES1VertexBufferBackend : public IVertexBufferBackend
     {
     public:
-        explicit OpenGLES1VertexBufferBackend(int vertexCapacity) : vertexCapacity_(vertexCapacity) {}
+        explicit OpenGLES1VertexBufferBackend(int vertexCapacity);
+        ~OpenGLES1VertexBufferBackend() override;
+
+        OpenGLES1VertexBufferBackend(const OpenGLES1VertexBufferBackend&) = delete;
+        OpenGLES1VertexBufferBackend& operator=(const OpenGLES1VertexBufferBackend&) = delete;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         int GetVertexCount() const override { return vertexCount_; }
 
-        [[nodiscard]] const uint8_t* Data() const { return data_.data(); }
+        /// NOXNA. Binds this buffer's VBO to GL_ARRAY_BUFFER -- callers then use byte offsets
+        /// (not raw pointers) with glVertexPointer/glColorPointer/glTexCoordPointer/glNormalPointer.
+        void Bind() const;
         [[nodiscard]] std::size_t Stride() const { return stride_; }
 
     private:
+        unsigned int buffer_ = 0;
         int vertexCapacity_ = 0;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
-        std::vector<uint8_t> data_;
     };
 
-    /** @brief NOXNA. Client-side 16-bit index storage for OpenGL ES 1.1 (see vertex buffer above). */
+    /**
+     * @brief NOXNA. Real GPU-side 16-bit index buffer object for OpenGL ES 1.1 (see vertex buffer
+     * above).
+     *
+     * Also keeps a small CPU-side shadow copy of the raw index values -- needed only for
+     * wireframe emulation (OPENGLES1-76): re-expanding a triangle draw into `GL_LINES` requires
+     * reading back which vertices form each triangle, which a GPU-only buffer can't answer
+     * without a synchronous readback. Mirrors `EasyGLVertexBufferBackend`/
+     * `EasyGLIndexBufferBackend`'s own identical `GetCpuBytes()`-backed
+     * `EasyGLGraphicsBackend::DrawWireframe()` technique.
+     */
     class OpenGLES1IndexBufferBackend : public IIndexBufferBackend
     {
     public:
-        explicit OpenGLES1IndexBufferBackend(int indexCapacity) : indexCapacity_(indexCapacity) {}
+        explicit OpenGLES1IndexBufferBackend(int indexCapacity);
+        ~OpenGLES1IndexBufferBackend() override;
+
+        OpenGLES1IndexBufferBackend(const OpenGLES1IndexBufferBackend&) = delete;
+        OpenGLES1IndexBufferBackend& operator=(const OpenGLES1IndexBufferBackend&) = delete;
 
         void SetData16(const void* data, int index_count) override;
         int GetIndexCount() const override { return indexCount_; }
 
-        [[nodiscard]] const uint16_t* Data() const { return data_.data(); }
+        /// NOXNA. Binds this buffer's VBO to GL_ELEMENT_ARRAY_BUFFER -- callers then pass a byte
+        /// offset (not a raw pointer) as glDrawElements' `indices` argument.
+        void Bind() const;
+        /// NOXNA. CPU-side shadow of the index values, for wireframe emulation only (see above).
+        [[nodiscard]] const std::vector<uint16_t>& CpuShadow() const { return cpuShadow_; }
 
     private:
+        unsigned int buffer_ = 0;
         int indexCapacity_ = 0;
         int indexCount_ = 0;
-        std::vector<uint16_t> data_;
+        std::vector<uint16_t> cpuShadow_;
     };
 
     class OpenGLES1GraphicsBackend;
@@ -148,6 +175,80 @@ namespace CNA::Internal::Backends::OpenGLES1
     };
 
     /**
+     * @brief NOXNA. Off-screen render target backed by `GL_OES_framebuffer_object` (a common but
+     * optional ES 1.1 extension -- `OpenGLES1GraphicsBackend::CreateRenderTarget2D()` returns
+     * `nullptr`, matching `IGraphicsBackend`'s own "backend that can't support this" contract, on
+     * a driver where it isn't present).
+     *
+     * Depth/stencil is provided by a renderbuffer (`GL_DEPTH_COMPONENT16_OES`, upgraded to
+     * `GL_DEPTH_COMPONENT24_OES`/`GL_DEPTH24_STENCIL8_OES` only when the corresponding
+     * `GL_OES_depth24`/`GL_OES_packed_depth_stencil` extension is also present -- otherwise this
+     * silently falls back to a 16-bit depth-only buffer, a documented deviation, see
+     * docs/opengles1-backend.md). Mip generation and multisampling are not implemented (matches
+     * `CreateRenderTarget2D`'s own `mipMap`/`multiSampleCount` parameters being accepted but
+     * ignored, same as several other CNA backends' own current gaps).
+     */
+    class OpenGLES1RenderTargetBackend : public IRenderTargetBackend
+    {
+    public:
+        OpenGLES1RenderTargetBackend(OpenGLES1GraphicsBackend* owner, int width, int height, int depthFormat);
+        ~OpenGLES1RenderTargetBackend() override;
+
+        OpenGLES1RenderTargetBackend(const OpenGLES1RenderTargetBackend&) = delete;
+        OpenGLES1RenderTargetBackend& operator=(const OpenGLES1RenderTargetBackend&) = delete;
+
+        int GetWidth() const override { return width_; }
+        int GetHeight() const override { return height_; }
+        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        void BindGL() const override;
+
+        void BindAsRenderTarget() override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetColorGLHandle() const override { return colorTexture_; }
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
+        {
+            return depthFormatWasRequested && hasDepth_;
+        }
+
+    private:
+        OpenGLES1GraphicsBackend* owner_ = nullptr;
+        unsigned int fbo_ = 0;
+        unsigned int colorTexture_ = 0;
+        unsigned int depthRenderbuffer_ = 0;
+        int width_ = 0;
+        int height_ = 0;
+        bool hasDepth_ = false;
+        bool hasStencil_ = false;
+    };
+
+    /**
+     * @brief NOXNA. Cube-map texture backed by `GL_OES_texture_cube_map` (an optional ES 1.1
+     * extension -- `OpenGLES1GraphicsBackend::CreateTextureCube()` returns `nullptr` on a driver
+     * where it isn't present, same "unsupported, not just unimplemented" contract as the render
+     * target above). Used only for `EnvironmentMapEffect`'s reflection map -- see
+     * `DrawPrimitivesEx`'s `envMapping` handling and docs/opengles1-backend.md.
+     */
+    class OpenGLES1TextureCubeBackend : public ITextureCubeBackend
+    {
+    public:
+        explicit OpenGLES1TextureCubeBackend(int size);
+        ~OpenGLES1TextureCubeBackend() override;
+
+        OpenGLES1TextureCubeBackend(const OpenGLES1TextureCubeBackend&) = delete;
+        OpenGLES1TextureCubeBackend& operator=(const OpenGLES1TextureCubeBackend&) = delete;
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                     const void* data, int dataLength) override;
+        void BindGL() const override;
+
+        [[nodiscard]] unsigned int GetGLHandle() const { return texture_; }
+
+    private:
+        unsigned int texture_ = 0;
+        int size_ = 0;
+    };
+
+    /**
      * @brief NOXNA. Graphics backend built on real OpenGL ES 1.1 (the fixed-function "Common"
      * profile), deliberately independent of the EasyGL backend (which targets WebGL2/OpenGL ES
      * 3.0 and cannot create an ES 1.1 context at all).
@@ -185,6 +286,12 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
@@ -254,6 +361,41 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// backend's SpriteBatch-owns-its-own-2D-projection convention.
         void ApplyLogicalViewportAndOrtho2D();
 
+        /// NOXNA. Returns the size of the currently-bound OpenGLES1RenderTargetBackend, if any
+        /// (used by ApplyLogicalViewportAndOrtho2D so a SpriteBatch flush while an RT is bound
+        /// sizes its projection to the RT, not the window -- mirrors EasyGLGraphicsBackend's
+        /// identical GetCurrentRenderTarget2DSize()).
+        bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
+
+        /// NOXNA. Whether GL_OES_framebuffer_object was detected at startup (queried once via
+        /// glGetString(GL_EXTENSIONS), not re-checked per call).
+        [[nodiscard]] bool SupportsFramebufferObject() const { return fboSupported_; }
+        /// NOXNA. Whether GL_OES_texture_cube_map was detected at startup.
+        [[nodiscard]] bool SupportsTextureCubeMap() const { return cubeMapSupported_; }
+        /// NOXNA. Whether a second texture unit is actually available (GL_MAX_TEXTURE_UNITS >= 2),
+        /// needed for a real DualTextureEffect dispatch.
+        [[nodiscard]] bool SupportsSecondTextureUnit() const { return maxTextureUnits_ >= 2; }
+
+        // GL_OES_framebuffer_object entry points -- resolved once at startup via
+        // SDL_GL_GetProcAddress (see LoadExtensionEntryPoints()), used by
+        // OpenGLES1RenderTargetBackend. Public so that class can call them without this class
+        // needing to expose every FBO operation as its own wrapper method.
+        PFNGLGENFRAMEBUFFERSOESPROC glGenFramebuffersOES_ = nullptr;
+        PFNGLBINDFRAMEBUFFEROESPROC glBindFramebufferOES_ = nullptr;
+        PFNGLDELETEFRAMEBUFFERSOESPROC glDeleteFramebuffersOES_ = nullptr;
+        PFNGLFRAMEBUFFERTEXTURE2DOESPROC glFramebufferTexture2DOES_ = nullptr;
+        PFNGLFRAMEBUFFERRENDERBUFFEROESPROC glFramebufferRenderbufferOES_ = nullptr;
+        PFNGLCHECKFRAMEBUFFERSTATUSOESPROC glCheckFramebufferStatusOES_ = nullptr;
+        PFNGLGENRENDERBUFFERSOESPROC glGenRenderbuffersOES_ = nullptr;
+        PFNGLBINDRENDERBUFFEROESPROC glBindRenderbufferOES_ = nullptr;
+        PFNGLDELETERENDERBUFFERSOESPROC glDeleteRenderbuffersOES_ = nullptr;
+        PFNGLRENDERBUFFERSTORAGEOESPROC glRenderbufferStorageOES_ = nullptr;
+
+        // GL_OES_texture_cube_map's glTexGeniOES -- drives real GL_REFLECTION_MAP_OES automatic
+        // reflection-vector texture-coordinate generation for EnvironmentMapEffect (see
+        // DrawPrimitivesEx's envMapping handling).
+        PFNGLTEXGENIOESPROC glTexGeniOES_ = nullptr;
+
     private:
         void CreateGLContext();
         void DestroyGLContext();
@@ -274,5 +416,16 @@ namespace CNA::Internal::Backends::OpenGLES1
         // glBlendFunc/default-Add accordingly (documented deviation, see docs/opengles1-backend.md).
         PFNGLBLENDFUNCSEPARATEOESPROC glBlendFuncSeparateOES_ = nullptr;
         PFNGLBLENDEQUATIONOESPROC glBlendEquationOES_ = nullptr;
+
+        bool fboSupported_ = false;
+        bool cubeMapSupported_ = false;
+        int maxTextureUnits_ = 1;
+
+        // Wireframe emulation (OPENGLES1-76): FillMode::WireFrame has no glPolygonMode
+        // equivalent in ES 1.1 -- Draw*() re-expands each triangle into GL_LINES when set,
+        // mirroring EasyGLGraphicsBackend::DrawWireframe's identical technique.
+        bool wireframe_ = false;
+
+        IRenderTargetBackend* currentRenderTarget_ = nullptr;
     };
 }
