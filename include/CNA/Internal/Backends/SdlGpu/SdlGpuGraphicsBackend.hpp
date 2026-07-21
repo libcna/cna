@@ -602,6 +602,12 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             DrawKind kind;
             std::size_t index;
+            // REMED-GFX-064: the GraphicsDevice.Viewport live when this draw was queued, captured
+            // per-draw (PushDrawOrder) and replayed via SDL_SetGPUViewport in RenderQueuedDraws.
+            // viewportSet=false (or a zero-size rect) => the pass's full render-target extents.
+            bool viewportSet = false;
+            int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
+            float viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
         };
 
         // SDLGPU-18: raw XNA Blend/BlendFunction ordinals, captured at Queue*Draw time so the
@@ -1065,6 +1071,18 @@ namespace CNA::Internal::Backends::SdlGpu
          * full render-target extents instead of this rect, matching "no clipping"). */
         void SetScissorRect(int x, int y, int w, int h) override;
         /**
+         * @brief Real `GraphicsDevice.Viewport` mapping (`REMED-GFX-064`) -- stores the sub-region
+         * viewport rect + depth range; captured PER DRAW into each `QueuedDrawRef` at
+         * `Queue*Draw()`/`QueueSprite()` time and applied via `SDL_SetGPUViewport` per draw in
+         * `RenderQueuedDraws`. Per-draw (not per-pass like the scissor) because this deferred
+         * backend replays draws at Present and `SetRenderTarget` resets the frame-global viewport
+         * on bind/unbind, so a per-pass read of the live viewport would be wrong -- the same
+         * deferred-model reasoning `VulkanGraphicsBackend` (GFX-062) uses. An unset or degenerate
+         * (zero-size) viewport falls back to the pass's full render-target extents, byte-identical
+         * to the pre-fix behavior (SDL's own default full-target viewport).
+         */
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
+        /**
          * @brief Real per-slot `SamplerState` mapping (`SDLGPU-21`) for direct 3D draws --
          * `SpriteBatch`'s own per-draw sampler selection (`SetSamplerFilter`/`SetSamplerAddressMode`)
          * already had its own separate path before this. Stores into `samplerSlots_[slot]`, read
@@ -1404,6 +1422,15 @@ namespace CNA::Internal::Backends::SdlGpu
         // viewport/scissor are real render-pass-time state on this backend's Vulkan-driven peers,
         // not baked into any pipeline.
         void ApplyScissorForPass(SDL_GPURenderPass* pass, int targetWidth, int targetHeight) const;
+        // REMED-GFX-064: appends a QueuedDrawRef, snapshotting the current GraphicsDevice.Viewport
+        // (viewportSet_/viewportX_/...) into it so each queued draw carries the viewport it was
+        // issued under (per-draw capture, needed for this deferred backend -- see SetViewport()).
+        void PushDrawOrder(DrawKind kind, std::size_t index);
+        // REMED-GFX-064: applies SDL_SetGPUViewport for one queued draw, using the ref's captured
+        // viewport if set, otherwise the pass's full render-target extents (byte-identical to the
+        // pre-fix implicit full-target viewport). Called per draw from RenderQueuedDraws.
+        void ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
+                                 int targetWidth, int targetHeight) const;
 
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
@@ -1574,6 +1601,17 @@ namespace CNA::Internal::Backends::SdlGpu
         int scissorY_ = 0;
         int scissorW_ = 0;
         int scissorH_ = 0;
+        // REMED-GFX-064: current GraphicsDevice.Viewport, set by SetViewport() and snapshotted into
+        // each QueuedDrawRef at Queue*Draw()/QueueSprite() time (PushDrawOrder). viewportSet_ stays
+        // false until the game/GraphicsDevice pushes a viewport, so pre-viewport draws fall back to
+        // the pass's full render-target extents (SDL's own default), byte-identical to pre-fix.
+        bool viewportSet_ = false;
+        int viewportX_ = 0;
+        int viewportY_ = 0;
+        int viewportW_ = 0;
+        int viewportH_ = 0;
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
         // Stored but deliberately not yet applied -- see ApplyRasterizerState's own doc comment.
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;

@@ -1214,6 +1214,21 @@ namespace CNA::Internal::Backends::SdlGpu
         scissorH_ = h;
     }
 
+    void SdlGpuGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        // REMED-GFX-064: store only. The value is snapshotted per draw into each QueuedDrawRef at
+        // Queue*Draw()/QueueSprite() time (PushDrawOrder) and applied at Present-time replay
+        // (ApplyViewportForRef) -- never read back here, mirroring how every other per-command
+        // state (scissor rect, blend, stencil) is captured on this deferred backend.
+        viewportSet_ = true;
+        viewportX_ = x;
+        viewportY_ = y;
+        viewportW_ = w;
+        viewportH_ = h;
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
+    }
+
     void SdlGpuGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
     {
         if (slot < 0 || slot >= static_cast<int>(samplerSlots_.size()))
@@ -1245,6 +1260,45 @@ namespace CNA::Internal::Backends::SdlGpu
             rect.h = targetHeight;
         }
         SDL_SetGPUScissor(pass, &rect);
+    }
+
+    void SdlGpuGraphicsBackend::PushDrawOrder(DrawKind kind, std::size_t index)
+    {
+        // REMED-GFX-064: snapshot the current viewport into the ref so a later SetRenderTarget
+        // reset / SetViewport change never retroactively alters an already-queued draw's viewport.
+        drawOrder_.push_back(QueuedDrawRef{kind, index, viewportSet_, viewportX_, viewportY_,
+                                           viewportW_, viewportH_, viewportMinDepth_, viewportMaxDepth_});
+    }
+
+    void SdlGpuGraphicsBackend::ApplyViewportForRef(SDL_GPURenderPass* pass, const QueuedDrawRef& ref,
+                                                    int targetWidth, int targetHeight) const
+    {
+        SDL_GPUViewport vp{};
+        if (ref.viewportSet && ref.viewportW > 0 && ref.viewportH > 0)
+        {
+            // Sub-region viewport is a NDC->framebuffer transform, NOT a clip: pass it through
+            // unclamped (clamping would distort placement). SDL_GPUViewport.y is top-left origin,
+            // matching XNA Viewport.Y directly -- no extra Y-flip (the CNA sprite/3D shaders already
+            // handle SDL's clip-space Y, GFX-011-style). Depth range clamped to SDL's [0,1] domain.
+            vp.x = static_cast<float>(ref.viewportX);
+            vp.y = static_cast<float>(ref.viewportY);
+            vp.w = static_cast<float>(ref.viewportW);
+            vp.h = static_cast<float>(ref.viewportH);
+            vp.min_depth = std::clamp(ref.viewportMinDepth, 0.0f, 1.0f);
+            vp.max_depth = std::clamp(ref.viewportMaxDepth, 0.0f, 1.0f);
+        }
+        else
+        {
+            // Unset or degenerate viewport => full render target (SDL's own default full-target
+            // viewport at pass begin), byte-identical to the pre-REMED-GFX-064 behavior.
+            vp.x = 0.0f;
+            vp.y = 0.0f;
+            vp.w = static_cast<float>(targetWidth);
+            vp.h = static_cast<float>(targetHeight);
+            vp.min_depth = 0.0f;
+            vp.max_depth = 1.0f;
+        }
+        SDL_SetGPUViewport(pass, &vp);
     }
 
     SdlGpuGraphicsBackend::RenderStateSnapshot SdlGpuGraphicsBackend::CaptureRenderState() const
@@ -1701,7 +1755,7 @@ namespace CNA::Internal::Backends::SdlGpu
             vertex.a = rgba[3];
         }
         spriteCommands_.push_back(command);
-        drawOrder_.push_back({DrawKind::Sprite, spriteCommands_.size() - 1});
+        PushDrawOrder(DrawKind::Sprite, spriteCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -2113,7 +2167,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         coloredDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::Colored, coloredDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::Colored, coloredDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -2161,7 +2215,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         texturedDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::Textured, texturedDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::Textured, texturedDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -2210,7 +2264,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         litTexturedDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::LitTextured, litTexturedDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::LitTextured, litTexturedDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -2883,7 +2937,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         alphaTestDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::AlphaTest, alphaTestDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::AlphaTest, alphaTestDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -2936,7 +2990,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         dualTextureDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::DualTexture, dualTextureDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::DualTexture, dualTextureDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -3002,7 +3056,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         envMapDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::EnvMap, envMapDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::EnvMap, envMapDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -3055,7 +3109,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         skinnedDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::Skinned, skinnedDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::Skinned, skinnedDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -3126,7 +3180,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         pbrDrawCommands_.push_back(std::move(command));
-        drawOrder_.push_back({DrawKind::Pbr, pbrDrawCommands_.size() - 1});
+        PushDrawOrder(DrawKind::Pbr, pbrDrawCommands_.size() - 1);
         framePending_ = true;
     }
 
@@ -3598,6 +3652,13 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUGraphicsPipeline* boundPipeline = nullptr;
         for (const QueuedDrawRef& ref : drawOrder_)
         {
+            // REMED-GFX-064: apply this draw's own captured GraphicsDevice.Viewport before it is
+            // issued. SDL_SetGPUViewport is pass-state that persists until changed, so setting it
+            // per draw makes each draw honor the viewport it was enqueued under -- essential here
+            // because SetRenderTarget resets the frame-global viewport on unbind, so the live
+            // viewport at Present is not the sub-region an RT draw used. Refs not targeting this
+            // pass do not draw; their apply is harmlessly overwritten before the next real draw.
+            ApplyViewportForRef(pass, ref, static_cast<int>(viewportSize[0]), static_cast<int>(viewportSize[1]));
             switch (ref.kind)
             {
                 case DrawKind::Colored:
