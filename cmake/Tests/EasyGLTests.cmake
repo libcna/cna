@@ -636,6 +636,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_SkinnedEffect_MultiLight COMMAND cna_test_easygl_skinnedeffect_multilight
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-008: analytic SkinnedEffect ambient/emissive lighting conformance
+        cna_easygl_test(cna_test_easygl_skinnedeffect_lighting_conformance
+                        examples/skinnedeffect_lighting_conformance_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_LightingConformance COMMAND cna_test_easygl_skinnedeffect_lighting_conformance
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 894: SkinnedEffect real specular highlights
         cna_easygl_test(cna_test_easygl_skinnedeffect_specular
                         examples/easygl_skinnedeffect_specular_test.cpp)

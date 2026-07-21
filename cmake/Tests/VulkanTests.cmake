@@ -689,6 +689,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_SkinnedEffect_Specular COMMAND cna_test_vulkan_skinnedeffect_specular
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-008: analytic SkinnedEffect ambient/emissive lighting conformance
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_lighting_conformance
+                        examples/skinnedeffect_lighting_conformance_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_LightingConformance COMMAND cna_test_vulkan_skinnedeffect_lighting_conformance
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 1103: SkinnedEffect pixel test — PreferPerPixelLighting genuinely selects between a
         # real per-vertex-lit shader variant and the existing per-pixel-lit one.
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_preferperpixellighting
