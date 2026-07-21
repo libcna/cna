@@ -1200,6 +1200,28 @@ static int clampMetalSampleCount(id<MTLDevice> dev, int requested)
     return 1;
 }
 
+// plan_metal.md METAL-104/105: a real CI signal corrected this -- MetalRenderTargetBackend
+// originally piggybacked on the device backend's own deviceSampleCount the same way
+// VulkanRenderTargetBackend's own real precedent does (that backend's own comment: "avoids
+// threading an independent numeric sample count through every pipeline cache key"). But Metal's own
+// MetalPipelineCacheKey ALREADY threads sampleCount independently (this same task's own
+// colorAttachmentCount-adjacent addition) -- there is no shared MSAA render-pass/pipeline
+// infrastructure to reuse the way Vulkan's VkRenderPass/VkFramebuffer combo has, so the Vulkan-
+// specific reason for piggybacking doesn't actually apply to Metal's own architecture. Confirmed
+// genuinely wrong, not just theoretically unnecessary, by a real CI run: Metal_RenderTarget2D_MSAA's
+// own MultiSampleCount=8 check failed with the CI log's own diagnostic message spelling out the
+// exact cause ("MultiSampleCount=8 row is purely binary -- MSAA resolve is not actually averaging
+// sub-pixel coverage") -- the reused examples/easygl_rendertarget2d_msaa_test.cpp never sets
+// GraphicsDeviceManager.PreferMultiSampling (only Metal_MSAA's own easygl_msaa_test.cpp does), so
+// deviceSampleCount stayed 1 and the piggyback condition silently kept every RT-only MSAA request
+// at 0 regardless of what was asked for. A RenderTarget2D's own sample count is now independent of
+// the backbuffer's.
+static int computeAppliedRenderTargetSampleCount(id<MTLDevice> dev, int requested)
+{
+    const int clamped = clampMetalSampleCount(dev, requested);
+    return clamped > 1 ? clamped : 0;
+}
+
 struct MetalGraphicsBackend::Impl
 {
     SDL_Window* window=nullptr;
@@ -2042,16 +2064,17 @@ static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> 
 class MetalRenderTargetBackend final : public IRenderTargetBackend
 {
 public:
-    // plan_metal.md METAL-104/105: `requestedMultiSampleCount` mirrors VulkanRenderTargetBackend's
-    // own exact "piggyback on the backend's own device-wide sample count" scope decision (confirmed
-    // by reading it directly, not assumed) -- this target only ever engages MSAA if BOTH it asked
-    // for it (requestedMultiSampleCount>1) AND the device backend itself has real MSAA available
-    // (owner.deviceSampleCount>1); appliedSampleCount_ honestly reports 0 (not the requested value)
-    // whenever either half of that isn't true, matching IRenderTargetBackend::GetMultiSampleCount()
-    // 's own "report the real applied value" contract.
+    // plan_metal.md METAL-104/105: `requestedMultiSampleCount` is independent of the device
+    // backend's own deviceSampleCount -- see computeAppliedRenderTargetSampleCount()'s own comment
+    // for why the "piggyback on the backend-wide sample count" design this originally mirrored from
+    // VulkanRenderTargetBackend was a real bug for Metal specifically, found via a real CI run.
+    // appliedSampleCount_ honestly reports 0 (not the requested value) whenever the device doesn't
+    // support this count at all (requestedMultiSampleCount<=1 or clampMetalSampleCount() couldn't
+    // find any supported candidate), matching IRenderTargetBackend::GetMultiSampleCount()'s own
+    // "report the real applied value" contract.
     MetalRenderTargetBackend(MetalGraphicsBackend::Impl& owner, int w, int h, bool mipMap, int requestedMultiSampleCount=1)
         : owner_(owner), w_(w), h_(h), mipMap_(mipMap),
-          appliedSampleCount_((requestedMultiSampleCount>1 && owner.deviceSampleCount>1) ? owner.deviceSampleCount : 0)
+          appliedSampleCount_(computeAppliedRenderTargetSampleCount(owner.device, requestedMultiSampleCount))
     {
         // plan_metal.md METAL-101: MUST be BGRA8Unorm, matching every pipeline's own hardcoded
         // colorAttachments[0].pixelFormat (makePipeline(), keyed to the backbuffer's own format) --
