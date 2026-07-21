@@ -314,6 +314,13 @@ namespace CNA::Internal::Backends::Vulkan
             std::vector<uint16_t>       indices;
             std::vector<DrawCall>       draws;
             VulkanEffectBackend*        customEffectBackend = nullptr;
+            // REMED-GFX-013: scissor state captured at End() so a SpriteBatch filling a render
+            // target is clipped correctly regardless of later frame-global scissor changes (e.g.
+            // Task 338's ScissorRectangle reset on RT unbind). enabled==false or a zero-sized rect
+            // means "no clip" (whole framebuffer), matching the backbuffer pass's own guard.
+            bool                        scissorEnabled = false;
+            int32_t                     scissorX = 0, scissorY = 0;
+            uint32_t                    scissorW = 0, scissorH = 0;
         };
 
     private:
@@ -1151,6 +1158,14 @@ namespace CNA::Internal::Backends::Vulkan
             // contiguous run of draws sharing the same non-null pointer, within a single
             // targetRT's render pass, in a real vkCmdBeginQuery/vkCmdEndQuery pair.
             VulkanOcclusionQueryBackend* occlusionQuery = nullptr;
+            // REMED-GFX-013: scissor state snapshotted at enqueue time (PushPending3DDraw), so it
+            // survives the frame-global scissor being overwritten before Present() records this
+            // draw -- notably by Task 338's ScissorRectangle reset on render-target unbind.
+            // scissorEnabled==false (or a zero-sized rect) means "no clip" (whole framebuffer),
+            // matching the backbuffer pass's own long-standing guard.
+            bool                    scissorEnabled = false;
+            int32_t                 scissorX = 0, scissorY = 0;
+            uint32_t                scissorW = 0, scissorH = 0;
         };
         std::vector<Pending3DDraw>  pending3D_;
         // Task 447/854: pushes d onto pending3D_ after tagging it with the currently-active

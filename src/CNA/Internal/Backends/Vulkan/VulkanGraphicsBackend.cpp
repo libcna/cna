@@ -833,6 +833,10 @@ namespace CNA::Internal::Backends::Vulkan
             snapshot->indices             = std::move(indices_);
             snapshot->draws               = std::move(draws_);
             snapshot->customEffectBackend = customEffectBackend_;
+            // REMED-GFX-013: capture the scissor active for this batch (see BatchSnapshot).
+            snapshot->scissorEnabled = backend_->scissorEnabled_;
+            snapshot->scissorX = backend_->scissorX_; snapshot->scissorY = backend_->scissorY_;
+            snapshot->scissorW = backend_->scissorW_; snapshot->scissorH = backend_->scissorH_;
             backend_->activeBatches_.push_back({ std::move(snapshot), activeRT_ });
         }
     }
@@ -6265,6 +6269,30 @@ namespace CNA::Internal::Backends::Vulkan
             }
         }
 
+        // REMED-GFX-013: build the dynamic VkRect2D scissor for one draw/batch from its captured
+        // XNA scissor state (see Pending3DDraw / BatchSnapshot) and the physical extent of the
+        // framebuffer it targets. Disabled or degenerate (zero-sized) → whole framebuffer, matching
+        // the backbuffer pass's own long-standing `scissorEnabled_ && scissorW_>0 && scissorH_>0`
+        // guard. Otherwise the captured rectangle is clamped to the framebuffer in 64-bit space so
+        // the resulting VkRect2D always satisfies Vulkan's requirements (offset ≥ 0, offset+extent
+        // within the framebuffer, no signed/unsigned overflow) even for rectangles that begin
+        // outside or overhang the target edges.
+        auto computeScissor = [](bool enabled, int32_t sx, int32_t sy, uint32_t sw, uint32_t sh,
+                                 uint32_t fbW, uint32_t fbH) -> VkRect2D {
+            if (!enabled || sw == 0 || sh == 0)
+                return VkRect2D{ {0, 0}, { fbW, fbH } };
+            const int64_t x0 = std::clamp<int64_t>(sx, 0, static_cast<int64_t>(fbW));
+            const int64_t y0 = std::clamp<int64_t>(sy, 0, static_cast<int64_t>(fbH));
+            const int64_t x1 = std::clamp<int64_t>(static_cast<int64_t>(sx) + sw, 0, static_cast<int64_t>(fbW));
+            const int64_t y1 = std::clamp<int64_t>(static_cast<int64_t>(sy) + sh, 0, static_cast<int64_t>(fbH));
+            VkRect2D r{};
+            r.offset.x      = static_cast<int32_t>(x0);
+            r.offset.y      = static_cast<int32_t>(y0);
+            r.extent.width  = static_cast<uint32_t>(x1 > x0 ? x1 - x0 : 0);
+            r.extent.height = static_cast<uint32_t>(y1 > y0 ? y1 - y0 : 0);
+            return r;
+        };
+
         // Helper: draw all 2D batches for a specific RT (nullptr = backbuffer) into current render pass.
         // Sprite VB/IB ring buffers are shared across all passes in a frame — each snapshot is
         // memcpy'd/bound at its own running byte offset (vbOff/ibOff below), mirroring draw3DFor's
@@ -6341,6 +6369,19 @@ namespace CNA::Internal::Backends::Vulkan
                         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, 128, fullPC);
                 } else {
                     vkCmdPushConstants(cb, pipelineLayout2D_, VK_SHADER_STAGE_VERTEX_BIT, 0, 8, vpSize);
+                }
+
+                // REMED-GFX-013: apply this batch's captured scissor, clamped to the target's
+                // PHYSICAL extent (not vpW/vpH, which may be the virtual-resolution size).
+                {
+                    const uint32_t fbW = targetRT ? static_cast<uint32_t>(targetRT->GetWidth())
+                                                  : swapchainExtent_.width;
+                    const uint32_t fbH = targetRT ? static_cast<uint32_t>(targetRT->GetHeight())
+                                                  : swapchainExtent_.height;
+                    VkRect2D bsc = computeScissor(snapshot->scissorEnabled,
+                                                  snapshot->scissorX, snapshot->scissorY,
+                                                  snapshot->scissorW, snapshot->scissorH, fbW, fbH);
+                    vkCmdSetScissor(cb, 0, 1, &bsc);
                 }
 
                 for (const auto& d : draws) {
@@ -6425,6 +6466,19 @@ namespace CNA::Internal::Backends::Vulkan
                 if (draw.useInstanced && !draw.instVbData.empty())
                     std::memcpy(static_cast<uint8_t*>(frame3DInstVBPtr_[currentFrame_]) + instVbOff,
                                 draw.instVbData.data(), draw.instVbData.size());
+
+                // REMED-GFX-013: apply this draw's captured scissor, clamped to the target's
+                // physical extent (RT dimensions, or the swapchain for the backbuffer).
+                {
+                    const uint32_t fbW = targetRT ? static_cast<uint32_t>(targetRT->GetWidth())
+                                                  : swapchainExtent_.width;
+                    const uint32_t fbH = targetRT ? static_cast<uint32_t>(targetRT->GetHeight())
+                                                  : swapchainExtent_.height;
+                    VkRect2D dsc = computeScissor(draw.scissorEnabled,
+                                                  draw.scissorX, draw.scissorY,
+                                                  draw.scissorW, draw.scissorH, fbW, fbH);
+                    vkCmdSetScissor(cb, 0, 1, &dsc);
+                }
 
                 const uint32_t nColor = targetRT ? targetRT->GetColorAttachmentCount() : 1u;
                 // Task 878/879: MSAA-aware for RT passes too, not just the backbuffer -- an RT
@@ -7269,6 +7323,12 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::PushPending3DDraw(Pending3DDraw&& d)
     {
         d.occlusionQuery = activeOcclusionQuery_;
+        // REMED-GFX-013: snapshot the scissor active at enqueue time (see Pending3DDraw) so the
+        // render-target pass clips this draw with the rect that was set while its RT was bound,
+        // not the frame-global rect left over at Present() (which Task 338 resets on RT unbind).
+        d.scissorEnabled = scissorEnabled_;
+        d.scissorX = scissorX_; d.scissorY = scissorY_;
+        d.scissorW = scissorW_; d.scissorH = scissorH_;
         pending3D_.push_back(std::move(d));
     }
 
@@ -7996,6 +8056,12 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
     {
+        // Storage-only: consumed at command-buffer-record time. REMED-GFX-013 snapshots this
+        // state per draw/batch at enqueue time (PushPending3DDraw / SpriteBatch End()), so it is
+        // applied correctly in BOTH the backbuffer and render-target passes and survives Task
+        // 338's ScissorRectangle reset on render-target unbind. Negative width/height clamp to 0
+        // (treated as "no clip"); the record-time computeScissor helper clamps offset/extent to
+        // the target framebuffer so the resulting VkRect2D is always Vulkan-valid.
         scissorX_ = static_cast<int32_t>(x);
         scissorY_ = static_cast<int32_t>(y);
         scissorW_ = static_cast<uint32_t>(std::max(0, w));
@@ -8004,13 +8070,14 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
-        // Storage-only (Task 880); consumed at command-buffer-record time via
-        // vkCmdSetViewport, mirroring SetScissorRect's identical pattern. Only the
-        // backbuffer pass reads this state -- RT passes stay hardcoded to each RT's own
-        // full size, matching RecordCommandBuffer's existing per-RT-pass scissor-hardcoding
-        // precedent, since the deferred, potentially-multi-RT-per-frame recording model
-        // cannot recover "what Viewport was active when each RT's draws were issued" from a
-        // single frame-global stored value.
+        // Storage-only (Task 880); consumed at command-buffer-record time via vkCmdSetViewport.
+        // Only the backbuffer pass reads this state -- RT passes stay hardcoded to each RT's own
+        // full size, because the deferred, potentially-multi-RT-per-frame recording model cannot
+        // recover "what Viewport was active when each RT's draws were issued" from a single
+        // frame-global stored value. (Scissor once shared this exact limitation but no longer:
+        // REMED-GFX-013 snapshots the scissor per draw/batch at enqueue time instead. The same
+        // technique would let Viewport be honored per-draw in RT passes too -- tracked as a
+        // separate follow-up finding, not part of GFX-013.)
         viewportX_        = static_cast<int32_t>(x);
         viewportY_        = static_cast<int32_t>(y);
         viewportW_        = static_cast<uint32_t>(std::max(0, w));
