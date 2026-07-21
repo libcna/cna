@@ -22,13 +22,9 @@ void main()
     v_color0 = vc * u_diffuseColor;
     // REMED-GFX-005: fog factor from raw object-space Z, corrected to EasyGL's Task-1111 form
     // (the prior Task-888 (FogEnd-z) form was the mirror of EasyGL's since-fixed formula, NOT
-    // a match to it). u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    // a match to it). u_fogParams = FNA fog vector (REMED-GFX-010): dot(vec4(pos,1), u_fogParams) = fogFactor.
     // REMED-GFX-005: corrected to FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); the
     // prior Task 888/899 (FogEnd-z) formula was the mirror image and wrong. Zero-length range
     // (FogStart==FogEnd) -> fully fogged (factor 0), matching FNA SetFogVector.
-    v_fogFactor = (u_fogParams.x > 0.5)
-        ? ((abs(u_fogParams.z - u_fogParams.y) < 1e-6)
-            ? 0.0
-            : clamp((a_position.z + u_fogParams.z) / (u_fogParams.z - u_fogParams.y), 0.0, 1.0))
-        : 1.0;
+    v_fogFactor = 1.0 - clamp(dot(vec4(a_position, 1.0), u_fogParams), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

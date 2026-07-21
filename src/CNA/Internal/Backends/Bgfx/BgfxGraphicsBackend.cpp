@@ -2385,7 +2385,10 @@ namespace CNA::Internal::Backends::Bgfx
         // them, no error.
         float fogColor4[4]  = { params.fogColor[0], params.fogColor[1], params.fogColor[2], 0.0f };
         bgfx::setUniform(fogColorUnif_, fogColor4);
-        float fogParams4[4] = { params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd, 0.0f };
+        // REMED-GFX-010: u_fogParams now carries the FNA view-space fog vector (GpuDrawParams.fogVector,
+        // = SetFogVector(World*View, fogStart, fogEnd)). The shader computes
+        // v_fogFactor = 1 - saturate(dot(vec4(pos,1), u_fogParams)); all-zero when fog is disabled.
+        float fogParams4[4] = { params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3] };
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
         bgfx::setVertexBuffer(0, vb.handle);
@@ -2908,7 +2911,10 @@ namespace CNA::Internal::Backends::Bgfx
         // them, no error.
         float fogColor4[4]  = { params.fogColor[0], params.fogColor[1], params.fogColor[2], 0.0f };
         bgfx::setUniform(fogColorUnif_, fogColor4);
-        float fogParams4[4] = { params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd, 0.0f };
+        // REMED-GFX-010: u_fogParams now carries the FNA view-space fog vector (GpuDrawParams.fogVector,
+        // = SetFogVector(World*View, fogStart, fogEnd)). The shader computes
+        // v_fogFactor = 1 - saturate(dot(vec4(pos,1), u_fogParams)); all-zero when fog is disabled.
+        float fogParams4[4] = { params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3] };
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
         bgfx::setVertexBuffer(0, vb.handle);
