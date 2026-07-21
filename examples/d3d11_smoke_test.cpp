@@ -1131,6 +1131,17 @@ protected:
                 ctp.fogEnabled = false;
                 ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
                 ctp.fogStart = 0.0f; ctp.fogEnd = 0.5f;
+                // REMED-GFX-055: the REMED-GFX-005/010 D3D campaign switched D3DCommon fog to FNA's
+                // view-space fog vector (EffectHelpers.SetFogVector). Stock effects bake it into
+                // GpuDrawParams::fogVector; a direct-backend DrawPrimitivesEx caller (which bypasses
+                // that layer) must supply it too -- the scalar fogStart/fogEnd above are now
+                // accepted-but-ignored by D3DCommon. This fixture's geometry sits at eye-space Z=0.5
+                // (positive: D3D clips Z to [0,1], so the FNA negative-eyeZ vector cannot be used
+                // here), and the shader's keep = 1 - saturate(dot(float4(pos,1), fogVector)) reaches
+                // full fog (keep=0) at Z=fogEnd when fogVector.z = 1/fogEnd = 2. (These 8 direct-
+                // backend fog checks silently stopped fogging when the campaign landed; effect-driven
+                // fog was unaffected. See the sibling checks below for the same one-line vector.)
+                ctp.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
@@ -1172,6 +1183,7 @@ protected:
             tp.fogEnabled = false;
             tp.fogColor[0] = 0.0f; tp.fogColor[1] = 1.0f; tp.fogColor[2] = 0.0f;
             tp.fogStart = 0.0f; tp.fogEnd = 0.5f;
+            tp.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
             dev.Clear(Color(10, 10, 10, 255));
             backend.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
@@ -1278,6 +1290,7 @@ protected:
                 litFogP.fogEnabled = false;
                 litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
                 litFogP.fogStart = 0.0f; litFogP.fogEnd = 0.5f;
+                litFogP.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
@@ -1469,6 +1482,11 @@ protected:
                 atp.fogEnabled = false;
                 atp.fogColor[0] = 0.0f; atp.fogColor[1] = 1.0f; atp.fogColor[2] = 0.0f;
                 atp.fogStart = 0.0f; atp.fogEnd = 0.5f;
+                // REMED-GFX-055: unlike the other stock shaders (whose fog is gated by a separate
+                // FogColorEnabled.w flag), alpha_test3d's D3DAlphaTestConstants dropped the scalar
+                // fogEnabled flag entirely -- its fog is gated solely by whether FogVector is
+                // non-zero. So the fog vector is set ONLY for the fogEnabled=true draw below; leaving
+                // it zero here is what keeps this fogEnabled=false case genuinely unfogged.
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
@@ -1480,6 +1498,7 @@ protected:
                       "the exact passing texture color unblended (plan_dx.md DX-137)");
 
                 atp.fogEnabled = true;
+                atp.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
@@ -1654,6 +1673,7 @@ protected:
                 dtp.fogEnabled = false;
                 dtp.fogColor[0] = 0.0f; dtp.fogColor[1] = 1.0f; dtp.fogColor[2] = 0.0f;
                 dtp.fogStart = 0.0f; dtp.fogEnd = 0.5f;
+                dtp.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
@@ -1772,6 +1792,7 @@ protected:
                 ep.fogEnabled = false;
                 ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
                 ep.fogStart = 0.0f; ep.fogEnd = 0.5f;
+                ep.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
@@ -1985,6 +2006,7 @@ protected:
                 skinFogP.fogEnabled = false;
                 skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
                 skinFogP.fogStart = 0.0f; skinFogP.fogEnd = 0.5f;
+                skinFogP.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
@@ -2609,6 +2631,7 @@ protected:
             fogOff.fogColor[0] = 0.0f; fogOff.fogColor[1] = 1.0f; fogOff.fogColor[2] = 0.0f;
             fogOff.fogStart = 0.0f;
             fogOff.fogEnd = 0.5f;
+            fogOff.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
 
             const Microsoft::Xna::Framework::Rectangle centerRegionFog(30, 30, 1, 1);
             dev.Clear(Color(10, 10, 10, 255));
