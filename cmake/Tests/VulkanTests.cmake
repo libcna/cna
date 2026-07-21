@@ -481,6 +481,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_SpriteBatch_MultiBeginEnd COMMAND cna_test_vulkan_spritebatch_multi_begin_end
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-012: SpriteBatch Begin()'s transformMatrix must be applied (was a silent no-op)
+        cna_vulkan_test(cna_test_vulkan_transform_matrix
+                        examples/vulkan_transform_matrix_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_TransformMatrix COMMAND cna_test_vulkan_transform_matrix
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 665: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
         cna_vulkan_test(cna_test_vulkan_texture_address_mode
                         examples/vulkan_texture_address_mode_test.cpp)
