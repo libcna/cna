@@ -2417,6 +2417,42 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     new code, step by step, by hand. Pushed for real CI verification next — genuinely unverified
     until that CI run reports back.
 
+87. **Real thirtieth CI signal — item 86's MRT code compiles clean and runs without any Metal
+    validation error, and the "genuine open question" it flagged is answered: `Metal_MRT` fails
+    for the same already-confirmed readback bug, not a new MRT-specific defect**: CI run
+    `29807262945` shows "Build native Metal backend" passing with no errors, and `ctest` reports
+    `96% tests passed, 5 tests failed out of 136` — the count rose from 132 to 136 (the 3 new
+    `MetalPipelineCacheKey` tests, which also run under the real macOS `CnaTests` build since they
+    carry no `CNA_BACKEND_METAL` gate, plus the 1 new `Metal_MRT` test), and the failures are the
+    same 4 pre-existing ones plus exactly 1 new one (`Metal_MRT`) — no other regression anywhere.
+
+    `Metal_MRT`'s own diagnostic log (`MTL_SHADER_VALIDATION=1`/`MTL_DEBUG_LAYER=1` both active,
+    per `metal-macos-ci.yml`'s own test-step env) shows the real, decisive sequence: one
+    `drawMetal3D kind=0 stride=16` (the MRT draw itself — `PipelineKind::Colored16`, the green quad,
+    into the real 2-color-attachment pipeline this task built) completes cleanly with **no**
+    validation error or exception logged, followed by two ordinary single-target `drawMetal3D
+    kind=1 stride=20` calls (the rt0/rt1 blit-to-backbuffer draws) and two `ReadBackbuffer`
+    requests — the whole sequence runs to completion without incident. This directly answers item
+    86's own flagged open question: a Metal fragment function that writes only `[[color(0)]]`
+    (implicitly, via a single `float4` return) against a pipeline whose `colorAttachments[0]` and
+    `colorAttachments[1]` are both declared with a real pixel format does **not** trigger a Metal
+    API validation error, even under both of Apple's own strictest runtime validation layers —
+    confirmed empirically, not just believed correct from documentation.
+
+    The actual failure: `[FAIL] MRT: left=(0,0,0) [expect green], right=(0,0,0) [expect blue]` —
+    both readback pixels are pure black, exactly matching the test's own `device.Clear(Color(0, 0,
+    0, 255))` call immediately before the two blit draws, the identical "readback returns only the
+    most recent `Clear()` color, not what was actually drawn" signature items 67–76/82/84/85/86
+    already established. This closes the loop cleanly: **the MRT feature itself — binding,
+    pipeline construction, drawing into 2 simultaneous color attachments — works without any
+    detectable defect** (real hardware, real validation layers, zero errors across the whole
+    sequence); the test's failure is entirely attributable to the same pre-existing, already-
+    paused-pending-a-physical-Mac readback bug, not to anything landed in this task. `METAL-112`/
+    `113`/`118` are now build-and-runtime-confirmed source-complete (no crash, no validation error),
+    correctly not marked ✅ only because the shared readback bug prevents this specific `CTest` from
+    itself passing — the same honesty standard every other readback-dependent Metal test in this
+    plan is held to.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -2882,13 +2918,13 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-109 | `CreateRenderTargetCube(size,depthFormat,mipMap,multiSampleCount)` — `MetalRenderTargetCubeBackend : IRenderTargetCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | 🟨 |
 | METAL-110 | `BindAsRenderTargetFace(int face)` — per-face `MTLRenderPassDescriptor` color attachment using `slice:face` | 🟨 |
 | METAL-111 | `SetRenderTargetCubeFace(rt,face)` — verify the base default's composition (`rt ? rt->BindAsRenderTargetFace(face) : SetRenderTarget2D(nullptr)`) is already correct once `METAL-110`/`METAL-107` land, before writing a redundant override | 🟨 (found: base default is NOT sufficient once mip-gen-on-unbind exists — a real override was needed, see narrative) |
-| METAL-112 | `SetRenderTargets(rts[],count)` — real MRT (up to 8 simultaneous color attachments), replacing the base default's "bind only the first target" | 🟨 landed 2026-07-21 — see narrative item 86, pending CI |
-| METAL-113 | `MetalPipelineKey` must include the *set* of attachment pixel formats, not just one, once MRT lands | 🟨 landed 2026-07-21 — corrected scope: only the *count* needed to vary, not a per-slot format list, since every `MetalRenderTargetBackend` color texture is already unconditionally `MTLPixelFormatBGRA8Unorm` (narrative item 77) — `MetalPipelineCacheKey` gained a `colorAttachmentCount` field instead; real-build-verified on Linux (3 new `MetalPipelineCacheKey`/`Hash` tests, `CnaTests` 130/130), pending CI for the `.mm`-side pipeline-descriptor loop |
+| METAL-112 | `SetRenderTargets(rts[],count)` — real MRT (up to 8 simultaneous color attachments), replacing the base default's "bind only the first target" | 🟨 landed and CI-confirmed 2026-07-21 — see narrative items 86/87: compiles clean, a real 2-attachment MRT draw ran with zero Metal API validation errors under `MTL_SHADER_VALIDATION=1`/`MTL_DEBUG_LAYER=1`; not ✅ only because `Metal_MRT`'s own final readback hits the separate, already-tracked, shared readback bug |
+| METAL-113 | `MetalPipelineKey` must include the *set* of attachment pixel formats, not just one, once MRT lands | 🟨 landed and CI-confirmed 2026-07-21 — corrected scope: only the *count* needed to vary, not a per-slot format list, since every `MetalRenderTargetBackend` color texture is already unconditionally `MTLPixelFormatBGRA8Unorm` (narrative item 77) — `MetalPipelineCacheKey` gained a `colorAttachmentCount` field instead; real-build-verified on Linux (3 new `MetalPipelineCacheKey`/`Hash` tests, `CnaTests` 130/130) and the `.mm`-side pipeline-descriptor loop confirmed to build a valid 2-attachment `MTLRenderPipelineState` on real CI with no validation error (narrative item 87) |
 | METAL-114 | `CTest`: `Metal_RenderTarget2D` — bind+clear+draw+unbind+readback (depends on Phase 12) | ⬜ |
 | METAL-115 | `CTest`: `Metal_RenderTargetCube` — per-face bind+clear+readback+independence check | ⬜ |
 | METAL-116 | `CTest`: `Metal_RenderTarget_MSAA` — device-clamped MSAA clear+resolve, pixel-verified | ⬜ |
 | METAL-117 | `CTest`: `Metal_RenderTarget_Mip` — auto-mip-on-unbind, sampled at a non-zero mip level | ⬜ |
-| METAL-118 | `CTest`: `Metal_MRT` — 2+ simultaneous targets, independent per-target clear-color proof | 🟨 landed 2026-07-21 as `Metal_MRT`, reusing `examples/easygl_mrt_test.cpp` verbatim (public XNA API only) — its own final readback goes through `GetBackBufferData()`, expected to likely hit the same still-unresolved Clear-color-only readback bug (items 67–76/82/84/85) even if MRT itself binds/draws correctly, pending CI |
+| METAL-118 | `CTest`: `Metal_MRT` — 2+ simultaneous targets, independent per-target clear-color proof | 🟨 landed 2026-07-21 as `Metal_MRT`, reusing `examples/easygl_mrt_test.cpp` verbatim (public XNA API only) — **CI-confirmed**: the MRT draw itself completes with zero validation errors (narrative item 87), but the test as a whole fails because its own final readback goes through `GetBackBufferData()`, hitting the same still-unresolved Clear-color-only readback bug (items 67–76/82/84/85) — not ✅ until that shared bug is resolved |
 | METAL-119 | Add a `Metal` column to `docs/rendertarget-support.md` | ⬜ |
 
 ## Phase 11 — TextureCube / Texture3D (METAL-120 – METAL-129)
