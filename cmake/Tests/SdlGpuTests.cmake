@@ -108,6 +108,21 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_SkinnedEffect_WorldNormal COMMAND cna_test_sdlgpu_skinnedeffect_world_normal
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-009: stock-effect fog (previously a total absence on this backend). Blue geometry +
+    # red fog, FogStart=0/FogEnd=-0.9 -> keep=1/0.5/0 at Z=0/0.45/0.9; linear RT readback. One file
+    # per effect group covering all 13 fog-capable shader families.
+    cna_sdlgpu_test(cna_test_sdlgpu_basiceffect_fog examples/sdlgpu_basiceffect_fog_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_BasicEffect_Fog COMMAND cna_test_sdlgpu_basiceffect_fog
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sdlgpu_test(cna_test_sdlgpu_effects_fog examples/sdlgpu_effects_fog_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_Effects_Fog COMMAND cna_test_sdlgpu_effects_fog
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sdlgpu_test(cna_test_sdlgpu_skinnedeffect_fog examples/sdlgpu_skinnedeffect_fog_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_SkinnedEffect_Fog COMMAND cna_test_sdlgpu_skinnedeffect_fog
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
     cna_sdlgpu_test(cna_test_sdlgpu_shadereffect examples/sdlgpu_shadereffect_test.cpp)
     cna_register_backend_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
