@@ -157,4 +157,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime examples/sdlgpu_rendertarget_lifetime_test.cpp)
     cna_register_backend_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-064: GraphicsDevice.Viewport honored per-draw in RenderTarget2D passes.
+    cna_sdlgpu_test(cna_test_sdlgpu_rt_viewport examples/sdlgpu_rendertarget_viewport_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_RenderTargetViewport COMMAND cna_test_sdlgpu_rt_viewport
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
