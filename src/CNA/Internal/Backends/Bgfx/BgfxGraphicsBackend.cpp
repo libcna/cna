@@ -1855,9 +1855,10 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxGraphicsBackend::SetViewport(int x, int y, int w, int h, float /*minDepth*/, float /*maxDepth*/)
     {
         // Storage-only (Task 880); applied via ApplyViewportOverride() right before each 3D
-        // submit. Depth range is an acceptable Bgfx deviation -- bgfx has no per-view depth
-        // range knob equivalent to VkViewport's minDepth/maxDepth (mirrors SetVirtualResolution's
-        // documented no-op precedent for parameters Bgfx has no matching concept for).
+        // submit -- for RENDER-TARGET views as well as the backbuffer since REMED-GFX-063.
+        // Depth range is an acceptable Bgfx deviation -- bgfx has no per-view depth range knob
+        // equivalent to VkViewport's minDepth/maxDepth (mirrors SetVirtualResolution's documented
+        // no-op precedent for parameters Bgfx has no matching concept for).
         if (w <= 0 || h <= 0) { viewportW_ = viewportH_ = 0; viewportSet_ = false; return; }
         viewportX_   = static_cast<uint16_t>(x);
         viewportY_   = static_cast<uint16_t>(y);
@@ -1868,12 +1869,23 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::ApplyViewportOverride()
     {
-        // Only the backbuffer (view 0) honors a custom sub-region Viewport -- RT passes stay at
-        // their EnsureViewState()/BindAsRenderTarget()-established full-RT-size default, since
-        // currentViewId_/spriteViewId are shared between the deferred-per-frame 2D SpriteBatch
-        // path and this 3D path, and a per-RT custom Viewport cannot be recovered from a single
-        // frame-global stored value (mirrors Vulkan's identical RT-pass scoping decision).
-        if (viewportSet_ && currentViewId_ == 0 && viewportW_ > 0 && viewportH_ > 0)
+        // REMED-GFX-063: honor a custom sub-region Viewport for RENDER-TARGET views too, not only
+        // the backbuffer (view 0). bgfx view rect is PER-VIEW state (unlike the per-draw scissor
+        // in ApplyScissorOverride): the last setViewRect(viewId,...) before bgfx::frame() applies
+        // to every draw submitted to that view. Each RenderTarget2D/Cube/MRT owns a distinct view
+        // id (currentViewId_ points at the bound target's own view), so applying the custom rect to
+        // currentViewId_ here -- called right before every 3D submit, after any EnsureViewState()/
+        // BindAsRenderTarget() full-target reset -- makes it the winning view rect for that pass's
+        // draws. Viewport coordinates are in the bound target's own pixel space (top-left origin),
+        // which is exactly bgfx::setViewRect's convention (bgfx normalizes the underlying renderer's
+        // origin internally), so no Y-flip. When no custom viewport is set (viewportSet_ false or a
+        // zero-sized rect) this is a no-op and the view keeps its full-target rect.
+        //
+        // Bgfx cannot represent two DIFFERENT viewports on one view within a single frame (a
+        // pre-existing per-view-model limitation shared with the backbuffer -- REMED-GFX-065);
+        // Viewport.MinDepth/MaxDepth remain an accepted Bgfx deviation (no per-view depth-range
+        // knob -- see SetViewport()).
+        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0)
             bgfx::setViewRect(currentViewId_, viewportX_, viewportY_, viewportW_, viewportH_);
     }
 
