@@ -32,7 +32,7 @@ backend code is authorized, mirroring `plan_dx9.md`'s `D9-0` discipline.
 |---|---|---|---|---|---|---|---|
 | 1 | **DX1** | 1995 | DirectDraw v1 only (`IDirectDraw`/`IDirectDrawSurface`/`DDSURFACEDESC`) — no Direct3D exists yet | throw (no code path exists at all) | `DX1` | `plan_dx1.md` | ✅ done (2026-07-20) — 10/10 CTests passing, see `docs/dx1-backend.md` |
 | 2 | **DX2** | 1996 | DirectDraw v1 (unchanged); 3D built on `IDirect3D2`/`IDirect3DDevice2`'s `DrawPrimitive`/`DrawIndexedPrimitive` (DX3-SDK addition) rather than the literal DX2-SDK execute-buffer API (`IDirect3D`/`IDirect3DDevice`/`IDirect3DExecuteBuffer`) — **spike-proven non-functional in this Wine environment**, see below | 2D real (ported from DX1); 3D real geometry/Z-test/one-texture/blend/`WireFrame` via `DrawPrimitive`, plus (Phase O9) real CPU-side ambient+directional lighting for normal-bearing vertices; fog/multitexture/stencil/`AnisotropicFiltering` accepted-and-ignored or empirically confirmed absent (owner-confirmed scope) | `DX2` | `plan_dx2.md` | ✅ done (2026-07-21) — all 9 phases complete (O1-O8 baseline + O9 lighting/`WireFrame` improvement), 19/19 dedicated CTests + full 5415-test `CnaTests` regression (19 failed/1 not-run, all pre-existing or documented scope boundaries, zero DX2-caused), real 3D rendering + lighting verified, see `docs/dx2-backend.md` |
-| 3 | **DX3 (real)** | 1996 | DirectDraw v2 (`IDirectDraw2`, adds refresh-rate to `SetDisplayMode`) + execute-buffer Direct3D, matured | throw for v1 (2D-only baseline), same optional-3D question as DX2 | `DX3` (⚠ reassigned — see rename note) | `plan_dx3_real.md` (not yet written) | ⬜ not started — blocked on the `FREE_DIRECT` rename below |
+| 3 | **DX3 (real)** | 1996 | DirectDraw v2 (`IDirectDraw2`, adds refresh-rate to `SetDisplayMode` — confirmed real via `DX30-0`, but dead code for this backend family's windowed-only design, same as DX1/DX2); 3D built on `IDirect3D2`/`IDirect3DDevice2::DrawPrimitive` (already a DX3-SDK addition, verbatim port of DX2's own post-Phase-O9 3D layer, incl. CPU lighting/`WireFrame`) rather than the execute-buffer surface (proven non-functional, same `DX2-0` finding) | 2D real (mechanical port of DX2, upgraded to `IDirectDraw2`); 3D real geometry/Z-test/one-texture/blend/`WireFrame`/CPU lighting, identical to DX2's own boundary | `DX30` (temporary — see rename note; will become `DX3` once the rename below runs) | `plan_dx30.md`, `docs/dx30-backend.md` | ✅ done (2026-07-21) — 19/19 dedicated CTests pass (all green on first run, mechanical port of DX2), see `docs/dx30-backend.md` |
 | 4 | *(DX4)* | — | never released | — | — | — | n/a |
 | 5 | **DX5** | 1997 | DirectDraw v4 + Direct3D `DrawPrimitive` (modern draw-call model begins) | 2D real (HW quads); fixed-function 3D optional/best-effort, own decision when opened | `DX5` | `plan_dx5.md` (not yet written) | ⬜ not started |
 | 6 | **DX6** | 1998 | + multitexturing, DXTn, stencil, `IDirect3DVertexBuffer` | same shape as DX5 | `DX6` | `plan_dx6.md` (not yet written) | ⬜ not started |
@@ -51,15 +51,21 @@ of this roadmap's scope.
 - **Today**: `CNA_GRAPHICS_BACKEND=DX3` is the existing, shipped `free-direct`-backed 2D DirectDraw
   backend (`plan_dx3.md`, `docs/dx3-backend.md`). It stays exactly as-is until the rename below is
   actually carried out as its own task — this roadmap does not touch it.
-- **Future task**: rename that backend's `CNA_GRAPHICS_BACKEND` value (and matching
-  `CNA_BACKEND_*`/library-target/file-path identifiers) from `DX3` to `FREE_DIRECT`, freeing up the
-  `DX3` name for a *real* (Route B) DirectX 3 backend, built the same way `DX1` is being built now —
-  real `ddraw.h`/`IDirectDraw2` interfaces, MinGW cross-compile, Wine translation, **no
-  `free-direct`**. That real-DX3 work is row 3 above and gets its own `plan_dx3_real.md` (working
-  name; the final filename may reuse `plan_dx3.md` once the rename lands and the old content is
-  archived — decide at that task's own start, not here).
+- **Done (2026-07-21)**: the real (Route B) DirectX 3 backend itself — real `ddraw.h`/`IDirectDraw2`
+  interfaces, MinGW cross-compile, Wine translation, **no `free-direct`** — is implemented and
+  shipping under the temporary name `DX30` (`plan_dx30.md`, `docs/dx30-backend.md`), per the
+  project owner's own instruction to build it now under a temporary name rather than wait for the
+  rename below. It is architecturally a mechanical port of `DX2`'s own 2D+3D layers, upgraded to
+  `IDirectDraw2`.
+- **Still-future task**: rename the existing `free-direct`-backed backend's `CNA_GRAPHICS_BACKEND`
+  value (and matching `CNA_BACKEND_*`/library-target/file-path identifiers) from `DX3` to
+  `FREE_DIRECT`, then rename `DX30` (mechanical: `Dx30`→`Dx3` class/file/directory renames,
+  `DX30`→`DX3` CMake option/define renames) to inherit the now-free `DX3` name; `plan_dx30.md` can
+  be retired/merged into `plan_dx3.md` once the old `free-direct` content there is archived —
+  decide the exact filename mechanics at that task's own start, not here.
 - Until the rename task actually runs, do not reuse the bare `DX3` `CMakeLists.txt`/CMake-option
-  identifiers for anything else — that would collide with the still-shipping backend.
+  identifiers for anything else — that would collide with the still-shipping backend. `DX30` is
+  registered as its own, separate CMake option precisely to avoid this collision.
 
 ## What's shared across every backend in this family
 
@@ -92,6 +98,9 @@ of this roadmap's scope.
 - `docs/directx-legacy-backends-analysis.md` — the feasibility analysis this roadmap turns into
   actual tasks.
 - `plan_dx1.md` — DX1's own full implementation plan (this session).
+- `plan_dx2.md`, `docs/dx2-backend.md` — DX2's own full implementation plan, the backend `DX30`
+  ports verbatim.
+- `plan_dx30.md`, `docs/dx30-backend.md` — the real DirectX 3 backend, temporarily named `DX30`.
 - `plan_dx3.md`, `docs/dx3-backend.md` — the shipping `free-direct`-backed DX3, pending its
   `FREE_DIRECT` rename.
 - `plan_dx9.md`, `plan_dx.md` — the shipping D3D9/D3D11/D3D12 plans; their Route-B conventions

@@ -39,8 +39,11 @@ cmake-build-windows/*
 cmake-build-tests/*
 cmake-build-ubsan/*
 cmake-build-dx2/*
+cmake-build-dx30/*
 dx2-spike/*.exe
 dx2-spike/*.o
+dx30-spike/*.exe
+dx30-spike/*.o
 __pycache__/
 *.pyc
 

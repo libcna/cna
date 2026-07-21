@@ -176,6 +176,11 @@ include(cmake/Tests/Dx1Tests.cmake)
 # own shape (Windows-only, MinGW cross-compile + Wine wrapper).
 include(cmake/Tests/Dx2Tests.cmake)
 
+# plan_dx30.md: real DirectX 3 backend, temporarily named DX30 (see plan_dx30.md's own status note
+# for why) -- a mechanical port of DX2's own 2D+3D layers upgraded to IDirectDraw2, same
+# Windows-only/MinGW-cross-compile/Wine-wrapper shape as Dx2Tests.cmake.
+include(cmake/Tests/Dx30Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

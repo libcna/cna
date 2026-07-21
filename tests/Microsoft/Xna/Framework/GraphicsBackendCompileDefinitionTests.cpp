@@ -65,6 +65,11 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_DX2
     ++enabled;
 #endif
+    // plan_dx30.md: same class of gap DX2-84's own comment above documents -- DX30 needs its own
+    // entry here too, added proactively this time rather than discovered by a from-scratch regression.
+#ifdef CNA_BACKEND_DX30
+    ++enabled;
+#endif
 #ifdef CNA_BACKEND_SDL_GPU
     ++enabled;
 #endif
