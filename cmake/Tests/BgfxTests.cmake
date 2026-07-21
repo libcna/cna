@@ -437,6 +437,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_Viewport_Subregion COMMAND cna_test_bgfx_viewport_subregion
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-063: custom Viewport must be honored for draws issued while a RenderTarget2D is bound
+    cna_bgfx_test(cna_test_bgfx_rendertarget_viewport
+                  examples/bgfx_rendertarget_viewport_test.cpp)
+    cna_register_backend_test(NAME Bgfx_RenderTarget_Viewport COMMAND cna_test_bgfx_rendertarget_viewport
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 750: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
     cna_bgfx_test(cna_test_bgfx_texture_address_mode
                   examples/bgfx_texture_address_mode_test.cpp)
