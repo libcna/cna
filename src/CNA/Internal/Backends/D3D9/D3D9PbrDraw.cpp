@@ -231,18 +231,24 @@ namespace CNA::Internal::Backends::D3D9
         {
             // FogParams.w carries WeightsPerVertex for the skinned variant (PbrSkinned3D.hlsl's
             // own register layout, matching SkinnedVertexColor3D.hlsl's identical packing choice).
+            // REMED-GFX-010: fog moved to its own FogVector register (the FNA view-space fog vector),
+            // dotted with the POST-skin position in the VS; FogParams.xyz are now unused.
             const float fogParams[4] = {
-                params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd,
-                static_cast<float>(params.weightsPerVertex)};
+                0.0f, 0.0f, 0.0f, static_cast<float>(params.weightsPerVertex)};
             TryUploadVertexShaderConstantEXT(device_.Get(), vsRegs, vsCount, "FogParams", fogParams);
+            const float fogVector[4] = {
+                params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3]};
+            TryUploadVertexShaderConstantEXT(device_.Get(), vsRegs, vsCount, "FogVector", fogVector);
             UploadBonesVS(device_.Get(), vsRegs, vsCount, params);
         }
         else
         {
             const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
             UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "NormalMatrix", worldInverseTranspose);
+            // REMED-GFX-010: Pbr3D (non-skinned) has no WeightsPerVertex, so FogParams carries the
+            // FNA view-space fog vector directly (dotted with the object position in the VS).
             const float fogParams[4] = {
-                params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd, 0.0f};
+                params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3]};
             TryUploadVertexShaderConstantEXT(device_.Get(), vsRegs, vsCount, "FogParams", fogParams);
         }
 

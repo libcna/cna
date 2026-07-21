@@ -64,9 +64,10 @@ static constexpr D3D9ShaderConstantSlot kPbrSkinned3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},
     {"World", 'v', 4, 3},
     {"FogParams", 'v', 8, 1},
-    {"Bones", 'v', 9, 216}
+    {"Bones", 'v', 9, 216},
+    {"FogVector", 'v', 225, 1}   // REMED-GFX-010: D3DDisassemble-verified (c225, after Bones c9..c224)
 };
-static constexpr int kPbrSkinned3DVS_RegistersCount = 4;
+static constexpr int kPbrSkinned3DVS_RegistersCount = 5;
 
 // Identical constant set/registers to kPbr3DPS_Registers (PbrSkinned3D.hlsl's own pixel shader is
 // a straight copy of Pbr3D.hlsl's) -- kept as its own named table anyway, matching this file's own
@@ -92,9 +93,10 @@ static constexpr D3D9ShaderConstantSlot kSkinnedVertexColor3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},
     {"World", 'v', 4, 3},
     {"FogParams", 'v', 8, 1},
-    {"Bones", 'v', 9, 216}
+    {"Bones", 'v', 9, 216},
+    {"FogVector", 'v', 225, 1}   // REMED-GFX-010: D3DDisassemble-verified (c225, after Bones c9..c224)
 };
-static constexpr int kSkinnedVertexColor3DVS_RegistersCount = 4;
+static constexpr int kSkinnedVertexColor3DVS_RegistersCount = 5;
 
 static constexpr D3D9ShaderConstantSlot kSkinnedVertexColor3DPS_Registers[] = {
     {"DiffuseColor", 'p', 0, 1},

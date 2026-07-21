@@ -55,8 +55,9 @@
 
 float4x4 WorldViewProj : register(c0); // c0-c3
 float4x4 World          : register(c4); // c4-c7
-float4   FogParams      : register(c8); // x=FogEnabled, y=FogStart, z=FogEnd, w=WeightsPerVertex
+float4   FogParams      : register(c8); // REMED-GFX-010: only .w = WeightsPerVertex now (xyz unused)
 float4x3 Bones[72]      : register(c9); // c9..c224 (216 registers)
+float4   FogVector      : register(c225); // REMED-GFX-010: FNA view-space fog vector (SetFogVector)
 
 struct VSInput
 {
@@ -111,11 +112,9 @@ VSOutput VSSkinnedVertexColor3D(VSInput vin)
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;
     vout.Color = vin.Color;
-    vout.FogFactor = (FogParams.x > 0.5)
-        ? ((abs(FogParams.z - FogParams.y) < 1e-6)
-            ? 0.0
-            : saturate((vin.Position.z + FogParams.z) / (FogParams.z - FogParams.y)))
-        : 1.0;
+    // REMED-GFX-010: FNA view-space fog on the POST-skin position (FNA Skin() mutates vin.Position
+    // before ComputeFogFactor). keep = 1 - saturate(dot(skinPos, fogVector)); zero vector = no fog.
+    vout.FogFactor = 1.0 - saturate(dot(float4(skinnedPos, 1.0), FogVector));
 
     return vout;
 }

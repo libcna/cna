@@ -141,10 +141,15 @@ namespace CNA::Internal::Backends::D3D9
 
         UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "WorldViewProj", world * view * projection);
         UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, "World", world);
+        // FogParams.w carries WeightsPerVertex. REMED-GFX-010: fog moved to its own FogVector
+        // register (the FNA view-space fog vector), dotted with the POST-skin position in the VS;
+        // FogParams.xyz are now unused.
         const float fogParams[4] = {
-            params.fogEnabled ? 1.0f : 0.0f, params.fogStart, params.fogEnd,
-            static_cast<float>(params.weightsPerVertex)};
+            0.0f, 0.0f, 0.0f, static_cast<float>(params.weightsPerVertex)};
         TryUploadVertexShaderConstantEXT(device_.Get(), vsRegs, vsCount, "FogParams", fogParams);
+        const float fogVector[4] = {
+            params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3]};
+        TryUploadVertexShaderConstantEXT(device_.Get(), vsRegs, vsCount, "FogVector", fogVector);
         UploadBonesVS(device_.Get(), vsRegs, vsCount, params);
 
         // SkinnedEffect::FillGpuDrawParams() already pre-folds ambient into emissiveColor (matches
