@@ -2094,6 +2094,37 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     (`METAL-21`–`34`) is now fully closed except `METAL-32`, correctly and only blocked on MSAA
     (`METAL-104`/`105`) not existing yet.
 
+79. **`METAL-256` fix landed — `MetalTexture`'s in-place `replaceRegion:` CPU/GPU-sync hazard
+    (`METAL-175`) closed with the mip-level-preserving reallocate pattern its own table row
+    described as the needed approach, not attempted until now**: `MetalTexture` now stores
+    (retained) `dev_`/`queue_` references, mirroring `MetalTextureCube`'s own established pattern,
+    passed in from `CreateTexture()`'s existing `impl_->device`/`impl_->queue`. Both
+    `UpdatePixels()`/`UpdatePixelsLevel()` now delegate to a new `reallocateAndUpdate(targetLevel,
+    rgba, bytesPerRow, levelW, levelH)` method instead of mutating `texture_` in place: it allocates
+    a fresh `id<MTLTexture>` with the same descriptor, and — only when `mipmapLevelCount > 1` (the
+    uncommon case; skipped entirely for the overwhelmingly common non-mipmapped texture, so this adds
+    no extra GPU round-trip there) — blit-copies every *other* mip level from the old texture into
+    the new one first via `MTLBlitCommandEncoder copyFromTexture:...toTexture:...` (one short-lived
+    command buffer, `waitUntilCompleted` before proceeding, matching this file's own established
+    synchronous-upload style elsewhere), so no already-uploaded level's content is lost the way a
+    naive "just reallocate" fix would have lost it. Only then does it `replaceRegion:` the new pixel
+    data into the new texture's target level, release the old `texture_`, and swap the pointer — by
+    the time either public method returns, `texture_` always refers to an object nothing has ever
+    mutated in place while potentially GPU-visible, the same safety property `MetalVertexBuffer`/
+    `MetalIndexBuffer`'s own `SetData()` already had (`METAL-173`/`174`). Cross-checked before
+    committing: `CreateTexture()` (the sole `MetalTexture` construction call site, confirmed by
+    `grep`) updated to pass `impl_->queue` as the new constructor argument; `nativeTextureFor()`
+    (the only place that reads a `MetalTexture`'s live `id<MTLTexture>`) confirmed to always call
+    `->native()` fresh on every invocation rather than caching the pointer anywhere, ruling out a
+    stale-reference risk from the swap; `ITextureBackend::UpdatePixels`/`UpdatePixelsLevel`'s base
+    contract (`IGraphicsBackend.hpp`) confirmed to be plain synchronous `void` virtuals with no
+    async/completion-handler requirement this synchronous design needs to satisfy. **Cannot be
+    build-verified from this Linux sandbox** — this is genuinely new Objective-C++ code that has
+    never been compiled anywhere; the only sanity check available here was a full-file
+    brace/bracket/paren balance re-check (`336/336`, `796/796`, `1717/1717`, all balanced) plus
+    careful manual re-reading of the diff against Apple's documented Metal blit-encoder API shape.
+    Pushed for real CI verification next — genuinely unverified until that CI run reports back.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -2118,8 +2149,7 @@ Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114
 `ShaderEffect`, which
 Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
 `VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
-on Phase 14); `METAL-256` (the real texture-update
-CPU/GPU-sync hazard Phase 18's audit found but did not fix) and `METAL-257` (the cross-backend
+on Phase 14); `METAL-257` (the cross-backend
 missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap Phase 16's research found but deliberately left for a
 cross-backend task, not this Metal-only plan — now also confirmed to affect iOS/tvOS, not just
 macOS, per Phase 29's own research); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases 21–28 and
@@ -2169,8 +2199,8 @@ downstream of it, `METAL-243`/`246` themselves answered, see above).
 - Command-buffer/encoder lifecycle formally audited and a real premature-`presentDrawable:` bug
   fixed: mid-frame render-target switches previously presented the still-in-progress backbuffer up
   to once per switch instead of exactly once per `Present()` (🟨 landed 2026-07-19 — `METAL-173`–
-  `181`; the texture-update CPU/GPU-sync hazard the same audit found is real but deliberately left
-  open as `METAL-256`, see its own note on why a naive fix would lose mip-level content).
+  `181`; the texture-update CPU/GPU-sync hazard the same audit found was fixed 2026-07-21 as
+  `METAL-256`, mip-level-preserving reallocate — see narrative item 79, pending CI).
 - Resize/fullscreen/Retina behavior confirmed correct **by reading this repo's own vendored SDL3
   Cocoa Metal-view source** rather than guessing — `drawableSize`/`contentsScale` are already
   managed automatically by SDL3 itself, no CNA Metal code needed; found one real, precisely-scoped,
@@ -2685,14 +2715,14 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 |---|---|---|
 | METAL-173 | Definitive answer (from Apple documentation, not assumption) on whether `[buffer_ release]`-then-reallocate in `MetalVertexBuffer::SetData()` is safe while the old buffer is still referenced by an in-flight command buffer from a prior frame — a correctness question, not style | 🟨 (answered: safe — see narrative) |
 | METAL-174 | Same audit for `MetalIndexBuffer::upload()`'s identical pattern | 🟨 (answered: safe, same reasoning) |
-| METAL-175 | Same audit for `MetalTexture`'s in-place `replaceRegion:` calls while the texture may be bound to an in-flight command buffer | 🟨 (answered: **genuinely unsafe as written** — a real, currently-unmitigated hazard; follow-up fix tracked separately as `METAL-256`, not fixed in this pass — see narrative for why) |
+| METAL-175 | Same audit for `MetalTexture`'s in-place `replaceRegion:` calls while the texture may be bound to an in-flight command buffer | 🟨 (answered: was genuinely unsafe as written; fix landed as `METAL-256`, see narrative item 79 — pending CI verification) |
 | METAL-176 | Consider (profile-driven, optional) buffer sub-allocation from a ring/pool instead of one `MTLBuffer` per `SetData()` call, for high-frequency `SpriteBatch` uploads | 🟨 (scope decision recorded: defer, profile-driven only) |
 | METAL-177 | `SetDataWithOptions`/`SetData16WithOptions`/`SetData32WithOptions` — no override exists today (falls to the base default that ignores the hint); decide whether the current always-reallocate behavior already satisfies both `Discard`/`NoOverwrite` hints' *observable* contract, or whether a real perf-motivated distinction is worth adding | 🟨 (decided: already satisfies both hints observably, no override needed — see narrative) |
 | METAL-178 | `SetContextRecoveryEnabled(bool)` — Metal has no OpenGL-style context loss on desktop macOS; confirm this should stay a documented intentional no-op | 🟨 (confirmed correct, matches Vulkan/D3D11/D3D12/WebGPU/Bgfx/SdlGpu/DX3's own established precedent — only D3D9/EasyGL override it, both genuinely context-loss-prone APIs) |
 | METAL-179 | `DebugSimulateContextLoss()`/`DebugRestoreContext()` — same reasoning as `METAL-178`, document as an intentional no-op with justification | 🟨 (confirmed correct, same precedent) |
 | METAL-180 | Audit whether the current one-command-buffer-per-frame model scales once render-target switches (Phase 10) force ending/starting encoders mid-frame — get this right architecturally before Phase 10 lands, not as a retrofit | 🟨 (found and fixed a real premature-present bug — see narrative) |
 | METAL-181 | Document the final command-buffer/encoder lifecycle model once `METAL-173`–`METAL-180` resolve — currently only exists as scattered `ensureFrame()`/`endFrame()`/`clear()` logic with no written model, despite being the single most safety-critical part of this backend | 🟨 (written below; extracted into `docs/metal-backend.md`'s own dedicated section 2026-07-20, `METAL-234`) |
-| METAL-256 | *(new, found during this audit)* Fix `MetalTexture::UpdatePixels()`/`UpdatePixelsLevel()`'s in-place `replaceRegion:` CPU/GPU synchronization hazard (`METAL-175`) — genuinely non-trivial: a naive "always reallocate the `id<MTLTexture>`" fix (mirroring the already-safe `MetalVertexBuffer`/`MetalIndexBuffer` pattern) would silently lose any *other*, already-uploaded mip level's content, since a fresh `newTextureWithDescriptor:` texture starts uninitialized and `UpdatePixels()` only ever rewrites level 0 — needs either a per-level blit-copy of untouched levels into the new texture, or an explicit GPU-completion-gated update queue; deliberately not attempted without a compiler to verify against | ⬜ |
+| METAL-256 | *(new, found during this audit)* Fix `MetalTexture::UpdatePixels()`/`UpdatePixelsLevel()`'s in-place `replaceRegion:` CPU/GPU synchronization hazard (`METAL-175`) — genuinely non-trivial: a naive "always reallocate the `id<MTLTexture>`" fix (mirroring the already-safe `MetalVertexBuffer`/`MetalIndexBuffer` pattern) would silently lose any *other*, already-uploaded mip level's content, since a fresh `newTextureWithDescriptor:` texture starts uninitialized and `UpdatePixels()` only ever rewrites level 0 — needs either a per-level blit-copy of untouched levels into the new texture, or an explicit GPU-completion-gated update queue | 🟨 **fixed 2026-07-21** — see narrative item 79: `reallocateAndUpdate()` blit-copies every other mip level into the new texture before writing new data, then swaps the pointer; source-complete, unbuilt/unverified — no compiler available in this sandbox, pending CI |
 
 ## Phase 19 — SpriteBatch full parity (METAL-182 – METAL-188)
 

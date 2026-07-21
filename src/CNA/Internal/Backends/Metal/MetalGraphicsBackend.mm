@@ -891,8 +891,9 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     class MetalTexture final : public ITextureBackend
     {
     public:
-        MetalTexture(id<MTLDevice> dev, const ImageData& data) : w_(data.width), h_(data.height)
+        MetalTexture(id<MTLDevice> dev, id<MTLCommandQueue> queue, const ImageData& data) : dev_(dev), queue_(queue), w_(data.width), h_(data.height)
         {
+            [dev_ retain]; [queue_ retain];
             MTLTextureDescriptor* d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
                 width:w_ height:h_ mipmapped:(data.mipLevels > 1)];
             d.usage=MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
@@ -903,18 +904,69 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 [texture_ replaceRegion:r mipmapLevel:0 withBytes:data.pixels.data() bytesPerRow:w_*4];
             }
         }
-        ~MetalTexture() override { [texture_ release]; }
+        ~MetalTexture() override { [texture_ release]; [queue_ release]; [dev_ release]; }
         int GetWidth() const override { return w_; }
         int GetHeight() const override { return h_; }
         SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        // plan_metal.md METAL-256: real bug found (Phase 18's own resource-lifetime audit, METAL-175)
+        // and fixed here -- the original implementation mutated `texture_` in place via
+        // `replaceRegion:`, which Apple's own Metal synchronization guidance is explicit is NOT
+        // automatically protected the way reference-counted object lifetime is (unlike
+        // MetalVertexBuffer/MetalIndexBuffer's own SetData(), which already safely reallocates a
+        // fresh id<MTLBuffer> instead of mutating in place, relying on Metal's documented "a command
+        // buffer keeps every resource it references alive until its GPU work completes" guarantee --
+        // that guarantee protects an object's *lifetime*, not its *contents*). A game calling
+        // Texture2D.SetData() on a texture a still-GPU-executing prior frame is reading risked the
+        // GPU observing torn/partially-updated content.
+        //
+        // Mirrors that already-safe reallocate-on-write pattern here too, extended with the one
+        // genuine extra step a texture needs that a buffer does not: reallocating outright would
+        // otherwise silently lose any *other*, separately-uploaded mip level (UpdatePixels() only
+        // ever touches level 0; UpdatePixelsLevel() only ever touches its own one level), since a
+        // freshly allocated MTLTexture starts completely uninitialized. Blit-copies every level
+        // except the one being updated from the old texture into the new one first (skipped
+        // entirely when there is only one level, the overwhelmingly common non-mipmapped case, so
+        // this adds no extra GPU round-trip there), then writes the new pixel data into the new
+        // texture's target level via the usual replaceRegion:, then swaps `texture_` to the new
+        // object and releases the old one -- by the time this returns, `texture_` always refers to
+        // a texture nothing has ever mutated in place while GPU-visible.
+        void reallocateAndUpdate(int targetLevel, const uint8_t* rgba, int bytesPerRow, int levelW, int levelH)
+        {
+            const NSUInteger levelCount = texture_.mipmapLevelCount;
+            MTLTextureDescriptor* d=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm
+                width:(NSUInteger)w_ height:(NSUInteger)h_ mipmapped:(levelCount>1)];
+            d.usage=MTLTextureUsageShaderRead | MTLTextureUsageRenderTarget;
+            id<MTLTexture> newTex=[dev_ newTextureWithDescriptor:d];
+            if (!newTex) throw std::runtime_error("Metal: failed to allocate replacement texture for UpdatePixels");
+            if (levelCount>1) {
+                id<MTLCommandBuffer> cmd=[queue_ commandBuffer];
+                id<MTLBlitCommandEncoder> blit=[cmd blitCommandEncoder];
+                for (NSUInteger lvl=0; lvl<levelCount; ++lvl) {
+                    if ((int)lvl==targetLevel) continue;
+                    const NSUInteger lw=std::max<NSUInteger>(1,(NSUInteger)w_>>lvl);
+                    const NSUInteger lh=std::max<NSUInteger>(1,(NSUInteger)h_>>lvl);
+                    [blit copyFromTexture:texture_ sourceSlice:0 sourceLevel:lvl
+                              sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(lw,lh,1)
+                                 toTexture:newTex destinationSlice:0 destinationLevel:lvl destinationOrigin:MTLOriginMake(0,0,0)];
+                }
+                [blit endEncoding];
+                [cmd commit];
+                [cmd waitUntilCompleted];
+            }
+            MTLRegion r=MTLRegionMake2D(0,0,(NSUInteger)levelW,(NSUInteger)levelH);
+            [newTex replaceRegion:r mipmapLevel:(NSUInteger)targetLevel withBytes:rgba bytesPerRow:(NSUInteger)bytesPerRow];
+            [texture_ release];
+            texture_=newTex;
+        }
         void UpdatePixels(const uint8_t* rgba, int stride) override {
-            [texture_ replaceRegion:MTLRegionMake2D(0,0,w_,h_) mipmapLevel:0 withBytes:rgba bytesPerRow:stride];
+            reallocateAndUpdate(0, rgba, stride, w_, h_);
         }
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int lw, int lh) override {
-            [texture_ replaceRegion:MTLRegionMake2D(0,0,lw,lh) mipmapLevel:level withBytes:rgba bytesPerRow:lw*4];
+            reallocateAndUpdate(level, rgba, lw*4, lw, lh);
         }
         id<MTLTexture> native() const { return texture_; }
     private:
+        id<MTLDevice> dev_=nil; id<MTLCommandQueue> queue_=nil;
         int w_, h_; id<MTLTexture> texture_ = nil;
     };
 
@@ -1998,7 +2050,7 @@ void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixel
     [p.command release]; p.command=nil; // command buffers are single-use; drawable stays alive.
 }
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
-std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
+std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,impl_->queue,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
 std::unique_ptr<ITextureCubeBackend> MetalGraphicsBackend::CreateTextureCube(int size,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap);}
 std::unique_ptr<IOcclusionQueryBackend> MetalGraphicsBackend::CreateOcclusionQuery()
 {
