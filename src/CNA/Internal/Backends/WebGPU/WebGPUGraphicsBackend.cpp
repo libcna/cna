@@ -3912,7 +3912,12 @@ struct VertexOutput {
     let lightSum = ep.light0DiffuseFresnelEn.xyz * ndotl0
                  + ep.light1Diffuse.xyz * ndotl1
                  + ep.light2Diffuse.xyz * ndotl2;
-    let litRGB = (ep.emissiveAmount.xyz + lightSum) * ep.diffuseColor.rgb;
+    // REMED-GFX-007: FNA Lighting.fxh adds emissive UNSCALED (litRGB = lightSum*Diffuse +
+    // Emissive), not (Emissive + lightSum)*Diffuse -- the latter re-scales the already
+    // ambient-folded emissive by DiffuseColor a second time (and, since the CPU layer pre-folds
+    // Alpha into both operands, squares Alpha too). emissiveAmount.xyz is the CPU-side pre-folded
+    // (EmissiveColor + AmbientLightColor*DiffuseColor)*Alpha (EnvironmentMapEffect.cpp).
+    let litRGB = lightSum * ep.diffuseColor.rgb + ep.emissiveAmount.xyz;
     let baseColor = litRGB * texColor.rgb;
     let combinedAlpha = ep.diffuseColor.a * texColor.a;
     let reflDir = reflect(-e, n);
