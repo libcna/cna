@@ -319,18 +319,21 @@ namespace CNA::Internal::Backends::SdlGpu
             out[31] = p.vertexColorEnabled ? 1.0f : 0.0f;
         }
 
-        // REMED-GFX-009: shared 32-byte FogParams block, byte-identical to VulkanGraphicsBackend's
-        // own FogParams shape -- vec4 fogColorEnabled (xyz = FogColor, w = fogEnabled 0/1) + vec4
-        // fogStartEnd (x = FogStart, y = FogEnd, zw = pad). Bound to the vertex stage only; the
-        // vertex shader computes the keep-factor from raw object-space Z (the GFX-005 convention)
-        // and forwards FogColor + keep to the fragment stage as a varying. A default-constructed
-        // all-zero block means fog disabled -- correct for the no-GpuDrawParams FillColoredUniforms
+        // REMED-GFX-009/-010: shared 32-byte FogParams block, byte-identical to
+        // VulkanGraphicsBackend's own FogParams shape -- vec4 fogColorEnabled (xyz = FogColor, w =
+        // fogEnabled 0/1) + vec4 fogVector (REMED-GFX-010 FNA view-space fog vector). Bound to the
+        // vertex stage only; the vertex shader computes keep = 1 - saturate(dot(vec4(pos,1),
+        // fogVector)) -- object-space position for non-skinned, POST-skin for skinned -- and forwards
+        // FogColor + keep to the fragment stage as a varying. A default-constructed all-zero block
+        // means no fog (dot -> 0 -> keep 1) -- correct for the no-GpuDrawParams FillColoredUniforms
         // path (DrawColoredPrimitives), which never sets fog.
         void FillFogUniforms(std::array<float, 8>& out, const GpuDrawParams& p)
         {
             out[0] = p.fogColor[0]; out[1] = p.fogColor[1]; out[2] = p.fogColor[2];
             out[3] = p.fogEnabled ? 1.0f : 0.0f;
-            out[4] = p.fogStart; out[5] = p.fogEnd; out[6] = 0.0f; out[7] = 0.0f;
+            // REMED-GFX-010: FNA fog vector (bakes World*View + fogStart/fogEnd; zero when disabled).
+            out[4] = p.fogVector[0]; out[5] = p.fogVector[1];
+            out[6] = p.fogVector[2]; out[7] = p.fogVector[3];
         }
 
         // Secondary UBO for lit_textured3d.glsl: DirectionalLight1/DirectionalLight2, EmissiveColor,

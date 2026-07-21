@@ -38,7 +38,7 @@ layout(set = 1, binding = 1) uniform EnvMapParams {
 // VulkanGraphicsBackend's FogParams shape byte-for-byte.
 layout(set = 1, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    vec4 fogStartEnd;      // x = FogStart, y = FogEnd, zw = unused
+    vec4 fogVector;        // REMED-GFX-010: FNA fog vector (dot with object/skin pos)
 } fog;
 
 void main() {
@@ -51,9 +51,6 @@ void main() {
     // REMED-GFX-009: keep-factor from raw object-space Z (GFX-005 corrected form
     // (z+FogEnd)/(FogEnd-FogStart)); FogStart==FogEnd -> fully fogged (FNA SetFogVector). keep=1 ->
     // no fog, keep=0 -> full FogColor. Skinned shaders use the PRE-skin inPos.z (matches Vulkan).
-    float fogKeep = (fog.fogColorEnabled.w > 0.5)
-        ? ((abs(fog.fogStartEnd.y - fog.fogStartEnd.x) < 1e-6) ? 0.0
-            : clamp((inPos.z + fog.fogStartEnd.y) / (fog.fogStartEnd.y - fog.fogStartEnd.x), 0.0, 1.0))
-        : 1.0;
+    float fogKeep = 1.0 - clamp(dot(vec4(inPos, 1.0), fog.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
     fragFog = vec4(fog.fogColorEnabled.xyz, fogKeep);
 }
