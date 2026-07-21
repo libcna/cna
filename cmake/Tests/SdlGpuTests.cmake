@@ -169,4 +169,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_scissor examples/sdlgpu_rendertarget_scissor_test.cpp)
     cna_register_backend_test(NAME SdlGpu_RenderTargetScissor COMMAND cna_test_sdlgpu_rt_scissor
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-069: GraphicsDevice.BlendFactor (constant blend color) reaches the GPU per-draw in
+    # RenderTarget2D passes (blend-constant analog of GFX-064/068; SdlGpu never overrode the base
+    # SetBlendFactor / called SDL_SetGPUBlendConstants, so constant-color blends used SDL's (0,0,0,0)).
+    cna_sdlgpu_test(cna_test_sdlgpu_rt_blendfactor examples/sdlgpu_rendertarget_blendfactor_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_RenderTargetBlendFactor COMMAND cna_test_sdlgpu_rt_blendfactor
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
