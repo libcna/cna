@@ -59,6 +59,9 @@ namespace CNA
         /** @brief DX5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, no execute buffers). */
         Dx5,
 
+        /** @brief DX6 (real DirectDraw v4 + Direct3D v3, real stencil buffer operations). */
+        Dx6,
+
         /** @brief SDL_GPU. */
         SdlGpu
     };
@@ -108,6 +111,8 @@ namespace CNA
         return GraphicsBackendType::Dx30;
 #elif defined(CNA_BACKEND_DX5)
         return GraphicsBackendType::Dx5;
+#elif defined(CNA_BACKEND_DX6)
+        return GraphicsBackendType::Dx6;
 #elif defined(CNA_BACKEND_SDL_GPU)
         return GraphicsBackendType::SdlGpu;
 #else
@@ -146,6 +151,7 @@ namespace CNA
             case GraphicsBackendType::Dx2:            return "DX2";
             case GraphicsBackendType::Dx30:           return "DX30";
             case GraphicsBackendType::Dx5:            return "DX5";
+            case GraphicsBackendType::Dx6:            return "DX6";
             case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
         }
         return "UNKNOWN";

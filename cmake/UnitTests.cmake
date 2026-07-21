@@ -263,6 +263,10 @@ if(CNA_BUILD_TESTS)
             # plan_dx5.md: same proactive wiring as DX30.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx5.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX6")
+            # plan_dx6.md: same proactive wiring as DX30/DX5.
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX6_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx6.sh")
         endif()
     endif()
 

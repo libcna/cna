@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, DX1, DX2, DX30, DX5, or SDL_GPU)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "DX1" "DX2" "DX30" "DX5" "SDL_GPU")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, DX1, DX2, DX30, DX5, DX6, or SDL_GPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "DX1" "DX2" "DX30" "DX5" "DX6" "SDL_GPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -54,10 +54,17 @@ option(CNA_BACKEND_DX30 "Enable Direct X 3 (real DirectDraw v2 + Direct3D v2 Dra
 # of the old D3DVERTEXTYPE enum). Mechanical port of DX30's own 2D+3D layers (including Phase O9's
 # CPU lighting), upgraded further.
 option(CNA_BACKEND_DX5 "Enable Direct X 5 (real DirectDraw v4 + Direct3D v3 FVF DrawPrimitive) graphics backend (Windows only)" OFF)
+# plan_dx6.md: real DirectX 6 graphics backend -- the EXACT SAME COM interfaces DX5 already uses
+# (IDirectDraw4/IDirect3D3/IDirect3DDevice3/IDirect3DViewport3, no new interface revision at this
+# DirectX era). Its own delta: real stencil buffer operations (D3DRENDERSTATE_STENCIL*, spike-
+# confirmed genuine write+test behavior) against a combined depth+stencil Z-buffer surface,
+# resolving the "no real stencil until DX6" boundary DX2/DX30/DX5 all documented. Multitexture
+# stays accepted-and-ignored (D3DTLVERTEX only carries one texture-coordinate pair).
+option(CNA_BACKEND_DX6 "Enable Direct X 6 (real DirectDraw v4 + Direct3D v3, real stencil) graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX30 OR CNA_BACKEND_DX5 OR CNA_BACKEND_SDL_GPU)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX30 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_SDL_GPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -114,6 +121,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_DX5)
         list(APPEND _cna_enabled_backends "DX5")
     endif()
+    if(CNA_BACKEND_DX6)
+        list(APPEND _cna_enabled_backends "DX6")
+    endif()
     if(CNA_BACKEND_SDL_GPU)
         list(APPEND _cna_enabled_backends "SDL_GPU")
     endif()
@@ -132,7 +142,7 @@ endif()
 # extends this same gate to D3D9 (d3d9.h is equally Windows-only). plan_dx1.md design decision 1
 # extends it again to DX1: unlike DX3 (SDL3-backed ../free-direct, genuinely native-Linux-buildable),
 # DX1 uses the real Windows ddraw.h, so it needs the exact same gate.
-if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "DX1" OR CNA_GRAPHICS_BACKEND STREQUAL "DX2" OR CNA_GRAPHICS_BACKEND STREQUAL "DX30" OR CNA_GRAPHICS_BACKEND STREQUAL "DX5")
+if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "DX1" OR CNA_GRAPHICS_BACKEND STREQUAL "DX2" OR CNA_GRAPHICS_BACKEND STREQUAL "DX30" OR CNA_GRAPHICS_BACKEND STREQUAL "DX5" OR CNA_GRAPHICS_BACKEND STREQUAL "DX6")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
@@ -325,6 +335,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX5")
     set(BACKEND_TARGET "cna_backend_graphics_dx5")
     add_compile_definitions(CNA_BACKEND_DX5)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_DX5")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX6")
+    message(STATUS "CNA: Using DX6 (real DirectDraw v4 + Direct3D v3, real stencil) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Dx6")
+    set(BACKEND_TARGET "cna_backend_graphics_dx6")
+    add_compile_definitions(CNA_BACKEND_DX6)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_DX6")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     message(STATUS "CNA: Using SDL_GPU graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/SdlGpu")

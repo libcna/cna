@@ -185,6 +185,10 @@ include(cmake/Tests/Dx30Tests.cmake)
 # port of DX30's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 include(cmake/Tests/Dx5Tests.cmake)
 
+# plan_dx6.md: real DirectX 6 backend -- same DirectDraw v4 + Direct3D v3 interfaces as DX5, with
+# real stencil buffer operations added; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
+include(cmake/Tests/Dx6Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)
