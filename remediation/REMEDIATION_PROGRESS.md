@@ -2311,9 +2311,9 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-DOCS-002 | P2 | NOT STARTED | | | |
 | REMED-DOCS-003 | P3 | NOT STARTED | | | |
 | REMED-GFX-004 | P1 | NOT STARTED | | | |
-| REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4 | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass** — see "Wave 3 — GRAPHICS shader campaign" below). Bgfx + D3DCommon (D3D11/D3D12) slices PENDING (bytecode regen blocked in this sandbox: no shaderc/fxc/dxc binary). Cross-backend fog conformance test still to build. |
-| REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450 | feature/audit | **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx / D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (no shaderc/fxc/dxc). See "Wave 3 — GRAPHICS shader campaign". |
-| REMED-GFX-007 | P1 | IN PROGRESS | 31668819 | feature/audit | **Vulkan slice DONE** — env_map3d.frag emissive now added unscaled (`lightSum*Diffuse + Emissive`); test-driven discriminating case added (non-white Diffuse). 8/8 Vulkan env-map tests pass, zero regressions. Bgfx/WebGPU/SdlGpu/D3DCommon slices PENDING (bytecode regen blocked). See "Wave 3 — GRAPHICS shader campaign". |
+| REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4, _bgfx-test_, _bgfx-fix_ | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass**). **Bgfx slice DONE and VERIFIED** — all **14** fog-capable `vs_*.sc` corrected to `(z+FogEnd)/(FogEnd-FogStart)` + zero-length guard; `bgfx_shaders.hpp` regenerated with a **from-source-built bgfx shaderc 1.19.150** (byte-reproducible: an unchanged-source regen is byte-identical to the committed header; the fix touches exactly the 15 intended shaders' 60 arrays, other 48 byte-identical). All 6 Bgfx fog tests retargeted to non-collapsing scenes and go pre→post: 4 collapsing tests 2/3→3/3, alphatest/dualtexture (endpoint-swap) 1/3→3/3. D3DCommon (D3D11/D3D12) + D3D9 slices PENDING (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
+| REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450 | feature/audit | **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx slice DONE and VERIFIED** — `vs_skinned3d`, `vs_skinned3d_vertexlit` (both Variant A) + `vs_pbr_skinned3d` (Variant B) now apply the World inverse-transpose after the bone skin, supplied CPU-side via the existing `u_normalMatrix` (bgfx's shaderc lacks in-shader `inverse()`/`transpose()`; the 4 skinned draw sites now upload `ComputeNormalMatrix3x3`). New Bgfx analytic world-normal harness (pixel- **and** vertex-lit) **2/8→8/8**; scale case reads 228 (inverse-transpose), not 180 (Variant A) or 114 (raw-World). `vs_skinned3d_vertexlit` was **not** in the audit's Bgfx evidence list — found by exhaustive inspection. **D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
+| REMED-GFX-007 | P1 | IN PROGRESS | 31668819, _bgfx-fix_ | feature/audit | **Vulkan slice DONE** — env_map3d.frag emissive now added unscaled (`lightSum*Diffuse + Emissive`). **Bgfx slice DONE and VERIFIED** — `fs_env_map3d.sc` corrected to `lightSum*Diffuse + Emissive`; discriminating sub-test added to `bgfx_environmentmapeffect_amount_zero_test.cpp` (non-white Diffuse (0.5) + non-zero Emissive (0.5)): pre-fix got=(50,25,13), post-fix got=(100,50,25). All Bgfx env-map tests pass (AmountZero/Fresnel/Combined/…), zero regressions. WebGPU/SdlGpu/D3DCommon slices PENDING. See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
 | REMED-GFX-008 | P1 | DEFERRED (this session) | | | Vulkan root cause re-confirmed at source (skinned frag reads always-zero `pc.ambientColor`; `SkinnedEffect::FillGpuDrawParams` never writes `p.ambientColor` and pre-folds ambient into `p.emissiveColor`, which the skinned UBOs have no slot for). **Deferred, not blocked by tooling:** the FNA-correct formula double-lights `Vulkan_AvatarRenderer_TintRouting`, which drives ambient(1,1,1) AND a full head-on light and passes only because this bug cancels the double-count. Re-baselining it needs AvatarRenderer lighting recalibration — an avatar-subsystem change outside this campaign's clean scope. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-009 | P1 | NOT STARTED | | | |
 | REMED-GFX-010 | P2 | NOT STARTED | | | |
@@ -2927,3 +2927,125 @@ frag shaders at it), but it **cannot be rigorously verified** without that recal
 deferred rather than landed unverified. Recommend scheduling GFX-008 jointly with an
 AvatarRenderer-lighting-calibration task (owner: GRAPHICS + avatar), per the plan's "handle both
 together."
+
+---
+
+## Wave 3 — GRAPHICS shader/effect campaign, **Bgfx slices** (REMED-GFX-005 / -006 / -007)
+
+This session unblocked the Bgfx backend, which the prior Wave-3 passes left BYTECODE-BLOCKED
+("no shaderc binary"). The blocker was purely the missing tool — the bgfx shader source and its
+3rdparty (glslang / spirv-tools / spirv-cross / tint) were all present under
+`cmake-build-bgfx/_deps/bgfx_cmake-src/`.
+
+### Shaderc toolchain — built from source (no repo change required)
+
+- **Tool:** bgfx `shaderc`, **version 1.19.150**, built from the already-fetched bgfx source
+  (**bgfx rev `759bdeb936ea95e4ac13d1ba8d4ce2e91c5c17d2`**, bimg `c3cf9af…`, bx `c98e98c…`).
+- **Path:** `cmake-build-bgfx-shaderc/cmake/bgfx/shaderc` (in-repo, **gitignored**, 21 MB binary /
+  183 MB build dir — kept as the reusable regen toolchain).
+- **Configure:** standalone CMake on the bgfx.cmake `CMakeLists.txt`, `Release`, `ccache`,
+  `-DBGFX_BUILD_TOOLS_SHADER=ON` with examples/tests/texture/geometry/bin2c tools OFF,
+  `BGFX_CUSTOM_TARGETS=OFF`, `BGFX_INSTALL=OFF`. Built `--target shaderc -j4`.
+- Links glslang / glsl-optimizer / spirv-opt / spirv-cross / **tint** (WGSL) / fcpp — all from the
+  bgfx 3rdparty tree; `ldd` clean (no missing libs; libdxcompiler not needed for the glsl/essl/
+  spirv/wgsl targets `compile_shaders.py` uses). **No CNA/build-script change was needed to make
+  the toolchain reproducible**, so no `REMED-BUILD-*` finding was raised.
+
+### Byte-reproducible regeneration — proven before any edit
+
+Ran `compile_shaders.py <shaderc> <bgfx/src>` against the **unmodified** shader sources: the
+regenerated `bgfx_shaders.hpp` was **byte-identical** to the committed header (same MD5
+`b0d1cc6d…`, empty `git diff`), across all **27 shaders × 4 profiles (glsl-140 / essl-300 / spirv /
+wgsl) = 108 arrays**. This proves the built shaderc is the exact toolchain that produced the
+committed header, and that WGSL (tint) and SPIR-V outputs are deterministic here.
+
+### Affected-shader matrix (exhaustive inspection, not assumed)
+
+| Task | Bgfx shaders | Note |
+|---|---|---|
+| GFX-005 fog | **14** `vs_*.sc` (`alpha_test3d`, `alpha_test_colored3d`, `colored3d`, `colored_textured3d`, `dual_texture3d`, `dual_texture_colored3d`, `env_map3d`, `lit_textured3d`, `lit_textured3d_vertexlit`, `pbr3d`, `pbr_skinned3d`, `skinned3d`, `skinned3d_vertexlit`, `textured3d`) | The plan listed only 3 (the ones with test-audit coverage); the mirror `(FogEnd−z)` was byte-identical in all 14. `vs_instanced3d` correctly has no fog. |
+| GFX-006 normal | `vs_skinned3d` (Variant A), `vs_skinned3d_vertexlit` (Variant A), `vs_pbr_skinned3d` (Variant B) | `vs_skinned3d_vertexlit` was **NOT** in the audit's Bgfx evidence — found by exhaustive read (identical Variant-A defect). |
+| GFX-007 emissive | `fs_env_map3d.sc` | `(Emissive+lightSum)*Diffuse` → `lightSum*Diffuse + Emissive`. |
+
+### GFX-005 — fog mirror fix
+
+- All 14 shaders' `clamp((FogEnd−z)/max(FogEnd−FogStart,1e-6),0,1)` → the FNA/EasyGL Task-1111 form
+  `((abs(FogEnd−FogStart)<1e-6)?0.0:clamp((z+FogEnd)/(FogEnd−FogStart),0,1))` (object-space z, per
+  the campaign's decision to fix only the mirror, not object→view-space). The three false
+  "matches EasyGL's established formula" precedent comments were corrected (9/1/1 variants).
+- **Tests (test-first, fail pre-fix):** the 6 Bgfx fog tests were retargeted. The 4 that used the
+  collapsing FogStart=0/FogEnd=1 scene (basiceffect/lit/skinned/env) moved to FogStart=0/FogEnd=−0.9
+  at z∈{0,0.45,0.9} (blue/purple/red, asserted pixels unchanged); **2/3→3/3** each. `alphatest_fog`
+  and `dualtexture_fog` already used the non-collapsing FogStart=−0.9/FogEnd=0.9 range, where the
+  correction simply **swaps** the two endpoints (z=−0.9→full fog, z=+0.9→material); expectations
+  swapped, **1/3→3/3** each. Every retargeted case discriminates the mirror from the correct formula.
+
+### GFX-006 — SkinnedEffect world-space normal
+
+- **bgfx's shaderc does not expose the GLSL `inverse()`/`transpose()` builtins** (SPIR-V target:
+  `'inverse' : no matching overloaded function`, `mat3(mat4)` misparse), unlike the libshaderc path
+  the Vulkan/SdlGpu slices used. Resolved by **supplying the World inverse-transpose CPU-side** via
+  the existing `u_normalMatrix` uniform (the same one the lit shaders already consume), computed by
+  the backend's already-proven `ComputeNormalMatrix3x3` (cofactor/det = inverse-transpose, verified
+  against the lit shaders). The 3 skinned shaders now `normalize(mul(u_normalMatrix, skinnedNormal))`
+  after the bone 3×3; `vs_pbr_skinned3d`'s **tangent stays on raw World** (directions, not normals).
+- **C++:** the 4 skinned draw sites (2 skinned + 2 pbr-skinned, across the two `FillGpuDrawParams`
+  paths) now `ComputeNormalMatrix3x3(params.worldColMajor, …)` + `setUniform(normalMatrix3DUnif_,…)`.
+  Previously only the lit/pbr paths uploaded it. No UBO-layout or FillGpuDrawParams-value change.
+- **Test:** new `examples/bgfx_skinnedeffect_world_normal_test.cpp` (port of the EasyGL/Vulkan
+  analytic harness; pixel-lit **and** vertex-lit; identity/rotationZ(90)/scale(2,1,1)/rot×scale).
+  **2/8 → 8/8.** Pre-fix values matched Variant A exactly (rotation 0 vs 255, scale 180 vs 228,
+  rot×scale 180 vs 114); post-fix every case matches the FNA analytic value **to the byte**
+  (0/255/228/114). The 228 (not 114) confirms the inverse-transpose specifically, rejecting a naive
+  raw-World "fix".
+
+### GFX-007 — EnvironmentMapEffect emissive
+
+- `fs_env_map3d.sc`: `(u_emissiveColor+lightSum)*u_diffuseColor` → `lightSum*u_diffuseColor +
+  u_emissiveColor` (FNA Lighting.fxh; `u_emissiveColor` is already the pre-folded
+  `(Emissive+Ambient*Diffuse)*alpha`). Discriminating sub-test added to
+  `bgfx_environmentmapeffect_amount_zero_test.cpp` (Diffuse=Emissive=(0.5,0.5,0.5), no lights,
+  Amount=0, tex=(200,100,50)): **pre-fix got=(50,25,13), post-fix got=(100,50,25).**
+
+### Regeneration semantic diff (per-array)
+
+Regenerated `bgfx_shaders.hpp` once (all three fixes). Per-array MD5 diff vs the committed header:
+**exactly 60 of 108 arrays changed = the 15 intended logical shaders × 4 profiles** (14 fog `vs_*` +
+`fs_env_map3d`); the other **48 arrays byte-identical**; **0 added, 0 removed**. No unrelated
+regeneration drift. (`fs_env_map3d` glsl/essl/spv kept their byte-lengths but changed content — the
+`a*c+b` reorder — while wgsl shrank 2639→2618; every fog `vs` grew, consistent with the added
+zero-length guard; the 3 skinned `vs` grew from the added `u_normalMatrix` + the fog fix.)
+
+### Verification / regression / validation
+
+- **Post-fix pixel tests:** world-normal 8/8; all 6 fog tests 3/3; env amount-zero 2/2. Cross-backend:
+  the Bgfx world-normal linear readback (0/255/228/114) is **byte-identical** to the Vulkan/EasyGL/
+  SdlGpu slices' linear values, confirming cross-backend conformance of the inverse-transpose.
+- **Full Bgfx regression:** `ctest -R ^Bgfx_` (115 tests) → **113 pass, 2 fail**. Both failures
+  (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`) are **pre-existing,
+  deterministic, environment-only** — they run under llvmpipe "OpenGL 2.1", which does no real MSAA
+  averaging / the tested depth behavior; neither uses fog/skinned/env-map effects. **Zero effect-test
+  regressions** (SkinnedEffect IdentityBones/Combined/Multilight/VertexColor/WeightsPerVertex/PBR,
+  all EnvironmentMap variants, PbrEffect, BasicEffect NormalTransform all pass).
+- **Environment note (not a new remediation ID):** an initial full-suite `ctest -j4` (5743 tests)
+  **killed Xvfb `:99` mid-run**, cascading ~115 Bgfx graphics tests into
+  `SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available` aborts — a REMED-BUILD-010-class
+  Xvfb-under-load fragility, **not** a code regression (re-running the Bgfx subset at `-j2` against a
+  fresh Xvfb gave the clean 113/115). The 6 non-graphics full-suite failures were all known
+  pre-existing/flaky (ENet ×2, AudioCategory, CnjEffect/CnjStockEffect GLSL-toolchain-absent,
+  WireFrame capability). Recommend the Bgfx graphics shard be run at ≤ `-j2` on a single Xvfb.
+- **Validation:** Bgfx runs the OpenGL renderer here (no Vulkan validation layers); every effect
+  program created and rendered without shader-compile warnings or uniform/attribute mismatches (the
+  exact-byte world-normal readout proves `u_normalMatrix` binds and is consumed correctly). The CPU
+  change is a `float[9]` stack write reusing the proven `ComputeNormalMatrix3x3` — no new allocation
+  or bounds risk — so a dedicated ASan/UBSan Bgfx build (400–900 MB) was judged not proportionate.
+
+### Remaining GFX-005/006/007 scope
+
+- **GFX-005:** D3DCommon (D3D11/D3D12) + D3D9 fog — BYTECODE-BLOCKED (fxc/dxc absent). SdlGpu has no
+  fog (GFX-009); D3D9 custom-shader fog is the separate object-space defect (GFX-010).
+- **GFX-006:** D3D9 (`SkinnedVertexColor3D` A, `PbrSkinned3D` B) + D3DCommon (`skinned*` A ×4,
+  `pbr_skinned3d` B) — BYTECODE-BLOCKED. All directly-editable + Bgfx backends now DONE.
+- **GFX-007:** WebGPU, SdlGpu (incl. its extra alpha-squaring), D3DCommon — WebGPU/SdlGpu are
+  directly-editable/libshaderc and were simply not in this Bgfx-scoped session; D3DCommon
+  BYTECODE-BLOCKED.
