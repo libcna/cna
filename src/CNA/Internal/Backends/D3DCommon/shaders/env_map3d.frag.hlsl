@@ -43,7 +43,11 @@ float4 main(PSInput input) : SV_Target
     float3 lightSum = Light0DiffFresnelEn.xyz * NdotL0
                      + Light1DiffPad.xyz * NdotL1
                      + Light2DiffPad.xyz * NdotL2;
-    float3 litRGB = (EmissiveEm.xyz + lightSum) * DiffuseColor.rgb;
+    // REMED-GFX-007: FNA Lighting.fxh adds EmissiveColor UNSCALED (the CPU layer already pre-folds
+    // ambient into it): litRGB = lightSum*DiffuseColor + Emissive. The prior
+    // (Emissive + lightSum) * DiffuseColor re-scaled the emissive by DiffuseColor -- invisible only
+    // when DiffuseColor is white. Matches the corrected Vulkan/SdlGpu/Bgfx/WebGPU env_map3d shaders.
+    float3 litRGB = lightSum * DiffuseColor.rgb + EmissiveEm.xyz;
     float4 texColor = uTexture.Sample(uTextureSampler, input.UV);
     float3 reflDir = reflect(-E, N);
     float4 envSample = uEnvMap.Sample(uEnvMapSampler, reflDir);

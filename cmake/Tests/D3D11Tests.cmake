@@ -74,4 +74,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_d3d11_ctest_command(_d3d11_pbr_vertexcolor_cmd cna_test_d3d11_pbr_vertexcolor)
     cna_register_backend_test(NAME D3D11_Pbr_VertexColor COMMAND ${_d3d11_pbr_vertexcolor_cmd}
         TIMEOUT 60 LABELS "D3D11")
+
+    # REMED-GFX-007: EnvironmentMapEffect emissive must be added UNSCALED (FNA Lighting.fxh:
+    # litRGB = lightSum*Diffuse + Emissive). The shared, backend-agnostic amount-zero test carries
+    # the discriminating non-white-Diffuse case (pre-fix D3DCommon env_map3d.frag gives (50,25,12),
+    # post-fix (100,50,25)). Reused verbatim from the Vulkan-authored source, same as the easygl_*
+    # state tests above are reused here.
+    cna_d3d11_test(cna_test_d3d11_environmentmapeffect_amount_zero examples/vulkan_environmentmapeffect_amount_zero_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_envmap_amount_zero_cmd cna_test_d3d11_environmentmapeffect_amount_zero)
+    cna_register_backend_test(NAME D3D11_EnvironmentMapAmountZero COMMAND ${_d3d11_envmap_amount_zero_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 endif()
