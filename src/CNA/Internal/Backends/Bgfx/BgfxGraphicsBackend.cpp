@@ -2515,6 +2515,14 @@ namespace CNA::Internal::Backends::Bgfx
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
             float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
+            // REMED-GFX-006: upload the World inverse-transpose (same ComputeNormalMatrix3x3 the
+            // lit/PBR paths use) so vs_pbr_skinned3d.sc composes it with the bone skin for the
+            // normal. Previously the shader used raw World (audit Variant B), wrong under
+            // non-uniform scale. bgfx's shaderc has no in-shader inverse()/transpose(), so the
+            // matrix is supplied CPU-side.
+            float normalMatrixSkin[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
             BindPbrTextures(params);
             SubmitViewProgram(pbrSkinned3DProgram_);
         }
@@ -2630,6 +2638,14 @@ namespace CNA::Internal::Backends::Bgfx
             // Task 1104: XNA's real SkinnedEffect default is per-vertex lighting
             // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
             // vertex-lit sibling failed to compile on this renderer.
+            // REMED-GFX-006: upload the World inverse-transpose (same ComputeNormalMatrix3x3 the
+            // lit path uses) so vs_skinned3d.sc / vs_skinned3d_vertexlit.sc compose it with the
+            // bone skin for the normal. Previously the shaders applied only the bone 3x3 (audit
+            // Variant A -- no world factor), wrong under non-identity World. bgfx's shaderc has no
+            // in-shader inverse()/transpose(), so the matrix is supplied CPU-side.
+            float normalMatrixSkin[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
             SubmitViewProgram((!params.preferPerPixelLighting && bgfx::isValid(skinned3DVertexLitProgram_))
                 ? skinned3DVertexLitProgram_ : skinned3DProgram_);
         }
@@ -3023,6 +3039,14 @@ namespace CNA::Internal::Backends::Bgfx
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
             float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
+            // REMED-GFX-006: upload the World inverse-transpose (same ComputeNormalMatrix3x3 the
+            // lit/PBR paths use) so vs_pbr_skinned3d.sc composes it with the bone skin for the
+            // normal. Previously the shader used raw World (audit Variant B), wrong under
+            // non-uniform scale. bgfx's shaderc has no in-shader inverse()/transpose(), so the
+            // matrix is supplied CPU-side.
+            float normalMatrixSkin[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
             BindPbrTextures(params);
             SubmitViewProgram(pbrSkinned3DProgram_);
         }
@@ -3138,6 +3162,14 @@ namespace CNA::Internal::Backends::Bgfx
             // Task 1104: XNA's real SkinnedEffect default is per-vertex lighting
             // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
             // vertex-lit sibling failed to compile on this renderer.
+            // REMED-GFX-006: upload the World inverse-transpose (same ComputeNormalMatrix3x3 the
+            // lit path uses) so vs_skinned3d.sc / vs_skinned3d_vertexlit.sc compose it with the
+            // bone skin for the normal. Previously the shaders applied only the bone 3x3 (audit
+            // Variant A -- no world factor), wrong under non-identity World. bgfx's shaderc has no
+            // in-shader inverse()/transpose(), so the matrix is supplied CPU-side.
+            float normalMatrixSkin[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
             SubmitViewProgram((!params.preferPerPixelLighting && bgfx::isValid(skinned3DVertexLitProgram_))
                 ? skinned3DVertexLitProgram_ : skinned3DProgram_);
         }

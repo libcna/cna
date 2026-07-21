@@ -23,9 +23,15 @@ void main()
     v_normal      = mul(u_normalMatrix, a_normal);
     v_eyeDir      = u_eyePos.xyz - worldPos;
     v_texcoord0   = a_texcoord0;
-    // Task 899: fog factor from raw object-space Z (matches lit_textured3d's Task 888 formula
-    // exactly). u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    // REMED-GFX-005: fog factor from raw object-space Z, corrected to EasyGL's Task-1111 form
+    // (the prior Task-899 (FogEnd-z) form mirrored lit_textured3d's own mirrored fog, NOT the
+    // correct formula). u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    // REMED-GFX-005: corrected to FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); the
+    // prior Task 888/899 (FogEnd-z) formula was the mirror image and wrong. Zero-length range
+    // (FogStart==FogEnd) -> fully fogged (factor 0), matching FNA SetFogVector.
     v_fogFactor = (u_fogParams.x > 0.5)
-        ? clamp((u_fogParams.z - a_position.z) / max(u_fogParams.z - u_fogParams.y, 1e-6), 0.0, 1.0)
+        ? ((abs(u_fogParams.z - u_fogParams.y) < 1e-6)
+            ? 0.0
+            : clamp((a_position.z + u_fogParams.z) / (u_fogParams.z - u_fogParams.y), 0.0, 1.0))
         : 1.0;
 }

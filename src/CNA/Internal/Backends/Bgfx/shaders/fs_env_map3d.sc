@@ -25,7 +25,11 @@ void main()
     float NdotL1  = max(dot(N, -normalize(u_light1Dir.xyz)), 0.0);
     float NdotL2  = max(dot(N, -normalize(u_light2Dir.xyz)), 0.0);
     vec3 lightSum = u_light0Diffuse.xyz * NdotL0 + u_light1Diffuse.xyz * NdotL1 + u_light2Diffuse.xyz * NdotL2;
-    vec3 litRGB   = (u_emissiveColor.xyz + lightSum) * u_diffuseColor.xyz;
+    // REMED-GFX-007: FNA's Lighting.fxh adds EmissiveColor UNSCALED (lightSum*DiffuseColor +
+    // Emissive), not (Emissive + lightSum)*DiffuseColor. u_emissiveColor is already the pre-folded
+    // (EmissiveColor + AmbientLightColor*DiffuseColor)*alpha from EnvironmentMapEffect.cpp, so
+    // re-scaling it by DiffuseColor double-applied the diffuse tint.
+    vec3 litRGB   = lightSum * u_diffuseColor.xyz + u_emissiveColor.xyz;
     vec4 texColor  = texture2D(s_texColor, v_texcoord0);
     vec3 reflDir   = reflect(-E, N);
     vec4 envSample = textureCube(s_envMap, reflDir);

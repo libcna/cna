@@ -21,9 +21,15 @@ void main()
     // vertex-color multiply gated by VertexColorEnabled.
     vec4 vc = (u_vertexColorEnabled3D.x > 0.5) ? a_color0 : vec4(1.0, 1.0, 1.0, 1.0);
     v_color0 = vc * u_diffuseColor;
-    // Task 888: fog factor from raw object-space Z (matches EasyGL's established formula
-    // exactly). u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    // REMED-GFX-005: fog factor from raw object-space Z, corrected to EasyGL's Task-1111 form
+    // (the prior Task-888 (FogEnd-z) form was the mirror of EasyGL's since-fixed formula, NOT
+    // a match to it). u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    // REMED-GFX-005: corrected to FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); the
+    // prior Task 888/899 (FogEnd-z) formula was the mirror image and wrong. Zero-length range
+    // (FogStart==FogEnd) -> fully fogged (factor 0), matching FNA SetFogVector.
     v_fogFactor = (u_fogParams.x > 0.5)
-        ? clamp((u_fogParams.z - a_position.z) / max(u_fogParams.z - u_fogParams.y, 1e-6), 0.0, 1.0)
+        ? ((abs(u_fogParams.z - u_fogParams.y) < 1e-6)
+            ? 0.0
+            : clamp((a_position.z + u_fogParams.z) / (u_fogParams.z - u_fogParams.y), 0.0, 1.0))
         : 1.0;
 }

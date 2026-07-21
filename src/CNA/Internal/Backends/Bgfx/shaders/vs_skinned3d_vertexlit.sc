@@ -10,6 +10,7 @@ $output v_texcoord0, v_color0, v_fogFactor, v_litRGB, v_specularRGB, v_vertexCol
 
 uniform mat4 u_wvp;
 uniform mat4 u_world;
+uniform mat3 u_normalMatrix;
 uniform vec4 u_diffuseColor;
 uniform mat4 u_bones[72];
 uniform vec4 u_fogParams;
@@ -43,9 +44,13 @@ void main()
     gl_Position  = mul(u_wvp, skinnedPos);
     // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
     gl_Position.z += u_depthBias.x * gl_Position.w;
-    vec3 N = normalize(skinMat[0].xyz * a_normal.x
-                     + skinMat[1].xyz * a_normal.y
-                     + skinMat[2].xyz * a_normal.z);
+    // REMED-GFX-006: apply the World inverse-transpose (CPU-supplied u_normalMatrix) after the
+    // bone 3x3 (audit Variant A fix; see vs_skinned3d.sc). The per-vertex lighting below reads this
+    // world-space normal, so the fix must land here too, not only in the per-pixel sibling.
+    vec3 skinnedNormal = skinMat[0].xyz * a_normal.x
+                       + skinMat[1].xyz * a_normal.y
+                       + skinMat[2].xyz * a_normal.z;
+    vec3 N = normalize(mul(u_normalMatrix, skinnedNormal));
     v_texcoord0  = a_texcoord0;
     v_color0     = u_diffuseColor;
     // CNB-67 (Phase 13C) Bgfx port: see vs_skinned3d.sc's identical comment.
@@ -73,7 +78,12 @@ void main()
                      + spec2 * u_light2Specular.xyz) * u_specularColorPower.xyz;
 
     // Task 899: fog factor from raw PRE-SKIN object-space Z, unchanged from vs_skinned3d.sc.
+    // REMED-GFX-005: corrected to FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); the
+    // prior Task 888/899 (FogEnd-z) formula was the mirror image and wrong. Zero-length range
+    // (FogStart==FogEnd) -> fully fogged (factor 0), matching FNA SetFogVector.
     v_fogFactor = (u_fogParams.x > 0.5)
-        ? clamp((u_fogParams.z - a_position.z) / max(u_fogParams.z - u_fogParams.y, 1e-6), 0.0, 1.0)
+        ? ((abs(u_fogParams.z - u_fogParams.y) < 1e-6)
+            ? 0.0
+            : clamp((a_position.z + u_fogParams.z) / (u_fogParams.z - u_fogParams.y), 0.0, 1.0))
         : 1.0;
 }

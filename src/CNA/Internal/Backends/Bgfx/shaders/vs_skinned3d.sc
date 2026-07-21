@@ -5,6 +5,7 @@ $output v_texcoord0, v_normal, v_color0, v_fogFactor, v_worldPos, v_vertexColor0
 
 uniform mat4 u_wvp;
 uniform mat4 u_world;
+uniform mat3 u_normalMatrix;
 uniform vec4 u_diffuseColor;
 uniform mat4 u_bones[72];
 uniform vec4 u_fogParams;
@@ -24,9 +25,18 @@ void main()
     gl_Position  = mul(u_wvp, skinnedPos);
     // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
     gl_Position.z += u_depthBias.x * gl_Position.w;
-    v_normal     = normalize(skinMat[0].xyz * a_normal.x
-                           + skinMat[1].xyz * a_normal.y
-                           + skinMat[2].xyz * a_normal.z);
+    // REMED-GFX-006: FNA's Skin() applies the bone 3x3 to the normal, then Lighting.fxh applies
+    // the World inverse-transpose (mul(normal, WorldInverseTranspose)). This shader previously
+    // applied only the bone 3x3 (audit Variant A -- no world factor at all), which is wrong under
+    // any non-identity World rotation or non-uniform scale. u_normalMatrix is the CPU-computed
+    // World inverse-transpose (ComputeNormalMatrix3x3), the same uniform the lit shaders use; it is
+    // applied as the outer normal matrix after the bone skin. (bgfx's shaderc does not support the
+    // GLSL inverse()/transpose() builtins, so the matrix is supplied CPU-side rather than derived
+    // in-shader as on the Vulkan/SdlGpu slices.)
+    vec3 skinnedNormal = skinMat[0].xyz * a_normal.x
+                       + skinMat[1].xyz * a_normal.y
+                       + skinMat[2].xyz * a_normal.z;
+    v_normal     = normalize(mul(u_normalMatrix, skinnedNormal));
     v_texcoord0  = a_texcoord0;
     v_color0     = u_diffuseColor;
     // CNB-67 (Phase 13C) Bgfx port: stride-56 SkinnedEffect+Color vertex color, kept in its own
@@ -35,10 +45,16 @@ void main()
     // the fragment stage, mirroring EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vColor.
     v_vertexColor0 = a_color0;
     v_worldPos   = mul(u_world, skinnedPos).xyz;
-    // Task 899: fog factor from raw PRE-SKIN object-space Z (matches EasyGL's Task 900 formula
-    // exactly, which also uses aPos.z rather than the skinned position).
+    // REMED-GFX-005: fog factor from raw PRE-SKIN object-space Z (aPos.z, not the skinned
+    // position), corrected to EasyGL's Task-1111 form (the prior Task-899 (FogEnd-z) form was
+    // the mirror image and wrong).
     // u_fogParams = (fogEnabled, fogStart, fogEnd, unused). 1.0 = no fog, 0.0 = full.
+    // REMED-GFX-005: corrected to FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); the
+    // prior Task 888/899 (FogEnd-z) formula was the mirror image and wrong. Zero-length range
+    // (FogStart==FogEnd) -> fully fogged (factor 0), matching FNA SetFogVector.
     v_fogFactor = (u_fogParams.x > 0.5)
-        ? clamp((u_fogParams.z - a_position.z) / max(u_fogParams.z - u_fogParams.y, 1e-6), 0.0, 1.0)
+        ? ((abs(u_fogParams.z - u_fogParams.y) < 1e-6)
+            ? 0.0
+            : clamp((a_position.z + u_fogParams.z) / (u_fogParams.z - u_fogParams.y), 0.0, 1.0))
         : 1.0;
 }
