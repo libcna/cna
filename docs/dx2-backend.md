@@ -13,9 +13,11 @@ and found non-functional in this environment's Wine (see `dx2-spike/README.md`).
 via MinGW-w64 and run under Wine, the same Route B delivery mechanism `D3D9`/`D3D11`/`D3D12`/`DX1`
 already use.
 
-This document is the completeness status after `plan_dx2.md`'s full Phase O1–O8 implementation.
-Every row cites the task(s) that verified it — see `plan_dx2.md`'s own task tables for full design
-rationale and code detail, and `dx2-spike/README.md` for the existence-gate spike record.
+This document is the completeness status after `plan_dx2.md`'s full Phase O1–O9 implementation
+(Phase O9 added real CPU-side lighting and a `WireFrame`/`AnisotropicFiltering` re-verification —
+§6a and §7). Every row cites the task(s) that verified it — see `plan_dx2.md`'s own task tables for
+full design rationale and code detail, and `dx2-spike/README.md` for the existence-gate spike
+record.
 
 **Status legend** (matches `docs/dx1-backend.md`'s own convention)
 
@@ -105,12 +107,21 @@ made. `Dx2_SpriteFont` CTest (5 checks) passes.
 | Feature | Status | Notes |
 |---|---|---|
 | `Dx2VertexBufferBackend`/`Dx2IndexBufferBackend` (16- and 32-bit) | ✅ | Plain CPU-side `std::vector<uint8_t>` storage, matching the `Software` backend's own identical approach — the CPU transform pipeline reads directly from these buffers each draw. `CreateIndexBuffer32` explicitly overridden with real 32-bit storage (not the shared default's delegate-to-16-bit fallback). `Dx2_VertexIndexBuffer` CTest (5/5). |
-| CPU transform + near-plane clip | ✅ | `Dx2ClipVertex`/`Dx2ClipTriangleNearPlane`/`Dx2BuildPositionColorClipVertex`/`Dx2BuildGenericClipVertex`, ported from `SoftwareGraphicsBackend.cpp`'s own math, simplified (no world-space position/normal — lighting/envMap/skinning out of scope, see §7). `Dx2_Clipping` CTest (2/2): a straddling triangle clips to a visible partial fragment, a fully-behind-camera triangle renders nothing. |
+| CPU transform + near-plane clip | ✅ | `Dx2ClipVertex`/`Dx2ClipTriangleNearPlane`/`Dx2BuildPositionColorClipVertex`/`Dx2BuildGenericClipVertex`, ported from `SoftwareGraphicsBackend.cpp`'s own math, simplified (envMap/skinning out of scope, see §7; lighting is real for stride 32/52 as of Phase O9, see §6a). `Dx2_Clipping` CTest (2/2): a straddling triangle clips to a visible partial fragment, a fully-behind-camera triangle renders nothing. |
 | `D3DTLVERTEX` packing | ✅ | `Dx2ClipVertexToD3DTLVERTEX` — perspective-divides the **position only**; color/uv are **not** premultiplied by `invW` (unlike `Software`'s own `RasterVertex`, which does — real Direct3D already performs perspective-correct interpolation internally via `rhw`, so premultiplying again would double-apply it). |
 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` | ✅ | `VertexPositionColor`, `TriangleList` only, submitted via the shared `SubmitDx2Primitives` helper — uses `DrawIndexedPrimitive` internally even for non-indexed calls, since near-plane clipping can turn one triangle into a quad needing 2 triangles sharing vertices. `Dx2_ColoredPrimitives` (2/2), `Dx2_IndexedPrimitives` (2/2, both 16- and 32-bit index widths). |
 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` | ✅ | Stride-dispatched vertex layouts (16/20/24/32/52 bytes, matching `Software`'s own set); real texture0 modulation. Honors `GpuDrawParams::vertexStart`/`startIndex`/`baseVertex` (a real gap found in the `Software` reference backend — it doesn't honor these at all, `EasyGL` does — DX2 matches `EasyGL`). |
 | Depth-test occlusion | ✅ | `Dx2_ZTest` CTest (2/2): both draw orders, proving real, order-independent depth-test occlusion, not "last write wins". |
 | Real texture sampling in a 3D draw | ✅ | `Dx2_Texture3D` CTest (see §2). |
+
+## 6a. CPU-side BasicEffect lighting (Phase O9)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Ambient + up to 3 directional lights (Lambertian diffuse) | ✅ | `Dx2ComputeVertexLighting()`, evaluated per-vertex (CNA's default across every backend — real XNA's `PreferPerPixelLighting` defaults to `false`) for `stride==32`/`52` (`VertexPositionNormalTexture`/`Skinned`) when `GpuDrawParams::lightingEnabled`. Ported from `EasyGLGraphicsBackend.cpp`'s `EnsureLit3DVertexLitProgram()` GLSL and `BasicEffect::FillGpuDrawParams()`'s field semantics, not re-derived. Normal transformed by `transpose(inverse(World₃ₓ₃))` (cofactor/determinant shortcut, matching `EasyGL`'s own Task-398 fix) — correct under non-uniform World scale. |
+| Blinn-Phong specular highlight | ✅ | Computed alongside diffuse, but composited by real `D3DRENDERSTATE_SPECULARENABLE` + `D3DTLVERTEX::specular` hardware **after** the texture-modulate stage — spike-confirmed real (`dx2_spike10_specular_wireframe_aniso.cpp` Test C), not folded into the diffuse channel on the CPU. One honest divergence from XNA's exact shader formula: real fixed-function hardware's specular-add has no per-pixel alpha weighting (`color.rgb += specular*color.a`), so DX2's highlight isn't alpha-weighted — invisible for the overwhelmingly common opaque case, a subtle brightness difference only for a semi-transparent, specular-lit surface. |
+| Fog, multitexture, env-mapping, skinning | ⚪-accepted-and-ignored | Unchanged from Phase O1-O8 — Phase O9 only addressed lighting. Skinned vertices (`stride==52`) are lit using their raw, unskinned local-space position/normal. |
+| `Dx2_Lighting` CTest | ✅ (4/4) | Full-intensity Lambertian pixel-verified against hand-computed values; a light facing away from the surface verified to clamp to 0 (not negative/wrapped); a real specular highlight verified to appear and disappear with `SpecularColor`. |
 
 ## 7. Per-draw 3D state mapping (Phase O6)
 
@@ -124,7 +135,8 @@ made. `Dx2_SpriteFont` CTest (5 checks) passes.
 | `SetBlendEnabled` | ⚠-accepted-and-ignored (deliberate no-op) | Matches `D3D9`'s/`D3D11`'s/`D3D12`'s own identical reasoning — a bare "enable blending" has no defined factors in XNA; real config always arrives via `ApplyBlendState`, which already unconditionally enables blending. |
 | `SupportsCapability(GraphicsCapability::ThreeD)` | ✅ (`true`) | The full bundle that flag's own doc comment defines (vertex/index buffers, 3D draw calls, depth/stencil clears AND state) is genuinely complete as of this phase. |
 | `SupportsCapability(GraphicsCapability::DepthStencilBuffer)` | ✅ (`true`) | A real, if depth-only, buffer exists. |
-| `SupportsCapability(GraphicsCapability::WireFrame)`/`AnisotropicFiltering` | conservatively `false` | The corresponding render states (`D3DFILL_WIREFRAME`/`D3DRENDERSTATE_ANISOTROPY`) are real and accepted, but neither was spike-verified to produce genuinely distinct rendering output on this environment's software RGB device — reporting `true` would be an unverified claim, not a "doesn't exist" one. |
+| `SupportsCapability(GraphicsCapability::WireFrame)` | ✅ (`true`, Phase O9) | `dx2_spike10_specular_wireframe_aniso.cpp` Test D empirically confirmed `D3DFILL_WIREFRAME` genuinely renders edge-only output on this environment's software RGB device (a point inside a filled triangle reads back the cleared background color in `WIREFRAME` mode, the triangle's own color in `SOLID` mode) — real, verified distinctness, not assumed from the render state merely existing. `Dx2_WireframeAniso` CTest (4/4). |
+| `SupportsCapability(GraphicsCapability::AnisotropicFiltering)` | `false` (Phase O9: now evidence-backed) | The same spike's Test E rendered a heavily-minified checkerboard under `D3DTFN_POINT`/`LINEAR`/`ANISOTROPIC` (2 levels) and got byte-identical readback at every sampled point across all four — this software RGB device does not implement anisotropic (or even point-vs-linear) minification filtering distinctly at all. `D3DRENDERSTATE_ANISOTROPY` is still set by `ApplySamplerState` (a real, accepted render state); it simply has no observable effect here. |
 | `SupportsCapability(GraphicsCapability::MultiSampleAntiAliasing \| MultipleRenderTargets \| OcclusionQuery \| CustomEffects)` | ✅ (`false`) | Genuinely unavailable at this DirectX era. |
 
 `Dx2_GraphicsCapability` CTest: 9/9 checks, including the `SetRenderTargets(count=2)` throw
@@ -156,11 +168,13 @@ initializes a real `IDirectDraw` (v1) + `IDirect3DDevice2` device against it, do
 `DX1` does for 2D (`SpriteBatch`, `SpriteFont`, all 4 blend modes, texture sampling/addressing),
 **and additionally draws real 3D geometry** — `VertexBuffer`/`IndexBuffer` (16- and 32-bit),
 `DrawPrimitives`/`DrawIndexedPrimitives` through `BasicEffect` (vertex-color and one-texture
-paths), genuine order-independent depth-test occlusion, near-plane clipping, and real per-draw
-rasterizer/depth/blend/sampler state. Lighting, fog, multitexture, environment mapping, and
-skinning are read from `GpuDrawParams` but not evaluated — the vertex's own diffuse color and
-(single) texture sample are used as-is, matching the `Software` backend's own identical,
-already-documented v1 scope boundary. This is measurably more than
+paths), genuine order-independent depth-test occlusion, near-plane clipping, real per-draw
+rasterizer/depth/blend/sampler state, and (Phase O9) real CPU-computed ambient + up to 3
+directional-light Lambertian/Blinn-Phong lighting for the two normal-bearing vertex layouts, with
+the specular highlight composited by real fixed-function hardware. `WireFrame` fill mode is real
+and spike-confirmed distinct. Fog, multitexture, environment mapping, and skinning are still read
+from `GpuDrawParams` but not evaluated — matching the `Software` backend's own identical,
+already-documented v1 scope boundary for those specific features. This is measurably more than
 `docs/directx-legacy-backends-analysis.md`'s original analysis-level "~15%" estimate for DX2/3
 (which assumed the execute-buffer path) — see that document's own updated §3.1 note.
 
@@ -212,13 +226,24 @@ assuming every parallel failure is real.
 
 Zero DX2-caused failures remain unaccounted for.
 
+**Phase O9 addendum**: this full-suite regression was not re-run in its entirety for Phase O9's
+additive lighting/`WireFrame` change (a multi-hour run, out of proportion to a narrowly-scoped
+change). Instead, all 19 `DX2`-labeled CTests were re-run (17 pre-existing + 2 new, all passing),
+plus a targeted re-run of the two cross-backend `CnaTests` classes this change could plausibly
+affect: `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (fixed to branch on
+`CNA_BACKEND_DX2`, now passes) and its 3 already-documented ungated sibling failures above
+(`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects`, unchanged).
+
 ## 11. Known permanent limitations
 
-- **No fixed-function lighting/fog** (`lightingEnabled`, `ambientColor`, `light{0,1,2}*`,
-  `fogEnabled`/etc.) — matches the `Software` backend's own identical, pre-existing v1 scope
-  boundary; the vertex's own diffuse color is used as-is.
+- **No fixed-function fog** (`fogEnabled`/`fogColor`/`fogStart`/`fogEnd`) — matches the `Software`
+  backend's own identical, pre-existing v1 scope boundary. Ambient + up to 3 directional-light
+  Lambertian/Blinn-Phong **lighting** is real as of Phase O9 (§6a) for the two normal-bearing
+  vertex layouts (`VertexPositionNormalTexture`/`Skinned`, stride 32/52) — strides without a normal
+  have no lighting concept and are unaffected.
 - **No multitexture, environment mapping, or skinning** (`dualTexture`, `envMapping`, `skinned`)
-  — accepted-and-ignored (renders diffuse-texture-only), not thrown.
+  — accepted-and-ignored (renders diffuse-texture-only), not thrown. Phase O9's lighting for
+  `stride==52` uses the vertex's raw, unskinned local-space position/normal.
 - **No real stencil operations** — no stencil buffer/ops exist until DX6.
 - **No separate alpha blend-factor/op pair** — D3D v1/v2 has none; only the color factors map to
   real state.

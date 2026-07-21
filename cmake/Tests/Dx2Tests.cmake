@@ -146,4 +146,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "DX2")
     cna_dx2_ctest_command(_dx2_remaining_defaults_cmd cna_test_dx2_remaining_defaults)
     cna_register_backend_test(NAME Dx2_RemainingDefaults COMMAND ${_dx2_remaining_defaults_cmd}
         TIMEOUT 60 LABELS "DX2")
+
+    # Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect lighting (ambient + directional
+    # Lambertian/Blinn-Phong specular) for the normal-bearing vertex layouts, design decision 13.
+    cna_dx2_test(cna_test_dx2_lighting examples/dx2_lighting_test.cpp)
+    cna_dx2_ctest_command(_dx2_lighting_cmd cna_test_dx2_lighting)
+    cna_register_backend_test(NAME Dx2_Lighting COMMAND ${_dx2_lighting_cmd}
+        TIMEOUT 60 LABELS "DX2")
+
+    # Phase O9 (DX2-95, DX2-97): WireFrame/AnisotropicFiltering re-verification -- WireFrame now
+    # real (SupportsCapability flipped true), AnisotropicFiltering empirically confirmed absent.
+    cna_dx2_test(cna_test_dx2_wireframe_aniso examples/dx2_wireframe_aniso_test.cpp)
+    cna_dx2_ctest_command(_dx2_wireframe_aniso_cmd cna_test_dx2_wireframe_aniso)
+    cna_register_backend_test(NAME Dx2_WireframeAniso COMMAND ${_dx2_wireframe_aniso_cmd}
+        TIMEOUT 60 LABELS "DX2")
 endif()

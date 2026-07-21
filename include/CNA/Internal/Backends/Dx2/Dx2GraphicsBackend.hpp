@@ -163,18 +163,29 @@ namespace CNA::Internal::Backends::Dx2
             // reports true (a real, if depth-only, buffer exists -- SupportsDepthStencil() already
             // says so). MultiSampleAntiAliasing/MultipleRenderTargets/OcclusionQuery/CustomEffects
             // report false -- genuinely unavailable at this DirectX era (plan_dx2.md's Boundaries
-            // section). AnisotropicFiltering/WireFrame ALSO report false, but for a different,
-            // narrower reason: ApplySamplerState/ApplyRasterizerState do set the corresponding
-            // real render states (D3DRENDERSTATE_ANISOTROPY/D3DFILL_WIREFRAME both exist and are
-            // accepted), but neither was spike-verified to produce genuinely distinct rendering
-            // output on this environment's software RGB device (only solid-fill triangles were
-            // ever pixel-verified) -- reporting true would be an unverified claim, not a
-            // "doesn't exist" one; revisit if a future task actually verifies the visual result.
+            // section).
+            //
+            // WireFrame (Phase O9, plan_dx2.md design decision 13): reports true. A follow-up
+            // spike (dx2_spike10_specular_wireframe_aniso.cpp, Test D) empirically confirmed
+            // D3DRENDERSTATE_FILLMODE=D3DFILL_WIREFRAME genuinely renders edge-only output on this
+            // environment's software RGB device (a point inside a filled triangle reads back the
+            // cleared background color in WIREFRAME mode, the triangle's own color in SOLID mode)
+            // -- real, verified distinctness, not assumed from the render state merely existing.
+            //
+            // AnisotropicFiltering still reports false, but now for an EMPIRICALLY CONFIRMED
+            // reason rather than "never verified": the same spike's Test E rendered a heavily-
+            // minified checkerboard texture under D3DTFN_POINT/D3DTFN_LINEAR/D3DTFN_ANISOTROPIC
+            // (at two different anisotropy levels) and got byte-identical readback at every
+            // sampled point across all four configurations -- this software RGB device does not
+            // implement anisotropic (or even point-vs-linear) minification filtering distinctly
+            // at all. D3DRENDERSTATE_ANISOTROPY is still set by ApplySamplerState (it's a real,
+            // accepted render state), it simply has no observable effect here.
             using CNA::GraphicsCapability;
             switch (capability)
             {
                 case GraphicsCapability::ThreeD:
                 case GraphicsCapability::DepthStencilBuffer:
+                case GraphicsCapability::WireFrame:
                     return true;
                 default:
                     return false;

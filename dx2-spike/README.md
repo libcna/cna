@@ -132,8 +132,36 @@ No real Proton runtime is installed in this sandbox (only system Wine 10.0~repac
 not an actual Proton install. Testing against Proton's bundled (often Valve-patched) `wined3d`/
 `DXVK` stack, a different Wine version, or real Windows was not possible here.
 
+## Phase O9 follow-up spike (2026-07-21): specular/wireframe/anisotropic re-verification
+
+`dx2_spike10_specular_wireframe_aniso.cpp`, run against the same `~/.wine-cna-dx1` prefix, three
+questions Phase O9 (`plan_dx2.md` design decision 13) needed answered before writing any CPU
+lighting code or flipping any `SupportsCapability` bit:
+
+- **Test C — `D3DRENDERSTATE_SPECULARENABLE` + `D3DTLVERTEX::specular`**: a full-viewport quad with
+  vertex `color` (diffuse) set to opaque BLACK and `specular` set to opaque RED. With
+  `SPECULARENABLE=TRUE`, readback at the center is pure `(255,0,0)` — the specular channel is
+  genuinely, additively composited by real Direct3D fixed-function hardware, independent of the
+  diffuse/texture-modulate stage. With `SPECULARENABLE=FALSE` (same vertices, same draw), readback
+  is pure `(0,0,0)` — confirming the red wasn't leaking in from the diffuse channel by mistake.
+  **Real, working, exactly the mechanism real XNA's shader-based specular-add needs.**
+- **Test D — `D3DRENDERSTATE_FILLMODE` (`D3DFILL_SOLID` vs `D3DFILL_WIREFRAME`)**: a triangle
+  covering the render target's center. A point well inside the triangle reads the triangle's own
+  color (`(255,255,255)`) in `SOLID` mode, and the cleared background color (`(0,0,0)`) in
+  `WIREFRAME` mode — **real, confirmed distinctness**, not a silent solid-fill fallback.
+- **Test E — `D3DRENDERSTATE_ANISOTROPY`/`D3DTFN_ANISOTROPIC` vs `D3DTFN_LINEAR`/`D3DTFN_POINT`**:
+  an 8×8 checkerboard texture heavily minified onto a 64×64 quad (UV range 0..4), sampled at 25
+  points across the surface under all four filter configurations. **Every single sampled point was
+  byte-identical across all four configurations** — this environment's software RGB Direct3D
+  device does not implement point/linear/anisotropic minification filtering distinctly at all (not
+  even point-vs-linear differ, let alone anisotropic-vs-linear). Confirms `DX2-95`'s decision to
+  keep `SupportsCapability(AnisotropicFiltering)` reporting `false`, now backed by a real negative
+  result instead of "never verified."
+
 ## Files
 
+- `dx2_spike10_specular_wireframe_aniso.cpp` — Phase O9 follow-up: specular-add, wireframe,
+  anisotropic filtering (see section above)
 - `dx2_spike.cpp` — round 1: `D3DLVERTEX` + `PROCESSVERTICES(TRANSFORM)` full pipeline
 - `dx2_spike2.cpp` — round 2: pre-transformed `D3DTLVERTEX` direct, offscreen `3DDEVICE` target;
   most of the ruled-out variants above were iterated in this file

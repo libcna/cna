@@ -1,6 +1,20 @@
 # DirectX 2 (DirectDraw v1 + Direct3D v2 DrawPrimitive) Graphics Backend — Implementation Plan
 
-> **Status (2026-07-21): all 8 phases complete.** CMake skeleton, 2D layer (verbatim port from
+> **Status (2026-07-21): Phase O9 complete**, on top of the 8-phase v1 baseline (below) that
+> shipped the same day. Phase O9 adds two owner-requested improvements found by asking "can DX2 be
+> improved further, within what's feasible": (1) real CPU-side BasicEffect-style fixed-function
+> lighting (ambient + up to 3 directional lights, Lambertian diffuse + Blinn-Phong specular) for
+> the two vertex layouts that carry a normal (`VertexPositionNormalTexture`/
+> `VertexPositionNormalTextureSkinned`, strides 32/52), with the specular highlight composited by
+> real `D3DRENDERSTATE_SPECULARENABLE` hardware, and (2) an empirical re-verification of whether
+> `WireFrame`/`AnisotropicFiltering` actually produce visually distinct output on this environment's
+> software RGB device — both previously reported `false` by `SupportsCapability()` only because
+> neither had been spike-tested, not because either was known broken. Result: `WireFrame` is real
+> (now reports `true`); `AnisotropicFiltering` is confirmed genuinely absent here (stays `false`,
+> now evidence-backed). 19/19 `DX2`-labeled CTests pass (17 pre-Phase-O9 + 2 new). See Phase O9
+> below for the full detail.
+>
+> **All 8 v1 phases complete.** CMake skeleton, 2D layer (verbatim port from
 > `DX1`), Direct3D v2 device bring-up, `VertexBuffer`/`IndexBuffer` backends, the CPU
 > transform/clip pipeline + real `DrawPrimitive`/`DrawIndexedPrimitive` submission, full per-draw
 > state mapping, the remaining genuinely-unavailable `IGraphicsBackend` entry points, and docs/full
@@ -252,6 +266,62 @@ verified empirically, not assumed. Phase O1 is unblocked.
     `D3DOP_` — a real, automated proof this backend never quietly reaches for the proven-broken
     execute-buffer path instead of the working `DrawPrimitive` one.
 
+13. **(Phase O9, added 2026-07-21) CPU-side lighting for the two normal-bearing strides, real
+    fixed-function specular via `D3DRENDERSTATE_SPECULARENABLE`.** Design decision 7 above scoped
+    lighting fully out of `DX2` v1, matching `Software`'s own identical precedent. Following up on
+    the owner's own question ("can DX2 be improved somehow?"), this is revisited for the two
+    vertex layouts that actually carry a normal (`stride==32`/`VertexPositionNormalTexture`,
+    `stride==52`/`VertexPositionNormalTextureSkinned` — skinning itself stays out of scope,
+    decision 7, so stride-52 lighting uses the unskinned local-space position/normal directly).
+    Strides 16/20/24 (no normal at all) are unaffected and behave exactly as before. A new spike
+    (`dx2_spike10_specular_wireframe_aniso.cpp`, Test C) confirmed `D3DRENDERSTATE_SPECULARENABLE`
+    + `D3DTLVERTEX::specular` is a real, hardware-composited additive pass applied *after* the
+    texture-modulate stage (black diffuse + red specular reads back pure red with
+    `SPECULARENABLE=TRUE`, pure black with it `FALSE`) — this is the historically-real DirectX
+    mechanism for exactly what real XNA's `Lighting.fxh`/`AddSpecular` does
+    (`color.rgb += specular*color.a`), so `DX2`'s lighting doesn't need to fold specular into the
+    diffuse channel on the CPU at all. Math ported from `EasyGLGraphicsBackend.cpp`'s own
+    `EnsureLit3DVertexLitProgram()` GLSL (CNA's default per-vertex-lit path, since
+    `BasicEffect::preferPerPixelLighting_` defaults to `false`, matching real XNA) and
+    `BasicEffect::FillGpuDrawParams()`'s field semantics — not re-derived:
+    - `normal` (world-space) = `transpose(inverse(World₃ₓ₃))·localNormal`, computed via the same
+      cofactor/determinant shortcut `EasyGLGraphicsBackend.cpp`'s own Task-398 fix uses (correct
+      for non-uniform-scale `World`, unlike using the raw upper-left 3×3 directly) — reads
+      `GpuDrawParams::worldColMajor`, already provided for exactly this.
+    - `lightSum = ambientColor + Σᵢ light[i]Diffuse · max(dot(N,-light[i]Dir), 0)` (3 lights,
+      always evaluated — a disabled light already arrives pre-zeroed from
+      `BasicEffect::FillGpuDrawParams()`).
+    - `litDiffuse = lightSum · diffuseColor.rgb + emissiveColor` (this backend's vertex `color`
+      channel) — `diffuseColor` arrives already alpha-premultiplied, `emissiveColor` already
+      alpha-premultiplied and added *after* the multiply, matching `BasicEffect`'s lit-path-only
+      semantics exactly (§ design decision 7's field-semantics comment already documents this).
+    - `litSpecular = specularColor · Σᵢ (pow(max(dot(H[i],N),0)·zeroL[i], specularPower) ·
+      light[i]Specular)` where `H[i] = normalize(eyeDir - light[i]Dir)` and `zeroL[i]` gates
+      specular off when the surface faces away from that light — this backend's vertex
+      `specular` channel (`D3DTLVERTEX::specular`, `SPECULARENABLE=TRUE` set per-draw whenever
+      `params.lightingEnabled`).
+    - **One honest, documented divergence from the exact HLSL/GLSL formula**: real XNA weights the
+      specular add by the final pixel's alpha (`color.rgb += specular*color.a`); real D3D v1/v2
+      fixed-function hardware's post-texture specular-add has no such per-pixel alpha multiply
+      capability (it is a flat additive compositing stage) — so `DX2`'s specular highlight is
+      *not* alpha-weighted. Invisible for the overwhelmingly common opaque case (`alpha≈1`); only
+      a semi-transparent, specular-lit surface would show a (subtly too-bright) difference from
+      real XNA. Documented, not silently accepted.
+    - Lighting is only evaluated when `params.lightingEnabled` is true; when false, behavior is
+      byte-identical to before (raw vertex data / opaque-white fallback, `vertexColorEnabled`'s
+      existing meaning unchanged) — a pure additive capability, zero risk to any already-passing
+      Phase O1-O8 CTest.
+    - `WireFrame`/`AnisotropicFiltering` re-verified empirically in the same spike (Tests D/E, not
+      assumed): `D3DFILL_WIREFRAME` genuinely renders edge-only output (a point inside a filled
+      triangle reads back the WIREFRAME background color, not the triangle's own color) — **real,
+      confirmed distinctness**, `SupportsCapability(WireFrame)` now reports `true`.
+      `D3DRENDERSTATE_ANISOTROPY`/`D3DTFN_ANISOTROPIC` produced **byte-identical** readback to
+      `D3DTFN_LINEAR`/`D3DTFN_POINT` across a heavily-minified checkerboard texture at every
+      sampled point — this environment's software RGB rasterizer does not implement anisotropic
+      (or, apparently, even bilinear-vs-point) filtering distinctly at all.
+      `SupportsCapability(AnisotropicFiltering)` stays `false`, now backed by a real negative
+      result instead of "never tested."
+
 ---
 
 ## 4. Active execution order
@@ -372,6 +442,20 @@ actually passing.
 | `DX2-84` | Full `CnaTests`/DX2 CTest suite regression run under `-DCNA_GRAPHICS_BACKEND=DX2` (MinGW cross-compile) — confirm no unrelated suite breaks, same rigor `DX1-88` applied | ✅ | **Final: 5415 total, 19 failed (1 confirmed a concurrency flake — passes cleanly in isolation, 18 genuine), 1 `Not Run`.** Getting an honest count required finding and fixing two real, pre-existing, cross-backend CMake/test-infrastructure gaps neither specific to DX2's own logic nor previously caught (this exact from-scratch MinGW + full `CnaTests` configuration had simply never been run via `ctest`'s own per-test discovery before — the same class of "never exercised" gap `DX1-88` itself found repeatedly): (1) `cmake/UnitTests.cmake` never wired a `CROSSCOMPILING_EMULATOR` for `DX1`'s or `DX2`'s own `CnaTests` binary (D3D9/D3D11/D3D12 already had one) — without it, `ctest`'s `gtest_discover_tests(PRE_TEST)` step can't even enumerate tests under Wine; fixed for both backends together. (2) `gtest_discover_tests` never set a `WORKING_DIRECTORY`, defaulting to the build directory instead of the repo root — but ~140 test fixtures (`SongTest`/`MediaLibraryTestFixture`/`PlaylistParserTest`/etc.) load real files via a path relative to the repo root, so every one of them threw `FileNotFoundException` when ctest ran them from a non-repo-root cwd; fixed by pinning `WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"` (verified: this is a genuine, universal gap that would affect **every** backend run this way, not a DX2 regression — confirmed by reproducing the exact failure manually from the build dir, independent of DX2's own code). Also found and fixed two backend-list gaps of the exact same shape `DX1-1`/`DX3-27` already needed: `GraphicsBackendCompileDefinitionsTest.ExactlyOneGraphicsBackendIsSelected` and `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow` both lacked a `CNA_BACKEND_DX2` case. **Methodology note, itself a real finding worth keeping**: running `ctest -j4` against a shared `WINEPREFIX` causes spurious failures/timeouts across unrelated test categories (2 DX2 tests, 2 GamerServices tests, 1 audio test, 1 content test all independently reproduced as clean passes in isolation) — `-j2` with a `--timeout` safety net is the practical balance between the ~3-hour fully-serial runtime and `-j4`'s contention; a from-scratch regression of this backend family should expect this and budget for a rerun-failed pass, not assume every parallel failure is real. **Final 19 failures, categorized against `DX1-88`'s own precedent**: 7 `MediaLibraryTestFixture`/`MediaLibrarySavePictureTest` (pre-existing `CNA_FFMPEG_AVAILABLE=OFF` gap, matching `DX1-88`'s own ~6); 3 `GraphicsDeviceCapabilityTest.SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects` (this test has **no backend gate at all**, same pre-existing design `DX1-88` documented — but unlike `DX1`, `SupportsThreeD`/`SupportsDepthStencilBuffer` now correctly **pass** for `DX2`, since real 3D genuinely exists); 6 `CnjTexture3DTest`/`CnjStockEffectTest`/`CnjEffectTest`/`XnbContainerFuzzTest.MutatedRealTexture2DFixture`/`Texture3DTextureCubeContentTypeReaderTest`×2 (content genuinely requiring `Texture3D`/custom-effect support DX2 doesn't have by design — the content-pipeline code doesn't null-check `CreateTexture3D`'s nullptr return cleanly, a pre-existing content-pipeline robustness gap that would affect any nullptr-returning backend, not unique to DX2, out of this task's scope to fix); 1 `AudioTagParserTest.ReadsNonAsciiVorbisCommentTitleCorrectly` (the **exact same test** `docs/dx1-backend.md` §7a already names as a pre-existing Windows/Wine non-ASCII-encoding quirk); 1 `StrictXnaApiSurfaceCheck_Compile_Run` `Not Run` (a separate executable target never wired into the `CnaTests` build step — pre-existing, same category `DX1-88` also hit). Zero DX2-caused failures remain unaccounted for. |
 | `DX2-90` | Update `docs/directx-legacy-backends-analysis.md` §3.1's DX2/3 row: the ~15%/execute-buffer-only estimate was analysis-level and is now superseded by this plan's empirical finding (real `DrawPrimitive`-based rendering, not execute buffers) — record the actual delivered capability instead of the earlier assumption, and cross-reference `dx2-spike/README.md` | ✅ | |
 
+## Phase O9 — CPU-side BasicEffect lighting + WireFrame/Anisotropic re-verification (owner-requested improvement)
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| `DX2-91` | Spike: `D3DRENDERSTATE_SPECULARENABLE` + `D3DTLVERTEX::specular` (real post-texture additive compositing), `D3DFILL_WIREFRAME` vs `D3DFILL_SOLID`, `D3DTFN_ANISOTROPIC` vs `LINEAR`/`POINT` on a minified checkerboard — before writing any lighting code or flipping any `SupportsCapability` bit | ✅ | `dx2_spike10_specular_wireframe_aniso.cpp`. **Test C** (specular): black diffuse + red specular reads back pure `(255,0,0)` with `SPECULARENABLE=TRUE`, pure `(0,0,0)` with `FALSE` — real, additive, confirmed. **Test D** (fill mode): a point inside a filled triangle reads the triangle's own color in `SOLID` mode, the cleared background color in `WIREFRAME` mode — real, confirmed distinctness. **Test E** (filter): `POINT`/`LINEAR`/`ANISOTROPIC×4`/`ANISOTROPIC×16` all produced byte-identical readback across 25 sampled points on a heavily-minified 8×8 checkerboard — confirmed no distinctness on this software RGB device. |
+| `DX2-92` | Extend `Dx2ClipVertex`/`Dx2LerpClipVertex` with a specular (`sr,sg,sb`) channel, interpolated through near-plane clipping exactly like color/uv | ✅ | Specular defaults to `{0,0,0}` (no contribution) for every path except lit `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` draws — `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (plain `VertexPositionColor`, no lighting concept) are unaffected. |
+| `DX2-93` | `Dx2ComputeVertexLighting()`: ambient + up to 3 directional lights (Lambertian diffuse, Blinn-Phong specular), ported from `EasyGLGraphicsBackend.cpp`'s `EnsureLit3DVertexLitProgram()` GLSL + `BasicEffect::FillGpuDrawParams()`'s field semantics (design decision 13) — not re-derived from scratch | ✅ | Normal-matrix cofactor/determinant shortcut ported from `EasyGLGraphicsBackend.cpp`'s own Task-398 fix (reads `GpuDrawParams::worldColMajor`). |
+| `DX2-94` | Wire `Dx2ComputeVertexLighting()` into `Dx2BuildGenericClipVertex()` for `stride==32`/`52` when `params.lightingEnabled` — pass `world`+`params` through (signature change) from `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`; `Dx2ClipVertexToD3DTLVERTEX` packs the new specular channel into `D3DTLVERTEX::specular`; `SubmitDx2Primitives` gains a `specularEnabled` parameter setting `D3DRENDERSTATE_SPECULARENABLE` per-draw (`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` always pass `false`, unaffected) | ✅ | Strides 16/20/24 (no normal) and `lightingEnabled=false` draws are byte-identical to pre-Phase-O9 behavior — purely additive change. |
+| `DX2-95` | `SupportsCapability()`: flip `WireFrame` to `true` (Test D proved real distinctness); update `AnisotropicFiltering`'s comment to record the empirical negative result from Test E (stays `false`, now evidence-backed instead of "untested") | ✅ | `Dx2GraphicsBackend.hpp`'s doc comment rewritten to match. Also fixed one now-genuinely-broken pre-existing assertion this flip caused: `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (an ungated cross-backend test that asserted `WireFrame==false` unconditionally) now branches on `#ifdef CNA_BACKEND_DX2`; `dx2_graphics_capability_test.cpp`'s own DX2-specific checks updated the same way. |
+| `DX2-96` | `Dx2_Lighting` CTest: a lit `VertexPositionNormalTexture` quad under a single directional light + ambient, pixel-verified against the hand-computed Lambertian value at a known normal/light-direction pair; a second check confirms a light facing away from the surface contributes ~0 (not negative/wrapped); a third confirms a specular highlight appears (and is absent when `SpecularColor` is black) | ✅ | 4/4 checks pass. Real finding while writing this test: lighting is evaluated per-VERTEX (CNA's default, matching real XNA's `PreferPerPixelLighting=false`), so a full-viewport quad's far corner vertices each see a strongly off-axis eye direction and the Blinn-Phong specular term crushes to near-zero (measured `(9,9,9)`, not a bug) — the specular checks use a small, centered quad (NDC half-extent 0.12) instead, where all 4 corners are close enough to the optical axis to agree closely (confirmed by their positional symmetry), giving a reliable, clearly-bright readback. |
+| `DX2-97` | `Dx2_WireframeAniso` CTest: render the same triangle with `RasterizerState`'s `FillMode=WireFrame` vs default `Solid` and assert the interior/edge readback differs exactly as the spike found; assert `SupportsCapability(WireFrame)==true` and `SupportsCapability(AnisotropicFiltering)==false` | ✅ | 4/4 checks pass. |
+| `DX2-98` | Full `DX2`-labeled CTest suite re-run (all pre-Phase-O9 tests + the two new ones) under `-DCNA_GRAPHICS_BACKEND=DX2`, MinGW cross-compile, confirm zero regressions | ✅ | **19/19 `DX2`-labeled CTests pass** (17 pre-existing + `Dx2_Lighting` + `Dx2_WireframeAniso`), independently re-run via `ctest -L DX2 -j2`. Also re-ran the two cross-backend tests DX2-84 previously touched (`GraphicsBackendCompileDefinitionsTest`, `GraphicsDeviceCapabilityTest`) via the full `CnaTests` binary: `DoesNotSupportWireFrame` now passes (the `DX2-95` fix), and the 3 pre-existing, already-documented DX2-84 failures in that same ungated test class (`SupportsMultipleRenderTargets`/`SupportsOcclusionQuery`/`SupportsCustomEffects`) are unchanged — confirms zero new regressions. A repo-root full multi-hour `CnaTests` regression (DX2-84's own scope) was not re-run for this additive, narrowly-scoped change; the targeted re-run above covers everything this phase's code could plausibly affect. |
+| `DX2-99` | Update `docs/dx2-backend.md`'s 3D-capability section (lighting moves from "accepted-and-ignored" to "real, for normal-bearing strides"; `WireFrame` moves from "unsupported" to "supported") and `plan_dxold.md`'s DX2 row | ✅ | |
+
 ---
 
 ## Boundaries — explicitly out of scope for `DX2` v1
@@ -379,11 +463,18 @@ actually passing.
 - **Execute-buffer Direct3D** (`IDirect3D`/`IDirect3DDevice`/`IDirect3DExecuteBuffer`) — proven
   non-functional in this environment; permanently excluded by design decision 12's discipline
   CTest, not merely avoided by convention.
-- **Fixed-function lighting/fog** (`lightingEnabled`, `ambientColor`, `light{0,1,2}*`,
-  `fogEnabled`/`fogColor`/`fogStart`/`fogEnd`, `specularColor`/`specularPower`, `emissiveColor`) —
-  design decision 7, matching `Software`'s own identical precedent.
+- **Fixed-function lighting** (`lightingEnabled`, `ambientColor`, `light{0,1,2}*`,
+  `specularColor`/`specularPower`, `emissiveColor`) — design decision 7's v1 boundary, **superseded
+  by Phase O9 (design decision 13) for the two normal-bearing strides** (`stride==32`/`52`): real
+  CPU-computed ambient+directional Lambertian/Blinn-Phong lighting now applies there. Strides
+  16/20/24 (no normal) have no lighting concept regardless (there is no normal to light against),
+  same as before.
+- **Fog** (`fogEnabled`/`fogColor`/`fogStart`/`fogEnd`) — still out of scope, design decision 7;
+  Phase O9 only addressed lighting, not fog.
 - **Multitexture, env-mapping, skinning** (`dualTexture`, `envMapping`, `skinned`) — design
   decision 7; accepted-and-ignored, not thrown, but not rendered with real per-feature math either.
+  Phase O9's lighting for `stride==52` (`VertexPositionNormalTextureSkinned`) uses the vertex's
+  raw, unskinned local-space position/normal — skinning itself is still not evaluated.
 - **Stencil operations** — no real stencil buffer exists at this DirectX era (DX6+); accepted and
   ignored per decision 7/`DX2-50`.
 - **`IDirectDraw2`+/`IDirectDrawSurface2`+ features** — permanently out of scope for the `DX2` name
@@ -406,8 +497,14 @@ actually passing.
 - `src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp` — the CPU transform/clip
   pipeline this backend's 3D layer ports from (Phase O4), and the precedent for scoping
   lighting/fog out of a "v1" (design decision 7).
+- `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp`'s `EnsureLit3DVertexLitProgram()` —
+  the per-vertex-lit BasicEffect GLSL formula Phase O9's CPU lighting ports from (design decision
+  13), and the normal-matrix cofactor/determinant shortcut (Task 398) reused for the same reason.
 - `dx2-spike/README.md` — the full `DX2-0` spike record: all 14 ruled-out execute-buffer variants,
-  and the `IDirect3DDevice2` `DrawPrimitive` breakthrough that unblocked this plan.
+  and the `IDirect3DDevice2` `DrawPrimitive` breakthrough that unblocked this plan. Also records
+  Phase O9's follow-up spike (`dx2_spike10_specular_wireframe_aniso.cpp`): real post-texture
+  additive specular via `D3DRENDERSTATE_SPECULARENABLE`, real `WireFrame` distinctness, and a
+  confirmed-absent `AnisotropicFiltering` distinctness on this environment's software RGB device.
 - `docs/directx-legacy-backends-analysis.md` — the feasibility analysis that authorized this whole
   backend family; §3.1's DX2/3 capability estimate is superseded by this plan's empirical finding
   (`DX2-90`).

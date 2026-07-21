@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 // CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports DX2's
-// final Phase O6 capability set. Unlike an earlier version of this test (mirroring a 2D-only
-// backend's capability test, matching DX1/SDL_RENDERER/CANVAS), DX2's 3D pipeline is now
-// genuinely real end-to-end (Phase O3-O6, plan_dx2.md) -- ThreeD and DepthStencilBuffer both
-// report true. What remains false is either genuinely unavailable at this DirectX era (MSAA/MRT/
-// occlusion query/custom effects) or real-but-unverified-visually (WireFrame/AnisotropicFiltering
-// -- see Dx2GraphicsBackend.hpp's own SupportsCapability() comment for why those two are
-// deliberately conservative rather than a "doesn't exist" claim).
+// capability set. Unlike an earlier version of this test (mirroring a 2D-only backend's
+// capability test, matching DX1/SDL_RENDERER/CANVAS), DX2's 3D pipeline is now genuinely real
+// end-to-end (Phase O3-O6, plan_dx2.md) -- ThreeD and DepthStencilBuffer both report true. What
+// remains false is genuinely unavailable at this DirectX era (MSAA/MRT/occlusion query/custom
+// effects), or empirically confirmed absent on this software RGB device (AnisotropicFiltering,
+// Phase O9's dx2_spike10 Test E). WireFrame reports true as of Phase O9 -- the same spike's Test D
+// confirmed D3DFILL_WIREFRAME genuinely renders edge-only output here (see Dx2GraphicsBackend.hpp's
+// own SupportsCapability() comment for the full rationale).
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -64,11 +65,12 @@ protected:
         check(!dev.SupportsCapability(GraphicsCapability::OcclusionQuery), "OcclusionQuery not supported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported");
 
-        // Real render states exist and are accepted (D3DRENDERSTATE_ANISOTROPY/D3DFILL_WIREFRAME),
-        // but neither was spike-verified to produce distinct rendering output here -- reported
-        // conservatively as unsupported rather than an unverified claim.
-        check(!dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering not supported (unverified, not absent)");
-        check(!dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame not supported (unverified, not absent)");
+        // Phase O9 (dx2_spike10_specular_wireframe_aniso.cpp): WireFrame is real (Test D --
+        // D3DFILL_WIREFRAME genuinely renders edge-only output), AnisotropicFiltering is
+        // empirically confirmed absent (Test E -- byte-identical readback across POINT/LINEAR/
+        // ANISOTROPIC filters on this software RGB device), not merely "never tested" anymore.
+        check(dev.SupportsCapability(GraphicsCapability::WireFrame), "WireFrame supported (Phase O9, empirically verified)");
+        check(!dev.SupportsCapability(GraphicsCapability::AnisotropicFiltering), "AnisotropicFiltering not supported (Phase O9, empirically confirmed absent)");
 
         // SupportsCapability() is a check, not an enforcement mechanism -- calling a method for a
         // genuinely-unsupported capability anyway still throws. MultipleRenderTargets (checked

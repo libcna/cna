@@ -1139,12 +1139,17 @@ namespace CNA::Internal::Backends::Dx2
 
     /// One vertex in clip space (before the perspective divide), matching
     /// SoftwareGraphicsBackend.cpp's own ClipVertex (position + un-premultiplied color/uv only --
-    /// no world-space position/normal, unlike Software's, since lighting/envMap are out of scope).
+    /// no world-space position/normal, unlike Software's, since envMap/skinning are out of scope).
+    /// `sr`/`sg`/`sb` (Phase O9, plan_dx2.md design decision 13): the specular highlight
+    /// contribution, additive, packed into D3DTLVERTEX::specular and composited by real
+    /// D3DRENDERSTATE_SPECULARENABLE hardware AFTER the texture-modulate stage -- zero for every
+    /// draw except a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx (stride 32/52, lightingEnabled).
     struct Dx2ClipVertex
     {
         float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
         float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
         float u = 0.0f, v = 0.0f;
+        float sr = 0.0f, sg = 0.0f, sb = 0.0f;
     };
 
     Dx2ClipVertex Dx2LerpClipVertex(const Dx2ClipVertex& a, const Dx2ClipVertex& b, float t)
@@ -1160,6 +1165,9 @@ namespace CNA::Internal::Backends::Dx2
         out.a = a.a + t * (b.a - a.a);
         out.u = a.u + t * (b.u - a.u);
         out.v = a.v + t * (b.v - a.v);
+        out.sr = a.sr + t * (b.sr - a.sr);
+        out.sg = a.sg + t * (b.sg - a.sg);
+        out.sb = a.sb + t * (b.sb - a.sb);
         return out;
     }
 
@@ -1207,17 +1215,98 @@ namespace CNA::Internal::Backends::Dx2
         return out;
     }
 
+    /// Result of Dx2ComputeVertexLighting: the diffuse (base vertex color) and specular (additive,
+    /// D3DTLVERTEX::specular) contributions, both already RGB (alpha handled separately by the
+    /// caller -- diffuseColor's own alpha channel).
+    struct Dx2LitColor
+    {
+        float diffuseR = 0.0f, diffuseG = 0.0f, diffuseB = 0.0f;
+        float specR = 0.0f, specG = 0.0f, specB = 0.0f;
+    };
+
+    /// CPU-side BasicEffect-style per-vertex lighting (Phase O9, plan_dx2.md design decision 13):
+    /// ambient + up to 3 directional lights, Lambertian diffuse + Blinn-Phong specular. Ported
+    /// from EasyGLGraphicsBackend.cpp's EnsureLit3DVertexLitProgram() GLSL (CNA's default
+    /// per-vertex-lit path -- BasicEffect::preferPerPixelLighting_ defaults to false, matching
+    /// real XNA) and BasicEffect::FillGpuDrawParams()'s field semantics -- not re-derived. Only
+    /// called for stride==32/52 (the layouts that carry a normal) when params.lightingEnabled.
+    Dx2LitColor Dx2ComputeVertexLighting(const Vector3& localPosition, const Vector3& localNormal,
+                                         const Matrix& world, const GpuDrawParams& params)
+    {
+        const Vector3 worldPos = Vector3::Transform(localPosition, world);
+
+        // Normal matrix = transpose(inverse(World 3x3)), cofactor/determinant shortcut ported
+        // verbatim from EasyGLGraphicsBackend.cpp's own Task-398 fix -- correct for non-uniform-
+        // scale World transforms, unlike using the raw upper-left 3x3 directly. Reads
+        // GpuDrawParams::worldColMajor (already provided for exactly this).
+        const float* w = params.worldColMajor;
+        const float a = w[0], d = w[1], g = w[2];
+        const float b = w[4], e = w[5], h = w[6];
+        const float c = w[8], f = w[9], i = w[10];
+        const float det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+        const float invDet = (det != 0.0f) ? (1.0f / det) : 0.0f;
+        const float nm[9] = {
+            (e * i - f * h) * invDet, -(b * i - c * h) * invDet, (b * f - c * e) * invDet,
+            -(d * i - f * g) * invDet, (a * i - c * g) * invDet, -(a * f - c * d) * invDet,
+            (d * h - e * g) * invDet, -(a * h - b * g) * invDet, (a * e - b * d) * invDet,
+        };
+        Vector3 normal(
+            nm[0] * localNormal.X + nm[1] * localNormal.Y + nm[2] * localNormal.Z,
+            nm[3] * localNormal.X + nm[4] * localNormal.Y + nm[5] * localNormal.Z,
+            nm[6] * localNormal.X + nm[7] * localNormal.Y + nm[8] * localNormal.Z);
+        normal = Vector3::Normalize(normal);
+
+        const Vector3 eyePos(params.eyePositionWorld[0], params.eyePositionWorld[1], params.eyePositionWorld[2]);
+        const Vector3 eyeDir = Vector3::Normalize(eyePos - worldPos);
+
+        const float* lightDirs[3]      = {params.light0Dir, params.light1Dir, params.light2Dir};
+        const float* lightDiffuses[3]  = {params.light0Diffuse, params.light1Diffuse, params.light2Diffuse};
+        const float* lightSpeculars[3] = {params.light0Specular, params.light1Specular, params.light2Specular};
+
+        float lightSum[3] = {params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]};
+        float specSum[3]  = {0.0f, 0.0f, 0.0f};
+
+        for (int li = 0; li < 3; ++li)
+        {
+            const Vector3 lightDir(lightDirs[li][0], lightDirs[li][1], lightDirs[li][2]);
+            const float dotL = Vector3::Dot(normal, Vector3(-lightDir.X, -lightDir.Y, -lightDir.Z));
+            const float ndotL = std::max(dotL, 0.0f);
+            const float zeroL = (dotL >= 0.0f) ? 1.0f : 0.0f;
+            lightSum[0] += lightDiffuses[li][0] * ndotL;
+            lightSum[1] += lightDiffuses[li][1] * ndotL;
+            lightSum[2] += lightDiffuses[li][2] * ndotL;
+
+            const Vector3 half = Vector3::Normalize(Vector3(eyeDir.X - lightDir.X, eyeDir.Y - lightDir.Y, eyeDir.Z - lightDir.Z));
+            const float specTerm = std::pow(std::max(Vector3::Dot(half, normal), 0.0f) * zeroL, params.specularPower);
+            specSum[0] += specTerm * lightSpeculars[li][0];
+            specSum[1] += specTerm * lightSpeculars[li][1];
+            specSum[2] += specTerm * lightSpeculars[li][2];
+        }
+
+        Dx2LitColor out;
+        out.diffuseR = lightSum[0] * params.diffuseColor[0] + params.emissiveColor[0];
+        out.diffuseG = lightSum[1] * params.diffuseColor[1] + params.emissiveColor[1];
+        out.diffuseB = lightSum[2] * params.diffuseColor[2] + params.emissiveColor[2];
+        out.specR = specSum[0] * params.specularColor[0];
+        out.specG = specSum[1] * params.specularColor[1];
+        out.specB = specSum[2] * params.specularColor[2];
+        return out;
+    }
+
     /// Stride-dispatched vertex transform for the DrawPrimitivesEx/DrawIndexedPrimitivesEx path
     /// (design decision 7's simplified scope -- no skinning bone-blend, no envMap world-space
     /// output, matching this backend's v1 boundary): 16=VertexPositionColor, 20=
-    /// VertexPositionTexture, 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (the
-    /// normal is read but ignored -- no lighting), 52=VertexPositionNormalTextureSkinned (normal
-    /// and bone weights/indices are read but ignored -- renders as if unskinned, matching the
-    /// "accept and ignore" pattern design decision 7 documents). `vertexColorEnabled` mirrors
-    /// GpuDrawParams' own flag -- when false, vertex color is forced to opaque white so only
-    /// texture modulation and the material-less diffuse pass-through apply.
+    /// VertexPositionTexture, 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture, 52=
+    /// VertexPositionNormalTextureSkinned (bone weights/indices are read but ignored -- renders as
+    /// if unskinned, matching the "accept and ignore" pattern design decision 7 documents).
+    /// `vertexColorEnabled` mirrors GpuDrawParams' own flag -- when false, vertex color is forced
+    /// to opaque white so only texture modulation and the material-less diffuse pass-through
+    /// apply. Phase O9 (design decision 13): when params.lightingEnabled and the stride carries a
+    /// normal (32/52), Dx2ComputeVertexLighting() replaces the raw/white vertex color with real
+    /// ambient+directional lighting instead -- `vertexColorEnabled` is irrelevant in that case
+    /// (neither of those two strides carries a per-vertex diffuse channel to begin with).
     Dx2ClipVertex Dx2BuildGenericClipVertex(const uint8_t* raw, std::size_t stride, const Matrix& combined,
-                                            bool vertexColorEnabled)
+                                            const Matrix& world, const GpuDrawParams& params)
     {
         Vector3 position;
         std::memcpy(&position, raw, sizeof(Vector3));
@@ -1225,6 +1314,8 @@ namespace CNA::Internal::Backends::Dx2
 
         Dx2ClipVertex out;
         out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
+
+        bool lit = false;
 
         if (stride == 16)
         {
@@ -1241,21 +1332,26 @@ namespace CNA::Internal::Backends::Dx2
             std::memcpy(&out.u, raw + 16, sizeof(float));
             std::memcpy(&out.v, raw + 20, sizeof(float));
         }
-        else if (stride == 32)
+        else if (stride == 32 || stride == 52)
         {
-            // VertexPositionNormalTexture: Position@0, Normal@12 (ignored), TextureCoordinate@24.
+            // VertexPositionNormalTexture(Skinned): Position@0, Normal@12, TextureCoordinate@24;
+            // stride 52's BlendWeight@32/BlendIndices@48 are ignored (design decision 7).
             std::memcpy(&out.u, raw + 24, sizeof(float));
             std::memcpy(&out.v, raw + 28, sizeof(float));
-        }
-        else if (stride == 52)
-        {
-            // VertexPositionNormalTextureSkinned: TextureCoordinate@24; Normal@12 and
-            // BlendWeight@32/BlendIndices@48 are both ignored (design decision 7).
-            std::memcpy(&out.u, raw + 24, sizeof(float));
-            std::memcpy(&out.v, raw + 28, sizeof(float));
+
+            if (params.lightingEnabled)
+            {
+                Vector3 normal;
+                std::memcpy(&normal, raw + 12, sizeof(Vector3));
+                const Dx2LitColor litColor = Dx2ComputeVertexLighting(position, normal, world, params);
+                out.r = litColor.diffuseR; out.g = litColor.diffuseG; out.b = litColor.diffuseB;
+                out.a = params.diffuseColor[3];
+                out.sr = litColor.specR; out.sg = litColor.specG; out.sb = litColor.specB;
+                lit = true;
+            }
         }
 
-        if (!vertexColorEnabled)
+        if (!lit && !params.vertexColorEnabled)
         {
             out.r = out.g = out.b = out.a = 1.0f;
         }
@@ -1284,6 +1380,14 @@ namespace CNA::Internal::Backends::Dx2
                     (static_cast<D3DCOLOR>(channel(cv.r)) << 16) |
                     (static_cast<D3DCOLOR>(channel(cv.g)) << 8) |
                     static_cast<D3DCOLOR>(channel(cv.b));
+        // Phase O9 (design decision 13): specular highlight, composited by real Direct3D
+        // fixed-function hardware AFTER the texture-modulate stage when
+        // D3DRENDERSTATE_SPECULARENABLE is set (spike-confirmed real, dx2_spike10). Alpha is
+        // unused by that compositing stage -- always full, harmless.
+        out.specular = (static_cast<D3DCOLOR>(0xFFu) << 24) |
+                       (static_cast<D3DCOLOR>(channel(cv.sr)) << 16) |
+                       (static_cast<D3DCOLOR>(channel(cv.sg)) << 8) |
+                       static_cast<D3DCOLOR>(channel(cv.sb));
         out.tu = cv.u;
         out.tv = cv.v;
         return out;
@@ -1324,9 +1428,15 @@ namespace CNA::Internal::Backends::Dx2
     /// resolution its own entry point needs. `texHandle` is applied via
     /// D3DRENDERSTATE_TEXTUREHANDLE every call (0 = no texture) since it is a per-draw state,
     /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plan_dx2.md design decision 6).
+    /// `specularEnabled` (Phase O9, design decision 13): sets D3DRENDERSTATE_SPECULARENABLE per
+    /// draw -- true only for a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx call, spike-confirmed
+    /// (dx2_spike10) to genuinely composite D3DTLVERTEX::specular additively after the
+    /// texture-modulate stage; DrawColoredPrimitives/DrawIndexedColoredPrimitives always pass
+    /// false (their vertices' specular channel is always zero anyway, but leaving the render
+    /// state off avoids an unnecessary per-draw state change on the no-lighting-concept path).
     void SubmitDx2Primitives(LPDIRECT3DDEVICE2 device2, int viewportWidth, int viewportHeight,
                              const std::function<Dx2ClipVertex(int)>& fetchVertex,
-                             int primitiveCount, D3DTEXTUREHANDLE texHandle)
+                             int primitiveCount, D3DTEXTUREHANDLE texHandle, bool specularEnabled)
     {
         std::vector<D3DTLVERTEX> verts;
         std::vector<WORD> indices;
@@ -1364,6 +1474,8 @@ namespace CNA::Internal::Backends::Dx2
         if (FAILED(hr)) ThrowHr("IDirect3DDevice2::SetRenderState(TEXTUREHANDLE)", hr);
         hr = device2->SetRenderState(D3DRENDERSTATE_TEXTUREMAPBLEND, D3DTBLEND_MODULATE);
         if (FAILED(hr)) ThrowHr("IDirect3DDevice2::SetRenderState(TEXTUREMAPBLEND)", hr);
+        hr = device2->SetRenderState(D3DRENDERSTATE_SPECULARENABLE, specularEnabled ? TRUE : FALSE);
+        if (FAILED(hr)) ThrowHr("IDirect3DDevice2::SetRenderState(SPECULARENABLE)", hr);
 
         hr = device2->BeginScene();
         if (FAILED(hr)) ThrowHr("IDirect3DDevice2::BeginScene", hr);
@@ -1891,7 +2003,7 @@ namespace CNA::Internal::Backends::Dx2
 
         SubmitDx2Primitives(impl_->device2, vw, vh,
             [&](int i) { return Dx2BuildPositionColorClipVertex(base + static_cast<std::size_t>(i) * stride, combined); },
-            primitiveCount, 0);
+            primitiveCount, 0, false);
     }
 
     void Dx2GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb,
@@ -1932,7 +2044,7 @@ namespace CNA::Internal::Backends::Dx2
                 const uint32_t idx = readIndex(i);
                 return Dx2BuildPositionColorClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, combined);
             },
-            primitiveCount, 0);
+            primitiveCount, 0, false);
     }
 
     void Dx2GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
@@ -1960,13 +2072,12 @@ namespace CNA::Internal::Backends::Dx2
         impl_->ActiveSurfaceSize(vw, vh);
         const D3DTEXTUREHANDLE texHandle = params.textureEnabled
             ? Dx2ResolveTextureHandle(params.texture0, impl_->device2) : 0;
-        const bool vertexColorEnabled = params.vertexColorEnabled;
         const int vertexStart = params.vertexStart;
 
         SubmitDx2Primitives(impl_->device2, vw, vh,
             [&](int i) { return Dx2BuildGenericClipVertex(base + static_cast<std::size_t>(vertexStart + i) * stride,
-                                                          stride, combined, vertexColorEnabled); },
-            primitiveCount, texHandle);
+                                                          stride, combined, world, params); },
+            primitiveCount, texHandle, params.lightingEnabled);
     }
 
     void Dx2GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
@@ -1997,7 +2108,6 @@ namespace CNA::Internal::Backends::Dx2
         impl_->ActiveSurfaceSize(vw, vh);
         const D3DTEXTUREHANDLE texHandle = params.textureEnabled
             ? Dx2ResolveTextureHandle(params.texture0, impl_->device2) : 0;
-        const bool vertexColorEnabled = params.vertexColorEnabled;
         const int startIndex = params.startIndex;
         const int baseVertex = params.baseVertex;
 
@@ -2017,9 +2127,9 @@ namespace CNA::Internal::Backends::Dx2
             [&](int i) {
                 const uint32_t idx = readIndex(startIndex + i) + static_cast<uint32_t>(baseVertex);
                 return Dx2BuildGenericClipVertex(vbBase + static_cast<std::size_t>(idx) * stride, stride,
-                                                 combined, vertexColorEnabled);
+                                                 combined, world, params);
             },
-            primitiveCount, texHandle);
+            primitiveCount, texHandle, params.lightingEnabled);
     }
 }
 
