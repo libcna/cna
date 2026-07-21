@@ -2315,7 +2315,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450 | feature/audit | **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx slice DONE and VERIFIED** — `vs_skinned3d`, `vs_skinned3d_vertexlit` (both Variant A) + `vs_pbr_skinned3d` (Variant B) now apply the World inverse-transpose after the bone skin, supplied CPU-side via the existing `u_normalMatrix` (bgfx's shaderc lacks in-shader `inverse()`/`transpose()`; the 4 skinned draw sites now upload `ComputeNormalMatrix3x3`). New Bgfx analytic world-normal harness (pixel- **and** vertex-lit) **2/8→8/8**; scale case reads 228 (inverse-transpose), not 180 (Variant A) or 114 (raw-World). `vs_skinned3d_vertexlit` was **not** in the audit's Bgfx evidence list — found by exhaustive inspection. **D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
 | REMED-GFX-007 | P1 | IN PROGRESS (only D3DCommon BYTECODE-BLOCKED remains) | 31668819, _bgfx-fix_, 7f3e82bf, 38a1008d, e30868eb | feature/audit | **Vulkan / Bgfx / WebGPU / SdlGpu slices ALL DONE and VERIFIED** — all four add emissive unscaled (`lightSum*Diffuse + Emissive`). **WebGPU slice DONE+VERIFIED** (`38a1008d`) — `env_map3d.wgsl` fs_main corrected; new `webgpu_environmentmapeffect_emissive_test.cpp` is transfer-function-agnostic (WebGPU surface is sRGB here; calibrates T() via env-map full-replace), 2/4→4/4. **SdlGpu slice DONE+VERIFIED** (`e30868eb`) — `env_map3d.frag.glsl` corrected + `spirv_shaders.hpp` regenerated (1/23 arrays changed, `kEnvMap3dFragSpv` only); new `sdlgpu_environmentmapeffect_emissive_test.cpp` (linear RT readback) 2/4→4/4. **Alpha-squaring RESOLVED as inseparable** — the audit's SdlGpu-specific "also squares Alpha" symptom is a direct arithmetic consequence of the *same* line (both operands CPU-prefolded with Alpha); the one-line fix removes it, no separate finding raised. Cross-backend conformance proven: Vulkan/Bgfx/SdlGpu raw (100,50,25) linear; WebGPU raw (168,122,88) sRGB → decodes to (100,50,25). SdlGpu 23/23, WebGPU 25/25 shard, zero regressions. **Only D3DCommon (D3D11/D3D12) remains — BYTECODE-BLOCKED** (`env_map3d.frag.hlsl:46` has the identical defect; no fxc/dxc in repo). See "Wave 3 — GRAPHICS shader campaign, WebGPU/SdlGpu GFX-007 slices". |
 | REMED-GFX-008 | P1 | DEFERRED (this session) | | | Vulkan root cause re-confirmed at source (skinned frag reads always-zero `pc.ambientColor`; `SkinnedEffect::FillGpuDrawParams` never writes `p.ambientColor` and pre-folds ambient into `p.emissiveColor`, which the skinned UBOs have no slot for). **Deferred, not blocked by tooling:** the FNA-correct formula double-lights `Vulkan_AvatarRenderer_TintRouting`, which drives ambient(1,1,1) AND a full head-on light and passes only because this bug cancels the double-count. Re-baselining it needs AvatarRenderer lighting recalibration — an avatar-subsystem change outside this campaign's clean scope. See "Wave 3 — GRAPHICS shader campaign". |
-| REMED-GFX-009 | P1 | NOT STARTED | | | |
+| REMED-GFX-009 | P1 | **DONE and VERIFIED (SdlGpu — the only affected backend)** | dda6249f, 8cfdd8b9 | feature/audit | Fog implemented from scratch across **all 13** fog-capable SdlGpu shader families (13 vert + 8 frag SPIR-V arrays) using the REMED-GFX-005 corrected formula, adapted to SdlGpu's set convention. New shared 32-byte FogParams UBO (vertex-stage only, binding 1 for basic/alpha/dual, binding 2 for env/lit/skinned/pbr); keep-factor from raw object-space pre-skin `inPos.z`; forwarded to the fragment as a `fragFog` varying; `outColor.rgb = mix(FogColor, rgb, keep)` (RGB only). CPU: `FillFogUniforms()` + `fogUniforms` on all 8 DrawCommand structs + push in every Issue path + `num_uniform_buffers` +1 on all 13 vertex shaders (no fragment/API change; existing layouts untouched). SPIR-V regen byte-reproducible: exactly **21 of 23 arrays changed** (2 sprite2d byte-identical), no drift. 3 new conformance tests **0→43/43** (BasicEffect 16/16, Effects 16/16, Skinned/PBR 11/11). Full SdlGpu shard **26/26**, zero regressions (incl. GFX-006 WorldNormal + GFX-007 EnvMapEmissive controls). Validation clean (only the known pre-existing REMED-GFX-059 VUID-02684). Cross-backend: byte-identical to Vulkan on the shared scene. See "REMED-GFX-009 — SdlGpu stock-effect fog". |
 | REMED-GFX-010 | P2 | NOT STARTED | | | |
 | REMED-GFX-011 | P1 | **DONE (Vulkan — the only affected backend)** | c9e96813, 633a2e17 | feature/audit | Flip added to all 4 families; both false justifying comments deleted; SPIR-V regenerated and verified (exactly 4 of 35 arrays changed). Orientation harness 0/4 → 4/4 on backbuffer AND render target. Zero regressions. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-012 | P1 | NOT STARTED | | | |
@@ -3164,3 +3164,186 @@ holds the identical `(EmissiveEm.xyz + lightSum) * DiffuseColor.rgb` defect. No 
 toolchain exists in the repo, so the shared compiled bytecode cannot be regenerated here. Source left
 untouched (per scope). Recorded BYTECODE-BLOCKED; unblock when a reproducible HLSL toolchain lands
 (tracked alongside the GFX-005/006 D3DCommon bytecode blockers).
+
+---
+
+## REMED-GFX-009 — SdlGpu stock-effect fog (from-scratch implementation) — IN PROGRESS
+
+Branch `feature/audit`. Fog was a **total absence** on SdlGpu (0/N shader families): a grep of every
+`.glsl` for any fog identifier and of `SdlGpuGraphicsBackend.cpp` for `fogColor/fogEnabled/fogStart/
+fogEnd` both returned zero. Depends on **REMED-GFX-005** (the corrected fog formula, already the
+verified oracle on Vulkan/Bgfx/EasyGL). Semantic reference = GFX-005's formula, adapted to SdlGpu's
+own SPIR-V set convention (vertex UBOs = set 1, fragment UBOs = set 3).
+
+### Phase 1 — exhaustive affected-family matrix (proven, not assumed)
+
+Verified by reading **every** `.glsl` in `src/CNA/Internal/Backends/SdlGpu/shaders/` (23 files → 23
+SPIR-V arrays in `spirv_shaders.hpp`). The audit's "≈10 families" is the effect count; the shader
+count is **13 3D vertex shaders + 8 3D fragment shaders** (some fragment shaders are shared). Full
+classification:
+
+| # | Vertex shader | Fragment shader | XNA effect | Fog | Vert free UBO slot (set 1) | Vert free out-loc |
+|---|---|---|---|---|---|---|
+| 1 | `colored3d.vert` | `colored3d.frag` | BasicEffect (VertexPositionColor, stride 16) | REQUIRED+MISSING | binding 1 | loc 1 |
+| 2 | `textured3d.vert` | `textured3d.frag` | BasicEffect (VertexPositionTexture, 20) | REQUIRED+MISSING | binding 1 | loc 2 |
+| 3 | `colored_textured3d.vert` | `textured3d.frag` (shared) | BasicEffect (VertexPositionColorTexture, 24) | REQUIRED+MISSING | binding 1 | loc 2 |
+| 4 | `alpha_test3d.vert` | `alpha_test3d.frag` | AlphaTestEffect (20/32) | REQUIRED+MISSING | binding 1 | loc 2 |
+| 5 | `alpha_test_colored3d.vert` | `alpha_test3d.frag` (shared) | AlphaTestEffect (24) | REQUIRED+MISSING | binding 1 | loc 2 |
+| 6 | `dual_texture3d.vert` | `dual_texture3d.frag` | DualTextureEffect (20) | REQUIRED+MISSING | binding 1 | loc 2 |
+| 7 | `dual_texture_colored3d.vert` | `dual_texture3d.frag` (shared) | DualTextureEffect (24) | REQUIRED+MISSING | binding 1 | loc 2 |
+| 8 | `lit_textured3d.vert` | `lit_textured3d.frag` | BasicEffect lit path (VertexPositionNormalTexture, 32) | REQUIRED+MISSING | binding 2 | loc 4 |
+| 9 | `env_map3d.vert` | `env_map3d.frag` | EnvironmentMapEffect (32) | REQUIRED+MISSING | binding 2 | loc 4 |
+| 10 | `skinned3d.vert` | `lit_textured3d.frag` (shared) | SkinnedEffect (VertexPositionNormalTextureSkinned, 52) | REQUIRED+MISSING | binding 2 | loc 4 |
+| 11 | `skinned_colored3d.vert` | `skinned_colored3d.frag` | SkinnedEffect + vertex color (56) | REQUIRED+MISSING | binding 2 | loc 5 |
+| 12 | `pbr3d.vert` | `pbr3d.frag` | PbrEffect (VertexPositionNormalTangentTexture, 48) | REQUIRED+MISSING (parity w/ Vulkan/Bgfx PBR fog) | binding 2 | loc 5 |
+| 13 | `pbr_skinned3d.vert` | `pbr3d.frag` (shared) | SkinnedPbrEffect (68) | REQUIRED+MISSING | binding 2 | loc 5 |
+| — | `sprite2d.vert` | `sprite2d.frag` | 2D SpriteBatch | **NOT APPLICABLE** (no 3D depth/fog) | — | — |
+
+- **FOG REQUIRED AND MISSING:** all 13 3D families above (13 vert + 8 distinct frag arrays).
+- **FOG NOT APPLICABLE:** `sprite2d` (2D). Its 2 SPIR-V arrays must remain byte-identical after regen.
+- **SEPARATE DEFECT:** none newly found in this phase; the pre-existing `REMED-GFX-059`
+  (VUID-02684) is unrelated and already tracked.
+- Shared-fragment-shader constraint checked: each shared fragment shader's paired vertex shaders
+  use identical output-location counts, so a single fog `in`-varying location is consistent across
+  every pipeline that reuses that fragment shader (textured3d.frag: locs 0–1 → fog loc 2;
+  lit_textured3d.frag: locs 0–3 → fog loc 4; pbr3d.frag: locs 0–4 → fog loc 5).
+
+### Phase 2 — fog pipeline design (per family, one shared formulation)
+
+Root cause is *absence*, so the whole pipeline is built from scratch:
+
+- **CPU source** (`GpuDrawParams`, already populated by the XNA layer for every backend):
+  `fogEnabled`, `fogColor[3]`, `fogStart`, `fogEnd` (`IGraphicsBackend.hpp:438–445`).
+- **New shared 32-byte fog UBO** (mirrors Vulkan's `FogParams` shape byte-for-byte):
+  `vec4 fogColorEnabled` (xyz=FogColor, w=fogEnabled) + `vec4 fogStartEnd` (x=start, y=end, zw=pad).
+  Filled by one new helper `FillFogUniforms(std::array<float,8>&, const GpuDrawParams&)`; a
+  default-constructed all-zero block = fog disabled (correct for the `FillColoredUniforms` no-params
+  path).
+- **Slot allocation** (SDL_gpu vertex UBO = set 1; push slot == binding index): the shared 128-byte
+  `PC` block is *fully packed* (32/32 floats), exactly as on Vulkan, so fog cannot extend it — it
+  gets its own UBO at the next free binding: **binding 1** for the 7 basic/alpha/dual families
+  (only `PC` at binding 0), **binding 2** for the 6 env/lit/skinned/pbr families (which already use
+  bindings 0+1). Bound to the **vertex stage only**.
+- **Per-fragment blend via a varying** (avoids any fragment-UBO/slot changes): the vertex shader
+  computes the keep-factor and forwards `fragFog = vec4(FogColor.rgb, keepFactor)`; the fragment
+  shader ends with `outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a)`. Fog affects **RGB
+  only**, never alpha (matches FNA and every other backend).
+- **Fog coordinate:** raw **object-space** pre-skin `inPos.z` (the deliberate GFX-005 convention,
+  identical to Vulkan/Bgfx/EasyGL — cross-cutting object-space note in the GFX-005 section). For the
+  4 skinned shaders the coordinate is the **pre-skin** `inPos.z`, matching Vulkan's
+  `skinned3d.vert.glsl` (`aPos.z`) exactly for cross-backend conformance.
+- `num_uniform_buffers` for each of the 13 vertex shaders is bumped by 1 at `SDL_CreateGPUShader`
+  time; fragment shader counts are unchanged (fog reaches the fragment via the varying).
+
+### Phase 3 — semantics (GFX-005 formula, verbatim)
+
+`keep = fogEnabled ? ( |end-start|<1e-6 ? 0.0 : clamp((z + end)/(end - start), 0, 1) ) : 1.0`
+then `rgb = mix(FogColor, rgb, keep)`. keep=1 → no fog (original), keep=0 → full FogColor.
+`FogStart==FogEnd` → fully fogged (matches FNA `SetFogVector` returning `(0,0,0,1)`). Verified scene
+(shared with Vulkan for conformance): FogStart=0, FogEnd=−0.9, z∈{0,0.45,0.9} → keep∈{1,0.5,0};
+blue geometry + red fog → OFF=blue(0,0,255), half=(128,0,128), full=red(255,0,0).
+
+### Toolchain reproducibility (Phase 7 prerequisite, proven BEFORE editing)
+
+A no-change `compile_shaders.py` regen reproduced the committed `spirv_shaders.hpp` byte-for-byte
+(md5 `6cbe1ec070426254dcdc6cb071314b5a`). Expected post-edit diff: **21 of 23 arrays change**
+(13 vert + 8 frag), only the 2 `sprite2d` arrays byte-identical.
+
+### Phases 4–10 — implementation and verification (DONE, commits `dda6249f` tests, `8cfdd8b9` fix)
+
+**Phase 4 — tests first (pre-fix FAIL → post-fix PASS).** Three new pixel tests (linear
+RenderTarget2D readback, swapchain download segfaults on this backend per SDLGPU-39), each family's
+scene shared with the verified Vulkan fog tests for cross-backend comparability — blue geometry, red
+fog, FogStart=0, FogEnd=−0.9 → Z=0 pure blue / Z=0.45 (128,0,128) / Z=0.9 pure red, plus a fog-OFF
+control. skinned/PBR build the blue base via a single N·L=1 directional light; pbr3d/pbr_skinned3d
+additionally use a shading-invariant discriminator (full fog must equal FogColor regardless of the
+BRDF shade; half fog must equal `mix(red, sameZ-fog-off-reference, 0.5)`).
+
+| Test | families | pre-fix | post-fix |
+|---|---|---|---|
+| `sdlgpu_basiceffect_fog_test` | colored3d, textured3d, colored_textured3d, lit_textured3d | **8/16** (all controls pass, all half+full fail) | **16/16** |
+| `sdlgpu_effects_fog_test` | alpha_test3d(+colored), dual_texture3d(+colored), env_map3d | **8/16** | **16/16** |
+| `sdlgpu_skinnedeffect_fog_test` | skinned3d, skinned_colored3d, pbr3d, pbr_skinned3d | **3/11** | **11/11** |
+
+Pre-fix every fog-ON case rendered the un-fogged colour (fog absent); every fog-OFF/no-fog control
+passed — the exact test-first signature. **43/43 post-fix.**
+
+**Phases 5–6 — CPU + shader (one logical fix, inseparable).**
+- CPU: `FillFogUniforms(std::array<float,8>&, const GpuDrawParams&)` writes all 8 floats
+  (`fogColor.rgb`, `fogEnabled`, `fogStart`, `fogEnd`, 2 pad); `fogUniforms` field added to all 8
+  `*DrawCommand` structs; filled in every `Queue*` path (the no-params `FillColoredUniforms` branch
+  leaves it zero = disabled); pushed at the matching vertex slot in every `Issue*` path;
+  `num_uniform_buffers` bumped +1 on all 13 vertex shaders (fragment counts unchanged — fog reaches
+  the fragment via the varying, not a fragment UBO). No existing uniform layout touched; no public
+  API change. Three now-false "No fog (deliberately deferred)" comments removed.
+- Shaders: each of the 13 vertex shaders gained the FogParams UBO, a `fragFog` out varying, and the
+  keep-factor compute; each of the 8 fragment shaders gained the `fragFog` in varying and the final
+  `outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a)`. Special care preserved: env_map3d's
+  GFX-007 emissive composition, skinned/pbr_skinned GFX-006 world-normal transform, alpha_test's
+  discard (fog applied after), dual_texture's dual contribution, all vertex-color paths.
+
+**Phase 7 — SPIR-V regeneration.** No-change regen proven byte-identical to the committed header
+(md5 `6cbe1ec0…`) BEFORE editing. Post-edit per-array diff: **exactly 21 of 23 arrays changed** (13
+vert + 8 frag), the 2 `sprite2d` arrays byte-identical, 0 added / 0 removed. Word growth uniform and
+explained (vert +~226–236 for UBO+compute+varying; frag +~111–127 for varying+mix). New header md5
+`e6f2020a…`. No unrelated drift.
+
+**Phase 8 — Vulkan validation (`VK_LAYER_KHRONOS_validation` under SDL_GPU).** Across all 43 draws
+the only validation message is `VUID-vkCmdDraw-renderPass-02684` (60×) — the **known pre-existing
+REMED-GFX-059** (render-pass depth-attachment `VK_ATTACHMENT_UNUSED` vs pipeline `1`), unrelated to
+fog and emitted identically pre-fix. **No new messages**: no push-constant/uniform-buffer size or
+alignment errors, no descriptor/binding/layout mismatch, no "uniform not set" — the new FogParams
+UBO binding is correctly declared (num_uniform_buffers) and pushed (matching slot) on every path.
+
+**Phase 9 — cross-backend conformance.** Live-run the verified Vulkan fog tests (GFX-005 controls,
+all 3/3) against the identical scene. For every family sharing the blue-geometry/red-fog scene the
+linear RGBA8 readback is **byte-identical** between backends:
+
+| Scene | Z=0 (keep 1) | Z=0.45 (keep 0.5) | Z=0.9 (keep 0) | Vulkan | SdlGpu |
+|---|---|---|---|---|---|
+| BasicEffect colored/textured/lit | (0,0,255) | (128,0,128) | (255,0,0) | ✓ | ✓ (identical) |
+| DualTextureEffect | (0,0,255) | (128,0,128) | (255,0,0) | ✓ | ✓ (identical) |
+| EnvironmentMapEffect | (0,0,255) | (128,0,128) | (255,0,0) | ✓ | ✓ (identical) |
+
+Both backends compute the same keep-factor `(z+FogEnd)/(FogEnd−FogStart)` and blend `mix(FogColor,
+rgb, keep)`; both read back linear RGBA8, so the agreement is exact (no colour-space adjustment
+needed, unlike the WebGPU sRGB case in GFX-007). The Vulkan `alphatest` test uses a different
+material/fog colour but proves the same 0/0.5/1 interpolation.
+
+**Phase 10 — full SdlGpu regression.** `ctest -L SdlGpu -j2`: **26/26 pass** (23 pre-existing + 3
+new fog), **zero regressions**. Re-verified controls: `SdlGpu_SkinnedEffect_WorldNormal` (GFX-006),
+`SdlGpu_EnvMapEmissive` (GFX-007), plus all env-map/pbr/skinned/skinnedpbr/render-target(±MSAA)/
+MRT/samplerstate/renderstate/texture3d/texturecube/smoke/swapchain-recovery/draworder tests. Vulkan
+GFX-005 fog controls re-run 5×3/3 (also serve as the cross-backend reference above).
+
+**Sanitizers (memory-safety verification).** The CPU-side change is memory-safe by construction and
+introduces no dynamic memory, pointer arithmetic, or variable-length copy: `fogUniforms` is a
+value-initialised `std::array<float,8>` (32 bytes, no padding); `FillFogUniforms` writes all 8
+indices explicitly (no uninitialised upload); every push uses `sizeof(command.fogUniforms)` = 32,
+matching the shader's `2×vec4` FogParams block exactly (no size mismatch, no OOB). No existing
+uniform struct layout was modified. Given this and the repo's explicit cost policy on
+sanitizer builds (a full CNA+SDL ASan/UBSan rebuild is disproportionate for a fully-initialised
+fixed-size POD append), no dynamic-sanitizer build was run — verification is by inspection, and per
+the task's own caveat GPU sanitizer coverage is not claimed. Shader correctness is instead
+established by the pixel tests, the SPIR-V regeneration proof, and Vulkan validation above.
+
+### New findings
+
+None. No separate fog-space defect, uniform-layout mismatch, colour-space mismatch, alpha/fog
+ordering defect, test blind spot, or generated-shader drift surfaced. The only validation message is
+the already-tracked pre-existing REMED-GFX-059 (unchanged in shape/frequency).
+
+### Remaining fog-related work (backend fog matrix after this task)
+
+- **SdlGpu:** DONE (this task).
+- **Vulkan / Bgfx / EasyGL:** correct fog already (GFX-005 + EasyGL Task-1111).
+- **D3D9 custom-shader / D3DCommon (D3D11/D3D12):** still the separate object-space-fog concern
+  (REMED-GFX-010) and the mirrored-formula bytecode-blocked slices (REMED-GFX-005 D3D remainder) —
+  out of scope here, unblock when an fxc/dxc HLSL→bytecode toolchain lands.
+
+### Recommended next GRAPHICS step
+
+`REMED-GFX-010` (move stock-effect fog from object-space to true view-space across the backends that
+share the object-space approximation — EasyGL/Bgfx/Vulkan/SdlGpu/D3DCommon), which the GFX-005
+cross-cutting note already flagged as broader than "D3D9-only". It is the natural continuation of the
+fog work and does not require the blocked D3D bytecode toolchain for the GLSL/SPIR-V backends.
