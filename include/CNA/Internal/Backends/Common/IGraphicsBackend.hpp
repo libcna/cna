@@ -443,6 +443,18 @@ namespace CNA::Internal::Backends
         float fogStart        = 0.0f;
         /// BasicEffect fog: distance at which fog reaches full density (eye-space Z).
         float fogEnd          = 1.0f;
+        /// REMED-GFX-010: FNA stock-effect fog vector (EffectHelpers.SetFogVector). Dotting this
+        /// with the object-space (or, for SkinnedEffect, the post-skin) vertex position `float4(p,1)`
+        /// yields FNA's `fogFactor = saturate(dot(pos, fogVector))` — a true *view-space* Z fog term,
+        /// because the vector bakes in the third column of `World*View`
+        /// (`{M13,M23,M33} * scale`, `w = (M43 + fogStart) * scale`, `scale = 1/(fogStart-fogEnd)`).
+        /// Backends compute `keep = 1 - saturate(dot(pos, fogVector))` (their "keep" convention).
+        /// All-zero when fog is disabled (dot→0→keep=1, a true no-op) and `{0,0,0,1}` for the
+        /// degenerate `fogStart==fogEnd` case (dot→1→keep=0, fully fogged), matching FNA exactly.
+        /// Populated by every stock effect's FillGpuDrawParams(); backends that predate REMED-GFX-010
+        /// (D3D/other slices) simply ignore it and keep using fogStart/fogEnd, per the established
+        /// accepted-and-ignored GpuDrawParams-field pattern.
+        float fogVector[4]    = {0, 0, 0, 0};
         bool textureEnabled      = false;
         bool vertexColorEnabled  = true;
         bool lightingEnabled     = false;

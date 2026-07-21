@@ -432,10 +432,8 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_bones         = -1;  ///< mat4[72] bone palette (SkinnedEffect)
             int loc_weightsPerVertex = -1;  ///< int 1/2/4 (SkinnedEffect only, Task 895)
             int loc_alphatest     = -1;  ///< vec4 (refVal, tolerance, passW, failW)
-            int loc_fog_enabled   = -1;  ///< float 0=off 1=on
+            int loc_fog_vector    = -1;  ///< REMED-GFX-010: vec4 FNA fog vector (dot with object/skin pos)
             int loc_fog_color     = -1;  ///< vec3 RGB fog colour
-            int loc_fog_start     = -1;  ///< float fog start depth
-            int loc_fog_end       = -1;  ///< float fog end depth
             int loc_vertexcolor   = -1;  ///< float 0=ignore vertex color, 1=multiply by it (BasicEffect.VertexColorEnabled)
             int loc_pbr_normalmap  = -1;  ///< sampler2D tangent-space normal map (PbrEffect only)
             int loc_pbr_mr         = -1;  ///< sampler2D metallic-roughness map (PbrEffect only, G=roughness/B=metallic)

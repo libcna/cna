@@ -359,6 +359,27 @@ namespace Microsoft::Xna::Framework::Graphics
         p.fogColor[2] = fogColor.Z;
         p.fogStart    = fogStart_;
         p.fogEnd      = fogEnd_;
+
+        // REMED-GFX-010: FNA EffectHelpers.SetFogVector — view-space Z fog dotted with the
+        // object-space vertex position in the shader; the vector bakes World*View's third column.
+        Matrix fogWorldView; Matrix::Multiply(world_, view_, fogWorldView);
+        if (!fogEnabled_)
+        {
+            p.fogVector[0] = p.fogVector[1] = p.fogVector[2] = p.fogVector[3] = 0.0f;
+        }
+        else if (fogStart_ == fogEnd_)
+        {
+            p.fogVector[0] = p.fogVector[1] = p.fogVector[2] = 0.0f;
+            p.fogVector[3] = 1.0f;
+        }
+        else
+        {
+            const float s = 1.0f / (fogStart_ - fogEnd_);
+            p.fogVector[0] = fogWorldView.M13 * s;
+            p.fogVector[1] = fogWorldView.M23 * s;
+            p.fogVector[2] = fogWorldView.M33 * s;
+            p.fogVector[3] = (fogWorldView.M43 + fogStart_) * s;
+        }
     }
 
     const std::string& PbrEffect::GetTypeName() const

@@ -138,6 +138,29 @@ namespace Microsoft::Xna::Framework::Graphics
         p.fogColor[2]  = fogColor_.Z;
         p.fogStart     = fogStart_;
         p.fogEnd       = fogEnd_;
+
+        // REMED-GFX-010: FNA EffectHelpers.SetFogVector. Fog is a view-space Z term computed by
+        // dotting this vector with the object-space vertex position in the shader; the vector bakes
+        // the third column of World*View. Matches OnApply()'s fogVectorParam path exactly. Zero when
+        // disabled (no-op) or {0,0,0,1} for the fogStart==fogEnd degenerate case (fully fogged).
+        Matrix fogWorldView; Matrix::Multiply(World, View, fogWorldView);
+        if (!fogEnabled_)
+        {
+            p.fogVector[0] = p.fogVector[1] = p.fogVector[2] = p.fogVector[3] = 0.0f;
+        }
+        else if (fogStart_ == fogEnd_)
+        {
+            p.fogVector[0] = p.fogVector[1] = p.fogVector[2] = 0.0f;
+            p.fogVector[3] = 1.0f;
+        }
+        else
+        {
+            const float s = 1.0f / (fogStart_ - fogEnd_);
+            p.fogVector[0] = fogWorldView.M13 * s;
+            p.fogVector[1] = fogWorldView.M23 * s;
+            p.fogVector[2] = fogWorldView.M33 * s;
+            p.fogVector[3] = (fogWorldView.M43 + fogStart_) * s;
+        }
     }
 
     // IEffectLights

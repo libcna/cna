@@ -2592,24 +2592,19 @@ void main()
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec4 vColor;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2633,10 +2628,8 @@ void main()
         prog_colored_.loc_wvp         = prog_colored_.prog.uniform_location("uWVP");
         prog_colored_.loc_diffuse     = prog_colored_.prog.uniform_location("uDiffuseColor");
         prog_colored_.loc_alphatest   = prog_colored_.prog.uniform_location("uAlphaTest");
-        prog_colored_.loc_fog_enabled = prog_colored_.prog.uniform_location("uFogEnabled");
+        prog_colored_.loc_fog_vector = prog_colored_.prog.uniform_location("uFogVector");
         prog_colored_.loc_fog_color   = prog_colored_.prog.uniform_location("uFogColor");
-        prog_colored_.loc_fog_start   = prog_colored_.prog.uniform_location("uFogStart");
-        prog_colored_.loc_fog_end     = prog_colored_.prog.uniform_location("uFogEnd");
         prog_colored_.loc_vertexcolor = prog_colored_.prog.uniform_location("uVertexColorEnabled");
         prog_colored_.ready           = true;
         CNA_RENDER_LOG("colored3D ready loc_wvp=" << prog_colored_.loc_wvp);
@@ -2652,24 +2645,19 @@ void main()
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2693,10 +2681,8 @@ void main()
         prog_textured_.loc_diffuse     = prog_textured_.prog.uniform_location("uDiffuseColor");
         prog_textured_.loc_texture     = prog_textured_.prog.uniform_location("uTexture");
         prog_textured_.loc_alphatest   = prog_textured_.prog.uniform_location("uAlphaTest");
-        prog_textured_.loc_fog_enabled = prog_textured_.prog.uniform_location("uFogEnabled");
+        prog_textured_.loc_fog_vector = prog_textured_.prog.uniform_location("uFogVector");
         prog_textured_.loc_fog_color   = prog_textured_.prog.uniform_location("uFogColor");
-        prog_textured_.loc_fog_start   = prog_textured_.prog.uniform_location("uFogStart");
-        prog_textured_.loc_fog_end     = prog_textured_.prog.uniform_location("uFogEnd");
         prog_textured_.ready           = true;
         CNA_RENDER_LOG("textured3D ready loc_wvp=" << prog_textured_.loc_wvp);
     }
@@ -2712,9 +2698,7 @@ void main()
 "layout(location=1) in vec4 aColor;\n"
 "layout(location=2) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
@@ -2722,16 +2706,13 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2758,10 +2739,8 @@ void main()
         prog_col_textured_.loc_texture     = prog_col_textured_.prog.uniform_location("uTexture");
         prog_col_textured_.loc_diffuse     = prog_col_textured_.prog.uniform_location("uDiffuseColor");
         prog_col_textured_.loc_alphatest   = prog_col_textured_.prog.uniform_location("uAlphaTest");
-        prog_col_textured_.loc_fog_enabled = prog_col_textured_.prog.uniform_location("uFogEnabled");
+        prog_col_textured_.loc_fog_vector = prog_col_textured_.prog.uniform_location("uFogVector");
         prog_col_textured_.loc_fog_color   = prog_col_textured_.prog.uniform_location("uFogColor");
-        prog_col_textured_.loc_fog_start   = prog_col_textured_.prog.uniform_location("uFogStart");
-        prog_col_textured_.loc_fog_end     = prog_col_textured_.prog.uniform_location("uFogEnd");
         prog_col_textured_.loc_vertexcolor = prog_col_textured_.prog.uniform_location("uVertexColorEnabled");
         prog_col_textured_.ready           = true;
         CNA_RENDER_LOG("col+textured3D ready loc_wvp=" << prog_col_textured_.loc_wvp);
@@ -2780,9 +2759,7 @@ void main()
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
@@ -2791,16 +2768,13 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vNormal=uNormalMatrix*aNormal;\n"
 "    vUV=aUV;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "}\n";
         static const char* fsrc =
@@ -2869,10 +2843,8 @@ void main()
         prog_lit_textured_.loc_emissive    = prog_lit_textured_.prog.uniform_location("uEmissiveColor");
         prog_lit_textured_.loc_texture     = prog_lit_textured_.prog.uniform_location("uTexture");
         prog_lit_textured_.loc_alphatest   = prog_lit_textured_.prog.uniform_location("uAlphaTest");
-        prog_lit_textured_.loc_fog_enabled = prog_lit_textured_.prog.uniform_location("uFogEnabled");
+        prog_lit_textured_.loc_fog_vector = prog_lit_textured_.prog.uniform_location("uFogVector");
         prog_lit_textured_.loc_fog_color   = prog_lit_textured_.prog.uniform_location("uFogColor");
-        prog_lit_textured_.loc_fog_start   = prog_lit_textured_.prog.uniform_location("uFogStart");
-        prog_lit_textured_.loc_fog_end     = prog_lit_textured_.prog.uniform_location("uFogEnd");
         prog_lit_textured_.ready           = true;
         CNA_RENDER_LOG("lit+textured3D ready loc_wvp=" << prog_lit_textured_.loc_wvp);
     }
@@ -2905,9 +2877,7 @@ void main()
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 // uDiffuseColor is read by BOTH stages here (vertex needs .rgb for vLitRGB, fragment needs .a) --
 // GLSL ES 3.00 requires a uniform shared across stages to have the SAME precision qualification,
 // and this shader's own vertex/fragment stages have different DEFAULT float precisions (highp
@@ -2936,16 +2906,13 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "    vec3 N=normalize(uNormalMatrix*aNormal);\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
@@ -3000,10 +2967,8 @@ void main()
         prog_lit_textured_vertexlit_.loc_emissive    = prog_lit_textured_vertexlit_.prog.uniform_location("uEmissiveColor");
         prog_lit_textured_vertexlit_.loc_texture     = prog_lit_textured_vertexlit_.prog.uniform_location("uTexture");
         prog_lit_textured_vertexlit_.loc_alphatest   = prog_lit_textured_vertexlit_.prog.uniform_location("uAlphaTest");
-        prog_lit_textured_vertexlit_.loc_fog_enabled = prog_lit_textured_vertexlit_.prog.uniform_location("uFogEnabled");
+        prog_lit_textured_vertexlit_.loc_fog_vector = prog_lit_textured_vertexlit_.prog.uniform_location("uFogVector");
         prog_lit_textured_vertexlit_.loc_fog_color   = prog_lit_textured_vertexlit_.prog.uniform_location("uFogColor");
-        prog_lit_textured_vertexlit_.loc_fog_start   = prog_lit_textured_vertexlit_.prog.uniform_location("uFogStart");
-        prog_lit_textured_vertexlit_.loc_fog_end     = prog_lit_textured_vertexlit_.prog.uniform_location("uFogEnd");
         prog_lit_textured_vertexlit_.ready           = true;
         CNA_RENDER_LOG("lit+textured3D (vertex-lit) ready loc_wvp=" << prog_lit_textured_vertexlit_.loc_wvp);
     }
@@ -3018,24 +2983,19 @@ void main()
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3063,10 +3023,8 @@ void main()
         prog_dual_textured_.loc_texture2    = prog_dual_textured_.prog.uniform_location("uTexture2");
         prog_dual_textured_.loc_diffuse     = prog_dual_textured_.prog.uniform_location("uDiffuseColor");
         prog_dual_textured_.loc_alphatest   = prog_dual_textured_.prog.uniform_location("uAlphaTest");
-        prog_dual_textured_.loc_fog_enabled = prog_dual_textured_.prog.uniform_location("uFogEnabled");
+        prog_dual_textured_.loc_fog_vector = prog_dual_textured_.prog.uniform_location("uFogVector");
         prog_dual_textured_.loc_fog_color   = prog_dual_textured_.prog.uniform_location("uFogColor");
-        prog_dual_textured_.loc_fog_start   = prog_dual_textured_.prog.uniform_location("uFogStart");
-        prog_dual_textured_.loc_fog_end     = prog_dual_textured_.prog.uniform_location("uFogEnd");
         prog_dual_textured_.ready           = true;
         CNA_RENDER_LOG("dual+textured3D ready loc_wvp=" << prog_dual_textured_.loc_wvp);
     }
@@ -3085,9 +3043,7 @@ void main()
 "layout(location=1) in vec4 aColor;\n"
 "layout(location=2) in vec2 aUV;\n"
 "uniform mat4 uWVP;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec4 vColor;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
@@ -3095,16 +3051,13 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3135,10 +3088,8 @@ void main()
         prog_dual_textured_colored_.loc_texture2    = prog_dual_textured_colored_.prog.uniform_location("uTexture2");
         prog_dual_textured_colored_.loc_diffuse     = prog_dual_textured_colored_.prog.uniform_location("uDiffuseColor");
         prog_dual_textured_colored_.loc_alphatest   = prog_dual_textured_colored_.prog.uniform_location("uAlphaTest");
-        prog_dual_textured_colored_.loc_fog_enabled = prog_dual_textured_colored_.prog.uniform_location("uFogEnabled");
+        prog_dual_textured_colored_.loc_fog_vector = prog_dual_textured_colored_.prog.uniform_location("uFogVector");
         prog_dual_textured_colored_.loc_fog_color   = prog_dual_textured_colored_.prog.uniform_location("uFogColor");
-        prog_dual_textured_colored_.loc_fog_start   = prog_dual_textured_colored_.prog.uniform_location("uFogStart");
-        prog_dual_textured_colored_.loc_fog_end     = prog_dual_textured_colored_.prog.uniform_location("uFogEnd");
         prog_dual_textured_colored_.loc_vertexcolor = prog_dual_textured_colored_.prog.uniform_location("uVertexColorEnabled");
         prog_dual_textured_colored_.ready           = true;
         CNA_RENDER_LOG("dual+textured+colored3D ready loc_wvp=" << prog_dual_textured_colored_.loc_wvp);
@@ -3158,9 +3109,7 @@ void main()
 "uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uWorld;\n"
 "uniform vec3 uEyePosition;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "uniform float uEnvMapAmount;\n"
 "uniform float uFresnelEnabled;\n"
 "uniform float uFresnelFactor;\n"
@@ -3185,16 +3134,13 @@ void main()
 "    vFresnel=(uFresnelEnabled>0.5)\n"
 "        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
 "        : uEnvMapAmount;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3263,10 +3209,8 @@ void main()
         p.loc_fresnel_enabled = p.prog.uniform_location("uFresnelEnabled");
         p.loc_fresnel_factor  = p.prog.uniform_location("uFresnelFactor");
         p.loc_alphatest       = p.prog.uniform_location("uAlphaTest");
-        p.loc_fog_enabled     = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_vector     = p.prog.uniform_location("uFogVector");
         p.loc_fog_color       = p.prog.uniform_location("uFogColor");
-        p.loc_fog_start       = p.prog.uniform_location("uFogStart");
-        p.loc_fog_end         = p.prog.uniform_location("uFogEnd");
         p.ready               = true;
         CNA_RENDER_LOG("env+mapped3D ready loc_wvp=" << p.loc_wvp);
     }
@@ -3289,9 +3233,7 @@ void main()
 "uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uBones[72];\n"
 "uniform int uWeightsPerVertex;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
@@ -3329,16 +3271,14 @@ void main()
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
 "    vColor=aColor;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+// Skinned: dot the POST-skin position (FNA Skin() mutates vin.Position before ComputeFogFactor).
+"    vFogFactor=1.0-clamp(dot(vec4(skinnedPos.xyz,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -3428,10 +3368,8 @@ void main()
         p.loc_specularpower = p.prog.uniform_location("uSpecularPower");
         p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
-        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
-        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
-        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
         p.loc_vertexcolor = p.prog.uniform_location("uVertexColorEnabled");
         p.ready         = true;
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
@@ -3471,9 +3409,7 @@ void main()
 "uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uBones[72];\n"
 "uniform int uWeightsPerVertex;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 // uDiffuseColor is read by BOTH stages here (vertex needs .rgb for vLitRGB, fragment needs .a) --
 // same GLSL ES "matching precision qualifier across stages" requirement Task 1102 already found
 // and fixed for BasicEffect's own vertex-lit shader -- qualified explicitly and identically in
@@ -3505,16 +3441,13 @@ void main()
 "    gl_Position=uWVP*skinnedPos;\n"
 "    vUV=aUV;\n"
 "    vColor=aColor;\n"
-// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
-// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
-// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
-// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
-// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
-// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
-// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
-// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
-// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+// REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
+// VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
+// column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
+// "keep" (mix(uFogColor,color,vFogFactor)), so vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+// uFogVector is 0 when fog is disabled (=> keep 1, no-op) and (0,0,0,1) for the fogStart==fogEnd
+// degenerate case (=> keep 0, fully fogged) -- all handled CPU-side, matching FNA exactly.
+"    vFogFactor=1.0-clamp(dot(vec4(skinnedPos.xyz,1.0),uFogVector),0.0,1.0);\n"
 "    vec3 worldPos=(uWorld*skinnedPos).xyz;\n"
 // Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
 // comment for the root cause) -- this vertex-lit sibling does the identical skinning
@@ -3592,10 +3525,8 @@ void main()
         p.loc_specularpower = p.prog.uniform_location("uSpecularPower");
         p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
-        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
-        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
-        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
         p.loc_vertexcolor = p.prog.uniform_location("uVertexColorEnabled");
         p.ready         = true;
         CNA_RENDER_LOG("skinned3D (vertex-lit) ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
@@ -3627,9 +3558,7 @@ void main()
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat3 uNormalMatrix;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec3 vNormal;\n"
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
@@ -3647,7 +3576,7 @@ void main()
 "    vBitangentSign=aTangent.w;\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+"    vFogFactor=1.0-clamp(dot(vec4(aPos,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -3749,10 +3678,8 @@ void main()
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
-        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
-        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
-        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
         p.ready         = true;
         CNA_RENDER_LOG("pbr3D ready loc_wvp=" << p.loc_wvp);
     }
@@ -3779,9 +3706,7 @@ void main()
 "uniform mat3 uNormalMatrix;\n"
 "uniform mat4 uBones[72];\n"
 "uniform int uWeightsPerVertex;\n"
-"uniform float uFogEnabled;\n"
-"uniform float uFogStart;\n"
-"uniform float uFogEnd;\n"
+"uniform vec4 uFogVector;\n"
 "out vec3 vNormal;\n"
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
@@ -3805,7 +3730,7 @@ void main()
 "    vBitangentSign=aTangent.w;\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
-"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+"    vFogFactor=1.0-clamp(dot(vec4(skinnedPos.xyz,1.0),uFogVector),0.0,1.0);\n"
 "}\n";
 
         static const char* fsrc =
@@ -3907,10 +3832,8 @@ void main()
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
-        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
-        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
-        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
         p.ready         = true;
         CNA_RENDER_LOG("pbr_skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
@@ -4273,16 +4196,16 @@ void main()
                 params.alphaTest[0], params.alphaTest[1],
                 params.alphaTest[2], params.alphaTest[3]);
 
-        // Linear fog (BasicEffect and AlphaTestEffect shaders)
-        if (p.loc_fog_enabled >= 0)
-            p.prog.set_uniform(p.loc_fog_enabled, params.fogEnabled ? 1.0f : 0.0f);
+        // REMED-GFX-010: upload the FNA view-space fog vector (GpuDrawParams.fogVector). It bakes
+        // World*View's third column + fogStart/fogEnd, is zero when fog is disabled, and (0,0,0,1) for
+        // the degenerate fogStart==fogEnd case, so no separate start/end/enabled uniforms are needed —
+        // the shader computes vFogFactor = 1 - saturate(dot(pos, uFogVector)).
+        if (p.loc_fog_vector >= 0)
+            p.prog.set_uniform(p.loc_fog_vector,
+                params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3]);
         if (p.loc_fog_color >= 0)
             p.prog.set_uniform(p.loc_fog_color,
                 params.fogColor[0], params.fogColor[1], params.fogColor[2]);
-        if (p.loc_fog_start >= 0)
-            p.prog.set_uniform(p.loc_fog_start, params.fogStart);
-        if (p.loc_fog_end >= 0)
-            p.prog.set_uniform(p.loc_fog_end, params.fogEnd);
     }
 
     void EasyGLGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
