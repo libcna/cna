@@ -237,9 +237,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::vector<int> parentBoneIds_;
         std::vector<Microsoft::Xna::Framework::Matrix> bindPoseArray_;
         mutable AvatarRendererState state_{AvatarRendererState::Unavailable};
-        Microsoft::Xna::Framework::Vector3 lightColor_;
-        Microsoft::Xna::Framework::Vector3 lightDirection_;
-        Microsoft::Xna::Framework::Vector3 ambientLightColor_;
+        // REMED-GFX-008: sensible non-black defaults. Previously these were value-initialized to
+        // (0,0,0), so an avatar drawn without an explicit lighting setup rendered pure black. The
+        // ambient (0.35) + head-on key light (0.65) sum to 1.0 on a front-facing surface, so a fully
+        // lit part shows at its nominal tint under the FNA-correct SkinnedEffect lighting model.
+        Microsoft::Xna::Framework::Vector3 lightColor_{0.65f, 0.65f, 0.65f};
+        Microsoft::Xna::Framework::Vector3 lightDirection_{0.0f, 0.0f, -1.0f};
+        Microsoft::Xna::Framework::Vector3 ambientLightColor_{0.35f, 0.35f, 0.35f};
         bool isDisposed_{false};
 
         // --- Real-rendering extension state (NOXNA) ---

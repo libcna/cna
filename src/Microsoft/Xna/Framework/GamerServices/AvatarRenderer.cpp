@@ -195,19 +195,27 @@ namespace Microsoft::Xna::Framework::GamerServices
         realEffect_->setViewProperty(view_);
         realEffect_->setProjectionProperty(projection_);
         realEffect_->SetBoneTransforms(boneTransforms);
-        // EnableDefaultLighting() must run *before* the custom ambient/key-light overrides
-        // below, not after - it unconditionally resets AmbientLightColor and all three
-        // DirectionalLights to XNA's own built-in defaults (confirmed via SkinnedEffect's
-        // own EnableDefaultLighting(), which is itself correct/FNA-faithful). Calling it
-        // after setAmbientLightColorProperty() silently discarded every custom ambient
-        // value this class ever set, floored at XNA's much dimmer default ambient
-        // (~0.05-0.18 instead of the intended 0.35) - the actual cause of shadowed/concave
-        // regions (joints, creases) rendering near-black regardless of avatar pose.
-        realEffect_->EnableDefaultLighting();
-        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
+        // REMED-GFX-008: XNA's AvatarRenderer exposes exactly ONE directional light
+        // (LightDirection/LightColor) plus AmbientLightColor -- not the three-light BasicEffect rig.
+        // Configure DirectionalLight0 as that single key light and DISABLE DirectionalLight1/2 so the
+        // two exposed properties genuinely control avatar lighting. Previously this called
+        // EnableDefaultLighting() (which turns on all three lights + XNA's dim default ambient) and
+        // overrode only Light0, leaving XNA's generic fill/back lights 1 & 2 leaking into every
+        // avatar -- an infidelity that was only invisible in tests because those extra lights happen
+        // to back-face the front-facing test quads. Ambient is set last (no EnableDefaultLighting to
+        // clobber it). Specular is left off: the avatar model exposes only a diffuse key light +
+        // ambient, and emissive is unused, so both are zeroed to keep the lit result a clean
+        // (ambient + keyLight*N.L) * tint under the FNA-correct SkinnedEffect lighting model.
         realEffect_->getDirectionalLight0Property().setEnabledProperty(true);
         realEffect_->getDirectionalLight0Property().setDirectionProperty(lightDirection_);
         realEffect_->getDirectionalLight0Property().setDiffuseColorProperty(lightColor_);
+        realEffect_->getDirectionalLight0Property().setSpecularColorProperty(
+            Microsoft::Xna::Framework::Vector3::Zero);
+        realEffect_->getDirectionalLight1Property().setEnabledProperty(false);
+        realEffect_->getDirectionalLight2Property().setEnabledProperty(false);
+        realEffect_->setSpecularColorProperty(Microsoft::Xna::Framework::Vector3::Zero);
+        realEffect_->setEmissiveColorProperty(Microsoft::Xna::Framework::Vector3::Zero);
+        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
 
         for (const auto& part : realModel_->Parts)
         {
