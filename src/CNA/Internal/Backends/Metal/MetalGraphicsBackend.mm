@@ -849,14 +849,20 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // blend to vary here even during real MRT. Every attachment always shares
     // MTLPixelFormatBGRA8Unorm (MetalRenderTargetBackend's own hardcoded choice, see narrative item
     // 77), so only the loop bound needs to change, not a per-slot format lookup.
+    // plan_metal.md METAL-104: `sampleCount` (default 1, every pre-MSAA call site unaffected) must
+    // match the active render pass's own sample count exactly, or pipeline creation is the same
+    // class of genuine Metal API validation error `colorCount` above already documents for
+    // attachment count -- an independent, orthogonal axis from MRT (a pipeline can be
+    // multisampled with 1 color attachment, single-sampled with several, or both/neither).
     static id<MTLRenderPipelineState> makePipeline(id<MTLDevice> dev, id<MTLLibrary> lib,
                                                     NSString* vs, NSString* fs,
                                                     MTLVertexDescriptor* vd, const BlendKey& blend,
-                                                    int colorCount=1)
+                                                    int colorCount=1, int sampleCount=1)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
         d.vertexFunction=[lib newFunctionWithName:vs]; d.fragmentFunction=[lib newFunctionWithName:fs]; d.vertexDescriptor=vd;
         d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
+        d.sampleCount=(NSUInteger)sampleCount;
         for (int i=0;i<colorCount;++i) {
             d.colorAttachments[i].pixelFormat=MTLPixelFormatBGRA8Unorm;
             d.colorAttachments[i].blendingEnabled = blend.enabled ? YES : NO;
@@ -1160,6 +1166,40 @@ static id<MTLTexture> nativeTextureFor(const ITextureBackend* t);
 // silently fail for it exactly the way the 2D case did before nativeTextureFor() existed.
 static id<MTLTexture> nativeCubeTextureFor(const ITextureCubeBackend* t);
 
+// plan_metal.md METAL-104/105: real MSAA. `texture2DDescriptorWithPixelFormat:...mipmapped:`
+// (used everywhere else in this file) always produces an `MTLTextureType2D` descriptor with no way
+// to request multisampling -- a genuinely multisampled texture needs an explicit
+// `MTLTextureType2DMultisample` descriptor with `sampleCount` set, built by hand instead of via
+// that convenience initializer. Shared by the backbuffer's own `msaaColorTexture`/`depthTexture`
+// (resolveActiveAttachments()) and `MetalRenderTargetBackend`'s own per-target opt-in.
+static id<MTLTexture> makeMultisampleTexture(id<MTLDevice> dev, MTLPixelFormat fmt, NSUInteger w, NSUInteger h, NSUInteger samples, MTLTextureUsage usage)
+{
+    MTLTextureDescriptor* d=[[MTLTextureDescriptor alloc] init];
+    d.textureType=MTLTextureType2DMultisample; d.pixelFormat=fmt; d.width=w; d.height=h;
+    d.sampleCount=samples; d.mipmapLevelCount=1; d.storageMode=MTLStorageModePrivate; d.usage=usage;
+    id<MTLTexture> t=[dev newTextureWithDescriptor:d];
+    [d release];
+    return t;
+}
+
+// plan_metal.md METAL-105: "real, device-queried clamp via MTLDevice.supportsTextureSampleCount:"
+// -- `requested<=1` means "no MSAA requested", always clamps to 1 (not a device query at all, no
+// candidate can be less than requested's own floor of 1 anyway). Otherwise walks the standard
+// Metal-supported sample counts from highest to lowest, no higher than what was actually requested,
+// and returns the first one `supportsTextureSampleCount:` confirms this specific device supports --
+// matches every other backend's own "report the real clamped value" contract (VulkanGraphicsBackend
+// ::PickSampleCount is the closest architectural analog, confirmed by reading it) rather than
+// blindly trusting the request.
+static int clampMetalSampleCount(id<MTLDevice> dev, int requested)
+{
+    if (requested <= 1) return 1;
+    static const int candidates[] = {8,4,2};
+    for (int c : candidates) {
+        if (c <= requested && [dev supportsTextureSampleCount:(NSUInteger)c]) return c;
+    }
+    return 1;
+}
+
 struct MetalGraphicsBackend::Impl
 {
     SDL_Window* window=nullptr;
@@ -1179,6 +1219,24 @@ struct MetalGraphicsBackend::Impl
     id<MTLRenderCommandEncoder> encoder=nil;
     id<CAMetalDrawable> drawable=nil;
     id<MTLTexture> depthTexture=nil;
+    // plan_metal.md METAL-104/105: real backbuffer MSAA. `deviceSampleCount` is the real,
+    // device-clamped sample count (1 = no MSAA) -- set at construction from
+    // GraphicsBackendCreateArgs::multiSampleCount, and reconfigurable at runtime via
+    // ApplyMultiSampleCount() (GraphicsDevice::Reset() forwarding a changed
+    // GraphicsDeviceManager.PreferMultiSampling). `msaaColorTexture` is the backbuffer's own
+    // multisampled render target, lazily (re)allocated by resolveActiveAttachments() the same way
+    // `depthTexture` above already lazily reallocates on a width/height change -- resolved into the
+    // real drawable via MTLStoreActionStoreAndMultisampleResolve on every encoder boundary (not
+    // plain MTLStoreActionMultisampleResolve, which would discard the MSAA texture's own content
+    // and silently lose accumulated multisample data across this file's own established
+    // multiple-encoders-per-logical-frame architecture -- Clear()/RenderTarget2D switches routinely
+    // end and restart encoders mid-frame). `activeSampleCount` is the sample count of whichever
+    // render pass ensureFrame()/clear() most recently built (1 outside MSAA, matching
+    // activeColorAttachmentCount's own analogous per-frame tracking above) and feeds
+    // MetalPipelineCacheKey the same way.
+    id<MTLTexture> msaaColorTexture=nil;
+    int deviceSampleCount=1;
+    int activeSampleCount=1;
     int virtualW=0,virtualH=0,presentationMode=0,swapInterval=1;
     bool depthEnabled=true,depthWrite=true,blendEnabled=true,scissorEnabled=false;
     int refStencil=0;
@@ -1299,7 +1357,15 @@ struct MetalGraphicsBackend::Impl
     // active target (MTLRenderPassColorAttachmentDescriptor.slice selects which cube face/array
     // layer of colorOut a render pass actually writes to; 0 is simply ignored/inert for a plain 2D
     // texture, so callers can set it unconditionally with no branching of their own).
-    bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut);
+    // plan_metal.md METAL-104: `resolveOut` (nil unless MSAA is engaged for whatever's currently
+    // active) and `sampleCountOut` (always 1 unless `resolveOut` is non-nil) were added alongside
+    // the pre-existing 3 out-params for real backbuffer/RenderTarget2D MSAA -- a non-nil
+    // `resolveOut` means `colorOut` is a multisampled texture that must be resolved into
+    // `resolveOut` at render-pass-end (`MTLStoreActionStoreAndMultisampleResolve`, not plain
+    // `MTLStoreActionMultisampleResolve` -- see msaaColorTexture's own field comment for why).
+    // RenderTargetCube deliberately stays out of MSAA scope for this pass (matches METAL-112's own
+    // MRT+MSAA scope decision below) -- its own branch below never sets resolveOut.
+    bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& resolveOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut);
 
     // plan_metal.md METAL-112: the MRT-aware sibling of resolveActiveAttachments() above, used only
     // by ensureFrame()/clear() (every other caller -- computeSpriteTransform(), etc. -- only ever
@@ -1307,7 +1373,14 @@ struct MetalGraphicsBackend::Impl
     // out-of-line after MetalRenderTargetBackend for the same incomplete-type reason as
     // resolveActiveAttachments()/computeSpriteTransform() above -- its body calls
     // currentMRT[i]->colorTexture()/depthTextureNative(), which need the complete type.
-    bool resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut);
+    //
+    // plan_metal.md METAL-104: true MRT (currentMRT.size()>=2) and MSAA are deliberately never
+    // combined in this pass -- every MRT draw always runs at sample count 1 regardless of
+    // deviceSampleCount, matching real-world XNA usage (MSAA is a single-target scene-
+    // anti-aliasing feature; deferred/G-buffer-style MRT rendering practically never also wants
+    // MSAA on the G-buffer itself). `resolvesOut` is parallel to `colorsOut`, always all-nil
+    // during real MRT.
+    bool resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, std::vector<id<MTLTexture>>& resolvesOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut);
 
     // Ends whatever encoder/command-buffer is currently active -- shared by endFrame() and
     // MetalRenderTargetBackend's own Bind/UnbindAsRenderTarget() (Metal render passes are
@@ -1342,16 +1415,24 @@ struct MetalGraphicsBackend::Impl
     void ensureFrame()
     {
         if (encoder) return;
-        std::vector<id<MTLTexture>> colors; id<MTLTexture> depthTex=nil; NSUInteger slice=0;
-        if (!resolveActiveColorAttachments(colors, depthTex, slice)) throw std::runtime_error("Metal: CAMetalLayer returned no drawable");
+        std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
+        if (!resolveActiveColorAttachments(colors, resolves, depthTex, slice, sampleCount)) throw std::runtime_error("Metal: CAMetalLayer returned no drawable");
         command=[queue commandBuffer]; [command retain];
         MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
         // plan_metal.md METAL-112: loop bound is 1 outside MRT (colors.size()==1, identical to the
         // original single-attachment code this replaced), up to Metal's own 8-attachment hardware
         // limit during real SetRenderTargets() MRT.
+        //
+        // plan_metal.md METAL-104: a non-nil resolves[i] means colors[i] is this frame's
+        // multisampled render target -- StoreAndMultisampleResolve both keeps colors[i]'s own
+        // content (needed across this file's own mid-frame encoder boundaries, see
+        // msaaColorTexture's field comment) and resolves it into resolves[i] (the real drawable/
+        // RT's single-sample texture) every time this encoder ends.
         for (NSUInteger i=0;i<colors.size();++i) {
             rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice;
-            rp.colorAttachments[i].loadAction=MTLLoadActionLoad; rp.colorAttachments[i].storeAction=MTLStoreActionStore;
+            rp.colorAttachments[i].loadAction=MTLLoadActionLoad;
+            if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
+            else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
         }
         rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
         rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
@@ -1360,6 +1441,7 @@ struct MetalGraphicsBackend::Impl
         const NSUInteger w=colors[0].width,h=colors[0].height;
         viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
         activeColorAttachmentCount=(int)colors.size();
+        activeSampleCount=sampleCount;
         applyTrackedEncoderState();
     }
 
@@ -1382,15 +1464,19 @@ struct MetalGraphicsBackend::Impl
     void clear(bool color,float r,float g,float b,float a,bool depth,float dv,bool stencil,int sv)
     {
         endActiveEncoding(false); // mid-frame boundary only -- see endActiveEncoding()'s own METAL-180 note.
-        std::vector<id<MTLTexture>> colors; id<MTLTexture> depthTex=nil; NSUInteger slice=0;
-        if (!resolveActiveColorAttachments(colors, depthTex, slice)) return;
+        std::vector<id<MTLTexture>> colors, resolves; id<MTLTexture> depthTex=nil; NSUInteger slice=0; int sampleCount=1;
+        if (!resolveActiveColorAttachments(colors, resolves, depthTex, slice, sampleCount)) return;
         command=[queue commandBuffer]; [command retain];
         MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
         // plan_metal.md METAL-112: Clear()'s own real XNA contract clears every currently-bound
         // render target to the same color -- matches GraphicsDevice.Clear(color)'s documented
         // behavior regardless of how many targets SetRenderTargets() bound.
+        //
+        // plan_metal.md METAL-104: same StoreAndMultisampleResolve reasoning as ensureFrame() above.
         for (NSUInteger i=0;i<colors.size();++i) {
-            rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].storeAction=MTLStoreActionStore; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
+            rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
+            if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
+            else { rp.colorAttachments[i].storeAction=MTLStoreActionStore; }
         }
         rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
         rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
@@ -1399,6 +1485,7 @@ struct MetalGraphicsBackend::Impl
         const NSUInteger w=colors[0].width,h=colors[0].height;
         viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
         activeColorAttachmentCount=(int)colors.size();
+        activeSampleCount=sampleCount;
         applyTrackedEncoderState();
     }
 
@@ -1459,7 +1546,11 @@ struct MetalGraphicsBackend::Impl
         // currently holds -- MTLPipelineCacheKey's own field is a uint8_t, and 8 is Metal's own
         // hardware attachment limit either way.
         const uint8_t colorCount = (uint8_t)std::clamp(activeColorAttachmentCount, 1, 8);
-        PipelineCacheKey key{kind, currentBlend, colorCount};
+        // plan_metal.md METAL-104: same defensive-clamp reasoning as colorCount above, for the
+        // orthogonal MSAA axis -- activeSampleCount is always one of {1,2,4,8} in practice
+        // (clampMetalSampleCount()'s own candidate list), this is just a hard ceiling.
+        const uint8_t sampleCountKey = (uint8_t)std::clamp(activeSampleCount, 1, 8);
+        PipelineCacheKey key{kind, currentBlend, colorCount, sampleCountKey};
         auto it = pipelineCache.find(key);
         if (it != pipelineCache.end()) return it->second;
         NSString* vs=nil; NSString* fs=nil; std::size_t stride=0;
@@ -1488,7 +1579,7 @@ struct MetalGraphicsBackend::Impl
         // this was compiled for the first time ever on real Apple hardware -- Clang's own "type
         // argument 'MTLVertexDescriptor' must be a pointer (requires a '*')" error.
         MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
-        id<MTLRenderPipelineState> pipe = makePipeline(device, library, vs, fs, vd, currentBlend, colorCount);
+        id<MTLRenderPipelineState> pipe = makePipeline(device, library, vs, fs, vd, currentBlend, colorCount, sampleCountKey);
         pipelineCache.emplace(key, pipe);
         return pipe;
     }
@@ -1677,9 +1768,14 @@ public:
     // re-reading this effect's current uniform bytes on every draw call is both simpler and more
     // correct: a SetUniformXxx() call between two Draw()s in the same Begin/End genuinely takes
     // effect on the next sprite, not just the next batch).
+    // plan_metal.md METAL-104: also rebuilds when owner_.activeSampleCount changes, the same
+    // "genuine Metal API validation error otherwise" reasoning makePipeline()'s own sampleCount
+    // parameter documents -- a custom SpriteBatch effect drawn while the backbuffer/RenderTarget2D
+    // happens to be MSAA-enabled needs a pipeline whose own sampleCount matches, exactly like every
+    // built-in PipelineKind already gets via getOrCreatePipeline()'s own MetalPipelineCacheKey.
     id<MTLRenderPipelineState> pipelineFor(const BlendKey& blend)
     {
-        if (pipeline_ && blend == lastBlend_) return pipeline_;
+        if (pipeline_ && blend == lastBlend_ && owner_.activeSampleCount == lastSampleCount_) return pipeline_;
         if (pipeline_) { [pipeline_ release]; pipeline_ = nil; }
         MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
         d.vertexFunction = vertFn_;
@@ -1687,6 +1783,7 @@ public:
         d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
         d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
         d.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        d.sampleCount = (NSUInteger)owner_.activeSampleCount;
         d.colorAttachments[0].blendingEnabled = blend.enabled ? YES : NO;
         if (blend.enabled) {
             d.colorAttachments[0].sourceRGBBlendFactor = metalBlendFactor(blend.colorSrc);
@@ -1706,6 +1803,7 @@ public:
             return nil;
         }
         lastBlend_ = blend;
+        lastSampleCount_ = owner_.activeSampleCount;
         return pipeline_;
     }
 
@@ -1748,6 +1846,7 @@ private:
     id<MTLFunction> fragFn_ = nil;
     id<MTLRenderPipelineState> pipeline_ = nil;
     BlendKey lastBlend_{};
+    int lastSampleCount_=1; // plan_metal.md METAL-104
     bool valid_ = false;
     std::string compileError_;
     // Defaults match the identity matrix / transparent-black color / zero scalar a fresh custom
@@ -1943,7 +2042,16 @@ static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> 
 class MetalRenderTargetBackend final : public IRenderTargetBackend
 {
 public:
-    MetalRenderTargetBackend(MetalGraphicsBackend::Impl& owner, int w, int h, bool mipMap) : owner_(owner), w_(w), h_(h), mipMap_(mipMap)
+    // plan_metal.md METAL-104/105: `requestedMultiSampleCount` mirrors VulkanRenderTargetBackend's
+    // own exact "piggyback on the backend's own device-wide sample count" scope decision (confirmed
+    // by reading it directly, not assumed) -- this target only ever engages MSAA if BOTH it asked
+    // for it (requestedMultiSampleCount>1) AND the device backend itself has real MSAA available
+    // (owner.deviceSampleCount>1); appliedSampleCount_ honestly reports 0 (not the requested value)
+    // whenever either half of that isn't true, matching IRenderTargetBackend::GetMultiSampleCount()
+    // 's own "report the real applied value" contract.
+    MetalRenderTargetBackend(MetalGraphicsBackend::Impl& owner, int w, int h, bool mipMap, int requestedMultiSampleCount=1)
+        : owner_(owner), w_(w), h_(h), mipMap_(mipMap),
+          appliedSampleCount_((requestedMultiSampleCount>1 && owner.deviceSampleCount>1) ? owner.deviceSampleCount : 0)
     {
         // plan_metal.md METAL-101: MUST be BGRA8Unorm, matching every pipeline's own hardcoded
         // colorAttachments[0].pixelFormat (makePipeline(), keyed to the backbuffer's own format) --
@@ -1963,9 +2071,29 @@ public:
         cd.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
         colorTexture_=[owner_.device newTextureWithDescriptor:cd];
         if(!colorTexture_) throw std::runtime_error("Metal: failed to create RenderTarget2D color texture");
-        MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)w height:(NSUInteger)h mipmapped:NO];
-        dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
-        depthTexture_=[owner_.device newTextureWithDescriptor:dd];
+        // plan_metal.md METAL-104: engaging MSAA needs a SECOND color texture -- colorTexture_
+        // above stays the single-sample, sampleable, GetData()-readable texture every existing
+        // caller already expects (unaffected either way); msaaColorTexture_ is the real multisampled
+        // render target this instance's own render passes actually write into when appliedSampleCount_
+        // >0, resolved into colorTexture_ at every encoder boundary (see msaaColorTexture's own
+        // field comment on Impl for why StoreAndMultisampleResolve, not plain MultisampleResolve).
+        if (appliedSampleCount_ > 0) {
+            msaaColorTexture_=makeMultisampleTexture(owner_.device, MTLPixelFormatBGRA8Unorm, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget);
+            if(!msaaColorTexture_) throw std::runtime_error("Metal: failed to create RenderTarget2D MSAA color texture");
+        }
+        // plan_metal.md METAL-104: the depth attachment's own sample count must match the color
+        // attachment it's paired with in the same render pass -- a real Metal API constraint, not a
+        // style choice -- so this target's depth texture is multisampled too whenever it engages
+        // MSAA. Never sampled externally by anything in this codebase (matches
+        // VulkanRenderTargetBackend's own identical "depthView_ is never sampled externally" note),
+        // so there is no separate depth-resolve concern to handle the way color has one.
+        if (appliedSampleCount_ > 0) {
+            depthTexture_=makeMultisampleTexture(owner_.device, MTLPixelFormatDepth32Float_Stencil8, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget);
+        } else {
+            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:(NSUInteger)w height:(NSUInteger)h mipmapped:NO];
+            dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
+            depthTexture_=[owner_.device newTextureWithDescriptor:dd];
+        }
         if(!depthTexture_) throw std::runtime_error("Metal: failed to create RenderTarget2D depth texture");
     }
     ~MetalRenderTargetBackend() override
@@ -1991,11 +2119,16 @@ public:
                 owner_.activeColorAttachmentCount=1;
             }
         }
-        [depthTexture_ release]; [colorTexture_ release];
+        [depthTexture_ release]; [colorTexture_ release]; [msaaColorTexture_ release];
     }
     int GetWidth() const override { return w_; }
     int GetHeight() const override { return h_; }
     SDL_Texture* GetNativeTexture() const override { return nullptr; }
+    // plan_metal.md METAL-105: real, applied (not merely requested) sample count -- 0 whenever
+    // this target didn't actually engage MSAA (either it wasn't asked to, or the device backend
+    // itself has no MSAA available), matching IRenderTargetBackend::GetMultiSampleCount()'s own
+    // documented "0 = none" contract.
+    int GetMultiSampleCount() const override { return appliedSampleCount_; }
     void BindAsRenderTarget() override
     {
         owner_.endActiveEncoding(false); // mid-frame switch, never presents -- see METAL-180 note.
@@ -2045,13 +2178,26 @@ public:
         if (owner_.currentRenderTarget==this) owner_.endActiveEncoding(false);
         blitTextureToClientBuffer(owner_.device, owner_.queue, colorTexture_, 0, level, x, y, 0, w, h, 1, data, dataLength);
     }
+    // plan_metal.md METAL-104: colorTexture() is UNCHANGED -- still always the single-sample,
+    // sampleable, GetData()-readable texture, whether or not this target engages MSAA (every
+    // existing caller -- shader sampling, GetData() above, blit sources -- keeps working
+    // unmodified). colorTextureForRenderPass()/resolveTargetForRenderPass() are the two new,
+    // narrowly-scoped accessors resolveActiveAttachments() alone needs to build a real MSAA render
+    // pass: the former is what a render pass actually writes into (the MSAA texture when engaged,
+    // else colorTexture_ itself -- the exact same texture, no branch needed by the caller);
+    // resolveTargetForRenderPass() is nil unless MSAA is engaged, in which case it's colorTexture_
+    // (the resolve destination).
     id<MTLTexture> colorTexture() const { return colorTexture_; }
+    id<MTLTexture> colorTextureForRenderPass() const { return msaaColorTexture_ ? msaaColorTexture_ : colorTexture_; }
+    id<MTLTexture> resolveTargetForRenderPass() const { return msaaColorTexture_ ? colorTexture_ : nil; }
     id<MTLTexture> depthTextureNative() const { return depthTexture_; }
 private:
     MetalGraphicsBackend::Impl& owner_;
     int w_, h_;
     bool mipMap_;
+    int appliedSampleCount_=0;
     id<MTLTexture> colorTexture_=nil;
+    id<MTLTexture> msaaColorTexture_=nil;
     id<MTLTexture> depthTexture_=nil;
 };
 
@@ -2133,15 +2279,23 @@ private:
     id<MTLTexture> depthTexture_=nil;
 };
 
-bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut)
+bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& resolveOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut)
 {
-    sliceOut = 0;
+    sliceOut = 0; resolveOut = nil; sampleCountOut = 1;
     if (currentRenderTarget) {
-        colorOut = currentRenderTarget->colorTexture();
+        // plan_metal.md METAL-104: colorTextureForRenderPass()/resolveTargetForRenderPass() collapse
+        // to plain colorTexture()/nil whenever this target doesn't engage MSAA -- this branch's own
+        // behavior is byte-identical to before MSAA existed in that (the overwhelmingly common) case.
+        colorOut = currentRenderTarget->colorTextureForRenderPass();
+        resolveOut = currentRenderTarget->resolveTargetForRenderPass();
         depthOut = currentRenderTarget->depthTextureNative();
+        if (resolveOut) sampleCountOut = currentRenderTarget->GetMultiSampleCount();
         return true;
     }
     if (currentRenderTargetCube) {
+        // plan_metal.md METAL-104: RenderTargetCube deliberately stays out of MSAA scope for this
+        // pass (see resolveActiveColorAttachments()'s own MRT+MSAA scope-decision comment for the
+        // same reasoning applied to a different axis) -- always single-sampled.
         colorOut = currentRenderTargetCube->colorTexture();
         depthOut = currentRenderTargetCube->depthTextureNative();
         sliceOut = currentRenderTargetCubeFace;
@@ -2149,23 +2303,46 @@ bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorO
     }
     if (!drawable) drawable=[layer nextDrawable];
     if (!drawable) return false;
-    colorOut = drawable.texture;
     const NSUInteger w=drawable.texture.width, h=drawable.texture.height;
+    // plan_metal.md METAL-104: real backbuffer MSAA -- msaaColorTexture is lazily (re)allocated on
+    // a width/height change exactly like depthTexture below already was, just for a second texture.
+    if (deviceSampleCount > 1) {
+        if (!msaaColorTexture || msaaColorTexture.width!=w || msaaColorTexture.height!=h) {
+            [msaaColorTexture release];
+            msaaColorTexture = makeMultisampleTexture(device, MTLPixelFormatBGRA8Unorm, w, h, (NSUInteger)deviceSampleCount, MTLTextureUsageRenderTarget);
+        }
+        colorOut = msaaColorTexture;
+        resolveOut = drawable.texture;
+        sampleCountOut = deviceSampleCount;
+    } else {
+        colorOut = drawable.texture;
+    }
     if(!depthTexture || depthTexture.width!=w || depthTexture.height!=h){
         [depthTexture release];
-        MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:w height:h mipmapped:NO];
-        dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
-        depthTexture=[device newTextureWithDescriptor:dd];
+        // plan_metal.md METAL-104: same "depth sample count must match its paired color attachment"
+        // constraint MetalRenderTargetBackend's own constructor comment documents, applied to the
+        // backbuffer's own depth texture.
+        if (deviceSampleCount > 1) {
+            depthTexture = makeMultisampleTexture(device, MTLPixelFormatDepth32Float_Stencil8, w, h, (NSUInteger)deviceSampleCount, MTLTextureUsageRenderTarget);
+        } else {
+            MTLTextureDescriptor* dd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float_Stencil8 width:w height:h mipmapped:NO];
+            dd.storageMode=MTLStorageModePrivate; dd.usage=MTLTextureUsageRenderTarget;
+            depthTexture=[device newTextureWithDescriptor:dd];
+        }
     }
     depthOut = depthTexture;
     return true;
 }
 
-bool MetalGraphicsBackend::Impl::resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut)
+bool MetalGraphicsBackend::Impl::resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, std::vector<id<MTLTexture>>& resolvesOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut)
 {
     if (currentMRT.size() >= 2) {
-        colorsOut.clear();
-        for (auto* rt : currentMRT) colorsOut.push_back(rt->colorTexture());
+        colorsOut.clear(); resolvesOut.clear();
+        // plan_metal.md METAL-104: true MRT and MSAA are deliberately never combined in this pass
+        // (see this method's own declaration comment for the full reasoning) -- every MRT target
+        // contributes its plain, always-single-sampled colorTexture(), never
+        // colorTextureForRenderPass(), and every resolvesOut entry stays nil.
+        for (auto* rt : currentMRT) { colorsOut.push_back(rt->colorTexture()); resolvesOut.push_back(nil); }
         // plan_metal.md METAL-112: reuses currentMRT[0]'s own depthTextureNative() for the whole
         // MRT render pass rather than allocating a dedicated shared one (unlike VulkanMRTProxy,
         // which must -- Vulkan's explicit VkFramebuffer object needs one concrete depth
@@ -2174,12 +2351,13 @@ bool MetalGraphicsBackend::Impl::resolveActiveColorAttachments(std::vector<id<MT
         // Depth32Float_Stencil8 texture, so borrowing target 0's avoids a second depth allocation
         // for every MRT session).
         depthOut = currentMRT[0]->depthTextureNative();
-        sliceOut = 0;
+        sliceOut = 0; sampleCountOut = 1;
         return true;
     }
-    id<MTLTexture> c=nil;
-    if (!resolveActiveAttachments(c, depthOut, sliceOut)) return false;
+    id<MTLTexture> c=nil, r=nil;
+    if (!resolveActiveAttachments(c, r, depthOut, sliceOut, sampleCountOut)) return false;
     colorsOut.assign(1, c);
+    resolvesOut.assign(1, r);
     return true;
 }
 
@@ -2267,6 +2445,8 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     p.presentationMode=(int)args.presentationMode;
     if(!p.window) throw std::runtime_error("Metal backend requires an SDL_Window");
     p.device=MTLCreateSystemDefaultDevice(); if(!p.device) throw std::runtime_error("Metal: MTLCreateSystemDefaultDevice failed"); [p.device retain];
+    // plan_metal.md METAL-104/105: real, device-clamped backbuffer MSAA sample count.
+    p.deviceSampleCount=clampMetalSampleCount(p.device,args.multiSampleCount);
     p.view=SDL_Metal_CreateView(p.window); if(!p.view) throw std::runtime_error(std::string("Metal: SDL_Metal_CreateView failed: ")+SDL_GetError());
     p.layer=(CAMetalLayer*)SDL_Metal_GetLayer(p.view); [p.layer retain]; p.layer.device=p.device; p.layer.pixelFormat=MTLPixelFormatBGRA8Unorm; p.layer.framebufferOnly=NO;
     // plan_metal.md METAL-168: swapInterval was previously stored but never applied -- CAMetalLayer
@@ -2301,7 +2481,7 @@ MetalGraphicsBackend::MetalGraphicsBackend(const GraphicsBackendCreateArgs& args
     }
     p.rebuildDepthState();
 }
-MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.defaultFlatNormalTexture release];[p.defaultWhiteTexture release];[p.visibilityBuffer release];[p.depthTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
+MetalGraphicsBackend::~MetalGraphicsBackend(){auto&p=*impl_;p.endFrame();for(auto& kv:p.samplerCache)[kv.second release];p.samplerCache.clear();for(auto& kv:p.pipelineCache)[kv.second release];p.pipelineCache.clear();[p.defaultFlatNormalTexture release];[p.defaultWhiteTexture release];[p.visibilityBuffer release];[p.depthTexture release];[p.msaaColorTexture release];[p.depthState release];[p.sampler release];[p.library release];[p.queue release];[p.layer release];if(p.view)SDL_Metal_DestroyView(p.view);[p.device release];}
 MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl(){return *impl_;} const MetalGraphicsBackend::Impl& MetalGraphicsBackend::impl()const{return *impl_;}
 void MetalGraphicsBackend::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalGraphicsBackend::Present(){impl_->endFrame();}
 void MetalGraphicsBackend::GetViewportSize(int&w,int&h){
@@ -2317,6 +2497,31 @@ void MetalGraphicsBackend::GetViewportSize(int&w,int&h){
 }
 void MetalGraphicsBackend::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->virtualH=h;} void MetalGraphicsBackend::SetPresentationMode(int m){impl_->presentationMode=m;}
 void MetalGraphicsBackend::SetSwapInterval(int i){impl_->swapInterval=i;impl_->layer.displaySyncEnabled=(i!=0);} // plan_metal.md METAL-168, same mapping as the constructor.
+// plan_metal.md METAL-104/105: real runtime MSAA reconfiguration, called from GraphicsDevice::
+// Reset() when GraphicsDeviceManager.PreferMultiSampling changes after construction -- without
+// this override, the base IGraphicsBackend default (`return GetMultiSampleCount();`, a pure
+// report-back no-op) would silently ignore any such change forever, matching this backend's own
+// established "actually reach the backend, don't silently ignore a post-construction preference
+// change" convention (SetVirtualResolution/SetPresentationMode/SetSwapInterval above all already
+// follow it). Forces msaaColorTexture/depthTexture to nil so resolveActiveAttachments() reallocates
+// both at the new sample count the next time either is actually needed (mirrors their own existing
+// lazy-reallocate-on-width/height-change convention, just triggered by a sample-count change
+// instead) -- correct even mid-frame, since a real target/attachment switch already unconditionally
+// ends whatever encoder is active before either texture is touched again.
+int MetalGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount)
+{
+    auto& p=*impl_;
+    p.deviceSampleCount=clampMetalSampleCount(p.device,requestedMultiSampleCount);
+    [p.msaaColorTexture release]; p.msaaColorTexture=nil;
+    [p.depthTexture release]; p.depthTexture=nil;
+    return (p.deviceSampleCount>1) ? p.deviceSampleCount : 0;
+}
+// plan_metal.md METAL-105: real, applied (not merely requested) backbuffer sample count, matching
+// this method's own documented "0 = none/unsupported" contract -- deviceSampleCount internally uses
+// the opposite convention (1 = no MSAA, matching GraphicsBackendCreateArgs::multiSampleCount's own
+// doc comment) purely because that's the natural "identity" value for a sample count, so this is a
+// deliberate translation at the boundary, not an inconsistency.
+int MetalGraphicsBackend::GetMultiSampleCount() const { return (impl_->deviceSampleCount>1) ? impl_->deviceSampleCount : 0; }
 bool MetalGraphicsBackend::TransformWindowToLogical(float windowX,float windowY,float& logX,float& logY) const{return impl_->transformWindowToLogical(windowX,windowY,logX,logY);}
 bool MetalGraphicsBackend::TransformLogicalToWindow(float logX,float logY,float& windowX,float& windowY) const{return impl_->transformLogicalToWindow(logX,logY,windowX,windowY);}
 // plan_metal.md METAL-130: real ReadBackbuffer, previously unimplemented (base default throws).
@@ -2412,9 +2617,13 @@ std::unique_ptr<ITexture3DBackend> MetalGraphicsBackend::CreateTexture3D(int w,i
 // MTLLoadActionLoad already satisfies correctly. EasyGLRenderTargetBackend::CreateRenderTarget2D
 // ignores this same parameter for the identical reason (its own commented-out parameter name) --
 // not a Metal-specific gap, matches established cross-backend precedent exactly.
-std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2D(int w,int h,int /*depthFormat*/,bool /*preserveContents*/,bool mipMap,int /*multiSampleCount*/)
+//
+// plan_metal.md METAL-104/105: multiSampleCount is now real -- forwarded to
+// MetalRenderTargetBackend's own constructor, which decides whether it's actually honored (see the
+// constructor's own "piggyback on the device backend's own sample count" doc comment).
+std::unique_ptr<IRenderTargetBackend> MetalGraphicsBackend::CreateRenderTarget2D(int w,int h,int /*depthFormat*/,bool /*preserveContents*/,bool mipMap,int multiSampleCount)
 {
-    return std::make_unique<MetalRenderTargetBackend>(*impl_, w, h, mipMap);
+    return std::make_unique<MetalRenderTargetBackend>(*impl_, w, h, mipMap, multiSampleCount);
 }
 // plan_metal.md METAL-109: always allocates depth32+stencil8 and ignores multiSampleCount, matching
 // CreateRenderTarget2D's own already-documented simplification exactly (METAL-101's own note) --
@@ -2772,17 +2981,20 @@ bool MetalGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability
     // (remove the explicit `false`) as its own phase lands. OcclusionQuery flipped to real/true
     // 2026-07-19 (METAL-136-139) now that CreateOcclusionQuery() is real, not a stub.
     switch (capability) {
-        case CNA::GraphicsCapability::MultipleRenderTargets:     return false; // plan_metal.md METAL-112
+        // plan_metal.md METAL-192: flipped to real/true 2026-07-21 now that SetRenderTargets() is
+        // real MRT (Phase 10, METAL-112), not the base default's "bind only the first target" --
+        // found while landing MultiSampleAntiAliasing's own identical fix below that this one had
+        // been left behind as a stale `false` from before METAL-112 landed; same "revert the
+        // explicit false once the feature lands" pattern OcclusionQuery/CustomEffects followed.
+        case CNA::GraphicsCapability::MultipleRenderTargets:     return true; // plan_metal.md METAL-192
         // plan_metal.md METAL-150: flipped to real/true 2026-07-21 now that CreateEffectBackend()/
         // MetalEffectBackend/MetalSpriteBatch::SetCustomEffect() are real (Phase 14), not a stub --
         // same "revert the explicit false once the feature lands" pattern OcclusionQuery followed.
         case CNA::GraphicsCapability::CustomEffects:              return true; // plan_metal.md METAL-150
-        // plan_metal.md METAL-191: CreateRenderTarget2D() silently ignores its multiSampleCount
-        // parameter (METAL-103/104 still open, see the comment right above that function) -- the
-        // backbuffer itself is also never allocated with a sample count above 1. A blanket `true`
-        // here would be the same class of false-positive METAL-192/195/196 already fixed for MRT/
-        // OcclusionQuery, just not caught until this same pass reviewed Phase 20 fresh.
-        case CNA::GraphicsCapability::MultiSampleAntiAliasing:    return false; // plan_metal.md METAL-104
+        // plan_metal.md METAL-191: flipped to real/true 2026-07-21 now that ApplyMultiSampleCount()/
+        // CreateRenderTarget2D()'s own multiSampleCount are both real (METAL-104/105) -- requesting
+        // MSAA now genuinely engages it, device-clamped, on both the backbuffer and RenderTarget2D.
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing:    return true; // plan_metal.md METAL-191
         default: return true;
     }
 }

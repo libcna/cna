@@ -72,6 +72,19 @@ TEST(MetalPipelineCacheKey, UnequalWhenOnlyColorAttachmentCountDiffers)
     EXPECT_FALSE(single == mrt);
 }
 
+TEST(MetalPipelineCacheKey, SampleCountDefaultsToOne)
+{
+    MetalPipelineCacheKey k{MetalPipelineKind::Colored16, MetalBlendKey{}};
+    EXPECT_EQ(k.sampleCount, 1);
+}
+
+TEST(MetalPipelineCacheKey, UnequalWhenOnlySampleCountDiffers)
+{
+    MetalPipelineCacheKey noMsaa{MetalPipelineKind::Colored16, MetalBlendKey{}, 1, 1};
+    MetalPipelineCacheKey msaa4x{MetalPipelineKind::Colored16, MetalBlendKey{}, 1, 4};
+    EXPECT_FALSE(noMsaa == msaa4x);
+}
+
 TEST(MetalPipelineCacheKeyHash, EqualKeysProduceEqualHashes)
 {
     // A hard requirement, not a nicety: std::unordered_map's own contract is undefined behavior if
@@ -88,6 +101,27 @@ TEST(MetalPipelineCacheKeyHash, DifferentColorAttachmentCountUsuallyProducesDiff
     MetalPipelineCacheKey single{MetalPipelineKind::Colored16, MetalBlendKey{}, 1};
     MetalPipelineCacheKey mrt{MetalPipelineKind::Colored16, MetalBlendKey{}, 8};
     EXPECT_NE(hash(single), hash(mrt));
+}
+
+TEST(MetalPipelineCacheKeyHash, DifferentSampleCountUsuallyProducesDifferentHash)
+{
+    MetalPipelineCacheKeyHash hash;
+    MetalPipelineCacheKey noMsaa{MetalPipelineKind::Colored16, MetalBlendKey{}, 1, 1};
+    MetalPipelineCacheKey msaa4x{MetalPipelineKind::Colored16, MetalBlendKey{}, 1, 4};
+    EXPECT_NE(hash(noMsaa), hash(msaa4x));
+}
+
+TEST(MetalPipelineCacheKeyHash, ColorAttachmentCountAndSampleCountBothVaryingProducesDifferentHash)
+{
+    // plan_metal.md METAL-104: a real regression guard for the hash_combine fix -- if sampleCount
+    // were still packed into the same 64-bit word as colorAttachmentCount, a (count=1,samples=8)
+    // key could collide with a (count=?,samples=?) key via bit overflow into colorAttachmentCount's
+    // own range. XOR-combining avoids this; this test locks in that distinctness for a
+    // representative pair that would be most at risk of exactly that kind of overflow collision.
+    MetalPipelineCacheKeyHash hash;
+    MetalPipelineCacheKey a{MetalPipelineKind::Colored16, MetalBlendKey{}, 1, 8};
+    MetalPipelineCacheKey b{MetalPipelineKind::Colored16, MetalBlendKey{}, 2, 4};
+    EXPECT_NE(hash(a), hash(b));
 }
 
 TEST(MetalPipelineCacheKeyHash, DifferentKeysUsuallyProduceDifferentHashes)

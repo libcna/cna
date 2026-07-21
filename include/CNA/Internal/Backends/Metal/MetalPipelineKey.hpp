@@ -79,12 +79,19 @@ namespace CNA::Internal::Backends::Metal
     // precedent (its `PickRTPipelineRenderPass`/pipeline-key helpers), confirmed by reading it
     // directly. Defaults to `1` so every pre-MRT call site (an aggregate-initializing
     // `PipelineCacheKey key{kind, currentBlend};` with only 2 explicit fields) is unaffected.
+    // plan_metal.md METAL-104/105: `sampleCount` (1/2/4/8) joins `colorAttachmentCount` once MSAA
+    // lands -- a render pipeline's `MTLRenderPipelineDescriptor.sampleCount` must match the active
+    // render pass's own sample count, or pipeline creation is a genuine Metal API validation
+    // error, exactly the same class of constraint `colorAttachmentCount` above already documents,
+    // now for the orthogonal MSAA axis instead of the MRT one. Defaults to `1` (no MSAA) so every
+    // pre-MSAA call site is unaffected.
     struct MetalPipelineCacheKey
     {
-        MetalPipelineKind kind; MetalBlendKey blend; uint8_t colorAttachmentCount = 1;
+        MetalPipelineKind kind; MetalBlendKey blend; uint8_t colorAttachmentCount = 1; uint8_t sampleCount = 1;
         bool operator==(const MetalPipelineCacheKey& o) const
         {
-            return kind==o.kind && blend==o.blend && colorAttachmentCount==o.colorAttachmentCount;
+            return kind==o.kind && blend==o.blend && colorAttachmentCount==o.colorAttachmentCount &&
+                   sampleCount==o.sampleCount;
         }
     };
     struct MetalPipelineCacheKeyHash
@@ -100,7 +107,15 @@ namespace CNA::Internal::Backends::Metal
                 | ((uint64_t)k.blend.alphaFunc << 48)
                 | ((uint64_t)(k.blend.enabled ? 1 : 0) << 56)
                 | ((uint64_t)k.colorAttachmentCount << 57);
-            return std::hash<uint64_t>()(h);
+            // plan_metal.md METAL-104: sampleCount combined via a second, independent hash (the
+            // standard hash_combine formula) rather than packed into the same 64-bit word as
+            // everything above -- colorAttachmentCount already occupies bits 57-60 (4 bits, enough
+            // for its own 1-8 range), leaving only 3 bits free, one short of sampleCount's own 1-8
+            // range -- XOR-combining avoids reshuffling every existing field's bit offset (needless
+            // churn/regression risk for an already-working scheme) just to make room.
+            std::size_t hh = std::hash<uint64_t>()(h);
+            hh ^= std::hash<uint8_t>()(k.sampleCount) + 0x9e3779b97f4a7c15ULL + (hh<<6) + (hh>>2);
+            return hh;
         }
     };
 }

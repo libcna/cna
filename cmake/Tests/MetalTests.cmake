@@ -81,4 +81,36 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "METAL")
     endif()
     cna_register_backend_test(NAME Metal_MRT COMMAND cna_test_metal_mrt
         TIMEOUT 30 LABELS "Metal")
+
+    # plan_metal.md Phase 10 (METAL-104/105): real backbuffer MSAA. Reuses examples/
+    # easygl_msaa_test.cpp verbatim (public XNA API only -- GraphicsDeviceManager.
+    # PreferMultiSampling + SpriteBatch + GetBackBufferData, no EasyGL-specific includes). Its own
+    # final readback goes through GetBackBufferData() -- expect the same pre-existing Clear-color-
+    # only readback bug (items 67-76/82/84/85) to likely block this test too, independent of
+    # whether the MSAA machinery itself (multisampled texture allocation, StoreAndMultisampleResolve,
+    # per-sample-count pipeline cache key) actually works.
+    add_executable(cna_test_metal_msaa examples/easygl_msaa_test.cpp)
+    target_link_libraries(cna_test_metal_msaa PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_msaa PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_backend_test(NAME Metal_MSAA COMMAND cna_test_metal_msaa
+        TIMEOUT 30 LABELS "Metal")
+
+    # plan_metal.md Phase 10 (METAL-104/105): real RenderTarget2D-level MSAA opt-in. Reuses
+    # examples/easygl_rendertarget2d_msaa_test.cpp verbatim (public XNA API only) -- a genuinely
+    # stronger test than Metal_MSAA above: it checks for real partially-covered (blended) pixels
+    # along a diagonal triangle edge, a signature only a real multisample resolve can produce, not
+    # just "solid colors survive the resolve unchanged" (differential: same triangle rendered into
+    # a MultiSampleCount=0 RT and a MultiSampleCount=8 RT, both sampled 1:1 onto the backbuffer).
+    # Its own final readback still goes through GetBackBufferData() (samples each RT onto the
+    # backbuffer first, same as Metal_MSAA above), so it is equally exposed to the same
+    # pre-existing readback bug -- not an independent, bug-immune code path.
+    add_executable(cna_test_metal_rendertarget2d_msaa examples/easygl_rendertarget2d_msaa_test.cpp)
+    target_link_libraries(cna_test_metal_rendertarget2d_msaa PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_rendertarget2d_msaa PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_backend_test(NAME Metal_RenderTarget2D_MSAA COMMAND cna_test_metal_rendertarget2d_msaa
+        TIMEOUT 30 LABELS "Metal")
 endif()

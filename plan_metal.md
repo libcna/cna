@@ -2453,6 +2453,92 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     itself passing — the same honesty standard every other readback-dependent Metal test in this
     plan is held to.
 
+88. **`METAL-32`/`104`/`105`/`191` landed — real MSAA, backbuffer and `RenderTarget2D`, keyed the
+    same way `METAL-112`/`113`'s own MRT extension already keys attachment count**: mirrors
+    `VulkanRenderTargetBackend`'s own exact "piggyback on the backend's own device-wide sample
+    count" scope decision (confirmed by reading it directly) — a `RenderTarget2D` only engages MSAA
+    if it asked for it AND the device backend itself was constructed (or later reconfigured, see
+    below) with real MSAA available; there is no independent per-target arbitrary sample count.
+    `clampMetalSampleCount()` walks Metal's own standard sample counts (8/4/2) no higher than
+    requested, returning the first one `MTLDevice.supportsTextureSampleCount:` actually confirms —
+    a real device query, not a blind pass-through of the request, satisfying `METAL-105`'s own
+    "report the real clamped value" contract on both `IGraphicsBackend` (backbuffer) and
+    `IRenderTargetBackend` (per-target).
+
+    `MetalPipelineCacheKey` gained a `sampleCount` field, hash-combined with the existing packed
+    word via the standard `hash_combine` formula rather than packed into the same 64-bit word as
+    `colorAttachmentCount` — a real overflow risk caught before it became a bug: `colorAttachmentCount`
+    already occupies 4 bits (57-60) for its own 1-8 range, leaving only 3 free, one short of
+    `sampleCount`'s own 1-8 range. A dedicated regression-guard test
+    (`ColorAttachmentCountAndSampleCountBothVaryingProducesDifferentHash`) locks in the specific
+    pair most at risk of exactly that overflow collision. `makePipeline()`/`getOrCreatePipeline()`
+    both extended with a `sampleCount` parameter the same way they were already extended for
+    `colorCount` in item 86 — and `MetalEffectBackend::pipelineFor()` (Phase 14's own custom
+    `SpriteBatch` effect pipeline, built independently of `getOrCreatePipeline()`) needed the
+    identical fix, found while implementing this: without it, a custom effect drawn while the
+    backbuffer happened to be MSAA-enabled would have built a 1-sample pipeline against an
+    N-sample render pass, a real validation error `getOrCreatePipeline()`'s own callers were
+    already protected against but this one wasn't.
+
+    A genuinely important, non-obvious correctness detail found and fixed before it could ship as a
+    silent bug, not left implicit: this codebase's own established multiple-encoders-per-logical-
+    frame architecture (`Clear()`/render-target switches routinely end and restart encoders
+    mid-frame, all already audited and fixed once during Phase 18) means plain
+    `MTLStoreActionMultisampleResolve` would be actively wrong here — that store action *discards*
+    the multisampled texture's own content after resolving, so the next `MTLLoadActionLoad` on it
+    (at the next mid-frame encoder boundary) would silently load undefined content, losing
+    accumulated multisample data between a `Clear()`/target-switch pair within one XNA frame.
+    Used `MTLStoreActionStoreAndMultisampleResolve` instead — stores the MSAA texture's own content
+    *and* resolves it, at the real cost of extra bandwidth on every encoder boundary, correctly
+    matching this file's own architecture rather than the simpler single-encoder-per-frame model
+    Apple's own basic sample code usually assumes.
+
+    Real runtime reconfiguration, not just construction-time: overrides
+    `IGraphicsBackend::ApplyMultiSampleCount()` (found while researching the interface — a hook
+    `GraphicsDevice::Reset()` calls when `GraphicsDeviceManager.PreferMultiSampling` changes
+    *after* construction; the base default is a pure no-op report-back, which this backend was
+    silently falling back to before this task). Forces the backbuffer's own MSAA/depth textures to
+    nil so `resolveActiveAttachments()` reallocates both at the new sample count next use, mirroring
+    their own pre-existing lazy-reallocate-on-width/height-change convention.
+
+    A real, unrelated bug also found and fixed in the same pass: `SupportsCapability(
+    MultipleRenderTargets)` (`METAL-192`) was still hardcoded `false` — item 86 landed real MRT but
+    never reverted this flag, a stale false-negative left sitting in the source for one commit,
+    caught only while fixing `MultiSampleAntiAliasing`'s own identical case. Both now correctly
+    answer `true`.
+
+    Scope decisions, documented rather than silently assumed: true MRT (`currentMRT.size()>=2`) and
+    MSAA are never combined in this pass — every MRT draw always runs at sample count 1 regardless
+    of `deviceSampleCount` (matches real-world XNA usage: MSAA is a single-target scene-anti-
+    aliasing feature, deferred/G-buffer-style MRT rendering practically never also wants MSAA on
+    the G-buffer itself); `RenderTargetCube` also stays out of MSAA scope, matching `METAL-109`/
+    `110`'s own established simplification tier. Two new `CTest`s, both reusing existing
+    backend-agnostic EasyGL sources verbatim: `Metal_MSAA` (backbuffer, solid-fill) and `Metal_
+    RenderTarget2D_MSAA` (a genuinely stronger differential test — checks for real partially-
+    covered pixels along a diagonal triangle edge, the one signature only an actual multisample
+    resolve can produce, not just "solid colors survive unchanged"). Both still route their final
+    readback through `GetBackBufferData()`, so — consistent with `Metal_MRT`'s own result in item
+    87 — expect them to likely hit the same pre-existing readback bug even if the MSAA machinery
+    itself is fully correct; a CI failure here should be checked against that known signature
+    before being read as an MSAA-specific defect. Not attempted this pass: a dedicated CTest for
+    `ApplyMultiSampleCount()`'s own real runtime-reconfiguration behavior (EasyGL's own `easygl_
+    msaa_change_test.cpp` explicitly asserts the *opposite* of what Metal now does — that
+    reconfiguration is impossible post-construction — so it cannot be reused verbatim; a genuinely
+    new Metal-specific test would be needed, left as a real, flagged follow-up rather than silently
+    skipped).
+
+    **Cannot be build-verified from this Linux sandbox for the `.mm`-side changes** — the largest
+    single feature landed this session, touching the same frame/encoder lifecycle `METAL-112`
+    already flagged as risky, now with real resolve semantics on top. Real local verification was
+    possible for the plain-C++ pipeline-key extension only: `cmake --build cmake-build-headless
+    --target CnaTests` compiles clean, and `ctest -R "^Metal"` (134 tests, 4 new `MetalPipelineCacheKey`
+    /`Hash` tests including the overflow-collision regression guard) reports `100% tests passed, 0
+    tests failed`. The `.mm`-side changes were sanity-checked only via a full-file brace/bracket/
+    paren balance re-check (`409/409`, `891/891`, `2114/2114`, all balanced) and careful manual
+    tracing of both new `CTest`s' own exact call sequences against the new code, step by step, by
+    hand. Pushed for real CI verification next — genuinely unverified until that CI run reports
+    back.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -2472,10 +2558,15 @@ or further diagnostics, not attributable to either of the two real bugs (`vertex
 `ReadBackbuffer`) already found and fixed from this same investigation; confirmed 2026-07-21 (items
 84/85) to also affect `Metal_SpriteBatch_CustomEffect`'s own `SpriteBatch`-2D-draw readback, not
 just 3D draws — the underlying bug is broader than originally scoped, still unresolved, still
-paused; the rest of
-Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
-`METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108`, `RenderTargetCube`
-`METAL-109`–`111`, and `GetData()` `METAL-131` are now closed, see above); Phase 14's own
+paused; Phase 10's own MRT (`METAL-112`/`113`, item 86) and MSAA (`METAL-104`/`105`/`32`, item 88)
+are now both landed too (source-complete, CI-confirmed to compile and run without any Metal
+validation error where testable — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/
+`108`, `RenderTargetCube` `METAL-109`–`111`, and `GetData()` `METAL-131` were already closed) —
+only `METAL-114`/`115`/`116`/`117` (the still-missing `Metal_RenderTarget2D`/`Metal_
+RenderTargetCube`/`Metal_RenderTarget_MSAA`/`Metal_RenderTarget_Mip` `CTest`s `METAL-118`'s own
+task text separately called for, distinct from the `Metal_MRT`/`Metal_MSAA`/`Metal_
+RenderTarget2D_MSAA` tests items 86/88 actually landed) and docs `METAL-119` remain genuinely
+open within Phase 10; Phase 14's own
 SpriteBatch-scoped custom `ShaderEffect` facility is now closed (item 83, 2026-07-21 — corrected,
 narrower scope than originally assumed, see this phase's own corrected blocker note); `METAL-147`
 (extra-sampler-unit `BindTexture`/`BindTextureCube`/`BindTexture3D`) and `METAL-148` (the general
@@ -2768,7 +2859,7 @@ already works and must not be redesigned by mistake.
 | METAL-29 | `selectPipelineKey(stride, elements, GpuDrawParams)` dispatcher replicating `EasyGLGraphicsBackend::SelectProgram()`'s exact precedence (pbr+skinned → pbr → skinned(±vertexlit) → envMapping → dualTexture(stride-24 colored variant) → stride switch 20/24/32(±vertexlit) → default colored) | 🟨 |
 | METAL-30 | Regression-proof: every existing stride-16/20/24/32 path must select byte-identical pipelines before/after the cache rewrite — a Linux-side manual trace against the current 5-pipeline logic, ahead of any macOS build | ✅ **real trace done 2026-07-20**, against the actual pre-rewrite source (`git show 08707f81:.../MetalGraphicsBackend.mm`, the original commit, not assumed from memory): old dispatch was `textured=params&&params->texture0; if(textured){stride==20→pipe3Tex20; ==24→pipe3ColorTex24; ==32→pipe3NormalTex32; else throw} else if(stride!=16) throw; else pipe3Color`. Byte-identical to `SelectMetalPipelineKind()`'s current dispatch for strides 16/20/24 (same throw conditions, same textured-gate, only the destination name changed: `pipe3Color→Colored16`/`pipe3Tex20→Textured20`/`pipe3ColorTex24→ColorTex24`). Stride 32 is the one real, already-fully-documented divergence: old `pipe3NormalTex32` reused the same flat unlit `cna_f3d_texture` fragment shader as strides 20/24 (no lighting existed anywhere in the pre-rewrite backend), new `LitTex32`/`LitTex32VertexLit` is genuinely lit — Phase 3's deliberate, intentional addition (`METAL-38`'s own note already documents this exact swap), not a silent regression. `MetalSelectPipelineKindTests.cpp`'s 15 already-passing tests (item 33's own narrative) lock the new dispatch in going forward. |
 | METAL-31 | Key pipelines by color/depth/stencil attachment pixel format (backbuffer BGRA8 vs. an RGBA8/other `RenderTarget2D` once Phase 10 lands — Metal pipelines are format-specific) | ✅ **based on a false premise, confirmed 2026-07-20** — see narrative item 77: Phase 10's real `MetalRenderTargetBackend`/`MetalRenderTargetCubeBackend` constructors deliberately force every render target's color texture to `MTLPixelFormatBGRA8Unorm` and every depth texture to `MTLPixelFormatDepth32Float_Stencil8` — byte-identical to the backbuffer's own hardcoded pipeline format (`makePipeline()`'s own `d.colorAttachments[0].pixelFormat`/`depthAttachmentPixelFormat`/`stencilAttachmentPixelFormat`), by explicit, already-documented design (`METAL-101`'s own comment). No attachment in this codebase — backbuffer, `RenderTarget2D`, or `RenderTargetCube` — has ever used a different color/depth/stencil format, so there is no format variance for a pipeline key to disambiguate |
-| METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | ⬜ genuinely still blocked — MSAA (`METAL-104`/`105`) itself remains unimplemented; unlike `METAL-31`, this one's premise is real (a pipeline's `sampleCount` genuinely must match its render pass once MSAA exists) — the `METAL-31` precedent (force every attachment to one fixed value) is a real candidate design for this too, worth trying first when MSAA lands, rather than assuming a full format/sample-count-keyed cache is needed |
+| METAL-32 | Key pipelines by attachment sample count once Phase 10 adds MSAA | 🟨 landed 2026-07-21 alongside `METAL-104`/`105` — see narrative item 88: `MetalPipelineCacheKey` gained a `sampleCount` field (mirroring `colorAttachmentCount`'s own `METAL-113` precedent exactly), not the `METAL-31`-style single-fixed-value shortcut this row's own text speculated might be enough — a real, non-obvious reason that shortcut doesn't apply here: unlike attachment *format* (always `MTLPixelFormatBGRA8Unorm` everywhere, so `METAL-31` really was over-cautious), sample count *is* observably runtime-variable across draws in the same process (backbuffer at `deviceSampleCount`, an ordinary non-MSAA `RenderTarget2D` at 1, a custom `ShaderEffect`'s own pipeline too) — a single fixed value would be actively wrong, not just theoretically redundant |
 | METAL-33 | Document the expected cache size/no-eviction-needed-for-v1 assumption (mirrors EasyGL's own per-field `Prog3D` bound-variant assumption); flag unbounded-growth as a NOXNA follow-up only if a real pathological case appears | ✅ **documented 2026-07-20** — see narrative item 78: `MetalPipelineKey.hpp`'s own `MetalPipelineCacheKey` comment (plus a one-line pointer at the real `pipelineCache` member in `MetalGraphicsBackend.mm`) explains the bound — 15 fixed `MetalPipelineKind` values × realistically a handful of distinct `BlendState`s a game actually applies (XNA's 4 built-in presets cover the overwhelming majority), capping the cache at a few hundred lightweight `id<MTLRenderPipelineState>` entries even in a pathological case; LRU eviction is the correct NOXNA follow-up only if that assumption is ever actually violated, not something to build speculatively now |
 | METAL-34 | Extract `MetalPipelineKey`'s hash/equality into an `#ifdef __OBJC__`-free plain-C++ header so it can be exercised by a normal GoogleTest binary **without an Apple toolchain** — the one piece of Phase 2 genuinely build-verifiable on this Linux machine today | ✅ **real, on this Linux machine, 2026-07-19** — 8/8 new tests (`MetalBlendKey.*`/`MetalPipelineCacheKey.*`/`MetalPipelineCacheKeyHash.*`, CTest #102–109) pass under the real `CnaTests` binary (`cmake -DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON`, `cmake --build --target CnaTests`, `ctest -R 'MetalBlendKey\|MetalPipelineCacheKey'`) — the first of 7 extractions to genuinely earn this tier tonight (6 more plain-C++ pieces followed the same pattern, see the numbered narrative items below), matching `METAL-238`'s own "cite the actual CTest name" discipline |
 
@@ -2910,8 +3001,8 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-101 | Honor `depthFormat` exactly per target (`METAL-16`'s table) — aim for EasyGL/Bgfx's "honor the exact requested format" tier, not Vulkan's documented "always allocate depth+stencil" simplification (Task 911/877) | 🟨 |
 | METAL-102 | `preserveContents` → `MTLLoadActionDontCare`/`MTLLoadActionLoad` on rebind, matching the shared `GraphicsDevice.cpp` contract every backend already honors identically | 🟨 (found: already correctly handled, no code needed — see narrative) |
 | METAL-103 | `mipMap` — full mip chain via `MTLBlitCommandEncoder::generateMipmapsForTexture:` on unbind, matching FNA3D's `OPENGL_ResolveTarget` auto-mip semantics (Task 336/878/906 precedent) | 🟨 |
-| METAL-104 | `multiSampleCount` — multisampled attachment resolved via the render pass's own `MTLStoreActionMultisampleResolve` (a cheaper, first-class Metal path vs. GL's separate blit) | ⬜ |
-| METAL-105 | `GetMultiSampleCount()` — real, device-queried clamp via `MTLDevice.supportsTextureSampleCount:`, matching every backend's "report the real clamped value" contract | ⬜ |
+| METAL-104 | `multiSampleCount` — multisampled attachment resolved via the render pass's own `MTLStoreActionMultisampleResolve` (a cheaper, first-class Metal path vs. GL's separate blit) | 🟨 landed 2026-07-21 — see narrative item 88: real backbuffer + `RenderTarget2D` MSAA, `MTLStoreActionStoreAndMultisampleResolve` (not plain `MultisampleResolve` — see own note on why), pending CI |
+| METAL-105 | `GetMultiSampleCount()` — real, device-queried clamp via `MTLDevice.supportsTextureSampleCount:`, matching every backend's "report the real clamped value" contract | 🟨 landed 2026-07-21 — real on both `IGraphicsBackend` (backbuffer) and `IRenderTargetBackend` (per-target), device-clamped via `clampMetalSampleCount()`; real-build-verified on Linux (4 new `MetalPipelineCacheKey` tests, `CnaTests` 134/134), pending CI for the `.mm`-side texture/pipeline plumbing |
 | METAL-106 | `HasRealDepthBuffer(bool)` — confirm the default `= depthFormatWasRequested` is already correct once real depth-format honoring (`METAL-101`) lands | 🟨 |
 | METAL-107 | `SetRenderTarget2D(IRenderTargetBackend*)` — real bind/unbind dispatch, currently a no-op | 🟨 |
 | METAL-108 | `GetColorGLHandle()` — confirm the default `return 0` is correct (GL-specific, N/A on Metal) and no caller assumes nonzero means "has a render target" | 🟨 (confirmed: zero callers anywhere in `include/`/`src/` outside its own declaration/`EasyGLRenderTargetBackend` override — nothing branches on it) |
@@ -3075,8 +3166,8 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 |---|---|---|
 | METAL-189 | `GraphicsCapability::ThreeD` — confirm the inherited default `true` is correct (verification task, not new code) | 🟨 |
 | METAL-190 | `GraphicsCapability::DepthStencilBuffer` — same, confirm default `true` is correct | 🟨 |
-| METAL-191 | `GraphicsCapability::MultiSampleAntiAliasing` — should become real/device-queried once Phase 10 lands (`MTLDevice.supportsTextureSampleCount:`), not a blanket `true` | 🟨 (found still a false positive on this same review pass — fixed to `false` until `METAL-104` lands) |
-| METAL-192 | `GraphicsCapability::MultipleRenderTargets` — **fixed**: was a false-positive blanket `true` (real MRT doesn't exist, Phase 10), now correctly answers `false` until `METAL-112` lands | 🟨 |
+| METAL-191 | `GraphicsCapability::MultiSampleAntiAliasing` — should become real/device-queried once Phase 10 lands (`MTLDevice.supportsTextureSampleCount:`), not a blanket `true` | 🟨 flipped back to real/`true` 2026-07-21 now that `METAL-104`/`105` are real — see narrative item 88, pending CI |
+| METAL-192 | `GraphicsCapability::MultipleRenderTargets` — **fixed**: was a false-positive blanket `true` (real MRT doesn't exist, Phase 10), now correctly answers `false` until `METAL-112` lands | 🟨 **real bug found and fixed 2026-07-21**: this row's own `false` case was never actually reverted when `METAL-112` landed (item 86) — a stale false-positive-in-the-*other*-direction left sitting in the source for one commit, caught while landing `METAL-191`'s own identical fix, flipped to real/`true` in the same pass, see narrative item 88 |
 | METAL-193 | `GraphicsCapability::AnisotropicFiltering` — should be `true` now that `METAL-1`'s sampler cache applies `maxAnisotropy`; confirm on real hardware once buildable | 🟨 (source-confirmed; real-hardware confirmation still needs macOS CI) |
 | METAL-194 | `GraphicsCapability::WireFrame` — confirm the already-correct `FillMode::WireFrame`→`MTLTriangleFillModeLines` mapping makes the default `true` correct | 🟨 |
 | METAL-195 | `GraphicsCapability::OcclusionQuery` — **fixed**: was a false-positive blanket `true` (`CreateOcclusionQuery()` still returns `nullptr`), now correctly answers `false` until Phase 13 lands | 🟨 |
