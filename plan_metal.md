@@ -2140,13 +2140,53 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     none found. `METAL-256`/`METAL-175` can now be marked verified-safe rather than merely
     source-complete.
 
+81. **`METAL-19` fully closed — the remaining un-extracted `CullMode`/`Blend`/`BlendFunction`/
+    `CompareFunction`/`StencilOperation` tables, real-build-and-test-verified on this Linux
+    machine**: mirrors item 66's own `MetalSamplerFilter.hpp` extraction exactly. The 4 functions
+    in `MetalGraphicsBackend.mm` that previously switched on raw `int` literals with only a comment
+    recording the assumed XNA ordinals (`metalCompareFunction`/`metalStencilOp`/`metalBlendFactor`/
+    `metalBlendOp`), plus `ApplyRasterizerState`'s own inline `c==1?...:(c==2?...:...)` cull-mode
+    ternary chain, are now thin wrappers around 5 new plain-C++ headers
+    (`MetalCompareFunction.hpp`/`MetalStencilOperation.hpp`/`MetalBlend.hpp`/
+    `MetalBlendFunction.hpp`/`MetalCullMode.hpp`) that each switch on the real XNA enumerator name
+    (`CompareFunction`/`StencilOperation`/`Blend`/`BlendFunction`/`CullMode`, cast once from the
+    plain int the `.mm` call sites still pass) and return a plain C++ enum describing the equivalent
+    Metal semantic — zero Objective-C dependency. A future reordering of any of these 5 XNA enums'
+    declarations is now compile-time-irrelevant here, the same guarantee item 66 already gave
+    `TextureFilter`. The final `.mm`-side translation from each plain-C++ "kind" enum to the real
+    Apple SDK enum (`MTLCompareFunction`/`MTLStencilOperation`/`MTLBlendFactor`/`MTLBlendOperation`/
+    `MTLCullMode`) stays a trivial 1:1 name-matching switch, the one part of this that genuinely
+    needs the Apple SDK and so still can't be verified from this sandbox. Every enumerator value of
+    all 5 XNA enums was read directly from its real `.hpp` (`CompareFunction.hpp`/
+    `StencilOperation.hpp`/`Blend.hpp`/`BlendFunction.hpp`/`CullMode.hpp`), confirming the ordinals
+    the old literal-based comments already assumed were correct (no latent bug found here, unlike
+    `MetalSamplerFilter.hpp`'s own real bug) — this closes `METAL-19` as a genuine hardening/
+    regression-guard task, not a bugfix. Unlike `METAL-256`, this is **fully build-and-test-verified
+    on this Linux machine**, not merely balance-checked: `cmake --build cmake-build-headless
+    --target CnaTests` compiled clean, and `ctest --test-dir cmake-build-headless -R
+    "MetalCompareFunction|MetalStencilOperation|MetalBlend|MetalCullMode"` reports `100% tests
+    passed, 0 tests failed out of 45` (42 new tests across the 5 new suites plus the 3 pre-existing
+    `MetalBlendKey` tests the filter also matched). A full, unfiltered `ctest --test-dir
+    cmake-build-headless` run (5644 total tests, using `--output-log` to an on-disk file rather
+    than trusting any tool-side tail truncation) confirms zero regression across the entire suite:
+    `96% tests passed, 231 tests failed out of 5644`, and every one of those 231 failures, broken
+    down by test-suite name, falls into `MediaLibraryTestFixture`/`VideoPlayerTest`/
+    `VideoDecoderTest`/`SongTest`/`AudioTagParserTest`/`Xnb*`/`ContentManager*`/`Lzx*`/`Playlist*`/
+    `Picture*`/`Thumbnail*` (all pre-existing, fixture/ffmpeg-dependent Media/Content/Video/Audio
+    subsystems this Linux sandbox cannot fully exercise, matching this project's own already-
+    documented limitation) plus exactly one unrelated `GraphicsDeviceCapabilityTest.
+    DoesNotSupportWireFrame` (a `HEADLESS`-backend capability query, untouched by this change) —
+    zero of the 231 are Metal-related, and the specific test-ID range covering all 5 new suites
+    (`#83`–`#181`) is 100% green. Still pushes for real CI build/test confirmation next, same as
+    every other `.mm` change this session, since the final Apple-SDK-side switch itself remains
+    unbuilt outside CI.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
-`METAL-19` (the enum-reordering regression guard — the one real, extracted instance found
-[`MetalSamplerFilter.hpp`] is fixed, see item 66; the remaining scope is the un-extracted `.mm`-only
-`CullMode`/`Blend`/`CompareFunction`/`StencilOperation` tables, still needing extraction first,
-same as `METAL-14` originally did); the
+`METAL-19` is now fully closed (item 81, 2026-07-21 — the remaining `CullMode`/`Blend`/
+`BlendFunction`/`CompareFunction`/`StencilOperation` tables extracted and Linux-verified, same as
+`MetalSamplerFilter.hpp` already was); the
 *wiring* of the generic `VertexElement`-driven descriptor builder into a live draw path
 (`METAL-26`/`27`'s core logic landed real 2026-07-20 — see narrative — but no `PipelineKind`/shader
 currently pairs with an arbitrary declaration, so this stays correctly blocked on Phase 14, same
@@ -2423,7 +2463,7 @@ that replace it; do not re-derive scope from this table, use the phases:
 | METAL-16 | `DepthFormat`→`MTLPixelFormat` table (None/Depth16/Depth24/Depth24Stencil8) — backbuffer currently always allocates `Depth32Float_Stencil8` regardless of what `PresentationParameters` requested | 🟨 (confirmed intentional, not overlooked: matches `VulkanGraphicsBackend`'s own already-accepted "always allocate depth+stencil" simplification, explicitly called out as the deliberately-chosen tier back in `METAL-101`'s own note — not a priority fix) |
 | METAL-17 | Query `MTLDevice.supportsBCTextureCompression` and document the real, device-dependent DXT/BC boundary (no native support on Apple Silicon without emulation; yes on Intel Macs) rather than assuming universal support | 🟨 (confirmed moot under the current architecture: since `METAL-15`'s finding means nothing ever uploads real DXT/BC bytes to any backend today, this query has nothing to gate yet — would only become relevant if a future, genuinely different, cross-backend "upload real compressed texture data" path bypassing `ImageData` were ever added, which is a project-wide feature, not a Metal-only one) |
 | METAL-18 | Centralize every mapping above into one shared location so Phase 2's pipeline cache and Phase 10's render-target/format work reuse one source of truth instead of duplicating switch statements | 🟨 (scope reduced by the `METAL-15`/`17` findings above — the enum-mapping tables that genuinely exist and matter today, e.g. `metalCompareFunction`/`metalStencilOp`/`metalBlendFactor`/`metalBlendOp`/`metalPrimitive`, already live together near the top of `kMetalShaderSource`'s surrounding helpers; no separate centralization pass is needed until `METAL-14`'s real `VertexElementFormat` table actually gets built) |
-| METAL-19 | Guard against silent enum-reordering regressions (a compile-time or `GraphicsBackendCompileDefinitionsTest`-style check that these ordinal assumptions still match the real `.hpp` files) | ⬜ (partially closed 2026-07-20 — see narrative item 66: `MetalSamplerFilter.hpp`'s `DescribeMetalSamplerFilter()` was the one real, extracted, Linux-verifiable instance of this hazard and is now fixed to switch by `TextureFilter` enumerator name instead of magic literals; the remaining scope — un-extracted, `.mm`-only `CullMode`/`Blend`/`CompareFunction`/`StencilOperation` tables — still needs extraction first, same as `METAL-14` originally required, before it's reachable from this Linux machine) |
+| METAL-19 | Guard against silent enum-reordering regressions (a compile-time or `GraphicsBackendCompileDefinitionsTest`-style check that these ordinal assumptions still match the real `.hpp` files) | ✅ **fully closed 2026-07-21** — see narrative item 81: the remaining `CullMode`/`Blend`/`BlendFunction`/`CompareFunction`/`StencilOperation` tables (`MetalSamplerFilter.hpp`'s own `TextureFilter` case was already fixed 2026-07-20, item 66) are now extracted into 5 plain-C++ headers (`MetalCullMode.hpp`/`MetalBlend.hpp`/`MetalBlendFunction.hpp`/`MetalCompareFunction.hpp`/`MetalStencilOperation.hpp`) that switch on the real XNA enumerator names, each real-build-and-test-verified on this Linux machine (42 new `CnaTests`, all passing) |
 | METAL-20 | `MTLSamplerDescriptor.maxAnisotropy` valid-range audit (clamped 1–16 in `samplerFor()` today) — confirm this matches `TextureFilter`/`SamplerState.MaxAnisotropy`'s real XNA range | 🟨 (confirmed correct, and for a different reason than `VulkanGraphicsBackend`'s own analogous clamp: Apple's own `MTLSamplerDescriptor.maxAnisotropy` documentation states 16 is a *fixed, hardware-independent* API ceiling — unlike Vulkan's `VkPhysicalDeviceLimits.maxSamplerAnisotropy`/GL's `GL_MAX_TEXTURE_MAX_ANISOTROPY`, both genuinely device-queried because their real upper bound varies by GPU, Metal's existing hardcoded `std::clamp(maxAnisotropy,1,16)` needs no device query at all) |
 
 ## Phase 2 — Pipeline-state cache and generic `VertexDeclaration`-driven vertex descriptor (METAL-21 – METAL-34)

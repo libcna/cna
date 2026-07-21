@@ -9,6 +9,11 @@
 #include "CNA/Internal/Backends/Metal/MetalVertexAttribFormat.hpp"
 #include "CNA/Internal/Backends/Metal/MetalVertexDescriptorPlan.hpp"
 #include "CNA/Internal/Backends/Metal/MetalSamplerFilter.hpp"
+#include "CNA/Internal/Backends/Metal/MetalCompareFunction.hpp"
+#include "CNA/Internal/Backends/Metal/MetalStencilOperation.hpp"
+#include "CNA/Internal/Backends/Metal/MetalBlend.hpp"
+#include "CNA/Internal/Backends/Metal/MetalBlendFunction.hpp"
+#include "CNA/Internal/Backends/Metal/MetalCullMode.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -589,79 +594,80 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
-    // XNA CompareFunction ordinals -> MTLCompareFunction (mirrors EasyGL's ToEasyGLCompareFunc /
-    // Vulkan's ToVkCompareOp exactly): Always=0, Never=1, Less=2, LessEqual=3, Equal=4,
-    // GreaterEqual=5, Greater=6, NotEqual=7.
+    // plan_metal.md METAL-19: the enum-reordering-sensitive XNA-ordinal logic now lives in the
+    // plain-C++ MetalCompareFunction.hpp (no Objective-C, buildable and unit-tested on any platform
+    // without an Apple toolchain) -- kept as a thin same-signature wrapper here, a trivial 1:1
+    // name-matching switch onto the real Apple SDK enum, since only that final step genuinely needs
+    // the Apple SDK.
     static MTLCompareFunction metalCompareFunction(int cmp)
     {
-        switch (cmp) {
-            case 1: return MTLCompareFunctionNever;
-            case 2: return MTLCompareFunctionLess;
-            case 3: return MTLCompareFunctionLessEqual;
-            case 4: return MTLCompareFunctionEqual;
-            case 5: return MTLCompareFunctionGreaterEqual;
-            case 6: return MTLCompareFunctionGreater;
-            case 7: return MTLCompareFunctionNotEqual;
-            default: return MTLCompareFunctionAlways; // CompareFunction::Always = 0
+        using K = CNA::Internal::Backends::Metal::MetalCompareFunctionKind;
+        switch (CNA::Internal::Backends::Metal::DescribeMetalCompareFunction(cmp)) {
+            case K::Never:        return MTLCompareFunctionNever;
+            case K::Less:         return MTLCompareFunctionLess;
+            case K::LessEqual:    return MTLCompareFunctionLessEqual;
+            case K::Equal:        return MTLCompareFunctionEqual;
+            case K::GreaterEqual: return MTLCompareFunctionGreaterEqual;
+            case K::Greater:      return MTLCompareFunctionGreater;
+            case K::NotEqual:     return MTLCompareFunctionNotEqual;
+            case K::Always:
+            default:              return MTLCompareFunctionAlways;
         }
     }
 
-    // XNA StencilOperation ordinals -> MTLStencilOperation (mirrors EasyGL/Vulkan's
-    // ToVkStencilOp exactly): Keep=0, Zero=1, Replace=2, Increment=3, Decrement=4,
-    // IncrementSaturation=5, DecrementSaturation=6, Invert=7. XNA's Increment/Decrement wrap
-    // (D3DSTENCILOP_INCR/DECR); the *Saturation variants clamp (D3DSTENCILOP_INCRSAT/DECRSAT) --
-    // confirmed against Vulkan's already-tested VulkanGraphicsBackend::ToVkStencilOp.
+    // plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
+    // plain-C++ MetalStencilOperation.hpp.
     static MTLStencilOperation metalStencilOp(int op)
     {
-        switch (op) {
-            case 1: return MTLStencilOperationZero;
-            case 2: return MTLStencilOperationReplace;
-            case 3: return MTLStencilOperationIncrementWrap;
-            case 4: return MTLStencilOperationDecrementWrap;
-            case 5: return MTLStencilOperationIncrementClamp;
-            case 6: return MTLStencilOperationDecrementClamp;
-            case 7: return MTLStencilOperationInvert;
-            default: return MTLStencilOperationKeep; // StencilOperation::Keep = 0
+        using K = CNA::Internal::Backends::Metal::MetalStencilOperationKind;
+        switch (CNA::Internal::Backends::Metal::DescribeMetalStencilOperation(op)) {
+            case K::Zero:            return MTLStencilOperationZero;
+            case K::Replace:         return MTLStencilOperationReplace;
+            case K::IncrementWrap:   return MTLStencilOperationIncrementWrap;
+            case K::DecrementWrap:   return MTLStencilOperationDecrementWrap;
+            case K::IncrementClamp:  return MTLStencilOperationIncrementClamp;
+            case K::DecrementClamp:  return MTLStencilOperationDecrementClamp;
+            case K::Invert:          return MTLStencilOperationInvert;
+            case K::Keep:
+            default:                 return MTLStencilOperationKeep;
         }
     }
 
-    // XNA Blend ordinals -> MTLBlendFactor (mirrors EasyGL's ToEasyGLBlendFactor / Vulkan's
-    // ToVkBlendFactor exactly, including their identical no-RGB/Alpha-channel-distinction choice
-    // for BlendFactor/InverseBlendFactor -- SourceColor/DestinationColor/BlendFactor as an
-    // *Alpha*-slot factor is not a combination real D3D9/XNA content legally produces, and every
-    // established CNA backend already made this same simplifying choice, not just this one):
-    // One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5,
-    // DestinationColor=6, InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9,
-    // BlendFactor=10, InverseBlendFactor=11, SourceAlphaSaturation=12.
+    // plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
+    // plain-C++ MetalBlend.hpp.
     static MTLBlendFactor metalBlendFactor(int xnaBlend)
     {
-        switch (xnaBlend) {
-            case  1: return MTLBlendFactorZero;
-            case  2: return MTLBlendFactorSourceColor;
-            case  3: return MTLBlendFactorOneMinusSourceColor;
-            case  4: return MTLBlendFactorSourceAlpha;
-            case  5: return MTLBlendFactorOneMinusSourceAlpha;
-            case  6: return MTLBlendFactorDestinationColor;
-            case  7: return MTLBlendFactorOneMinusDestinationColor;
-            case  8: return MTLBlendFactorDestinationAlpha;
-            case  9: return MTLBlendFactorOneMinusDestinationAlpha;
-            case 10: return MTLBlendFactorBlendColor;
-            case 11: return MTLBlendFactorOneMinusBlendColor;
-            case 12: return MTLBlendFactorSourceAlphaSaturated;
-            default: return MTLBlendFactorOne; // Blend::One = 0
+        using K = CNA::Internal::Backends::Metal::MetalBlendFactorKind;
+        switch (CNA::Internal::Backends::Metal::DescribeMetalBlendFactor(xnaBlend)) {
+            case K::Zero:                    return MTLBlendFactorZero;
+            case K::SourceColor:             return MTLBlendFactorSourceColor;
+            case K::OneMinusSourceColor:     return MTLBlendFactorOneMinusSourceColor;
+            case K::SourceAlpha:             return MTLBlendFactorSourceAlpha;
+            case K::OneMinusSourceAlpha:     return MTLBlendFactorOneMinusSourceAlpha;
+            case K::DestinationColor:        return MTLBlendFactorDestinationColor;
+            case K::OneMinusDestinationColor:return MTLBlendFactorOneMinusDestinationColor;
+            case K::DestinationAlpha:        return MTLBlendFactorDestinationAlpha;
+            case K::OneMinusDestinationAlpha:return MTLBlendFactorOneMinusDestinationAlpha;
+            case K::BlendColor:              return MTLBlendFactorBlendColor;
+            case K::OneMinusBlendColor:      return MTLBlendFactorOneMinusBlendColor;
+            case K::SourceAlphaSaturated:    return MTLBlendFactorSourceAlphaSaturated;
+            case K::One:
+            default:                         return MTLBlendFactorOne;
         }
     }
 
-    // XNA BlendFunction ordinals -> MTLBlendOperation (mirrors EasyGL's ToEasyGLBlendEquation /
-    // Vulkan's ToVkBlendOp): Add=0, Subtract=1, ReverseSubtract=2, Max=3, Min=4.
+    // plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
+    // plain-C++ MetalBlendFunction.hpp.
     static MTLBlendOperation metalBlendOp(int xnaBlendFunc)
     {
-        switch (xnaBlendFunc) {
-            case 1: return MTLBlendOperationSubtract;
-            case 2: return MTLBlendOperationReverseSubtract;
-            case 3: return MTLBlendOperationMax;
-            case 4: return MTLBlendOperationMin;
-            default: return MTLBlendOperationAdd; // BlendFunction::Add = 0
+        using K = CNA::Internal::Backends::Metal::MetalBlendOperationKind;
+        switch (CNA::Internal::Backends::Metal::DescribeMetalBlendOperation(xnaBlendFunc)) {
+            case K::Subtract:        return MTLBlendOperationSubtract;
+            case K::ReverseSubtract: return MTLBlendOperationReverseSubtract;
+            case K::Max:             return MTLBlendOperationMax;
+            case K::Min:             return MTLBlendOperationMin;
+            case K::Add:
+            default:                 return MTLBlendOperationAdd;
         }
     }
 
@@ -2138,7 +2144,21 @@ void MetalGraphicsBackend::ApplyDepthStencilState(bool depthEnable,bool depthWri
     p.rebuildDepthState();
     if(p.encoder)[p.encoder setStencilReferenceValue:referenceStencil];
 }
-void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb){impl_->cull=c==1?MTLCullModeFront:(c==2?MTLCullModeBack:MTLCullModeNone);impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;impl_->scissorEnabled=se;impl_->depthBias=db;impl_->slopeBias=sb;if(impl_->encoder){[impl_->encoder setFrontFacingWinding:MTLWindingClockwise];[impl_->encoder setCullMode:impl_->cull];[impl_->encoder setTriangleFillMode:impl_->fill];[impl_->encoder setDepthBias:db slopeScale:sb clamp:0];}}
+// plan_metal.md METAL-19: the `c==1?...:(c==2?...:...)` ternary chain this replaced switched on raw
+// XNA CullMode ordinals with no enum-reordering guard; now backed by the plain-C++, unit-tested
+// MetalCullMode.hpp (METAL-5's own Front/Back mapping preserved exactly).
+static MTLCullMode metalCullMode(int c)
+{
+    using K = CNA::Internal::Backends::Metal::MetalCullModeKind;
+    switch (CNA::Internal::Backends::Metal::DescribeMetalCullMode(c)) {
+        case K::Front: return MTLCullModeFront;
+        case K::Back:  return MTLCullModeBack;
+        case K::None:
+        default:       return MTLCullModeNone;
+    }
+}
+
+void MetalGraphicsBackend::ApplyRasterizerState(int c,int f,bool se,float db,float sb){impl_->cull=metalCullMode(c);impl_->fill=f==1?MTLTriangleFillModeLines:MTLTriangleFillModeFill;impl_->scissorEnabled=se;impl_->depthBias=db;impl_->slopeBias=sb;if(impl_->encoder){[impl_->encoder setFrontFacingWinding:MTLWindingClockwise];[impl_->encoder setCullMode:impl_->cull];[impl_->encoder setTriangleFillMode:impl_->fill];[impl_->encoder setDepthBias:db slopeScale:sb clamp:0];}}
 void MetalGraphicsBackend::ApplySamplerState(int slot,int filter,int addressU,int addressV,int maxAnisotropy){if(slot<0||slot>=16)return;impl_->samplerSlots[slot]=impl_->samplerFor(filter,addressU,addressV,maxAnisotropy);}
 void MetalGraphicsBackend::SetBlendFactor(float r,float g,float b,float a){impl_->blendColor[0]=r;impl_->blendColor[1]=g;impl_->blendColor[2]=b;impl_->blendColor[3]=a;if(impl_->encoder)[impl_->encoder setBlendColorRed:r green:g blue:b alpha:a];}
 void MetalGraphicsBackend::SetReferenceStencil(int v){impl_->refStencil=v;if(impl_->encoder)[impl_->encoder setStencilReferenceValue:v];}
