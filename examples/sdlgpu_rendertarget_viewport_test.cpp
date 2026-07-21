@@ -43,14 +43,15 @@
 //       A-center (15,15) -> RED   B-center (59,43) -> GREEN
 //       (59,15) -> BLACK          (15,43) -> BLACK
 //
-// The Viewport∩ScissorRectangle INTERSECTION is deliberately NOT asserted here: SdlGpu can only read
-// a RenderTarget2D back via GetData() after the target is UNBOUND, and SdlGpu's scissor is applied
-// once per pass from the live state at Present time — so SetRenderTarget(nullptr) resets
-// ScissorRectangle to the full backbuffer before the RT pass replays, and the scissor no longer
-// clips. That is a pre-existing per-pass-scissor deferred-reset limitation (recorded as
-// REMED-GFX-068), independent of the per-draw Viewport wiring this test exercises; the
-// Viewport∩Scissor independence itself is proven on Vulkan, where both states are per-draw
-// (vulkan_rendertarget_viewport_test, GFX-062 Frame 3).
+// The Viewport∩ScissorRectangle INTERSECTION is not asserted in THIS test (it exercises only the
+// per-draw Viewport wiring). When this test was written SdlGpu applied the scissor once per pass from
+// the live state at Present time, so — because SdlGpu can only read a RenderTarget2D back via GetData()
+// after the target is UNBOUND, and SetRenderTarget(nullptr) resets ScissorRectangle to the full
+// backbuffer — the RT pass replayed with the scissor no longer clipping. That per-pass-scissor
+// deferred-reset limitation is now FIXED (REMED-GFX-068 made the scissor per-draw, like the viewport),
+// and the Viewport∩Scissor intersection is asserted end-to-end in sdlgpu_rendertarget_scissor_test
+// Frame 3. (The independence was already proven on Vulkan, where both states are per-draw —
+// vulkan_rendertarget_viewport_test, GFX-062 Frame 3.)
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
