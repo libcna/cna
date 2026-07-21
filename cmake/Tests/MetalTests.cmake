@@ -54,4 +54,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "METAL")
     endif()
     cna_register_backend_test(NAME Metal_DrawUserPrimitives_VPC COMMAND cna_test_metal_draw_user_primitives_vpc
         TIMEOUT 30 LABELS "Metal")
+
+    # plan_metal.md Phase 14 (METAL-142-152): real runtime-compiled MSL custom ShaderEffect, wired
+    # through SpriteBatch::Begin(effect). Mirrors D3D9_SpriteBatch_CustomEffect's own methodology
+    # exactly (see examples/metal_spritebatch_customeffect_test.cpp's own header comment).
+    add_executable(cna_test_metal_spritebatch_customeffect examples/metal_spritebatch_customeffect_test.cpp)
+    target_link_libraries(cna_test_metal_spritebatch_customeffect PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_spritebatch_customeffect PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_backend_test(NAME Metal_SpriteBatch_CustomEffect COMMAND cna_test_metal_spritebatch_customeffect
+        TIMEOUT 30 LABELS "Metal")
 endif()

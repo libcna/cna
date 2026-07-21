@@ -2192,7 +2192,76 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     `Metal_DrawUserPrimitives_VPC`), so all 42 new `MetalCompareFunction`/`MetalStencilOperation`/
     `MetalBlend`/`MetalBlendFunction`/`MetalCullMode` tests passed on real Apple hardware too (131
     total − 3 failed = 128 passed; 128 − 86 previously-passing = 42, exactly). `METAL-19` is now
-    fully verified, not merely source-complete. / not attempted across this whole overnight session** (do not assume these
+    fully verified, not merely source-complete.
+
+83. **Phase 14 (custom `ShaderEffect`/MSL contract) landed for its real, correctly-scoped shape —
+    the phase's own 2026-07-19 blocker note was a false premise, corrected by reading
+    `VulkanEffectBackend`/`D3D11EffectBackend`/`D3D12EffectBackend` directly**: those three each
+    document their custom-effect facility as SpriteBatch-only with a fixed, `Sprite2DVertex`-shaped
+    (32-byte) vertex contract, not the arbitrary-3D-vertex-layout facility only
+    `EasyGLGraphicsBackend` actually supports (GL's own attribute binding is inherently
+    layout-flexible; no established structured-pipeline backend — Vulkan, D3D11, D3D12, or now
+    Metal — needs `MTLVertexDescriptor`-style rigidity for this facility at all, since Metal's own
+    `cna_v2d` shader already reads vertices manually via `v[vid]` with zero vertex descriptor).
+    This makes Phase 14 fully independent of Phase 2's still-open generic `VertexElement`-driven
+    descriptor builder (`METAL-26`/`27`), reversing the original blocking conclusion.
+
+    Implementation: a new `MetalEffectBackend : IEffectBackend` class compiles `vertSrc`/`fragSrc`
+    as two **separate** `MTLLibrary` objects via `newLibraryWithSource:options:error:` (matching
+    `CompileProgram`'s own two-string signature) — each source must declare exactly one function,
+    discovered via `MTLLibrary.functionNames` rather than a fixed required name, so a shader author
+    is free to name their own entry point anything. The uniform contract mirrors
+    `VulkanEffectBackend`/`D3D11EffectBackend`'s own fixed-slot, name-ignoring precedent (MSL has no
+    simple named-uniform reflection either) but as three separate natural-typed buffers
+    (`buffer(2)`=mat4, `buffer(3)`=vec4, `buffer(4)`=float) instead of one combined push-constant-
+    style block, avoiding any `constant`-address-space struct-padding ambiguity. Two deliberate,
+    documented improvements over the Vulkan/D3D11/D3D12 precedent rather than a blind copy: (1) the
+    automatic per-draw transform buffer uses the same letterbox-aware `U2D{scale,offset}` the stock
+    `cna_v2d` shader already uses (`METAL-157`/`158`), not Vulkan/D3D11's own raw `vpSize`-only
+    convention, which would have silently reintroduced the exact letterboxing bug those tasks
+    already fixed; (2) the custom pipeline's blend state is keyed off the real, currently-applied
+    `BlendState` via `MetalEffectBackend::pipelineFor()` (Metal's own pipeline cache is already
+    blend-state-aware), rather than the fixed hardcoded alpha blend Vulkan/D3D11/D3D12 use — a real
+    XNA/FNA-behavior improvement, not a scope gap, since `blendState` and `effect` are independent
+    `SpriteBatch.Begin()` parameters. `MetalSpriteBatch::Draw()` resolves the bound `Effect`'s
+    backend fresh on every draw call (not once per flush the way D3D11/Vulkan's own batched
+    architecture requires), so a `SetUniformXxx()` call between two `Draw()`s in the same
+    `Begin`/`End` genuinely takes effect on the very next sprite — Metal's own architecture (one
+    immediate draw per sprite, no batching) makes this more correct at no extra cost, not a
+    deliberate divergence for its own sake. A `pipelineFor()` failure (a rare, real GPU/driver-level
+    error, distinct from a `CompileProgram()`-time compile failure) falls back to the stock
+    `Sprite2D` pipeline rather than passing `nil` to `setRenderPipelineState:`, a hard Metal API
+    misuse that would otherwise crash.
+
+    `METAL-147` (`BindTexture`/`BindTextureCube`/`BindTexture3D` for extra sampler units) and
+    `METAL-148` (the general 3D `GpuDrawParams::customEffectBackend` bypass) remain genuinely
+    unimplemented — not oversights, but confirmed-by-reading scope boundaries matching
+    Vulkan/D3D11/D3D12's own identical choices (`VulkanGraphicsBackend`'s own 3D `draw3DFor()` was
+    read directly and confirmed to never consume `customEffectBackend`/`activeCustomEffect_` at
+    all, only its `SpriteBatch` flush code does).
+
+    A new `Metal_SpriteBatch_CustomEffect` `CTest` (`examples/metal_spritebatch_customeffect_
+    test.cpp`) mirrors `D3D9_SpriteBatch_CustomEffect`'s own exact 4-check RGB-inversion
+    methodology in real MSL, additionally exercising `SetUniformVec4()`'s real `buffer(3)` wiring
+    (a broken wiring would produce black, not the expected cyan, a distinguishable failure). While
+    researching the CTest precedent this task's own text cited ("D3D9/D3D11/D3D12/Vulkan/Bgfx
+    already use" this methodology), found that claim itself was optimistic — only `D3D9` and
+    `SDL_Renderer` (a "throws" test, since SDL_Renderer doesn't support custom effects at all)
+    actually have a registered custom-effect `CTest` today; Vulkan/D3D11/D3D12/Bgfx have the
+    backend classes but no dedicated test. Documented rather than silently treated as true; the new
+    Metal test still faithfully mirrors the one real precedent that exists. The full MSL uniform/
+    vertex-buffer contract is written up in `docs/metal-shader-effect-contract.md` (`METAL-152`).
+
+    **Cannot be build-verified from this Linux sandbox** — this is genuinely new Objective-C++ code
+    that has never been compiled anywhere; the only sanity check available here was a full-file
+    brace/bracket/paren balance re-check (`375/375`, `854/854`, `1876/1876`, all balanced) plus
+    careful manual review against Apple's documented `MTLLibrary`/`MTLRenderPipelineDescriptor` API
+    shape and the established `VulkanEffectBackend`/`D3D11EffectBackend` precedent. `METAL-142`/
+    `144`–`146`/`149`–`151` land as source-complete (🟨); `METAL-143`/`152` are genuinely done
+    (design decision + doc, no code to verify); `METAL-147`/`148` stay open, correctly. Pushed for
+    real CI verification next — genuinely unverified until that CI run reports back.
+
+**Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
 `METAL-19` is now fully closed (item 81, 2026-07-21 — the remaining `CullMode`/`Blend`/
@@ -2211,11 +2280,16 @@ or further diagnostics, not attributable to either of the two real bugs (`vertex
 `ReadBackbuffer`) already found and fixed from this same investigation; the rest of
 Phase 10 (MRT `METAL-112`/`113`, MSAA `METAL-104`/`105`, all `CTest`s `METAL-114`–`118`, docs
 `METAL-119` — `preserveContents`/mip/`GetColorGLHandle` `METAL-102`/`103`/`108`, `RenderTargetCube`
-`METAL-109`–`111`, and `GetData()` `METAL-131` are now closed, see above); Phase 14 (custom
-`ShaderEffect`, which
-Phase 9 Instancing is itself blocked on, and which is itself further blocked on Phase 2's generic
-`VertexElement`-driven descriptor builder — see Phase 14's own header note); Phase 9 itself (blocked
-on Phase 14); `METAL-257` (the cross-backend
+`METAL-109`–`111`, and `GetData()` `METAL-131` are now closed, see above); Phase 14's own
+SpriteBatch-scoped custom `ShaderEffect` facility is now closed (item 83, 2026-07-21 — corrected,
+narrower scope than originally assumed, see this phase's own corrected blocker note); `METAL-147`
+(extra-sampler-unit `BindTexture`/`BindTextureCube`/`BindTexture3D`) and `METAL-148` (the general
+3D `GpuDrawParams::customEffectBackend` bypass) remain genuinely open within Phase 14, matching
+every established structured-pipeline backend's own identical scope boundary — and Phase 9
+Instancing stays correctly blocked specifically on `METAL-148`/the generic `VertexElement`-driven
+descriptor builder (`METAL-26`/`27`), *not* on the SpriteBatch-only piece Phase 14 just closed —
+real, useful instancing needs a custom 3D shader reading per-instance `VertexBufferBinding` data,
+which Phase 14's landed scope does not provide (see Phase 9's own header note); `METAL-257` (the cross-backend
 missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap Phase 16's research found but deliberately left for a
 cross-backend task, not this Metal-only plan — now also confirmed to affect iOS/tvOS, not just
 macOS, per Phase 29's own research); the rest of Phase 20 (`METAL-198`'s `CTest`); Phases 21–28 and
@@ -2697,36 +2771,34 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 
 ## Phase 14 — Custom ShaderEffect / MSL contract (METAL-142 – METAL-152)
 
-> **Third real dependency found 2026-07-19** (after the Phase 6→3 and Phase 9→14 blockers already
-> documented above): a custom `ShaderEffect` is, by definition, free to use an arbitrary vertex
-> layout the author chooses — it is not restricted to the fixed handful of concrete strides
-> (16/20/24/32/48/52/56) this session's `PipelineKind` enum + `vertexDescriptorForStride()` switch
-> statement hardcodes (see Phase 2's own still-open `METAL-26`/`METAL-27`, "the fully generic
-> `VertexElement`-driven descriptor builder"). `METAL-144`'s `newLibraryWithSource:` compile step and
-> `METAL-146`'s uniform-buffer contract can be built and even unit-tested for compilation success
-> independent of this, but `METAL-145`/`METAL-148` (actually binding and drawing with a custom
-> pipeline) cannot honestly support an arbitrary custom vertex layout until Phase 2's generic
-> descriptor builder exists — attempting it against only the current fixed-stride switch would mean
-> either silently rejecting any custom vertex format that doesn't happen to match one of the 7
-> built-in strides, or crashing on a `MTLVertexDescriptor` built from the wrong attribute offsets for
-> that particular custom shader. Phase 14 is therefore genuinely blocked on Phase 2's
-> `METAL-26`/`METAL-27`, not independently landable in full — `METAL-142`–`144`/`146`/`147`
-> (2D-texture case)/`150`–`152` can still land standalone; `METAL-145`/`148`/`149`/`147`'s cube/3D
-> cases should wait.
+> **Blocker corrected 2026-07-21 — false premise, same class of finding as `METAL-15`/`17`/`31`**:
+> the note below (written 2026-07-19) assumed a custom `ShaderEffect` must support an arbitrary
+> vertex layout, and blocked Phase 14 in full on Phase 2's still-open generic `VertexElement`-driven
+> descriptor builder (`METAL-26`/`27`) on that basis. Reading `VulkanEffectBackend`/
+> `D3D11EffectBackend`/`D3D12EffectBackend` directly (not assumed) shows this premise was wrong for
+> every established structured-pipeline backend: each carries an explicit comment stating "this
+> mechanism is a SpriteBatch-custom-shader facility, not a general arbitrary-vertex-format one",
+> with a hardcoded, fixed `Sprite2DVertex`-shaped (32-byte x,y|u,v|r,g,b,a) vertex contract. The
+> "arbitrary 3D vertex layout" scope only `EasyGLGraphicsBackend` actually supports is possible
+> *because* GL's attribute binding is inherently layout-flexible (no `MTLVertexDescriptor`-style
+> rigid descriptor object needed) — it is not something every backend commits to, and Metal's own
+> `Sprite2D` pipeline already reads vertices manually via `v[vid]` with no `MTLVertexDescriptor` at
+> all, so this facility needed zero dependency on Phase 2's builder. See narrative item 83 for the
+> full implementation writeup.
 
 | ID | Task | Status |
 |---|---|---|
-| METAL-142 | Design decision: raw MSL source via `CompileProgram(vertSrc,fragSrc)`, mirroring every other backend's existing GLSL/HLSL-source `IEffectBackend` convention | ⬜ |
-| METAL-143 | Evaluate and explicitly accept/reject a cross-compiler alternative (e.g. SPIRV-Cross GLSL/HLSL→MSL transpile, itself Linux-buildable) vs. raw-MSL-only scope — document the decision | ⬜ |
-| METAL-144 | `MetalEffectBackend : IEffectBackend` — `CompileProgram()` via `newLibraryWithSource:options:error:`, mirroring the existing `kMetalShaderSource` runtime-compile pattern | ⬜ |
-| METAL-145 | `Bind()`/`Unbind()` — set/clear the custom pipeline (built via Phase 2's generic cache) as the active shader, restoring built-in dispatch afterward | ⬜ |
-| METAL-146 | `SetUniformFloat/Int/Vec2/Vec3/Vec4/Mat4/FloatArray/Vec2Array` — MSL has no GLSL-style named-uniform reflection; pick a fixed documented buffer-layout contract or `MTLRenderPipelineReflection`-based introspection, and document the choice as this backend's MSL contract | ⬜ |
-| METAL-147 | `BindTexture`/`BindTextureCube`/`BindTexture3D` — 2D case can land immediately; cube/3D depend on Phase 11 | ⬜ |
-| METAL-148 | `customEffectBackend` (`GpuDrawParams`) — when non-null, bypass built-in shader selection and draw with the custom pipeline directly, mirroring EasyGL's Task 1079 contract exactly | ⬜ |
-| METAL-149 | `SpriteBatch.SetCustomEffect(Effect*)` — real override once `MetalEffectBackend` exists (currently base no-op) | ⬜ |
-| METAL-150 | `SupportsCapability(GraphicsCapability::CustomEffects)` flips to `true` once this phase lands — remove the `false` case added in `METAL-197` | ⬜ |
-| METAL-151 | `CTest`: `Metal_CustomEffect` — the same color-inversion custom-shader methodology D3D9/D3D11/D3D12/Vulkan/Bgfx already use | ⬜ |
-| METAL-152 | Document the MSL uniform-contract choice (`METAL-146`) — a new `docs/metal-shader-effect-contract.md`, genuinely Metal-specific with no FNA precedent to copy | ⬜ |
+| METAL-142 | Design decision: raw MSL source via `CompileProgram(vertSrc,fragSrc)`, mirroring every other backend's existing GLSL/HLSL-source `IEffectBackend` convention | 🟨 landed 2026-07-21 — see narrative item 83, pending CI |
+| METAL-143 | Evaluate and explicitly accept/reject a cross-compiler alternative (e.g. SPIRV-Cross GLSL/HLSL→MSL transpile, itself Linux-buildable) vs. raw-MSL-only scope — document the decision | ✅ decided: raw MSL only, matching D3D9/D3D11's own literal-HLSL-source / EasyGL's own literal-GLSL-source precedent — no cross-compile step |
+| METAL-144 | `MetalEffectBackend : IEffectBackend` — `CompileProgram()` via `newLibraryWithSource:options:error:`, mirroring the existing `kMetalShaderSource` runtime-compile pattern | 🟨 landed 2026-07-21 — compiles `vertSrc`/`fragSrc` as two separate `MTLLibrary` objects (see narrative item 83 for why no fixed entry-point name is needed), pending CI |
+| METAL-145 | `Bind()`/`Unbind()` — set/clear the custom pipeline (built via Phase 2's generic cache) as the active shader, restoring built-in dispatch afterward | 🟨 landed 2026-07-21, corrected scope: SpriteBatch-only (see this phase's own corrected blocker note above) — `MetalSpriteBatch::Draw()` resolves the pipeline directly via `GetEffectBackendPtr()` every draw call, `Bind()`/`Unbind()` are near-empty by design (no GPU state to defer), pending CI |
+| METAL-146 | `SetUniformFloat/Int/Vec2/Vec3/Vec4/Mat4/FloatArray/Vec2Array` — MSL has no GLSL-style named-uniform reflection; pick a fixed documented buffer-layout contract or `MTLRenderPipelineReflection`-based introspection, and document the choice as this backend's MSL contract | 🟨 landed 2026-07-21 — fixed-slot contract (buffer(2)=mat4, buffer(3)=vec4, buffer(4)=float/int; `FloatArray`/`Vec2Array` left as the inherited no-op default, matching Vulkan/D3D11's identical scope boundary), documented in `docs/metal-shader-effect-contract.md`, pending CI |
+| METAL-147 | `BindTexture`/`BindTextureCube`/`BindTexture3D` — 2D case can land immediately; cube/3D depend on Phase 11 | ⬜ genuinely still open — not implemented (inherits the no-op default), matching `VulkanEffectBackend`/`D3D11EffectBackend`'s own identical scope boundary (texture unit 0 is always driven by the caller/`SpriteBatch`, per `IEffectBackend::BindTexture()`'s own doc comment; no established backend actually implements these for its custom-effect facility) |
+| METAL-148 | `customEffectBackend` (`GpuDrawParams`) — when non-null, bypass built-in shader selection and draw with the custom pipeline directly, mirroring EasyGL's Task 1079 contract exactly | ⬜ genuinely still open, corrected scope: reading `VulkanGraphicsBackend`'s own 3D draw path (`draw3DFor`) shows `customEffectBackend`/`activeCustomEffect_` is consumed *only* inside its `SpriteBatch` flush code, never in the general `DrawIndexedPrimitives`/`DrawUserPrimitives` 3D path — this task as literally worded (general 3D bypass) is not something any established structured-pipeline backend actually does either, only `EasyGLGraphicsBackend` (GL's own layout-flexible attribute binding). Metal's own `GpuDrawParams::customEffectBackend` field is therefore left unconsumed here too, consistent with precedent, not a regression |
+| METAL-149 | `SpriteBatch.SetCustomEffect(Effect*)` — real override once `MetalEffectBackend` exists (currently base no-op) | 🟨 landed 2026-07-21 — `MetalSpriteBatch::SetCustomEffect()` stores the raw `Effect*`, resolved fresh every `Draw()` call, pending CI |
+| METAL-150 | `SupportsCapability(GraphicsCapability::CustomEffects)` flips to `true` once this phase lands — remove the `false` case added in `METAL-197` | 🟨 landed 2026-07-21, pending CI |
+| METAL-151 | `CTest`: `Metal_CustomEffect` — the same color-inversion custom-shader methodology D3D9/D3D11/D3D12/Vulkan/Bgfx already use | 🟨 landed 2026-07-21 as `Metal_SpriteBatch_CustomEffect` (mirrors `D3D9_SpriteBatch_CustomEffect`'s exact 4-check methodology in real MSL; found while writing this that Vulkan/D3D12/Bgfx do not actually have their own dedicated custom-effect `CTest` registered despite this task's own text claiming they do — only `D3D9`/`SDL_Renderer` do — so that part of this task's premise was itself optimistic, not literally true; this Metal test still faithfully mirrors the one real precedent that exists, `D3D9_SpriteBatch_CustomEffect`), pending CI |
+| METAL-152 | Document the MSL uniform-contract choice (`METAL-146`) — a new `docs/metal-shader-effect-contract.md`, genuinely Metal-specific with no FNA precedent to copy | ✅ written 2026-07-21 — `docs/metal-shader-effect-contract.md` |
 
 ## Phase 15 — Virtual resolution / letterbox / window↔logical transforms (METAL-153 – METAL-161)
 

@@ -40,6 +40,7 @@ namespace CNA::Internal::Backends::Metal
                                                                            int multiSampleCount = 0) override;
         void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc, const std::string& fragSrc) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

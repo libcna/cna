@@ -14,6 +14,10 @@
 #include "CNA/Internal/Backends/Metal/MetalBlend.hpp"
 #include "CNA/Internal/Backends/Metal/MetalBlendFunction.hpp"
 #include "CNA/Internal/Backends/Metal/MetalCullMode.hpp"
+// plan_metal.md Phase 14 (METAL-142-152): needs Effect's complete type (not just
+// IGraphicsBackend.hpp's own forward declaration) to call Apply()/GetEffectBackendPtr() from
+// MetalSpriteBatch's custom-effect wiring below.
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
 #ifdef __APPLE__
 #import <Metal/Metal.h>
@@ -1519,6 +1523,187 @@ struct MetalGraphicsBackend::Impl
     }
 };
 
+// plan_metal.md Phase 14 (METAL-142-152): Custom ShaderEffect / MSL contract.
+//
+// Scope decision (METAL-142/143), based on reading VulkanEffectBackend/D3D11EffectBackend/
+// D3D12EffectBackend directly rather than assuming: each of those three carries an explicit
+// "this mechanism is a SpriteBatch-custom-shader facility, not a general arbitrary-vertex-format
+// one" comment. This corrects this plan's own earlier assumption (Phase 14's original header note)
+// that Phase 14 was blocked in full on Phase 2's still-open generic VertexElement-driven descriptor
+// builder (METAL-26/27) -- that broader "arbitrary 3D vertex layout" scope is EasyGL's own unique
+// extra capability (GL's attribute binding is inherently layout-flexible; Vulkan/D3D11/D3D12's
+// structured pipeline objects are not, and neither is Metal's), not something every backend commits
+// to. MetalEffectBackend below is a SpriteBatch-only facility with a FIXED vertex layout matching
+// Metal's own existing Sprite2D pipeline exactly -- no dependency on Phase 2's builder at all.
+//
+// Raw MSL only (METAL-143): no SPIRV-Cross/cross-compile step, matching every other backend's own
+// literal-source-string convention (D3D9/D3D11 take literal HLSL, EasyGL takes literal GLSL) --
+// IEffectBackend::CompileProgram()'s own doc comment already says "Compiles the program from
+// GLSL/HLSL/SPIR-V sources", just MSL here.
+//
+// No fixed entry-point-name convention needed (part of METAL-146's documented choice): vertSrc and
+// fragSrc are compiled as two SEPARATE MTLLibrary objects (matching IEffectBackend::CompileProgram
+// ()'s own two-separate-strings signature), each required to declare exactly one function --
+// compileOneFunction() reads MTLLibrary.functionNames back directly rather than requiring a fixed
+// name, so a custom shader's author is free to name their own entry point anything, the same
+// freedom GLSL/HLSL's single-implicit-entry-point convention already gives every other backend.
+//
+// Uniform contract (METAL-146): MSL has no GLSL-style named-uniform reflection simple enough to
+// build a genuine "SetUniformFloat(name, ...)" on top of (MTLRenderPipelineReflection is argument-
+// table introspection, not a name->offset uniform map) -- so, matching Vulkan's SPIR-V
+// push-constant / D3D11's HLSL constant-buffer precedent (both hit the identical "no simple
+// name-based uniform API" problem and both chose the same answer), this is a fixed, documented
+// buffer-layout contract: every SetUniformXxx()'s `name` parameter is ignored, same as those two
+// backends. See docs/metal-shader-effect-contract.md for the full buffer-index layout a custom
+// vertex/fragment shader pair must match: buffer(0) vertex data, buffer(1) the automatic
+// letterbox-aware U2D transform, buffer(2)/(3)/(4) uMatrix/uColor/uFloat0 -- three separate
+// buffers, each one natural, unpadded Metal type (float4x4/float4/float), deliberately not one
+// combined struct, so there is no `constant`-address-space struct-padding ambiguity for a custom
+// shader's own MSL struct declaration to get wrong.
+//
+// Blend state (a deliberate, documented improvement over the Vulkan/D3D11/D3D12 precedent, not a
+// blind copy): those three hardcode a fixed alpha blend inside the custom pipeline, silently
+// ignoring whatever BlendState SpriteBatch.Begin(sortMode, blendState, ..., effect) requested --
+// Metal's own existing pipeline cache (getOrCreatePipeline()) is already blend-state-aware, so
+// pipelineFor() below keys its own single-entry pipeline cache off the real currentBlend, matching
+// real XNA/FNA behavior (blendState and effect are independent Begin() parameters; a custom effect
+// does not turn off blend-state support) rather than reproducing a gap found only by inspection.
+class MetalEffectBackend final : public IEffectBackend
+{
+public:
+    explicit MetalEffectBackend(MetalGraphicsBackend::Impl& owner) : owner_(owner) {}
+    ~MetalEffectBackend() override
+    {
+        if (pipeline_) [pipeline_ release];
+        if (vertFn_) [vertFn_ release];
+        if (fragFn_) [fragFn_ release];
+    }
+
+    bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override
+    {
+        compileError_.clear();
+        if (pipeline_) { [pipeline_ release]; pipeline_ = nil; }
+        if (vertFn_) { [vertFn_ release]; vertFn_ = nil; }
+        if (fragFn_) { [fragFn_ release]; fragFn_ = nil; }
+        valid_ = false;
+
+        id<MTLFunction> vf = compileOneFunction(vertSrc, "vertex");
+        if (!vf) return false;
+        id<MTLFunction> ff = compileOneFunction(fragSrc, "fragment");
+        if (!ff) { [vf release]; return false; }
+
+        vertFn_ = vf;
+        fragFn_ = ff;
+        valid_ = true;
+        return true;
+    }
+
+    // No GPU state to defer -- unlike D3D11 (whose own Bind() issues real IASetInputLayout/
+    // VSSetShader/PSSetShader calls immediately, since D3D11 has no separate pipeline-object
+    // assembly step), Metal's pipeline object is already fully assembled by CompileProgram()/
+    // pipelineFor(); MetalSpriteBatch::Draw() reads this effect's compiled pipeline/uniform bytes
+    // directly via GetEffectBackendPtr(), so Bind()/Unbind() only need to satisfy the interface
+    // contract, matching Vulkan's own near-empty Bind()/Unbind() for the identical reason.
+    void Bind() override {}
+    void Unbind() override {}
+    [[nodiscard]] bool IsValid() const override { return valid_; }
+    [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+
+    // Fixed-slot contract (see this class's own header comment): `name` is always ignored.
+    void SetUniformMat4(const char*, const float* matrix) override { std::memcpy(uMatrix_, matrix, sizeof(uMatrix_)); }
+    void SetUniformVec4(const char*, float x, float y, float z, float w) override { uColor_[0]=x; uColor_[1]=y; uColor_[2]=z; uColor_[3]=w; }
+    void SetUniformVec3(const char*, float x, float y, float z) override { uColor_[0]=x; uColor_[1]=y; uColor_[2]=z; }
+    void SetUniformVec2(const char*, float x, float y) override { uColor_[0]=x; uColor_[1]=y; }
+    void SetUniformFloat(const char*, float value) override { uFloat0_ = value; }
+    void SetUniformInt(const char*, int value) override { uFloat0_ = (float)value; }
+
+    // Called by MetalSpriteBatch::Draw() once per draw call (not once per Begin(), unlike the
+    // D3D11/Vulkan precedent's own once-per-flush Bind() -- Metal's SpriteBatch issues one
+    // immediate draw per sprite rather than batching a whole Begin/End block into one flush, so
+    // re-reading this effect's current uniform bytes on every draw call is both simpler and more
+    // correct: a SetUniformXxx() call between two Draw()s in the same Begin/End genuinely takes
+    // effect on the next sprite, not just the next batch).
+    id<MTLRenderPipelineState> pipelineFor(const BlendKey& blend)
+    {
+        if (pipeline_ && blend == lastBlend_) return pipeline_;
+        if (pipeline_) { [pipeline_ release]; pipeline_ = nil; }
+        MTLRenderPipelineDescriptor* d = [[MTLRenderPipelineDescriptor alloc] init];
+        d.vertexFunction = vertFn_;
+        d.fragmentFunction = fragFn_;
+        d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+        d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        d.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        d.colorAttachments[0].blendingEnabled = blend.enabled ? YES : NO;
+        if (blend.enabled) {
+            d.colorAttachments[0].sourceRGBBlendFactor = metalBlendFactor(blend.colorSrc);
+            d.colorAttachments[0].destinationRGBBlendFactor = metalBlendFactor(blend.colorDst);
+            d.colorAttachments[0].rgbBlendOperation = metalBlendOp(blend.colorFunc);
+            d.colorAttachments[0].sourceAlphaBlendFactor = metalBlendFactor(blend.alphaSrc);
+            d.colorAttachments[0].destinationAlphaBlendFactor = metalBlendFactor(blend.alphaDst);
+            d.colorAttachments[0].alphaBlendOperation = metalBlendOp(blend.alphaFunc);
+        }
+        NSError* err = nil;
+        pipeline_ = [owner_.device newRenderPipelineStateWithDescriptor:d error:&err];
+        [d release];
+        if (!pipeline_) {
+            compileError_ = std::string("Metal custom-effect pipeline compile failed: ") +
+                             (err ? [[err localizedDescription] UTF8String] : "unknown");
+            valid_ = false;
+            return nil;
+        }
+        lastBlend_ = blend;
+        return pipeline_;
+    }
+
+    [[nodiscard]] const float* GetMatrix() const { return uMatrix_; }
+    [[nodiscard]] const float* GetColor() const { return uColor_; }
+    [[nodiscard]] float GetFloat0() const { return uFloat0_; }
+
+private:
+    // Compiles `src` as its own standalone MTLLibrary and returns its sole function -- see this
+    // class's own header comment for why no fixed entry-point name is required.
+    id<MTLFunction> compileOneFunction(const std::string& src, const char* stageLabel)
+    {
+        NSString* srcStr = [NSString stringWithUTF8String:src.c_str()];
+        NSError* err = nil;
+        id<MTLLibrary> lib = [owner_.device newLibraryWithSource:srcStr options:nil error:&err];
+        if (!lib) {
+            compileError_ = std::string("Metal ") + stageLabel + " compile failed: " +
+                             (err ? [[err localizedDescription] UTF8String] : "unknown");
+            return nil;
+        }
+        NSArray<NSString*>* names = [lib functionNames];
+        if (names.count != 1) {
+            compileError_ = std::string("Metal ") + stageLabel +
+                             " source must declare exactly one function, found " +
+                             std::to_string((int)names.count);
+            [lib release];
+            return nil;
+        }
+        id<MTLFunction> fn = [lib newFunctionWithName:names[0]];
+        [lib release];
+        if (!fn) {
+            compileError_ = std::string("Metal ") + stageLabel + " function lookup failed";
+            return nil;
+        }
+        return fn;
+    }
+
+    MetalGraphicsBackend::Impl& owner_;
+    id<MTLFunction> vertFn_ = nil;
+    id<MTLFunction> fragFn_ = nil;
+    id<MTLRenderPipelineState> pipeline_ = nil;
+    BlendKey lastBlend_{};
+    bool valid_ = false;
+    std::string compileError_;
+    // Defaults match the identity matrix / transparent-black color / zero scalar a fresh custom
+    // effect should read before any SetUniformXxx() call, mirroring Vulkan/D3D11's own
+    // zero-initialized push-constant/constant-buffer default.
+    float uMatrix_[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+    float uColor_[4] = {0,0,0,0};
+    float uFloat0_ = 0.0f;
+};
+
 class MetalSpriteBatch final : public ISpriteBatchBackend
 {
 public:
@@ -1534,6 +1719,11 @@ public:
     // uses -- CPU-side, not threaded through the vertex shader, so identity (the default) costs
     // nothing extra and is provably a no-op.
     void SetTransformMatrix(const Matrix& m) override { transform_=m; }
+    // plan_metal.md Phase 14 (METAL-145/148/149): mirrors D3D11SpriteBatchBackend's own
+    // `customEffect_ = effect;` (just stores the raw Effect* -- the actual IEffectBackend is
+    // resolved fresh in Draw() via GetEffectBackendPtr(), never cached here, so a mid-batch
+    // Effect::Clone()/reassignment can't leave this pointing at a stale backend).
+    void SetCustomEffect(Effect* effect) override { customEffect_=effect; }
     void Draw(const ITextureBackend& t,float x,float y) override { Rectangle d((int)x,(int)y,t.GetWidth(),t.GetHeight()); Rectangle s(0,0,t.GetWidth(),t.GetHeight()); Draw(t,d,s,Color::White); }
     void Draw(const ITextureBackend& t,const Rectangle& d,const Rectangle& s,const Color& c) override { Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0); }
     void Draw(const ITextureBackend& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float) override
@@ -1564,10 +1754,32 @@ public:
         // ignoring virtual resolution/letterboxing entirely -- now the real scale+offset transform.
         auto st=p.computeSpriteTransform();
         struct U{float sx,sy,ox,oy;} u{st.scaleX,st.scaleY,st.offsetX,st.offsetY};
-        [p.encoder setRenderPipelineState:p.getOrCreatePipeline(PipelineKind::Sprite2D)]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
+        // plan_metal.md Phase 14 (METAL-145/148): resolved fresh every Draw() call, not cached
+        // across the Begin/End block -- see MetalEffectBackend::pipelineFor()'s own comment for why
+        // this (deliberately) makes a SetUniformXxx() call between two Draw()s take effect on the
+        // very next sprite, unlike the D3D11/Vulkan once-per-flush precedent.
+        MetalEffectBackend* ceb=nullptr;
+        if (customEffect_) {
+            customEffect_->Apply();
+            ceb=dynamic_cast<MetalEffectBackend*>(customEffect_->GetEffectBackendPtr());
+            if (ceb && !ceb->IsValid()) ceb=nullptr;
+        }
+        id<MTLRenderPipelineState> pipe = ceb ? ceb->pipelineFor(p.currentBlend) : nil;
+        // pipelineFor() can return nil on a genuine (rare, hardware/driver-level) pipeline-compile
+        // failure even though CompileProgram() itself already succeeded -- falls back to the stock
+        // Sprite2D pipeline rather than passing nil to setRenderPipelineState: (a hard Metal API
+        // misuse, not a recoverable-looking failure) so a real GPU-side error still degrades to
+        // "sprite drew with the stock shader" instead of a crash.
+        if (!pipe) { pipe=p.getOrCreatePipeline(PipelineKind::Sprite2D); ceb=nullptr; }
+        [p.encoder setRenderPipelineState:pipe]; [p.encoder setVertexBytes:vs length:sizeof(vs) atIndex:0]; [p.encoder setVertexBytes:&u length:sizeof(u) atIndex:1];
+        if (ceb) {
+            const float* m=ceb->GetMatrix(); const float* col=ceb->GetColor(); float f0=ceb->GetFloat0();
+            [p.encoder setVertexBytes:m length:16*sizeof(float) atIndex:2]; [p.encoder setVertexBytes:col length:4*sizeof(float) atIndex:3]; [p.encoder setVertexBytes:&f0 length:sizeof(float) atIndex:4];
+            [p.encoder setFragmentBytes:m length:16*sizeof(float) atIndex:2]; [p.encoder setFragmentBytes:col length:4*sizeof(float) atIndex:3]; [p.encoder setFragmentBytes:&f0 length:sizeof(float) atIndex:4];
+        }
         [p.encoder setFragmentTexture:nativeTex atIndex:0]; [p.encoder setFragmentSamplerState:p.samplerFor(filter_,addressU_,addressV_,1) atIndex:0]; [p.encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6];
     }
-private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty();
+private: MetalGraphicsBackend& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
 };
 
 // plan_metal.md METAL-136-139: real occlusion queries via a shared MTLVisibilityResultBuffer slot
@@ -2058,6 +2270,14 @@ void MetalGraphicsBackend::ReadBackbuffer(int x,int y,int w,int h,uint8_t* pixel
 SDL_Window* MetalGraphicsBackend::GetWindowInternal()const{return impl_->window;} SDL_Renderer* MetalGraphicsBackend::GetRendererInternal()const{return nullptr;}
 std::unique_ptr<ITextureBackend> MetalGraphicsBackend::CreateTexture(const ImageData& d){return std::make_unique<MetalTexture>(impl_->device,impl_->queue,d);} std::unique_ptr<ISpriteBatchBackend> MetalGraphicsBackend::CreateSpriteBatch(){return std::make_unique<MetalSpriteBatch>(*this);}
 std::unique_ptr<ITextureCubeBackend> MetalGraphicsBackend::CreateTextureCube(int size,bool mipMap,int /*surfaceFormat*/){return std::make_unique<MetalTextureCube>(impl_->device,impl_->queue,size,mipMap);}
+// plan_metal.md METAL-144: mirrors CreateTexture()/CreateTextureCube()'s own established
+// "construct the concrete backend class against impl_'s live Apple objects" shape.
+std::unique_ptr<IEffectBackend> MetalGraphicsBackend::CreateEffectBackend(const std::string& vertSrc,const std::string& fragSrc)
+{
+    auto backend=std::make_unique<MetalEffectBackend>(*impl_);
+    if (!vertSrc.empty() && !fragSrc.empty()) backend->CompileProgram(vertSrc,fragSrc);
+    return backend;
+}
 std::unique_ptr<IOcclusionQueryBackend> MetalGraphicsBackend::CreateOcclusionQuery()
 {
     auto& p=*impl_;
@@ -2415,12 +2635,15 @@ bool MetalGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability
     // 2026-07-19 (METAL-136-139) now that CreateOcclusionQuery() is real, not a stub.
     switch (capability) {
         case CNA::GraphicsCapability::MultipleRenderTargets:     return false; // plan_metal.md METAL-112
-        case CNA::GraphicsCapability::CustomEffects:              return false; // plan_metal.md METAL-144
+        // plan_metal.md METAL-150: flipped to real/true 2026-07-21 now that CreateEffectBackend()/
+        // MetalEffectBackend/MetalSpriteBatch::SetCustomEffect() are real (Phase 14), not a stub --
+        // same "revert the explicit false once the feature lands" pattern OcclusionQuery followed.
+        case CNA::GraphicsCapability::CustomEffects:              return true; // plan_metal.md METAL-150
         // plan_metal.md METAL-191: CreateRenderTarget2D() silently ignores its multiSampleCount
         // parameter (METAL-103/104 still open, see the comment right above that function) -- the
         // backbuffer itself is also never allocated with a sample count above 1. A blanket `true`
         // here would be the same class of false-positive METAL-192/195/196 already fixed for MRT/
-        // OcclusionQuery/CustomEffects, just not caught until this same pass reviewed Phase 20 fresh.
+        // OcclusionQuery, just not caught until this same pass reviewed Phase 20 fresh.
         case CNA::GraphicsCapability::MultiSampleAntiAliasing:    return false; // plan_metal.md METAL-104
         default: return true;
     }
