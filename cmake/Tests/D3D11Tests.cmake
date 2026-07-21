@@ -102,4 +102,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_d3d11_ctest_command(_d3d11_viewspace_fog_cmd cna_test_d3d11_viewspace_fog)
     cna_register_backend_test(NAME D3D11_ViewSpaceFog COMMAND ${_d3d11_viewspace_fog_cmd}
         TIMEOUT 60 LABELS "D3D11")
+
+    # REMED-GFX-005/010: AlphaTestEffect fog (its own scalar-fog cbuffer, restructured to carry the
+    # FNA fog vector). Identity-View mirror discriminator: at z=0.45 the mirrored factor gives no fog,
+    # the corrected FNA factor gives half fog. Reused verbatim from the Vulkan-authored source.
+    cna_d3d11_test(cna_test_d3d11_alphatest_fog examples/vulkan_alphatest_fog_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_alphatest_fog_cmd cna_test_d3d11_alphatest_fog)
+    cna_register_backend_test(NAME D3D11_AlphaTest_Fog COMMAND ${_d3d11_alphatest_fog_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 endif()

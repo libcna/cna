@@ -10,12 +10,11 @@ cbuffer PerDraw : register(b0)
     row_major float4x4 Mvp;    // offset  0  (64 bytes)
     float4 DiffuseColor;       // offset 64  (16 bytes)
     float4 AlphaTestParams;    // offset 80  (16 bytes) -- unused here, read only in the PS
-    float  VertexColorEnabled; // offset 96  -- unused here (this variant has no color attribute)
-    // Task 888: fog, packed into what was previously unused padding.
-    float  FogEnabled;         // offset 100
-    float  FogStart;           // offset 104
-    float  FogEnd;              // offset 108
+    // REMED-GFX-005/010: FNA view-space fog vector (was the VertexColorEnabled/FogEnabled/FogStart/
+    // FogEnd scalar quartet). Dotted with float4(pos,1); zero vector = no fog.
+    float4 FogVector;          // offset 96
     float3 FogColor;           // offset 112
+    float  VertexColorEnabled; // offset 124 -- unused here (this variant has no color attribute)
 };
 
 struct VSInput
@@ -41,11 +40,10 @@ VSOutput main(VSInput input)
     output.UV = input.UV;
     output.Tint = DiffuseColor;
 
-    // Task 888: fog factor from raw object-space Z (matches EasyGL's established formula
-    // exactly). 1.0 = no fog, 0.0 = full fog.
-    output.FogFactor = (FogEnabled > 0.5)
-        ? saturate((FogEnd - input.Position.z) / max(FogEnd - FogStart, 1e-6))
-        : 1.0;
+    // REMED-GFX-005/010: FNA view-space fog. keep = 1 - saturate(dot(objectPos, fogVector)); the
+    // vector bakes World*View's 3rd column (eye-space Z), the corrected non-mirrored FNA factor.
+    // 1.0 = no fog, 0.0 = full fog; a zero fog vector (disabled) yields keep = 1.
+    output.FogFactor = 1.0 - saturate(dot(float4(input.Position, 1.0), FogVector));
 
     return output;
 }

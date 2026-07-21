@@ -11,11 +11,10 @@ cbuffer PerDraw : register(b0)
     row_major float4x4 Mvp;    // offset  0  (64 bytes)
     float4 DiffuseColor;       // offset 64  (16 bytes)
     float4 AlphaTestParams;    // offset 80  (16 bytes) -- unused here, read only in the PS
-    float  VertexColorEnabled; // offset 96
-    float  FogEnabled;         // offset 100
-    float  FogStart;           // offset 104
-    float  FogEnd;             // offset 108
+    // REMED-GFX-005/010: FNA view-space fog vector (was VertexColorEnabled/FogEnabled/FogStart/FogEnd).
+    float4 FogVector;          // offset 96
     float3 FogColor;           // offset 112
+    float  VertexColorEnabled; // offset 124
 };
 
 struct VSInput
@@ -45,10 +44,9 @@ VSOutput main(VSInput input)
     // colored_textured3d.vert.hlsl's own established pattern).
     output.Tint = (VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor;
 
-    // Fog factor from raw object-space Z (matches the established Task 888 formula).
-    output.FogFactor = (FogEnabled > 0.5)
-        ? saturate((FogEnd - input.Position.z) / max(FogEnd - FogStart, 1e-6))
-        : 1.0;
+    // REMED-GFX-005/010: FNA view-space fog. keep = 1 - saturate(dot(objectPos, fogVector)); the
+    // vector bakes World*View's 3rd column (eye-space Z), the corrected non-mirrored FNA factor.
+    output.FogFactor = 1.0 - saturate(dot(float4(input.Position, 1.0), FogVector));
 
     return output;
 }

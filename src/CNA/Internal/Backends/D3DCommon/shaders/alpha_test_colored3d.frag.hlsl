@@ -16,11 +16,11 @@ cbuffer PerDraw : register(b0)
     float  AlphaTol;           // offset 84 -- tolerance (>0 = equality test, 0 = comparison)
     float  AlphaPassW;         // offset 88 -- weight when test passes  (< 0 = discard)
     float  AlphaFailW;         // offset 92 -- weight when test fails   (< 0 = discard)
-    float  VertexColorEnabled; // offset 96 -- unused here (read only in the VS)
-    float  FogEnabled;         // offset 100
-    float  FogStart;           // offset 104
-    float  FogEnd;             // offset 108
+    // REMED-GFX-005/010: FNA view-space fog vector (used only by the VS; declared here for the
+    // shared b0 layout). Replaces the former VertexColorEnabled/FogEnabled/FogStart/FogEnd quartet.
+    float4 FogVector;          // offset 96
     float3 FogColor;           // offset 112
+    float  VertexColorEnabled; // offset 124 -- unused here (read only in the VS)
 };
 
 struct PSInput

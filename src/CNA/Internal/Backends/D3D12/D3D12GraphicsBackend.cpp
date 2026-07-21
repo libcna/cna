@@ -1687,9 +1687,11 @@ namespace CNA::Internal::Backends::D3D12
             c.AlphaPassW         = params.alphaTest[2];
             c.AlphaFailW         = params.alphaTest[3];
             c.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
-            c.FogEnabled         = params.fogEnabled ? 1.0f : 0.0f;
-            c.FogStart           = params.fogStart;
-            c.FogEnd             = params.fogEnd;
+            // REMED-GFX-005/010: FNA view-space fog vector into the restructured cbuffer slot.
+            c.FogVector[0] = params.fogVector[0];
+            c.FogVector[1] = params.fogVector[1];
+            c.FogVector[2] = params.fogVector[2];
+            c.FogVector[3] = params.fogVector[3];
             c.FogColor[0] = params.fogColor[0];
             c.FogColor[1] = params.fogColor[1];
             c.FogColor[2] = params.fogColor[2];

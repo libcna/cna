@@ -107,11 +107,11 @@ namespace CNA::Internal::Backends::D3DCommon
         float AlphaTol;             ///< offset 84: tolerance (>0 = equality test, 0 = comparison)
         float AlphaPassW;           ///< offset 88: weight when test passes (<0 = discard)
         float AlphaFailW;           ///< offset 92: weight when test fails  (<0 = discard)
-        float VertexColorEnabled;   ///< offset 96 (unused by alpha_test3d's VSInput -- no color attribute)
-        float FogEnabled;           ///< offset 100
-        float FogStart;             ///< offset 104
-        float FogEnd;               ///< offset 108
+        float FogVector[4];         ///< offset 96: REMED-GFX-005/010 FNA view-space fog vector (dotted
+                                     ///< with float4(pos,1) in the VS). Replaces the former scalar
+                                     ///< VertexColorEnabled/FogEnabled/FogStart/FogEnd quartet. All-zero = no fog.
         float FogColor[3];          ///< offset 112
+        float VertexColorEnabled;   ///< offset 124: moved here from 96 (only alpha_test_colored3d's VS reads it)
     };
     static_assert(sizeof(D3DAlphaTestConstants) == 128, "D3DAlphaTestConstants must match alpha_test3d's real 128-byte HLSL cbuffer size");
     static_assert(offsetof(D3DAlphaTestConstants, DiffuseColor) == 64, "D3DAlphaTestConstants field offset mismatch vs HLSL");
@@ -119,11 +119,9 @@ namespace CNA::Internal::Backends::D3DCommon
     static_assert(offsetof(D3DAlphaTestConstants, AlphaTol) == 84, "D3DAlphaTestConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DAlphaTestConstants, AlphaPassW) == 88, "D3DAlphaTestConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DAlphaTestConstants, AlphaFailW) == 92, "D3DAlphaTestConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DAlphaTestConstants, VertexColorEnabled) == 96, "D3DAlphaTestConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DAlphaTestConstants, FogEnabled) == 100, "D3DAlphaTestConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DAlphaTestConstants, FogStart) == 104, "D3DAlphaTestConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DAlphaTestConstants, FogEnd) == 108, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, FogVector) == 96, "D3DAlphaTestConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DAlphaTestConstants, FogColor) == 112, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, VertexColorEnabled) == 124, "D3DAlphaTestConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DAlphaTestConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
     /// DX-60a: matches skinned3d.vert.hlsl's `cbuffer BoneBlock : register(b1)` byte-for-byte --
