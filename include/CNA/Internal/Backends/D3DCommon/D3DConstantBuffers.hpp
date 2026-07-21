@@ -156,8 +156,10 @@ namespace CNA::Internal::Backends::D3DCommon
         float Light0Specular[4];       ///< offset 192
         float Light1Specular[4];       ///< offset 208
         float Light2Specular[4];       ///< offset 224
+        float EmissiveColor[4];        ///< offset 240: REMED-GFX-008 pre-folded (emissive + ambient*diffuse)*alpha
     };
-    static_assert(sizeof(D3DSkinnedExtraConstants) == 240, "D3DSkinnedExtraConstants must match skinned3d's real 240-byte FogParams cbuffer size");
+    static_assert(sizeof(D3DSkinnedExtraConstants) == 256, "D3DSkinnedExtraConstants must match skinned3d's real 256-byte FogParams cbuffer size");
+    static_assert(offsetof(D3DSkinnedExtraConstants, EmissiveColor) == 240, "D3DSkinnedExtraConstants EmissiveColor offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, Light1Dir) == 32, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, World) == 96, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, EyePosition) == 160, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");

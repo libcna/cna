@@ -38,6 +38,7 @@ cbuffer FogParams : register(b2)
     float4 Light0SpecPad;
     float4 Light1SpecPad;
     float4 Light2SpecPad;
+    float4 EmissiveColor;   // REMED-GFX-008: pre-folded (emissive + ambient*diffuse)*alpha
 };
 
 struct VSInput
@@ -96,7 +97,7 @@ VSOutput main(VSInput input)
     float3 lightSum = Light0Diffuse * NdotL0
                      + Light1DiffPad.xyz * NdotL1
                      + Light2DiffPad.xyz * NdotL2;
-    output.LitRGB = (AmbientColor + lightSum) * DiffuseColor.rgb;
+    output.LitRGB = lightSum * DiffuseColor.rgb + EmissiveColor.rgb;
 
     float specularPower = SpecularColorPower.w;
     float3 h0 = normalize(E - normalize(Light0Dir));        float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, specularPower);

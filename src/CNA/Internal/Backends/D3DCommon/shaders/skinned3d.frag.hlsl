@@ -32,6 +32,7 @@ cbuffer FogParams : register(b2)
     float4 Light0SpecPad;
     float4 Light1SpecPad;
     float4 Light2SpecPad;
+    float4 EmissiveColor;   // REMED-GFX-008: pre-folded (emissive + ambient*diffuse)*alpha
 };
 
 struct PSInput
@@ -53,7 +54,7 @@ float4 main(PSInput input) : SV_Target
     float3 lightSum = Light0Diffuse * NdotL0
                      + Light1DiffPad.xyz * NdotL1
                      + Light2DiffPad.xyz * NdotL2;
-    float3 litRGB = (AmbientColor + lightSum) * DiffuseColor.rgb;
+    float3 litRGB = lightSum * DiffuseColor.rgb + EmissiveColor.rgb;
     float specularPower = SpecularColorPower.w;
     float3 h0 = normalize(E - normalize(Light0Dir));       float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, specularPower);
     float3 h1 = normalize(E - normalize(Light1DirPad.xyz)); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, specularPower);

@@ -37,6 +37,7 @@ cbuffer FogParams : register(b2)
     float4 Light0SpecPad;
     float4 Light1SpecPad;
     float4 Light2SpecPad;
+    float4 EmissiveColor;   // REMED-GFX-008: pre-folded (emissive + ambient*diffuse)*alpha
 };
 
 struct VSInput

@@ -94,6 +94,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_register_backend_test(NAME D3D11_SkinnedEffect_WorldNormal COMMAND ${_d3d11_skinned_world_normal_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-008: analytic SkinnedEffect ambient/emissive lighting conformance (shared harness).
+    cna_d3d11_test(cna_test_d3d11_skinnedeffect_lighting_conformance examples/skinnedeffect_lighting_conformance_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_skinned_lighting_conformance_cmd cna_test_d3d11_skinnedeffect_lighting_conformance)
+    cna_register_backend_test(NAME D3D11_SkinnedEffect_LightingConformance COMMAND ${_d3d11_skinned_lighting_conformance_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # REMED-GFX-005/010: fog must use FNA's view-space fog vector (corrected, non-mirrored, eye-space
     # Z), not object-space Z. The shared transformed-camera harness (ViewSpaceFogRef) holds cases where
     # object-space Z != view-space Z, so it discriminates both the mirror (GFX-005) and the

@@ -1637,6 +1637,12 @@ namespace CNA::Internal::Backends::D3D11
             extra.Light2Specular[0] = params.light2Specular[0];
             extra.Light2Specular[1] = params.light2Specular[1];
             extra.Light2Specular[2] = params.light2Specular[2];
+            // REMED-GFX-008: pre-folded (emissive + ambient*diffuse)*alpha. The skinned shaders add
+            // this AFTER lightSum*DiffuseColor; previously the skinned frag/vert-lit shaders read the
+            // always-zero AmbientColor and never added emissive, dropping both.
+            extra.EmissiveColor[0] = params.emissiveColor[0];
+            extra.EmissiveColor[1] = params.emissiveColor[1];
+            extra.EmissiveColor[2] = params.emissiveColor[2];
 
             ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
             ID3D11Buffer* boneCB = GetOrCreateBoneConstantBufferEXT();
