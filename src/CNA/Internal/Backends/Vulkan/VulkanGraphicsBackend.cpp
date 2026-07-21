@@ -916,11 +916,23 @@ namespace CNA::Internal::Backends::Vulkan
         rot(p2x, p2y, v2x, v2y);
         rot(p3x, p3y, v3x, v3y);
 
+        // REMED-GFX-012: apply SpriteBatch's transform matrix here, in pixel space, before upload.
+        // sprite2d.vert.glsl maps a raw pixel-space Position straight to NDC via viewportSize with
+        // no projection-matrix uniform, so this is the correct place -- mathematically equivalent
+        // to XNA's combined = transformMatrix * orthographicProjection, evaluated CPU-side, exactly
+        // as D3D11SpriteBatchBackend does for the identical Sprite2DVertex/shader contract.
+        // Previously omitted entirely (SetTransformMatrix was unoverridden), so this transform was
+        // silently dropped on Vulkan.
+        const Vector2 tv0 = Vector2::Transform(Vector2(v0x, v0y), transform_);
+        const Vector2 tv1 = Vector2::Transform(Vector2(v1x, v1y), transform_);
+        const Vector2 tv2 = Vector2::Transform(Vector2(v2x, v2y), transform_);
+        const Vector2 tv3 = Vector2::Transform(Vector2(v3x, v3y), transform_);
+
         auto base = static_cast<uint16_t>(vertices_.size());
-        vertices_.push_back({v0x, v0y, u1, v1, r, g, b, a});
-        vertices_.push_back({v1x, v1y, u2, v1, r, g, b, a});
-        vertices_.push_back({v2x, v2y, u2, v2, r, g, b, a});
-        vertices_.push_back({v3x, v3y, u1, v2, r, g, b, a});
+        vertices_.push_back({tv0.X, tv0.Y, u1, v1, r, g, b, a});
+        vertices_.push_back({tv1.X, tv1.Y, u2, v1, r, g, b, a});
+        vertices_.push_back({tv2.X, tv2.Y, u2, v2, r, g, b, a});
+        vertices_.push_back({tv3.X, tv3.Y, u1, v2, r, g, b, a});
 
         indices_.insert(indices_.end(),
             {static_cast<uint16_t>(base),

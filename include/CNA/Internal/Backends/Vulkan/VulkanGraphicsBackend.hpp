@@ -271,6 +271,14 @@ namespace CNA::Internal::Backends::Vulkan
 
         void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
 
+        // REMED-GFX-012 fix: previously unoverridden, so SpriteBatch.Begin(transformMatrix) fell
+        // through to IGraphicsBackend::SetTransformMatrix()'s shared no-op default and the
+        // transform was silently discarded on Vulkan specifically (the only affected backend of
+        // 14). Stored here and applied CPU-side per vertex in Draw() (see the .cpp), mirroring
+        // D3D11SpriteBatchBackend's design -- same raw-pixel-space Sprite2DVertex/viewportSize
+        // shader contract, so there is no projection-matrix uniform to fold it into GPU-side.
+        void SetTransformMatrix(const Matrix& m) override { transform_ = m; }
+
         // Task 665 fix: previously unoverridden (silent no-op via the base class's default
         // empty bodies). Stores pending values applied via VulkanGraphicsBackend::
         // ApplySamplerState(0, ...) (Task 118's existing per-slot VkSampler cache) at flush
@@ -313,6 +321,10 @@ namespace CNA::Internal::Backends::Vulkan
         bool                             active_              = false;
         Effect*                          customEffect_        = nullptr;
         VulkanEffectBackend*             customEffectBackend_ = nullptr;
+        // REMED-GFX-012: SpriteBatch.Begin(transformMatrix), applied per vertex in Draw(). Always
+        // (re-)set by SpriteBatch::Begin() before this backend's Begin(), so it is never stale;
+        // defaults to Identity for the no-transform overload.
+        Matrix                           transform_           = Matrix::getIdentityProperty();
         std::vector<Sprite2DVertex>      vertices_;
         std::vector<uint16_t>            indices_;
         std::vector<DrawCall>            draws_;
