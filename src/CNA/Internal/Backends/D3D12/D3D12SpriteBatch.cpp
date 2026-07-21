@@ -255,7 +255,10 @@ namespace CNA::Internal::Backends::D3D12
         D3D12_CPU_DESCRIPTOR_HANDLE rtv = owner_->GetBoundColorRtvEXT();
         cmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
-        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(vpW), static_cast<float>(vpH), 0.0f, 1.0f};
+        // REMED-GFX-064: honor a custom GraphicsDevice.Viewport for sprite draws too (the GPU
+        // viewport rectangle). vpW/vpH above still drive the sprite2d ViewportSize projection
+        // uniform (full target / virtual resolution); the GPU viewport rectangle is independent.
+        D3D12_VIEWPORT viewport = owner_->GetEffectiveViewportEXT();
         D3D12_RECT scissor{0, 0, vpW, vpH};
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);

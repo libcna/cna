@@ -171,6 +171,20 @@ namespace CNA::Internal::Backends::D3D12
         /// (harmless, no-op) but never consumed by any draw.
         void ApplySamplerState(int slot, int filter, int addressU, int addressV,
                                int maxAnisotropy) override;
+        /// REMED-GFX-064: real, runtime-settable GraphicsDevice.Viewport. Stores the sub-region
+        /// viewport rect + depth range; every draw path re-records its own command list fresh
+        /// (immediate-per-draw model), so each RSSetViewports site simply reads the stored value
+        /// back through GetEffectiveViewportEXT() -- no capture/replay is needed (unlike the
+        /// deferred Vulkan/SdlGpu backends). Before this task D3D12 never overrode the no-op base
+        /// SetViewport and hardcoded a full-target D3D12_VIEWPORT at all four RSSetViewports sites
+        /// (+ the sprite path), so a custom Viewport was a total no-op on backbuffer and RT alike.
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
+        /// REMED-GFX-064: the D3D12_VIEWPORT every draw must set -- the custom Viewport stored by
+        /// SetViewport() if one was set (unclamped rect, top-left origin, depth clamped to [0,1]),
+        /// otherwise the full bound-target rect ({0,0,boundColorWidth_,boundColorHeight_,0,1},
+        /// byte-identical to the pre-fix hardcode). Shared by the 4 backend draw paths and the
+        /// D3D12 SpriteBatch flush (which reads it via owner_).
+        [[nodiscard]] D3D12_VIEWPORT GetEffectiveViewportEXT() const;
 
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
@@ -665,6 +679,19 @@ namespace CNA::Internal::Backends::D3D12
         DXGI_FORMAT boundColorFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int boundColorWidth_ = 0;
         int boundColorHeight_ = 0;
+        // REMED-GFX-064: current GraphicsDevice.Viewport, set by SetViewport() and consumed at
+        // every RSSetViewports site via GetEffectiveViewportEXT(). viewportSet_ stays false until
+        // a viewport is pushed, so pre-viewport draws fall back to the full bound-target rect,
+        // byte-identical to the pre-fix hardcode. SetRenderTarget resets Viewport to the new
+        // target's full size at the GraphicsDevice layer (ResetViewportAndScissorForRenderTarget
+        // -> SetViewport(0,0,w,h)), so no per-target reset is needed inside the backend.
+        bool viewportSet_ = false;
+        int viewportX_ = 0;
+        int viewportY_ = 0;
+        int viewportW_ = 0;
+        int viewportH_ = 0;
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
         // DX-118: optional real DSV bound alongside the color target above -- ptr==0 means unbound,
         // matching every draw path's pre-DX-118 "null DSV" behavior exactly when nothing sets one.
         D3D12_CPU_DESCRIPTOR_HANDLE boundDsv_{};

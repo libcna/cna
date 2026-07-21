@@ -677,6 +677,12 @@ namespace CNA::Internal::Backends::D3D12
         boundColorHeight_ = height;
         boundDsv_ = dsv;
         boundDsvFormat_ = dsvFormat;
+        // REMED-GFX-064: binding a target resets the custom Viewport to that target's full size
+        // (mirrors XNA's SetRenderTarget reset; here viewportSet_=false => the full-target fallback
+        // in GetEffectiveViewportEXT). In production GraphicsDevice re-sets it explicitly right
+        // after; this also keeps backend-direct callers (e.g. the smoke test) from leaking a stale
+        // viewport across targets.
+        viewportSet_ = false;
     }
 
     void D3D12GraphicsBackend::UnbindOffscreenColorTargetEXT()
@@ -687,6 +693,39 @@ namespace CNA::Internal::Backends::D3D12
         boundDsv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
         boundDsvFormat_ = DXGI_FORMAT_UNKNOWN;
         extraMrtCount_ = 0; // DX-117: MRT extras are only ever meaningful alongside a bound primary
+        viewportSet_ = false; // REMED-GFX-064: target-change resets the custom Viewport
+    }
+
+    void D3D12GraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        // REMED-GFX-064: store only -- consumed at each RSSetViewports site via
+        // GetEffectiveViewportEXT(). D3D12 re-records every draw's command list from scratch, so
+        // there is nothing to set immediately (unlike D3D11's persistent context, which calls
+        // RSSetViewports here); reading the stored value per draw is the correct model.
+        viewportSet_ = true;
+        viewportX_ = x;
+        viewportY_ = y;
+        viewportW_ = w;
+        viewportH_ = h;
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
+    }
+
+    D3D12_VIEWPORT D3D12GraphicsBackend::GetEffectiveViewportEXT() const
+    {
+        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0)
+        {
+            // Sub-region viewport is a NDC->framebuffer transform, NOT a clip: pass the rect through
+            // unclamped (clamping distorts placement). Top-left origin matches XNA Viewport.Y and
+            // D3D12_VIEWPORT.TopLeftY directly (no Y-flip). Depth clamped to D3D12's [0,1] domain.
+            return D3D12_VIEWPORT{
+                static_cast<float>(viewportX_), static_cast<float>(viewportY_),
+                static_cast<float>(viewportW_), static_cast<float>(viewportH_),
+                std::clamp(viewportMinDepth_, 0.0f, 1.0f), std::clamp(viewportMaxDepth_, 0.0f, 1.0f)};
+        }
+        // Unset or degenerate viewport => full bound target, byte-identical to the pre-fix hardcode.
+        return D3D12_VIEWPORT{0.0f, 0.0f, static_cast<float>(boundColorWidth_),
+                              static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
     }
 
     void D3D12GraphicsBackend::BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
@@ -1336,7 +1375,7 @@ namespace CNA::Internal::Backends::D3D12
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
-        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+        D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
@@ -1433,7 +1472,7 @@ namespace CNA::Internal::Backends::D3D12
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
-        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+        D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
@@ -2139,7 +2178,7 @@ namespace CNA::Internal::Backends::D3D12
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
-        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+        D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
@@ -2337,7 +2376,7 @@ namespace CNA::Internal::Backends::D3D12
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
 
-        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+        D3D12_VIEWPORT viewport = GetEffectiveViewportEXT();  // REMED-GFX-064: honor custom Viewport
         D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
         cmdList->RSSetViewports(1, &viewport);
         cmdList->RSSetScissorRects(1, &scissor);
