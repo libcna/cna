@@ -162,4 +162,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_viewport examples/sdlgpu_rendertarget_viewport_test.cpp)
     cna_register_backend_test(NAME SdlGpu_RenderTargetViewport COMMAND cna_test_sdlgpu_rt_viewport
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-068: GraphicsDevice.ScissorRectangle honored per-draw in RenderTarget2D passes
+    # (deferred-model analog of Vulkan GFX-013; scissor was applied once per pass from the live
+    # post-unbind full-backbuffer state, so an RT-bound scissor no longer clipped at replay).
+    cna_sdlgpu_test(cna_test_sdlgpu_rt_scissor examples/sdlgpu_rendertarget_scissor_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_RenderTargetScissor COMMAND cna_test_sdlgpu_rt_scissor
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
