@@ -88,7 +88,8 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 | `REMED-GFX-011` | Vulkan Y-flip missing in 4 effect families | HIGH | GRAPHICS | NO |
 | `REMED-GFX-012` | Vulkan `SpriteBatch` transform dropped | HIGH | GRAPHICS | YES |
 | `REMED-GFX-058` | Vulkan test shard centre-pixel-only (47 of 71) — structurally blind to mirrors | MEDIUM | GRAPHICS | YES |
-| `REMED-GFX-013` | Vulkan scissor inert when RT bound | HIGH | GRAPHICS | COND |
+| `REMED-GFX-013` | Vulkan scissor inert when RT bound — **DONE** (per-draw scissor capture) | HIGH | GRAPHICS | COND |
+| `REMED-GFX-062` | Vulkan `Viewport` still full-RT-hardcoded in RT passes (disclosed) — fixable via GFX-013's per-draw capture | MEDIUM | GRAPHICS | NEW |
 | `REMED-GFX-016` | EasyGL MRT second attachment never drawn | HIGH | GRAPHICS | NO |
 | `REMED-GFX-017` | Bgfx default cull mode culls nothing | HIGH | GRAPHICS | YES |
 | `REMED-GFX-018` | Bgfx `Clear` ignores `ClearOptions` | HIGH | GRAPHICS | YES |

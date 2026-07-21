@@ -2322,7 +2322,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-010 | P2 | **DONE (all backends; D3D slices closed via reproducible toolchain)** | _easygl t+f_, _vulkan t+f_, _sdlgpu t+f_, _bgfx t+f_, 2967df76, 24f20513, 26e7b812 | feature/audit | **STATUS RECONCILED (2026-07-21):** the prior "D3D9/D3DCommon BYTECODE-BLOCKED" text is superseded by "D3D shader slices CLOSED with the reproducible toolchain" — D3DCommon 13 fog verts + alpha_test restructure (`2967df76`, `24f20513`) and D3D9 3 custom shaders (`26e7b812`) landed; `D3D11_ViewSpaceFog` 9/9, `D3D11_AlphaTest_Fog` 3/3 (done jointly with GFX-005 for D3D). Original detail retained below for history. Cross-backend move of stock-effect fog from object-space Z to true FNA view-space fog (the plan's D3D9-only scope was already flagged as broader). Shared layer: `GpuDrawParams.fogVector[4]` + FNA `EffectHelpers.SetFogVector` port in all 7 stock effects. **EasyGL** 9/9 + existing fog 3/3×5. **Vulkan** 16 shaders, SPIR-V byte-reproducible (17-array diff), 9/9 + 68/68. **SdlGpu** 13 shaders, SPIR-V reproducible (13-array diff), 9/9 + 15/15. **Bgfx** 14 shaders, bgfx_shaders.hpp reproducible (56-array diff over glsl/essl/spv/wgsl), 9/9 + 56/56. Cross-backend conformance: identical canonical scenes → identical colors on all 4. Skinned fog now uses POST-skin position. Instanced fog N/A (not fog-capable anywhere). Unit suite 5613 pass (3 pre-existing non-fog failures). D3D slices bytecode-blocked. See "REMED-GFX-010 — view-space stock-effect fog". |
 | REMED-GFX-011 | P1 | **DONE (Vulkan — the only affected backend)** | c9e96813, 633a2e17 | feature/audit | Flip added to all 4 families; both false justifying comments deleted; SPIR-V regenerated and verified (exactly 4 of 35 arrays changed). Orientation harness 0/4 → 4/4 on backbuffer AND render target. Zero regressions. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-012 | P1 | **DONE and VERIFIED (Vulkan — the only affected backend)** | 21f6c4af, 6985b2fe | feature/audit | Audit hypothesis CONFIRMED exactly: `VulkanSpriteBatchBackend` never overrode `SetTransformMatrix()` (zero matches at HEAD), so `SpriteBatch.Begin(transformMatrix)` fell through to `IGraphicsBackend`'s no-op default and was silently dropped. Fix mirrors `D3D11SpriteBatchBackend` (identical Sprite2DVertex/viewportSize shader contract): store the matrix, apply per vertex in `Draw()` via `Vector2::Transform` in pixel space before upload. New `Vulkan_SpriteBatch_TransformMatrix` (scale+translate, two-sided discrimination) **1/3 → 3/3**. Identity default ⇒ byte-identical non-transform path (all existing sprite tests unchanged). Backend-parity sweep: Vulkan was the sole gap of 14; D3D12 (audit-unchecked) has a real working override identical to D3D11; Ascii delegates to SdlRenderer's real backend. No shader/SPIR-V change (CPU-side only). See "REMED-GFX-012 — Vulkan SpriteBatch transformMatrix". |
-| REMED-GFX-013 | P1 | NOT STARTED | | | |
+| REMED-GFX-013 | P1 | **DONE and VERIFIED (Vulkan — the only affected backend)** | 14ea2dd3, 8216399f | feature/audit | Audit hypothesis CONFIRMED at HEAD: `RecordCommandBuffer` Phase-1 RT loop hardcoded `VkRect2D{{0,0},{rtW,rtH}}` and never read `scissorEnabled_/X_/Y_/W_/H_` (Phase-2 backbuffer did). The audit's suggested "read the global scissor in the RT loop" is INSUFFICIENT: the backend defers all draws to `Present()` and Task 338 resets `ScissorRectangle` on RT unbind, so the frame-global rect is wrong by record time. Fixed by snapshotting scissor **per draw/batch at enqueue** (`PushPending3DDraw` + `SpriteBatch::End()`) and replaying per draw via a clamped `computeScissor` helper (covers RenderTarget2D/Cube/MRT — one shared root cause). New `Vulkan_RenderTarget_Scissor` (asymmetric 48×32 RT, scissor (12,8,20,12), 5-way probe + scissor-OFF control) **5/9 → 9/9**. No Y-flip (VkRect2D is framebuffer/top-left space, matches XNA). Zero validation errors. Full shard: no regressions (4 stable failures = known GFX-012 baseline; 4 others = confirmed-flaky NET/AUDIO). Backend-parity: Vulkan was the sole full-target-hardcoded RT scissor; EasyGL/D3D11/D3D9/Bgfx/SdlGpu/WebGPU already honor RT scissor; D3D12 inert = separate GFX-014. No shader change. Spawned **GFX-062** (Vulkan Viewport still full-RT-hardcoded, disclosed, fixable via the same per-draw capture). See "REMED-GFX-013 — Vulkan ScissorRectangle …". |
 | REMED-GFX-014 | P1 | NOT STARTED | | | |
 | REMED-GFX-015 | P2 | NOT STARTED | | | |
 | REMED-GFX-016 | P1 | NOT STARTED | | | |
@@ -4129,3 +4129,211 @@ the byte-identical-identity argument cover it honestly.
 this task).
 
 **Commits.** test `21f6c4af`, fix `6985b2fe`, docs (this entry).
+
+---
+
+### REMED-GFX-013 — Vulkan `ScissorRectangle` non-functional when a render target is bound (IN PROGRESS, 2026-07-21)
+
+**Exact problem (audit hypothesis).** On Vulkan, `GraphicsDevice.ScissorRectangle` combined with
+`RasterizerState.ScissorTestEnable=true` clips correctly against the **backbuffer** but is a silent
+no-op when a `RenderTarget2D`/`RenderTargetCube` is bound — the render-target pass hardcodes a
+full-target scissor.
+
+**Root cause — CONFIRMED at HEAD (`37543365`), exactly as audited.**
+`VulkanGraphicsBackend::RecordCommandBuffer()` is a two-phase, whole-frame-**deferred** recorder
+invoked once per frame from `Present()` (`SubmitFrame` → line 6933). It collects every sprite batch
+(`activeBatches_`) and 3D draw (`pending3D_`) issued during the frame, then replays them: **Phase 1**
+iterates every used render target and records its pass; **Phase 2** records the backbuffer pass.
+- **Phase 1 (RT), lines 6759–6760:** `VkRect2D rtSc{ {0,0}, {rtW,rtH} }; vkCmdSetScissor(cb,0,1,&rtSc);`
+  — an unconditional full-target scissor. `scissorEnabled_`/`scissorX_`/`Y_`/`W_`/`H_` are **never read**
+  in this loop.
+- **Phase 2 (backbuffer), lines 6809–6812:** correctly reads `scissorEnabled_ && scissorW_>0 && scissorH_>0`
+  and applies the real rect.
+Scissor is Vulkan **dynamic state** (`VK_DYNAMIC_STATE_SCISSOR`, line 2614), so the single
+`vkCmdSetScissor` per pass governs every draw in that pass; the two call sites above are the only
+`vkCmdSetScissor` calls in the file. So the RT pass genuinely applies no XNA scissor at all.
+
+**Scope of the defect.** Only render-target passes (Phase 1) are affected; the backbuffer path is
+correct. Because Phase 1's loop is shared by **RenderTarget2D, RenderTargetCube, and MRT** (all route
+through `usedRTs`/`draw.rt`/`activeBatches_`'s `VulkanRTSource*`), all RT kinds share the one root
+cause and one fix. No coordinate-conversion or state-propagation bug — it is a hardcoded
+command-buffer state.
+
+**State-propagation model (verified).** `GraphicsDevice::setRasterizerStateProperty` →
+`backend_->ApplyRasterizerState(...)` (sets `scissorEnabled_`) and
+`setScissorRectangleProperty` → `backend_->SetScissorRect(...)` (sets `scissorX_/Y_/W_/H_`) both
+propagate **eagerly** at property-set time (`GraphicsDevice.cpp:1720-1738`) — i.e. the backend's
+scissor fields hold the correct value at the moment each draw is *enqueued*.
+
+**Why the audit's suggested minimal fix ("read the global scissor in the RT loop as the backbuffer
+does") is INSUFFICIENT — the decisive finding.** The stored `scissorEnabled_/X_/Y_/W_/H_` are a
+single **frame-global** value; at `Present()`/record time they hold the frame's *final* scissor, not
+the scissor active when each RT's draws were issued. Combined with **Task 338** (FNA parity:
+`SetRenderTarget(...)`/`SetRenderTarget(nullptr)` **always resets `ScissorRectangle`** to the new
+target's — or the backbuffer's — full size, `GraphicsDevice.cpp:1823/1839/1944`), a realistic frame:
+```
+SetRenderTarget(rt);  scissor=S (sub-rect);  draw red -> rt      // clipped to S wanted
+SetRenderTarget(null);   // Task 338 resets ScissorRectangle to (0,0,backbufferW,backbufferH)
+... draw/sample rt to backbuffer ...
+Present -> RecordCommandBuffer                                    // global scissor is now backbuffer-full
+```
+records the *deferred* RT pass with the **post-unbind** full rect — never S. This is the same
+limitation the **Viewport** path already discloses in `SetViewport()`'s header comment (7007-7013,
+which even cites "RecordCommandBuffer's existing per-RT-pass scissor-hardcoding precedent"). So
+honoring the frame-global scissor in the RT loop would still not clip any real RT scene, and would
+fail the task's own Phase 8 state-transition intent.
+
+**Chosen fix — per-draw / per-batch scissor capture (the genuinely-correct branch of the completion
+criteria, "scissor applies correctly to RT passes").** Snapshot the scissor state
+(`enabled,x,y,w,h`) into each `Pending3DDraw` (at the single choke point `PushPending3DDraw`, which
+already tags per-draw RT + occlusion query) and into each sprite `BatchSnapshot` (at `End()`), then
+in `RecordCommandBuffer` apply that captured state per draw/batch via `vkCmdSetScissor`, clamped to
+the **physical framebuffer extent** of the pass (`{rtW,rtH}` for an RT, `swapchainExtent_` for the
+backbuffer). This survives the Task-338 unbind-reset because it is snapshotted at enqueue time, and
+it unifies backbuffer + RT behavior. It is backend-local (`VulkanGraphicsBackend` only; friend
+`VulkanSpriteBatchBackend` already accesses the backend's private scissor fields). Viewport is left
+as-is (out of GFX-013 scope; the same technique could later fix it — evaluated for a new finding in
+Phase 16).
+
+**Coordinate convention (Phase 6).** `VkRect2D` scissor is in **framebuffer** space (top-left origin,
++Y down) — identical to XNA `ScissorRectangle`. So the XNA rect maps to `VkRect2D` with **no Y-flip**;
+the GFX-011 shader Y-flip governs NDC→framebuffer for *geometry* only and must not be applied to the
+scissor. The regression test's above/below probes independently guard against an accidental scissor
+Y-inversion.
+
+**Environment.** llvmpipe (Lavapipe, `lvp_icd.json`) under Xvfb `:99` — the same software oracle used
+for GFX-011/012 (RADV needs DRI3 the Xvfb server lacks; scissor is standard rasterization llvmpipe
+implements faithfully). Pre-work sanity: existing `Vulkan_ScissorTest` (backbuffer control) **4/4**
+and `Vulkan_RenderTarget2D_FullCycle` (RT-blit methodology) **PASS** at HEAD.
+
+**Test (test-first, commit `14ea2dd3`).** New `examples/vulkan_rendertarget_scissor_test.cpp`
+(registered `Vulkan_RenderTarget_Scissor`, `cmake/Tests/VulkanTests.cmake`). Deliberately asymmetric
+on every axis so it catches origin/width/height/Y-mirror errors, not just "scissor ignored":
+- Backbuffer 64×64; `RenderTarget2D` **48×32** (asymmetric, ≠ backbuffer, to catch dimension leaks).
+- Scissor **(12, 8, 20, 12)** — non-zero X *and* Y, not full-target, W≠H ⇒ clipped region x∈[12,32),
+  y∈[8,20).
+- Methodology (the proven Vulkan RT-blit path from `vulkan_rt2d_test`; `GetBackBufferData` always
+  reads the swapchain, never a bound RT): draw a full-RT red quad under scissor → **unbind** (this is
+  the key: Task 338 resets the device scissor here, so only per-draw capture can still clip the RT) →
+  blit the RT 1:1 onto the backbuffer, scissor disabled → read back.
+- **Frame 0 (scissor ON):** 5-way probe — inside (20,13)=RED; left (4,13), right (40,13), above
+  (20,3), below (20,26) all = BLACK. Distinguishes: scissor ignored, wrong origin, vertical mirror,
+  wrong W/H, full-target hardcode.
+- **Frame 1 (scissor OFF control, Phase 5):** same rect set but `ScissorTestEnable=false` ⇒ every
+  probe RED — guards against the fix over-applying the stored rect when the test is disabled.
+
+**Pre-fix vs post-fix evidence (llvmpipe, Xvfb :99).**
+- **Pre-fix (HEAD `14ea2dd3` = test commit): 5/9.** Frame 0's four "outside" probes read **RED**
+  (`(255,0,0)`) instead of BLACK — the RT pass applied no scissor at all (full-target hardcode). The
+  inside probe and all four scissor-OFF probes passed. The exact signature of an ignored RT scissor.
+- **Post-fix: 9/9.** Frame 0: inside `(255,0,0)`, left/right/above/below all `(0,0,0)`. Frame 0's
+  top/bottom probes (above=BLACK@y<8, below=BLACK@y≥20) independently rule out an accidental scissor
+  Y-inversion. Frame 1 (OFF): all `(255,0,0)`.
+
+**Production fix (commit `8216399f`, `VulkanGraphicsBackend` only — no shared/interface change).**
+1. `Pending3DDraw` + `BatchSnapshot` (hpp): added `scissorEnabled/X/Y/W/H` snapshot fields.
+2. `PushPending3DDraw()` (the single 3D enqueue choke point): tags each draw with the current
+   `scissorEnabled_/X_/Y_/W_/H_`. `VulkanSpriteBatchBackend::End()`: tags each batch likewise.
+3. `RecordCommandBuffer()`: new `computeScissor(enabled,x,y,w,h,fbW,fbH)` lambda → `VkRect2D`. Applied
+   **per draw** in `draw3DFor` and **per batch** in `drawSpritesFor`, clamped to the pass's **physical**
+   framebuffer extent (`{rt->GetWidth(),GetHeight()}` for an RT, `swapchainExtent_` for the backbuffer —
+   deliberately **not** `vpW/vpH`, which for the backbuffer is the *virtual*-resolution size used for
+   sprite NDC mapping, not the framebuffer extent).
+4. Disclosure hygiene: the now-stale "per-RT-pass scissor-hardcoding precedent" reference in
+   `SetViewport()`'s comment corrected; a per-draw-capture note added to `SetScissorRect()` (the audit
+   flagged the *absence* of any scissor disclosure).
+
+**Why per-draw capture, not the audit's "read the global scissor in the RT loop".** The backend is a
+whole-frame-deferred recorder (`RecordCommandBuffer` runs once per frame from `Present()`), and
+`scissorEnabled_/X_/…` is a single frame-global value = the frame's *final* scissor at record time.
+Task 338 resets `ScissorRectangle` on RT unbind (FNA parity), and any real RT scene unbinds before it
+can use/read the RT — so the global rect at `Present()` is never the sub-rect the RT was drawn under.
+Reading the global scissor in the RT loop would therefore still clip nothing (and fails the task's own
+Phase-8 state-transition intent). Snapshotting at enqueue is the only design that survives the unbind;
+it also unifies backbuffer + RT (both now per-draw-correct). Byte-identical for the disabled/default
+path (`computeScissor` returns the whole framebuffer, matching the pre-existing backbuffer guard) —
+proven by every other Vulkan sprite/RT test passing unchanged.
+
+**Coordinate/scissor-conversion semantics (Phase 6).** `VkRect2D` scissor is framebuffer space
+(top-left origin, +Y down) — identical to XNA `ScissorRectangle`. XNA rect → `VkRect2D` with **no
+Y-flip**; the GFX-011 shader Y-flip governs NDC→framebuffer for *geometry* only. Confirmed independently
+by the test's above/below probes. Bounds (Phase 11): `computeScissor` clamps in 64-bit space so
+offset≥0, offset+extent ≤ framebuffer, no signed/unsigned overflow — even for rects that begin outside
+or overhang; a rect fully outside yields a zero-extent (fully-clipped) scissor. `SetScissorRect` already
+clamps negative W/H to 0 (→ "no clip", matching backbuffer). No malformed publicly-reachable state
+reaches `vkCmdSetScissor`.
+
+**Validation (Phase 13).** `Vulkan_RenderTarget_Scissor` under `VK_LAYER_KHRONOS_validation` (loader
+confirmed the layer was inserted): **9/9, zero** VUID / VkRect2D / render-area / dynamic-state /
+command-buffer errors or warnings.
+
+**MRT / cube / other RT paths (Phase 12).** RenderTarget2D, RenderTargetCube, and MRT all route through
+the same Phase-1 `usedRTs`/`draw.rt`/`activeBatches_` loop and `draw3DFor`/`drawSpritesFor`, so the one
+fix covers them all — no separate implementations, no new findings. `Vulkan_MRT_MixedFormats`,
+`Vulkan_RenderTargetCube_{SampleAfterUnbind,MipChain,MsaaResolve,PerFace,Properties}` all pass.
+
+**Regression matrix (Phase 14).**
+- Focused: `Vulkan_RenderTarget_Scissor` **9/9** (was 5/9).
+- Controls: `Vulkan_ScissorTest` (backbuffer, Phase 4) PASS; `Vulkan_RenderTarget_ViewportScissorReset`
+  (backbuffer/RT scissor-reset transition, Phase 8) PASS.
+- Key example set (13): all PASS — incl. `Vulkan_Orientation_RenderTarget` (GFX-011),
+  `Vulkan_SpriteBatch_TransformMatrix` (GFX-012), `Vulkan_RenderTarget2D_{FullCycle,DepthBuffer}`,
+  `Vulkan_SpriteBatch_MultiBeginEnd`, all `RenderTargetCube` + `MRT`.
+- Targeted gtest+example families (scissor/RT/sprite/viewport/MRT/cube/orientation/transform): **224/224**.
+- **Full Vulkan shard: 5762/5770 passed.** 8 failures = **4 stable, all pre-existing** and identical to
+  the GFX-012 baseline (`CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` = REMED-GFX-036, `Vulkan_DepthBias` = D9-62) +
+  **4 confirmed-flaky NET/AUDIO** (`ENetDiscoveryServiceTest`×2 and `NetworkSessionTest.FindReturnsEmptyCollection`
+  all PASSED on immediate retry; `DynamicSoundEffectInstanceTest.BufferNeededDoesNotFireWhenStreamHasEnoughData`
+  flips pass/fail across identical isolated runs — 1✓2✗3✓4✗). My change touches only
+  `VulkanGraphicsBackend.*`, which has no causal path to NET/AUDIO. **Zero regressions.**
+
+**Cross-backend parity (Phase 15).** The abstract XNA contract: `ScissorRectangle` is in the bound
+target's coordinate space (top-left), clipping draws when `ScissorTestEnable=true`; each backend converts
+to its native scissor convention. Verified by source read:
+- **EasyGL** (immediate + FBO): `SetScissorRect` uses `currentRtHeight_` to Y-flip into GL's bottom-left
+  space against the *bound RT's* height (Task 880) — honors RT scissor.
+- **D3D11 / D3D9** (immediate): `RSSetScissorRects` / `SetScissorRect` apply against the bound RT,
+  top-left, no flip — honor RT scissor.
+- **Bgfx** (`bgfx::setScissor` per draw), **SdlGpu** (`ApplyScissorForPass(pass,targetW,targetH)`),
+  **WebGPU** (per-pass, RT-aware `dstW/dstH`) — all honor RT scissor.
+- **D3D12** — scissor entirely inert (`scissorTestEnable` commented out, PSO `ScissorEnable=FALSE`) =
+  the separately-tracked **REMED-GFX-014**, not this task.
+Vulkan was the **sole** backend hardcoding a full-target RT scissor; the fix aligns it with D3D11's
+top-left convention (correct for `VkRect2D`). No other backend touched.
+
+**Targeted pattern sweep (Phase 16).** No other backend hardcodes a full-framebuffer scissor in an RT
+path, ignores `ScissorTestEnable` in a specialized pass, or confuses target-vs-backbuffer size in its
+scissor path. One adjacent, pre-existing, **disclosed** item found → new finding **REMED-GFX-062**
+(Vulkan `Viewport` in RT passes is still hardcoded to full-RT size; now fixable with GFX-013's per-draw
+capture technique). Recorded, **not** fixed — out of GFX-013 scope and explicitly a separate Viewport
+concern.
+
+**Generated shaders (GENERATED SHADERS section).** None — zero GLSL/SPIR-V diff. This is pure
+command/state handling; no shader logic changed.
+
+**Sanitizers.** New CPU arithmetic = `computeScissor`'s 64-bit clamp. Reasoned safe: all intermediate
+math is `int64_t` with `std::clamp` to `[0, fbW/fbH]` (framebuffer extents ≤ a few thousand), so
+`x0/y0/x1/y1 ∈ [0, fb]`, differences non-negative, final `static_cast<uint32_t>` of a value ≤ extent —
+no signed overflow, no negative-to-unsigned conversion, no `offset+extent` overflow reaches
+`vkCmdSetScissor`. Validation layer (which flags exactly these VkRect2D VUIDs) reported clean. Not
+separately UBSan-built (would only re-exercise unchanged allocation paths).
+
+**GFX-061 status.** Untouched — remains deferred (unrelated fog-field cleanup).
+
+**Commits.** test `14ea2dd3`, fix `8216399f`, docs (this entry).
+
+---
+
+### REMED-GFX-062 — Vulkan: `Viewport` still hardcoded to full-RT size in render-target passes (NEW, discovered during GFX-013, NOT fixed)
+
+| Field | Value |
+|---|---|
+| Sev / Pri / Owner / Status | MEDIUM / P2 / GRAPHICS / **NOT STARTED (recorded, deferred)** |
+| Root cause | `VulkanGraphicsBackend::RecordCommandBuffer()`'s RT-pass loop sets `vkCmdSetViewport` to each RT's full size (`{0,0,rtW,rtH}`); `SetViewport()` stores `viewportX_/Y_/W_/H_/minDepth/maxDepth` but only the **backbuffer** pass reads them. A custom sub-region `Viewport` set while a `RenderTarget2D`/`RenderTargetCube`/MRT is bound is ignored. |
+| Evidence | `SetViewport()`'s own header comment already **discloses** this (unlike the scissor gap, which was silent — that was GFX-013). Confirmed at source during the GFX-013 pattern sweep (Phase 16). |
+| Relationship to GFX-013 | The **same** deferred-model root shape. GFX-013 fixed scissor by snapshotting it per draw/batch at enqueue (`PushPending3DDraw` / `SpriteBatch::End()`); the identical technique — snapshot `viewportSet_/X_/Y_/W_/H_/minDepth/maxDepth` per draw/batch and replay via `vkCmdSetViewport` clamped to the RT extent — would honor `Viewport` in RT passes too. |
+| Affected files | `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp` |
+| Backends / Platforms | Vulkan / ALL |
+| Why separable / not fixed here | The task explicitly scopes Viewport out of GFX-013 ("Do not broaden this into a Viewport task … allocate a new REMED-GFX ID"). It is a *disclosed* limitation (lower urgency than the silent scissor gap), independently testable, and touches a distinct state path. No fix attempted. |
+| Suggested test | A Vulkan RT + custom sub-region `Viewport` pixel test mirroring `Vulkan_RenderTarget_Scissor`'s RT-blit methodology. |
