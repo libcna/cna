@@ -3642,6 +3642,16 @@ causes are CPU-side/test-side), so no bytecode regeneration was needed; `hlsl_sh
 CNA links) but **not runtime-verified** — D3D12 real-window runtime stays blocked by REMED-BUILD-012
 (Wine/vkd3d-proton swap-chain crash), and no D3D12 test exercises a non-zero draw offset yet.
 
+**D3D9 comparison (Phase 12):** D3D9 has the **same defect class** but was left UNFIXED (out of
+GFX-020's D3D11/D3DCommon scope, separate backend/shader model, and spread across several draw sites vs
+D3D11/D3D12's single `DrawPrimitivesExImpl`). Confirmed hardcoded-zero offsets: `D3D9SkinnedVertexColorDraw.cpp:194`
+`DrawPrimitive(topology, 0, primitiveCount)` (StartVertex=0) and `:188` `DrawIndexedPrimitive(topology, 0, 0, ...)`
+(BaseVertexIndex/MinIndex=0); `D3D9InstancedDraw.cpp:130` likewise; the main `D3D9EffectDraw.cpp` stock-effect
+cascade should be swept too. **Recommended follow-up: a new REMED-GFX task** — "honor DrawPrimitives/
+DrawIndexedPrimitives offsets across the D3D9 draw sites" (needs a non-zero-offset D3D9 pixel test; D3D9
+runtime is verifiable via Wine+DXVK9, unlike D3D12). Not a regression — this offset was never honored on
+D3D9; only surfaced by GFX-020's cross-backend-parity sweep.
+
 ### REMED-GFX-055 — D3D11 direct-backend fog checks orphaned by the view-space fog switch (DONE, 2026-07-21)
 
 **New finding, discovered while running `D3D11_Smoke` for GFX-020.** Beyond the single specular
