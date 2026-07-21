@@ -837,6 +837,12 @@ namespace CNA::Internal::Backends::Vulkan
             snapshot->scissorEnabled = backend_->scissorEnabled_;
             snapshot->scissorX = backend_->scissorX_; snapshot->scissorY = backend_->scissorY_;
             snapshot->scissorW = backend_->scissorW_; snapshot->scissorH = backend_->scissorH_;
+            // REMED-GFX-062: capture the viewport active for this batch (see BatchSnapshot).
+            snapshot->viewportSet = backend_->viewportSet_;
+            snapshot->viewportX = backend_->viewportX_; snapshot->viewportY = backend_->viewportY_;
+            snapshot->viewportW = backend_->viewportW_; snapshot->viewportH = backend_->viewportH_;
+            snapshot->viewportMinDepth = backend_->viewportMinDepth_;
+            snapshot->viewportMaxDepth = backend_->viewportMaxDepth_;
             backend_->activeBatches_.push_back({ std::move(snapshot), activeRT_ });
         }
     }
@@ -6293,6 +6299,36 @@ namespace CNA::Internal::Backends::Vulkan
             return r;
         };
 
+        // REMED-GFX-062: convert a captured CNA Viewport into a VkViewport for this pass. Unlike
+        // computeScissor, the rectangle is NOT clamped to the framebuffer -- a viewport is the
+        // NDC->framebuffer transform, and clamping x/y/w/h would distort where geometry lands
+        // (a sub-region viewport within the target is already valid, and D3D/XNA pass an
+        // overhanging viewport straight through; Vulkan's viewportBoundsRange is far larger than
+        // any framebuffer here). Positive height is deliberate: CNA flips Y in the vertex shader
+        // (REMED-GFX-011, `pos.y = -pos.y`), so the viewport must stay top-left/positive-height
+        // and XNA Viewport.Y maps directly to VkViewport.y with no additional flip. minDepth/
+        // maxDepth are clamped to [0,1] to satisfy VkViewport's VUIDs (XNA's own valid range).
+        // set==false or a degenerate (zero-sized) rect falls back to the full physical target,
+        // byte-identical to the pre-fix hardcoded full-target viewport.
+        auto computeViewport = [](bool set, int32_t vx, int32_t vy, uint32_t vw, uint32_t vh,
+                                  float minD, float maxD, uint32_t fbW, uint32_t fbH) -> VkViewport {
+            VkViewport v{};
+            if (!set || vw == 0 || vh == 0) {
+                v.x = 0.0f; v.y = 0.0f;
+                v.width  = static_cast<float>(fbW);
+                v.height = static_cast<float>(fbH);
+                v.minDepth = 0.0f; v.maxDepth = 1.0f;
+                return v;
+            }
+            v.x = static_cast<float>(vx);
+            v.y = static_cast<float>(vy);
+            v.width  = static_cast<float>(vw);
+            v.height = static_cast<float>(vh);
+            v.minDepth = std::clamp(minD, 0.0f, 1.0f);
+            v.maxDepth = std::clamp(maxD, 0.0f, 1.0f);
+            return v;
+        };
+
         // Helper: draw all 2D batches for a specific RT (nullptr = backbuffer) into current render pass.
         // Sprite VB/IB ring buffers are shared across all passes in a frame — each snapshot is
         // memcpy'd/bound at its own running byte offset (vbOff/ibOff below), mirroring draw3DFor's
@@ -6382,6 +6418,16 @@ namespace CNA::Internal::Backends::Vulkan
                                                   snapshot->scissorX, snapshot->scissorY,
                                                   snapshot->scissorW, snapshot->scissorH, fbW, fbH);
                     vkCmdSetScissor(cb, 0, 1, &bsc);
+                    // REMED-GFX-062: apply this batch's captured viewport (full target when unset),
+                    // so a SpriteBatch fill honors a custom Viewport in RT passes too, not just the
+                    // backbuffer. Byte-identical for every existing batch (all run under the full
+                    // target viewport SetRenderTarget resets to).
+                    VkViewport bvp = computeViewport(snapshot->viewportSet,
+                                                     snapshot->viewportX, snapshot->viewportY,
+                                                     snapshot->viewportW, snapshot->viewportH,
+                                                     snapshot->viewportMinDepth,
+                                                     snapshot->viewportMaxDepth, fbW, fbH);
+                    vkCmdSetViewport(cb, 0, 1, &bvp);
                 }
 
                 for (const auto& d : draws) {
@@ -6478,6 +6524,16 @@ namespace CNA::Internal::Backends::Vulkan
                                                   draw.scissorX, draw.scissorY,
                                                   draw.scissorW, draw.scissorH, fbW, fbH);
                     vkCmdSetScissor(cb, 0, 1, &dsc);
+                    // REMED-GFX-062: apply this draw's captured viewport (full target when unset),
+                    // so a custom Viewport set while a render target was bound is honored in the RT
+                    // pass, not just the backbuffer. Byte-identical for every draw issued under the
+                    // full target viewport SetRenderTarget resets to.
+                    VkViewport dvp = computeViewport(draw.viewportSet,
+                                                     draw.viewportX, draw.viewportY,
+                                                     draw.viewportW, draw.viewportH,
+                                                     draw.viewportMinDepth, draw.viewportMaxDepth,
+                                                     fbW, fbH);
+                    vkCmdSetViewport(cb, 0, 1, &dvp);
                 }
 
                 const uint32_t nColor = targetRT ? targetRT->GetColorAttachmentCount() : 1u;
@@ -7329,6 +7385,15 @@ namespace CNA::Internal::Backends::Vulkan
         d.scissorEnabled = scissorEnabled_;
         d.scissorX = scissorX_; d.scissorY = scissorY_;
         d.scissorW = scissorW_; d.scissorH = scissorH_;
+        // REMED-GFX-062: snapshot the viewport active at enqueue time (see Pending3DDraw) so the
+        // render-target pass draws this call under the Viewport that was set while its RT was bound,
+        // not the frame-global viewport left over at Present() (SetRenderTarget resets it to the
+        // full target size on RT bind/unbind).
+        d.viewportSet = viewportSet_;
+        d.viewportX = viewportX_; d.viewportY = viewportY_;
+        d.viewportW = viewportW_; d.viewportH = viewportH_;
+        d.viewportMinDepth = viewportMinDepth_;
+        d.viewportMaxDepth = viewportMaxDepth_;
         pending3D_.push_back(std::move(d));
     }
 
@@ -8071,13 +8136,15 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
     {
         // Storage-only (Task 880); consumed at command-buffer-record time via vkCmdSetViewport.
-        // Only the backbuffer pass reads this state -- RT passes stay hardcoded to each RT's own
-        // full size, because the deferred, potentially-multi-RT-per-frame recording model cannot
-        // recover "what Viewport was active when each RT's draws were issued" from a single
-        // frame-global stored value. (Scissor once shared this exact limitation but no longer:
-        // REMED-GFX-013 snapshots the scissor per draw/batch at enqueue time instead. The same
-        // technique would let Viewport be honored per-draw in RT passes too -- tracked as a
-        // separate follow-up finding, not part of GFX-013.)
+        // REMED-GFX-062 snapshots this state per draw/batch at enqueue time (PushPending3DDraw /
+        // SpriteBatch End()) and replays it per draw via computeViewport, so a custom sub-region
+        // Viewport is honored in BOTH the backbuffer and render-target passes and survives
+        // SetRenderTarget's full-target reset on RT bind/unbind (GraphicsDevice::
+        // ResetViewportAndScissorForRenderTarget). This mirrors REMED-GFX-013's identical per-draw
+        // scissor capture; a single frame-global value could not survive the deferred,
+        // potentially-multi-RT-per-frame recording model. Negative width/height clamp to 0 (treated
+        // as "full target"); minDepth/maxDepth are clamped to VkViewport's valid [0,1] at record
+        // time.
         viewportX_        = static_cast<int32_t>(x);
         viewportY_        = static_cast<int32_t>(y);
         viewportW_        = static_cast<uint32_t>(std::max(0, w));

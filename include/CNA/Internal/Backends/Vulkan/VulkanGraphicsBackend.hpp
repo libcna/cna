@@ -321,6 +321,14 @@ namespace CNA::Internal::Backends::Vulkan
             bool                        scissorEnabled = false;
             int32_t                     scissorX = 0, scissorY = 0;
             uint32_t                    scissorW = 0, scissorH = 0;
+            // REMED-GFX-062: viewport state captured at End() so a SpriteBatch filling a render
+            // target honors the Viewport active for this batch, not the frame-global viewport left
+            // over at Present() (which SetRenderTarget resets to the target's full size). set==false
+            // or a zero-sized rect means "full target", matching the backbuffer pass's own guard.
+            bool                        viewportSet = false;
+            int32_t                     viewportX = 0, viewportY = 0;
+            uint32_t                    viewportW = 0, viewportH = 0;
+            float                       viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
         };
 
     private:
@@ -1166,6 +1174,17 @@ namespace CNA::Internal::Backends::Vulkan
             bool                    scissorEnabled = false;
             int32_t                 scissorX = 0, scissorY = 0;
             uint32_t                scissorW = 0, scissorH = 0;
+            // REMED-GFX-062: viewport state snapshotted at enqueue time (PushPending3DDraw), so the
+            // render-target pass honors the Viewport that was active while its RT was bound, not the
+            // frame-global viewport left over at Present() -- notably the full-size reset
+            // SetRenderTarget applies on RT bind/unbind (GraphicsDevice::
+            // ResetViewportAndScissorForRenderTarget, the FNA-parity analog of Task 338's scissor
+            // reset). viewportSet==false (or a zero-sized rect) means "full target", matching the
+            // backbuffer pass's own long-standing guard.
+            bool                    viewportSet = false;
+            int32_t                 viewportX = 0, viewportY = 0;
+            uint32_t                viewportW = 0, viewportH = 0;
+            float                   viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
         };
         std::vector<Pending3DDraw>  pending3D_;
         // Task 447/854: pushes d onto pending3D_ after tagging it with the currently-active
