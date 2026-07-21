@@ -68,8 +68,11 @@ void main()
     // Matches fs_skinned3d.sc's own formula exactly: emissive+ambient+lightSum, mixed by
     // lightingEnabled (EmissiveColor is pre-folded with AmbientLightColor*DiffuseColor at the
     // C++ FillGpuDrawParams() level, same as the per-pixel-lit sibling).
-    vec3 lit = u_emissiveColor.xyz + u_ambientColor.xyz + lightSum;
-    v_litRGB = mix(vec3(1.0, 1.0, 1.0), lit, u_lightingEnabled.x);
+    // REMED-GFX-008: bake DiffuseColor into the per-vertex lit RGB the FNA way
+    // (lightSum*DiffuseColor + EmissiveColor); the fragment stage no longer multiplies v_litRGB by
+    // DiffuseColor again. u_ambientColor is always 0 for skinned (ambient pre-folded into emissive).
+    vec3 litRGB = lightSum * u_diffuseColor.rgb + u_emissiveColor.xyz;
+    v_litRGB = mix(u_diffuseColor.rgb, litRGB, u_lightingEnabled.x);
 
     vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, u_specularColorPower.w);
     vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, u_specularColorPower.w);

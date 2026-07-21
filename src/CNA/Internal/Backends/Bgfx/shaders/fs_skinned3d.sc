@@ -50,12 +50,18 @@ void main()
     // cleanly. C++'s FillGpuDrawParams() already pre-combines AmbientLightColor*DiffuseColor into
     // emissiveColor (u_ambientColor is never separately populated for SkinnedEffect, always 0),
     // matching EasyGL's already-working (uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb.
-    vec3 lit  = u_emissiveColor.xyz + u_ambientColor.xyz + lightSum;
-    vec3 finalLight = mix(vec3(1.0, 1.0, 1.0), lit, u_lightingEnabled.x);
+    // REMED-GFX-008: FNA composes lit = lightSum*DiffuseColor + EmissiveColor -- emissive is added
+    // OUTSIDE the diffuse multiply. The prior code folded emissive INTO finalLight and then
+    // multiplied the whole thing by v_color0 (=DiffuseColor), wrongly scaling the pre-folded
+    // emissive/ambient by diffuse (quadratic suppression). u_ambientColor is always 0 for skinned
+    // (ambient is pre-folded into emissiveColor at the C++ FillGpuDrawParams() level), so it is
+    // dropped here rather than added inside the multiply.
+    vec3 litRGB   = lightSum * v_color0.rgb + u_emissiveColor.xyz;
+    vec3 finalRGB = mix(v_color0.rgb, litRGB, u_lightingEnabled.x);
     // CNB-67 (Phase 13C) Bgfx port: vc is (1,1,1,1) unless VertexColorEnabled is set, matching
     // EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vc gate exactly.
     vec4 vc = mix(vec4(1.0, 1.0, 1.0, 1.0), v_vertexColor0, u_vertexColorEnabled3D.x);
-    gl_FragColor = tex * v_color0 * vec4(finalLight, 1.0);
+    gl_FragColor = vec4(tex.rgb * finalRGB, tex.a * v_color0.a);
     gl_FragColor.a *= vc.a;
     gl_FragColor.rgb += specularRGB * gl_FragColor.a;
     // Vertex color modulates the whole combined diffuse+specular output, not just diffuse --
