@@ -671,6 +671,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_SkinnedEffect_Fog COMMAND cna_test_vulkan_skinnedeffect_fog
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-010: transformed-camera view-space fog conformance (fails pre-fix).
+        cna_vulkan_test(cna_test_vulkan_viewspace_fog
+                        examples/vulkan_viewspace_fog_test.cpp)
+        cna_register_backend_test(NAME Vulkan_ViewSpace_Fog COMMAND cna_test_vulkan_viewspace_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_multilight
                         examples/vulkan_skinnedeffect_multilight_test.cpp)
