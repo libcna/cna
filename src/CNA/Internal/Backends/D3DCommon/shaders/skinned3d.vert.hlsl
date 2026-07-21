@@ -58,6 +58,18 @@ struct VSOutput
     float3 WorldPos  : TEXCOORD3;
 };
 
+// REMED-GFX-006: HLSL has no built-in inverse()/mat3(mat4); this returns transpose(inverse(m))
+// (the cofactor matrix over its determinant), matching lit_textured3d.vert.hlsl's own helper and
+// the corrected Vulkan skinned3d.vert.glsl's transpose(inverse(mat3(world))).
+float3x3 InverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    return float3x3(c0, c1, c2) / det;
+}
+
 VSOutput main(VSInput input)
 {
     VSOutput output;
@@ -71,7 +83,10 @@ VSOutput main(VSInput input)
                                            + Bones[input.BoneIndices.w] * input.BoneWeights.w;
     float4 skinnedPos = mul(float4(input.Position, 1.0), skinMat);
     output.Position = mul(skinnedPos, Mvp);
-    output.Normal = normalize(mul(input.Normal, (float3x3)skinMat));
+    // REMED-GFX-006: compose the bone-skin 3x3 with the outer World inverse-transpose normal
+    // matrix (was skin-only, so any rotated / non-uniformly-scaled skinned model was lit as if
+    // World were identity). Matches the corrected Vulkan skinned3d.vert.glsl exactly.
+    output.Normal = normalize(mul(mul(input.Normal, (float3x3)skinMat), InverseTranspose3x3((float3x3)World)));
     output.UV = input.UV;
     output.WorldPos = mul(skinnedPos, World).xyz;
     // Task 899: fog factor from the PRE-SKIN raw object-space Z (matches EasyGL/Bgfx's

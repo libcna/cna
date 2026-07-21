@@ -59,6 +59,18 @@ struct VSOutput
     float  Alpha       : TEXCOORD4;
 };
 
+// REMED-GFX-006: HLSL has no built-in inverse()/mat3(mat4); this returns transpose(inverse(m))
+// (the cofactor matrix over its determinant), matching lit_textured3d.vert.hlsl's own helper and
+// the corrected Vulkan skinned3d.vert.glsl's transpose(inverse(mat3(world))).
+float3x3 InverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    return float3x3(c0, c1, c2) / det;
+}
+
 VSOutput main(VSInput input)
 {
     VSOutput output;
@@ -72,7 +84,9 @@ VSOutput main(VSInput input)
     output.Position = mul(skinnedPos, Mvp);
     output.UV = input.UV;
 
-    float3 N = normalize(mul(input.Normal, (float3x3)skinMat));
+    // REMED-GFX-006: compose the bone-skin 3x3 with the outer World inverse-transpose normal
+    // matrix (was skin-only). Matches the corrected Vulkan skinned3d.vert.glsl exactly.
+    float3 N = normalize(mul(mul(input.Normal, (float3x3)skinMat), InverseTranspose3x3((float3x3)World)));
     float3 worldPos = mul(skinnedPos, World).xyz;
     float3 E = normalize(EyePosPad.xyz - worldPos);
 

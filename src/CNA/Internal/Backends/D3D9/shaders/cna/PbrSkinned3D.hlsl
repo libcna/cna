@@ -62,6 +62,18 @@ struct VSOutput
     float  FogFactor : TEXCOORD4;
 };
 
+// REMED-GFX-006: transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
+// no built-in inverse(); vs_3_0 has ample instruction budget for this. Matches Pbr3D.hlsl's own
+// CPU-supplied NormalMatrix and the corrected Vulkan pbr3d_skinned.vert.glsl.
+float3x3 InverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    return float3x3(c0, c1, c2) / det;
+}
+
 VSOutput VSPbrSkinned3D(VSInput vin)
 {
     VSOutput vout;
@@ -82,7 +94,9 @@ VSOutput VSPbrSkinned3D(VSInput vin)
     float3 skinnedTangent = mul(vin.Tangent.xyz, skinNormalMat);
 
     vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj);
-    vout.Normal = normalize(mul(skinnedNormal, (float3x3)World));
+    // REMED-GFX-006 (Variant B): normal takes World's inverse-transpose (correct under non-uniform
+    // scale), not raw World. Tangent stays on raw World (tangents transform as directions).
+    vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)World)));
     vout.TangentWS = float4(mul(skinnedTangent, (float3x3)World), vin.Tangent.w);
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;

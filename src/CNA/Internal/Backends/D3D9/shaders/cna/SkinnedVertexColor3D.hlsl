@@ -42,12 +42,12 @@
 //   (b) EnsurePbrSkinnedProgram()'s OWN identical extra `mat3(uWorld)` step for ITS normal
 //       (`vNormal=normalize(mat3(uWorld)*(skinNormalMat*aNormal));`) -- i.e. EnsureSkinnedProgram()
 //       looks like the outlier between EasyGL's own two skinned-lighting functions, not the
-//       intentional convention. Uses plain (float3x3)World (not a separate WorldInverseTranspose
-//       constant) to match EnsurePbrSkinnedProgram()'s own uniform-scale simplification exactly,
-//       keeping this task's 3 new D3D9 shaders internally consistent with each other. This is a
-//       correctness improvement over the literal EnsureSkinnedProgram() GLSL for any draw with a
-//       rotated World matrix; EasyGL itself is explicitly out of scope for this task and was not
-//       touched.
+//       intentional convention.
+// REMED-GFX-006: applies the World INVERSE-TRANSPOSE (computed in-shader via InverseTranspose3x3)
+//       after the skin-local rotation, not raw (float3x3)World. This is correct under non-uniform
+//       World scale as well as rotation, matching SkinnedEffect.fx's own WorldInverseTranspose and
+//       the corrected cross-backend skinned shaders (Vulkan/EasyGL/Bgfx/SdlGpu). EasyGL itself is
+//       out of scope for this task and was not touched.
 //
 // Vertex declaration (stride 56, D3D9VertexDeclarations.hpp): POSITION0 (FLOAT3, 0), NORMAL0
 // (FLOAT3, 12), TEXCOORD0 (FLOAT2, 24), BLENDWEIGHT0 (FLOAT4, 32), BLENDINDICES0 (UBYTE4, 48),
@@ -78,6 +78,18 @@ struct VSOutput
     float4 Color     : COLOR0;
 };
 
+// REMED-GFX-006: transpose(inverse(m)) of a 3x3 (cofactor matrix over its determinant). HLSL has
+// no built-in inverse(); vs_3_0 has ample instruction budget. Matches the corrected cross-backend
+// skinned normal transform.
+float3x3 InverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    return float3x3(c0, c1, c2) / det;
+}
+
 VSOutput VSSkinnedVertexColor3D(VSInput vin)
 {
     VSOutput vout;
@@ -94,8 +106,8 @@ VSOutput VSSkinnedVertexColor3D(VSInput vin)
     float3 skinnedNormal = mul(vin.Normal, (float3x3)skinning);
 
     vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj);
-    // See this file's own header comment (Deviation) for why (float3x3)World is applied here.
-    vout.Normal = normalize(mul(skinnedNormal, (float3x3)World));
+    // REMED-GFX-006: World inverse-transpose (not raw World) -- see header Deviation note.
+    vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)World)));
     vout.UV = vin.UV;
     vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;
     vout.Color = vin.Color;

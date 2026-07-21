@@ -84,4 +84,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_d3d11_ctest_command(_d3d11_envmap_amount_zero_cmd cna_test_d3d11_environmentmapeffect_amount_zero)
     cna_register_backend_test(NAME D3D11_EnvironmentMapAmountZero COMMAND ${_d3d11_envmap_amount_zero_cmd}
         TIMEOUT 60 LABELS "D3D11")
+
+    # REMED-GFX-006: SkinnedEffect must compose the World inverse-transpose normal matrix with the
+    # bone-skin matrix. The shared, backend-agnostic world-normal test has a rotation case (WHITE vs
+    # BLACK, discriminates Variant A) and a non-uniform-scale case (228 correct vs 114 raw-World vs
+    # 180 no-world). Reused verbatim from the Vulkan-authored source.
+    cna_d3d11_test(cna_test_d3d11_skinnedeffect_world_normal examples/vulkan_skinnedeffect_world_normal_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_skinned_world_normal_cmd cna_test_d3d11_skinnedeffect_world_normal)
+    cna_register_backend_test(NAME D3D11_SkinnedEffect_WorldNormal COMMAND ${_d3d11_skinned_world_normal_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 endif()

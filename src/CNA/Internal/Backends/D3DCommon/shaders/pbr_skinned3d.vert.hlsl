@@ -53,6 +53,18 @@ struct VSOutput
     float3 WorldPos  : TEXCOORD4;
 };
 
+// REMED-GFX-006: HLSL has no built-in inverse()/mat3(mat4); this returns transpose(inverse(m))
+// (the cofactor matrix over its determinant), matching pbr3d.vert.hlsl's own unskinned normal
+// matrix and the corrected Vulkan pbr3d_skinned.vert.glsl's transpose(inverse(mat3(world))).
+float3x3 InverseTranspose3x3(float3x3 m)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    return float3x3(c0, c1, c2) / det;
+}
+
 VSOutput main(VSInput input)
 {
     VSOutput output;
@@ -68,11 +80,12 @@ VSOutput main(VSInput input)
     float4 skinnedPos = mul(float4(input.Position, 1.0), skinMat);
     output.Position = mul(skinnedPos, Mvp);
 
-    // PBR + skinning combo: matches EasyGLGraphicsBackend::EnsurePbrSkinnedProgram() exactly --
-    // plain World (NOT the inverse-transpose pbr3d.vert.hlsl's unskinned sibling uses), the same
-    // simplification skinned3d.vert.hlsl's own normal transform already makes for skinned meshes.
+    // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose of World, not raw World
+    // (correct under non-uniform scale, matching pbr3d.vert.hlsl's own unskinned sibling and the
+    // corrected Vulkan pbr3d_skinned.vert.glsl). The tangent stays on raw World: tangents transform
+    // as directions, not as normals (glTF convention).
     float3x3 skinNormalMat = (float3x3)skinMat;
-    output.Normal = normalize(mul(mul(input.Normal, skinNormalMat), (float3x3)World));
+    output.Normal = normalize(mul(mul(input.Normal, skinNormalMat), InverseTranspose3x3((float3x3)World)));
     output.Tangent = float4(mul(mul(input.Tangent.xyz, skinNormalMat), (float3x3)World), input.Tangent.w);
 
     output.UV = input.UV;
