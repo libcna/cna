@@ -2312,7 +2312,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-DOCS-003 | P3 | NOT STARTED | | | |
 | REMED-GFX-004 | P1 | NOT STARTED | | | |
 | REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4 | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass** — see "Wave 3 — GRAPHICS shader campaign" below). Bgfx + D3DCommon (D3D11/D3D12) slices PENDING (bytecode regen blocked in this sandbox: no shaderc/fxc/dxc binary). Cross-backend fog conformance test still to build. |
-| REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9 | feature/audit | **Vulkan slice DONE** — all 5 skinned vertex shaders now compose `transpose(inverse(mat3(world)))` (Variant A ×4 + Variant B ×1 in pbr3d_skinned). New non-identity-World harness 1/4 → 4/4, matching FNA analytic values to the byte. Shader-only (world already in UBO). EasyGL/WebGPU/SdlGpu/Bgfx/D3D9/D3DCommon slices PENDING (bytecode regen blocked). See "Wave 3 — GRAPHICS shader campaign". |
+| REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450 | feature/audit | **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx / D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (no shaderc/fxc/dxc). See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-007 | P1 | IN PROGRESS | 31668819 | feature/audit | **Vulkan slice DONE** — env_map3d.frag emissive now added unscaled (`lightSum*Diffuse + Emissive`); test-driven discriminating case added (non-white Diffuse). 8/8 Vulkan env-map tests pass, zero regressions. Bgfx/WebGPU/SdlGpu/D3DCommon slices PENDING (bytecode regen blocked). See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-008 | P1 | DEFERRED (this session) | | | Vulkan root cause re-confirmed at source (skinned frag reads always-zero `pc.ambientColor`; `SkinnedEffect::FillGpuDrawParams` never writes `p.ambientColor` and pre-folds ambient into `p.emissiveColor`, which the skinned UBOs have no slot for). **Deferred, not blocked by tooling:** the FNA-correct formula double-lights `Vulkan_AvatarRenderer_TintRouting`, which drives ambient(1,1,1) AND a full head-on light and passes only because this bug cancels the double-count. Re-baselining it needs AvatarRenderer lighting recalibration — an avatar-subsystem change outside this campaign's clean scope. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-009 | P1 | NOT STARTED | | | |
@@ -2400,6 +2400,7 @@ existing task.
 | REMED-DEVICES-004 | `devices-asan` preset's `CNA_DEVICES_GTEST_FILTER` run (all 50 `tests/CNA/Devices/*.cpp` cases) exits process code 1 despite **all 50 gtest cases reporting PASSED** — AddressSanitizer reports 12032 bytes leaked in 16 allocations. Bisected precisely: excluding `CameraTests.*` alone makes the same run exit 0 with the other 46 tests still passing; within `CameraTests`, the leak is specific to the 4 `TryAcquireFrame*` cases (which construct a real `Texture2D`/`GraphicsDevice` for pixel upload), not the other 4 `CameraTests` cases. Every leak's stack trace bottoms out in `libdrm.so.2`/`<unknown module>` (GL/DRI driver initialization), not any `CNA::Devices::Camera`/`CameraTests` source line. **Extended under `devices-tsan`:** the same run there (exit 66, TSan's own convention) reports 8 data-race warnings, **all 8 in the identical shape** — `pthread_barrier_init`/`pthread_barrier_destroy` racing inside `libgallium-25.0.7-2.so`/`libEGL_mesa.so` during real `GraphicsDevice`/`EasyGLGraphicsBackend` construction/teardown, triggered by the exact same `CameraTests.TryAcquireFrame*` cases (confirmed via full stack traces: `GraphicsDevice::GraphicsDevice()`/`::Dispose()`/`::~GraphicsDevice()` → Mesa/EGL internals, never a `CNA::Devices::Camera`/`CameraTests.cpp` frame) — the same root class as the ASan leak, not a second, independent finding | MEDIUM | P3 | `REMED-BUILD-011`'s own devices-asan/devices-tsan verification runs (this tranche) | NOT STARTED — recorded, not fixed (out of BUILD_TEST_CI scope; both the ASan leak and the TSan races point at Mesa/libgallium/libEGL driver-internal synchronization during real GL context construction/teardown, not `CNA::Devices::Camera` code — matches this project's own already-documented Wave 1 decision that ASan/TSan+real-GPU-rendering paths are known-noisy and intentionally out of sanitizer-coverage scope. DEVICES lane should still confirm this directly before permanently dismissing it, since a driver false positive vs. a real bug in `Camera.cpp`'s own texture-upload/device-lifecycle path have very different remediations) |
 | REMED-BUILD-016 | This project's `-fsanitize=undefined` build configuration (`cmake-build-media-asan`'s ad hoc flags, and by the same shape `devices-ubsan` in `CMakePresets.json`) does not include `-fsanitize=float-cast-overflow`. GCC (unlike Clang, which bundles it into `undefined`) requires this check named explicitly. Confirmed empirically while verifying `REMED-CORE-004`: the exact UB that task fixed (`static_cast<bytecs>(NaN * 255.0f)` etc.) produced **zero** sanitizer output under the project's own `cmake-build-media-asan`, and only reproduced (12 distinct runtime-error reports) once `float-cast-overflow` was added explicitly to an ad hoc standalone build. Any out-of-range/NaN float→integer cast anywhere in the codebase currently passes this project's own UBSan coverage silently | MEDIUM | P1 (suggested — same leverage precedent as `REMED-BUILD-001`/`-002`: a build-config fix that makes an entire defect class newly detectable project-wide) | `REMED-CORE-004`'s own UBSan verification pass | NOT STARTED — recorded, not fixed (BUILD_TEST_CI-owned: `CMakePresets.json` and this session's own ad hoc `cmake-build-*-asan` `CMAKE_CXX_FLAGS` convention) |
 | REMED-GFX-057 | `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`'s `DrawString`/`Draw` (`static_cast<intcs>(dw * scale)`/`static_cast<intcs>(dh * scale)` ~line 311, the `Vector2`-scale siblings ~line 329, and the glyph-width/height `std::lround(...)`-wrapped casts ~lines 514-515) share the identical unguarded-float-to-`intcs`-cast root cause `Color::Lerp`/`Color::Multiply` had before `REMED-CORE-004`: a NaN or extreme `scale`/`Vector2 scale` argument reaching `DrawString`/`Draw` is undefined behavior with no guard | MEDIUM | P2 (suggested — same defect class as `REMED-CORE-004`, UB not memory corruption; fold into whichever GRAPHICS batch next touches `SpriteBatch.cpp`) | `REMED-CORE-004`'s own "verify all constructors/operators touched by the same root cause" sweep, extended past `Color.cpp` to other unguarded-float-cast sites project-wide | NOT STARTED — recorded, not fixed (GRAPHICS-owned file, out of the CORE lane's scope) |
+| REMED-GFX-059 | The SdlGpu backend emits a Vulkan validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw (confirmed via `VK_LAYER_KHRONOS_validation` under `SDL_GPU`). Confirmed **pre-existing** and independent of `REMED-GFX-006`: the existing `SdlGpu_Skinned` test emits it 6× against unchanged (pre-fix) shaders, and readback pixel values are correct throughout, so it is a render-pass/pipeline attachment-compatibility validation issue in `SdlGpuGraphicsBackend`, not a normal-transform or rendering-correctness defect | LOW-MEDIUM | P2 (SdlGpu-lane; validation-cleanliness, not a visible-output defect) | `REMED-GFX-006` SdlGpu slice (first `VK_LAYER_KHRONOS_validation` run of the new world-normal harness) | NOT STARTED — recorded, not fixed (out of GFX-006's normal-transform scope; SdlGpu-backend owner should reconcile the SDL_GPU render-pass/pipeline attachment description that 02684 flags) |
 
 #### REMED-BUILD-010 detail
 
@@ -2801,9 +2802,103 @@ transpose specifically.
 `Vulkan_DepthBias`). Every existing identity-World skinned test still passes, as expected (the new
 factor is the identity there). Validation layer (`VK_LAYER_KHRONOS_validation`) clean.
 
-**Remaining GFX-006 scope.** EasyGL, WebGPU, SdlGpu, Bgfx, D3D9, D3DCommon carry the same Variant A/B
-defect (audit-confirmed at source); their bytecode regen is blocked in this sandbox. GFX-006 stays
-IN PROGRESS.
+**Remaining GFX-006 scope (after the Vulkan slice).** EasyGL, WebGPU, SdlGpu, Bgfx, D3D9, D3DCommon
+carry the same Variant A/B defect (audit-confirmed at source). The EasyGL/WebGPU/SdlGpu slices are
+now DONE (below); Bgfx/D3D9/D3DCommon stay BYTECODE-BLOCKED.
+
+### REMED-GFX-006 — EasyGL / WebGPU / SdlGpu skinned world-space normal transform — **DONE and VERIFIED** (commits `7c5cf74f`, `f040f184`, `cd9298fd`, `23a83527`, `daa7bb70`, `9e0b1450`)
+
+**Scope confirmed before editing (Phase 1).** A full repo sweep for directly-editable skinned
+normal transforms classified every backend:
+- **AFFECTED (fixed this session):** EasyGL (3 programs), WebGPU (5 WGSL shaders), SdlGpu (3 GLSL
+  shaders).
+- **ALREADY CORRECT:** Vulkan (prior slice, 5 shaders).
+- **BYTECODE-BLOCKED (inspected, not edited):** Bgfx (`vs_skinned3d` A, `vs_pbr_skinned3d` B), D3D9
+  (`SkinnedVertexColor3D` A, `PbrSkinned3D` B), D3DCommon→D3D11/D3D12 (`skinned*` A ×4,
+  `pbr_skinned3d` B). Their `sc`/`fxc`/`dxc` toolchains are unavailable in this sandbox; source-only
+  edits would be inert, so none were made.
+- **NOT_APPLICABLE:** Software (no skinned diffuse lighting at all — design decision 6; its only
+  world-normal use is the env-map reflection vector, a documented raw-World simplification that is
+  GFX-007-adjacent, not GFX-006), and Ascii/Canvas/Headless/SdlRenderer/Dx3 (no 3D skinned normal
+  transform).
+
+**Fix per backend.** The correct transform, applied AFTER the bone-skin 3×3, is
+`normalize( transpose(inverse(mat3(World))) * (mat3(skinMat) * normal) )` — FNA's `Skin()` then
+`Lighting.fxh`'s `mul(normal, WorldInverseTranspose)`. Tangents (PBR) stay on raw `World`.
+- **EasyGL** — routed all three programs (`EnsureSkinnedProgram` A, `EnsureSkinnedVertexLitProgram`
+  A, `EnsurePbrSkinnedProgram` B) through the CPU-precomputed inverse-transpose `uNormalMatrix` that
+  `BindDrawParams()` already uploads for every non-skinned lit program: each now declares
+  `uniform mat3 uNormalMatrix` and registers `loc_normalmat`, so the upload path activated with no
+  C++ data change.
+- **WebGPU** — the 4 non-PBR skinned WGSL (Variant A) + 1 PBR (Variant B) now read
+  `lp.normalMatrixCol0/1/2` (the inverse-transpose `FillLitLightUniforms` already filled for every
+  skinned draw but no shader read). Shader-string-only; WGSL is compiled at runtime by wgpu-native.
+- **SdlGpu** — the 3 GLSL shaders (`skinned3d` A, `skinned_colored3d` A, `pbr_skinned3d` B) compute
+  `transpose(inverse(mat3(lp.world)))` in-shader (no CPU normal-matrix upload on this backend),
+  mirroring the Vulkan siblings. `spirv_shaders.hpp` regenerated via `compile_shaders.py`
+  (libshaderc); regen was proven byte-reproducible (an unchanged-source regen is byte-identical to
+  the committed header) and the change touched exactly the 3 intended arrays, the other 20
+  byte-identical.
+
+**Pre-fix → post-fix (analytic non-identity-World harness, ported per backend).**
+| Backend | test | readback | pre-fix | post-fix | expected (correct) |
+|---|---|---|---|---|---|
+| EasyGL | `easygl_skinnedeffect_world_normal_test.cpp` | GetBackBufferData, linear | 2/8 | **8/8** | 0 / 255 / 228 / 114 |
+| WebGPU | `webgpu_skinnedeffect_world_normal_test.cpp` | GetBackBufferData, **sRGB** | 2/8 | **8/8** | 0 / 255 / 243 / 178 |
+| SdlGpu | `sdlgpu_skinnedeffect_world_normal_test.cpp` | RenderTarget2D::GetData, linear | 1/4 | **4/4** | 0 / 255 / 228 / 114 |
+
+EasyGL/WebGPU cover both `PreferPerPixelLighting` variants (8 checks); SdlGpu has one lit skinned
+path (4 checks). The scale case discriminates all three hypotheses: correct inverse-transpose
+(228 linear / 243 sRGB) vs no-world Variant A (180 / 219) vs raw-World Variant B (114 / 178) — every
+pre-fix backend read the Variant-A value, every post-fix backend reads the inverse-transpose value.
+WebGPU's swapchain is sRGB (`BGRA8UnormSrgb`), so its bytes are the sRGB OETF of the identical linear
+N·L (empirically, un-worlded 0.707 → exactly 219 = round(255·sRGB(0.707))).
+
+**Cross-backend conformance (Phase 8).** Same World/bones/geometry/material/light on all four
+verified backends:
+| Case | correct N·L | Vulkan | EasyGL | SdlGpu | WebGPU (sRGB) | WebGPU→linear |
+|---|---|---|---|---|---|---|
+| identity | 0.000 | 0 | 0 | 0 | 0 | 0.000 |
+| rotationZ(90) | 1.000 | 255 | 255 | 255 | 255 | 1.000 |
+| scale(2,1,1) | 0.894 | 228 | 228 | 228 | 243 | 0.894 |
+| rot×scale | 0.447 | 114 | 114 | 114 | 178 | 0.447 |
+The three linear-backbuffer backends are **byte-identical** (0 divergence); WebGPU is the sRGB
+encoding of the same linear normal, which decodes back to the same N·L within 8-bit quantization
+(≤0.2%). Tolerance justified: the only cross-backend difference is the swapchain transfer function,
+not the normal transform.
+
+**Regression / validation.**
+- EasyGL: 95 effect tests pass (all identity-World skinned cases, PBR, environment-map, basiceffect,
+  model, goldens). `EasyGL_AvatarRenderer_TintRouting` still fails with the **identical**
+  pre-existing value `left=(81,51,31)` both with and without the fix (confirmed by a stash-rebuild
+  baseline) — the known REMED-BUILD-003 fragment-stage tint-doubling defect, orthogonal to the
+  vertex normal.
+- WebGPU: 11 effect tests pass (Skinned3D, SkinnedPbr3D, Pbr3D, LitTextured3D, …); no wgpu
+  validation errors.
+- SdlGpu: all 22 SdlGpu tests pass; full-suite run (5603 tests) had 4 failures, all pre-existing and
+  backend-agnostic — `CnjEffectTest.LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (the same 3 the Vulkan slice documented) plus
+  a flaky Net `ENetDiscoveryServiceTest`; none are SdlGpu skinned/effect tests.
+
+**Coverage boundary (Variant B / PBR-skinned path).** The per-backend analytic harnesses drive
+`SkinnedEffect` (the non-PBR Variant-A programs) directly with pixel assertions. The PBR-skinned
+Variant-B shaders (EasyGL `EnsurePbrSkinnedProgram`, WebGPU `CreateSkinnedPbrResources`, SdlGpu
+`pbr_skinned3d`) are fixed with the *identical* inverse-transpose composition and verified by (a)
+code-consistency with the pixel-verified Variant-A world factor on the same backend, (b) equivalence
+to Vulkan's already-analytic-verified `pbr3d_skinned`, and (c) each backend's existing
+identity-World `SkinnedPbrEffect` regression test still passing. A dedicated non-identity-World PBR
+harness (stride-68 `SkinnedPbrEffect`, whose BRDF makes a clean N·L readout harder) was not built
+this session — the residual risk is low given (a)–(c), but it is the one path proven by consistency
+rather than by direct non-identity pixel measurement.
+
+**New finding (recorded, not fixed here): REMED-GFX-059** — the SdlGpu backend emits a Vulkan
+validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw. Confirmed **pre-existing** (the
+existing `SdlGpu_Skinned` test emits it 6× against unchanged shaders) and independent of GFX-006
+(readback values are correct). Left outside this task — a SdlGpu render-pass/pipeline
+attachment-compatibility issue, not a normal-transform defect.
+
+**Remaining GFX-006 scope.** Only the bytecode-blocked backends remain: Bgfx, D3D9, D3DCommon
+(D3D11/D3D12). GFX-006 stays IN PROGRESS until those regenerate.
 
 ### REMED-GFX-008 — Vulkan skinned Ambient/Emissive — **DEFERRED this session** (verification entangled with avatar recalibration)
 
