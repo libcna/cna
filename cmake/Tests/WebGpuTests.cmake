@@ -115,6 +115,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_SkinnedPbr3D COMMAND cna_test_webgpu_skinnedpbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-006: SkinnedEffect world-space normal transform under non-identity World (rotation,
+    # non-uniform scale, and both) for both PreferPerPixelLighting variants -- the cases every
+    # existing skinned test, all of which use World = Identity, structurally cannot detect.
+    cna_webgpu_test(cna_test_webgpu_skinnedeffect_world_normal examples/webgpu_skinnedeffect_world_normal_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SkinnedEffect_WorldNormal COMMAND cna_test_webgpu_skinnedeffect_world_normal
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-41/77/78/79/80/81/82/83: real BlendState/RasterizerState (cull mode, wireframe)/
     # scissor/viewport wiring -- previously ApplyBlendState/ApplyRasterizerState/SetScissorRect/
     # SetViewport had no override at all on this backend, silently falling back to
