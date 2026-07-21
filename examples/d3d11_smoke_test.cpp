@@ -2973,6 +2973,14 @@ protected:
             sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
             sp.specularColor[0] = 1.0f; sp.specularColor[1] = 1.0f; sp.specularColor[2] = 1.0f;
             sp.specularPower = 16.0f;
+            // REMED-GFX-020: this check verifies the *per-pixel* lit_textured3d Blinn-Phong
+            // highlight (dot(H,N)=1 -> exact 255). With lightingEnabled=true and the default
+            // preferPerPixelLighting=false, DrawPrimitivesEx would instead dispatch the vertex-lit
+            // (Gouraud) LitTextured3dVertexLit variant, whose interpolated specular across this
+            // large triangle is ~228 at the sample pixel -- a correct vertex-lit result, but not
+            // the per-pixel value this check asserts. Opt into per-pixel lighting so the variant
+            // selected matches the value asserted (was the sole D3D11_Smoke internal check failure).
+            sp.preferPerPixelLighting = true;
 
             const Microsoft::Xna::Framework::Rectangle centerRegionFF(30, 30, 1, 1);
 
@@ -2998,6 +3006,24 @@ protected:
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME geometry/light with material "
                   "SpecularColor zeroed produces exact black -- proves the prior check's white came "
                   "genuinely from the specular term, not diffuse/ambient/emissive (plan_dx.md DX-125)");
+
+            // REMED-GFX-020: reversed-light-direction discriminator. Flip Light1 to travel -Z
+            // (toward the eye / away from the surface): "direction to light" now points away from
+            // the surface, so dot(N, -Light1Dir) < 0, the shader's zeroL1 gate collapses the
+            // specular term to zero, and the highlight must vanish to black. A specular formula that
+            // dropped the facing-gate or got the light-direction sign wrong would still light this
+            // case, so this pins the sign convention the full-white check above cannot alone.
+            GpuDrawParams spRev = sp;
+            spRev.light1Dir[2] = -1.0f;  // travels -Z instead of +Z
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, spRev);
+            Color specRev(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFF, &specRev, 0, 1);
+            check(specRev.getRProperty() == 0 && specRev.getGProperty() == 0 && specRev.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): reversing Light1's direction (now facing "
+                  "away from the surface) collapses the specular highlight to exact black via the "
+                  "shader's facing gate -- pins the light-direction sign convention (plan_dx.md DX-125)");
         }
 
         // plan_dx.md DX-151: skinned3d -- real Blinn-Phong specular highlight, discriminating.
@@ -3037,6 +3063,14 @@ protected:
             rp.eyePositionWorld[0] = 0.0f; rp.eyePositionWorld[1] = 0.0f; rp.eyePositionWorld[2] = -10.0f;
             rp.specularColor[0] = 1.0f; rp.specularColor[1] = 1.0f; rp.specularColor[2] = 1.0f;
             rp.specularPower = 16.0f;
+            // REMED-GFX-020: assert the *per-pixel* skinned3d highlight explicitly. skinned3d.frag
+            // has no LightingEnabled branch (it is unconditionally lit), so this check historically
+            // passed even with the default lightingEnabled=false -- but only because that default
+            // also happens to steer variant selection to the per-pixel Skinned3d base shader. Make
+            // the per-pixel intent explicit so the shader variant actually exercised matches the
+            // per-pixel value asserted, mirroring DX-125's own fix above.
+            rp.lightingEnabled = true;
+            rp.preferPerPixelLighting = true;
 
             const Microsoft::Xna::Framework::Rectangle rrRegion(30, 30, 1, 1);
 
@@ -3561,7 +3595,7 @@ protected:
                                 + 4 /* DX-145 DepthStencilFormat fidelity */
                                 + 2 /* DX-147 occlusion query visible-vs-occluded */
                                 + 4 /* DX-124 multi-light + EmissiveColor discrimination */
-                                + 2 /* DX-125 specular-highlight discrimination */
+                                + 3 /* DX-125 specular-highlight discrimination (+REMED-GFX-020 reversed-light) */
                                 + 3 /* DX-126 mip level > 0 upload/readback */
                                 + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */
                                 + 1 /* DX-128 Model/ModelMesh runtime-API orchestration */
