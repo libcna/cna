@@ -3536,3 +3536,56 @@ D3DCommon (D3D11/D3D12) fog/skinned/env shaders and the 3 D3D9 custom shaders. *
 verification stays limited by the pre-existing **REMED-BUILD-012** Wine/vkd3d-proton swap-chain crash
 (unchanged, unrelated to compilation); D3D12 shares D3DCommon's bytecode, so its shaders are corrected
 and byte-verified even where the real-window runtime cannot execute here.
+
+### D3D shader slices CLOSED with the reproducible toolchain (all of GFX-005/006/007/010)
+
+With reproducibility established, every previously BYTECODE-BLOCKED D3D slice was implemented,
+regenerated, and verified. All runtime verification is D3D11 under **Wine 10.0 + DXVK 2.6 (Xvfb :99)**;
+D3D12 shares D3DCommon's DXBC + CPU so its shaders are corrected + bytecode-verified (real-window
+runtime blocked by REMED-BUILD-012). Each regen changed **only** the intended arrays.
+
+| Task | Backend | Shaders | Commit | Pre-fix → post-fix |
+|---|---|---|---|---|
+| **GFX-007** EnvMap emissive | D3DCommon | `env_map3d.frag` (1 array) | `ef63b2b7` | `D3D11_EnvironmentMapAmountZero`: (50,25,12) FAIL → (100,50,25) PASS |
+| **GFX-006** skinned world-normal | D3DCommon | `skinned3d`,`skinned3d_vertexlit`,`skinned_colored3d`,`skinned_colored3d_vertexlit`,`pbr_skinned3d` verts (5) | `b5c3fdf6` | `D3D11_SkinnedEffect_WorldNormal`: 3/4 FAIL (Variant A: 0/180/180) → 4/4 PASS |
+| **GFX-006** skinned world-normal | D3D9 | `SkinnedVertexColor3D`,`PbrSkinned3D` (Variant B) | `b5c3fdf6` | disasm: +1 rcp(1/det) +1 dp3(det) = cofactor inverse-transpose now in bytecode |
+| **GFX-005/010** view-space fog | D3DCommon | 13 vector-slot fog verts | `2967df76` | `D3D11_ViewSpaceFog`: 6/9 FAIL (object-space) → 9/9 PASS |
+| **GFX-005/010** view-space fog | D3DCommon | `alpha_test3d`,`alpha_test_colored3d` (vert+frag, cbuffer restructured) | `24f20513` | `D3D11_AlphaTest_Fog`: 2/3 FAIL (mirror+denom-clamp) → 3/3 PASS |
+| **GFX-010** view-space fog | D3D9 | `Pbr3D`,`PbrSkinned3D`,`SkinnedVertexColor3D` custom (3) | `26e7b812` | disasm: FogVector@c225 dotted with post-skin pos; Pbr3D FogParams@c11 as vector |
+
+**Key design decisions**
+- **Fog (GFX-005 + GFX-010 done together for D3D):** both fog defects (mirrored factor + object-space Z)
+  live in the same shaders; implementing FNA's view-space fog vector fixes both at once and reaches
+  cross-backend conformance with EasyGL/Vulkan/SdlGpu/Bgfx. `keep = 1 - saturate(dot(float4(pos,1),
+  fogVector))`. The `GpuDrawParams.fogVector` (EffectHelpers.SetFogVector) is already CPU-computed by
+  every stock effect; the D3D backends just upload it. D3DCommon reuses the existing `FogStartEnd`
+  vec4 cbuffer slot (comment-noted reinterpretation) so fragment DXBCs stay byte-identical; only
+  AlphaTestEffect needed a cbuffer restructure (scalar fog → `FogVector[4]@96`, `VertexColorEnabled`
+  moved to @124, still 128 B, offsets guarded by the existing `static_assert`s). D3D9 stock effects
+  were already view-space-correct (`ComputeFogVectorEXT`); only the 3 custom shaders needed routing.
+- **Skinned normals (GFX-006):** `normalize(mul(mul(normal, skinMat3x3), InverseTranspose3x3(World)))`,
+  matching FNA (`SkinnedEffect.fx` `Skin()` + `Lighting.fxh` WorldInverseTranspose). Tangents stay on
+  raw World (direction convention). D3D9 skinned shaders compute the cofactor inverse-transpose in-shader.
+- **D3D9 register plumbing:** Pbr3D repurposes `FogParams`(c11) as the fog vector (no WeightsPerVertex);
+  the two skinned shaders add a `FogVector` constant at **c225** (D3DDisassemble-confirmed; the compiler's
+  own literal lands at c226, no conflict), `FogParams` keeping only `.w = WeightsPerVertex`. Manual
+  register tables updated 4→5 slots.
+
+**Regression status (final):** full D3D11 suite = **9/11 pass**; the only 2 failures
+(`D3D11_Smoke` Blinn-Phong specular, `D3D11_Pbr_VertexColor` black-vertex-color) are the pre-existing
+**REMED-GFX-020**, confirmed failing identically at HEAD before any change in this campaign — not
+regressions. D3D9 `D3D9_Pbr` + `D3D9_SkinnedVertexColor` pass under Wine+DXVK9 (no fog regression).
+
+**New findings during the D3D campaign**
+- None separable from the tasks. The documented assumption that D3DCommon DXBC is non-reproducible
+  (`verify_hlsl_shaders_native_msvc.py`) was **disproven** in this environment — recorded above, not a
+  code defect. REMED-GFX-020 (D3D11 specular/black-vertex-color) reconfirmed pre-existing and unrelated.
+
+**Remaining D3D graphics gaps (out of this campaign's scope)**
+- **D3D9 view-space fog runtime pixel test:** verification for the D3D9 fog + GFX-006 slices is
+  compile/disassembly + formula-identity with the D3D11-verified path (no transformed-camera D3D9 fog
+  or lit rotated-World skinned-vertex-color test exists yet). A future BUILD/TEST task should add one.
+- **D3D12 runtime:** every D3D12 shader here is corrected + bytecode-identical to D3D11's, but
+  real-window runtime stays blocked by REMED-BUILD-012 (Wine/vkd3d-proton swap-chain crash).
+- **REMED-GFX-020** (D3D11 specular asymmetry + black vertex color) remains open — a separate task,
+  surfaced again here only as the 2 pre-existing suite failures.
