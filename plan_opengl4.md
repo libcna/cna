@@ -1,17 +1,23 @@
 # OpenGL 4 Graphics Backend — Implementation Plan
 
-> **Status (2026-07-21): Phase 1 (`GL4-1`–`GL4-12`) landed and verified.** `CNA_GRAPHICS_BACKEND=OPENGL4`
+> **Status (2026-07-21): Phase 1 (`GL4-1`–`GL4-13`) landed and verified.** `CNA_GRAPHICS_BACKEND=OPENGL4`
 > configures, builds (`cna_backend_graphics_opengl4`), and a real window with a real desktop
 > `SDL_GL_CONTEXT_PROFILE_CORE` context (confirmed via `glGetString(GL_VERSION)` reporting
 > `4.5 (Core Profile) Mesa 25.2.8` on this dev machine's llvmpipe/Mesa driver under Xvfb) clears
 > color/depth/stencil, uploads a real `Texture2D`, draws a real `SpriteBatch` scene (tint, alpha,
 > rotation/flip, source-rectangle cropping, and all three sampler address modes — Wrap/Clamp/
-> Mirror), and draws real `colored3d` geometry (`VertexPositionColor`/`BasicEffect.
-> VertexColorEnabled`) both non-indexed and indexed, including a genuine depth-test occlusion
-> proof verified two ways (draw-order-independent). Verified by `OpenGL4_Smoke` (8/8),
-> `OpenGL4_Readback` (10/10), and `OpenGL4_3D` (4/4) — all real pixel-readback assertions via
-> `GraphicsDevice.GetBackBufferData()`, not just "didn't throw" — `ctest -R OpenGL4`, all pass.
-> Two real bugs were found and fixed while getting there — see `GL4-7`/`GL4-9`'s rows below.
+> Mirror), and draws real 3D geometry through `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s
+> stride-keyed dispatch: `colored3d` (`VertexPositionColor`/`BasicEffect.VertexColorEnabled`,
+> with a genuine depth-test occlusion proof verified two ways/draw-order-independent),
+> `textured3d` (`VertexPositionTexture`/`BasicEffect.TextureEnabled`, real texture sampling, not a
+> diffuse-only fallback), `colored_textured3d` (`VertexPositionColorTexture`, vertex-color tint
+> multiplying the sampled texture), and `lit_textured3d` (`VertexPositionNormalTexture`/
+> `BasicEffect.EnableDefaultLighting()`, real ambient+Lambertian-diffuse+Blinn-Phong-specular
+> lighting, proven to actually differ from the unlit render). Verified by `OpenGL4_Smoke` (8/8),
+> `OpenGL4_Readback` (10/10), `OpenGL4_3D` (4/4), and `OpenGL4_Textured3D` (5/5) — all real
+> pixel-readback assertions via `GraphicsDevice.GetBackBufferData()`, not just "didn't throw" —
+> `ctest -R OpenGL4`, all pass. Two real bugs were found and fixed while getting there — see
+> `GL4-7`/`GL4-9`'s rows below.
 >
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
@@ -41,19 +47,13 @@
 >   `nullptr` via `IGraphicsBackend`'s own default. No FBO code exists yet at all. ⬜
 > - **`Texture3D`/`TextureCube` (plain, non-render-target)** — `CreateTexture3D`/
 >   `CreateTextureCube` are not overridden either; both return `nullptr`. ⬜
-> - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`** — not overridden; both inherit
->   `IGraphicsBackend`'s default fallback to `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`,
->   which only reproduces the stride-16 `VertexPositionColor` layout correctly. A `BasicEffect`
->   with `TextureEnabled=true` (stride 20/24/32) or lighting enabled currently renders through
->   that same colored-only shader instead of throwing — geometry still draws, but texture/lighting
->   are silently ignored. `opengl4_3d_test.cpp` deliberately does not test those paths for this
->   reason (see its own top-of-file comment) rather than claim coverage it doesn't have. Needs:
->   `textured3d`/`colored_textured3d`/`lit_textured3d` GLSL variants (the existing
->   `VulkanGraphicsBackend`/`EasyGLGraphicsBackend` shaders are a solid algorithmic reference) and
->   real stride-keyed shader/VAO dispatch, mirroring `SdlGpuGraphicsBackend`'s own
->   `GetOrCreatePipeline*` pattern. ⬜
 > - **`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`** —
->   none implemented (all depend on the `DrawPrimitivesEx` work above landing first). ⬜
+>   none implemented yet. `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done) unblocks
+>   these — each needs its own shader variant/uniform wiring on top of the stride dispatch that
+>   now exists, plus (for `SkinnedEffect`) a bone-palette uniform array and a new stride-52/56
+>   vertex layout `OpenGL4VertexBufferBackend::ApplyLayout` doesn't recognize yet (falls back to
+>   its own documented position-only default case). `EnvironmentMapEffect` additionally needs
+>   `TextureCube` (see above) as its env-map source. ⬜
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
 > - **`ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`** — not overridden (inherited
@@ -61,6 +61,20 @@
 >   virtuals) and `SetViewport`/`ApplySamplerState` (both genuinely implemented) are the only real
 >   per-draw state currently wired to real GL calls — cull mode, fill mode, scissor, blend
 >   factors/equations, and stencil ops are all still whatever GL's own defaults are. ⬜
+> - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplifications (`GL4-13`)** — real, but
+>   two real gaps remain: (1) `params.baseVertex` is ignored (no `glDrawElementsBaseVertex` call —
+>   only `params.startIndex` is honored, via a byte offset into the index buffer); (2) the texture
+>   sampler used for `params.texture0` is hardcoded Linear/Clamp (`ApplySamplerState(0, 0, 1, 1,
+>   1)`), not driven by the real bound `SamplerState` — same documented gap as `plan_sdlgpu.md`'s
+>   own `SDLGPU-21` ("dynamic `SamplerState` for direct 3D draws"). ⬜
+> - **`preferPerPixelLighting`** — `GpuDrawParams::preferPerPixelLighting` is read by no shader;
+>   `lit_textured3d` always renders per-pixel regardless of its value, same known, tracked
+>   divergence from XNA's real per-vertex-lit default that every backend except D3D9 currently has
+>   (see the field's own doc comment in `IGraphicsBackend.hpp`). ⬜
+> - **Fog** — `GpuDrawParams::fogEnabled`/`fogColor`/`fogStart`/`fogEnd` are not read by any of the
+>   4 stride shaders (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`), a deliberate
+>   deferral matching `plan_webgpu.md`'s own "No fog (same deliberate deferral as the other 3
+>   stride variants)" precedent for `lit_textured3d`. ⬜
 > - **MSAA** — `GraphicsBackendCreateArgs::multiSampleCount` is accepted but ignored;
 >   `SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, ...)` is never called. `GetMultiSampleCount()`
 >   keeps `IGraphicsBackend`'s own default (`0`). ⬜
@@ -117,7 +131,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -137,14 +151,16 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-10` | `ReadBackbuffer` (`glReadPixels` + Y-flip, mirroring `EasyGLGraphicsBackend::ReadBackbuffer`'s own convention) — real pixel-level verification for every check above, not just "didn't throw". | ✅ | |
 | `GL4-11` | `ApplySamplerState`: real GL sampler objects (`glGenSamplers`/`glBindSampler`/`glSamplerParameteri`), not texture-object-embedded state — Point/Linear/Anisotropic filter, Wrap/Clamp/Mirror address mode. | ✅ | |
 | `GL4-12` | `GraphicsBackendCompileDefinitionTests.cpp`/`GraphicsBackendType.hpp` updated for the new backend (the latter was a genuine second registration point found only by actually attempting a full-library build — `getCurrentGraphicsBackendType()`'s `#error` fires if a backend defines its own `CNA_BACKEND_*` compile definition without a matching branch there). | ✅ | `ExactlyOneGraphicsBackendIsSelected` syntax-checked against this backend's compile definitions; full `CnaTests` link not attempted in this sandboxed session (see Verification methodology below). |
+| `GL4-13` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: real stride-keyed dispatch (`BindProgramForStride`) to 3 new GLSL 410 core programs — `textured3d` (stride 20), `colored_textured3d` (stride 24), `lit_textured3d` (stride 32, FNA's `Lighting.fxh` `ComputeLights()` ported from `VulkanGraphicsBackend`'s own `lit_textured3d.vert/frag.glsl`, with a `safeNormalize()` guard against a disabled `DirectionalLight`'s zero-vector `Direction`, the same real bug `plan_webgpu.md` found and fixed independently). Unrecognized strides still fall back to `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`. | ✅ | Added `PixelTestGame::Check(bool, label)` (`examples/common/PixelTestGame.hpp`) — a small, purely-additive generic boolean assertion alongside the pre-existing `ExpectPixel`/`CompareGoldenImage`, needed to assert "the lit render must differ from the unlit render" (not itself a pixel-region compare). |
 
 ---
 
 ## Verification methodology
 
 Mirrors the `SDL_GPU`/`WebGPU`/`D3D11` precedent: this backend's own dedicated CTest suite
-(`ctest -R OpenGL4` — `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`) is the validated
-methodology for a real-window/GPU backend in this project, not a full unfiltered `CnaTests` run.
+(`ctest -R OpenGL4` — `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`) is
+the validated methodology for a real-window/GPU backend in this project, not a full unfiltered
+`CnaTests` run.
 In this sandboxed dev environment, building the full `CnaTests` target hit pre-existing,
 backend-independent gaps unrelated to this work (a `tools/audio/*_harness.cpp` target missing an
 SDL3 include path, and a version-skew between this checkout's `Xnb` content readers and the
@@ -154,7 +170,7 @@ backends too and are out of scope for this plan; not fixed here. `GraphicsBacken
 was independently syntax-checked (`g++ -fsyntax-only`) against `CNA_BACKEND_OPENGL4`'s compile
 definitions instead.
 
-All three dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All four dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -163,18 +179,27 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   coverage, alpha=0/50% blending, source-rectangle cropping, all three `TextureAddressMode` values).
 - `OpenGL4_3D` — 4/4 (solid-color quad via `DrawPrimitives`, real depth-test occlusion proven both
   draw orders, `DrawIndexedPrimitives`).
+- `OpenGL4_Textured3D` — 5/5 (`textured3d` samples a solid-orange texture exactly; `colored_textured3d`'s
+  vertex-color tint multiplies the sampled texture; `lit_textured3d`'s unlit render matches the
+  plain texture exactly AND `EnableDefaultLighting()`'s lit render is provably different from it;
+  `DrawIndexedPrimitivesEx` samples correctly too).
 
 ---
 
 ## Active execution order — do this one task at a time
 
-1. ~~`GL4-1`~~ – ~~`GL4-12`~~ — Phase 1 (infrastructure, 2D `SpriteBatch` vertical slice, `colored3d`
-   3D with real depth-test proof) done and verified 2026-07-21, all ✅. See the task table above
-   for the two real bugs found and fixed along the way.
-2. **Next up (not yet started, no priority order implied):**
-   - `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` + `textured3d`/`colored_textured3d`/
-     `lit_textured3d` shader variants — unblocks `BasicEffect.TextureEnabled`/lighting, and in turn
-     `AlphaTestEffect`/`DualTextureEffect`.
+1. ~~`GL4-1`~~ – ~~`GL4-12`~~ — Phase 1 infrastructure (window/context, clear/present, `Texture2D`,
+   `VertexBuffer`/`IndexBuffer`, `SpriteBatch`, `colored3d` 3D with real depth-test proof) done and
+   verified 2026-07-21, all ✅. See the task table above for the two real bugs found and fixed
+   along the way.
+2. ~~`GL4-13`~~ — `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` stride dispatch (`textured3d`/
+   `colored_textured3d`/`lit_textured3d`) done and verified 2026-07-21, all ✅ (`OpenGL4_Textured3D`,
+   5/5). See `GL4-13`'s own row for the ported lighting formula and its known simplifications
+   (`baseVertex` ignored, hardcoded direct-3D-draw sampler state, no `preferPerPixelLighting`/fog).
+3. **Next up (not yet started, no priority order implied):**
+   - `AlphaTestEffect`/`DualTextureEffect` — now unblocked by `GL4-13`'s stride dispatch; each
+     needs its own shader variant (per-pixel discard for the former, a second sampler for the
+     latter) plumbed through `BindProgramForStride`.
    - `RenderTarget2D` (FBO) — unblocks render-to-texture and, later, `EnvironmentMapEffect`'s
      env-map source once `TextureCube` exists.
    - `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState` dynamic mapping — currently

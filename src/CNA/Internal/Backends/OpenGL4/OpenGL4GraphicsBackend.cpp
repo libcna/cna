@@ -97,6 +97,167 @@ void main()
 }
 )GLSL";
 
+        // plan_opengl4.md GL4-13: textured3d (VertexPositionTexture, stride 20). Algorithmic
+        // reference: VulkanGraphicsBackend's textured3d.vert/frag.glsl (no fog, no Y-flip --
+        // OpenGL's own NDC convention needs none, unlike Vulkan's flipped clip space).
+        const char* kTextured3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec2 aUV;
+uniform mat4 uWorldViewProj;
+out vec2 vUV;
+void main()
+{
+    vUV = aUV;
+    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+}
+)GLSL";
+
+        const char* kTextured3DFragSrc = R"GLSL(
+#version 410 core
+in vec2 vUV;
+uniform sampler2D uTexture;
+uniform vec4 uDiffuseColor;
+uniform bool uTextureEnabled;
+out vec4 fragColor;
+void main()
+{
+    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
+    fragColor = tex * uDiffuseColor;
+}
+)GLSL";
+
+        // colored_textured3d (VertexPositionColorTexture, stride 24).
+        const char* kColoredTextured3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec4 aColor;
+layout(location = 2) in vec2 aUV;
+uniform mat4 uWorldViewProj;
+uniform vec4 uDiffuseColor;
+uniform bool uVertexColorEnabled;
+out vec2 vUV;
+out vec4 vTint;
+void main()
+{
+    vUV = aUV;
+    vTint = uVertexColorEnabled ? (aColor * uDiffuseColor) : uDiffuseColor;
+    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+}
+)GLSL";
+
+        const char* kColoredTextured3DFragSrc = R"GLSL(
+#version 410 core
+in vec2 vUV;
+in vec4 vTint;
+uniform sampler2D uTexture;
+uniform bool uTextureEnabled;
+out vec4 fragColor;
+void main()
+{
+    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
+    fragColor = tex * vTint;
+}
+)GLSL";
+
+        // lit_textured3d (VertexPositionNormalTexture, stride 32) -- BasicEffect's default
+        // 3-directional-light rig. Ported from VulkanGraphicsBackend's lit_textured3d.vert/
+        // frag.glsl: FNA's Lighting.fxh ComputeLights() (ambient + per-light Lambertian diffuse +
+        // Blinn-Phong specular, EmissiveColor added post-multiply, specular added post-texture
+        // scaled by alpha). No fog (same deliberate deferral as the other 3D stride variants).
+        // World's inverse-transpose upper-left 3x3 is used for the normal matrix (not MVP's),
+        // matching EnvironmentMapEffect's own already-correct pattern -- an MVP-based transform
+        // would bake View/Projection into the normal.
+        const char* kLitTextured3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
+uniform mat4 uWorldViewProj;
+uniform mat4 uWorld;
+out vec2 vUV;
+out vec3 vNormal;
+out vec3 vWorldPos;
+void main()
+{
+    vUV = aUV;
+    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
+    vNormal = normalize(normalMatrix * aNormal);
+    vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
+    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+}
+)GLSL";
+
+        const char* kLitTextured3DFragSrc = R"GLSL(
+#version 410 core
+in vec2 vUV;
+in vec3 vNormal;
+in vec3 vWorldPos;
+uniform sampler2D uTexture;
+uniform bool uTextureEnabled;
+uniform bool uLightingEnabled;
+uniform vec4 uDiffuseColor;
+uniform vec3 uAmbientColor;
+uniform vec3 uLight0Dir;
+uniform vec3 uLight0Diffuse;
+uniform vec3 uLight0Specular;
+uniform vec3 uLight1Dir;
+uniform vec3 uLight1Diffuse;
+uniform vec3 uLight1Specular;
+uniform vec3 uLight2Dir;
+uniform vec3 uLight2Diffuse;
+uniform vec3 uLight2Specular;
+uniform vec3 uEmissiveColor;
+uniform vec3 uEyePosition;
+uniform vec3 uSpecularColor;
+uniform float uSpecularPower;
+out vec4 fragColor;
+
+// Guards against normalize(0,0,0) on a disabled/unconfigured DirectionalLight -- a real bug
+// found while porting WebGPU's own lit3d shader (plan_webgpu.md): normalize() on a true zero
+// vector is undefined and can poison the whole light sum with NaN.
+vec3 safeNormalize(vec3 v)
+{
+    float len = length(v);
+    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
+}
+
+void main()
+{
+    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
+    vec4 color;
+    if (uLightingEnabled)
+    {
+        vec3 N = normalize(vNormal);
+        vec3 E = normalize(uEyePosition - vWorldPos);
+        vec3 nL0 = safeNormalize(uLight0Dir);
+        vec3 nL1 = safeNormalize(uLight1Dir);
+        vec3 nL2 = safeNormalize(uLight2Dir);
+        // Direction fields point FROM the light, so negate for the dot with N.
+        float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+        float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+        float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+        vec3 lightSum = uAmbientColor + NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
+        vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
+        vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
+        vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
+        vec3 specularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
+        // EmissiveColor is added after the light-sum*DiffuseColor multiply, not scaled by it
+        // (matches FNA's Lighting.fxh: result.Diffuse = sum*DiffuseColor + EmissiveColor).
+        vec3 lit = lightSum * uDiffuseColor.rgb + uEmissiveColor;
+        color = vec4(lit, uDiffuseColor.a) * tex;
+        // Specular is added after the texture*diffuse multiply, scaled by the resulting alpha
+        // (FNA's AddSpecular macro), never by the texture directly.
+        color.rgb += specularRGB * color.a;
+    }
+    else
+    {
+        color = uDiffuseColor * tex;
+    }
+    fragColor = color;
+}
+)GLSL";
+
         // XNA TextureFilter ordinal -> (GL min filter, GL mag filter). No mip chains are
         // generated by CreateTexture() in this phase, so every "Mip*" variant collapses to its
         // plain non-mip counterpart (matches EasyGLGraphicsBackend::ApplySamplerState's own
@@ -826,6 +987,165 @@ void main()
         if (!colored3DProgram_.Compile(kColored3DVertSrc, kColored3DFragSrc))
             throw std::runtime_error("OpenGL4: colored3d program failed to compile: " + colored3DProgram_.GetError());
         colored3DWvpLoc_ = colored3DProgram_.UniformLocation("uWorldViewProj");
+    }
+
+    void OpenGL4GraphicsBackend::EnsureTextured3DProgram()
+    {
+        if (textured3DProgram_.IsValid()) return;
+        if (!textured3DProgram_.Compile(kTextured3DVertSrc, kTextured3DFragSrc))
+            throw std::runtime_error("OpenGL4: textured3d program failed to compile: " + textured3DProgram_.GetError());
+    }
+
+    void OpenGL4GraphicsBackend::EnsureColoredTextured3DProgram()
+    {
+        if (coloredTextured3DProgram_.IsValid()) return;
+        if (!coloredTextured3DProgram_.Compile(kColoredTextured3DVertSrc, kColoredTextured3DFragSrc))
+            throw std::runtime_error("OpenGL4: colored_textured3d program failed to compile: " + coloredTextured3DProgram_.GetError());
+    }
+
+    void OpenGL4GraphicsBackend::EnsureLitTextured3DProgram()
+    {
+        if (litTextured3DProgram_.IsValid()) return;
+        if (!litTextured3DProgram_.Compile(kLitTextured3DVertSrc, kLitTextured3DFragSrc))
+            throw std::runtime_error("OpenGL4: lit_textured3d program failed to compile: " + litTextured3DProgram_.GetError());
+    }
+
+    bool OpenGL4GraphicsBackend::BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
+                                                       const Matrix& projection, const GpuDrawParams& params)
+    {
+        const Matrix wvp = world * view * projection;
+        float wvpCol[16];
+        wvp.ToColumnMajor(wvpCol);
+
+        const bool hasTexture0 = params.texture0 != nullptr;
+        if (hasTexture0)
+        {
+            gl4_glActiveTexture(GL_TEXTURE0);
+            params.texture0->BindGL();
+            ApplySamplerState(0, 0, 1, 1, 1); // Linear/Clamp -- matches this phase's SpriteBatch default.
+        }
+
+        switch (strideInBytes)
+        {
+        case 20: // VertexPositionTexture
+        {
+            EnsureTextured3DProgram();
+            textured3DProgram_.Use();
+            const int wvpLoc = textured3DProgram_.UniformLocation("uWorldViewProj");
+            if (wvpLoc >= 0) gl4_glUniformMatrix4fv(wvpLoc, 1, GL_FALSE, wvpCol);
+            const int diffuseLoc = textured3DProgram_.UniformLocation("uDiffuseColor");
+            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
+                                                 params.diffuseColor[2], params.diffuseColor[3]);
+            const int texEnabledLoc = textured3DProgram_.UniformLocation("uTextureEnabled");
+            if (texEnabledLoc >= 0) gl4_glUniform1i(texEnabledLoc, (params.textureEnabled && hasTexture0) ? 1 : 0);
+            const int texLoc = textured3DProgram_.UniformLocation("uTexture");
+            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            return true;
+        }
+        case 24: // VertexPositionColorTexture
+        {
+            EnsureColoredTextured3DProgram();
+            coloredTextured3DProgram_.Use();
+            const int wvpLoc = coloredTextured3DProgram_.UniformLocation("uWorldViewProj");
+            if (wvpLoc >= 0) gl4_glUniformMatrix4fv(wvpLoc, 1, GL_FALSE, wvpCol);
+            const int diffuseLoc = coloredTextured3DProgram_.UniformLocation("uDiffuseColor");
+            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
+                                                 params.diffuseColor[2], params.diffuseColor[3]);
+            const int vcLoc = coloredTextured3DProgram_.UniformLocation("uVertexColorEnabled");
+            if (vcLoc >= 0) gl4_glUniform1i(vcLoc, params.vertexColorEnabled ? 1 : 0);
+            const int texEnabledLoc = coloredTextured3DProgram_.UniformLocation("uTextureEnabled");
+            if (texEnabledLoc >= 0) gl4_glUniform1i(texEnabledLoc, (params.textureEnabled && hasTexture0) ? 1 : 0);
+            const int texLoc = coloredTextured3DProgram_.UniformLocation("uTexture");
+            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            return true;
+        }
+        case 32: // VertexPositionNormalTexture
+        {
+            EnsureLitTextured3DProgram();
+            litTextured3DProgram_.Use();
+            float worldCol[16];
+            world.ToColumnMajor(worldCol);
+            const auto setM4 = [&](const char* name, const float* m) {
+                const int loc = litTextured3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
+            };
+            const auto setV3 = [&](const char* name, const float* v) {
+                const int loc = litTextured3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
+            };
+            const auto setB = [&](const char* name, bool v) {
+                const int loc = litTextured3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
+            };
+            setM4("uWorldViewProj", wvpCol);
+            setM4("uWorld", worldCol);
+            const int diffuseLoc = litTextured3DProgram_.UniformLocation("uDiffuseColor");
+            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
+                                                 params.diffuseColor[2], params.diffuseColor[3]);
+            setB("uTextureEnabled", params.textureEnabled && hasTexture0);
+            setB("uLightingEnabled", params.lightingEnabled);
+            setV3("uAmbientColor", params.ambientColor);
+            setV3("uLight0Dir", params.light0Dir);
+            setV3("uLight0Diffuse", params.light0Diffuse);
+            setV3("uLight0Specular", params.light0Specular);
+            setV3("uLight1Dir", params.light1Dir);
+            setV3("uLight1Diffuse", params.light1Diffuse);
+            setV3("uLight1Specular", params.light1Specular);
+            setV3("uLight2Dir", params.light2Dir);
+            setV3("uLight2Diffuse", params.light2Diffuse);
+            setV3("uLight2Specular", params.light2Specular);
+            setV3("uEmissiveColor", params.emissiveColor);
+            setV3("uEyePosition", params.eyePositionWorld);
+            setV3("uSpecularColor", params.specularColor);
+            const int specPowerLoc = litTextured3DProgram_.UniformLocation("uSpecularPower");
+            if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
+            const int texLoc = litTextured3DProgram_.UniformLocation("uTexture");
+            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            return true;
+        }
+        default:
+            return false;
+        }
+    }
+
+    void OpenGL4GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
+                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                  PrimitiveType primitive, int primitiveCount,
+                                                  const GpuDrawParams& params)
+    {
+        const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
+        if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
+        {
+            DrawColoredPrimitives(vb_in, world, view, projection, primitive, primitiveCount);
+            return;
+        }
+
+        const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        gl4_glBindVertexArray(vb.VaoHandle());
+        glDrawArrays(ToGLPrimitive(primitive), params.vertexStart, vertexCount);
+        gl4_glBindVertexArray(0);
+    }
+
+    void OpenGL4GraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb_in, const IIndexBufferBackend& ib_in,
+                                                         const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                         PrimitiveType primitive, int primitiveCount,
+                                                         const GpuDrawParams& params)
+    {
+        const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
+        const auto& ib = static_cast<const OpenGL4IndexBufferBackend&>(ib_in);
+        if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
+        {
+            DrawIndexedColoredPrimitives(vb_in, ib_in, world, view, projection, primitive, primitiveCount);
+            return;
+        }
+
+        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        const auto byteOffset = reinterpret_cast<const void*>(
+            static_cast<std::uintptr_t>(params.startIndex) * sizeof(uint16_t));
+        gl4_glBindVertexArray(vb.VaoHandle());
+        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
+        glDrawElements(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT, byteOffset);
+        gl4_glBindVertexArray(0);
     }
 
     OpenGL4RawProgram& OpenGL4GraphicsBackend::GetOrCreateSpriteProgram()

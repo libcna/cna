@@ -96,6 +96,7 @@ namespace CNA::Internal::Backends::OpenGL4
 
         NOXNA [[nodiscard]] unsigned int VaoHandle() const { return vao_; }
         NOXNA [[nodiscard]] unsigned int VboHandle() const { return vbo_; }
+        NOXNA [[nodiscard]] std::size_t GetStrideInBytes() const { return strideInBytes_; }
 
     private:
         void ApplyLayout(std::size_t strideInBytes);
@@ -238,6 +239,18 @@ namespace CNA::Internal::Backends::OpenGL4
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
 
+        /// plan_opengl4.md GL4-13: dispatches by vertex stride to the colored/textured/
+        /// colored-textured/lit-textured shader family, matching VulkanGraphicsBackend's/
+        /// SdlGpuGraphicsBackend's own stride-keyed pipeline dispatch pattern.
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
+
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
@@ -250,6 +263,16 @@ namespace CNA::Internal::Backends::OpenGL4
 
     private:
         void EnsureColored3DProgram();
+        void EnsureTextured3DProgram();
+        void EnsureColoredTextured3DProgram();
+        void EnsureLitTextured3DProgram();
+
+        /// Binds the correct stride-keyed program for @p strideInBytes, uploads its uniforms
+        /// from @p world/@p view/@p projection/@p params, and binds texture unit 0 if
+        /// params.texture0 is set. Returns false (caller should fall back to
+        /// DrawColoredPrimitives/DrawIndexedColoredPrimitives) for an unrecognized stride.
+        bool BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
+                                  const Matrix& projection, const GpuDrawParams& params);
 
         static constexpr int kMaxSamplerSlots = 16;
 
@@ -264,6 +287,9 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;
         int colored3DWvpLoc_ = -1;
+        OpenGL4RawProgram textured3DProgram_;
+        OpenGL4RawProgram coloredTextured3DProgram_;
+        OpenGL4RawProgram litTextured3DProgram_;
         unsigned int samplers_[kMaxSamplerSlots] = {};
     };
 }
