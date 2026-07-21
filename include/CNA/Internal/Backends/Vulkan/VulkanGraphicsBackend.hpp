@@ -329,6 +329,14 @@ namespace CNA::Internal::Backends::Vulkan
             int32_t                     viewportX = 0, viewportY = 0;
             uint32_t                    viewportW = 0, viewportH = 0;
             float                       viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
+            // REMED-GFX-070: blend-constant (GraphicsDevice.BlendFactor) captured at End() so a
+            // SpriteBatch filling a render target uses the constant active for this batch, not the
+            // frame-global value the backend applied once per frame at backbuffer-pass begin.
+            // Defaults to (1,1,1,1) = XNA Color::White so a batch that predates any SetBlendFactor
+            // uses the correct XNA default. Only meaningful for BlendFactor/InverseBlendFactor
+            // factors, but replayed unconditionally per batch (inert otherwise), like viewport/scissor.
+            float                       blendFactorR = 1.0f, blendFactorG = 1.0f,
+                                        blendFactorB = 1.0f, blendFactorA = 1.0f;
         };
 
     private:
@@ -1185,6 +1193,14 @@ namespace CNA::Internal::Backends::Vulkan
             int32_t                 viewportX = 0, viewportY = 0;
             uint32_t                viewportW = 0, viewportH = 0;
             float                   viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
+            // REMED-GFX-070: blend-constant (GraphicsDevice.BlendFactor) snapshotted at enqueue time
+            // (PushPending3DDraw), so each queued draw replays the constant that was active when it
+            // was issued. Pre-fix, RT passes never set the blend constant at all, and multiple
+            // BlendFactor values in one frame collapsed to the single record-time read (last-wins).
+            // Defaults to (1,1,1,1) = XNA Color::White. Replayed per draw via vkCmdSetBlendConstants
+            // (VK_DYNAMIC_STATE_BLEND_CONSTANTS), unconditionally (inert for non-constant factors).
+            float                   blendFactorR = 1.0f, blendFactorG = 1.0f,
+                                    blendFactorB = 1.0f, blendFactorA = 1.0f;
         };
         std::vector<Pending3DDraw>  pending3D_;
         // Task 447/854: pushes d onto pending3D_ after tagging it with the currently-active

@@ -843,6 +843,11 @@ namespace CNA::Internal::Backends::Vulkan
             snapshot->viewportW = backend_->viewportW_; snapshot->viewportH = backend_->viewportH_;
             snapshot->viewportMinDepth = backend_->viewportMinDepth_;
             snapshot->viewportMaxDepth = backend_->viewportMaxDepth_;
+            // REMED-GFX-070: capture the blend constant active for this batch (see BatchSnapshot).
+            snapshot->blendFactorR = backend_->blendFactorR_;
+            snapshot->blendFactorG = backend_->blendFactorG_;
+            snapshot->blendFactorB = backend_->blendFactorB_;
+            snapshot->blendFactorA = backend_->blendFactorA_;
             backend_->activeBatches_.push_back({ std::move(snapshot), activeRT_ });
         }
     }
@@ -6428,6 +6433,15 @@ namespace CNA::Internal::Backends::Vulkan
                                                      snapshot->viewportMinDepth,
                                                      snapshot->viewportMaxDepth, fbW, fbH);
                     vkCmdSetViewport(cb, 0, 1, &bvp);
+                    // REMED-GFX-070: apply this batch's captured blend constant (GraphicsDevice.
+                    // BlendFactor). Direct R/G/B/A -> VkBlendConstants[4], no swap/premultiply/sRGB
+                    // (a numeric pipeline factor, not a framebuffer color). Set unconditionally: the
+                    // constant is inert for pipelines whose blend factors don't reference
+                    // CONSTANT_COLOR, and issuing it also satisfies VK_DYNAMIC_STATE_BLEND_CONSTANTS
+                    // for every blend-enabled RT-pass draw (pre-fix VUID-vkCmdDraw-None-07835).
+                    const float bbc[4] = { snapshot->blendFactorR, snapshot->blendFactorG,
+                                           snapshot->blendFactorB, snapshot->blendFactorA };
+                    vkCmdSetBlendConstants(cb, bbc);
                 }
 
                 for (const auto& d : draws) {
@@ -6534,6 +6548,15 @@ namespace CNA::Internal::Backends::Vulkan
                                                      draw.viewportMinDepth, draw.viewportMaxDepth,
                                                      fbW, fbH);
                     vkCmdSetViewport(cb, 0, 1, &dvp);
+                    // REMED-GFX-070: apply this draw's captured blend constant (GraphicsDevice.
+                    // BlendFactor). Direct R/G/B/A -> VkBlendConstants[4], no swap/premultiply/sRGB.
+                    // Set unconditionally (inert for non-constant factors) so a custom BlendFactor
+                    // set while a render target was bound is honored in the RT pass, not just the
+                    // backbuffer, and every blend-enabled RT draw satisfies its declared
+                    // VK_DYNAMIC_STATE_BLEND_CONSTANTS (pre-fix VUID-vkCmdDraw-None-07835).
+                    const float dbc[4] = { draw.blendFactorR, draw.blendFactorG,
+                                           draw.blendFactorB, draw.blendFactorA };
+                    vkCmdSetBlendConstants(cb, dbc);
                 }
 
                 const uint32_t nColor = targetRT ? targetRT->GetColorAttachmentCount() : 1u;
@@ -6922,6 +6945,10 @@ namespace CNA::Internal::Backends::Vulkan
             vkCmdSetScissor(cb, 0, 1, &sc);
         }
         {
+            // REMED-GFX-070: backbuffer pass-begin default blend constant (mirrors the pass-begin
+            // viewport/scissor defaults above). Now redundant — drawSpritesFor/draw3DFor replay each
+            // draw/batch's captured constant per draw — but kept so a pass that only clears (no
+            // draws) still has a defined blend constant, and so the default matches pre-fix behavior.
             float bc[4] = { blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_ };
             vkCmdSetBlendConstants(cb, bc);
         }
@@ -7394,6 +7421,12 @@ namespace CNA::Internal::Backends::Vulkan
         d.viewportW = viewportW_; d.viewportH = viewportH_;
         d.viewportMinDepth = viewportMinDepth_;
         d.viewportMaxDepth = viewportMaxDepth_;
+        // REMED-GFX-070: snapshot the blend constant active at enqueue time (see Pending3DDraw) so
+        // the render-target pass replays this draw with the BlendFactor that was set when it was
+        // issued, not the frame-global value (RT passes never set it pre-fix; multiple BlendFactor
+        // values in one frame otherwise collapse to the single record-time read).
+        d.blendFactorR = blendFactorR_; d.blendFactorG = blendFactorG_;
+        d.blendFactorB = blendFactorB_; d.blendFactorA = blendFactorA_;
         pending3D_.push_back(std::move(d));
     }
 
@@ -8156,6 +8189,12 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
     {
+        // REMED-GFX-070: store-only. GraphicsDevice pushes GraphicsDevice.BlendFactor here as
+        // already-normalized [0,1] floats. Because the backend is a whole-frame-deferred recorder,
+        // this frame-global value is snapshotted per draw/batch at enqueue (PushPending3DDraw /
+        // SpriteBatch End()) and replayed per draw via vkCmdSetBlendConstants (see draw3DFor/
+        // drawSpritesFor) -- not read once at record time, which would give every queued draw the
+        // frame's last BlendFactor and leave render-target passes with no constant set at all.
         blendFactorR_ = r;
         blendFactorG_ = g;
         blendFactorB_ = b;
