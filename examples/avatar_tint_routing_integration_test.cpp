@@ -1,19 +1,26 @@
 // SPDX-License-Identifier: MS-PL
-// Task 11.24: pixel-readback regression test for AvatarRenderer::PartTintEXT's per-part
-// tint routing (Task 11.17). Guards against the exact class of bug that motivated Task
-// 11.17: `PartTintEXT` matched `part.Name == "hair"` (exact equality against a lowercase
-// literal), which never matched real part names like "CNAAvatarHair" -- every part,
-// including actual hair, silently rendered in skin color instead. Nothing but manual
-// visual inspection would have caught that; this test would fail it automatically.
+// Task 11.24 / REMED-GFX-008: pixel-readback regression test for AvatarRenderer::PartTintEXT's
+// per-part tint routing (Task 11.17) AND for the AvatarRenderer lighting calibration.
 //
-// Two single-bone quads, each its own SkinnedModelEXT part with an all-white texture (so
-// tint alone determines the rendered color, isolating PartTintEXT from any texture
-// contribution): "CNAAvatarHair" covers NDC x: -1..0, "CNAAvatarShirt" covers NDC x: 0..1.
-// A non-default AvatarAppearanceEXT sets distinct Hair/Shirt colors.
+// Original purpose (Task 11.17): guard against `PartTintEXT` matching `part.Name == "hair"` (exact
+// equality against a lowercase literal), which never matched real part names like "CNAAvatarHair" --
+// every part, including actual hair, silently rendered in skin color. Two single-bone quads, each
+// its own SkinnedModelEXT part with an all-white texture (so tint alone determines the rendered
+// color): "CNAAvatarHair" covers NDC x: -1..0, "CNAAvatarShirt" covers NDC x: 0..1.
 //
-// Expected results after GPU skinning:
-//   - Pixel at left quarter  (NDC ~ -0.5) -> the appearance's HairColor
-//   - Pixel at right quarter (NDC ~ +0.5) -> the appearance's ShirtColor
+// REMED-GFX-008 strengthening: the pre-fix version drove AmbientLightColor=(1,1,1) AND a full
+// head-on DirectionalLight, then asserted the raw tint -- which only held because the SkinnedEffect
+// shader bug silently DROPPED the ambient contribution, cancelling the 2x over-lighting back to 1x.
+// With the shader corrected, that setup renders 2x tint. This test now uses two lighting scenes
+// whose fully-lit result is genuinely 1x tint under the FNA-correct model
+// `final = (ambient + keyLight*max(0,N.L)) * tint`, so it can no longer pass by two bugs cancelling:
+//
+//   Scene 1 "ambient-driven"    : ambient=(1,1,1), key light OFF  -> flat 1x tint.
+//       A shader that drops ambient renders this BLACK -> FAIL (this is exactly the GFX-008 bug).
+//   Scene 2 "directional-driven": ambient=(0,0,0), key light=(1,1,1) head-on -> 1x tint.
+//       A shader that DOUBLES the directional light renders this 2x tint -> FAIL.
+//
+// Both scenes also verify routing: left quarter must be HairColor, right quarter must be ShirtColor.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -105,7 +112,63 @@ class AvatarTintRoutingIntegrationTest : public Game
 {
     Texture2D whiteTex_;
     bool done_ = false;
-    int result_ = 1;
+    int result_ = 0;
+
+    // Renders the two-part avatar with the given lighting, samples the left/right quarter pixels,
+    // and checks both routing (left=Hair, right=Shirt) and the absolute 1x-tint calibration.
+    void runScene(GraphicsDevice& device, const std::shared_ptr<SkinnedModelEXT>& model,
+                  const AvatarAppearanceEXT& appearance, const Color& hairColor, const Color& shirtColor,
+                  const char* label, const Vector3& ambient, const Vector3& lightColor,
+                  const Vector3& lightDir)
+    {
+        const auto& vp = device.getViewportProperty();
+        const int W = vp.getWidthProperty();
+        const int H = vp.getHeightProperty();
+
+        device.Clear(Color(0, 128, 0, 255));
+        device.SetDepthTestEnabled(false);
+        device.setBlendStateProperty(BlendState::Opaque);
+        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
+        // RasterizerState -- needs CullNone.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+        AvatarRenderer renderer(nullptr);
+        renderer.EnableRealRenderingEXT(device, model);
+        renderer.SetAppearanceEXT(appearance);
+        renderer.setAmbientLightColorProperty(ambient);
+        renderer.setLightColorProperty(lightColor);
+        renderer.setLightDirectionProperty(lightDir);
+        renderer.DrawRealEXT("Test", System::TimeSpan::Zero, false);
+
+        const Rectangle leftReg(W / 4, H / 2, 1, 1);
+        const Rectangle rightReg(3 * W / 4, H / 2, 1, 1);
+        Color leftPx(0, 0, 0, 0), rightPx(0, 0, 0, 0);
+        device.GetBackBufferData(&leftReg, &leftPx, 0, 1);
+        device.GetBackBufferData(&rightReg, &rightPx, 0, 1);
+
+        // Tolerance of 20 absorbs ordinary shading/rounding noise while staying far tighter than the
+        // ~100+ channel swing a routing bug (both parts collapsing to one color), an ambient-drop
+        // bug (part goes black), or a doubled-light bug (2x tint) would produce.
+        const bool leftOk = ColorCloseTo(leftPx, hairColor, 20);
+        const bool rightOk = ColorCloseTo(rightPx, shirtColor, 20);
+
+        if (leftOk && rightOk)
+        {
+            std::printf("[PASS] %-18s left=(%d,%d,%d) right=(%d,%d,%d)\n", label,
+                        leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
+                        rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty());
+        }
+        else
+        {
+            std::printf("[FAIL] %-18s left=(%d,%d,%d) right=(%d,%d,%d)\n"
+                        "       expected: left=HairColor(%d,%d,%d), right=ShirtColor(%d,%d,%d)\n", label,
+                        leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
+                        rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty(),
+                        hairColor.getRProperty(), hairColor.getGProperty(), hairColor.getBProperty(),
+                        shirtColor.getRProperty(), shirtColor.getGProperty(), shirtColor.getBProperty());
+            result_ = 1;
+        }
+    }
 
 protected:
     void Initialize() override
@@ -121,18 +184,6 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        const auto& vp = device.getViewportProperty();
-        const int W = vp.getWidthProperty();
-        const int H = vp.getHeightProperty();
-
-        device.Clear(Color(0, 128, 0, 255));
-        device.SetDepthTestEnabled(false);
-        device.setBlendStateProperty(BlendState::Opaque);
-        // Task 896 finding: this quad's winding is CCW/back-facing under CNA's real default
-        // RasterizerState — needs CullNone (missed by Task 896's own file audit).
-        device.setRasterizerStateProperty(RasterizerState::CullNone);
-
-        auto model = BuildTwoPartModel(device, whiteTex_);
 
         const Color hairColor(40, 25, 15, 255);
         const Color shirtColor(20, 90, 155, 255);
@@ -140,43 +191,18 @@ protected:
         appearance.setHairColorProperty(hairColor);
         appearance.setShirtColorProperty(shirtColor);
 
-        AvatarRenderer renderer(nullptr);
-        renderer.EnableRealRenderingEXT(device, model);
-        renderer.SetAppearanceEXT(appearance);
-        renderer.setAmbientLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-        renderer.setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-        renderer.setLightDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
-        renderer.DrawRealEXT("Test", System::TimeSpan::Zero, false);
+        auto model = BuildTwoPartModel(device, whiteTex_);
 
-        const Rectangle leftReg(W / 4, H / 2, 1, 1);
-        const Rectangle rightReg(3 * W / 4, H / 2, 1, 1);
-        Color leftPx(0, 0, 0, 0), rightPx(0, 0, 0, 0);
-        device.GetBackBufferData(&leftReg, &leftPx, 0, 1);
-        device.GetBackBufferData(&rightReg, &rightPx, 0, 1);
+        // Scene 1: ambient (1,1,1), key light OFF. Fully lit = (1 + 0)*tint = 1x tint.
+        // The GFX-008 ambient-drop bug renders this BLACK.
+        runScene(device, model, appearance, hairColor, shirtColor, "ambient-driven",
+                 Vector3(1.0f, 1.0f, 1.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 0.0f, -1.0f));
 
-        // Tolerance of 20 absorbs ordinary shading/rounding noise (observed up to ~17 on
-        // one channel) while staying far tighter than the ~100+ channel swing a real
-        // routing bug (e.g. reverting to the pre-Task-11.17 exact-"hair" match) would
-        // produce -- both parts would collapse to the same (skin) color instead.
-        const bool leftOk = ColorCloseTo(leftPx, hairColor, 20);
-        const bool rightOk = ColorCloseTo(rightPx, shirtColor, 20);
+        // Scene 2: ambient (0,0,0), key light (1,1,1) head-on (N=(0,0,1), L=(0,0,-1) so N.(-L)=1).
+        // Fully lit = (0 + 1)*tint = 1x tint. A doubled-directional bug renders this 2x tint.
+        runScene(device, model, appearance, hairColor, shirtColor, "directional-driven",
+                 Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 1.0f, 1.0f), Vector3(0.0f, 0.0f, -1.0f));
 
-        if (leftOk && rightOk)
-        {
-            std::printf("[PASS] AvatarTintRoutingIntegration: left=(%d,%d,%d) right=(%d,%d,%d)\n",
-                        leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
-                        rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty());
-            result_ = 0;
-        }
-        else
-        {
-            std::printf("[FAIL] AvatarTintRoutingIntegration: left=(%d,%d,%d) right=(%d,%d,%d)\n"
-                        "       expected: left=HairColor(%d,%d,%d), right=ShirtColor(%d,%d,%d)\n",
-                        leftPx.getRProperty(), leftPx.getGProperty(), leftPx.getBProperty(),
-                        rightPx.getRProperty(), rightPx.getGProperty(), rightPx.getBProperty(),
-                        hairColor.getRProperty(), hairColor.getGProperty(), hairColor.getBProperty(),
-                        shirtColor.getRProperty(), shirtColor.getGProperty(), shirtColor.getBProperty());
-        }
         Exit();
     }
 
