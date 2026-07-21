@@ -2585,6 +2585,53 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     genuinely unverified whether this specific fix is itself correct until that run reports back —
     this item documents the found-and-fixed bug, not yet its own resolution.
 
+90. **Real thirty-second CI signal — item 89's decoupling fix compiles clean, but `Metal_
+    RenderTarget2D_MSAA`'s `MultiSampleCount=8` check still fails identically; a targeted
+    diagnostic ruled out the most likely remaining hypothesis, and this specific sub-investigation
+    is paused, not resolved**: CI run `29809995787` shows the exact same `[FAIL] MultiSampleCount=8:
+    ... row is purely binary` result as before item 89's fix, byte-for-byte — the decoupling fix
+    itself was real and correct (confirmed necessary by the earlier CI evidence in item 89), but it
+    was not sufficient to fix `Metal_RenderTarget2D_MSAA` on its own, meaning a second, still
+    undetermined issue exists somewhere downstream.
+
+    Added a temporary diagnostic (`NSLog` in `computeAppliedRenderTargetSampleCount()`, printing
+    `requested`/`clamped`/`applied` and the raw `supportsTextureSampleCount:` result for 8/4/2) to
+    distinguish two remaining hypotheses: (a) this specific CI runner's GPU doesn't actually support
+    any of Metal's standard MSAA sample counts at all (an environment limitation, matching this same
+    runner's own earlier-confirmed `MTLCaptureDestinationGPUTraceDocument` limitation from item 76),
+    vs. (b) a real >1 sample count genuinely gets applied but something further downstream (the
+    render pass/pipeline/resolve chain) still isn't producing genuinely anti-aliased output. CI run
+    `29810575691`'s own diagnostic output answers this cleanly: `supports8=0` (confirming this
+    runner's GPU/driver combination cannot do 8x MSAA — a real, now-documented environment
+    limitation, consistent with its own earlier GPU-capture limitation) but `supports4=1`/
+    `supports2=1`, and for the actual `MultiSampleCount=8` test request: `clamped=4 applied=4` — a
+    real, non-zero sample count *is* being applied. Hypothesis (a) is therefore false; hypothesis
+    (b) is confirmed: `RenderTarget2D` genuinely engages 4x MSAA (a real, non-multisampled-texture-
+    allocation-shaped `id<MTLTexture>` is created, a real `sampleCount=4`-declared pipeline is built
+    and used), and the test's own diagonal-triangle draw still produces zero blended pixels in the
+    final resolved-and-read-back row.
+
+    A second, careful manual re-trace of the whole render-pass/pipeline/resolve chain (`resolve
+    ActiveAttachments()`'s `currentRenderTarget` branch → `ensureFrame()`'s per-attachment loop →
+    `getOrCreatePipeline()`'s cache-key construction → `applyTrackedEncoderState()`, checked fresh
+    for any MSAA-unaware state that might interfere — found none) did not surface a further, more
+    specific code defect beyond what item 89 already found and fixed. Given this is now the third
+    real CI round-trip spent on this one specific, narrow sub-symptom (distinct from — and
+    downstream of — the separate, much larger Clear-color-readback investigation paused at item 76),
+    and per this session's own standing discipline (documented explicitly by the user: pause and
+    document rather than keep guessing blindly once an investigation reaches the limit of what's
+    determinable from this sandbox), this specific thread is paused here, not abandoned. What is
+    now confirmed, not merely hoped: the MSAA *infrastructure* itself (multisample texture
+    allocation at a real device-clamped sample count, matching-sample-count pipeline construction,
+    `StoreAndMultisampleResolve` render-pass wiring) runs on real Apple hardware without crashing,
+    without any Metal API validation error, and without the already-familiar Clear-color-readback
+    signature (Check 1's own `MultiSampleCount=0` control case genuinely passes, proving the
+    surrounding readback/positioning machinery is sound) — but whether the *resolve itself*
+    produces genuine sub-pixel-averaged output remains unconfirmed, and `Metal_RenderTarget2D_MSAA`
+    cannot honestly be marked ✅ until that's resolved, either by further diagnosis or by a physical
+    Mac. The `[METAL-104 diag]` `NSLog` is left in place (matching this file's own established
+    precedent for prior investigation diagnostics, e.g. `[METAL-89 diag]`), not reverted.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -3047,8 +3094,8 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-101 | Honor `depthFormat` exactly per target (`METAL-16`'s table) — aim for EasyGL/Bgfx's "honor the exact requested format" tier, not Vulkan's documented "always allocate depth+stencil" simplification (Task 911/877) | 🟨 |
 | METAL-102 | `preserveContents` → `MTLLoadActionDontCare`/`MTLLoadActionLoad` on rebind, matching the shared `GraphicsDevice.cpp` contract every backend already honors identically | 🟨 (found: already correctly handled, no code needed — see narrative) |
 | METAL-103 | `mipMap` — full mip chain via `MTLBlitCommandEncoder::generateMipmapsForTexture:` on unbind, matching FNA3D's `OPENGL_ResolveTarget` auto-mip semantics (Task 336/878/906 precedent) | 🟨 |
-| METAL-104 | `multiSampleCount` — multisampled attachment resolved via the render pass's own `MTLStoreActionMultisampleResolve` (a cheaper, first-class Metal path vs. GL's separate blit) | 🟨 landed 2026-07-21, CI-confirmed to compile, and a real bug found+fixed from a real CI signal — see narrative items 88/89: real backbuffer + `RenderTarget2D` MSAA, `MTLStoreActionStoreAndMultisampleResolve` (not plain `MultisampleResolve` — see own note on why); `RenderTarget2D`'s own sample count was originally (wrongly) tied to the backbuffer's own — CI caught it, now independent — re-pushed, pending a fresh CI round-trip |
-| METAL-105 | `GetMultiSampleCount()` — real, device-queried clamp via `MTLDevice.supportsTextureSampleCount:`, matching every backend's "report the real clamped value" contract | 🟨 landed 2026-07-21 — real on both `IGraphicsBackend` (backbuffer) and `IRenderTargetBackend` (per-target, now independent of the backbuffer's own count — narrative item 89), device-clamped via `clampMetalSampleCount()`; real-build-verified on Linux (4 new `MetalPipelineCacheKey` tests, `CnaTests` 134/134), pending a fresh CI round-trip for the `.mm`-side fix |
+| METAL-104 | `multiSampleCount` — multisampled attachment resolved via the render pass's own `MTLStoreActionMultisampleResolve` (a cheaper, first-class Metal path vs. GL's separate blit) | 🟨 landed and CI-confirmed to compile+run without any crash/validation error 2026-07-21 — see narrative items 88/89/90: real backbuffer + `RenderTarget2D` MSAA, `MTLStoreActionStoreAndMultisampleResolve` (not plain `MultisampleResolve` — see own note on why); `RenderTarget2D`'s own sample count is now independent of the backbuffer's (a real bug, found+fixed via CI, item 89). **Not yet ✅**: `Metal_RenderTarget2D_MSAA`'s own `MultiSampleCount=8` check still fails — CI-confirmed a real, non-zero sample count (4, correctly clamped from 8 on this runner's own GPU) genuinely gets applied, but the resolved output still shows no anti-aliasing; root cause undetermined after 3 CI round-trips, paused (item 90), not abandoned |
+| METAL-105 | `GetMultiSampleCount()` — real, device-queried clamp via `MTLDevice.supportsTextureSampleCount:`, matching every backend's "report the real clamped value" contract | 🟨 landed and CI-confirmed 2026-07-21 — real on both `IGraphicsBackend` (backbuffer) and `IRenderTargetBackend` (per-target, now independent of the backbuffer's own count — item 89), device-clamped via `clampMetalSampleCount()`; CI confirmed the clamp itself works correctly (this exact runner's GPU: `supports8=0`, `supports4=1`, correctly clamps a requested 8 down to 4 — item 90's own diagnostic evidence); real-build-verified on Linux too (4 new `MetalPipelineCacheKey` tests, `CnaTests` 134/134) |
 | METAL-106 | `HasRealDepthBuffer(bool)` — confirm the default `= depthFormatWasRequested` is already correct once real depth-format honoring (`METAL-101`) lands | 🟨 |
 | METAL-107 | `SetRenderTarget2D(IRenderTargetBackend*)` — real bind/unbind dispatch, currently a no-op | 🟨 |
 | METAL-108 | `GetColorGLHandle()` — confirm the default `return 0` is correct (GL-specific, N/A on Metal) and no caller assumes nonzero means "has a render target" | 🟨 (confirmed: zero callers anywhere in `include/`/`src/` outside its own declaration/`EasyGLRenderTargetBackend` override — nothing branches on it) |
