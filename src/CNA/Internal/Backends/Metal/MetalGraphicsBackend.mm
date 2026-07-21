@@ -840,21 +840,34 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // plan_metal.md METAL-6/24: real per-BlendState blend factors/operation, replacing the
     // previous hardcoded-into-every-pipeline straight-alpha blend. When !blend.enabled, blending
     // is left off entirely (matches BlendState.Opaque's real observable behavior).
+    //
+    // plan_metal.md METAL-112/113: `colorCount` (default 1, every pre-MRT call site unaffected)
+    // declares the SAME format/blend for `colorCount` simultaneous attachments, matching
+    // VulkanGraphicsBackend's own identical "one VkPipelineColorBlendAttachmentState replicated
+    // colorAttachmentCount times" precedent (confirmed by reading it directly) -- XNA's own
+    // BlendState is a single global state, not per-render-target, so there is no per-attachment
+    // blend to vary here even during real MRT. Every attachment always shares
+    // MTLPixelFormatBGRA8Unorm (MetalRenderTargetBackend's own hardcoded choice, see narrative item
+    // 77), so only the loop bound needs to change, not a per-slot format lookup.
     static id<MTLRenderPipelineState> makePipeline(id<MTLDevice> dev, id<MTLLibrary> lib,
                                                     NSString* vs, NSString* fs,
-                                                    MTLVertexDescriptor* vd, const BlendKey& blend)
+                                                    MTLVertexDescriptor* vd, const BlendKey& blend,
+                                                    int colorCount=1)
     {
         MTLRenderPipelineDescriptor* d=[[MTLRenderPipelineDescriptor alloc] init];
         d.vertexFunction=[lib newFunctionWithName:vs]; d.fragmentFunction=[lib newFunctionWithName:fs]; d.vertexDescriptor=vd;
-        d.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm; d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
-        d.colorAttachments[0].blendingEnabled = blend.enabled ? YES : NO;
-        if (blend.enabled) {
-            d.colorAttachments[0].sourceRGBBlendFactor=metalBlendFactor(blend.colorSrc);
-            d.colorAttachments[0].destinationRGBBlendFactor=metalBlendFactor(blend.colorDst);
-            d.colorAttachments[0].rgbBlendOperation=metalBlendOp(blend.colorFunc);
-            d.colorAttachments[0].sourceAlphaBlendFactor=metalBlendFactor(blend.alphaSrc);
-            d.colorAttachments[0].destinationAlphaBlendFactor=metalBlendFactor(blend.alphaDst);
-            d.colorAttachments[0].alphaBlendOperation=metalBlendOp(blend.alphaFunc);
+        d.depthAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8; d.stencilAttachmentPixelFormat=MTLPixelFormatDepth32Float_Stencil8;
+        for (int i=0;i<colorCount;++i) {
+            d.colorAttachments[i].pixelFormat=MTLPixelFormatBGRA8Unorm;
+            d.colorAttachments[i].blendingEnabled = blend.enabled ? YES : NO;
+            if (blend.enabled) {
+                d.colorAttachments[i].sourceRGBBlendFactor=metalBlendFactor(blend.colorSrc);
+                d.colorAttachments[i].destinationRGBBlendFactor=metalBlendFactor(blend.colorDst);
+                d.colorAttachments[i].rgbBlendOperation=metalBlendOp(blend.colorFunc);
+                d.colorAttachments[i].sourceAlphaBlendFactor=metalBlendFactor(blend.alphaSrc);
+                d.colorAttachments[i].destinationAlphaBlendFactor=metalBlendFactor(blend.alphaDst);
+                d.colorAttachments[i].alphaBlendOperation=metalBlendOp(blend.alphaFunc);
+            }
         }
         NSError* err=nil; id<MTLRenderPipelineState> p=[dev newRenderPipelineStateWithDescriptor:d error:&err]; [d.vertexFunction release]; [d.fragmentFunction release]; [d release];
         if(!p) throw std::runtime_error(std::string("Metal pipeline compile failed: ")+([[err localizedDescription] UTF8String]?:"unknown")); return p;
@@ -1211,6 +1224,22 @@ struct MetalGraphicsBackend::Impl
     MetalRenderTargetCubeBackend* currentRenderTargetCube=nullptr;
     NSUInteger currentRenderTargetCubeFace=0;
 
+    // plan_metal.md METAL-112/113: real MRT. `currentMRT.size()>=2` means true simultaneous
+    // multi-attachment rendering is active; `currentMRT[0]` is always mirrored into
+    // currentRenderTarget above too (so computeSpriteTransform()/the single-target destructor
+    // safety net/etc. keep working unmodified against target 0), but ensureFrame()/clear() check
+    // currentMRT directly first so they build a render pass with every bound attachment, not just
+    // target 0. activeColorAttachmentCount feeds MetalPipelineCacheKey (1 outside MRT, up to
+    // Metal's own 8-attachment hardware limit during MRT) -- every entry point that changes which
+    // render target(s) are active (SetRenderTarget2D/SetRenderTargetCubeFace/SetRenderTargets/the
+    // MetalRenderTargetBackend destructor's own safety net) must keep this and currentMRT
+    // consistent; unbindCurrentMRT() (defined out-of-line after MetalRenderTargetBackend, same
+    // reason as resolveActiveAttachments()/computeSpriteTransform() above) is the single chokepoint
+    // that tears either down correctly, including per-target mip regeneration.
+    std::vector<MetalRenderTargetBackend*> currentMRT;
+    int activeColorAttachmentCount=1;
+    void unbindCurrentMRT();
+
     // plan_metal.md METAL-87: fallback textures for PbrEffect's 4 optional maps (normalMap/
     // metallicRoughnessMap/emissiveMap/occlusionMap) when left unbound, mirroring
     // EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture() exactly
@@ -1272,6 +1301,14 @@ struct MetalGraphicsBackend::Impl
     // texture, so callers can set it unconditionally with no branching of their own).
     bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut);
 
+    // plan_metal.md METAL-112: the MRT-aware sibling of resolveActiveAttachments() above, used only
+    // by ensureFrame()/clear() (every other caller -- computeSpriteTransform(), etc. -- only ever
+    // needs target 0, already available via currentRenderTarget directly). Declared here, defined
+    // out-of-line after MetalRenderTargetBackend for the same incomplete-type reason as
+    // resolveActiveAttachments()/computeSpriteTransform() above -- its body calls
+    // currentMRT[i]->colorTexture()/depthTextureNative(), which need the complete type.
+    bool resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut);
+
     // Ends whatever encoder/command-buffer is currently active -- shared by endFrame() and
     // MetalRenderTargetBackend's own Bind/UnbindAsRenderTarget() (Metal render passes are
     // fixed-attachment for their whole encoder lifetime, unlike GL's dynamic FBO rebinding, so
@@ -1305,18 +1342,24 @@ struct MetalGraphicsBackend::Impl
     void ensureFrame()
     {
         if (encoder) return;
-        id<MTLTexture> colorTex=nil, depthTex=nil; NSUInteger slice=0;
-        if (!resolveActiveAttachments(colorTex, depthTex, slice)) throw std::runtime_error("Metal: CAMetalLayer returned no drawable");
+        std::vector<id<MTLTexture>> colors; id<MTLTexture> depthTex=nil; NSUInteger slice=0;
+        if (!resolveActiveColorAttachments(colors, depthTex, slice)) throw std::runtime_error("Metal: CAMetalLayer returned no drawable");
         command=[queue commandBuffer]; [command retain];
         MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
-        rp.colorAttachments[0].texture=colorTex; rp.colorAttachments[0].slice=slice;
-        rp.colorAttachments[0].loadAction=MTLLoadActionLoad; rp.colorAttachments[0].storeAction=MTLStoreActionStore;
+        // plan_metal.md METAL-112: loop bound is 1 outside MRT (colors.size()==1, identical to the
+        // original single-attachment code this replaced), up to Metal's own 8-attachment hardware
+        // limit during real SetRenderTargets() MRT.
+        for (NSUInteger i=0;i<colors.size();++i) {
+            rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice;
+            rp.colorAttachments[i].loadAction=MTLLoadActionLoad; rp.colorAttachments[i].storeAction=MTLStoreActionStore;
+        }
         rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore;
         rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore;
         rp.visibilityResultBuffer=visibilityBuffer;
         encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
-        const NSUInteger w=colorTex.width,h=colorTex.height;
+        const NSUInteger w=colors[0].width,h=colors[0].height;
         viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
+        activeColorAttachmentCount=(int)colors.size();
         applyTrackedEncoderState();
     }
 
@@ -1339,17 +1382,23 @@ struct MetalGraphicsBackend::Impl
     void clear(bool color,float r,float g,float b,float a,bool depth,float dv,bool stencil,int sv)
     {
         endActiveEncoding(false); // mid-frame boundary only -- see endActiveEncoding()'s own METAL-180 note.
-        id<MTLTexture> colorTex=nil, depthTex=nil; NSUInteger slice=0;
-        if (!resolveActiveAttachments(colorTex, depthTex, slice)) return;
+        std::vector<id<MTLTexture>> colors; id<MTLTexture> depthTex=nil; NSUInteger slice=0;
+        if (!resolveActiveColorAttachments(colors, depthTex, slice)) return;
         command=[queue commandBuffer]; [command retain];
         MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
-        rp.colorAttachments[0].texture=colorTex; rp.colorAttachments[0].slice=slice; rp.colorAttachments[0].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[0].storeAction=MTLStoreActionStore; rp.colorAttachments[0].clearColor=MTLClearColorMake(r,g,b,a);
+        // plan_metal.md METAL-112: Clear()'s own real XNA contract clears every currently-bound
+        // render target to the same color -- matches GraphicsDevice.Clear(color)'s documented
+        // behavior regardless of how many targets SetRenderTargets() bound.
+        for (NSUInteger i=0;i<colors.size();++i) {
+            rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].storeAction=MTLStoreActionStore; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
+        }
         rp.depthAttachment.texture=depthTex; rp.depthAttachment.loadAction=depth?MTLLoadActionClear:MTLLoadActionLoad; rp.depthAttachment.storeAction=MTLStoreActionStore; rp.depthAttachment.clearDepth=dv;
         rp.stencilAttachment.texture=depthTex; rp.stencilAttachment.loadAction=stencil?MTLLoadActionClear:MTLLoadActionLoad; rp.stencilAttachment.storeAction=MTLStoreActionStore; rp.stencilAttachment.clearStencil=sv;
         rp.visibilityResultBuffer=visibilityBuffer;
         encoder=[command renderCommandEncoderWithDescriptor:rp]; [encoder retain];
-        const NSUInteger w=colorTex.width,h=colorTex.height;
+        const NSUInteger w=colors[0].width,h=colors[0].height;
         viewport={0,0,(double)w,(double)h,0,1}; scissor={0,0,w,h};
+        activeColorAttachmentCount=(int)colors.size();
         applyTrackedEncoderState();
     }
 
@@ -1405,7 +1454,12 @@ struct MetalGraphicsBackend::Impl
     // lazily-populated cache keyed by (shader/vertex-layout variant, current blend state).
     id<MTLRenderPipelineState> getOrCreatePipeline(PipelineKind kind)
     {
-        PipelineCacheKey key{kind, currentBlend};
+        // plan_metal.md METAL-112/113: clamped the same way SetRenderTargets() itself clamps
+        // count, and again here as a defensive bound on whatever activeColorAttachmentCount
+        // currently holds -- MTLPipelineCacheKey's own field is a uint8_t, and 8 is Metal's own
+        // hardware attachment limit either way.
+        const uint8_t colorCount = (uint8_t)std::clamp(activeColorAttachmentCount, 1, 8);
+        PipelineCacheKey key{kind, currentBlend, colorCount};
         auto it = pipelineCache.find(key);
         if (it != pipelineCache.end()) return it->second;
         NSString* vs=nil; NSString* fs=nil; std::size_t stride=0;
@@ -1434,7 +1488,7 @@ struct MetalGraphicsBackend::Impl
         // this was compiled for the first time ever on real Apple hardware -- Clang's own "type
         // argument 'MTLVertexDescriptor' must be a pointer (requires a '*')" error.
         MTLVertexDescriptor* vd = (kind==PipelineKind::Sprite2D) ? nil : vertexDescriptorForStride(stride);
-        id<MTLRenderPipelineState> pipe = makePipeline(device, library, vs, fs, vd, currentBlend);
+        id<MTLRenderPipelineState> pipe = makePipeline(device, library, vs, fs, vd, currentBlend, colorCount);
         pipelineCache.emplace(key, pipe);
         return pipe;
     }
@@ -1922,6 +1976,21 @@ public:
         // about to be freed, a real use-after-free/dangling-attachment risk, not just untidy state.
         // false: destruction mid-frame must never present -- see endActiveEncoding()'s METAL-180 note.
         if (owner_.currentRenderTarget==this) { owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr; }
+        // plan_metal.md METAL-112: same safety net, extended to a real MRT set -- only currentMRT[0]
+        // is ever mirrored into currentRenderTarget above, so the check above alone would miss
+        // target 1..N-1 being destroyed while still part of the active binding. Invalidates the
+        // whole set rather than leave the other targets' own destructors with no way to detect a
+        // now-dangling entry (matches this file's own established "the game forgot to unbind, but
+        // it must not corrupt Impl's own state" convention, just applied to N pointers not one).
+        if (!owner_.currentMRT.empty()) {
+            auto it = std::find(owner_.currentMRT.begin(), owner_.currentMRT.end(), this);
+            if (it != owner_.currentMRT.end()) {
+                owner_.endActiveEncoding(false);
+                owner_.currentMRT.clear();
+                owner_.currentRenderTarget=nullptr;
+                owner_.activeColorAttachmentCount=1;
+            }
+        }
         [depthTexture_ release]; [colorTexture_ release];
     }
     int GetWidth() const override { return w_; }
@@ -1930,28 +1999,38 @@ public:
     void BindAsRenderTarget() override
     {
         owner_.endActiveEncoding(false); // mid-frame switch, never presents -- see METAL-180 note.
+        // plan_metal.md METAL-112: a single-target bind always means "not MRT" -- clears any stale
+        // MRT state a previous SetRenderTargets() call left behind, whether this was reached via
+        // SetRenderTarget2D() directly or via SetRenderTargets()'s own count==1 delegation.
+        owner_.currentMRT.clear(); owner_.activeColorAttachmentCount=1;
         owner_.currentRenderTarget=this;
+    }
+    // plan_metal.md METAL-103/112: factored out of UnbindAsRenderTarget() so SetRenderTargets()'s
+    // own MRT teardown (Impl::unbindCurrentMRT()) can regenerate mips for every target in an
+    // outgoing MRT set, not just whichever one BindAsRenderTarget() itself last tracked.
+    void regenerateMipsIfNeeded()
+    {
+        if (!mipMap_) return;
+        // plan_metal.md METAL-103: regenerate the full mip chain from level 0's just-rendered
+        // content on every unbind when mipMap was requested, unconditionally -- matches
+        // EasyGLRenderTargetBackend::UnbindAsRenderTarget()'s own established precedent exactly
+        // (itself citing FNA3D's OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...
+        // glGenerateMipmap... }"), not gated on whether anything was actually drawn this bind
+        // session -- EasyGL's glGenerateMipmap call isn't gated on that either.
+        if (owner_.encoder) { [owner_.encoder endEncoding]; [owner_.encoder release]; owner_.encoder=nil; }
+        // A blit encoder needs a real command buffer to encode into; if nothing was ever
+        // drawn/cleared this bind session owner_.command is still nil (ensureFrame() was
+        // never called) -- create one just for the blit, mirroring ReadBackbuffer()'s own
+        // precedent of using a small standalone command buffer for a one-off GPU operation.
+        if (!owner_.command) { owner_.command=[owner_.queue commandBuffer]; [owner_.command retain]; }
+        id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
+        [blit generateMipmapsForTexture:colorTexture_];
+        [blit endEncoding];
     }
     void UnbindAsRenderTarget() override
     {
         if (owner_.currentRenderTarget==this) {
-            // plan_metal.md METAL-103: regenerate the full mip chain from level 0's just-rendered
-            // content on every unbind when mipMap was requested, unconditionally -- matches
-            // EasyGLRenderTargetBackend::UnbindAsRenderTarget()'s own established precedent exactly
-            // (itself citing FNA3D's OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...
-            // glGenerateMipmap... }"), not gated on whether anything was actually drawn this bind
-            // session -- EasyGL's glGenerateMipmap call isn't gated on that either.
-            if (mipMap_) {
-                if (owner_.encoder) { [owner_.encoder endEncoding]; [owner_.encoder release]; owner_.encoder=nil; }
-                // A blit encoder needs a real command buffer to encode into; if nothing was ever
-                // drawn/cleared this bind session owner_.command is still nil (ensureFrame() was
-                // never called) -- create one just for the blit, mirroring ReadBackbuffer()'s own
-                // precedent of using a small standalone command buffer for a one-off GPU operation.
-                if (!owner_.command) { owner_.command=[owner_.queue commandBuffer]; [owner_.command retain]; }
-                id<MTLBlitCommandEncoder> blit=[owner_.command blitCommandEncoder];
-                [blit generateMipmapsForTexture:colorTexture_];
-                [blit endEncoding];
-            }
+            regenerateMipsIfNeeded();
             owner_.endActiveEncoding(false); owner_.currentRenderTarget=nullptr;
         }
     }
@@ -2080,6 +2159,46 @@ bool MetalGraphicsBackend::Impl::resolveActiveAttachments(id<MTLTexture>& colorO
     }
     depthOut = depthTexture;
     return true;
+}
+
+bool MetalGraphicsBackend::Impl::resolveActiveColorAttachments(std::vector<id<MTLTexture>>& colorsOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut)
+{
+    if (currentMRT.size() >= 2) {
+        colorsOut.clear();
+        for (auto* rt : currentMRT) colorsOut.push_back(rt->colorTexture());
+        // plan_metal.md METAL-112: reuses currentMRT[0]'s own depthTextureNative() for the whole
+        // MRT render pass rather than allocating a dedicated shared one (unlike VulkanMRTProxy,
+        // which must -- Vulkan's explicit VkFramebuffer object needs one concrete depth
+        // VkImageView chosen up front; Metal's MTLRenderPassDescriptor has no such constraint, and
+        // every MetalRenderTargetBackend already unconditionally owns its own real
+        // Depth32Float_Stencil8 texture, so borrowing target 0's avoids a second depth allocation
+        // for every MRT session).
+        depthOut = currentMRT[0]->depthTextureNative();
+        sliceOut = 0;
+        return true;
+    }
+    id<MTLTexture> c=nil;
+    if (!resolveActiveAttachments(c, depthOut, sliceOut)) return false;
+    colorsOut.assign(1, c);
+    return true;
+}
+
+// plan_metal.md METAL-112: the single chokepoint that tears down a real MRT set correctly --
+// regenerates mips for every target in the outgoing set (matching MetalRenderTargetBackend::
+// UnbindAsRenderTarget()'s own per-target precedent, extended from one target to N) and resets
+// currentMRT/activeColorAttachmentCount, before any caller goes on to bind whatever comes next.
+// Called unconditionally as the first step of SetRenderTarget2D()/SetRenderTargetCubeFace()/
+// SetRenderTargets() so every path that changes the active render target(s) tears down a
+// previously-active MRT set the same way, regardless of which specific entry point the game used.
+void MetalGraphicsBackend::Impl::unbindCurrentMRT()
+{
+    if (currentMRT.empty()) return;
+    auto old = currentMRT;
+    currentMRT.clear();
+    currentRenderTarget = nullptr;
+    activeColorAttachmentCount = 1;
+    endActiveEncoding(false);
+    for (auto* rt : old) rt->regenerateMipsIfNeeded();
 }
 
 MetalGraphicsBackend::Impl::Sprite2DTransform MetalGraphicsBackend::Impl::computeSpriteTransform() const
@@ -2318,6 +2437,7 @@ std::unique_ptr<IRenderTargetCubeBackend> MetalGraphicsBackend::CreateRenderTarg
 void MetalGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
 {
     auto& p=*impl_;
+    p.unbindCurrentMRT(); // plan_metal.md METAL-112: tear down any active MRT set first, always.
     if (p.currentRenderTarget && p.currentRenderTarget != rt) p.currentRenderTarget->UnbindAsRenderTarget();
     if (p.currentRenderTargetCube) p.currentRenderTargetCube->UnbindAsRenderTarget();
     if (rt) static_cast<MetalRenderTargetBackend*>(rt)->BindAsRenderTarget();
@@ -2326,9 +2446,27 @@ void MetalGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt,
 {
     if (!rt) { SetRenderTarget2D(nullptr); return; }
     auto& p=*impl_;
+    p.unbindCurrentMRT(); // plan_metal.md METAL-112: same as SetRenderTarget2D() above.
     if (p.currentRenderTarget) p.currentRenderTarget->UnbindAsRenderTarget();
     if (p.currentRenderTargetCube && p.currentRenderTargetCube != rt) p.currentRenderTargetCube->UnbindAsRenderTarget();
     static_cast<MetalRenderTargetCubeBackend*>(rt)->BindAsRenderTargetFace(face);
+}
+// plan_metal.md METAL-112: real MRT, replacing the base default's "bind only the first target".
+// count==0/1 delegate to SetRenderTarget2D() (itself now MRT-aware via unbindCurrentMRT() above),
+// matching VulkanGraphicsBackend::SetRenderTargets()'s own identical count-based dispatch shape.
+void MetalGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts,int count)
+{
+    if (!rts || count<=0) { SetRenderTarget2D(nullptr); return; }
+    if (count==1) { SetRenderTarget2D(rts[0]); return; }
+    auto& p=*impl_;
+    SetRenderTarget2D(nullptr); // cross-unbind whatever was active before (single/cube/MRT).
+    const int n=std::min(count,8); // Metal's own hardware limit, matching METAL-112's own task text.
+    for (int i=0;i<n;++i) p.currentMRT.push_back(static_cast<MetalRenderTargetBackend*>(rts[i]));
+    p.currentRenderTarget=p.currentMRT[0]; // mirrors target 0 so computeSpriteTransform()/etc. keep working.
+    p.activeColorAttachmentCount=n; // ensureFrame()/clear() will recompute this from currentMRT
+                                     // anyway on the next encoder they create; set here too so it's
+                                     // never stale if something reads it before that happens.
+    p.endActiveEncoding(false); // mid-frame switch, matching BindAsRenderTarget()'s own convention.
 }
 void MetalGraphicsBackend::ClearColorAndDepth(float r,float g,float b,float a,float d){impl_->clear(true,r,g,b,a,true,d,false,0);} void MetalGraphicsBackend::ClearDepth(float d){impl_->clear(false,0,0,0,0,true,d,false,0);} void MetalGraphicsBackend::ClearStencil(int s){impl_->clear(false,0,0,0,0,false,1,true,s);} void MetalGraphicsBackend::ClearDepthAndStencil(float d,int s){impl_->clear(false,0,0,0,0,true,d,true,s);} void MetalGraphicsBackend::ClearColorAndStencil(float r,float g,float b,float a,int s){impl_->clear(true,r,g,b,a,false,1,true,s);} void MetalGraphicsBackend::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){impl_->clear(true,r,g,b,a,true,d,true,s);}
 void MetalGraphicsBackend::SetDepthTestEnabled(bool e){impl_->depthEnabled=e;impl_->rebuildDepthState();} void MetalGraphicsBackend::SetBlendEnabled(bool e){impl_->blendEnabled=e;} void MetalGraphicsBackend::SetDepthWriteEnabled(bool e){impl_->depthWrite=e;impl_->rebuildDepthState();}

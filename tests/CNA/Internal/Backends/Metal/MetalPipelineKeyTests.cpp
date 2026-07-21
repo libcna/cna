@@ -57,6 +57,21 @@ TEST(MetalPipelineCacheKey, EqualOnlyWhenKindAndBlendBothMatch)
     EXPECT_FALSE(a == differentBlend);
 }
 
+TEST(MetalPipelineCacheKey, ColorAttachmentCountDefaultsToOne)
+{
+    // plan_metal.md METAL-113: every pre-MRT call site aggregate-initializes only {kind, blend},
+    // relying on this default so it's unaffected by the new field.
+    MetalPipelineCacheKey k{MetalPipelineKind::Colored16, MetalBlendKey{}};
+    EXPECT_EQ(k.colorAttachmentCount, 1);
+}
+
+TEST(MetalPipelineCacheKey, UnequalWhenOnlyColorAttachmentCountDiffers)
+{
+    MetalPipelineCacheKey single{MetalPipelineKind::Colored16, MetalBlendKey{}, 1};
+    MetalPipelineCacheKey mrt{MetalPipelineKind::Colored16, MetalBlendKey{}, 3};
+    EXPECT_FALSE(single == mrt);
+}
+
 TEST(MetalPipelineCacheKeyHash, EqualKeysProduceEqualHashes)
 {
     // A hard requirement, not a nicety: std::unordered_map's own contract is undefined behavior if
@@ -65,6 +80,14 @@ TEST(MetalPipelineCacheKeyHash, EqualKeysProduceEqualHashes)
     MetalPipelineCacheKey a{MetalPipelineKind::Skinned56VertexLit, MetalBlendKey{4, 5, 6, 7, 1, 1, true}};
     MetalPipelineCacheKey b{MetalPipelineKind::Skinned56VertexLit, MetalBlendKey{4, 5, 6, 7, 1, 1, true}};
     EXPECT_EQ(hash(a), hash(b));
+}
+
+TEST(MetalPipelineCacheKeyHash, DifferentColorAttachmentCountUsuallyProducesDifferentHash)
+{
+    MetalPipelineCacheKeyHash hash;
+    MetalPipelineCacheKey single{MetalPipelineKind::Colored16, MetalBlendKey{}, 1};
+    MetalPipelineCacheKey mrt{MetalPipelineKind::Colored16, MetalBlendKey{}, 8};
+    EXPECT_NE(hash(single), hash(mrt));
 }
 
 TEST(MetalPipelineCacheKeyHash, DifferentKeysUsuallyProduceDifferentHashes)

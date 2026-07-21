@@ -65,4 +65,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "METAL")
     endif()
     cna_register_backend_test(NAME Metal_SpriteBatch_CustomEffect COMMAND cna_test_metal_spritebatch_customeffect
         TIMEOUT 30 LABELS "Metal")
+
+    # plan_metal.md Phase 10 (METAL-112/113/118): real MRT. Reuses examples/easygl_mrt_test.cpp
+    # verbatim -- public XNA API only (GraphicsDevice::SetRenderTargets(std::vector<
+    # RenderTargetBinding>), no EasyGL-specific includes), the same reuse technique every other
+    # Metal test in this file already uses. Its own final readback goes through
+    # GetBackBufferData(), the same call already confirmed (items 67-76/82/84/85) to hit this
+    # backend's own still-unresolved Clear-color-only readback bug -- expect this test to likely
+    # fail for that same pre-existing reason even if the MRT binding/draw themselves are correct;
+    # see plan_metal.md's own narrative for how to tell the two apart from the CI log.
+    add_executable(cna_test_metal_mrt examples/easygl_mrt_test.cpp)
+    target_link_libraries(cna_test_metal_mrt PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_test_metal_mrt PRIVATE SDL3::SDL3main)
+    endif()
+    cna_register_backend_test(NAME Metal_MRT COMMAND cna_test_metal_mrt
+        TIMEOUT 30 LABELS "Metal")
 endif()

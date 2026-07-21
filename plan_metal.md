@@ -2329,6 +2329,94 @@ a custom `ShaderEffect` (Phase 14, not started), so Phase 9 stays deliberately u
     resolved, exactly the same honesty standard `Metal_PbrEffect_Golden`/`Metal_
     SkinnedPbrEffect_Golden` have been held to since item 67.
 
+86. **`METAL-112`/`113`/`118` landed — real MRT (`SetRenderTargets`), replacing the base default's
+    "bind only the first target"**: reading `VulkanGraphicsBackend::SetRenderTargets()`/
+    `VulkanMRTProxy`/`GetOrCreateMRTRenderPass()` directly first (the closest architectural analog
+    among established backends — both Vulkan and Metal use explicit render-pass/pipeline objects,
+    unlike D3D11's simpler `OMSetRenderTargets`) confirmed the exact same real constraint would
+    apply to Metal: a render pipeline's declared color-attachment count must match how many
+    simultaneous attachments the active render pass actually binds, or pipeline creation is a
+    genuine Metal API validation error, not just a style mismatch — so `METAL-113`'s own premise
+    (the pipeline cache needs to vary by attachment *count*) is real, just narrower than its own
+    text suggested: only the count matters, not a per-slot *format* list, since every
+    `MetalRenderTargetBackend` color texture is already unconditionally `MTLPixelFormatBGRA8Unorm`
+    (item 77's own finding) — `MetalPipelineCacheKey` gained one `colorAttachmentCount` field
+    (`MetalPipelineKey.hpp`), not a hashed format-set.
+
+    Implementation: `MetalGraphicsBackend::Impl` gained `currentMRT` (a `vector<
+    MetalRenderTargetBackend*>`, `size()>=2` meaning true MRT is active) and
+    `activeColorAttachmentCount`, alongside the existing single-target `currentRenderTarget`
+    (`currentMRT[0]` is always mirrored into it, so `computeSpriteTransform()` and every other
+    single-target-only caller keep working unmodified against target 0). `ensureFrame()`/`clear()`
+    were extended from a single `id<MTLTexture> colorOut` to a new
+    `resolveActiveColorAttachments()`/loop, building `rp.colorAttachments[0..N-1]` for real MRT
+    while staying byte-identical to the original single-attachment code whenever `N==1` (the
+    overwhelming common case, verified by inspection: the loop body is the exact same 2 lines the
+    original hardcoded `[0]` version had, just iterated). Depth: reuses `currentMRT[0]`'s own
+    already-existing `depthTextureNative()` for the whole MRT render pass rather than allocating a
+    dedicated shared one the way `VulkanMRTProxy` must (Vulkan's explicit `VkFramebuffer` needs one
+    concrete depth `VkImageView` chosen up front; Metal's `MTLRenderPassDescriptor` has no such
+    constraint, and every Metal render target already unconditionally owns a real
+    `Depth32Float_Stencil8` texture) — a genuine, documented simplification, not a corner cut.
+    `Clear()`'s own real XNA contract (clearing every currently-bound target to the same color) is
+    preserved directly by the same loop.
+
+    A real correctness risk found and fixed while implementing this, not left implicit: only
+    `currentMRT[0]` is ever mirrored into `currentRenderTarget`, so the *existing* single-target
+    destructor safety net (`if (currentRenderTarget==this) ...`) would silently miss targets
+    1..N-1 being destroyed while still part of an active MRT binding, leaving `currentMRT` holding
+    a dangling pointer. Fixed by extending `MetalRenderTargetBackend`'s destructor to also scan
+    `currentMRT` via `std::find` and invalidate the whole set if `this` appears anywhere in it, not
+    just at index 0. A second, related gap: `BindAsRenderTarget()` (the single-target bind path,
+    reachable both directly via `SetRenderTarget2D()` and via `SetRenderTargets()`'s own count==1
+    delegation) did not clear stale `currentMRT`/`activeColorAttachmentCount` left over from a
+    *previous* `SetRenderTargets()` call — fixed by clearing both there too, and by extracting
+    `UnbindAsRenderTarget()`'s own per-target mip-regeneration logic (`METAL-103`) into a reusable
+    `regenerateMipsIfNeeded()` method, called both from the existing single-target unbind path and
+    from a new `Impl::unbindCurrentMRT()` (the single chokepoint every render-target-changing entry
+    point — `SetRenderTarget2D`/`SetRenderTargetCubeFace`/`SetRenderTargets` — now calls first,
+    unconditionally, so a previously-active MRT set is always torn down the same correct way
+    regardless of which specific entry point the game used next).
+
+    Blend state: unlike Vulkan/D3D11/D3D12's own custom-`ShaderEffect` precedent (item 83), this is
+    *not* a case of correcting an established simplification — Vulkan's own real 3D MRT path
+    already keys its pipeline cache by the real `BlendKey`/`colorAttachmentCount` together (read
+    directly, not assumed), so Metal's `makePipeline()` replicating the same single `BlendKey`
+    across all `colorCount` attachments (XNA's own `BlendState` is a single global state, not
+    per-render-target — there is nothing to vary per-attachment) matches established precedent
+    exactly, not a deviation either way.
+
+    Genuine open question, not glossed over: whether a Metal fragment function that returns a
+    single `float4` (implicitly written to `[[color(0)]]` only) validates cleanly against a
+    pipeline whose `colorAttachments[1..N-1]` are also declared with a real pixel format, with the
+    unwritten attachments simply left as whatever their own load action produced. This is standard,
+    well-documented Metal MRT usage as best understood from Apple's own API shape and sample-code
+    conventions (a shader is never required to write every attachment a pipeline declares), and is
+    exactly the semantics `examples/easygl_mrt_test.cpp`'s own reused test expects (rt1 stays blue,
+    untouched by a shader that only writes rt0) — but this specific claim about Metal's own
+    attachment-validation rules could not be verified against the real API or its documentation
+    from this sandbox, and is flagged here explicitly rather than silently assumed correct.
+
+    A new `Metal_MRT` `CTest` reuses `examples/easygl_mrt_test.cpp` verbatim (public XNA API only,
+    same reuse technique as every other Metal test in this file). Its own final readback goes
+    through `GetBackBufferData()` — expected, per items 67–76/82/84/85, to likely hit the same
+    still-unresolved Clear-color-only readback bug even if the MRT binding/draw themselves are
+    fully correct; a CI failure here should be checked against that known signature (observed color
+    equals the test's own `Clear()` color) before being read as an MRT-specific bug, the same
+    diagnostic discipline items 84/85 established for `Metal_SpriteBatch_CustomEffect`.
+
+    **Cannot be build-verified from this Linux sandbox for the `.mm`-side changes** — this is
+    genuinely new, never-compiled Objective-C++ code touching the same frame/encoder lifecycle this
+    project's own docs already flag as its riskiest surface. Real local verification was possible
+    for the plain-C++ pipeline-key extension only: `cmake --build cmake-build-headless --target
+    CnaTests` compiles clean, and the full `ctest -R "^Metal"` suite (130 tests, 3 new
+    `MetalPipelineCacheKey`/`Hash` tests plus the 127 already-passing ones) reports `100% tests
+    passed, 0 tests failed`. The `.mm`-side changes were sanity-checked only via a full-file
+    brace/bracket/paren balance re-check (`386/386`, `868/868`, `1990/1990`, all balanced) and
+    careful manual tracing of `examples/easygl_mrt_test.cpp`'s own exact call sequence against the
+    new code, step by step, by hand. Pushed for real CI verification next — genuinely unverified
+    until that CI run reports back.
+
 **Explicitly still open / not attempted across this whole overnight session** (do not assume these
 are done — this list is kept current as the authoritative "what's actually left" summary, updated
 at the end of each landed phase rather than trusted from an earlier revision):
@@ -2794,13 +2882,13 @@ Reference implementations already shipped and tested: `EasyGLGraphicsBackend::En
 | METAL-109 | `CreateRenderTargetCube(size,depthFormat,mipMap,multiSampleCount)` — `MetalRenderTargetCubeBackend : IRenderTargetCubeBackend`, `id<MTLTexture>` with `MTLTextureTypeCube` | 🟨 |
 | METAL-110 | `BindAsRenderTargetFace(int face)` — per-face `MTLRenderPassDescriptor` color attachment using `slice:face` | 🟨 |
 | METAL-111 | `SetRenderTargetCubeFace(rt,face)` — verify the base default's composition (`rt ? rt->BindAsRenderTargetFace(face) : SetRenderTarget2D(nullptr)`) is already correct once `METAL-110`/`METAL-107` land, before writing a redundant override | 🟨 (found: base default is NOT sufficient once mip-gen-on-unbind exists — a real override was needed, see narrative) |
-| METAL-112 | `SetRenderTargets(rts[],count)` — real MRT (up to 8 simultaneous color attachments), replacing the base default's "bind only the first target" | ⬜ |
-| METAL-113 | `MetalPipelineKey` must include the *set* of attachment pixel formats, not just one, once MRT lands | ⬜ |
+| METAL-112 | `SetRenderTargets(rts[],count)` — real MRT (up to 8 simultaneous color attachments), replacing the base default's "bind only the first target" | 🟨 landed 2026-07-21 — see narrative item 86, pending CI |
+| METAL-113 | `MetalPipelineKey` must include the *set* of attachment pixel formats, not just one, once MRT lands | 🟨 landed 2026-07-21 — corrected scope: only the *count* needed to vary, not a per-slot format list, since every `MetalRenderTargetBackend` color texture is already unconditionally `MTLPixelFormatBGRA8Unorm` (narrative item 77) — `MetalPipelineCacheKey` gained a `colorAttachmentCount` field instead; real-build-verified on Linux (3 new `MetalPipelineCacheKey`/`Hash` tests, `CnaTests` 130/130), pending CI for the `.mm`-side pipeline-descriptor loop |
 | METAL-114 | `CTest`: `Metal_RenderTarget2D` — bind+clear+draw+unbind+readback (depends on Phase 12) | ⬜ |
 | METAL-115 | `CTest`: `Metal_RenderTargetCube` — per-face bind+clear+readback+independence check | ⬜ |
 | METAL-116 | `CTest`: `Metal_RenderTarget_MSAA` — device-clamped MSAA clear+resolve, pixel-verified | ⬜ |
 | METAL-117 | `CTest`: `Metal_RenderTarget_Mip` — auto-mip-on-unbind, sampled at a non-zero mip level | ⬜ |
-| METAL-118 | `CTest`: `Metal_MRT` — 2+ simultaneous targets, independent per-target clear-color proof | ⬜ |
+| METAL-118 | `CTest`: `Metal_MRT` — 2+ simultaneous targets, independent per-target clear-color proof | 🟨 landed 2026-07-21 as `Metal_MRT`, reusing `examples/easygl_mrt_test.cpp` verbatim (public XNA API only) — its own final readback goes through `GetBackBufferData()`, expected to likely hit the same still-unresolved Clear-color-only readback bug (items 67–76/82/84/85) even if MRT itself binds/draws correctly, pending CI |
 | METAL-119 | Add a `Metal` column to `docs/rendertarget-support.md` | ⬜ |
 
 ## Phase 11 — TextureCube / Texture3D (METAL-120 – METAL-129)

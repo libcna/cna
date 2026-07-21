@@ -66,10 +66,26 @@ namespace CNA::Internal::Backends::Metal
     // procedurally constructs thousands of distinct one-off `BlendState`s) is ever observed in
     // practice, an LRU eviction policy would be the right NOXNA follow-up then, not something to
     // design speculatively now.
+    // plan_metal.md METAL-113: `colorAttachmentCount` joins `kind`/`blend` in the key once MRT
+    // (METAL-112) lands -- a render pipeline's `MTLRenderPipelineDescriptor.colorAttachments[i]`
+    // array must be declared for exactly as many simultaneous attachments as the active render
+    // pass actually binds (1 for the ordinary backbuffer/single-RT/cube-face case, up to Metal's
+    // own 8-attachment hardware limit for real `SetRenderTargets()` MRT), or `newRenderPipeline
+    // StateWithDescriptor:` raises a genuine validation error, not just a style mismatch. Every
+    // attachment always shares the same `MTLPixelFormatBGRA8Unorm` format (confirmed by
+    // `MetalRenderTargetBackend`'s own hardcoded choice, see `plan_metal.md` narrative item 77),
+    // so only the *count* needs to vary, not a per-slot format list -- matching
+    // `VulkanGraphicsBackend`'s own identical `colorAttachmentCount`-folded-into-the-pipeline-key
+    // precedent (its `PickRTPipelineRenderPass`/pipeline-key helpers), confirmed by reading it
+    // directly. Defaults to `1` so every pre-MRT call site (an aggregate-initializing
+    // `PipelineCacheKey key{kind, currentBlend};` with only 2 explicit fields) is unaffected.
     struct MetalPipelineCacheKey
     {
-        MetalPipelineKind kind; MetalBlendKey blend;
-        bool operator==(const MetalPipelineCacheKey& o) const { return kind==o.kind && blend==o.blend; }
+        MetalPipelineKind kind; MetalBlendKey blend; uint8_t colorAttachmentCount = 1;
+        bool operator==(const MetalPipelineCacheKey& o) const
+        {
+            return kind==o.kind && blend==o.blend && colorAttachmentCount==o.colorAttachmentCount;
+        }
     };
     struct MetalPipelineCacheKeyHash
     {
@@ -82,7 +98,8 @@ namespace CNA::Internal::Backends::Metal
                 | ((uint64_t)k.blend.alphaDst  << 32)
                 | ((uint64_t)k.blend.colorFunc << 40)
                 | ((uint64_t)k.blend.alphaFunc << 48)
-                | ((uint64_t)(k.blend.enabled ? 1 : 0) << 56);
+                | ((uint64_t)(k.blend.enabled ? 1 : 0) << 56)
+                | ((uint64_t)k.colorAttachmentCount << 57);
             return std::hash<uint64_t>()(h);
         }
     };

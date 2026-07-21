@@ -35,6 +35,7 @@ namespace CNA::Internal::Backends::Metal
                                                                      bool mipMap = false,
                                                                      int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
                                                                            bool mipMap = false,
                                                                            int multiSampleCount = 0) override;
