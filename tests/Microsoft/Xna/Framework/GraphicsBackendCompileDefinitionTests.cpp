@@ -82,6 +82,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_DX8
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_D3D10
+    ++enabled;
+#endif
 #ifdef CNA_BACKEND_SDL_GPU
     ++enabled;
 #endif

@@ -44,6 +44,9 @@ cmake-build-dx5/*
 cmake-build-dx6/*
 cmake-build-dx7/*
 cmake-build-dx8/*
+cmake-build-d3d10/*
+dx10-spike/*.exe
+dx10-spike/*.o
 dx2-spike/*.exe
 dx2-spike/*.o
 dx30-spike/*.exe

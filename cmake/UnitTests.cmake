@@ -277,6 +277,12 @@ if(CNA_BUILD_TESTS)
             # legitimately never opens a real D3D8 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dx8.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
+            # plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DX8's
+            # own gate -- CNA_D3D10_SKIP_DXVK_GATE for a binary that legitimately never opens a
+            # real D3D10 device (e.g. a bare --gtest_list_tests call).
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-d3d10.sh")
         endif()
     endif()
 

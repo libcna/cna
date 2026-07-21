@@ -162,6 +162,13 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX8")
             "d3d8.dll.a) or set -DCNA_DX8_DXVK_LIB=<path> to point at it explicitly.")
     endif()
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 "${CNA_DX8_DXVK_LIB}")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
+    # plan_d3d10.md design decision: unlike DX8, mingw-w64 ships a REAL d3d10 import library
+    # (libd3d10.a) -- no DXVK .dll.a linking hack needed. DXVK itself ships no d3d10.dll at all
+    # (only d3d10core.dll); the real d3d10.dll/d3d10_1.dll come from Wine's own builtin, which
+    # forward to d3d10core (overridden to DXVK's real implementation at the Wine-prefix level, not
+    # a link-time concern).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
     # into the same SDL3 library every other backend links against) -- no separate find_package

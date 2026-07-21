@@ -197,6 +197,10 @@ include(cmake/Tests/Dx7Tests.cmake)
 # only, real GPU-quad SpriteBatch; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 include(cmake/Tests/Dx8Tests.cmake)
 
+# plan_d3d10.md: real Direct3D 10 backend -- no fixed-function at all, real HLSL vs_4_0/ps_4_0
+# shaders throughout, DXVK-delivered via d3d10core.
+include(cmake/Tests/D3D10Tests.cmake)
+
 include(cmake/Harnesses.cmake)
 
 include(cmake/ToolGltfToCnj.cmake)

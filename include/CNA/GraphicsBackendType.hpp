@@ -69,6 +69,10 @@ namespace CNA
         /** @brief DX8 (real Direct3D 8, DXVK-delivered, fixed-function only -- no DirectDraw). */
         Dx8,
 
+        /** @brief Direct3D 10 (real ID3D10Device, DXVK-delivered via d3d10core, real HLSL shaders
+         * -- no fixed-function pipeline at all, unlike DX1..DX8). */
+        D3D10,
+
         /** @brief SDL_GPU. */
         SdlGpu
     };
@@ -124,6 +128,8 @@ namespace CNA
         return GraphicsBackendType::Dx7;
 #elif defined(CNA_BACKEND_DX8)
         return GraphicsBackendType::Dx8;
+#elif defined(CNA_BACKEND_D3D10)
+        return GraphicsBackendType::D3D10;
 #elif defined(CNA_BACKEND_SDL_GPU)
         return GraphicsBackendType::SdlGpu;
 #else
@@ -165,6 +171,7 @@ namespace CNA
             case GraphicsBackendType::Dx6:            return "DX6";
             case GraphicsBackendType::Dx7:            return "DX7";
             case GraphicsBackendType::Dx8:            return "DX8";
+            case GraphicsBackendType::D3D10:          return "D3D10";
             case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
         }
         return "UNKNOWN";

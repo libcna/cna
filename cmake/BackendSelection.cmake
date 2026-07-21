@@ -6,8 +6,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, DX1, DX2, DX30, DX5, DX6, DX7, DX8, or SDL_GPU)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "DX1" "DX2" "DX30" "DX5" "DX6" "DX7" "DX8" "SDL_GPU")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, DX1, DX2, DX30, DX5, DX6, DX7, DX8, D3D10, or SDL_GPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "DX1" "DX2" "DX30" "DX5" "DX6" "DX7" "DX8" "D3D10" "SDL_GPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -77,10 +77,16 @@ option(CNA_BACKEND_DX7 "Enable Direct X 7 (real DirectDraw v7 + Direct3D v7, fla
 # XNA content. The 2D SpriteBatch layer is real GPU-rendered textured quads (DirectDraw does not
 # exist at this era at all), not a CPU compositor like DX1..DX7's own.
 option(CNA_BACKEND_DX8 "Enable Direct X 8 (real Direct3D 8, DXVK-delivered, fixed-function) graphics backend (Windows only)" OFF)
+# plan_d3d10.md: real Direct3D 10 backend -- unlike DX1..DX8, D3D10 removed the fixed-function
+# pipeline entirely, so every draw needs a real HLSL vs_4_0/ps_4_0 shader pair (D3DCompile,
+# following D3D9/D3D11's own precedent), real state OBJECTS (ID3D10BlendState/etc, not per-call
+# render states), and real MRT support. Delivered via Wine's own builtin d3d10.dll/d3d10_1.dll
+# (DXVK 2.6.0 ships no d3d10.dll at all) forwarding to DXVK's real d3d10core.dll + dxgi.dll.
+option(CNA_BACKEND_D3D10 "Enable Direct3D 10 (real ID3D10Device, DXVK-delivered via d3d10core, real HLSL shaders) graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX30 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_SDL_GPU)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_DX1 OR CNA_BACKEND_DX2 OR CNA_BACKEND_DX30 OR CNA_BACKEND_DX5 OR CNA_BACKEND_DX6 OR CNA_BACKEND_DX7 OR CNA_BACKEND_DX8 OR CNA_BACKEND_D3D10 OR CNA_BACKEND_SDL_GPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -146,6 +152,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_DX8)
         list(APPEND _cna_enabled_backends "DX8")
     endif()
+    if(CNA_BACKEND_D3D10)
+        list(APPEND _cna_enabled_backends "D3D10")
+    endif()
     if(CNA_BACKEND_SDL_GPU)
         list(APPEND _cna_enabled_backends "SDL_GPU")
     endif()
@@ -164,7 +173,7 @@ endif()
 # extends this same gate to D3D9 (d3d9.h is equally Windows-only). plan_dx1.md design decision 1
 # extends it again to DX1: unlike DX3 (SDL3-backed ../free-direct, genuinely native-Linux-buildable),
 # DX1 uses the real Windows ddraw.h, so it needs the exact same gate.
-if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "DX1" OR CNA_GRAPHICS_BACKEND STREQUAL "DX2" OR CNA_GRAPHICS_BACKEND STREQUAL "DX30" OR CNA_GRAPHICS_BACKEND STREQUAL "DX5" OR CNA_GRAPHICS_BACKEND STREQUAL "DX6" OR CNA_GRAPHICS_BACKEND STREQUAL "DX7" OR CNA_GRAPHICS_BACKEND STREQUAL "DX8")
+if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "DX1" OR CNA_GRAPHICS_BACKEND STREQUAL "DX2" OR CNA_GRAPHICS_BACKEND STREQUAL "DX30" OR CNA_GRAPHICS_BACKEND STREQUAL "DX5" OR CNA_GRAPHICS_BACKEND STREQUAL "DX6" OR CNA_GRAPHICS_BACKEND STREQUAL "DX7" OR CNA_GRAPHICS_BACKEND STREQUAL "DX8" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
@@ -375,6 +384,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX8")
     set(BACKEND_TARGET "cna_backend_graphics_dx8")
     add_compile_definitions(CNA_BACKEND_DX8)
     set(CNA_BACKEND_DEFINE "CNA_BACKEND_DX8")
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D10")
+    message(STATUS "CNA: Using D3D10 (real Direct3D 10, DXVK-delivered via d3d10core, real HLSL shaders) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/D3D10")
+    set(BACKEND_TARGET "cna_backend_graphics_d3d10")
+    add_compile_definitions(CNA_BACKEND_D3D10)
+    set(CNA_BACKEND_DEFINE "CNA_BACKEND_D3D10")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     message(STATUS "CNA: Using SDL_GPU graphics backend")
     set(BACKEND_DIR "src/CNA/Internal/Backends/SdlGpu")
