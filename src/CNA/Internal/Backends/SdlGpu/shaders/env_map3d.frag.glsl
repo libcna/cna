@@ -50,7 +50,13 @@ void main() {
                   + ep.light1Diffuse_pad.xyz * NdotL1
                   + ep.light2Diffuse_pad.xyz * NdotL2;
 
-    vec3 litRGB = (pc.emissiveAmount.xyz + lightSum) * fragTint.rgb;
+    // REMED-GFX-007: FNA Lighting.fxh adds emissive UNSCALED (litRGB = lightSum*Diffuse +
+    // Emissive), not (Emissive + lightSum)*Diffuse -- the latter re-scales the already
+    // ambient-folded emissive by DiffuseColor a second time. Because the XNA layer pre-folds Alpha
+    // into BOTH fragTint.rgb (== DiffuseColor*Alpha) and pc.emissiveAmount.xyz
+    // (== (Emissive + Ambient*Diffuse)*Alpha), the wrong form additionally squared Alpha; adding
+    // emissive unscaled removes that too.
+    vec3 litRGB = lightSum * fragTint.rgb + pc.emissiveAmount.xyz;
     vec4 texColor = texture(uTexture, fragUV);
     vec3 reflDir = reflect(-E, N);
     vec4 envSample = texture(uEnvMap, reflDir);
