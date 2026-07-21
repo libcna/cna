@@ -93,4 +93,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_d3d11_ctest_command(_d3d11_skinned_world_normal_cmd cna_test_d3d11_skinnedeffect_world_normal)
     cna_register_backend_test(NAME D3D11_SkinnedEffect_WorldNormal COMMAND ${_d3d11_skinned_world_normal_cmd}
         TIMEOUT 60 LABELS "D3D11")
+
+    # REMED-GFX-005/010: fog must use FNA's view-space fog vector (corrected, non-mirrored, eye-space
+    # Z), not object-space Z. The shared transformed-camera harness (ViewSpaceFogRef) holds cases where
+    # object-space Z != view-space Z, so it discriminates both the mirror (GFX-005) and the
+    # object-vs-view-space (GFX-010) defects. Reused verbatim from the Vulkan-authored source.
+    cna_d3d11_test(cna_test_d3d11_viewspace_fog examples/vulkan_viewspace_fog_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_viewspace_fog_cmd cna_test_d3d11_viewspace_fog)
+    cna_register_backend_test(NAME D3D11_ViewSpaceFog COMMAND ${_d3d11_viewspace_fog_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 endif()

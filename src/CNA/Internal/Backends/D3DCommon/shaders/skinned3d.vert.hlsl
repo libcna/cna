@@ -89,10 +89,11 @@ VSOutput main(VSInput input)
     output.Normal = normalize(mul(mul(input.Normal, (float3x3)skinMat), InverseTranspose3x3((float3x3)World)));
     output.UV = input.UV;
     output.WorldPos = mul(skinnedPos, World).xyz;
-    // Task 899: fog factor from the PRE-SKIN raw object-space Z (matches EasyGL/Bgfx's
-    // established SkinnedEffect fog formula exactly -- Task 900/899 bonus scope).
+    // REMED-GFX-005/010: FNA view-space fog. FogStartEnd now carries EffectHelpers.SetFogVector
+    // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
+    // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.
     output.FogFactor = (FogColorEnabled.w > 0.5)
-        ? saturate((FogStartEnd.y - input.Position.z) / max(FogStartEnd.y - FogStartEnd.x, 1e-6))
+        ? 1.0 - saturate(dot(float4(skinnedPos.xyz, 1.0), FogStartEnd))
         : 1.0;
 
     return output;

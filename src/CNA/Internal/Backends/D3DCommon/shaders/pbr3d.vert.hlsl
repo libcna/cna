@@ -77,8 +77,11 @@ VSOutput main(VSInput input)
     // skinned3d.vert.hlsl) -- not EasyGL's own differently-derived formula (Task 1111's own note);
     // this file follows the D3D11 backend's existing convention, same "don't invent a new one"
     // discipline the rest of this port already applies.
+    // REMED-GFX-005/010: FNA view-space fog. FogStartEnd now carries EffectHelpers.SetFogVector
+    // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
+    // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.
     output.FogFactor = (FogColorEnabled.w > 0.5)
-        ? saturate((FogStartEnd.y - input.Position.z) / max(FogStartEnd.y - FogStartEnd.x, 1e-6))
+        ? 1.0 - saturate(dot(float4(input.Position, 1.0), FogStartEnd))
         : 1.0;
 
     return output;

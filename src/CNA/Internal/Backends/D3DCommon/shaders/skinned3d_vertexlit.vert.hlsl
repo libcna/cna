@@ -106,8 +106,11 @@ VSOutput main(VSInput input)
                           + spec2 * Light2SpecPad.xyz) * SpecularColorPower.xyz;
 
     output.Alpha = DiffuseColor.a;
+    // REMED-GFX-005/010: FNA view-space fog. FogStartEnd now carries EffectHelpers.SetFogVector
+    // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
+    // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.
     output.FogFactor = (FogColorEnabled.w > 0.5)
-        ? saturate((FogStartEnd.y - input.Position.z) / max(FogStartEnd.y - FogStartEnd.x, 1e-6))
+        ? 1.0 - saturate(dot(float4(skinnedPos.xyz, 1.0), FogStartEnd))
         : 1.0;
 
     return output;
