@@ -36,10 +36,13 @@ disproved finding is a real result and should be recorded with the same rigor as
 | Priority | Total | Done | In progress | Blocked | Not started |
 |---|---|---|---|---|---|
 | P0 | 12 | 12 | 0 | 0 | 0 |
-| P1 | 21 | 5 | 0 | 0 | 16 |
+| P1 | 21 | 6 | 0 | 0 | 15 |
 | P2 | 44 | 4 | 0 | 1 | 39 |
 | P3 | 28 | 0 | 0 | 0 | 28 |
-| **Total** | **105** | **21** | **0** | **1** | **83** |
+| **Total** | **105** | **22** | **0** | **1** | **82** |
+
+*P1's Done count 5→6 reflects `REMED-GFX-008` closing (SkinnedEffect ambient/emissive + AvatarRenderer
+recalibration; verified on Vulkan/EasyGL/Bgfx/D3D11/D3D9-custom, D3D12 source-verified).*
 
 *P1's Done count 3→5 reflects `REMED-CORE-001`/`-004` closing (see "Wave 2 — CORE lane" below).*
 
@@ -2314,7 +2317,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4, _bgfx-test_, _bgfx-fix_ | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass**). **Bgfx slice DONE and VERIFIED** — all **14** fog-capable `vs_*.sc` corrected to `(z+FogEnd)/(FogEnd-FogStart)` + zero-length guard; `bgfx_shaders.hpp` regenerated with a **from-source-built bgfx shaderc 1.19.150** (byte-reproducible: an unchanged-source regen is byte-identical to the committed header; the fix touches exactly the 15 intended shaders' 60 arrays, other 48 byte-identical). All 6 Bgfx fog tests retargeted to non-collapsing scenes and go pre→post: 4 collapsing tests 2/3→3/3, alphatest/dualtexture (endpoint-swap) 1/3→3/3. D3DCommon (D3D11/D3D12) + D3D9 slices PENDING (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
 | REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450 | feature/audit | **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx slice DONE and VERIFIED** — `vs_skinned3d`, `vs_skinned3d_vertexlit` (both Variant A) + `vs_pbr_skinned3d` (Variant B) now apply the World inverse-transpose after the bone skin, supplied CPU-side via the existing `u_normalMatrix` (bgfx's shaderc lacks in-shader `inverse()`/`transpose()`; the 4 skinned draw sites now upload `ComputeNormalMatrix3x3`). New Bgfx analytic world-normal harness (pixel- **and** vertex-lit) **2/8→8/8**; scale case reads 228 (inverse-transpose), not 180 (Variant A) or 114 (raw-World). `vs_skinned3d_vertexlit` was **not** in the audit's Bgfx evidence list — found by exhaustive inspection. **D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
 | REMED-GFX-007 | P1 | IN PROGRESS (only D3DCommon BYTECODE-BLOCKED remains) | 31668819, _bgfx-fix_, 7f3e82bf, 38a1008d, e30868eb | feature/audit | **Vulkan / Bgfx / WebGPU / SdlGpu slices ALL DONE and VERIFIED** — all four add emissive unscaled (`lightSum*Diffuse + Emissive`). **WebGPU slice DONE+VERIFIED** (`38a1008d`) — `env_map3d.wgsl` fs_main corrected; new `webgpu_environmentmapeffect_emissive_test.cpp` is transfer-function-agnostic (WebGPU surface is sRGB here; calibrates T() via env-map full-replace), 2/4→4/4. **SdlGpu slice DONE+VERIFIED** (`e30868eb`) — `env_map3d.frag.glsl` corrected + `spirv_shaders.hpp` regenerated (1/23 arrays changed, `kEnvMap3dFragSpv` only); new `sdlgpu_environmentmapeffect_emissive_test.cpp` (linear RT readback) 2/4→4/4. **Alpha-squaring RESOLVED as inseparable** — the audit's SdlGpu-specific "also squares Alpha" symptom is a direct arithmetic consequence of the *same* line (both operands CPU-prefolded with Alpha); the one-line fix removes it, no separate finding raised. Cross-backend conformance proven: Vulkan/Bgfx/SdlGpu raw (100,50,25) linear; WebGPU raw (168,122,88) sRGB → decodes to (100,50,25). SdlGpu 23/23, WebGPU 25/25 shard, zero regressions. **Only D3DCommon (D3D11/D3D12) remains — BYTECODE-BLOCKED** (`env_map3d.frag.hlsl:46` has the identical defect; no fxc/dxc in repo). See "Wave 3 — GRAPHICS shader campaign, WebGPU/SdlGpu GFX-007 slices". |
-| REMED-GFX-008 | P1 | DEFERRED (this session) | | | Vulkan root cause re-confirmed at source (skinned frag reads always-zero `pc.ambientColor`; `SkinnedEffect::FillGpuDrawParams` never writes `p.ambientColor` and pre-folds ambient into `p.emissiveColor`, which the skinned UBOs have no slot for). **Deferred, not blocked by tooling:** the FNA-correct formula double-lights `Vulkan_AvatarRenderer_TintRouting`, which drives ambient(1,1,1) AND a full head-on light and passes only because this bug cancels the double-count. Re-baselining it needs AvatarRenderer lighting recalibration — an avatar-subsystem change outside this campaign's clean scope. See "Wave 3 — GRAPHICS shader campaign". |
+| REMED-GFX-008 | P1 | **DONE and VERIFIED (Vulkan/EasyGL/Bgfx/D3D11/D3D9-custom pixel-verified; D3D12 source-verified)** | 47092ce6, b73f0a52, 26363ca1, 3790886d, 545192c0, 44db37af, b94631be | feature/audit | Analytic harness (9 cases) + AFFECTED-backend fix (Vulkan, D3D11/D3D12) + two audit-missed emissive×diffuse variants (Bgfx, D3D9-custom) + AvatarRenderer XNA single-light recalibration. Harness 9/9 on Vulkan/EasyGL/Bgfx/D3D11 (all agree ≤1 LSB); AvatarRenderer_TintRouting rewritten to 2 non-cancelling scenes, passes on EasyGL+Vulkan (also fixes the tracked avatar-tint bug); D3D9-custom 5/5 with new discriminating case. D3D12 shares D3D11's verified DXBC + compiles (windowed readback not runnable under Wine dxgi). SdlGpu/EasyGL/D3D9-stock confirmed ALREADY_CORRECT. Regression: Vulkan skinned+avatar 17/17, EasyGL 21/21, Bgfx 12/12, SdlGpu 5/5. See "REMED-GFX-008 — SkinnedEffect Ambient/Emissive (joint shader + AvatarRenderer)". |
 | REMED-GFX-009 | P1 | **DONE and VERIFIED (SdlGpu — the only affected backend)** | dda6249f, 8cfdd8b9 | feature/audit | Fog implemented from scratch across **all 13** fog-capable SdlGpu shader families (13 vert + 8 frag SPIR-V arrays) using the REMED-GFX-005 corrected formula, adapted to SdlGpu's set convention. New shared 32-byte FogParams UBO (vertex-stage only, binding 1 for basic/alpha/dual, binding 2 for env/lit/skinned/pbr); keep-factor from raw object-space pre-skin `inPos.z`; forwarded to the fragment as a `fragFog` varying; `outColor.rgb = mix(FogColor, rgb, keep)` (RGB only). CPU: `FillFogUniforms()` + `fogUniforms` on all 8 DrawCommand structs + push in every Issue path + `num_uniform_buffers` +1 on all 13 vertex shaders (no fragment/API change; existing layouts untouched). SPIR-V regen byte-reproducible: exactly **21 of 23 arrays changed** (2 sprite2d byte-identical), no drift. 3 new conformance tests **0→43/43** (BasicEffect 16/16, Effects 16/16, Skinned/PBR 11/11). Full SdlGpu shard **26/26**, zero regressions (incl. GFX-006 WorldNormal + GFX-007 EnvMapEmissive controls). Validation clean (only the known pre-existing REMED-GFX-059 VUID-02684). Cross-backend: byte-identical to Vulkan on the shared scene. See "REMED-GFX-009 — SdlGpu stock-effect fog". |
 | REMED-GFX-010 | P2 | **DONE+VERIFIED on all 4 directly-editable backends (EasyGL/Vulkan/SdlGpu/Bgfx); D3D9/D3DCommon BYTECODE-BLOCKED** | _easygl t+f_, _vulkan t+f_, _sdlgpu t+f_, _bgfx t+f_ | feature/audit | Cross-backend move of stock-effect fog from object-space Z to true FNA view-space fog (the plan's D3D9-only scope was already flagged as broader). Shared layer: `GpuDrawParams.fogVector[4]` + FNA `EffectHelpers.SetFogVector` port in all 7 stock effects. **EasyGL** 9/9 + existing fog 3/3×5. **Vulkan** 16 shaders, SPIR-V byte-reproducible (17-array diff), 9/9 + 68/68. **SdlGpu** 13 shaders, SPIR-V reproducible (13-array diff), 9/9 + 15/15. **Bgfx** 14 shaders, bgfx_shaders.hpp reproducible (56-array diff over glsl/essl/spv/wgsl), 9/9 + 56/56. Cross-backend conformance: identical canonical scenes → identical colors on all 4. Skinned fog now uses POST-skin position. Instanced fog N/A (not fog-capable anywhere). Unit suite 5613 pass (3 pre-existing non-fog failures). D3D slices bytecode-blocked. See "REMED-GFX-010 — view-space stock-effect fog". |
 | REMED-GFX-011 | P1 | **DONE (Vulkan — the only affected backend)** | c9e96813, 633a2e17 | feature/audit | Flip added to all 4 families; both false justifying comments deleted; SPIR-V regenerated and verified (exactly 4 of 35 arrays changed). Orientation harness 0/4 → 4/4 on backbuffer AND render target. Zero regressions. See "Wave 3 — GRAPHICS shader campaign". |
@@ -2930,6 +2933,173 @@ frag shaders at it), but it **cannot be rigorously verified** without that recal
 deferred rather than landed unverified. Recommend scheduling GFX-008 jointly with an
 AvatarRenderer-lighting-calibration task (owner: GRAPHICS + avatar), per the plan's "handle both
 together."
+
+---
+
+## REMED-GFX-008 — SkinnedEffect Ambient/Emissive (joint shader + AvatarRenderer) — IN PROGRESS (2026-07-21)
+
+De-deferred and scheduled jointly with AvatarRenderer lighting recalibration, exactly as the plan's
+"handle both together" instructs.
+
+### The exact FNA/XNA SkinnedEffect lighting equation (authoritative oracle)
+
+Source: `FNA/src/Graphics/Effect/StockEffects/EffectHelpers.cs::SetMaterialColor` (its own comment
+states the model verbatim) + `HLSL/Lighting.fxh::ComputeLights` + `HLSL/SkinnedEffect.fx`.
+
+**Desired lighting model (lighting enabled), per RGB channel:**
+
+```
+finalRGB = ((AmbientLightColor + Σ_i lightᵢ.DiffuseColor · max(0, N·(−Lᵢ_dir))) · DiffuseColor) + EmissiveColor
+```
+
+then modulated by the texture and vertex path:
+
+```
+pixelRGB = textureSample.rgb · finalRGB      (+ specular, then fog)   ; pixelA = alpha · textureSample.a
+```
+
+**CPU pre-fold (`SetMaterialColor`, mirrored byte-for-byte in CNA `SkinnedEffect::FillGpuDrawParams`):**
+the shader never sees raw ambient. The CPU folds ambient into the emissive uniform and premultiplies
+alpha:
+
+- `DiffuseColor_shader.rgb = diffuseColor · alpha`,  `DiffuseColor_shader.a = alpha`
+- `EmissiveColor_shader    = (emissiveColor + ambientLightColor · diffuseColor) · alpha`
+
+so the shader only has to compute:
+
+```
+litRGB = (Σ_i lightᵢDiffuse · max(0,N·(−Lᵢ))) · DiffuseColor_shader.rgb  +  EmissiveColor_shader
+```
+
+**Explicit term decomposition** (material emissive `E`, ambient `A`, diffuse `D`, alpha `α`, light `Ldᵢ`):
+
+| Term | Value |
+|---|---|
+| Diffuse base | `D` |
+| Ambient contribution | `A · D` (folded into the emissive uniform on CPU) |
+| Directional contribution | `Σ_i Ldᵢ · max(0, N·(−Lᵢ)) · D` |
+| Emissive contribution | `E` (added **raw** — NOT multiplied by `D`) |
+| Alpha | whole RGB premultiplied by `α`; output `.a = α · tex.a` |
+| Texture | `finalRGB = litRGB · tex.rgb` |
+| Vertex color | none in stock SkinnedEffect (`VSInputNmTxWeights`); CNA's `SkinnedVertexColor` NOXNA variant multiplies `vColor` into the final combined output |
+
+The two discriminating facts a correct implementation MUST honor: **(1) ambient is multiplied by
+diffuse; (2) emissive is added raw (not multiplied by diffuse).** Both are pre-folded into the single
+`emissiveColor` uniform on the CPU, so a backend that (a) reads an always-zero `ambientColor` for the
+ambient term and/or (b) never adds `emissiveColor` silently drops BOTH ambient and emissive.
+
+### Vulkan root cause (confirmed at source, all 4 skinned lighting shaders)
+
+`skinned3d.frag.glsl:49`, `skinned3d_color.frag.glsl:55`, `skinned3d_vertexlit.vert.glsl:78`,
+`skinned3d_vertexlit_color.vert.glsl:78` all compute:
+
+```glsl
+litRGB = (pc.ambientColor + lightSum) * pc.diffuseColor.rgb;   // WRONG
+```
+
+`pc.ambientColor` comes from `FillExtPushConst`'s `pc[20..22] = p.ambientColor`, which
+`SkinnedEffect::FillGpuDrawParams` never writes (defaults 0). And `emissiveColor` is never added — the
+skinned FogParams UBO (binding=2) has no emissive slot. So ambient AND emissive are both no-ops.
+
+**Fix (Vulkan):** add a `vec4 emissiveColor` to the skinned FogParams UBO (offset 240, fits the
+existing 256-byte stride) filled from `params.emissiveColor`, and change the 4 shaders to
+`litRGB = lightSum * pc.diffuseColor.rgb + fog.emissiveColor.rgb`. (Drop `pc.ambientColor` from the
+skinned formula — it is definitionally 0 for skinned draws since ambient is pre-folded into emissive.)
+
+### AvatarRenderer entanglement + root cause
+
+`AvatarRenderer::DrawRealEXT` routes each part's tint into `SkinnedEffect.DiffuseColor`
+(`AvatarRenderer.cpp:214`), calls `EnableDefaultLighting()` (enables **3** directional lights), then
+overrides only Light0. The tint-routing integration test
+(`examples/avatar_tint_routing_integration_test.cpp`) drives `AmbientLightColor=(1,1,1)` AND a full
+head-on Light0 `(0,0,-1)` diffuse `(1,1,1)` on a +Z-facing quad (N·L=1). Under the FNA-correct shader
+that is `(1+1)·tint = 2·tint` — the test passes **today only because the shader bug drops the ambient
+half back to `1·tint`**. Two additional AvatarRenderer defects surfaced:
+
+1. **Uses 3 lights; XNA `AvatarRenderer` exposes exactly ONE** (`LightDirection`/`LightColor`/
+   `AmbientLightColor`). Lights 1 & 2 leak XNA's generic fill/back lights into avatars — an infidelity.
+   (Masked in this test only because both extra lights are back-facing the +Z quad.)
+2. **Default `lightColor_`/`lightDirection_`/`ambientLightColor_` are uninitialized `Vector3` → (0,0,0)**,
+   so an avatar drawn without explicit lighting setup renders **black**. Not caught by any test (the
+   tint test overrides all three).
+
+**Planned recalibration (correct layer, not bug-compensation):** make AvatarRenderer XNA-faithful —
+enable only Light0, disable Light1/Light2, zero Light0 specular + material specular (the API exposes a
+diffuse key light + ambient only), give the three lighting members sensible non-black defaults. The
+tint-routing test is then set to a lighting configuration whose fully-lit result is genuinely `1·tint`
+under the CORRECT shader (ambient(1,1,1) + zero directional → flat `A·D = tint`), which a bugged shader
+that drops ambient renders as **black** → the test can no longer pass by two-bug cancellation.
+
+### Analytic harness (Phase 3) — measured pre/post (Vulkan, llvmpipe; other backends agree ≤1 LSB)
+
+`examples/skinnedeffect_lighting_conformance_test.cpp` — identity bone, +Z normal, head-on Light0
+(N·(−L)=1), white texture, specular zeroed. Correct = `(ambient + lightSum)·diffuse + emissive`, all
+premultiplied by alpha (emissive pre-fold = `(emissive + ambient·diffuse)·alpha`).
+
+| Case | inputs (A=ambient E=emissive Ld=light0 D=diffuse) | correct | pre-fix Vulkan (=oldBug) |
+|---|---|---|---|
+| A diffuse+light | Ld=1,D=(.5,.4,.3) | 128,102,76 | 128,102,76 (agree) |
+| B ambient only | A=.6,D=.5 | 77,77,77 | **0,0,0** |
+| C emissive only | E=(.4,.3,.2),D=.5 | 102,77,51 | **0,0,0** |
+| D ambient+dir | A=.3,Ld=.5,D=.8 | 163,163,163 | **102,102,102** |
+| E emissive+dir | E=.2,Ld=.5,D=.6 | 128,128,128 | **76,76,76** |
+| F ambient+emissive | A=.4,E=.15,D=.5 | 89,89,89 | **0,0,0** |
+| G amb+emis+dir | A=.2,E=.1,Ld=.5,D=.6 | 133,133,133 | **76,76,76** |
+| H per-channel | A=(.5,0,0),E=(0,.3,0),Ld=(0,0,.8),D=.6 | 77,77,122 | **0,0,122** |
+| I alpha·emissive | α=.5,E=.8,D=1 | 102,102,102 | **0,0,0** |
+
+Pre-fix Vulkan: **1/9** (only case A, where both formulas coincide). Post-fix Vulkan/EasyGL/Bgfx/D3D11:
+**9/9**, all four backends within 1 LSB of each other (llvmpipe rounds 0.3→76 where EasyGL gives 77).
+
+### Affected-backend matrix (Phase 2) — from the exhaustive sweep, all verdicts source-confirmed
+
+| Backend | Verdict | Skinned lit formula (pre-fix) | Action |
+|---|---|---|---|
+| **Vulkan** | AFFECTED | `(ambientColor[=0] + lightSum)·diffuse`, no emissive | FIXED — 8 shaders + UBO emissive slot + descriptor range 240→256; SPIR-V regen (8 arrays) |
+| **D3DCommon (D3D11+D3D12)** | AFFECTED | `(AmbientColor[=0] + lightSum)·diffuse`, no emissive | FIXED — 8 shaders + `D3DSkinnedExtraConstants.EmissiveColor` (240→256) + both backends' fill; DXBC regen (8 arrays) |
+| **Bgfx** | SEPARATE (audit said correct) | `diffuse·(emissive + lightSum)` (emissive×diffuse) | FIXED — 3 shaders (pixel+vertex-lit); bgfx_shaders.hpp regen (3 stems × glsl/essl/spv) |
+| **D3D9 custom vertex-color** | SEPARATE (audit said correct) | `(Emissive + lightSum)·diffuse` (emissive×diffuse) | FIXED — `SkinnedVertexColor3D.hlsl` PS; ps_3_0 DXBC regen (14-byte delta, VS byte-identical) |
+| EasyGL | ALREADY_CORRECT | `lightSum·diffuse + emissive` | none (harness 9/9 confirms) |
+| SdlGpu | ALREADY_CORRECT | `lightSum·diffuse + emissive` (reuses lit_textured3d.frag) | none (5/5 tests pass) |
+| D3D9 stock | ALREADY_CORRECT | vendored FNA `Lighting.fxh` | none |
+
+**Two audit misclassifications found:** the audit listed Bgfx and D3D9 as "confirmed correct," but both
+carried an emissive×diffuse defect (emissive present but wrongly scaled by DiffuseColor). Folded into
+GFX-008 (same effect, same emissive semantics, and required for the "all backends agree" criterion)
+rather than spun off — the harness catches them and they share the one-line reorder fix.
+
+### AvatarRenderer recalibration (Phases 4/7) — root cause + fix
+
+`DrawRealEXT` routes each part's tint → `DiffuseColor`, called `EnableDefaultLighting()` (3 lights)
+and overrode only Light0. The TintRouting test drove `AmbientLightColor=(1,1,1)` AND a full head-on
+Light0 `(1,1,1)`; with the corrected shader that is `(1+1)·tint = 2·tint` (measured pre-recalibration:
+hair 40,25,15 → **81,51,31**; shirt 20,90,155 → **41,181,255**). Three defects fixed at the
+AvatarRenderer layer: (1) 3-light rig where XNA exposes ONE key light + ambient → now enables only
+Light0, disables Light1/2; (2) latent all-zero default lighting (avatars rendered black without setup)
+→ non-black defaults (ambient 0.35 + head-on key 0.65 = 1.0 fully lit); (3) hidden specular → zeroed.
+The TintRouting test was rewritten to two non-cancelling scenes (ambient-only → bug renders black;
+directional-only → doubled-light renders 2×), both now reading exactly 1× tint on EasyGL+Vulkan. This
+also resolves the previously-failing `EasyGL/Vulkan_AvatarRenderer_TintRouting` (the tracked avatar
+tint bug — EasyGL's shader was already correct, so its old test failed at 2× tint).
+
+### Generated-artifact diffs (Phase 10) — all reproducible, only intended arrays
+
+- **Vulkan SPIR-V** (`spirv_shaders.hpp`, libshaderc): unchanged-source regen byte-identical; exactly
+  the 8 `kSkinned3d*` arrays changed, 26 others byte-identical.
+- **Bgfx** (`bgfx_shaders.hpp`, shaderc 1.19.150): unchanged-source byte-identical; only
+  `fs_skinned3d`, `vs_/fs_skinned3d_vertexlit` (× glsl/essl/spv) changed.
+- **D3DCommon DXBC** (`hlsl_shaders.hpp`, mingw+Wine/DXVK fxc tool — **UNBLOCKS the prior campaign's
+  "bytecode-blocked"**): unchanged-source byte-identical; by byte-content exactly the 8 `kSkinned3d*Dxbc`
+  arrays changed, the other 26 byte-identical (git's wider diff was line-reflow from the grown arrays).
+- **D3D9 DXBC** (`d3d9_skinned_vertex_color_shader.hpp`, fxc_tool via d3d9-spike prefix): VS byte-identical
+  (unchanged), PS 14-byte delta (same 1872-byte size).
+
+### Cross-backend conformance (Phase 9) & regression (Phase 11)
+
+Harness 9/9 on Vulkan, EasyGL, Bgfx, D3D11 — identical semantic inputs → identical decoded linear
+values within 1 LSB. Regression: Vulkan skinned+avatar **17/17** (was 16/17 with the intentionally-red
+TintRouting), EasyGL **21/21**, Bgfx **12/12**, SdlGpu **5/5**, AvatarRenderer+SkinnedEffect unit tests
+**94/94**. GFX-006 WorldNormal + GFX-010 Fog controls pass on every backend shard.
 
 ---
 
