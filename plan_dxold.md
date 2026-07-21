@@ -4,6 +4,11 @@
 > owner's direct instruction (2026-07-20). This file stays short on purpose — each version gets
 > its own full `plan_dxN.md` (this repo's standing convention, see `plan_dx3.md`/`plan_dx9.md`)
 > when its turn comes. Background analysis: `docs/directx-legacy-backends-analysis.md`.
+>
+> **Status (2026-07-21): the entire 1/2/3/5/6/7/8/10 line is done.** All 8 backends in the table
+> below are implemented, spiked, CTest-verified, and documented. The only remaining item from the
+> owner's original instruction is the still-future `DX3` naming transition (see its own section
+> below) — a rename task, not a new backend.
 
 ## Owner's instruction (translated from Czech, verbatim intent)
 
@@ -103,6 +108,13 @@ of this roadmap's scope.
 - `plan_dx30.md`, `docs/dx30-backend.md` — the real DirectX 3 backend, temporarily named `DX30`.
 - `plan_dx5.md`, `docs/dx5-backend.md` — the real DirectX 5 backend (DirectDraw v4 + Direct3D v3
   FVF `DrawPrimitive`), a further port of `DX30`'s own 2D+3D layers.
+- `plan_dx6.md`, `docs/dx6-backend.md` — DX6's real stencil buffer, same interfaces as DX5.
+- `plan_dx7.md`, `docs/dx7-backend.md` — DX7's genuinely new `IDirectDraw7`/`IDirect3D7`, viewport
+  object removed.
+- `plan_dx8.md`, `docs/dx8-backend.md` — DX8, no DirectDraw at all, DXVK-delivered, fixed-function
+  3D only.
+- `plan_d3d10.md`, `docs/d3d10-backend.md` — D3D10, no fixed-function pipeline at all, real HLSL
+  `vs_4_0`/`ps_4_0` shaders everywhere, delivered via Wine's own `d3d10.dll` + DXVK's `d3d10core.dll`.
 - `plan_dx3.md`, `docs/dx3-backend.md` — the shipping `free-direct`-backed DX3, pending its
   `FREE_DIRECT` rename.
 - `plan_dx9.md`, `plan_dx.md` — the shipping D3D9/D3D11/D3D12 plans; their Route-B conventions
