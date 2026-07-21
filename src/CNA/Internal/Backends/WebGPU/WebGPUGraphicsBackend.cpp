@@ -7549,7 +7549,13 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    output.worldNormal = normalize(skinMat3 * input.normal);
+    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
+    // FillLitLightUniforms and previously unused). The world factor was missing entirely (audit
+    // Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
+    // identity. The fragment stage re-normalizes worldNormal.
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    output.worldNormal = normalize(normalMatrix * (skinMat3 * input.normal));
     output.worldPos = (lp.world * skinnedPos).xyz;
     return output;
 }
@@ -7674,7 +7680,13 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    output.worldNormal = normalize(skinMat3 * input.normal);
+    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
+    // FillLitLightUniforms and previously unused). The world factor was missing entirely (audit
+    // Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
+    // identity. The fragment stage re-normalizes worldNormal.
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    output.worldNormal = normalize(normalMatrix * (skinMat3 * input.normal));
     output.worldPos = (lp.world * skinnedPos).xyz;
     output.color = input.color;
     return output;
@@ -7793,7 +7805,13 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    let n = normalize(skinMat3 * input.normal);
+    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
+    // FillLitLightUniforms and previously unused). This per-vertex-lit sibling had the identical
+    // missing-world-factor defect (audit Variant A); lighting is evaluated in this stage, so the
+    // world-transformed normal is re-normalized here.
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    let n = normalize(normalMatrix * (skinMat3 * input.normal));
     let worldPos = (lp.world * skinnedPos).xyz;
     let e = normalize(lp.eyePos.xyz - worldPos);
     let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
@@ -7906,7 +7924,13 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.uv = input.uv;
     output.color = input.color;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    let n = normalize(skinMat3 * input.normal);
+    // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
+    // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
+    // FillLitLightUniforms and previously unused). This per-vertex-lit sibling had the identical
+    // missing-world-factor defect (audit Variant A); lighting is evaluated in this stage, so the
+    // world-transformed normal is re-normalized here.
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    let n = normalize(normalMatrix * (skinMat3 * input.normal));
     let worldPos = (lp.world * skinnedPos).xyz;
     let e = normalize(lp.eyePos.xyz - worldPos);
     let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
@@ -8298,12 +8322,12 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
             return;
 
         // Vertex stage: skinned3d.wgsl's bone-palette transform (skinMatrix()), extended to also
-        // skin Tangent, feeding pbr3d.wgsl's own pbrLight()/fs_main BRDF unchanged. Matches
-        // EasyGLGraphicsBackend::EnsurePbrSkinnedProgram(): the normal/tangent transform here uses
-        // the raw World rotation directly (mat3(uWorld)*(skinMat3*normal)), NOT the precomputed
-        // inverse-transpose normal matrix pbr3d.wgsl's own unskinned vertex shader uses -- an
-        // intentional difference from unskinned PbrEffect, replicated here for cross-backend
-        // consistency rather than "fixed". No vertex colour (SkinnedPbrEffect has none).
+        // skin Tangent, feeding pbr3d.wgsl's own pbrLight()/fs_main BRDF unchanged. REMED-GFX-006:
+        // the normal now uses the inverse-transpose world normal matrix (lp.normalMatrixCol*), the
+        // same one pbr3d.wgsl's own unskinned vertex shader uses -- the previous raw-World
+        // (mat3(uWorld)*(skinMat3*normal)) path was audit Variant B, correct only for rotation and
+        // uniform scale. The tangent stays on raw World (direction transform, glTF convention). No
+        // vertex colour (SkinnedPbrEffect has none).
         static constexpr char shaderSource[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,
@@ -8386,7 +8410,14 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     output.position = u.mvp * skinnedPos;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     let worldMat3 = mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz);
-    output.worldNormal = normalize(worldMat3 * (skinMat3 * input.normal));
+    // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose world matrix
+    // (lp.normalMatrixCol*), not raw worldMat3. Raw World is correct only for rotation and uniform
+    // scale and diverges from FNA's mul(normal, WorldInverseTranspose) under non-uniform scale; it
+    // also contradicted this backend's own unskinned pbr3d.wgsl, which already uses the inverse
+    // transpose. The tangent stays on raw worldMat3: tangents transform as directions, not as
+    // normals (glTF convention, unchanged).
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    output.worldNormal = normalize(normalMatrix * (skinMat3 * input.normal));
     output.worldTangent = worldMat3 * (skinMat3 * input.tangent.xyz);
     output.bitangentSign = input.tangent.w;
     output.worldPos = (lp.world * skinnedPos).xyz;
