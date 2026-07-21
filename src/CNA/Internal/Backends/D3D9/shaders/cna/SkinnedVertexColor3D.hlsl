@@ -165,7 +165,11 @@ float4 PSSkinnedVertexColor3D(PSInput pin) : SV_Target0
     float NdotL2 = max(dotL2, 0.0);
 
     float3 lightSum = Light0Diffuse * NdotL0 + Light1Diffuse * NdotL1 + Light2Diffuse * NdotL2;
-    float3 litRGB = (EmissiveColor + lightSum) * DiffuseColor.rgb;
+    // REMED-GFX-008: FNA composes lit = lightSum*DiffuseColor + EmissiveColor -- emissive is added
+    // OUTSIDE the diffuse multiply (EmissiveColor already pre-folds (emissive + ambient*diffuse)*alpha
+    // at the C++ level). The prior (EmissiveColor + lightSum)*DiffuseColor wrongly scaled the folded
+    // emissive/ambient by DiffuseColor again.
+    float3 litRGB = lightSum * DiffuseColor.rgb + EmissiveColor;
 
     float3 h0 = normalize(E - normalize(Light0Dir));
     float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, SpecularPowerPad.x);

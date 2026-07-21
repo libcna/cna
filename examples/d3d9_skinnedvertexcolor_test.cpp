@@ -225,6 +225,34 @@ protected:
             check(threw, "DrawPrimitivesEx (SkinnedVertexColor3D): missing texture0 throws a named error");
         }
 
+        // Check E (REMED-GFX-008): EmissiveColor is ADDED outside the diffuse multiply, not
+        // multiplied by it. Lights off, DiffuseColor=(0.5), EmissiveColor=(0.8) ->
+        // litRGB = lightSum(0)*0.5 + 0.8 = 0.8 -> ~204. The old (EmissiveColor + lightSum)*DiffuseColor
+        // bug gave 0.8*0.5 = 0.4 -> ~102, so this discriminates the fix.
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriRedVertexColor, 3, sizeof(VPNTWC));
+
+            GpuDrawParams params;
+            SetBaseParams(params, whiteTex.get());
+            params.vertexColorEnabled = false;
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = 0.5f;
+            params.diffuseColor[3] = 1.0f;
+            params.emissiveColor[0] = params.emissiveColor[1] = params.emissiveColor[2] = 0.8f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            const bool okE = px.getRProperty() >= 200 && px.getRProperty() <= 208
+                          && px.getGProperty() >= 200 && px.getGProperty() <= 208
+                          && px.getBProperty() >= 200 && px.getBProperty() <= 208;
+            check(okE,
+                  "DrawPrimitivesEx (SkinnedVertexColor3D): EmissiveColor added OUTSIDE the diffuse "
+                  "multiply -- Diffuse=0.5 Emissive=0.8 lights-off -> ~204, not the old bug's ~102");
+        }
+
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
         Exit();
     }
