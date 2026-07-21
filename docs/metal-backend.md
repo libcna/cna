@@ -12,34 +12,58 @@ left" summary live in `plan_metal.md` (`METAL-1`–`METAL-257`, 30 phases). This
 durable capability-boundary reference `CLAUDE.md`'s `docs/webgpu-backend.md` precedent points to —
 kept current at the end of each session, not a full narrative retelling.
 
-## The central caveat: this backend has never been compiled
+## Current verification status (updated 2026-07-21)
 
-Every development session on this backend to date has run on Linux (Debian 13), which has no Apple
-Clang, no Metal framework headers, and no Metal-capable GPU. **The `.mm` files that make up the
-bulk of this backend's implementation have never been compiled, linked, or executed anywhere.**
-Every "landed" phase below is source-complete and was written by careful, line-by-line comparison
-against `EasyGLGraphicsBackend`'s already-shipping, already-tested equivalent logic (CNA's most
-mature 3D backend) — but "matches the reference implementation on paper" is not the same claim as
-"builds and runs correctly." Do not treat any 🟨 row below as verified in the sense CNA's other
-backend docs use that word.
+Every development *session* on this backend still runs on Linux (Debian 13), which has no Apple
+Clang, no Metal framework headers, and no Metal-capable GPU — every line of `.mm` code is still
+written and self-reviewed without ever compiling it locally. But since `.github/workflows/
+metal-macos-ci.yml` started actually building this backend on a real `macos-14` GitHub Actions
+runner, that is no longer the whole story:
 
-`.github/workflows/metal-macos-ci.yml` is the first thing that will ever actually build this
-backend, on a real `macos-14` GitHub Actions runner. Until a run of that job (or a physical Mac) is
-observed to pass, every 🟨 status below should be read as "carefully written, never compiled."
+- **This backend genuinely compiles cleanly on real Apple Clang.** Confirmed across many separate
+  CI runs (e.g. `29800865929`, `29801955085`, `29804175429`, `29804647754`), including every
+  Objective-C++ change landed to date — resource-lifetime fixes (`METAL-256`), enum-table
+  extractions (`METAL-19`), and the full custom-`ShaderEffect`/MSL facility (Phase 14). "Never
+  compiled" is no longer an accurate description of this backend as a whole.
+- **Most of its `ctest` suite passes on real Apple hardware.** As of the CI run above: `132` total
+  Metal-labeled tests, `128` passing (`97%`).
+- **A specific, confirmed, unresolved bug accounts for every current failure.** `Metal_PbrEffect_
+  Golden`/`Metal_SkinnedPbrEffect_Golden`/`Metal_DrawUserPrimitives_VPC`/`Metal_SpriteBatch_
+  CustomEffect` all fail for the *same* underlying reason: `GraphicsDevice::GetBackBufferData()`
+  (via `ReadBackbuffer()`) reads back only the `Clear()` color, never the content of a real draw
+  that ran before it — confirmed (not just suspected) by printing the actual observed pixel values,
+  which are byte-for-byte each test's own `Clear` color. This reproduces for both 2D (`SpriteBatch`)
+  and 3D draws, ruling out `PipelineKind`/shader-specific causes, and is **not** attributable to
+  either of two real, already-found-and-fixed bugs from the same investigation (a `vertexStart`
+  offset bug, a premature-`presentDrawable:` bug). Root cause remains undetermined — the
+  investigation is paused, not abandoned: pending either a physical Mac (for `Xcode`/`MTLCaptureManager`-
+  based GPU debugging — attempted once via CI, the specific `macos-14` runner's own GPU does not
+  support `MTLCaptureDestinationGPUTraceDocument`) or a `MTLCommandBuffer` runtime-error check
+  (already added, came back clean — rules out a GPU-side execution error too). See `plan_metal.md`
+  narrative items 67–76/82/84/85 for the full investigation history.
+
+Every "landed" phase below was written by careful, line-by-line comparison against
+`EasyGLGraphicsBackend`'s already-shipping, already-tested equivalent logic (CNA's most mature 3D
+backend) before ever reaching a compiler — but treat the distinction below (🟨 vs. ✅) as the
+authoritative word on what's actually been machine-checked, not the prose.
 
 ## Status legend
 
 - ✅ — **real, machine-verified**: actually compiled and executed by a real test binary on some
-  real machine, with the specific `ctest`/CI evidence cited. Never claimed on inspection alone.
-- 🟨 — source-complete: written and reviewed line-by-line against the FNA/EasyGL reference, but
-  never compiled (see caveat above). This is the ceiling reachable without an Apple toolchain for
-  any code that touches `id<MTL...>`/`CAMetalLayer`/Objective-C directly.
+  real machine (Linux for the plain-C++ subset, real Apple hardware via CI for everything else),
+  with the specific `ctest`/CI evidence cited. Never claimed on inspection alone.
+- 🟨 — source-complete: written and reviewed line-by-line against the FNA/EasyGL reference. Split
+  into two sub-cases, not distinguished further below (check `plan_metal.md`'s own per-task table
+  for the specific CI run backing any given 🟨 item): (a) genuinely CI-confirmed to *compile and
+  pass its own test* on real Apple hardware, just not yet promoted to ✅ in this summary doc, or
+  (b) written but not yet pushed/exercised by any CI run at all. Never treat a 🟨 row here as
+  functionally verified correct beyond what its own cited evidence says.
 - ⬜ — not started.
 
-One narrow exception exists to the "never compiled" rule: 7 pieces of this backend's logic touch
-*no* Objective-C or Metal-framework types at all (they only read/write plain C++ structs, XNA
-framework types, and `float` arrays) — see "Real, machine-verified subset" below. Those pieces
-carry a genuine ✅, extracted specifically so they could earn one without Apple hardware.
+One exception predates real CI entirely: 15 pieces of this backend's logic touch *no* Objective-C or
+Metal-framework types at all (they only read/write plain C++ structs, XNA framework types, and
+`float` arrays) — see "Real, machine-verified subset" below. Those pieces carry a genuine ✅ from a
+plain Linux build, no Apple hardware required.
 
 ## Implemented baseline (🟨 unless noted otherwise)
 
@@ -64,8 +88,19 @@ carry a genuine ✅, extracted specifically so they could earn one without Apple
   tangent-space normal mapping, 4 optional PBR maps with safe default-texture fallbacks (Phase 8).
   Cross-backend PBR support/verification status lives in `plan_cnj.md`'s `CNB-103`–`111` table
   (one row per backend), not duplicated here.
-- Instancing (Phase 9, blocked downstream on Phase 14's generic descriptor builder for anything
-  beyond the fixed `PipelineKind` set).
+- Custom `ShaderEffect`/MSL contract (Phase 14) — a `SpriteBatch`-scoped facility (fixed 32-byte
+  `Sprite2DVertex`-shaped contract, matching the exact scope `VulkanEffectBackend`/
+  `D3D11EffectBackend`/`D3D12EffectBackend` already commit to, not the arbitrary-3D-vertex-layout
+  facility only `EasyGLGraphicsBackend` supports): runtime-compiled MSL vertex+fragment pair via
+  two separate `MTLLibrary` objects, fixed-slot uniform contract (`docs/metal-shader-effect-
+  contract.md`), real per-`BlendState` pipeline selection (an improvement over the Vulkan/D3D11/
+  D3D12 precedent's own hardcoded blend). `SupportsCapability(CustomEffects)` is real (`true`).
+- Instancing (Phase 9) — still blocked, on the general 3D `GpuDrawParams::customEffectBackend`
+  bypass (`METAL-148`) and the generic `VertexElement`-driven descriptor builder specifically, not
+  on Phase 14 as a whole (Phase 14's own landed scope is `SpriteBatch`-only and does not touch
+  this). No established structured-pipeline backend (Vulkan/D3D11/D3D12) wires `customEffectBackend`
+  into its general 3D draw path either — only `EasyGLGraphicsBackend` does, since GL's attribute
+  binding needs no rigid vertex descriptor.
 - `RenderTarget2D`/`RenderTargetCube` bind/unbind, sampleable afterward, `DiscardContents`/
   `PreserveContents`, mip regeneration on unbind, `GetColorGLHandle`-equivalent accessor (Phase 10;
   MRT and MSAA remain ⬜, see Known limitations).
@@ -84,17 +119,19 @@ carry a genuine ✅, extracted specifically so they could earn one without Apple
 
 ## Real, machine-verified subset (✅, verified on Linux — see caveat on scope)
 
-Seven pieces of this backend's logic are plain C++ with zero Objective-C/Metal-framework
+15 pieces of this backend's logic are plain C++ with zero Objective-C/Metal-framework
 dependency — extracted out of `MetalGraphicsBackend.mm` into standalone headers under
 `include/CNA/Internal/Backends/Metal/`, with `MetalGraphicsBackend.mm` reduced to thin same-name
-aliases/wrappers so every call site is unaffected. Each has a dedicated GoogleTest suite under
+aliases/wrappers (or, for the enum-mapping headers, a trivial 1:1 final switch onto the real
+`MTL*` enum) so every call site is unaffected. Each has a dedicated GoogleTest suite under
 `tests/CNA/Internal/Backends/Metal/` that carries **no** `#if defined(CNA_BACKEND_METAL)` gate
 (deliberately — unlike every other backend's own tests, these must run under whichever backend
-this machine can actually build, e.g. `HEADLESS`). All 55 tests pass under a real
+this machine can actually build, e.g. `HEADLESS`). All 127 tests pass under a real
 `-DCNA_GRAPHICS_BACKEND=HEADLESS -DCNA_BUILD_TESTS=ON` `CnaTests` build and `ctest -R "^Metal"` run
-on Linux; an independent adversarial audit separately re-derived every expected value against the
-real source structs/functions and found no functional defects (see `plan_metal.md`'s narrative
-items 29–35 for full detail and the exact CTest numbers).
+on Linux (`ctest --test-dir cmake-build-headless -R "^Metal" -N` reports `Total Tests: 127`); an
+independent adversarial audit separately re-derived every expected value against the real source
+structs/functions for the first 7 and found no functional defects (see `plan_metal.md`'s narrative
+items 29–35 for that audit's full detail).
 
 | Header | What it covers |
 |---|---|
@@ -105,24 +142,51 @@ items 29–35 for full detail and the exact CTest numbers).
 | `MetalMat4.hpp` | `MetalMat4Multiply`/`FromXna`/`Transpose` — the WVP matrix helper set |
 | `MetalSelectPipelineKind.hpp` | `SelectMetalPipelineKind` — the shader-variant dispatch decision |
 | `MetalUniformFill.hpp` | `FillMetal{Lit,Env,Skinned,Pbr,SkinnedPbr}Uniforms` — `GpuDrawParams` → GPU uniform mapping |
+| `MetalSamplerFilter.hpp` | `DescribeMetalSamplerFilter` — `TextureFilter` → min/mag/mip-is-point plan |
+| `MetalVertexAttribFormat.hpp` | `MetalVertexAttribKind` — all 12 `VertexElementFormat` values, neutral (non-`MTL`) form |
+| `MetalVertexDescriptorPlan.hpp` | `BuildMetalVertexDescriptorPlan` — arbitrary-`VertexElement`-list attribute-layout building (`METAL-26`/`27`'s core logic; not yet wired into any live draw path, see Known limitations) |
+| `MetalCompareFunction.hpp` | `DescribeMetalCompareFunction` — `CompareFunction` → `MetalCompareFunctionKind` |
+| `MetalStencilOperation.hpp` | `DescribeMetalStencilOperation` — `StencilOperation` → `MetalStencilOperationKind` |
+| `MetalBlend.hpp` | `DescribeMetalBlendFactor` — `Blend` → `MetalBlendFactorKind` |
+| `MetalBlendFunction.hpp` | `DescribeMetalBlendOperation` — `BlendFunction` → `MetalBlendOperationKind` |
+| `MetalCullMode.hpp` | `DescribeMetalCullMode` — `CullMode` → `MetalCullModeKind` |
+
+The last 5 rows (`METAL-19`) switch on the real XNA enumerator name rather than a raw `int`
+literal, so a future reordering of any of those 5 XNA enums' declarations is compile-time-
+irrelevant here — the only part that still needs the Apple SDK is each header's own thin `.mm`-side
+final translation to the matching `MTL*` enum (a trivial 1:1 name match, CI-confirmed to compile
+correctly, see `plan_metal.md` narrative items 81/82).
 
 This subset does not include anything that constructs or issues real Metal API calls
-(`vertexDescriptorForStride`, `makePipeline`, the `metalPrimitive`/`metalCompareFunction`/
-`metalBlendFactor`/etc. enum-mapping functions, all real command-encoder work) — those return or
-consume genuine `MTL*` types declared only in Apple's Metal framework headers and cannot be
-extracted the same way without either the framework itself or hardcoding Apple's numeric enum
-values as an out-of-pattern risk. That remaining surface stays 🟨 pending real hardware.
+(`vertexDescriptorForStride`, `makePipeline`, the `metalPrimitive`/etc. final enum-translation
+switches, all real command-encoder work) — those return or consume genuine `MTL*` types declared
+only in Apple's Metal framework headers and cannot be extracted the same way without either the
+framework itself or hardcoding Apple's numeric enum values as an out-of-pattern risk. That
+remaining surface stays 🟨 (or ✅ per-item once its own CI evidence is checked, see the status
+legend above) pending real hardware for anything not yet exercised by a passing CI run.
 
 ## Known limitations / explicitly open
 
+- **The confirmed readback bug** — see "Current verification status" above. The single largest
+  known issue: any real draw (2D `SpriteBatch` or 3D) followed by a same-process
+  `GetBackBufferData()`/`ReadBackbuffer()` call reads back only the `Clear()` color. Affects 4
+  `CTest`s today (`Metal_PbrEffect_Golden`/`Metal_SkinnedPbrEffect_Golden`/`Metal_
+  DrawUserPrimitives_VPC`/`Metal_SpriteBatch_CustomEffect`) and will affect any *future* golden-
+  image/readback-based `CTest` too, until resolved. Root cause undetermined; investigation paused
+  pending a physical Mac (see `plan_metal.md` narrative items 67–76/82/84/85 for what has already
+  been ruled out).
 - **Fully generic `VertexElement`-driven descriptor builder** (`METAL-26`/`27`) — the current
   pipeline cache uses a fixed `PipelineKind` enum (one entry per concrete shader+layout this
   backend actually emits) rather than a hashed arbitrary-`VertexElement`-list key. Lower risk to
-  get right without a compiler than inventing the generic version blind; blocks Phase 14 (custom
-  `ShaderEffect`) and, transitively, Phase 9 (Instancing) for anything beyond the fixed set.
+  get right without a compiler than inventing the generic version blind; blocks the general 3D
+  `GpuDrawParams::customEffectBackend` bypass (`METAL-148`) and, transitively, Phase 9 (Instancing)
+  — no longer blocks Phase 14 as a whole, whose own landed scope (`SpriteBatch`-only custom
+  effects) needed no dependency on this builder (see Phase 14's bullet above).
 - **MRT / MSAA** (`METAL-104`/`105`/`112`/`113`) — the rest of Phase 10.
-- **`METAL-256`** — a real texture-update CPU/GPU-sync hazard Phase 18's audit found but did not
-  fix (documented, not silently ignored).
+- **`METAL-147`** — `IEffectBackend::BindTexture`/`BindTextureCube`/`BindTexture3D` for *extra*
+  sampler units on a custom `ShaderEffect` are not implemented (inherit the no-op default), matching
+  `VulkanEffectBackend`/`D3D11EffectBackend`'s own identical scope boundary — texture unit 0 is
+  always driven by the caller (`SpriteBatch`'s own texture parameter).
 - **`METAL-257`** — a cross-backend missing-`SDL_WINDOW_HIGH_PIXEL_DENSITY` gap Phase 16's research
   found; deliberately left for a cross-backend task since it isn't Metal-specific (confirmed to
   also affect iOS/tvOS, not just macOS).
@@ -131,8 +195,9 @@ values as an out-of-pattern risk. That remaining surface stays 🟨 pending real
   meaningfully, not attempted.
 - **Phase 28** (cross-backend pixel parity) and the rest of Phase 29 (a real iOS/tvOS build-only CI
   job and everything downstream of it) — ⬜.
-- **Every 🟨 row above** — see the central caveat: source-complete, never compiled, until
-  `metal-macos-ci.yml` or a physical Mac proves otherwise.
+- **Every 🟨 row above not otherwise called out with its own CI evidence** — see "Current
+  verification status": source-complete, and possibly already CI-compiled (check `plan_metal.md`'s
+  own per-task table for the specific run), but not yet promoted to ✅ in this summary doc.
 
 ## Verification methodology
 
@@ -148,13 +213,20 @@ represented as the other:
    (Anchored `-R "^Metal"`, not a bare `Metal` substring match — an unanchored filter also matches
    6 unrelated `PbrEffectDefaultsTest.Metallic*`/`SkinnedPbrEffectDefaultsTest.Metallic*` tests.)
 
-2. **Real ✅ on macOS (everything else, once observed passing)**: `.github/workflows/metal-macos-ci.yml`
-   on a `macos-14` GitHub Actions runner — configures with `-DCNA_GRAPHICS_BACKEND=METAL
-   -DCNA_BUILD_TESTS=ON`, builds, then runs the same `ctest -R "^Metal"` filter, which now also
-   covers `Metal_Smoke` (the real end-to-end device/window/swapchain/draw smoke test) alongside the
-   55 tests from tier 1. As of this writing this job has been extended to run that broader filter
-   but a passing run has not yet been observed from this Linux sandbox — treat as pending until a
-   real CI run or physical Mac confirms it.
+2. **Real ✅ on macOS (per-item, once each specific item's own evidence is checked)**:
+   `.github/workflows/metal-macos-ci.yml` on a `macos-14` GitHub Actions runner — configures with
+   `-DCNA_GRAPHICS_BACKEND=METAL -DCNA_BUILD_TESTS=ON`, builds, then runs `ctest -R "^Metal"
+   --output-on-failure`, which covers `Metal_Smoke` (the real end-to-end device/window/swapchain/
+   draw smoke test), the 132-and-growing full Metal `CTest` suite (SpriteBatch, custom effects,
+   golden-image, readback, occlusion queries, etc.), and the tier-1 extraction tests again (this
+   time on real Apple Clang, not just Linux). **This tier is real and has been observed passing for
+   most of the suite on multiple separate runs** — do not read this doc's own age as evidence
+   nothing has changed; check `plan_metal.md`'s narrative for the specific run ID behind any given
+   claim. The one standing exception is the confirmed readback bug in "Current verification status"
+   above, which currently keeps the overall `ctest` exit code nonzero (`Errors while running CTest`)
+   even though the great majority of individual tests pass — a job showing `conclusion: failure`
+   in `gh run list` does **not** by itself mean nothing works; always check the actual `ctest`
+   pass/fail line, not just the job's aggregate GitHub Actions conclusion.
 
 **Runtime validation** (`METAL-218`/`229`): `MTL_SHADER_VALIDATION=1` and `MTL_DEBUG_LAYER=1` are
 Apple's own documented runtime validation environment variables — the Metal-side equivalent of
