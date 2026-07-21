@@ -90,7 +90,10 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 | `REMED-GFX-058` | Vulkan test shard centre-pixel-only (47 of 71) — structurally blind to mirrors | MEDIUM | GRAPHICS | YES |
 | `REMED-GFX-013` | Vulkan scissor inert when RT bound — **DONE** (per-draw scissor capture) | HIGH | GRAPHICS | COND |
 | `REMED-GFX-062` | Vulkan `Viewport` full-RT-hardcoded in RT passes — **DONE** (per-draw viewport capture) | MEDIUM | GRAPHICS | COND |
-| `REMED-GFX-063` | Bgfx custom `Viewport` ignored in RT passes (backbuffer-only; self-disclosed) — GFX-062 parallel | MEDIUM | GRAPHICS | NEW |
+| `REMED-GFX-063` | Bgfx custom `Viewport` ignored in RT passes — **DONE** (setViewRect on RT views) | MEDIUM | GRAPHICS | COND |
+| `REMED-GFX-065` | Bgfx per-view rect can't represent 2+ viewports on one view in a frame (affects backbuffer too) | LOW | GRAPHICS | NEW |
+| `REMED-GFX-066` | Bgfx per-draw `bgfx::setScissor` does not clip on FBO/render-target views | MEDIUM | GRAPHICS | NEW |
+| `REMED-GFX-067` | Bgfx RT→backbuffer SpriteBatch-sample readback Y-mirrors for some RT sizes | MEDIUM | GRAPHICS | NEW |
 | `REMED-GFX-064` | SdlGpu + D3D12 never wire `GraphicsDevice.Viewport` (base no-op `SetViewport`; full-target hardcoded) | MEDIUM | GRAPHICS | NEW |
 | `REMED-GFX-016` | EasyGL MRT second attachment never drawn | HIGH | GRAPHICS | NO |
 | `REMED-GFX-017` | Bgfx default cull mode culls nothing | HIGH | GRAPHICS | YES |

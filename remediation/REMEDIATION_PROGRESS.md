@@ -2324,7 +2324,10 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-012 | P1 | **DONE and VERIFIED (Vulkan — the only affected backend)** | 21f6c4af, 6985b2fe | feature/audit | Audit hypothesis CONFIRMED exactly: `VulkanSpriteBatchBackend` never overrode `SetTransformMatrix()` (zero matches at HEAD), so `SpriteBatch.Begin(transformMatrix)` fell through to `IGraphicsBackend`'s no-op default and was silently dropped. Fix mirrors `D3D11SpriteBatchBackend` (identical Sprite2DVertex/viewportSize shader contract): store the matrix, apply per vertex in `Draw()` via `Vector2::Transform` in pixel space before upload. New `Vulkan_SpriteBatch_TransformMatrix` (scale+translate, two-sided discrimination) **1/3 → 3/3**. Identity default ⇒ byte-identical non-transform path (all existing sprite tests unchanged). Backend-parity sweep: Vulkan was the sole gap of 14; D3D12 (audit-unchecked) has a real working override identical to D3D11; Ascii delegates to SdlRenderer's real backend. No shader/SPIR-V change (CPU-side only). See "REMED-GFX-012 — Vulkan SpriteBatch transformMatrix". |
 | REMED-GFX-013 | P1 | **DONE and VERIFIED (Vulkan — the only affected backend)** | 14ea2dd3, 8216399f | feature/audit | Audit hypothesis CONFIRMED at HEAD: `RecordCommandBuffer` Phase-1 RT loop hardcoded `VkRect2D{{0,0},{rtW,rtH}}` and never read `scissorEnabled_/X_/Y_/W_/H_` (Phase-2 backbuffer did). The audit's suggested "read the global scissor in the RT loop" is INSUFFICIENT: the backend defers all draws to `Present()` and Task 338 resets `ScissorRectangle` on RT unbind, so the frame-global rect is wrong by record time. Fixed by snapshotting scissor **per draw/batch at enqueue** (`PushPending3DDraw` + `SpriteBatch::End()`) and replaying per draw via a clamped `computeScissor` helper (covers RenderTarget2D/Cube/MRT — one shared root cause). New `Vulkan_RenderTarget_Scissor` (asymmetric 48×32 RT, scissor (12,8,20,12), 5-way probe + scissor-OFF control) **5/9 → 9/9**. No Y-flip (VkRect2D is framebuffer/top-left space, matches XNA). Zero validation errors. Full shard: no regressions (4 stable failures = known GFX-012 baseline; 4 others = confirmed-flaky NET/AUDIO). Backend-parity: Vulkan was the sole full-target-hardcoded RT scissor; EasyGL/D3D11/D3D9/Bgfx/SdlGpu/WebGPU already honor RT scissor; D3D12 inert = separate GFX-014. No shader change. Spawned **GFX-062** (Vulkan Viewport still full-RT-hardcoded, disclosed, fixable via the same per-draw capture). See "REMED-GFX-013 — Vulkan ScissorRectangle …". |
 | REMED-GFX-062 | P2 | **DONE and VERIFIED (Vulkan — the only affected backend with a backbuffer-honored/RT-hardcoded split)** | 8247f632, 42c655fc, 048270a5 | feature/audit | Confirmed at HEAD: `RecordCommandBuffer` Phase-1 RT loop hardcoded `VkViewport{0,0,rtW,rtH,0,1}` and never read `viewportSet_/X_/Y_/W_/H_/minDepth/maxDepth` (Phase-2 backbuffer honored them since Task 880). Same deferred-model root cause as GFX-013: `SetRenderTarget` resets Viewport to the target's full size on RT bind/unbind (`ResetViewportAndScissorForRenderTarget`, FNA-parity analog of Task 338), so the frame-global viewport at `Present()` is never the sub-region each RT draw was issued under. Fixed by snapshotting viewport **per draw/batch at enqueue** (`PushPending3DDraw` + `SpriteBatch::End()`) and replaying per draw via new `computeViewport` (covers RenderTarget2D/Cube/MRT — one shared path). Unlike scissor: viewport rect is **NOT** clamped (a transform, not a clip — clamping distorts placement); positive height preserves the GFX-011 shader Y-flip (XNA `Viewport.Y` → `VkViewport.y` directly, no extra flip); `minDepth/maxDepth` clamped to `[0,1]` (also fixes RT path previously ignoring them). New `Vulkan_RenderTarget_Viewport` (64×48 RT, viewport (12,7,28,19), 5-way probe + full-viewport control + two-viewport state-timing + viewport∩scissor interaction) **7/18 → 18/18**. Validation layer (confirmed loaded): zero VkViewport/dynamic-state/render-pass errors. Full shard 5765/5771 (4 stable pre-existing = GFX-013 baseline; 2 flaky AUDIO passed on retry) — **zero regressions**. No shader change. Parity: Vulkan sole *deferred-and-split* backend; **Bgfx has the same RT-viewport-hardcoded defect → GFX-063**; **SdlGpu + D3D12 never wire Viewport at all → GFX-064**; EasyGL/D3D11/D3D9 honor RT viewport (immediate); WebGPU honors per-pass. See "REMED-GFX-062 — Vulkan Viewport …". |
-| REMED-GFX-063 | P2 | NOT STARTED (recorded during GFX-062 parity) | | feature/audit | Bgfx `ApplyViewportOverride()` self-discloses: only the backbuffer (view 0) honors a custom sub-region `Viewport`; RT passes stay at their `BindAsRenderTarget()` full-RT-size default. Identical shape to GFX-062 pre-fix. Fixable via the same per-draw capture (Bgfx uses `bgfx::setViewRect` on the per-RT view id). Not fixed — separate backend, distinct mechanism, out of GFX-062 scope. See detail below. |
+| REMED-GFX-063 | P2 | **DONE and VERIFIED (Bgfx — OpenGL 2.1 + Vulkan renderers)** | 131b8a30, bba401ff | feature/audit | `ApplyViewportOverride()` gated the custom viewport on `currentViewId_ == 0` (backbuffer), so a `Viewport` set while a RenderTarget2D/Cube/MRT was bound was ignored (RT views kept their `BindAsRenderTarget()`/`EnsureViewState()` full-RT `setViewRect`). Bgfx state model is DISTINCT from Vulkan GFX-062: bgfx view rect is PER-VIEW (last `setViewRect(viewId,...)` before `bgfx::frame()` wins for the whole view), NOT per-draw — and each RT owns a distinct view id. Fix = drop the `==0` gate: `ApplyViewportOverride()` (already called right before every 3D submit, after any `EnsureViewState()`/`BindAsRenderTarget()` full-target reset) now sets the custom rect on the bound target's own view. Top-left coords, no Y-flip, no dimension arithmetic; no-op when unset. New `Bgfx_RenderTarget_Viewport` (64×48 RT, viewport (11,7,29,18), 5-way probe + full-viewport control) **6/10 → 10/10** on bgfx-OpenGL (2.1, Xvfb :99) AND bgfx-Vulkan (real GPU, :0). Backbuffer `Bgfx_Viewport_Subregion` + `Bgfx_Scissor` unchanged. No shader diff. Full shard: no regressions (2 pre-existing = bgfx-Vulkan→GL2.1-fallback MSAA/depth env failures, confirmed identical without the fix). Spawned **GFX-065** (per-view multi-viewport limit), **GFX-066** (RT scissor inert), **GFX-067** (RT-size-dependent RT-sample Y-mirror). See "REMED-GFX-063 — Bgfx Viewport …". |
+| REMED-GFX-065 | P3 | NOT STARTED (recorded during GFX-063) | | feature/audit | bgfx view rect is per-view state, so two DIFFERENT viewports submitted to one view id within a single frame collapse to the last one — a pre-existing global limitation shared with the backbuffer (view 0), not RT-specific. Correctly supporting it needs per-viewport-change view-id splitting. Not fixed. See detail below. |
+| REMED-GFX-066 | P2 | NOT STARTED (recorded during GFX-063) | | feature/audit | `bgfx::setScissor` (ApplyScissorOverride, per-draw) does NOT clip on FBO-bound (render-target) views — a scissor-only RT render fills the whole target. Existing `Bgfx_Scissor` covers only the backbuffer, so this was never runtime-verified; GFX-013's "Bgfx honors RT scissor" parity claim was source-read only. Separate from Viewport. Not fixed. See detail below. |
+| REMED-GFX-067 | P2 | NOT STARTED (recorded during GFX-063) | | feature/audit | The Bgfx RT→backbuffer SpriteBatch-sample + `GetBackBufferData` readback path returns Y-mirrored content for some RT sizes (48×32, 40×48, 64×56 flip; 64×48 upright); trigger not fully characterized (not simple width/height/16-alignment). Existing Bgfx RT pixel tests all use sizes that happen to read upright. Not a Viewport defect. Not fixed. See detail below. |
 | REMED-GFX-064 | P2 | NOT STARTED (recorded during GFX-062 parity) | | feature/audit | SdlGpu and D3D12 never override the (no-op) base `IGraphicsBackend::SetViewport` — SdlGpu never calls `SDL_SetGPUViewport`; D3D12 hardcodes `{0,0,boundColorWidth_,boundColorHeight_}` at all 4 `RSSetViewports` sites. `GraphicsDevice.Viewport` is a total no-op on both (backbuffer **and** RT), broader than GFX-062. D3D12 is same family as its scissor-inert gap (GFX-014). Not fixed — out of GFX-062 scope. See detail below. |
 | REMED-GFX-014 | P1 | NOT STARTED | | | |
 | REMED-GFX-015 | P2 | NOT STARTED | | | |
@@ -4379,18 +4382,127 @@ separately UBSan-built (would only re-exercise unchanged allocation paths).
 
 ---
 
-### REMED-GFX-063 — Bgfx: custom `Viewport` ignored in render-target passes (NEW, discovered during GFX-062 parity, NOT fixed)
+### REMED-GFX-063 — Bgfx: custom `Viewport` honored in render-target views (setViewRect on RT views) — DONE and VERIFIED
+
+| Field | Value |
+|---|---|
+| Sev / Pri / Owner / Status | MEDIUM / P2 / GRAPHICS / **DONE and VERIFIED (Bgfx — both OpenGL and Vulkan renderers)** |
+| Commits | test `131b8a30`, fix `bba401ff`, docs (this entry) |
+| Root cause | `BgfxGraphicsBackend::ApplyViewportOverride()` gated the custom viewport on `currentViewId_ == 0` (the backbuffer view), so a custom `Viewport` set while a `RenderTarget2D`/`RenderTargetCube`/MRT was bound was ignored — RT views kept the full-RT `setViewRect` from `BindAsRenderTarget()`/`EnsureViewState()`. Only the backbuffer honored a custom `Viewport` (Task 880). |
+
+**Bgfx view-state model (independently established, Phases 1/5/6) — NOT the Vulkan per-draw shape.**
+bgfx view state (`setViewRect`, `setViewTransform`, `setViewFrameBuffer`, `setViewClear`) is **per-view**,
+evaluated once per view per `bgfx::frame()`: the **last** `setViewRect(viewId,...)` before the frame advance
+applies to **every** draw submitted to that view. It is *not* per-draw (unlike `bgfx::setScissor`, which is
+per-draw — that is why the GFX-013 scissor fix used a different mechanism). Each `RenderTarget2D`/Cube/MRT
+owns a **distinct** bgfx view id (`Detail::AllocateRtViewId()`, free-list-backed, ≤255); `SetRenderTarget`
+points `currentViewId_`/`spriteViewId` at the bound target's own view (0 for the backbuffer). So the correct
+fix for the common **one-viewport-per-RT-pass** case is simply to let `ApplyViewportOverride()` — already
+called right before every 3D submit, *after* any `EnsureViewState()`/`BindAsRenderTarget()` full-target reset —
+call `setViewRect(currentViewId_, vp)` for the RT view, making it the winning view rect for that pass.
+
+**Fix (`bba401ff`, `BgfxGraphicsBackend.cpp` only — one functional line).** Removed the `currentViewId_ == 0`
+gate from `ApplyViewportOverride()` (`if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0) setViewRect(currentViewId_, …)`).
+No new state, no per-draw capture, no view-id allocation → **no view-id-exhaustion risk** (Phase 14). Byte-identical
+for the backbuffer (view 0 still honored) and for any RT draw with no custom viewport (viewportSet_ holds the
+full-RT reset value → `setViewRect(rtView, 0,0,rtW,rtH)`, the same rect `BindAsRenderTarget` already set).
+
+**Coordinate/Y convention (Phases 9/10).** `Viewport(x,y,w,h)` is passed **raw** to `setViewRect(rtView,x,y,w,h)`
+— top-left origin, bgfx's own convention; bgfx normalizes the underlying renderer's origin (GL bottom-left vs
+others) internally, so **no manual Y-flip** and **no target-size arithmetic** (nothing dimension-dependent to get
+wrong — Phase 9 has no failure mode here). The regression's asymmetric above/below probes confirm no vertical
+mirror. **MinDepth/MaxDepth (Phase 11): unchanged accepted Bgfx deviation** — bgfx has no per-view depth-range
+knob (documented in `SetViewport()`, mirrors `SetVirtualResolution`); NOT faked, NOT part of GFX-063.
+
+**Test (`131b8a30`).** `examples/bgfx_rendertarget_viewport_test.cpp` (`Bgfx_RenderTarget_Viewport`), the proven
+Bgfx RT-sample methodology (`bgfx_rendertarget2d_msaa_test`): render a full-NDC quad into a **64×48** RT under
+`Viewport(11,7,29,18)`, unbind, `SpriteBatch`-blit 1:1 to the 64×64 backbuffer, read the whole region in one
+`GetBackBufferData` call (Bgfx first-read-per-frame quirk), probe pixels. Scenario A = custom viewport 5-way
+asymmetric probe (inside RED; left/right/above/below BLACK); Scenario B = full-viewport control (all RED).
+64×48 chosen because it reads back **upright** (see GFX-067). **Pre-fix 6/10** (scenario A's four outside probes
+RED = viewport ignored / full-target). **Post-fix 10/10.**
+
+**Bgfx renderer matrix (Phase 15).** Verified on **bgfx-OpenGL** (active renderer OpenGL 2.1, Mesa/llvmpipe under
+Xvfb :99 — the default the shard uses) **and bgfx-Vulkan** (active renderer Vulkan, real AMD GPU, `DISPLAY=:0`,
+`CNA_BGFX_RENDERER=VULKAN`): **10/10 on both.** Not claimed for D3D/Metal renderers (not available here).
+
+**SpriteBatch vs 3D (Phase 7).** The fix targets the 3D submit path (`ApplyViewportOverride`), which is where the
+finding and the DrawUserPrimitives test live. The RT-blit itself is a backbuffer sprite draw under the full
+(reset) backbuffer viewport, so it is unaffected. A SpriteBatch fill *into* an RT under a custom viewport is not
+covered (its NDC mapping is built from the full-target size in `EnsureViewState`, a distinct sprite-projection
+concern — same nuance noted for Vulkan GFX-062); not part of this fix.
+
+**Scissor interaction (Phase 12) — could not be tested; separate defect found.** Bgfx's per-draw `bgfx::setScissor`
+does **not clip on FBO/render-target views at all** (a scissor-only RT render fills the whole target). The existing
+`Bgfx_Scissor` test is backbuffer-only, so RT scissor was never runtime-verified (GFX-013's "Bgfx honors RT
+scissor" was a source read). Recorded as **REMED-GFX-066**, not fixed (out of GFX-063 scope; backbuffer scissor
+`Bgfx_Scissor` still green — no regression).
+
+**Regression matrix (Phase 16).** `Bgfx_RenderTarget_Viewport` 10/10; backbuffer controls `Bgfx_Viewport_Subregion`
++ `Bgfx_Scissor` PASS; targeted RT/orientation/skinned/envmap/fog families green except **2 pre-existing
+environment failures** — `Bgfx_RenderTarget2D_MsaaResolve` and `Bgfx_RenderTargetCube_DepthFormat` — both caused
+by bgfx-Vulkan falling back to OpenGL 2.1 here (no DRI3 under Xvfb; MSAA-resolve/real-depth don't work under GL
+2.1). **Confirmed identical with the fix reverted → not regressions.** **Full Bgfx shard (≤ -j2, Xvfb stability):
+5740/5746.** The 6 failures = 3 stable pre-existing graphics (`CnjEffectTest.LoadsRealCnjFixture`,
+`CnjStockEffectTest.CustomGlslEffectStillWorks`, `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`=GFX-036
+— identical to the Vulkan-shard baseline) + 1 pre-existing Bgfx env (`Bgfx_RenderTargetCube_DepthFormat`,
+bgfx-Vulkan→GL2.1 fallback, verified identical with the fix reverted) + 2 flaky (`ENetDiscoveryServiceTest`
+network, `DynamicSoundEffectInstanceTest` audio — both PASSED on isolated retry). `Bgfx_RenderTarget2D_MsaaResolve`
+passed in the full shard. My change is viewport-only, with no causal path to any of these. GFX-005/006/007/008/010
+Bgfx families unaffected. No `bx`/Xvfb death. **Zero regressions.**
+
+**Generated shaders.** None — zero `.sc`/`.glsl`/`bgfx_shaders.hpp` diff (pure bgfx view-state handling).
+
+**New findings spawned (recorded, NOT fixed):** **GFX-065** (two viewports on one view per frame — bgfx per-view
+limit, affects backbuffer too), **GFX-066** (RT `setScissor` inert), **GFX-067** (RT-size-dependent RT-sample
+readback Y-mirror). None inseparable from the viewport fix.
+
+| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`, `examples/bgfx_rendertarget_viewport_test.cpp`, `cmake/Tests/BgfxTests.cmake` |
+| Backends / Platforms | Bgfx / ALL |
+
+---
+
+### REMED-GFX-065 — Bgfx: bgfx per-view rect cannot represent two different viewports on one view within a frame (NEW, discovered during GFX-063, NOT fixed)
+
+| Field | Value |
+|---|---|
+| Sev / Pri / Owner / Status | LOW / P3 / GRAPHICS / **NOT STARTED (recorded, deferred)** |
+| Root cause | bgfx `setViewRect` is per-view state: the last call before `bgfx::frame()` applies to all draws in that view. If a game sets Viewport A, draws, sets Viewport B, draws — all into the same target/view within one un-advanced frame — both draws render under B. This is a **global** bgfx-view-model limitation, **not RT-specific**: it applies to the backbuffer (view 0) too, and predates GFX-063. Vulkan (GFX-062) can do this per-draw; bgfx cannot without splitting view ids. |
+| Evidence | bgfx view-state semantics; the one-viewport-per-pass fix (GFX-063) is correct for the common case. |
+| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (view-id allocation / `ApplyViewportOverride`) |
+| Backends / Platforms | Bgfx / ALL (backbuffer and render targets) |
+| Why separable / not fixed here | Correctly supporting it requires allocating a fresh bgfx view id per viewport-change within a pass (with sort-order and view-id-budget handling) — a real architectural change affecting the backbuffer path too, well beyond GFX-063's RT-viewport wiring. Rare in practice (XNA games seldom set >1 viewport per target per frame). |
+| Suggested fix | Split/allocate a per-(framebuffer,viewport) bgfx view id when the viewport changes mid-pass; manage view order and per-frame view-id release. |
+
+---
+
+### REMED-GFX-066 — Bgfx: per-draw `bgfx::setScissor` does not clip on render-target (FBO) views (NEW, discovered during GFX-063, NOT fixed)
 
 | Field | Value |
 |---|---|
 | Sev / Pri / Owner / Status | MEDIUM / P2 / GRAPHICS / **NOT STARTED (recorded, deferred)** |
-| Root cause | `BgfxGraphicsBackend::ApplyViewportOverride()` gates the custom viewport on `currentViewId_ == 0` (the backbuffer view) and **self-discloses**: *"Only the backbuffer (view 0) honors a custom sub-region Viewport -- RT passes stay at their `EnsureViewState()`/`BindAsRenderTarget()`-established full-RT-size default … a per-RT custom Viewport cannot be recovered from a single frame-global stored value (mirrors Vulkan's identical RT-pass scoping decision)."* So a custom `Viewport` set while a render target is bound is ignored — the exact shape GFX-062 just fixed for Vulkan. Depth range is a separate accepted Bgfx deviation (no per-view minDepth/maxDepth knob). |
-| Evidence | Source comment + code at `BgfxGraphicsBackend::ApplyViewportOverride()`. Backbuffer viewport works (Task 880). |
-| Relationship to GFX-062 | Same deferred-model root shape, but a **distinct backend and mechanism** — Bgfx uses per-view `bgfx::setViewRect` on the per-RT view id, not `Pending3DDraw`/`BatchSnapshot` capture. Fixable by capturing the viewport per RT-view (or per draw) and setting `bgfx::setViewRect` on the RT's own view id. |
-| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` |
+| Root cause | `ApplyScissorOverride()` issues `bgfx::setScissor(x,y,w,h)` per 3D submit, which correctly clips on the **backbuffer** (view 0, verified by `Bgfx_Scissor`) but does **NOT clip at all** when the current view is an FBO-bound render target — a scissor-only RT render (ScissorTestEnable=true, rect a sub-region) fills the entire target. Root cause not yet pinned (bgfx FBO scissor coordinate/enable handling); characterized empirically. |
+| Evidence | Isolated during GFX-063 test bring-up: rendering a full-RT quad into a 64×48 RT with scissor (18,11,30,30) enabled left the whole RT red (no clipping on either axis). The existing `Bgfx_Scissor` test only exercises the backbuffer, so RT scissor was never runtime-verified; GFX-013's parity note ("Bgfx honors RT scissor via `bgfx::setScissor` per draw") was source-read only and is **incorrect** for FBO views. |
+| Relationship to GFX-013 / GFX-063 | The Bgfx analog of the RT-scissor gap GFX-013 fixed for Vulkan. Independent of Viewport (`setScissor` vs `setViewRect`); blocks a Viewport∩Scissor RT-interaction test until fixed. |
+| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (`ApplyScissorOverride` / RT view scissor) |
+| Backends / Platforms | Bgfx / ALL (render targets only; backbuffer scissor works) |
+| Why separable / not fixed here | Distinct state (`setScissor`), distinct root cause; GFX-063 is Viewport-only. Not inseparable. |
+| Suggested test | A Bgfx RT + `ScissorRectangle` pixel test mirroring `Vulkan_RenderTarget_Scissor` (once fixed). |
+
+---
+
+### REMED-GFX-067 — Bgfx: RT→backbuffer SpriteBatch-sample readback Y-mirrors for some render-target sizes (NEW, discovered during GFX-063, NOT fixed)
+
+| Field | Value |
+|---|---|
+| Sev / Pri / Owner / Status | MEDIUM / P2 / GRAPHICS / **NOT STARTED (recorded, needs root-cause)** |
+| Root cause | Sampling an unbound `RenderTarget2D` back onto the backbuffer via `SpriteBatch` (and reading it via `GetBackBufferData`) returns **Y-mirrored** content for some RT sizes but upright for others. Observed on bgfx-OpenGL: 64×48 → upright; 48×32, 40×48, 64×56 → Y-flipped about the RT height. Trigger not a clean width/height/16-alignment rule; exact cause (RT texture V-orientation vs blit dest vs readback stride) not yet pinned. |
+| Evidence | Discovered during GFX-063 test bring-up: an identical viewport render into differently-sized RTs read back flipped for the non-64×48 sizes (grids captured). Every existing Bgfx RT pixel test happens to use sizes that read upright (32×32, 64×64, 64×48), so it was never surfaced. |
+| Relationship to GFX-063 | Downstream of the RT-sample/readback path, **not** the Viewport wiring — the viewport's X is always correct and the fix has zero dimension arithmetic. It only constrained the GFX-063 test's RT size to 64×48. |
+| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` / `BgfxSpriteBatchBackend` (RT-as-texture sample path) — exact site TBD |
 | Backends / Platforms | Bgfx / ALL |
-| Why separable / not fixed here | Different backend, different fix mechanism; GFX-062 is scoped to Vulkan. Not inseparable. |
-| Suggested test | A Bgfx RT + custom sub-region `Viewport` pixel test mirroring `Vulkan_RenderTarget_Viewport`. |
+| Why separable / not fixed here | A distinct RT-sampling/readback defect unrelated to Viewport; needs its own root-cause investigation. Not inseparable. |
+| Suggested next step | Bisect whether the flip is in the RT-texture V-coordinate (sprite sample), the blit destination, or the `GetBackBufferData` readback stride; add a matrix of RT sizes to a dedicated RT-sample test. |
 
 ---
 
