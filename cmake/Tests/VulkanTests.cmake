@@ -481,6 +481,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_RenderTarget_Scissor COMMAND cna_test_vulkan_rendertarget_scissor
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-062: Viewport must be honored for draws issued while a RenderTarget2D is bound
+        cna_vulkan_test(cna_test_vulkan_rendertarget_viewport
+                        examples/vulkan_rendertarget_viewport_test.cpp)
+        cna_register_backend_test(NAME Vulkan_RenderTarget_Viewport COMMAND cna_test_vulkan_rendertarget_viewport
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
         cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
                         examples/vulkan_spritebatch_multi_begin_end_test.cpp)
