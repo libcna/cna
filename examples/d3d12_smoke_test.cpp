@@ -954,6 +954,111 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check VP: REMED-GFX-064 -- GraphicsDevice.Viewport honored on D3D12 ----
+    // Before this task D3D12 never overrode the no-op base SetViewport and hardcoded a full-target
+    // D3D12_VIEWPORT at all four RSSetViewports sites, so a custom sub-region Viewport was a total
+    // no-op. D3D12's immediate-per-draw command-list model re-records every draw, so the fix stores
+    // the Viewport and re-reads it (GetEffectiveViewportEXT) at each site -- no capture/replay needed
+    // (unlike deferred Vulkan GFX-062 / SdlGpu). This runs off-screen (BindOffscreenColorTargetEXT),
+    // the only D3D12 path that survives this dev loop's plain Wine (real-window is REMED-BUILD-012).
+    //
+    // Asymmetric 80x60 RT, Viewport (13,9,31,23) => filled region x[13,44) y[9,32). An oversized
+    // full-NDC triangle (Check M's trick) would cover the whole target if the viewport were full.
+    {
+        constexpr int kRtWidth = 80;   // asymmetric, and != 64 (the other checks' RT size)
+        constexpr int kRtHeight = 60;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "VP0: real off-screen 80x60 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        struct VPC { float x, y, z; uint32_t color; };
+        // Colors are XNA packed AABBGGRR: red = 0xFF0000FF, green = 0xFF00FF00.
+        static const VPC kRedTri[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF0000FFu}, { 3.0f, -1.0f, 0.0f, 0xFF0000FFu}, {-1.0f,  3.0f, 0.0f, 0xFF0000FFu},
+        };
+        static const VPC kGreenTri[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF00FF00u}, { 3.0f, -1.0f, 0.0f, 0xFF00FF00u}, {-1.0f,  3.0f, 0.0f, 0xFF00FF00u},
+        };
+        D3D12VertexBufferBackend redVb(&backend, 3);
+        redVb.SetData(kRedTri, 3, sizeof(VPC));
+        D3D12VertexBufferBackend greenVb(&backend, 3);
+        greenVb.SetData(kGreenTri, 3, sizeof(VPC));
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b)
+        {
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+        const auto& I = Matrix::getIdentityProperty();
+
+        // (1) Custom sub-region viewport: full-NDC red triangle fills ONLY the viewport rect.
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.SetViewport(13, 9, 31, 23, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(redVb, I, I, I, PrimitiveType::TriangleList, 1);
+        auto buf = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(buf, 28, 20), 255, 0, 0), "VP1a: inside viewport (28,20) is RED");
+        Check(isColor(pixelAt(buf,  5, 20),   0, 0, 0), "VP1b: left of viewport ( 5,20) is BLACK (clear)");
+        Check(isColor(pixelAt(buf, 60, 20),   0, 0, 0), "VP1c: right of viewport (60,20) is BLACK (clear)");
+        Check(isColor(pixelAt(buf, 28,  3),   0, 0, 0), "VP1d: above viewport (28, 3) is BLACK (clear)");
+        Check(isColor(pixelAt(buf, 28, 50),   0, 0, 0), "VP1e: below viewport (28,50) is BLACK (clear)");
+
+        // (2) Full-viewport control: reset to full target, red triangle fills the WHOLE target.
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.SetViewport(0, 0, kRtWidth, kRtHeight, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(redVb, I, I, I, PrimitiveType::TriangleList, 1);
+        buf = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(buf, 28, 20), 255, 0, 0) && isColor(pixelAt(buf, 5, 20), 255, 0, 0)
+              && isColor(pixelAt(buf, 60, 20), 255, 0, 0) && isColor(pixelAt(buf, 28, 3), 255, 0, 0)
+              && isColor(pixelAt(buf, 28, 50), 255, 0, 0),
+              "VP2: full viewport (0,0,80,60) fills the whole target -- no over-clipping");
+
+        // (3) Two viewports, two draws, one target (no clear between): each draw honors its OWN
+        //     viewport (immediate-per-draw model records each RSSetViewports fresh).
+        //       Viewport A = (4,4,22,22) RED  => x[4,26)  y[4,26)
+        //       Viewport B = (48,32,22,22) GRN => x[48,70) y[32,54)
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.SetViewport(4, 4, 22, 22, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(redVb, I, I, I, PrimitiveType::TriangleList, 1);
+        backend.SetViewport(48, 32, 22, 22, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(greenVb, I, I, I, PrimitiveType::TriangleList, 1);
+        buf = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(buf, 15, 15), 255, 0, 0), "VP3a: viewport A center (15,15) is RED");
+        Check(isColor(pixelAt(buf, 59, 43), 0, 255, 0), "VP3b: viewport B center (59,43) is GREEN");
+        Check(isColor(pixelAt(buf, 59, 15), 0, 0, 0),   "VP3c: gap (59,15) is BLACK (in neither viewport)");
+        Check(isColor(pixelAt(buf, 15, 43), 0, 0, 0),   "VP3d: gap (15,43) is BLACK (in neither viewport)");
+
+        // Unbind clears the stored custom viewport (target-change reset, mirroring XNA), so every
+        // subsequent check -- which binds a different target and never calls SetViewport -- falls
+        // back to that target's full size, byte-identical to pre-REMED-GFX-064.
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     // ---- Check N (DX-111 continued): textured3d + colored_textured3d via real GpuDrawParams ----
     {
         constexpr int kRtWidth = 64;
