@@ -2313,7 +2313,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-004 | P1 | NOT STARTED | | | |
 | REMED-GFX-005 | P1 | IN PROGRESS | 58a7d0bb, c11c6ce4, _bgfx-test_, _bgfx-fix_ | feature/audit | **Vulkan slice DONE** (16 shaders, **8/8 fog tests pass**). **Bgfx slice DONE and VERIFIED** — all **14** fog-capable `vs_*.sc` corrected to `(z+FogEnd)/(FogEnd-FogStart)` + zero-length guard; `bgfx_shaders.hpp` regenerated with a **from-source-built bgfx shaderc 1.19.150** (byte-reproducible: an unchanged-source regen is byte-identical to the committed header; the fix touches exactly the 15 intended shaders' 60 arrays, other 48 byte-identical). All 6 Bgfx fog tests retargeted to non-collapsing scenes and go pre→post: 4 collapsing tests 2/3→3/3, alphatest/dualtexture (endpoint-swap) 1/3→3/3. D3DCommon (D3D11/D3D12) + D3D9 slices PENDING (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
 | REMED-GFX-006 | P1 | IN PROGRESS | dafa085d, acf200c9, 7c5cf74f, f040f184, cd9298fd, 23a83527, daa7bb70, 9e0b1450 | feature/audit | **Vulkan + EasyGL + WebGPU + SdlGpu slices DONE and VERIFIED** — all four directly-editable backends now compose `transpose(inverse(mat3(world)))` after the bone-skin 3×3 (Variant A + Variant B). Per-backend analytic non-identity-World harnesses: EasyGL 2/8→8/8, WebGPU 2/8→8/8 (sRGB swapchain), SdlGpu 1/4→4/4; all match FNA to the byte, and cross-backend conformance holds (linear backends byte-identical, WebGPU the sRGB encoding of the same normal). EasyGL routes through the existing CPU `uNormalMatrix`; WebGPU reads the already-uploaded `normalMatrixCol*`; SdlGpu computes in-shader + regenerated SPIR-V (byte-reproducible, 3/23 arrays changed). Regressions: none (EasyGL 95 effect tests, WebGPU 11, SdlGpu 22; pre-existing failures unchanged, incl. the REMED-BUILD-003 avatar tint bug). New finding **REMED-GFX-059** (pre-existing SdlGpu VUID-02684 validation error). **Bgfx slice DONE and VERIFIED** — `vs_skinned3d`, `vs_skinned3d_vertexlit` (both Variant A) + `vs_pbr_skinned3d` (Variant B) now apply the World inverse-transpose after the bone skin, supplied CPU-side via the existing `u_normalMatrix` (bgfx's shaderc lacks in-shader `inverse()`/`transpose()`; the 4 skinned draw sites now upload `ComputeNormalMatrix3x3`). New Bgfx analytic world-normal harness (pixel- **and** vertex-lit) **2/8→8/8**; scale case reads 228 (inverse-transpose), not 180 (Variant A) or 114 (raw-World). `vs_skinned3d_vertexlit` was **not** in the audit's Bgfx evidence list — found by exhaustive inspection. **D3D9 / D3DCommon slices PENDING — BYTECODE-BLOCKED** (fxc/dxc absent). See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
-| REMED-GFX-007 | P1 | IN PROGRESS | 31668819, _bgfx-fix_ | feature/audit | **Vulkan slice DONE** — env_map3d.frag emissive now added unscaled (`lightSum*Diffuse + Emissive`). **Bgfx slice DONE and VERIFIED** — `fs_env_map3d.sc` corrected to `lightSum*Diffuse + Emissive`; discriminating sub-test added to `bgfx_environmentmapeffect_amount_zero_test.cpp` (non-white Diffuse (0.5) + non-zero Emissive (0.5)): pre-fix got=(50,25,13), post-fix got=(100,50,25). All Bgfx env-map tests pass (AmountZero/Fresnel/Combined/…), zero regressions. WebGPU/SdlGpu/D3DCommon slices PENDING. See "Wave 3 — GRAPHICS shader campaign, Bgfx slices". |
+| REMED-GFX-007 | P1 | IN PROGRESS (only D3DCommon BYTECODE-BLOCKED remains) | 31668819, _bgfx-fix_, 7f3e82bf, 38a1008d, e30868eb | feature/audit | **Vulkan / Bgfx / WebGPU / SdlGpu slices ALL DONE and VERIFIED** — all four add emissive unscaled (`lightSum*Diffuse + Emissive`). **WebGPU slice DONE+VERIFIED** (`38a1008d`) — `env_map3d.wgsl` fs_main corrected; new `webgpu_environmentmapeffect_emissive_test.cpp` is transfer-function-agnostic (WebGPU surface is sRGB here; calibrates T() via env-map full-replace), 2/4→4/4. **SdlGpu slice DONE+VERIFIED** (`e30868eb`) — `env_map3d.frag.glsl` corrected + `spirv_shaders.hpp` regenerated (1/23 arrays changed, `kEnvMap3dFragSpv` only); new `sdlgpu_environmentmapeffect_emissive_test.cpp` (linear RT readback) 2/4→4/4. **Alpha-squaring RESOLVED as inseparable** — the audit's SdlGpu-specific "also squares Alpha" symptom is a direct arithmetic consequence of the *same* line (both operands CPU-prefolded with Alpha); the one-line fix removes it, no separate finding raised. Cross-backend conformance proven: Vulkan/Bgfx/SdlGpu raw (100,50,25) linear; WebGPU raw (168,122,88) sRGB → decodes to (100,50,25). SdlGpu 23/23, WebGPU 25/25 shard, zero regressions. **Only D3DCommon (D3D11/D3D12) remains — BYTECODE-BLOCKED** (`env_map3d.frag.hlsl:46` has the identical defect; no fxc/dxc in repo). See "Wave 3 — GRAPHICS shader campaign, WebGPU/SdlGpu GFX-007 slices". |
 | REMED-GFX-008 | P1 | DEFERRED (this session) | | | Vulkan root cause re-confirmed at source (skinned frag reads always-zero `pc.ambientColor`; `SkinnedEffect::FillGpuDrawParams` never writes `p.ambientColor` and pre-folds ambient into `p.emissiveColor`, which the skinned UBOs have no slot for). **Deferred, not blocked by tooling:** the FNA-correct formula double-lights `Vulkan_AvatarRenderer_TintRouting`, which drives ambient(1,1,1) AND a full head-on light and passes only because this bug cancels the double-count. Re-baselining it needs AvatarRenderer lighting recalibration — an avatar-subsystem change outside this campaign's clean scope. See "Wave 3 — GRAPHICS shader campaign". |
 | REMED-GFX-009 | P1 | NOT STARTED | | | |
 | REMED-GFX-010 | P2 | NOT STARTED | | | |
@@ -3046,6 +3046,121 @@ zero-length guard; the 3 skinned `vs` grew from the added `u_normalMatrix` + the
   fog (GFX-009); D3D9 custom-shader fog is the separate object-space defect (GFX-010).
 - **GFX-006:** D3D9 (`SkinnedVertexColor3D` A, `PbrSkinned3D` B) + D3DCommon (`skinned*` A ×4,
   `pbr_skinned3d` B) — BYTECODE-BLOCKED. All directly-editable + Bgfx backends now DONE.
-- **GFX-007:** WebGPU, SdlGpu (incl. its extra alpha-squaring), D3DCommon — WebGPU/SdlGpu are
-  directly-editable/libshaderc and were simply not in this Bgfx-scoped session; D3DCommon
-  BYTECODE-BLOCKED.
+- **GFX-007:** WebGPU + SdlGpu now **DONE and VERIFIED** (commits `38a1008d`, `e30868eb`; see the
+  dedicated section below). The SdlGpu "extra alpha-squaring" turned out **inseparable** — the same
+  one-line reorder removes it. **Only D3DCommon (D3D11/D3D12) remains — BYTECODE-BLOCKED**
+  (`env_map3d.frag.hlsl:46` = `(EmissiveEm.xyz + lightSum) * DiffuseColor.rgb`, identical defect;
+  no fxc/dxc toolchain in the repo, so the shared DXBC cannot be regenerated in this sandbox).
+
+---
+
+## REMED-GFX-007 — Wave 3 — GRAPHICS shader campaign, WebGPU/SdlGpu GFX-007 slices (DONE + VERIFIED)
+
+Commits: `7f3e82bf` (tests, fail pre-fix), `38a1008d` (WebGPU fix), `e30868eb` (SdlGpu fix + SPIR-V
+regen). Branch `feature/audit`.
+
+### Scope sweep (exhaustive, not assumed)
+
+Each backend has **exactly one** `EnvironmentMapEffect` shader variant, both confirmed AFFECTED:
+- **WebGPU** — `CreateEnvMapResources()`'s runtime WGSL string in `WebGPUGraphicsBackend.cpp`
+  (`env_map3d.wgsl`), fs_main. No skinned/specular env-map variant exists.
+- **SdlGpu** — `src/CNA/Internal/Backends/SdlGpu/shaders/env_map3d.frag.glsl`. Its `.vert.glsl`,
+  and the whole env-map path in `SdlGpuGraphicsBackend.cpp`, carry no second variant.
+
+Everything else in each env-map path was classified and left untouched: Fresnel weighting, reflection
+vector, cube sampling, `envMapAmount`/blend, `combinedAlpha` and the envmap/output alpha (all
+**ALREADY_CORRECT** — byte-for-byte the verified Vulkan form), WebGPU env-map fog (**ALREADY_CORRECT**,
+GFX-005 form), SdlGpu env-map fog (**NOT_APPLICABLE** — SdlGpu has no fog, GFX-009). No other stock
+effect touched.
+
+### Root cause (both backends, one line each)
+
+CPU side (`EnvironmentMapEffect::FillGpuDrawParams()`, unchanged and correct) pre-folds Alpha into
+**both** operands: `diffuseColor = (DiffuseColor*Alpha, Alpha)` and
+`emissiveColor = (EmissiveColor + AmbientLightColor*DiffuseColor)*Alpha`. Both shaders computed
+`litRGB = (emissive + lightSum) * diffuse`, so the emissive term became
+`(Emissive + Ambient*Diffuse)*Alpha · Diffuse*Alpha` = emissive re-scaled by Diffuse **and** Alpha
+squared. FNA `Lighting.fxh` adds emissive **unscaled**.
+
+- **WebGPU** `env_map3d.wgsl`: `let litRGB = (ep.emissiveAmount.xyz + lightSum) * ep.diffuseColor.rgb;`
+  → `let litRGB = lightSum * ep.diffuseColor.rgb + ep.emissiveAmount.xyz;`
+- **SdlGpu** `env_map3d.frag.glsl:53`: `vec3 litRGB = (pc.emissiveAmount.xyz + lightSum) * fragTint.rgb;`
+  → `vec3 litRGB = lightSum * fragTint.rgb + pc.emissiveAmount.xyz;`
+
+### Alpha-squaring conclusion — inseparable, NOT a separate finding
+
+The audit (`audit/examples/sdlgpu_smoke_test.cpp.audit.md:187-201`) reported SdlGpu as "uniquely also
+squares the Alpha term." Reproduced and confirmed the arithmetic, but it is **not an independent
+defect**: it is the exact `Alpha²` factor produced by the *same* wrong multiply, present latently in
+WebGPU too (same prefold). The single emissive-unscaled reorder removes emissive×Diffuse,
+Ambient×Diffuse², **and** Alpha² together. No new REMED-GFX task raised. The Alpha=0.5 sub-check in
+both new tests fails pre-fix specifically on the `Alpha²` term (SdlGpu got=(13,6,3) vs correct
+(50,25,13)) and passes post-fix.
+
+### Tests (test-first; pre-fix FAIL → post-fix PASS)
+
+Both new tests use non-white Diffuse=(0.5), Emissive=(0.5), no directional lights (lightSum=0),
+`EnvironmentMapAmount=0` (isolates litRGB), tex=(200,100,50); plus an Alpha=0.5 case, a white-Diffuse
+control (both formulas coincide — the masking case), and a zero-Emissive control (→ black). All four
+checks, both backends:
+
+| Backend | readback | core pre→post | Alpha=0.5 pre→post | controls |
+|---|---|---|---|---|
+| SdlGpu | linear RGBA8 RT | (50,25,13) → **(100,50,25)** | (13,6,3) → **(50,25,13)** | pass pre+post |
+| WebGPU | **sRGB** backbuffer | (122,88,63) → **(168,122,88)** | (63,43,29) → **(122,88,63)** | pass pre+post |
+
+- **WebGPU color-space handling.** The surface is `*_Srgb` here (empirically: linear tex*0.5 =
+  (100,50,25) reads back (168,122,88)), and `ReadBackbuffer()` returns raw stored bytes (no sRGB
+  decode). The test is therefore **transfer-function-agnostic by construction**: it calibrates `T()`
+  with an `EnvironmentMapAmount=1` flat full-replace of a *known-linear* cube through the identical
+  output-encoding path, then compares each emissive draw to its predicted-correct calibration. Pre-fix
+  the emissive draws matched the *wrong* calibration to ≤1 byte; post-fix they match the *correct*
+  calibration to ≤1 byte. Any byte difference vs. the linear backends is thus proven color-space, not
+  semantic. (A naïve direct-linear assertion of (100,50,25) would have wrongly failed here — this is
+  why the calibration harness was built.)
+
+### Regeneration semantic diff (SdlGpu SPIR-V)
+
+Byte-reproducible toolchain proven **before** editing: a no-change `compile_shaders.py` run reproduced
+the committed `spirv_shaders.hpp` exactly (md5 `4bc897b2409e3218ad961891832e3b6a`). Post-edit per-array
+diff: **exactly 1 of 23 arrays changed** — `kEnvMap3dFragSpv` (1070→1070 words, content reordered);
+the other 22 byte-identical; 0 added/0 removed. No unrelated drift.
+
+### Cross-backend conformance (Phase 6)
+
+Core case (Diffuse=0.5, Emissive=0.5, Alpha=1, no lights, Amount=0, tex=(200,100,50); expected linear
+(100,50,25)), all four live-verified this session:
+
+| Backend | format | raw bytes | decoded linear | tol | divergence |
+|---|---|---|---|---|---|
+| Vulkan | linear RGBA8 | (100,50,25) | (100,50,25) | ±20 | none |
+| Bgfx | linear | (100,50,25) | (100,50,25) | ±20 | none |
+| SdlGpu | linear RGBA8 RT | (100,50,25) | (100,50,25) | ±16 | none |
+| WebGPU | sRGB BGRA8UnormSrgb | (168,122,88) | sRGB⁻¹ → (100,50,25) | ±12 (encoded) | color-space only |
+
+All four agree after decoding to linear. sRGB⁻¹(168,122,88) = (100,50,25) to <1 (verified by hand).
+FNA/XNA-derived semantics + the already-verified Vulkan/Bgfx results are the oracle (not EasyGL).
+
+### Regression / validation (Phases 7–8)
+
+- **SdlGpu shard** `ctest -L SdlGpu -j2`: **23/23 pass** (env-map, env-map-emissive, effects, PBR,
+  skinned world-normal [GFX-006 control], skinnedpbr, rendertarget2d/±MSAA, rendertargetcube, MRT,
+  samplerstate, renderstate, smoke, swapchain-recovery, …). Zero regressions.
+- **WebGPU shard** `ctest -L WebGPU -j2`: **25/25 pass** (env-map3d, env-map-emissive, pbr3d,
+  skinnedpbr3d, skinned world-normal [GFX-006 control], littextured3d, dualtexture3d, alphatest3d,
+  colored/textured/coloredtextured3d, instanced3d, rendertarget2d, rendertargetcube, msaa, mipgen,
+  clear-readback, texture getdata, …). Zero regressions.
+- **WebGPU validation:** no WGSL compile / binding / alignment / pipeline errors (only the benign
+  "No DRI3 support" presentation note). Shader-only change; CPU parameter code untouched, so no CPU
+  sanitizer run (per task guidance).
+- **SdlGpu validation:** the `VUID-vkCmdDraw-renderPass-02684` warning is the **known pre-existing
+  REMED-GFX-059** (render-pass depth-attachment compatibility), emitted identically pre- and post-fix
+  and unrelated to the fragment formula — **not** a GFX-007 regression.
+
+### Remaining GFX-007 blocker
+
+**D3DCommon (D3D11/D3D12) only** — `src/CNA/Internal/Backends/D3DCommon/shaders/env_map3d.frag.hlsl:46`
+holds the identical `(EmissiveEm.xyz + lightSum) * DiffuseColor.rgb` defect. No fxc/dxc HLSL→DXBC
+toolchain exists in the repo, so the shared compiled bytecode cannot be regenerated here. Source left
+untouched (per scope). Recorded BYTECODE-BLOCKED; unblock when a reproducible HLSL toolchain lands
+(tracked alongside the GFX-005/006 D3DCommon bytecode blockers).
