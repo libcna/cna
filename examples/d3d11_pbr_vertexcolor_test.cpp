@@ -235,6 +235,47 @@ protected:
             ExpectPixel("skinned3dvertexlitcolored-black-vertexcolor", Rectangle(sampleDx, sampleY, 1, 1),
                         Color(0, 0, 0, 255), /*tolerance=*/10);
         }
+
+        // --- REMED-GFX-020 regression: DrawPrimitives() must honor a non-zero startVertex. ---
+        // The quad-D failure above was ROOT-CAUSED not to vertex color but to
+        // D3D11GraphicsBackend ignoring GpuDrawParams::vertexStart (context->Draw() hardcoded
+        // StartVertexLocation=0), so DrawPrimitives(..., startVertex=6, ...) silently redrew the
+        // first quad's vertices and left quad D's screen region at the clear color. This dedicated,
+        // lighting-independent check pins the fix: a single 2-quad PbrEffect emissive VB (pure-red
+        // output, gamma-invariant, no lighting) with quad-0 on screen-left and quad-1 on
+        // screen-right, of which ONLY quad-1 is drawn -- via startVertex=6. With the offset honored,
+        // screen-right is red and screen-left stays the green clear; a regressed (ignored) offset
+        // would draw quad-0 instead, making screen-left red and screen-right green -- both asserts
+        // below flip, so this discriminates the exact defect.
+        {
+            PbrEffect fx(device);
+            fx.setWorldProperty(Matrix::getIdentityProperty());
+            fx.setViewProperty(Matrix::getIdentityProperty());
+            fx.setProjectionProperty(Matrix::getIdentityProperty());
+            fx.setTextureProperty(&whiteTex);
+            fx.setEmissiveFactorProperty(Vector3(1.0f, 0.0f, 0.0f));
+
+            std::vector<PbrGpuVertex> verts;
+            AppendPbrQuad(verts, -1.0f, -0.5f);  // quad-0: screen-left  (vertices 0..5)
+            AppendPbrQuad(verts,  0.5f,  1.0f);  // quad-1: screen-right (vertices 6..11)
+            VertexBuffer vb(device, static_cast<int>(verts.size()));
+            vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()), static_cast<int>(sizeof(PbrGpuVertex)));
+
+            device.Clear(Color(0, 255, 0, 255));
+            device.SetDepthTestEnabled(false);
+            device.setBlendStateProperty(BlendState::Opaque);
+            device.setRasterizerStateProperty(RasterizerState::CullNone);
+            device.SetVertexBuffer(&vb);
+            fx.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 6, 2);  // draw ONLY quad-1
+
+            const int leftX  = W / 8;
+            const int rightX = W * 7 / 8;
+            ExpectPixel("startvertex-offset-right-quad-drawn", Rectangle(rightX, sampleY, 1, 1),
+                        Color(255, 0, 0, 255), /*tolerance=*/8);
+            ExpectPixel("startvertex-offset-left-quad-untouched", Rectangle(leftX, sampleY, 1, 1),
+                        Color(0, 255, 0, 255), /*tolerance=*/8);
+        }
     }
 };
 

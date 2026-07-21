@@ -1779,13 +1779,22 @@ namespace CNA::Internal::Backends::D3D11
 
         if (ib != nullptr)
         {
+            // REMED-GFX-020: honor the XNA DrawIndexedPrimitives startIndex/baseVertex offsets --
+            // StartIndexLocation (elements into the index buffer) and BaseVertexLocation (added to
+            // each fetched index). Previously both were hardcoded 0, so any indexed draw at a
+            // non-zero offset silently read from the start of the buffers.
             const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            context_->DrawIndexed(indexCount, 0, 0);
+            context_->DrawIndexed(indexCount, static_cast<UINT>(params.startIndex),
+                                  static_cast<INT>(params.baseVertex));
         }
         else
         {
+            // REMED-GFX-020: honor the XNA DrawPrimitives vertexStart offset -- StartVertexLocation
+            // (vertices to skip before the first primitive). Was hardcoded 0, so a draw at a
+            // non-zero startVertex silently re-rendered vertices from index 0 (the root cause of the
+            // D3D11_Pbr_VertexColor quad-D no-draw: DrawPrimitives(..., 6, 2) drew vertices 0..5).
             const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
-            context_->Draw(vertexCount, 0);
+            context_->Draw(vertexCount, static_cast<UINT>(params.vertexStart));
         }
     }
 
