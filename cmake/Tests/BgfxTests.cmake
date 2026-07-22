@@ -449,6 +449,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTarget_Scissor COMMAND cna_test_bgfx_rendertarget_scissor
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-081: SpriteBatch.Begin must apply its RasterizerState argument (shared fix in
+    # SpriteBatch.cpp). Bgfx control: GFX-066 proved bgfx::setScissor works when ScissorTestEnable is
+    # truly active, so this is a clean discriminator that the state reaches Bgfx through Begin. Uses
+    # Bgfx's own backbuffer + 20-frame settle loop (its single-frame RT GetData returns black, so the
+    # shared RT-readback test is Vulkan/SdlGpu only).
+    cna_bgfx_test(cna_test_bgfx_spritebatch_begin_rasterizerstate
+                  examples/bgfx_spritebatch_begin_rasterizerstate_test.cpp)
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_BeginRasterizerState COMMAND cna_test_bgfx_spritebatch_begin_rasterizerstate
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-067: a RenderTarget2D sampled back through SpriteBatch must read UPRIGHT (not
     # vertically mirrored) at EVERY size — FBO color memory is bottom-up on originBottomLeft renderers
     cna_bgfx_test(cna_test_bgfx_rendertarget_orientation

@@ -477,6 +477,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_ScissorTest COMMAND cna_test_vulkan_scissor
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-081: SpriteBatch.Begin must apply its RasterizerState argument (shared fix in
+        # SpriteBatch.cpp). Deferred-backend control: the scissor state must reach the BatchSnapshot
+        # through Begin, not only via a direct GraphicsDevice.RasterizerState assignment.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_begin_rasterizerstate
+                        examples/spritebatch_begin_rasterizerstate_scissor_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_BeginRasterizerState COMMAND cna_test_vulkan_spritebatch_begin_rasterizerstate
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # REMED-GFX-013: ScissorRectangle must clip draws issued while a RenderTarget2D is bound
         cna_vulkan_test(cna_test_vulkan_rendertarget_scissor
                         examples/vulkan_rendertarget_scissor_test.cpp)

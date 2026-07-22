@@ -62,6 +62,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_Scissor COMMAND cna_test_software_scissor
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-081: SpriteBatch.Begin must APPLY the RasterizerState it is passed (previously the
+    # canonical 7-arg overload dropped it), matching FNA's PrepRenderState
+    # (rasterizerState ?? RasterizerState.CullCounterClockwise). Software is the deterministic
+    # CPU-readback oracle; the fix itself is in the shared SpriteBatch.cpp (all backends).
+    cna_software_test(cna_test_software_spritebatch_rasterizerstate examples/software_spritebatch_rasterizerstate_test.cpp)
+    cna_register_backend_test(NAME Software_SpriteBatch_RasterizerState COMMAND cna_test_software_spritebatch_rasterizerstate
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
