@@ -46,6 +46,25 @@
 > regression from the shared `SetViewport`/`FlushBatch` changes. `RenderTargetCube`/MRT are not
 > part of this task — see "Remaining work" below.
 >
+> **Status (2026-07-22): `GL4-15` (`RenderTargetCube` + real MRT) landed and verified.**
+> `OpenGL4RenderTargetCubeBackend` is one shared cube-map texture with a single FBO re-attaching
+> whichever face (`0`=+X..`5`=-Z) is currently bound, the same depth/stencil-renderbuffer/MSAA-
+> resolve/mip-regen machinery as `GL4-14`'s 2D target, and a real `GetData()` per face+level via a
+> throwaway read FBO — modeled directly on `EasyGLRenderTargetCubeBackend`. `SetRenderTargets`
+> (plural) is real MRT: a lazily-created, persistent FBO with one `glFramebufferTexture2D`
+> attachment per target at `GL_COLOR_ATTACHMENT0+i` and a real `glDrawBuffers` call — not the
+> inherited single-target-only default. No depth attachment for MRT (same accepted, documented gap
+> `EasyGLGraphicsBackend`'s own MRT FBO already has), and no multi-output shader variant exists
+> yet (this backend's `colored3d`/`textured3d`/etc. programs all declare a single `fragColor`
+> output, so only `COLOR_ATTACHMENT0` receives a draw under MRT — verified explicitly, not glossed
+> over, by `OpenGL4_RenderTargetCube_MRT`'s own Check H). Verified by
+> `OpenGL4_RenderTargetCube_MRT` (13/13: two independent cube faces proven not to alias each
+> other, a real colored3d draw into a face, a depth-tested face, `MultiSampleCount` fidelity, a
+> mipMap round-trip, a real MSAA round-trip, and the MRT slot-0-vs-slot-1 independence proof) plus
+> a full re-run of `OpenGL4_Smoke`/`OpenGL4_Readback`/`OpenGL4_3D`/`OpenGL4_Textured3D`/
+> `OpenGL4_RenderTarget2D` confirming no regression from `SetRenderTarget2D`'s new
+> `currentRtCube_` unbind check.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -69,12 +88,6 @@
 > the reason this backend requests 4.1 rather than a higher minimum), not validation claims.
 >
 > **Remaining work (read this before picking a next task):**
-> - **`RenderTargetCube`, MRT** — `CreateRenderTargetCube`/`SetRenderTargetCubeFace` are not
->   overridden (every cube render-target request still returns `nullptr` via `IGraphicsBackend`'s
->   own default), and `SetRenderTargets` (plural) is not overridden either, so it inherits the
->   base class's single-target-only default (`SetRenderTarget2D(rts[0])`) rather than real MRT
->   (`glDrawBuffers` across multiple `GL_COLOR_ATTACHMENTn` points). `RenderTarget2D` itself
->   (`GL4-14`, below) is done. ⬜
 > - **`Texture3D`/`TextureCube` (plain, non-render-target)** — `CreateTexture3D`/
 >   `CreateTextureCube` are not overridden either; both return `nullptr`. ⬜
 > - **`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`** —
@@ -161,7 +174,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -183,6 +196,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-12` | `GraphicsBackendCompileDefinitionTests.cpp`/`GraphicsBackendType.hpp` updated for the new backend (the latter was a genuine second registration point found only by actually attempting a full-library build — `getCurrentGraphicsBackendType()`'s `#error` fires if a backend defines its own `CNA_BACKEND_*` compile definition without a matching branch there). | ✅ | `ExactlyOneGraphicsBackendIsSelected` syntax-checked against this backend's compile definitions; full `CnaTests` link not attempted in this sandboxed session (see Verification methodology below). |
 | `GL4-13` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: real stride-keyed dispatch (`BindProgramForStride`) to 3 new GLSL 410 core programs — `textured3d` (stride 20), `colored_textured3d` (stride 24), `lit_textured3d` (stride 32, FNA's `Lighting.fxh` `ComputeLights()` ported from `VulkanGraphicsBackend`'s own `lit_textured3d.vert/frag.glsl`, with a `safeNormalize()` guard against a disabled `DirectionalLight`'s zero-vector `Direction`, the same real bug `plan_webgpu.md` found and fixed independently). Unrecognized strides still fall back to `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`. | ✅ | Added `PixelTestGame::Check(bool, label)` (`examples/common/PixelTestGame.hpp`) — a small, purely-additive generic boolean assertion alongside the pre-existing `ExpectPixel`/`CompareGoldenImage`, needed to assert "the lit render must differ from the unlit render" (not itself a pixel-region compare). |
 | `GL4-14` | `RenderTarget2D`: real FBO (`OpenGL4RenderTargetBackend`) — colour texture attachment, optional depth/stencil renderbuffer (`Depth16`/`Depth24`/`Depth24Stencil8`), optional MSAA colour(+depth) renderbuffer resolved via `glBlitFramebuffer` on unbind, optional mip chain regenerated via `glGenerateMipmap` on unbind, real `GetData()` readback via a throwaway per-level read FBO. `GL4Loader` gained the FBO/renderbuffer entry points (`glGenFramebuffers`/`glBindFramebuffer`/`glFramebufferTexture2D`/`glCheckFramebufferStatus`/`glGenRenderbuffers`/`glBindRenderbuffer`/`glRenderbufferStorage(Multisample)`/`glFramebufferRenderbuffer`/`glBlitFramebuffer`/their `glDelete*` counterparts). | ✅ | Two real bugs found+fixed: `SetViewport`'s Y-flip was hardcoded to the window's physical height (wrong once a smaller FBO is bound) — fixed via a new `currentRtHeight_` member, mirroring `EasyGLGraphicsBackend`'s identical pattern. `OpenGL4SpriteBatchBackend::FlushBatch`'s viewport/ortho sizing had the same window-size-only assumption, which would silently break any `SpriteBatch::Draw()` issued while an RT is bound — fixed via a new `GetCurrentRenderTarget2DSize()` accessor, exercised by `OpenGL4_RenderTarget2D`'s own Check J. `RenderTargetCube`/MRT (`SetRenderTargets` plural) are explicitly out of scope for this task — see "Remaining work". |
+| `GL4-15` | `RenderTargetCube`: real per-face FBO (`OpenGL4RenderTargetCubeBackend`) — one shared cube-map texture, re-attaching the requested face (`GL_TEXTURE_CUBE_MAP_POSITIVE_X + face`) on `BindAsRenderTargetFace`, same depth/MSAA/mip machinery as `GL4-14`'s 2D target, real per-face `GetData()`. `SetRenderTargets` (plural): real MRT via a persistent multi-attachment FBO (`glFramebufferTexture2D` at `GL_COLOR_ATTACHMENT0+i` per target) + `glDrawBuffers`. `GL4Loader` gained `glDrawBuffers` and the `GL_TEXTURE_CUBE_MAP`/`GL_TEXTURE_CUBE_MAP_POSITIVE_X` tokens. | ✅ | No depth attachment for MRT and no multi-output shader variant (only `COLOR_ATTACHMENT0` receives a draw) — both explicitly verified, not silently assumed, by `OpenGL4_RenderTargetCube_MRT`'s own Check H, and match `EasyGLGraphicsBackend`'s own identical, documented MRT gap. |
 
 ---
 
@@ -205,7 +219,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All five dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All six dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -225,6 +239,13 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   `OpenGL4_Smoke`/`OpenGL4_Readback`/`OpenGL4_3D`/`OpenGL4_Textured3D` were all re-run after this
   task's shared `SetViewport`/`FlushBatch` changes and still pass at their original 8/8, 10/10,
   4/4, 5/5 — no regression.
+- `OpenGL4_RenderTargetCube_MRT` — 13/13 (two independent cube faces proven not to alias each
+  other via GetData(); a real colored3d draw into a face; a depth-tested face; `MultiSampleCount`
+  fidelity; a mipMap round-trip; a real MSAA round-trip through `glBlitFramebuffer`; MRT slot-0-
+  receives-the-draw/slot-1-stays-independent proof; MRT teardown restoring FBO 0 correctly).
+  `OpenGL4_Smoke`/`OpenGL4_Readback`/`OpenGL4_3D`/`OpenGL4_Textured3D`/`OpenGL4_RenderTarget2D`
+  were all re-run after this task's `SetRenderTarget2D` change (new `currentRtCube_` unbind
+  check) and still pass at their original counts — no regression.
 
 ---
 
@@ -242,13 +263,17 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
    (`OpenGL4_RenderTarget2D`, 12/12). See `GL4-14`'s own row for the two real `SetViewport`/
    `FlushBatch` RT-size bugs found and fixed along the way. `RenderTargetCube`/MRT were
    deliberately left out of this task's scope.
-4. **Next up (not yet started, no priority order implied):**
+4. ~~`GL4-15`~~ — `RenderTargetCube` + real MRT done and verified 2026-07-22, all ✅
+   (`OpenGL4_RenderTargetCube_MRT`, 13/13). See `GL4-15`'s own row for the documented MRT gaps
+   (no depth attachment, no multi-output shader variant) carried over from `EasyGLGraphicsBackend`'s
+   own identical MRT limitations.
+5. **Next up (not yet started, no priority order implied):**
    - `AlphaTestEffect`/`DualTextureEffect` — now unblocked by `GL4-13`'s stride dispatch; each
      needs its own shader variant (per-pixel discard for the former, a second sampler for the
      latter) plumbed through `BindProgramForStride`.
-   - `RenderTargetCube` (per-face FBO, one shared cube texture, mirroring
-     `EasyGLRenderTargetCubeBackend`) — unblocks `EnvironmentMapEffect`'s env-map source once
-     `TextureCube` also exists, and completes what `GL4-14` deliberately left out.
+   - `EnvironmentMapEffect` — now unblocked by `GL4-15`'s `RenderTargetCube` (its env-map source),
+     but also needs plain `CreateTextureCube` (a non-render-target cube texture a game can load
+     from disk) and its own shader variant.
    - `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState` dynamic mapping — currently
      every 3D draw is hardcoded (whatever GL's own defaults are); a real `BlendState`/
      `DepthStencilState`/`RasterizerState` assigned on `GraphicsDevice` has no effect yet.

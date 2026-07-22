@@ -128,6 +128,50 @@ namespace CNA::Internal::Backends::OpenGL4
         int multiSampleCount_ = 0;
     };
 
+    /**
+     * @brief `OpenGL4`-backed `RenderTargetCube`: one FBO shared across all 6 faces of a single
+     * cube-map texture, re-attaching the requested face on `BindAsRenderTargetFace` -- modeled
+     * directly on `EasyGLRenderTargetCubeBackend`'s own resource shape (plan_opengl4.md
+     * `GL4-15`), using raw `GL4Loader` calls instead of the `easygl::` wrapper types.
+     */
+    class OpenGL4RenderTargetCubeBackend final : public IRenderTargetCubeBackend
+    {
+    public:
+        OpenGL4RenderTargetCubeBackend(int size, int depthFormat, bool mipMap, int multiSampleCount);
+        ~OpenGL4RenderTargetCubeBackend() override;
+
+        OpenGL4RenderTargetCubeBackend(const OpenGL4RenderTargetCubeBackend&) = delete;
+        OpenGL4RenderTargetCubeBackend& operator=(const OpenGL4RenderTargetCubeBackend&) = delete;
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                    const void* data, int dataLength) override;
+        void GetData(int face, int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
+        void BindGL() const override;
+
+        [[nodiscard]] int GetSize() const override { return size_; }
+        void BindAsRenderTargetFace(int face) override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetGLHandle() const override { return cubeTexture_; }
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+
+    private:
+        void CreateResources();
+        void DestroyResources();
+
+        unsigned int fbo_ = 0;
+        unsigned int resolveFbo_ = 0;              ///< MSAA only: blit destination (re-attached per face).
+        unsigned int cubeTexture_ = 0;
+        unsigned int depthRenderbuffer_ = 0;
+        unsigned int msaaColorRenderbuffer_ = 0;    ///< MSAA only: shared across all 6 faces (one bound at a time).
+        int size_ = 0;
+        int depthFormat_ = 0;                       ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
+        bool mipMap_ = false;
+        int levelCount_ = 1;
+        int multiSampleCount_ = 0;
+        int lastFace_ = 0;                          ///< Most recently bound face, used by UnbindAsRenderTarget's resolve.
+    };
+
     /** @brief `OpenGL4`-backed vertex buffer (VBO + its own VAO). */
     class OpenGL4VertexBufferBackend final : public IVertexBufferBackend
     {
@@ -310,6 +354,13 @@ namespace CNA::Internal::Backends::OpenGL4
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
+        /// plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube + real MRT.
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool mipMap = false,
+                                                                          int multiSampleCount = 0) override;
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+
         /// NOXNA: physical window size, used by the SpriteBatch backend to size its ortho projection.
         NOXNA void GetPhysicalSize(int& width, int& height) const;
         /// NOXNA: logical (virtual) size, honoring FixedHeightDynamicWidth (mirrors EasyGL).
@@ -351,6 +402,11 @@ namespace CNA::Internal::Backends::OpenGL4
         /// EasyGLGraphicsBackend::currentRtHeight_'s identical role).
         IRenderTargetBackend* currentRt2D_ = nullptr;
         int currentRtHeight_ = 0;
+        /// plan_opengl4.md GL4-15: currently-bound RenderTargetCube face (nullptr = none).
+        IRenderTargetCubeBackend* currentRtCube_ = nullptr;
+        /// plan_opengl4.md GL4-15: lazily-created, persistent FBO reused across every
+        /// SetRenderTargets(count > 1) MRT call (mirrors EasyGLGraphicsBackend::mrtFbo_).
+        unsigned int mrtFbo_ = 0;
 
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;

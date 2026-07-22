@@ -50,4 +50,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_rendertarget2d examples/opengl4_rendertarget2d_test.cpp)
     cna_register_backend_test(NAME OpenGL4_RenderTarget2D COMMAND cna_test_opengl4_rendertarget2d
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube (colour cube-map texture,
+    # depth/stencil renderbuffer, MSAA resolved via glBlitFramebuffer, mip chain regenerated via
+    # glGenerateMipmap) and real MRT (SetRenderTargets, plural -- a persistent multi-attachment
+    # FBO + glDrawBuffers).
+    cna_opengl4_test(cna_test_opengl4_rendertargetcube_mrt examples/opengl4_rendertargetcube_mrt_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_RenderTargetCube_MRT COMMAND cna_test_opengl4_rendertargetcube_mrt
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

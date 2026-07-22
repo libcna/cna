@@ -660,6 +660,188 @@ void main()
     }
 
     // ------------------------------------------------------------------------------------
+    // OpenGL4RenderTargetCubeBackend
+    // ------------------------------------------------------------------------------------
+
+    OpenGL4RenderTargetCubeBackend::OpenGL4RenderTargetCubeBackend(int size, int depthFormat,
+                                                                    bool mipMap, int multiSampleCount)
+        : size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
+          multiSampleCount_(multiSampleCount)
+    {
+        levelCount_ = mipMap_ ? CalculateRenderTargetMipLevelsGL4(size, size) : 1;
+        CreateResources();
+    }
+
+    OpenGL4RenderTargetCubeBackend::~OpenGL4RenderTargetCubeBackend()
+    {
+        DestroyResources();
+    }
+
+    void OpenGL4RenderTargetCubeBackend::CreateResources()
+    {
+        if (multiSampleCount_ > 0)
+        {
+            GLint maxSamples = 0;
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
+                multiSampleCount_ = static_cast<int>(maxSamples);
+        }
+
+        glGenTextures(1, &cubeTexture_);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        // Allocate storage for all 6 faces, all mip levels up front (see
+        // OpenGL4RenderTargetBackend::CreateResources for why -- glGenerateMipmap's writes need
+        // every level to already have defined storage).
+        for (int face = 0; face < 6; ++face)
+        {
+            int levelSize = size_;
+            for (int level = 0; level < levelCount_; ++level)
+            {
+                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, GL_RGBA8, levelSize,
+                             levelSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                levelSize = std::max(1, levelSize / 2);
+            }
+        }
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+        gl4_glGenFramebuffers(1, &fbo_);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+
+        if (multiSampleCount_ > 0)
+        {
+            // One shared multisample colour renderbuffer, reused across all 6 faces (only one
+            // face is ever rendered into at a time) -- resolveFbo_ is re-attached to whichever
+            // face was most recently bound (see BindAsRenderTargetFace) so
+            // UnbindAsRenderTarget's blit resolves into the correct face.
+            gl4_glGenRenderbuffers(1, &msaaColorRenderbuffer_);
+            gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRenderbuffer_);
+            gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_, GL_RGBA8,
+                                                 size_, size_);
+            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+                                          msaaColorRenderbuffer_);
+            gl4_glGenFramebuffers(1, &resolveFbo_);
+        }
+
+        GLenum depthInternalFormat = 0, depthAttachment = 0;
+        if (MapDepthFormatGL4(depthFormat_, depthInternalFormat, depthAttachment))
+        {
+            gl4_glGenRenderbuffers(1, &depthRenderbuffer_);
+            gl4_glBindRenderbuffer(GL_RENDERBUFFER, depthRenderbuffer_);
+            if (multiSampleCount_ > 0)
+                gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_,
+                                                     depthInternalFormat, size_, size_);
+            else
+                gl4_glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, size_, size_);
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER,
+                                          depthRenderbuffer_);
+        }
+
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void OpenGL4RenderTargetCubeBackend::DestroyResources()
+    {
+        if (depthRenderbuffer_) gl4_glDeleteRenderbuffers(1, &depthRenderbuffer_);
+        if (msaaColorRenderbuffer_) gl4_glDeleteRenderbuffers(1, &msaaColorRenderbuffer_);
+        if (resolveFbo_) gl4_glDeleteFramebuffers(1, &resolveFbo_);
+        if (fbo_) gl4_glDeleteFramebuffers(1, &fbo_);
+        if (cubeTexture_) glDeleteTextures(1, &cubeTexture_);
+        depthRenderbuffer_ = msaaColorRenderbuffer_ = resolveFbo_ = fbo_ = cubeTexture_ = 0;
+    }
+
+    void OpenGL4RenderTargetCubeBackend::BindGL() const
+    {
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
+    }
+
+    void OpenGL4RenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        lastFace_ = face;
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+        if (multiSampleCount_ == 0)
+        {
+            // Non-MSAA: fbo_'s colour attachment IS cubeTexture_ -- re-attach the requested face
+            // (0=+X .. 5=-Z) directly, since all faces share this one FBO/texture.
+            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                       GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, cubeTexture_, 0);
+        }
+        // MSAA: fbo_'s colour attachment is the shared msaaColorRenderbuffer_, which is
+        // face-agnostic -- nothing to re-attach on bind; the face only matters when
+        // UnbindAsRenderTarget resolves into cubeTexture_'s specific face image.
+    }
+
+    void OpenGL4RenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        if (multiSampleCount_ > 0)
+        {
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo_);
+            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                       GL_TEXTURE_CUBE_MAP_POSITIVE_X + lastFace_, cubeTexture_, 0);
+            gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_);
+            gl4_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo_);
+            gl4_glBlitFramebuffer(0, 0, size_, size_, 0, 0, size_, size_, GL_COLOR_BUFFER_BIT,
+                                  GL_LINEAR);
+        }
+        if (levelCount_ > 1)
+        {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
+            gl4_glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+        }
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void OpenGL4RenderTargetCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                                 const void* data, int /*dataLength*/)
+    {
+        if (face < 0 || face >= 6) return;
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cubeTexture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexSubImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, level, x, y, w, h, GL_RGBA,
+                        GL_UNSIGNED_BYTE, data);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    }
+
+    void OpenGL4RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                 void* data, int dataLength) const
+    {
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
+        if (static_cast<std::size_t>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA OpenGL4: RenderTargetCube::GetData: dataLength too small for the requested region");
+
+        GLint prevFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+
+        GLuint readFbo = 0;
+        gl4_glGenFramebuffers(1, &readFbo);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
+        gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                   GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, cubeTexture_, level);
+
+        const int levelSize = std::max(1, size_ >> level);
+        const int glY = levelSize - y - h;
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        auto* pixels = static_cast<uint8_t*>(data);
+        glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+        const int rowBytes = w * 4;
+        std::vector<uint8_t> tmp(rowBytes);
+        for (int row = 0; row < h / 2; ++row)
+        {
+            uint8_t* a = pixels + static_cast<std::size_t>(row) * rowBytes;
+            uint8_t* b = pixels + static_cast<std::size_t>(h - 1 - row) * rowBytes;
+            std::memcpy(tmp.data(), a, rowBytes);
+            std::memcpy(a, b, rowBytes);
+            std::memcpy(b, tmp.data(), rowBytes);
+        }
+
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+        gl4_glDeleteFramebuffers(1, &readFbo);
+    }
+
+    // ------------------------------------------------------------------------------------
     // OpenGL4VertexBufferBackend
     // ------------------------------------------------------------------------------------
 
@@ -1035,6 +1217,7 @@ void main()
     {
         IGraphicsBackend::UnregisterForWindow(window_);
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
+        if (mrtFbo_) gl4_glDeleteFramebuffers(1, &mrtFbo_);
         if (glContext_)
             SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
     }
@@ -1120,6 +1303,9 @@ void main()
         // away from it -- mirrors EasyGLGraphicsBackend::SetRenderTarget2D's identical ordering.
         if (currentRt2D_ && currentRt2D_ != rt)
             currentRt2D_->UnbindAsRenderTarget();
+        if (currentRtCube_)
+            currentRtCube_->UnbindAsRenderTarget();
+        currentRtCube_ = nullptr;
 
         currentRt2D_ = rt;
         if (rt)
@@ -1140,6 +1326,61 @@ void main()
         width = currentRt2D_->GetWidth();
         height = currentRt2D_->GetHeight();
         return true;
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> OpenGL4GraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
+    {
+        return std::make_unique<OpenGL4RenderTargetCubeBackend>(size, depthFormat, mipMap, multiSampleCount);
+    }
+
+    void OpenGL4GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        if (!rt) { SetRenderTarget2D(nullptr); return; }
+
+        if (currentRt2D_)
+            currentRt2D_->UnbindAsRenderTarget();
+        if (currentRtCube_ && currentRtCube_ != rt)
+            currentRtCube_->UnbindAsRenderTarget();
+        currentRt2D_ = nullptr;
+        currentRtCube_ = rt;
+        currentRtHeight_ = rt->GetSize();
+        rt->BindAsRenderTargetFace(face);
+    }
+
+    void OpenGL4GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (count <= 0) { SetRenderTarget2D(nullptr); return; }
+        if (count == 1) { SetRenderTarget2D(rts[0]); return; }
+
+        // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed).
+        // MRT + per-target mipmaps is not supported here (mirrors
+        // EasyGLGraphicsBackend::SetRenderTargets' identical, documented gap) -- MRT targets are
+        // never tracked as currentRt2D_/currentRtCube_, so switching away from MRT mode cannot
+        // regenerate their mips.
+        if (currentRt2D_) currentRt2D_->UnbindAsRenderTarget();
+        if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
+        currentRt2D_ = nullptr;
+        currentRtCube_ = nullptr;
+
+        if (!mrtFbo_) gl4_glGenFramebuffers(1, &mrtFbo_);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, mrtFbo_);
+
+        constexpr int kMaxMRT = 8;
+        const int n = count < kMaxMRT ? count : kMaxMRT;
+        GLenum drawBufs[kMaxMRT];
+        for (int i = 0; i < n; ++i)
+        {
+            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D,
+                                       rts[i]->GetColorGLHandle(), 0);
+            drawBufs[i] = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + i);
+        }
+        gl4_glDrawBuffers(n, drawBufs);
+
+        // No depth attachment for MRT (same accepted gap as EasyGLGraphicsBackend's own MRT
+        // FBO) -- the viewport reset that follows still needs the first target's height for
+        // SetViewport's Y-flip.
+        currentRtHeight_ = rts[0]->GetHeight();
     }
 
     void OpenGL4GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)

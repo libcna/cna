@@ -138,6 +138,12 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 #ifndef GL_MAX_SAMPLES
 #define GL_MAX_SAMPLES 0x8D57
 #endif
+#ifndef GL_TEXTURE_CUBE_MAP
+#define GL_TEXTURE_CUBE_MAP 0x8513
+#endif
+#ifndef GL_TEXTURE_CUBE_MAP_POSITIVE_X
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
+#endif
 
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
@@ -204,6 +210,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     using PFNGL4RENDERBUFFERSTORAGEMULTISAMPLEPROC = void (*)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
     using PFNGL4FRAMEBUFFERRENDERBUFFERPROC     = void (*)(GLenum, GLenum, GLenum, GLuint);
     using PFNGL4BLITFRAMEBUFFERPROC             = void (*)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+    using PFNGL4DRAWBUFFERSPROC                 = void (*)(GLsizei, const GLenum*);
 
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
@@ -269,6 +276,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4RENDERBUFFERSTORAGEMULTISAMPLEPROC gl4_glRenderbufferStorageMultisample;
     extern PFNGL4FRAMEBUFFERRENDERBUFFERPROC     gl4_glFramebufferRenderbuffer;
     extern PFNGL4BLITFRAMEBUFFERPROC             gl4_glBlitFramebuffer;
+    extern PFNGL4DRAWBUFFERSPROC                 gl4_glDrawBuffers;
 
     /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
     /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this

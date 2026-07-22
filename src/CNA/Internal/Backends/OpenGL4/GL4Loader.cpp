@@ -68,6 +68,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     PFNGL4RENDERBUFFERSTORAGEMULTISAMPLEPROC gl4_glRenderbufferStorageMultisample = nullptr;
     PFNGL4FRAMEBUFFERRENDERBUFFERPROC     gl4_glFramebufferRenderbuffer     = nullptr;
     PFNGL4BLITFRAMEBUFFERPROC             gl4_glBlitFramebuffer             = nullptr;
+    PFNGL4DRAWBUFFERSPROC                 gl4_glDrawBuffers                 = nullptr;
 
     namespace
     {
@@ -151,6 +152,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glRenderbufferStorageMultisample", gl4_glRenderbufferStorageMultisample);
         ok &= Resolve(getProcAddress, "glFramebufferRenderbuffer", gl4_glFramebufferRenderbuffer);
         ok &= Resolve(getProcAddress, "glBlitFramebuffer", gl4_glBlitFramebuffer);
+        ok &= Resolve(getProcAddress, "glDrawBuffers", gl4_glDrawBuffers);
 
         return ok;
     }
