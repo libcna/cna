@@ -150,6 +150,9 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 #ifndef GL_DECR_WRAP
 #define GL_DECR_WRAP 0x8508
 #endif
+#ifndef GL_TEXTURE_3D
+#define GL_TEXTURE_3D 0x806F
+#endif
 
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
@@ -224,6 +227,15 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     using PFNGL4STENCILOPSEPARATEPROC           = void (*)(GLenum, GLenum, GLenum, GLenum);
     using PFNGL4STENCILMASKSEPARATEPROC         = void (*)(GLenum, GLuint);
 
+    // plan_opengl4.md GL4-20: plain Texture3D -- GL 1.2 core, not guaranteed to be declared by a
+    // GL-1.1-vintage <GL/gl.h> (same rationale as the other GL4-prefixed entries above).
+    using PFNGL4TEXIMAGE3DPROC                  = void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*);
+    using PFNGL4TEXSUBIMAGE3DPROC               = void (*)(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, const void*);
+    // GL 3.0 core -- attaches one Z-layer of a 3D texture to an FBO, used for Texture3D::GetData's
+    // per-slice glReadPixels loop (desktop GL has no per-sub-rectangle 3D-texture readback other
+    // than this FBO-per-slice approach).
+    using PFNGL4FRAMEBUFFERTEXTURELAYERPROC     = void (*)(GLenum, GLenum, GLuint, GLint, GLint);
+
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
     extern PFNGL4BINDBUFFERPROC               gl4_glBindBuffer;
@@ -293,6 +305,10 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4STENCILFUNCSEPARATEPROC         gl4_glStencilFuncSeparate;
     extern PFNGL4STENCILOPSEPARATEPROC           gl4_glStencilOpSeparate;
     extern PFNGL4STENCILMASKSEPARATEPROC         gl4_glStencilMaskSeparate;
+
+    extern PFNGL4TEXIMAGE3DPROC                  gl4_glTexImage3D;
+    extern PFNGL4TEXSUBIMAGE3DPROC               gl4_glTexSubImage3D;
+    extern PFNGL4FRAMEBUFFERTEXTURELAYERPROC     gl4_glFramebufferTextureLayer;
 
     /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
     /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this

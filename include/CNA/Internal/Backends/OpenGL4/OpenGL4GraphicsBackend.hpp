@@ -183,6 +183,64 @@ namespace CNA::Internal::Backends::OpenGL4
         int lastFace_ = 0;                          ///< Most recently bound face, used by UnbindAsRenderTarget's resolve.
     };
 
+    /**
+     * @brief `OpenGL4`-backed plain (non-render-target) `Texture3D` (volume texture) --
+     * modeled on `EasyGLTexture3DBackend`'s own resource shape (plan_opengl4.md `GL4-20`), using
+     * raw `GL4Loader` calls (`gl4_glTexImage3D`/`gl4_glTexSubImage3D`) instead of the `easygl::`
+     * wrapper types this backend deliberately avoids depending on.
+     */
+    class OpenGL4Texture3DBackend final : public ITexture3DBackend
+    {
+    public:
+        OpenGL4Texture3DBackend(int w, int h, int depth, bool mipMap);
+        ~OpenGL4Texture3DBackend() override;
+
+        OpenGL4Texture3DBackend(const OpenGL4Texture3DBackend&) = delete;
+        OpenGL4Texture3DBackend& operator=(const OpenGL4Texture3DBackend&) = delete;
+
+        void SetData(int level, int x, int y, int z, int w, int h, int depth,
+                    const void* data, int dataLength) override;
+        void GetData(int level, int x, int y, int z, int w, int h, int depth,
+                    void* data, int dataLength) const override;
+        void BindGL() const override;
+
+    private:
+        unsigned int texture_ = 0;
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
+        int levelCount_ = 1;
+    };
+
+    /**
+     * @brief `OpenGL4`-backed plain (non-render-target) `TextureCube` -- modeled on
+     * `EasyGLTextureCubeBackend`'s own resource shape (plan_opengl4.md `GL4-20`). Unlike
+     * `OpenGL4RenderTargetCubeBackend::GetData` (which Y-flips because it reads back a
+     * framebuffer-origin render target), this plain texture's `GetData` does not flip Y --
+     * matches `EasyGLTextureCubeBackend::GetData`'s own non-render-target convention, verified by
+     * a real pixel round-trip in `OpenGL4_TextureCube`.
+     */
+    class OpenGL4TextureCubeBackend final : public ITextureCubeBackend
+    {
+    public:
+        OpenGL4TextureCubeBackend(int size, bool mipMap);
+        ~OpenGL4TextureCubeBackend() override;
+
+        OpenGL4TextureCubeBackend(const OpenGL4TextureCubeBackend&) = delete;
+        OpenGL4TextureCubeBackend& operator=(const OpenGL4TextureCubeBackend&) = delete;
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                    const void* data, int dataLength) override;
+        void GetData(int face, int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
+        void BindGL() const override;
+
+    private:
+        unsigned int texture_ = 0;
+        int size_ = 0;
+        int levelCount_ = 1;
+    };
+
     /** @brief `OpenGL4`-backed vertex buffer (VBO + its own VAO). */
     class OpenGL4VertexBufferBackend final : public IVertexBufferBackend
     {
@@ -329,6 +387,12 @@ namespace CNA::Internal::Backends::OpenGL4
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+
+        /// plan_opengl4.md GL4-20: plain (non-render-target) Texture3D/TextureCube.
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                            int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
+                                                                int surfaceFormat) override;
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 

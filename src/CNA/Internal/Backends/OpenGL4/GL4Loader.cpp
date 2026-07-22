@@ -74,6 +74,10 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     PFNGL4STENCILOPSEPARATEPROC           gl4_glStencilOpSeparate           = nullptr;
     PFNGL4STENCILMASKSEPARATEPROC         gl4_glStencilMaskSeparate         = nullptr;
 
+    PFNGL4TEXIMAGE3DPROC                  gl4_glTexImage3D                  = nullptr;
+    PFNGL4TEXSUBIMAGE3DPROC               gl4_glTexSubImage3D               = nullptr;
+    PFNGL4FRAMEBUFFERTEXTURELAYERPROC     gl4_glFramebufferTextureLayer     = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -161,6 +165,10 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glStencilFuncSeparate", gl4_glStencilFuncSeparate);
         ok &= Resolve(getProcAddress, "glStencilOpSeparate", gl4_glStencilOpSeparate);
         ok &= Resolve(getProcAddress, "glStencilMaskSeparate", gl4_glStencilMaskSeparate);
+
+        ok &= Resolve(getProcAddress, "glTexImage3D", gl4_glTexImage3D);
+        ok &= Resolve(getProcAddress, "glTexSubImage3D", gl4_glTexSubImage3D);
+        ok &= Resolve(getProcAddress, "glFramebufferTextureLayer", gl4_glFramebufferTextureLayer);
 
         return ok;
     }

@@ -88,4 +88,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_alphatest_dualtexture examples/opengl4_alphatest_dualtexture_test.cpp)
     cna_register_backend_test(NAME OpenGL4_AlphaTestDualTexture COMMAND cna_test_opengl4_alphatest_dualtexture
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-20: plain (non-render-target) Texture3D + TextureCube -- real
+    # GL_TEXTURE_3D/GL_TEXTURE_CUBE_MAP allocation, per-mip-level pre-allocated storage, and real
+    # pixel-readback round-trips (per-slice/per-face aliasing, sub-box offsets, no-Y-flip proof
+    # for TextureCube, and mip level 1 storage).
+    cna_opengl4_test(cna_test_opengl4_texture3d examples/opengl4_texture3d_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_Texture3D COMMAND cna_test_opengl4_texture3d
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_opengl4_test(cna_test_opengl4_texturecube examples/opengl4_texturecube_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_TextureCube COMMAND cna_test_opengl4_texturecube
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

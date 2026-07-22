@@ -626,6 +626,179 @@ void main()
     }
 
     // ------------------------------------------------------------------------------------
+    // OpenGL4Texture3DBackend
+    // ------------------------------------------------------------------------------------
+
+    OpenGL4Texture3DBackend::OpenGL4Texture3DBackend(int w, int h, int depth, bool mipMap)
+        : width_(w), height_(h), depth_(depth),
+          levelCount_(mipMap ? CalculateRenderTargetMipLevelsGL4(w, h) : 1)
+    {
+        glGenTextures(1, &texture_);
+        glBindTexture(GL_TEXTURE_3D, texture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        // Allocate storage for every mip level up front (not just level 0): SetData's box
+        // writes use gl4_glTexSubImage3D, which requires the target level to already have a
+        // defined image -- matches EasyGLTexture3DBackend's own identical pre-allocation loop
+        // (and OpenGL4RenderTargetBackend's/OpenGL4RenderTargetCubeBackend's established
+        // OpenGL4 precedent for the same reason).
+        int levelW = w, levelH = h, levelD = depth;
+        for (int level = 0; level < levelCount_; ++level)
+        {
+            gl4_glTexImage3D(GL_TEXTURE_3D, level, GL_RGBA8, levelW, levelH, levelD, 0,
+                             GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            levelW = std::max(1, levelW / 2);
+            levelH = std::max(1, levelH / 2);
+            levelD = std::max(1, levelD / 2);
+        }
+        // plan_opengl4.md GL4-18/GL4-20: clamp GL_TEXTURE_MAX_LEVEL to the real level count --
+        // same "incomplete mipmap chain renders black" reason OpenGL4TextureBackend already
+        // fixed for Texture2D; EasyGLTexture3DBackend does not set this at all, so this is
+        // deliberately stricter than the EasyGL reference.
+        glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAX_LEVEL, levelCount_ - 1);
+        glBindTexture(GL_TEXTURE_3D, 0);
+    }
+
+    OpenGL4Texture3DBackend::~OpenGL4Texture3DBackend()
+    {
+        if (texture_ != 0)
+            glDeleteTextures(1, &texture_);
+    }
+
+    void OpenGL4Texture3DBackend::BindGL() const
+    {
+        glBindTexture(GL_TEXTURE_3D, texture_);
+    }
+
+    void OpenGL4Texture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                          const void* data, int /*dataLength*/)
+    {
+        glBindTexture(GL_TEXTURE_3D, texture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        gl4_glTexSubImage3D(GL_TEXTURE_3D, level, x, y, z, w, h, depth, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glBindTexture(GL_TEXTURE_3D, 0);
+    }
+
+    void OpenGL4Texture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                          void* data, int dataLength) const
+    {
+        if (w <= 0 || h <= 0 || depth <= 0) return;
+        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
+                                       static_cast<std::size_t>(depth) * 4;
+        if (static_cast<std::size_t>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA OpenGL4: Texture3D::GetData: dataLength too small for the requested region");
+
+        // Desktop GL 4.x has no per-slice readback shortcut for a 3D texture other than an FBO
+        // attached to each Z layer -- mirrors EasyGLTexture3DBackend::GetData's own per-slice
+        // gl4_glFramebufferTextureLayer + glReadPixels loop (GLES3 lacks glGetTexImage; this
+        // backend uses the identical FBO approach for consistency with
+        // OpenGL4RenderTargetCubeBackend's own established per-face FBO readback convention,
+        // even though desktop GL does have glGetTexImage as an alternative). No Y-flip -- this
+        // is a plain texture, not a framebuffer-origin render target.
+        GLint prevFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+
+        GLuint readFbo = 0;
+        gl4_glGenFramebuffers(1, &readFbo);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+        auto* dest = static_cast<uint8_t*>(data);
+        const std::size_t sliceBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
+        for (int slice = z; slice < z + depth; ++slice)
+        {
+            gl4_glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture_, level, slice);
+            glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, dest);
+            dest += sliceBytes;
+        }
+
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+        gl4_glDeleteFramebuffers(1, &readFbo);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // OpenGL4TextureCubeBackend
+    // ------------------------------------------------------------------------------------
+
+    namespace
+    {
+        constexpr GLenum kTextureCubeFaceTargetsGL4[6] = {
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + 0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 1,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + 2, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + 4, GL_TEXTURE_CUBE_MAP_POSITIVE_X + 5,
+        };
+    }
+
+    OpenGL4TextureCubeBackend::OpenGL4TextureCubeBackend(int size, bool mipMap)
+        : size_(size), levelCount_(mipMap ? CalculateRenderTargetMipLevelsGL4(size, size) : 1)
+    {
+        glGenTextures(1, &texture_);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        // Allocate storage for every face x every mip level up front, same rationale as
+        // OpenGL4RenderTargetCubeBackend::CreateResources / OpenGL4Texture3DBackend above.
+        for (GLenum faceTarget : kTextureCubeFaceTargetsGL4)
+        {
+            int levelSize = size_;
+            for (int level = 0; level < levelCount_; ++level)
+            {
+                glTexImage2D(faceTarget, level, GL_RGBA8, levelSize, levelSize, 0, GL_RGBA,
+                            GL_UNSIGNED_BYTE, nullptr);
+                levelSize = std::max(1, levelSize / 2);
+            }
+        }
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, levelCount_ - 1);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    }
+
+    OpenGL4TextureCubeBackend::~OpenGL4TextureCubeBackend()
+    {
+        if (texture_ != 0)
+            glDeleteTextures(1, &texture_);
+    }
+
+    void OpenGL4TextureCubeBackend::BindGL() const
+    {
+        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
+    }
+
+    void OpenGL4TextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                            const void* data, int /*dataLength*/)
+    {
+        if (face < 0 || face >= 6) return;
+        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexSubImage2D(kTextureCubeFaceTargetsGL4[face], level, x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    }
+
+    void OpenGL4TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                            void* data, int dataLength) const
+    {
+        if (face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
+        if (static_cast<std::size_t>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA OpenGL4: TextureCube::GetData: dataLength too small for the requested region");
+
+        GLint prevFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+
+        GLuint readFbo = 0;
+        gl4_glGenFramebuffers(1, &readFbo);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
+        gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                   kTextureCubeFaceTargetsGL4[face], texture_, level);
+
+        // No Y-flip -- unlike OpenGL4RenderTargetCubeBackend::GetData (a framebuffer-origin
+        // render target), this is a plain texture; matches EasyGLTextureCubeBackend::GetData's
+        // own non-flipped convention.
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+        gl4_glDeleteFramebuffers(1, &readFbo);
+    }
+
+    // ------------------------------------------------------------------------------------
     // OpenGL4RenderTargetBackend
     // ------------------------------------------------------------------------------------
 
@@ -1494,6 +1667,21 @@ void main()
     std::unique_ptr<ITextureBackend> OpenGL4GraphicsBackend::CreateTexture(const ImageData& data)
     {
         return std::make_unique<OpenGL4TextureBackend>(data);
+    }
+
+    std::unique_ptr<ITexture3DBackend> OpenGL4GraphicsBackend::CreateTexture3D(int w, int h, int depth,
+                                                                                bool mipMap, int /*surfaceFormat*/)
+    {
+        // surfaceFormat is currently unused -- matches EasyGLGraphicsBackend::CreateTexture3D's
+        // own identical "always RGBA8" behavior (see plan_opengl4.md GL4-20 and
+        // docs/texture3d-texturecube-support.md's documented cross-backend gap).
+        return std::make_unique<OpenGL4Texture3DBackend>(w, h, depth, mipMap);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> OpenGL4GraphicsBackend::CreateTextureCube(int size, bool mipMap,
+                                                                                    int /*surfaceFormat*/)
+    {
+        return std::make_unique<OpenGL4TextureCubeBackend>(size, mipMap);
     }
 
     std::unique_ptr<ISpriteBatchBackend> OpenGL4GraphicsBackend::CreateSpriteBatch()

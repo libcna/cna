@@ -160,6 +160,35 @@
 > `tex1*2*tex2~=1.0` (identity), letting `diffuseColor` pass through at its own intensity as
 > intended. Full re-run of the other 9 OpenGL4 CTest suites confirms no regression.
 >
+> **Status (2026-07-22): `GL4-20` (plain `Texture3D`/`TextureCube`) landed and verified.**
+> `CreateTexture3D`/`CreateTextureCube` previously fell through to `IGraphicsBackend`'s default
+> (returns `nullptr`), so `Texture3D`/`TextureCube` `SetData`/`GetData` silently no-op'd on this
+> backend. `OpenGL4Texture3DBackend` allocates a real `GL_TEXTURE_3D` with every mip level
+> pre-allocated up front via the newly-loaded `gl4_glTexImage3D` (mip storage must be defined
+> before `gl4_glTexSubImage3D`'s box writes can target it — same rationale `GL4-14`/`GL4-15`'s FBO
+> render targets already established), and reads back per-Z-slice via a temporary FBO + the
+> newly-loaded `gl4_glFramebufferTextureLayer` + `glReadPixels` (desktop GL's `glGetTexImage` was
+> an option but can't do sub-rectangle reads; the FBO approach also matches
+> `OpenGL4RenderTargetCubeBackend::GetData`'s own established per-face FBO convention).
+> `OpenGL4TextureCubeBackend` reuses `GL4-15`'s `GL_TEXTURE_CUBE_MAP_POSITIVE_X+face` arithmetic
+> directly, with every face × every mip level pre-allocated via `glTexImage2D`. Both new backends
+> add `GL_TEXTURE_MAX_LEVEL` clamping at construction (the same `GL4-18` fix `EasyGLTexture3DBackend`/
+> `EasyGLTextureCubeBackend` don't themselves apply — deliberately stricter than the EasyGL
+> reference here). `GL4Loader` gained `GL_TEXTURE_3D`, `gl4_glTexImage3D`/`gl4_glTexSubImage3D`
+> (GL 1.2 core, not declared by a GL-1.1-vintage `<GL/gl.h>`) and `gl4_glFramebufferTextureLayer`
+> (GL 3.0 core). `TextureCube::GetData` deliberately does **not** Y-flip (unlike
+> `OpenGL4RenderTargetCubeBackend::GetData`, which flips because it reads back a
+> framebuffer-origin render target) — matches `EasyGLTextureCubeBackend::GetData`'s own
+> non-flipped convention for a plain texture, verified for real (not assumed) by the new
+> `OpenGL4_TextureCube` CTest's Check C (an asymmetric single-corner marker pixel read back at the
+> exact corner it was written to). Verified by two new CTest suites: `OpenGL4_Texture3D` (3/3 —
+> per-slice round-trip on a 2×2×4 volume with no cross-slice aliasing, a sub-box offset proof, and
+> a genuine mip-level-1 storage round-trip) and `OpenGL4_TextureCube` (4/4 — per-face round-trip on
+> a size=2 cube with no cross-face aliasing, a sub-rectangle offset proof that doesn't bleed into
+> an adjacent face, the no-Y-flip corner-marker proof, and a genuine mip-level-1 storage
+> round-trip). Both new tests passed every check on their first real run — no backend or test bugs
+> found this time. Full re-run of the other 10 OpenGL4 CTest suites confirms no regression.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -183,15 +212,15 @@
 > the reason this backend requests 4.1 rather than a higher minimum), not validation claims.
 >
 > **Remaining work (read this before picking a next task):**
-> - **`Texture3D`/`TextureCube` (plain, non-render-target)** — `CreateTexture3D`/
->   `CreateTextureCube` are not overridden either; both return `nullptr`. ⬜
-> - **`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`** —
->   none implemented yet. `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done) unblocks
->   these — each needs its own shader variant/uniform wiring on top of the stride dispatch that
->   now exists, plus (for `SkinnedEffect`) a bone-palette uniform array and a new stride-52/56
->   vertex layout `OpenGL4VertexBufferBackend::ApplyLayout` doesn't recognize yet (falls back to
->   its own documented position-only default case). `EnvironmentMapEffect` additionally needs
->   `TextureCube` (see above) as its env-map source. ⬜
+> - **`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`** — none implemented yet (`AlphaTestEffect`/
+>   `DualTextureEffect` done, `GL4-19`; plain `Texture3D`/`TextureCube` done, `GL4-20`).
+>   `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done) unblocks these — each needs its
+>   own shader variant/uniform wiring on top of the stride dispatch that now exists, plus (for
+>   `SkinnedEffect`) a bone-palette uniform array and a new stride-52/56 vertex layout
+>   `OpenGL4VertexBufferBackend::ApplyLayout` doesn't recognize yet (falls back to its own
+>   documented position-only default case). `EnvironmentMapEffect` can now use `GL4-20`'s plain
+>   `CreateTextureCube` (a game-loaded env map from disk) or `GL4-15`'s `RenderTargetCube` as its
+>   env-map source. ⬜
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
 > - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplifications (`GL4-13`)** — real, but
@@ -259,7 +288,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -286,6 +315,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-17` | Real backbuffer MSAA — a manually-managed multisample FBO (`msaaFbo_`/`msaaColorRbo_`/`msaaDepthRbo_`, real `GL_DEPTH24_STENCIL8` combined depth+stencil) resolved via `glBlitFramebuffer` before `Present()`/`ReadBackbuffer()`, mirroring `EasyGLGraphicsBackend`'s own `CreateMsaaBuffers`/`ResolveMsaa`/`BindDefaultFramebuffer` shape rather than an SDL_GL window pixel-format request. Fixed at backend-construction time; `ApplyMultiSampleCount` not overridden (same documented limitation `EasyGLGraphicsBackend` already has). `GetMultiSampleCount()` (top-level `IGraphicsBackend`) now reports the real `GL_MAX_SAMPLES`-clamped value. | ✅ | `GraphicsDeviceManager.PreferMultiSampling` set in a `Game` subclass's constructor never reaches the *first* backend construction at all (a documented, codebase-wide `GraphicsDevice` architectural constraint — the device member is unconditionally default-constructed with `MultiSampleCount=0` first) — verification used `GraphicsDevice::RecreateBackendForMultiSampleCount(8)` (the same NOXNA test-only escape hatch Vulkan's own pre-Task-902 MSAA tests used), not a design gap specific to this backend. |
 | `GL4-18` | Real `Texture2D` mip level support — `OpenGL4TextureBackend::UpdatePixelsLevel()` uploads real per-level data via `glTexImage2D` (level storage is never pre-allocated beyond level 0), `GL_TEXTURE_MAX_LEVEL` is clamped to the real requested level count at construction (matches `EasyGLTextureBackend`'s own Task-924 fix), and `FilterToGL`'s mapping table gained real `GL_*_MIPMAP_*` min-filter tokens for every `TextureFilter` `Mip*` variant. `Point`/`Linear` deliberately keep their non-mip-aware GL filters, matching `EasyGLGraphicsBackend`'s own identical, documented choice. | ✅ | The new test needed the same `Color::Green`-is-`(0,128,0)`-not-`(0,255,0)` correction `GL4-16` already found once. |
 | `GL4-19` | `AlphaTestEffect`/`DualTextureEffect` — both reuse `GL4-13`'s existing stride-20/24 programs via new uniforms only: `uAlphaTest` (`vec4` reference/tolerance/pass-weight/fail-weight discard ternary, ported from `VulkanGraphicsBackend`'s `alpha_test3d.frag.glsl`) and `uTexture2`/`uDualTextureEnabled` (a second sampler on texture unit 1, `BindProgramForStride`'s new `hasTexture1` block mirroring the existing `hasTexture0` one). Dual-texture blend is the real XNA/D3D `DualTextureEffect.fx` 2x-modulate formula (`tex1.rgb*=2.0; result=tex1*tex2*diffuseColor`), cross-verified against both `VulkanGraphicsBackend`'s `dual_texture3d.frag.glsl` and `EasyGLGraphicsBackend`'s current inline GLSL before implementation. | ✅ | The new test's first draft had one authoring mistake (not a backend bug): a white/white `DualTextureEffect` check assumed `diffuseColor` passes through unchanged, but `tex1(1.0)*2*tex2(1.0)=2.0` clamps to full brightness on write and masks `diffuseColor`'s own value — fixed with a mid-gray second texture so `tex1*2*tex2~=1.0` (identity). |
+| `GL4-20` | Plain (non-render-target) `Texture3D`/`TextureCube` — `OpenGL4Texture3DBackend` (real `GL_TEXTURE_3D`, every mip level pre-allocated via the newly-loaded `gl4_glTexImage3D`, per-Z-slice `GetData` via a temporary FBO + the newly-loaded `gl4_glFramebufferTextureLayer` + `glReadPixels`) and `OpenGL4TextureCubeBackend` (reuses `GL4-15`'s `GL_TEXTURE_CUBE_MAP_POSITIVE_X+face` arithmetic, every face × every mip level pre-allocated via `glTexImage2D`), both modeled on `EasyGLTexture3DBackend`/`EasyGLTextureCubeBackend`'s resource shape. Both add `GL_TEXTURE_MAX_LEVEL` clamping (stricter than the EasyGL reference, matching `GL4-18`'s own fix). `TextureCube::GetData` deliberately does not Y-flip, unlike `OpenGL4RenderTargetCubeBackend::GetData` (a framebuffer-origin render target) — matches `EasyGLTextureCubeBackend`'s own plain-texture convention. | ✅ | Both new tests (`OpenGL4_Texture3D` 3/3, `OpenGL4_TextureCube` 4/4) passed every check on their first real run — no backend or test bugs found this time. |
 
 ---
 
@@ -308,7 +338,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All ten dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All twelve dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -356,6 +386,14 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   `tex2`, and `diffuseColor` each genuinely contribute, including a yellow×cyan→green case that
   only passes if both texture slots multiply simultaneously). Full re-run of the other 9 OpenGL4
   CTest suites confirmed no regression.
+- `OpenGL4_Texture3D` — 3/3 (per-slice `SetData`/`GetData` round-trip on a 2×2×4 volume with no
+  cross-slice aliasing, a sub-box x/y/z offset proof that doesn't bleed outside its box or into
+  other slices, and a genuine mip-level-1 storage round-trip).
+- `OpenGL4_TextureCube` — 4/4 (per-face `SetData`/`GetData` round-trip on a size=2 cube with no
+  cross-face aliasing, a sub-rectangle offset proof that doesn't bleed into an adjacent face, a
+  decisive no-Y-flip proof via an asymmetric single-corner marker pixel, and a genuine
+  mip-level-1 storage round-trip). Full re-run of the other 10 OpenGL4 CTest suites confirmed no
+  regression.
 
 ---
 
@@ -390,12 +428,14 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 8. ~~`GL4-19`~~ — `AlphaTestEffect`/`DualTextureEffect` done and verified 2026-07-22, all ✅
    (`OpenGL4_AlphaTestDualTexture`, 8/8). See `GL4-19`'s own row for the reused-stride-program
    approach and the dual-texture 2x-modulate formula cross-verified against two other backends.
-9. **Next up (not yet started, no priority order implied):**
-   - `EnvironmentMapEffect` — now unblocked by `GL4-15`'s `RenderTargetCube` (its env-map source),
-     but also needs plain `CreateTextureCube` (a non-render-target cube texture a game can load
-     from disk) and its own shader variant.
-   - `Texture3D`/`TextureCube` (plain, non-render-target) — `CreateTexture3D`/`CreateTextureCube`
-     still return `nullptr`.
+9. ~~`GL4-20`~~ — plain `Texture3D`/`TextureCube` done and verified 2026-07-22, all ✅
+   (`OpenGL4_Texture3D` 3/3, `OpenGL4_TextureCube` 4/4). See `GL4-20`'s own row for the FBO-based
+   `Texture3D::GetData` per-slice readback and the `TextureCube::GetData` no-Y-flip convention
+   (verified, not assumed, via a corner-marker pixel check).
+10. **Next up (not yet started, no priority order implied):**
+    - `EnvironmentMapEffect` — now unblocked by both `GL4-15`'s `RenderTargetCube` (a
+      render-target-sourced env map) and `GL4-20`'s plain `CreateTextureCube` (a game-loaded env
+      map from disk); still needs its own shader variant plumbed through `BindProgramForStride`.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
 everything else still open — do not treat the picks above as the only next options.
