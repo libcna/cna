@@ -2343,6 +2343,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-073 | P3 | **NEW — surfaced by GFX-072 Phase 2 backend survey, NOT fixed** | | feature/audit | The **Software** (CPU-raster) backend's SpriteBatch path places sprites at raw framebuffer pixel coordinates (`SoftwareGraphicsBackend.cpp` `MakeScreenSpaceVertex` sets `out.x = x; out.y = y`, bypassing World*View*Projection) and `SoftwareGraphicsBackend::SetViewport(...)` is a **no-op** (`{}`), so a custom `GraphicsDevice.Viewport` neither positions nor clips sprites — unlike the Software 3D path, which does consume the viewport via `ClipVertexToRasterVertex`. This is NOT the GFX-072 mis-scale (Software never divides by a target size); it is a broader "Software backend ignores `Viewport` for 2D" gap. The Software backend is a CPU reference with several such gaps and no pixel-test harness registered here; needs its own task (implement a viewport-relative sprite transform + viewport clip, mirroring the 3D path). Source-identified only. |
 | REMED-GFX-074 | P2 | **DONE and VERIFIED (Vulkan runtime + ASan, Xvfb :99; Vulkan validation clean)** | test `b129825c`, fix `202211b6`, docs (this entry) | feature/audit | **Root cause (generic, not SpriteBatch-only):** Vulkan defers every draw/clear into a `RenderTarget2D` to a single Present-time `RecordCommandBuffer`; deferred entries (`activeBatches_`/`pending3D_`/`clearedRTs_`) store a **raw `VulkanRTSource*`** target identity. (1) **UAF** — `~VulkanRenderTargetBackend` freed the target's GPU resources but left its pointer in the queues, so the next Present's `usedRTs` loop dereferenced freed memory (`GetColorAttachmentCount()`/`GetRenderPass()`/…) → **heap-use-after-free/SIGSEGV**. Affects 3D draws and bare `Clear()`s identically, not just sprites. (2) **GetData visibility** — `VulkanRenderTargetBackend` never overrode `ITextureBackend::GetData`, so `RenderTarget2D::GetData` hit the base no-op and returned **all-zeros**; and the target's deferred work isn't recorded until Present, so nothing existed to read. **Fix:** (a) `PurgeDeferredWorkForTarget(rt)` — every render-target destructor (2D + RenderTargetCube's 6 face proxies) drops deferred entries targeting the dying source *before* its resources are freed (a destroyed target is unobservable, so discarding its unflushed draws matches XNA's eager model). (b) `RecordCommandBuffer` gains a **`RenderTargetsOnly`** mode that records exactly one target's off-screen pass into a transient command buffer — no backbuffer pass, no swapchain, no present — consuming only that target's entries (no double-replay). (c) `FlushDeferredRenderTarget(rt)` drives it (submit+wait). (d) `VulkanRenderTargetBackend::GetData` flushes then copies `colorImage_` back via a host-visible staging buffer (swapchain BGRA→RGBA swap), mirroring `VulkanTexture3DBackend::GetData`. **This matches the flush-inside-GetData contract WebGPU (`RenderPendingDrawsToRenderTarget`) and SdlGpu (`EnsureFrameRendered`) already implement** — the only other backends that support RT2D `GetData` (EasyGL/Bgfx/D3D11/D3D12/D3D9/SdlRenderer never override it → return zeros; cross-backend gap, out of scope). **Verification:** new `Vulkan_RenderTarget_GetDataLifetime` **13/13** (GetData-before-Present visibility w/ spatial probes, 2 batches, 2 independent RTs, mixed 3D+2D, destroy-before-Present, no-double-replay) both Debug + ASan; previously-skipped GFX-072 RT-readback variant now runs **directly via RT GetData 8/8** on Vulkan (was routed through the backbuffer). **ASan: pre-fix UAF reproduced** — `heap-use-after-free` at `RecordCommandBuffer` usedRTs deref, freed by `~VulkanRenderTargetBackend`, allocated by `CreateRenderTarget2D`; **post-fix clean**. **Vulkan validation layer loaded, zero VUIDs.** GFX-013/062/070/072/012 replay preserved (flush reuses the same recording path); full Vulkan gtest shard **5613 passed / 5 skipped / 3 pre-existing failures** (`DoesNotSupportWireFrame` [llvmpipe supports it], 2 Cnj effect-fixture — all 3 fail identically on the stashed baseline). No shader/generated-artifact changes. Phase-25 deferred-resource lifetime sweep spawned **GFX-075** (Texture2D/TextureCube/RT-as-sampler, custom Effect, and OcclusionQuery destroyed before Present dangle their descriptor-set/pipeline/query references — same UAF class, different reference path not covered by `PurgeDeferredWorkForTarget`). See detail below. |
 | REMED-GFX-075 | P2 | **DONE and VERIFIED (Vulkan runtime + ASan, Xvfb :99; validation clean)** | test `ac4abd50`, fix `2416b8de`, docs (this entry) | feature/audit | **Fixed** via a generic **frame-fence-tagged retirement queue**: every user-destroyable Vulkan resource destructor now retires its handles (tagged with `frameGeneration_`) instead of freeing+`vkDeviceWaitIdle`, and `ProcessRetiredResources` frees a bucket only after the frame that consumed the referencing deferred entry has signalled its fence (`generation + MaxFramesInFlight < frameGeneration_`) — covering both the CPU-record and GPU-execution windows with **no ordinary-path device stall** (removes the pre-existing per-destroy one). Applies to Texture2D / TextureCube / RenderTarget2D-as-sampler / RenderTargetCube; the custom Effect is additionally captured **by value** into `BatchSnapshot` at `End()` (pipeline/layout/push-constants) so the record never derefs the wrapper (+ its pipeline retired); the OcclusionQuery detaches from every pending draw (`PurgeDeferredQuery`, draw preserved) + retires its pool; the MRT proxy is retired as a whole object on `SetRenderTargets`; `texSamplerDescSets_` entries are evicted per dying view (handle-reuse). Previously-issued draws are never dropped (immediate-API contract). New `Vulkan_DeferredResourceLifetime` **8/8** under ASan (pre-fix: dangling-imageView VUID + SEGV reproduced), GFX-074 `Vulkan_RenderTarget_GetDataLifetime` **13/13**, OcclusionQuery 6/6, shader-effect + env-map green; full Vulkan ctest **5772 passed** (5 pre-existing/environmental failures, incl. `Vulkan_DepthBias` verified identical on the stashed baseline). No shader diff. Spawned **GFX-076** (per-frame effect descriptor caches key on raw view-pointer hashes — handle-reuse stale-cache residual). **Original finding:** Same **use-after-free class** as GFX-074 (a Vulkan deferred draw outlives a resource destroyed before Present), but reached through **non-render-target reference paths** that GFX-074's `PurgeDeferredWorkForTarget` (keyed on the `d.rt`/`batchRT` destination) does not cover, and whose backends perform no equivalent purge: **(1)** destroying a **Texture2D / TextureCube / RenderTarget2D-used-as-sampler** after queuing a textured 3D or sprite draw dangles the `VkImageView` baked into the backend-owned descriptor set captured in the deferred entry (`Pending3DDraw::descSet` + the six effect descriptor-set fields `dualTex/envMap/skinned/pbr/litTextured/fogTex3D`, and sprite `DrawCall::descSet`) — dereferenced at `vkCmdBindDescriptorSets` in `RecordCommandBuffer`; `VulkanTextureBackend::~`/`ReleaseVulkanResources` destroys `imageView_` with no purge, and the per-frame `texSamplerDescSets_` cache also keys on the raw view pointer (handle-reuse collision risk). **(2)** destroying a **custom `Effect`** (`VulkanEffectBackend`) referenced by a sprite `BatchSnapshot::customEffectBackend` dangles the pointer + its `VkPipeline` (`~VulkanEffectBackend` destroys the pipeline, only nulls `activeCustomEffect_` if current). **(3)** destroying an **`OcclusionQuery`** referenced by `Pending3DDraw::occlusionQuery` dangles the pointer (`->pool_`/`->recordedThisFrame_` read at record time). Vertex/index/instance buffers are **safe** (bytes are copied into the entry at enqueue, no `VkBuffer` handle retained). Fix direction: a general enqueue-time strong-reference or a symmetric purge-on-destroy for textures/effects/queries (mirroring GFX-074's target purge). Source-identified via read-only sweep; NOT fixed (separable ownership model, own task per GFX-074 Phase-25 instructions). |
+| REMED-GFX-076 | P3 | **DONE and VERIFIED (Vulkan runtime + ASan, Xvfb :99; validation clean)** | test `ad02dcc8`, fix `6c3b0a48`, docs (this entry) | feature/audit | **Confirmed and fixed.** The seven per-frame effect descriptor-set caches (`dualTex/envMap/litTextured/fogTex3D/skinned/pbr/pbrSkinnedDescSets_`, each `array<unordered_map<uint64_t,set>, MaxFramesInFlight>`) keyed on a **hash of raw `VkImageView` handle values**, persisted across frames, and were freed only at teardown (their pools lacked `FREE_DESCRIPTOR_SET_BIT`). GFX-075 defers a dying view's free past the consuming frame's fence (UAF fixed), but once the view IS freed its handle value is **recyclable**: a later texture whose hash collides with the surviving stale entry gets a descriptor set that samples the destroyed image (silent wrong-texture), and with no free path the cache/pool grow unboundedly. **Chosen fix = per-view eviction + fenced free path** (mirrors `texSamplerDescSets_`, NOT a rekey — a rekey stops collisions but still leaks pool sets): each cache entry now records the sampled `VkImageView`s it was written against (`EffectDescSetEntry{set,views[5]}`), so `EvictSampledViewFromCaches` drops every effect-cache entry a dying view participates in and moves its set to a new fence-gated per-pool free list (`RetiredResources::poolDescriptorSets`, freed in `ProcessRetiredResources` once `gen+MaxFramesInFlight<frameGeneration_`). Effect pools gained `VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT`. The **`TextureCube` and `RenderTargetCube` destructors — which evicted from NO cache before (a pre-existing gap even for `texSamplerDescSets_`) — now evict their cube view** (feeds `envMapDescSets_`). Already-issued deferred draws are untouched: each captured its descriptor set **by value** at enqueue (`d.litTexturedDescSet` etc.) and retirement keeps the set alive past the fence — no in-flight descriptor is rewritten or freed early (Phase 19). **Why it cannot collide after handle reuse:** the entry is gone the instant its resource is destroyed, so no entry keyed on a recyclable handle ever outlives its view — proved DETERMINISTICALLY (not reliant on the driver actually recycling a handle). New `Vulkan_EffectDescriptorCacheIdentity` **14/14** (pre-fix **7/14** RED: T1d/T2a/T3c/T4b/T4c entries survive their destroyed resource; T5 cache 15→79 over 64 temp textures / no free path), litTextured+envMap-cube+dualTex covered; ASan clean (368 B/4-alloc leaks **identical to the GFX-075 baseline** — driver/loader `<unknown module>`, no CNA frames); Vulkan validation **clean** (0 VUIDs across destroy/evict/reuse/cube/64-tex stress); GFX-075 `Vulkan_DeferredResourceLifetime` **8/8**, GFX-074 `Vulkan_RenderTarget_GetDataLifetime` **13/13** (both under ASan too); full Vulkan ctest shard: see narrative below. No shader diff (`spirv_shaders.hpp`/`*.glsl` untouched). Samplers are teardown-only (never recycled at runtime) → sampler identity SAFE. |
 | REMED-GFX-020 | P2 | **DONE (2026-07-21)** | GRAPHICS | feature/audit | Two UNRELATED root causes, neither a shader-math bug. Specular (DX-125) = **test-oracle defect**: check asserted the per-pixel 255 but ran the vertex-lit (Gouraud, correct ~228) variant because it left `preferPerPixelLighting=false`; per-pixel variant verified = exactly 255. Black-vertex-color (PBR quad D) = **real production bug**: `Draw`/`DrawIndexed` hardcoded StartVertex/StartIndex/BaseVertex=0, ignoring `params.vertexStart/startIndex/baseVertex`, so `DrawPrimitives(...,startVertex=6,...)` silently redrew vertices 0..5. `D3D11_Pbr_VertexColor` 6/6, `D3D11_Smoke` 154/154, D3D11 shard 11/11 on real DXVK. Commits `ed1d906b`, `796885b3`. The 8 co-failing fog checks split out as **REMED-GFX-055** (`0453dc1c`). See detail below. |
 | REMED-GFX-060 | P2 | **DONE (2026-07-21)** | GRAPHICS | feature/audit | D3D9 counterpart of GFX-020 (split out from its Phase-12 sweep). Every effect-aware D3D9 draw site hardcoded StartVertex=0 / BaseVertexIndex=0/StartIndex=0, dropping `params.vertexStart/startIndex/baseVertex`. 15 sites across 4 files fixed (`D3D9EffectDraw` ×10, `D3D9PbrDraw` ×2, `D3D9SkinnedVertexColorDraw` ×2, `D3D9InstancedDraw` ×1); colored-primitive + SpriteBatch paths carry no offsets (NOT_APPLICABLE). New `D3D9_DrawOffset` test **0/7 → 7/7** on real DXVK 2.6.0; full D3D9 shard **20/20**; D3D11 GFX-020 regression still 6/6 (change is D3D9-local); EasyGL vertexStart control green; Vulkan honors by construction. Fog-comment/scalar-field cleanup split as **REMED-GFX-061**. Commits `aa23eed2` (test), `d2491a17` (fix). See detail below. |
 | REMED-GFX-021 | P2 | NOT STARTED | | | |
@@ -5114,3 +5115,116 @@ cannot alias a stale entry (or give them a proper per-view eviction/free path).
 
 **GFX-076** (the effect-descriptor-cache handle-reuse residual above — same deferred-ownership context)
 or **GFX-071** (Vulkan 2D sprite pipeline hardcodes alpha-blend, ignores BlendState).
+
+---
+
+## REMED-GFX-076 — Vulkan effect descriptor-cache resource identity (DONE, feature/audit)
+
+**Confirmed** (strong source finding, then proved at runtime): the seven per-frame effect
+descriptor-set caches used a **recyclable `VkImageView` handle value** as logical resource identity.
+
+### Affected caches (all confirmed; the completion inventory)
+
+| cache | key | pool | pre-fix FREE bit | lifetime | references view? | handle-reuse risk |
+|---|---|---|---|---|---|---|
+| `texSamplerDescSets_` | `(VkImageView,VkSampler)` pair | `descriptorPool_` | yes | cross-frame | yes | **already evicted per-view (GFX-075) — SAFE** |
+| `dualTexDescSets_` | hash(view0,view1,samp0,samp1) | `descriptorPool2Tex_` | no→**yes** | cross-frame | 2 | **GFX-076 → now evicted+freed** |
+| `envMapDescSets_` | hash(view2D,viewCube) | `descriptorPoolEnvMap_` | no→**yes** | cross-frame | 2 (incl. cube) | **GFX-076 → now evicted+freed** |
+| `litTexturedDescSets_` | raw view2D | `descriptorPoolLitTextured_` | no→**yes** | cross-frame | 1 | **GFX-076 → now evicted+freed** |
+| `fogTex3DDescSets_` | raw view2D | `descriptorPoolFogTex3D_` | no→**yes** | cross-frame | 1 | **GFX-076 → now evicted+freed** |
+| `skinnedDescSets_` | raw view2D | `descriptorPoolSkinned_` | no→**yes** | cross-frame | 1 | **GFX-076 → now evicted+freed** |
+| `pbrDescSets_` | FNV(5 views) | `descriptorPoolPbr_` | no→**yes** | cross-frame | 5 | **GFX-076 → now evicted+freed** |
+| `pbrSkinnedDescSets_` | FNV(5 views) | `descriptorPoolPbrSkinned_` | no→**yes** | cross-frame | 5 | **GFX-076 → now evicted+freed** |
+
+Not caches / immutable identity → **SAFE, unchanged**: `samplerCache_` (VkSampler destroyed only at
+teardown — never recycled at runtime, so composite `(view,sampler)` keys need no sampler handling);
+all `pipelines*` maps (keyed on render state, no resource handle); default white/flat-normal/white-cube
+views (backend-global, permanent).
+
+### Exact stale-cache mechanism
+
+`Texture A → VkImageView A → hash(A) → alloc DS-A → cache[hash(A)]=DS-A → draw`. `A` destroyed → GFX-075
+retirement keeps `A`'s view alive through the deferred-consume window, then **legitimately frees it** at
+`gen+MaxFramesInFlight`. Its handle value is now free for reuse. `Texture B` allocated → driver may
+return the same `VkImageView` value → `hash(B)==hash(A)` → **cache hit returns DS-A**, whose descriptor
+still references the destroyed image `A`. Result: B silently samples A's dead image (not a UAF — DS-A's
+pool is still valid — a **wrong-resource correctness defect**). Separately, with no free path the cache
+and its bounded pool grow every frame that draws a fresh texture (pool exhaustion → `vkAllocateDescriptorSets`
+fails → draws silently stop).
+
+### Fix (per-view eviction + fenced per-pool free — mirrors `texSamplerDescSets_`, NOT a rekey)
+
+A rekey (generation-stamped resource id) stops the collision but leaves the set in the bounded pool
+forever (the finding's "clearing them mid-run leaks their pool sets"). Eviction is the load-bearing part
+and GFX-075 already proved it works for `texSamplerDescSets_`; the only blocker for the effect caches was
+that a hash key is not reversible. So each entry now **records the `VkImageView`s it was written against**
+(`EffectDescSetEntry{VkDescriptorSet set; array<VkImageView,5> views;}`), `EvictSampledViewFromCaches`
+walks all seven caches (all frame slots) and drops every entry the dying view participates in, moving its
+set to a new **fence-gated per-pool free list** (`RetiredResources::poolDescriptorSets`, freed in
+`ProcessRetiredResources` once `gen+MaxFramesInFlight<frameGeneration_`). The seven pools gained
+`VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT`. The **`TextureCube` and `RenderTargetCube`
+destructors — which evicted from NO cache at all before (a pre-existing gap even for the GFX-075
+`texSamplerDescSets_` eviction) — now call `EvictSampledViewFromCaches` on their cube view.**
+
+**Why collision is impossible after handle reuse:** the entry is erased the instant its resource is
+destroyed, so no entry keyed on a recyclable handle ever outlives its view — a **structural** guarantee,
+not a probabilistic one. **In-flight safety (Phase 19):** already-issued deferred draws captured their
+descriptor set *by value* at enqueue (`d.litTexturedDescSet` etc.); eviction only removes the *cache*
+entry and the set is freed by the *same* fence-gated queue that GFX-075 already proved correct — no
+in-flight descriptor is rewritten or freed early, and a future draw for the new resource MISSes and
+allocates a fresh set.
+
+### Pre-fix evidence (deterministic — reproduces without relying on handle reuse)
+
+`Vulkan_EffectDescriptorCacheIdentity` at the test commit `ad02dcc8` (eviction not yet wired): **7/14**,
+RED exactly where required — `T1d`/`T2a` (litTextured entry survives its destroyed texture, keyed on the
+freed handle), `T3c` (envMap cube entry survives), `T4b`/`T4c` (dualTex entry survives), `T5a`/`T5b`
+(cache `15 → 79` entries over 64 temporary textures — the "no free path" growth). `T2b` passed pre-fix
+only because the driver did not recycle a handle that run — which is exactly why `T2a`'s structural check
+carries the proof. Post-fix (`6c3b0a48`): **14/14**.
+
+### Handle-reuse evidence (Phase 22)
+
+The lavapipe/llvmpipe run did **not** recycle the raw `VkImageView` value within `T2`'s destroy→free→
+recreate window ("reuse observed: no"); the test reports this explicitly and the deterministic
+introspection (`EffectDescSetEntriesForViewInTests`) proves the safety property regardless. When reuse
+does occur it is now a guaranteed cache MISS for the new resource identity.
+
+### Verification matrix (Vulkan, llvmpipe, Xvfb :99)
+
+- `Vulkan_EffectDescriptorCacheIdentity` **14/14** (runtime + ASan).
+- ASan: clean; residual 368 B / 4 allocs are `<unknown module>` (driver/loader) and **identical to the
+  GFX-075 control's baseline** — no CNA frames, no new leaks, no UAF.
+- Vulkan validation (`VK_LAYER_KHRONOS_validation`, loaded — confirmed via loader trace): **0 VUIDs** over
+  the whole destroy/evict/reuse/cube/64-texture-stress run (no destroyed-view-in-descriptor, no
+  descriptor-update-while-in-use, no pool-lifetime error).
+- GFX-075 `Vulkan_DeferredResourceLifetime` **8/8** and GFX-074 `Vulkan_RenderTarget_GetDataLifetime`
+  **13/13** (both also re-run under ASan) — retirement/target-scoped-flush untouched.
+- Normal rendering: 80 representative `Vulkan_(BasicEffect|EnvironmentMap|Skinned|Pbr|DualTexture|
+  SpriteBatch|TextureCube|RenderTarget)*` tests all **Passed**, 0 failed.
+- Full Vulkan ctest shard: **5773 / 5778 passed** (114 s). The **5 failures are the established
+  pre-existing/environmental baseline**, none descriptor-cache-related: `Vulkan_DepthBias` (GFX-075
+  already recorded pre-existing), `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (asserts
+  wireframe *unsupported*, but llvmpipe *does* support it), `DynamicSoundEffectInstanceTest.*` (audio),
+  `CnjEffectTest.LoadsRealCnjFixture` + `CnjStockEffectTest.CustomGlslEffectStillWorks` (content
+  fixtures). Delta vs the GFX-075 shard is **+1 total / +1 passed** (this new test) and the **same 5
+  failures** → zero new failures.
+- Generated artifacts: **none** — `git diff` touches only the backend `.hpp`/`.cpp`, the new test, and
+  the CMake registration; no `*.glsl` / `*.spv` / `spirv_shaders.hpp` change.
+
+### Commits
+
+- `ad02dcc8` test(Task REMED-GFX-076): regression + read-only cache observability (RED 7/14 without the
+  eviction wiring).
+- `6c3b0a48` fix(Task REMED-GFX-076): wire `EvictSampledViewFromCaches` to the seven effect caches + the
+  two cube destructors (GREEN 14/14).
+
+### New findings
+
+None. The final inventory above has no unexplained persistent cache keyed solely on a recyclable
+user-resource Vulkan handle.
+
+### Recommended next GRAPHICS task
+
+**GFX-071** (Vulkan 2D sprite pipeline hardcodes alpha-blend, ignores `BlendState`) — same Vulkan
+backend, self-contained; or **GFX-073**/**GFX-065**/**GFX-067** per the index.
