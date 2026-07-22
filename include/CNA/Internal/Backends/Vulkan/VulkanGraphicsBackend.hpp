@@ -267,6 +267,22 @@ namespace CNA::Internal::Backends::Vulkan
         float            pushConst_[32]  = {};
     };
 
+    // Task 868: the real per-channel Blend/BlendFunction values a BlendState requests, mirrors
+    // DepthStencilKeyParams -- fields baked into a pipeline at creation time (Vulkan has no
+    // per-draw dynamic blend-equation state). Defaults match BlendState.Opaque's own values
+    // (One/Zero, Add), though blendEnabled_ already gates Opaque out of blending entirely.
+    // REMED-GFX-071: also captured (by value) into VulkanSpriteBatchBackend::BatchSnapshot so the
+    // 2D sprite pipeline honors SpriteBatch.Begin()'s BlendState, mirroring the 3D Pending3DDraw
+    // path -- hence defined here, ahead of the sprite backend that stores it.
+    struct BlendKeyParams {
+        int colorSrc  = 0; // Blend::One
+        int colorDst  = 1; // Blend::Zero
+        int alphaSrc  = 0; // Blend::One
+        int alphaDst  = 1; // Blend::Zero
+        int colorFunc = 0; // BlendFunction::Add
+        int alphaFunc = 0; // BlendFunction::Add
+    };
+
     // -------------------------------------------------------------------------
     // VulkanSpriteBatchBackend
     // -------------------------------------------------------------------------
@@ -356,6 +372,16 @@ namespace CNA::Internal::Backends::Vulkan
             // factors, but replayed unconditionally per batch (inert otherwise), like viewport/scissor.
             float                       blendFactorR = 1.0f, blendFactorG = 1.0f,
                                         blendFactorB = 1.0f, blendFactorA = 1.0f;
+            // REMED-GFX-071: the batch's full BlendState -- blendEnable + the six per-channel
+            // Blend/BlendFunction values -- captured at End() so drawSpritesFor() selects a 2D
+            // sprite pipeline whose colour-attachment blend equation matches SpriteBatch.Begin()'s
+            // BlendState instead of the pre-fix hardcoded alpha-blend. Captured BY VALUE (not a
+            // BlendState*) so a state changed/destroyed after End() but before the deferred Present
+            // record cannot dangle (mirrors GFX-075's by-value effect capture and the 3D path's
+            // Pending3DDraw.blendParams). Defaults to Opaque (blendEnabled=false); every real batch
+            // overwrites these from the device state SpriteBatch.Begin() always (re-)applies.
+            bool                        blendEnabled = false;
+            BlendKeyParams              blendParams;
         };
 
     private:
@@ -659,18 +685,6 @@ namespace CNA::Internal::Backends::Vulkan
     // mask/write mask, which are true Vulkan dynamic state (vkCmdSetStencil*, no new pipeline
     // needed) -- is baked into a VkPipeline at creation time (depthCompareOp and the front/back
     // VkStencilOpState blocks), so must be part of every 3D pipeline's cache key.
-    // Task 868: the real per-channel Blend/BlendFunction values a BlendState requests, mirrors
-    // DepthStencilKeyParams -- fields baked into a pipeline at creation time (Vulkan has no
-    // per-draw dynamic blend-equation state). Defaults match BlendState.Opaque's own values
-    // (One/Zero, Add), though blendEnabled_ already gates Opaque out of blending entirely.
-    struct BlendKeyParams {
-        int colorSrc  = 0; // Blend::One
-        int colorDst  = 1; // Blend::Zero
-        int alphaSrc  = 0; // Blend::One
-        int alphaDst  = 1; // Blend::Zero
-        int colorFunc = 0; // BlendFunction::Add
-        int alphaFunc = 0; // BlendFunction::Add
-    };
 
     // Task 868: pipeline caches now key on (existing uint64_t topology/depth/stencil/etc. bits,
     // packed blend bits) -- a plain uint64_t ran out of free bit-width once the full 6-value
@@ -853,7 +867,13 @@ namespace CNA::Internal::Backends::Vulkan
         // exactly attachment-format-match whichever target it draws into even though it never
         // itself reads/writes the depth attachment (VkPipelineDepthStencilStateCreateInfo has
         // depthTestEnable=depthWriteEnable=VK_FALSE always).
-        std::unordered_map<VkFormat, VkPipeline> pipelines2DMsaaByDepthFmt_;
+        // REMED-GFX-071: now keyed by (depth-format-folded uint64 + blendEnabled bit, PackBlendBits)
+        // -- the full PipelineKey shape the 3D caches use -- so a distinct SpriteBatch BlendState
+        // gets its own VkPipeline (with FillBlendAttachmentState-derived factors) instead of one
+        // hardcoded alpha-blend pipeline per depth format. The BlendFactor *value* stays dynamic
+        // (VK_DYNAMIC_STATE_BLEND_CONSTANTS, GFX-070) and is NOT in this key -- only PackBlendBits'
+        // factor/function *enums* are, so changing GraphicsDevice.BlendFactor never fragments it.
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelines2DMsaaByDepthFmt_;
 
         // --- Swap interval (set at construction; Vulkan requires swapchain recreation to change) ---
         int swapInterval_ = 1;
@@ -927,7 +947,8 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorPool      descriptorPool_        = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayout2D_      = VK_NULL_HANDLE;
         // Task 911: depth-format-keyed, mirrors pipelines2DMsaaByDepthFmt_ above.
-        std::unordered_map<VkFormat, VkPipeline> pipelines2DByDepthFmt_;
+        // REMED-GFX-071: same (depth-format + blend) PipelineKey as the MSAA map above.
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelines2DByDepthFmt_;
         VkPipelineLayout      pipelineLayout3D_      = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelines3D_;
         VkPipelineLayout      pipelineLayoutExt3D_      = VK_NULL_HANDLE;
@@ -1446,7 +1467,10 @@ namespace CNA::Internal::Backends::Vulkan
         // VkFormat -- VK_FORMAT_UNDEFINED means "no depth attachment" (DepthFormat::None), mirrors
         // GetOrCreateRTRenderPass()'s own depth-format-keyed caching. Uses PickRTPipelineRenderPass
         // for the reference render pass, same as every 3D pipeline creation function.
-        VkPipeline GetOrCreatePipeline2D(VkFormat depthFmt);
+        // REMED-GFX-071: also parameterized by the batch's BlendState (blend enable + per-channel
+        // factors/functions) so SpriteBatch.Begin()'s BlendState drives the colour-attachment blend
+        // equation via FillBlendAttachmentState, instead of a hardcoded alpha-blend.
+        VkPipeline GetOrCreatePipeline2D(VkFormat depthFmt, bool blend, const BlendKeyParams& bp);
         VkFormat   FindDepthFormat() const;
         void       CreateDepthResources();
         void       CleanupDepthResources();
@@ -1599,7 +1623,8 @@ namespace CNA::Internal::Backends::Vulkan
         void CleanupMsaaColorResources();
         void CreateRenderPassMsaa();
         // Task 911: MSAA counterpart to GetOrCreatePipeline2D(), same depth-format-keyed caching.
-        VkPipeline GetOrCreatePipeline2DMsaa(VkFormat depthFmt);
+        // REMED-GFX-071: also BlendState-parameterized, see GetOrCreatePipeline2D().
+        VkPipeline GetOrCreatePipeline2DMsaa(VkFormat depthFmt, bool blend, const BlendKeyParams& bp);
 
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();

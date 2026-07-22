@@ -917,6 +917,13 @@ namespace CNA::Internal::Backends::Vulkan
             snapshot->blendFactorG = backend_->blendFactorG_;
             snapshot->blendFactorB = backend_->blendFactorB_;
             snapshot->blendFactorA = backend_->blendFactorA_;
+            // REMED-GFX-071: capture this batch's BlendState (blend enable + the six per-channel
+            // Blend/BlendFunction values) BY VALUE, so drawSpritesFor selects a 2D pipeline whose
+            // blend equation matches SpriteBatch.Begin()'s BlendState. SpriteBatch.Begin() applied
+            // it to the device (GraphicsDevice::setBlendStateProperty -> ApplyBlendState) before
+            // this backend's Begin(), so backend_->blendEnabled_/blendParams_ are this batch's.
+            snapshot->blendEnabled = backend_->blendEnabled_;
+            snapshot->blendParams  = backend_->blendParams_;
             backend_->activeBatches_.push_back({ std::move(snapshot), activeRT_ });
         }
     }
@@ -2629,9 +2636,22 @@ namespace CNA::Internal::Backends::Vulkan
     // 2D Sprite pipeline
     // =========================================================================
 
-    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2D(VkFormat depthFmt)
+    // REMED-GFX-071: forward-declared here because the 2D sprite pipelines (below) reuse the exact
+    // same XNA->Vulkan blend translation + cache-key packing the 3D path defines further down.
+    static uint32_t PackBlendBits(bool blend, const BlendKeyParams& bp);
+    static void FillBlendAttachmentState(VkPipelineColorBlendAttachmentState& cba, bool blend,
+                                         const BlendKeyParams& bp);
+    static uint64_t FoldDepthFormatIntoKey(uint64_t key, VkFormat depthFmt);
+
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2D(VkFormat depthFmt, bool blend,
+                                                            const BlendKeyParams& bp)
     {
-        auto cached = pipelines2DByDepthFmt_.find(depthFmt);
+        // REMED-GFX-071: key by (depth format folded + blend-enable bit, packed blend factor/func
+        // enums) -- the same PipelineKey shape the 3D caches use. The BlendFactor *value* is dynamic
+        // state (GFX-070) and deliberately absent from the key, so it never fragments the cache.
+        const PipelineKey key = { FoldDepthFormatIntoKey(blend ? 1ull : 0ull, depthFmt),
+                                  PackBlendBits(blend, bp) };
+        auto cached = pipelines2DByDepthFmt_.find(key);
         if (cached != pipelines2DByDepthFmt_.end()) return cached->second;
 
         using namespace Shaders;
@@ -2686,15 +2706,13 @@ namespace CNA::Internal::Backends::Vulkan
         ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-        // Alpha blending for sprites
+        // REMED-GFX-071: colour-attachment blend derived from the batch's BlendState via the same
+        // FillBlendAttachmentState the 3D path uses (One canonical XNA->Vulkan mapping for both 2D
+        // and 3D), replacing the pre-fix hardcoded SRC_ALPHA/ONE_MINUS_SRC_ALPHA that ignored the
+        // BlendState entirely. colorWriteMask stays RGBA -- ColorWriteChannels is not plumbed to any
+        // backend's ApplyBlendState yet (a separate cross-backend finding; see the progress log).
         VkPipelineColorBlendAttachmentState cba{};
-        cba.blendEnable         = VK_TRUE;
-        cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        cba.colorBlendOp        = VK_BLEND_OP_ADD;
-        cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        FillBlendAttachmentState(cba, blend, bp);
         cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         VkPipelineColorBlendStateCreateInfo cbs{};
@@ -2754,7 +2772,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         vkDestroyShaderModule(device_, vert, nullptr);
         vkDestroyShaderModule(device_, frag, nullptr);
-        pipelines2DByDepthFmt_[depthFmt] = pipe;
+        pipelines2DByDepthFmt_[key] = pipe;
         return pipe;
     }
 
@@ -2971,9 +2989,14 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkCreateRenderPass (MSAA) failed");
     }
 
-    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2DMsaa(VkFormat depthFmt)
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2DMsaa(VkFormat depthFmt, bool blend,
+                                                               const BlendKeyParams& bp)
     {
-        auto cached = pipelines2DMsaaByDepthFmt_.find(depthFmt);
+        // REMED-GFX-071: BlendState-keyed, same as the non-MSAA variant (separate map, so no MSAA
+        // bit is needed in the key).
+        const PipelineKey key = { FoldDepthFormatIntoKey(blend ? 1ull : 0ull, depthFmt),
+                                  PackBlendBits(blend, bp) };
+        auto cached = pipelines2DMsaaByDepthFmt_.find(key);
         if (cached != pipelines2DMsaaByDepthFmt_.end()) return cached->second;
 
         using namespace Shaders;
@@ -3024,14 +3047,9 @@ namespace CNA::Internal::Backends::Vulkan
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = sampleCount_;
 
+        // REMED-GFX-071: BlendState-derived colour-attachment blend (see the non-MSAA variant).
         VkPipelineColorBlendAttachmentState cba{};
-        cba.blendEnable         = VK_TRUE;
-        cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        cba.colorBlendOp        = VK_BLEND_OP_ADD;
-        cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        FillBlendAttachmentState(cba, blend, bp);
         cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         VkPipelineColorBlendStateCreateInfo cbs{};
@@ -3084,7 +3102,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         vkDestroyShaderModule(device_, vert, nullptr);
         vkDestroyShaderModule(device_, frag, nullptr);
-        pipelines2DMsaaByDepthFmt_[depthFmt] = pipe;
+        pipelines2DMsaaByDepthFmt_[key] = pipe;
         return pipe;
     }
 
@@ -6497,8 +6515,12 @@ namespace CNA::Internal::Backends::Vulkan
                 // Task 911: this target's own real depth VkFormat -- see draw3DFor's identical
                 // targetDepthFmt computation for the full rationale.
                 const VkFormat targetDepthFmt = targetRT ? targetRT->GetDepthFormat() : depthFormat_;
-                VkPipeline       activePipe   = useMsaaPipe ? GetOrCreatePipeline2DMsaa(targetDepthFmt)
-                                                             : GetOrCreatePipeline2D(targetDepthFmt);
+                // REMED-GFX-071: select the 2D pipeline whose colour-attachment blend equation
+                // matches this batch's captured BlendState (defaults to Opaque for a batch that
+                // predates any BlendState, but SpriteBatch.Begin always applies one).
+                VkPipeline       activePipe   = useMsaaPipe
+                    ? GetOrCreatePipeline2DMsaa(targetDepthFmt, snapshot->blendEnabled, snapshot->blendParams)
+                    : GetOrCreatePipeline2D(targetDepthFmt, snapshot->blendEnabled, snapshot->blendParams);
                 VkPipelineLayout activeLayout = pipelineLayout2D_;
                 const float*     customPC     = nullptr;
                 // REMED-GFX-075: read the effect's pipeline/layout/push-constants from the batch
