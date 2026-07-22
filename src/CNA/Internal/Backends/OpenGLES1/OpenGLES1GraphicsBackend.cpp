@@ -843,6 +843,42 @@ namespace CNA::Internal::Backends::OpenGLES1
         owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, 0);
     }
 
+    void OpenGLES1RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                               void* data, int dataLength) const
+    {
+        // Only level 0 exists here -- this backend does not generate mips (see CreateRenderTarget2D).
+        if (level != 0 || !data || w <= 0 || h <= 0) return;
+        if (dataLength < w * h * 4) return;
+        if (!owner_ || !owner_->glBindFramebufferOES_ || fbo_ == 0) return;
+
+        // ES 1.1 has no glGetTexImage, so the only way back out of the colour attachment is to
+        // read it through its own FBO. Restore the previously bound target afterwards rather than
+        // assuming the backbuffer was current -- GetData() may be called while another target is
+        // still bound.
+        GLint previousFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING_OES, &previousFbo);
+        owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, fbo_);
+
+        // Same top-left-origin convention as ReadBackbuffer(): flip the requested origin into GL's
+        // bottom-up window space, then flip the returned rows back.
+        auto* pixels = static_cast<uint8_t*>(data);
+        const int flippedY = height_ - y - h;
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(x, flippedY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+        std::vector<uint8_t> row(static_cast<std::size_t>(w) * 4);
+        for (int top = 0, bottom = h - 1; top < bottom; ++top, --bottom)
+        {
+            uint8_t* topRow = pixels + static_cast<std::size_t>(top) * w * 4;
+            uint8_t* bottomRow = pixels + static_cast<std::size_t>(bottom) * w * 4;
+            std::memcpy(row.data(), topRow, row.size());
+            std::memcpy(topRow, bottomRow, row.size());
+            std::memcpy(bottomRow, row.data(), row.size());
+        }
+
+        owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, static_cast<GLuint>(previousFbo));
+    }
+
     std::unique_ptr<IRenderTargetBackend> OpenGLES1GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {

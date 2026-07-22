@@ -36,6 +36,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGLES1_LightingFogAlphaTest_Readback COMMAND cna_test_opengles1_lighting_fog_alphatest
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengles1.md OPENGLES1-79: real GPU vertex/index buffers, RenderTarget2D and wireframe
+    # emulation (OPENGLES1-15/16/72/73/76).
+    cna_opengles1_test(cna_test_opengles1_buffers_rendertarget examples/opengles1_buffers_rendertarget_test.cpp)
+    cna_register_backend_test(NAME OpenGLES1_BuffersRenderTarget_Readback COMMAND cna_test_opengles1_buffers_rendertarget
+        TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_opengles1.md OPENGLES1-79: viewport and scissor clipping (OPENGLES1-29).
     cna_opengles1_test(cna_test_opengles1_viewport_scissor examples/opengles1_viewport_scissor_test.cpp)
     cna_register_backend_test(NAME OpenGLES1_ViewportScissor_Readback COMMAND cna_test_opengles1_viewport_scissor

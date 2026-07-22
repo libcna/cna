@@ -204,6 +204,25 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
+
+        /**
+         * @brief Reads raw RGBA8 pixels back out of the target's colour attachment.
+         *
+         * `RenderTarget2D::GetData()` has no CPU-side pixel shadow to fall back on -- its content
+         * only ever comes from GPU rendering -- so without this the call silently yields zeroes.
+         * Rows are flipped to the top-left-origin convention every other CNA backend reports.
+         *
+         * @param level Mip level; only level 0 exists on this backend.
+         * @param x Left edge of the sub-rectangle to read.
+         * @param y Top edge of the sub-rectangle, in top-left-origin coordinates.
+         * @param w Width of the sub-rectangle.
+         * @param h Height of the sub-rectangle.
+         * @param data Destination buffer receiving RGBA8 pixels.
+         * @param dataLength Size of that buffer in bytes.
+         */
+        void GetData(int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
+
         [[nodiscard]] unsigned int GetColorGLHandle() const override { return colorTexture_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
