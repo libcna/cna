@@ -107,12 +107,15 @@ namespace CNA::Internal::Backends::OpenGLES1
         }
 
         // XNA TextureAddressMode ordinals: Wrap=0, Clamp=1, Mirror=2.
-        GLenum ToGLWrapMode(int xnaAddressMode)
+        // ES 1.1 core has only GL_REPEAT and GL_CLAMP_TO_EDGE; mirrored repeat lives in the
+        // optional GL_OES_texture_mirrored_repeat, so Mirror is honoured where the driver exposes
+        // it and degrades to Wrap (a documented deviation) where it does not.
+        GLenum ToGLWrapMode(int xnaAddressMode, bool mirroredRepeatSupported)
         {
             switch (xnaAddressMode)
             {
             case 1: return GL_CLAMP_TO_EDGE;
-            case 2: return GL_REPEAT;  // ES1.1 core lacks GL_MIRRORED_REPEAT -- falls back to Wrap.
+            case 2: return mirroredRepeatSupported ? GL_MIRRORED_REPEAT_OES : GL_REPEAT;
             default: return GL_REPEAT;  // TextureAddressMode::Wrap = 0
             }
         }
@@ -523,6 +526,10 @@ namespace CNA::Internal::Backends::OpenGLES1
         // GL_OES_framebuffer_object (OPENGLES1-72): optional -- RenderTarget2D support is gated on
         // every one of these resolving, not just the extension string (a driver could advertise
         // the string but only implement part of it; resolving is the real capability check).
+        // Pure state-only extension -- no entry points to resolve, so the string is the whole
+        // capability check (unlike the FBO/cube-map ones below).
+        mirroredRepeatSupported_ = HasGLExtension("GL_OES_texture_mirrored_repeat");
+
         fboSupported_ = HasGLExtension("GL_OES_framebuffer_object");
         if (fboSupported_)
         {
@@ -1118,11 +1125,12 @@ namespace CNA::Internal::Backends::OpenGLES1
         // `(tex0.rgb*2, tex0.a) * tex1 * diffuseTint` via two GL_COMBINE stages: unit 0 computes
         // `tex0 * primaryColor` scaled 2x (RGB only), unit 1 modulates that by its own texture
         // sample.
-        void SetupDualTexture(const GpuDrawParams& params, std::size_t stride)
+        void SetupDualTexture(OpenGLES1GraphicsBackend& backend, const GpuDrawParams& params, std::size_t stride)
         {
             glActiveTexture(GL_TEXTURE0);
             glEnable(GL_TEXTURE_2D);
             params.texture0->BindGL();
+            backend.ApplySamplerToBoundTextureEXT(0, GL_TEXTURE_2D);
             glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
             glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
             glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE);
@@ -1140,6 +1148,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             glActiveTexture(GL_TEXTURE1);
             glEnable(GL_TEXTURE_2D);
             params.texture1->BindGL();
+            backend.ApplySamplerToBoundTextureEXT(1, GL_TEXTURE_2D);
             glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
             glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
             glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS);
@@ -1179,6 +1188,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             glActiveTexture(GL_TEXTURE1);
             glEnable(GL_TEXTURE_CUBE_MAP_OES);
             params.envMap->BindGL();
+            backend.ApplySamplerToBoundTextureEXT(1, GL_TEXTURE_CUBE_MAP_OES);
             backend.glTexGeniOES_(GL_TEXTURE_GEN_STR_OES, GL_TEXTURE_GEN_MODE_OES, GL_REFLECTION_MAP_OES);
             glEnable(GL_TEXTURE_GEN_STR_OES);
 
@@ -1499,7 +1509,7 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         if (wantDualTexture)
         {
-            SetupDualTexture(params, stride);
+            SetupDualTexture(*this, params, stride);
         }
         else
         {
@@ -1508,6 +1518,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             {
                 glEnable(GL_TEXTURE_2D);
                 params.texture0->BindGL();
+                ApplySamplerToBoundTextureEXT(0, GL_TEXTURE_2D);
                 glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
             }
             else
@@ -1607,7 +1618,7 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         if (wantDualTexture)
         {
-            SetupDualTexture(params, stride);
+            SetupDualTexture(*this, params, stride);
         }
         else
         {
@@ -1616,6 +1627,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             {
                 glEnable(GL_TEXTURE_2D);
                 params.texture0->BindGL();
+                ApplySamplerToBoundTextureEXT(0, GL_TEXTURE_2D);
                 glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
             }
             else
@@ -1746,11 +1758,35 @@ namespace CNA::Internal::Backends::OpenGLES1
 
     void OpenGLES1GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
     {
-        (void)slot; (void)maxAnisotropy;  // Single texture unit used by this backend's baseline.
+        (void)maxAnisotropy;  // No GL_EXT_texture_filter_anisotropic dependency in this baseline.
+
+        // Remember it: GraphicsDevice pushes sampler state down BEFORE the draw call binds its
+        // textures, and GL stores filter/wrap on the texture object, so applying it here alone
+        // would configure whichever texture happened to be bound at the time. The draw paths
+        // re-apply it through ApplySamplerToBoundTextureEXT() once the right texture is bound.
+        if (slot >= 0 && slot < kMaxSamplerSlots)
+        {
+            samplerFilter_[slot] = filter;
+            samplerAddressU_[slot] = addressU;
+            samplerAddressV_[slot] = addressV;
+        }
+
+        // Still apply immediately as well, which is what the SpriteBatch path (already binding
+        // before it calls this) relies on.
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ToGLFilter(filter));
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ToGLFilter(filter));
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(addressU));
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(addressV));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(addressU, mirroredRepeatSupported_));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(addressV, mirroredRepeatSupported_));
+    }
+
+    void OpenGLES1GraphicsBackend::ApplySamplerToBoundTextureEXT(int slot, unsigned int target) const
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        const GLenum t = static_cast<GLenum>(target);
+        glTexParameteri(t, GL_TEXTURE_MIN_FILTER, ToGLFilter(samplerFilter_[slot]));
+        glTexParameteri(t, GL_TEXTURE_MAG_FILTER, ToGLFilter(samplerFilter_[slot]));
+        glTexParameteri(t, GL_TEXTURE_WRAP_S, ToGLWrapMode(samplerAddressU_[slot], mirroredRepeatSupported_));
+        glTexParameteri(t, GL_TEXTURE_WRAP_T, ToGLWrapMode(samplerAddressV_[slot], mirroredRepeatSupported_));
     }
 
     void OpenGLES1GraphicsBackend::SetScissorRect(int x, int y, int w, int h)

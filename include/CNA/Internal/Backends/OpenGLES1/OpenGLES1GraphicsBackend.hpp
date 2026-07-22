@@ -439,6 +439,10 @@ namespace CNA::Internal::Backends::OpenGLES1
         [[nodiscard]] bool SupportsFramebufferObject() const { return fboSupported_; }
         /// NOXNA. Whether GL_OES_texture_cube_map was detected at startup.
         [[nodiscard]] bool SupportsTextureCubeMap() const { return cubeMapSupported_; }
+
+        /// NOXNA. True when GL_OES_texture_mirrored_repeat is present, i.e. when
+        /// TextureAddressMode::Mirror can be honoured instead of degrading to Wrap.
+        [[nodiscard]] bool SupportsMirroredRepeat() const { return mirroredRepeatSupported_; }
         /// NOXNA. Whether a second texture unit is actually available (GL_MAX_TEXTURE_UNITS >= 2),
         /// needed for a real DualTextureEffect dispatch.
         [[nodiscard]] bool SupportsSecondTextureUnit() const { return maxTextureUnits_ >= 2; }
@@ -462,6 +466,20 @@ namespace CNA::Internal::Backends::OpenGLES1
          *
          * @param buffer Buffer to track; ignored when null.
          */
+        /**
+         * @brief Re-applies the sampler state remembered for a slot to the currently bound texture.
+         *
+         * GL keeps filter and wrap mode on the *texture object*, while `GraphicsDevice` pushes
+         * sampler state down before a draw binds its textures. Applying it at push time would
+         * therefore land it on whatever texture happened to be bound; the draw paths call this
+         * immediately after each bind instead.
+         *
+         * @param slot Sampler slot whose remembered state should be applied.
+         * @param target GL texture target of the bound object (`GL_TEXTURE_2D` or
+         *        `GL_TEXTURE_CUBE_MAP_OES`).
+         */
+        void ApplySamplerToBoundTextureEXT(int slot, unsigned int target) const;
+
         void RegisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer);
 
         /**
@@ -529,10 +547,18 @@ namespace CNA::Internal::Backends::OpenGLES1
         bool fboSupported_ = false;
         // Every live texture, so DebugRestoreContext() can rebuild them all against the new
         // context. Raw pointers are safe here because each texture unregisters in its destructor.
+        // Sampler state as last pushed down by GraphicsDevice, remembered per slot so each draw
+        // can re-apply it to the texture it actually binds (see ApplySamplerToBoundTextureEXT).
+        static constexpr int kMaxSamplerSlots = 4;
+        int samplerFilter_[kMaxSamplerSlots] = {};
+        int samplerAddressU_[kMaxSamplerSlots] = {};
+        int samplerAddressV_[kMaxSamplerSlots] = {};
+
         std::vector<OpenGLES1TextureBackend*> liveTextures_;
         std::vector<OpenGLES1VertexBufferBackend*> liveVertexBuffers_;
         std::vector<OpenGLES1IndexBufferBackend*> liveIndexBuffers_;
         bool cubeMapSupported_ = false;
+        bool mirroredRepeatSupported_ = false;
         int maxTextureUnits_ = 1;
 
         // Wireframe emulation (OPENGLES1-76): FillMode::WireFrame has no glPolygonMode

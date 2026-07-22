@@ -42,6 +42,9 @@ export GALLIUM_DRIVER="${GALLIUM_DRIVER:-softpipe}"
 # GLX path this backend goes through; force the X11 driver deliberately.
 unset WAYLAND_DISPLAY
 export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-x11}"
-export DISPLAY="${DISPLAY:-:0}"
+
+# Default to the virtual display so test runs do not pop windows onto the developer's real
+# desktop. Export DISPLAY yourself (e.g. DISPLAY=:0) if you deliberately want to watch them.
+export DISPLAY="${DISPLAY:-:99}"
 
 exec "$@"

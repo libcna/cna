@@ -54,6 +54,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGLES1_ResolutionStateToggles_Readback COMMAND cna_test_opengles1_resolution_statetoggles
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengles1.md OPENGLES1-78: the same tools/xna-oracle/CnaOracleRender.cpp the D3D9 and
+    # EasyGL branches already build, linked against this backend, so the checked-in scene corpus can
+    # be rendered through real ES 1.1 and diffed against the real XNA 4.0 reference images by
+    # scripts/run-oracle-corpus-diff-opengles1.sh. Not registered as a CTest for the same reason
+    # cna_oracle_render_easygl is not: it is a comparison tool with no pass/fail assertion of its
+    # own -- xna-diff.py is what judges its output.
+    cna_opengles1_test(cna_oracle_render_opengles1 tools/xna-oracle/CnaOracleRender.cpp)
+
     # plan_opengles1.md OPENGLES1-79: viewport and scissor clipping (OPENGLES1-29).
     cna_opengles1_test(cna_test_opengles1_viewport_scissor examples/opengles1_viewport_scissor_test.cpp)
     cna_register_backend_test(NAME OpenGLES1_ViewportScissor_Readback COMMAND cna_test_opengles1_viewport_scissor

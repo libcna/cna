@@ -96,9 +96,14 @@
 > `SpriteBatch` transform matrix, `OPENGLES1-20` separate colour/alpha blend factors). Seven
 > executables, 51 pixel-asserted checks, all green under `ctest -R OpenGLES1`.
 >
-> What remains ⬜ is only what ES 1.1 genuinely cannot do (`OPENGLES1-75` occlusion query, plus the
-> shader/skinning/PBR gaps in the deviation table) and `OPENGLES1-78`, the cross-backend
-> pixel-parity comparison.
+> `OPENGLES1-78` then measured the backend against the 39-scene XNA oracle corpus and found two
+> further real defects (sampler state landing on the wrong texture object in the 3D paths, and
+> `TextureAddressMode::Mirror` silently degrading to Wrap) — both fixed; see
+> `docs/opengles1-parity-report.md`.
+>
+> **Every task row is now ✅ except `OPENGLES1-75`**, which is ⬜ because ES 1.1 genuinely has no
+> occlusion-query mechanism at all (the shader/skinning/PBR gaps in the deviation table are the
+> same kind of permanent limit).
 
 ## Design decisions
 
@@ -195,8 +200,10 @@
    runtime row to ✅ and exposing four real backend defects (see the finding above).
 7. `OPENGLES1-79` — ✅ done 2026-07-22 (the five new test executables above).
 8. `OPENGLES1-80` — ✅ done 2026-07-22 (buffer contents now survive a context loss).
-9. **Next:** the five uncovered rows listed in `OPENGLES1-77`, then `OPENGLES1-78` (cross-backend
-   pixel parity).
+9. `OPENGLES1-78` — ✅ done 2026-07-22 (39-scene corpus vs. real XNA 4.0; 6/39 exact vs. EasyGL's
+   10/39, and it found two more real defects — see `docs/opengles1-parity-report.md`).
+10. **Next:** explain the two open parity rows (`dualtexture_quad`, `fog_gradient_quad`), which are
+    recorded as unexplained rather than rationalised away.
 
 ---
 
@@ -255,7 +262,7 @@ above for the technical detail behind each row.
 | OPENGLES1-75 | `OcclusionQuery` — **researched and confirmed impossible**, not merely deferred: the real system `GLES/gl.h`/`GLES/glext.h` (Debian/Ubuntu `libgles-dev`) contain no occlusion-query mechanism of any kind anywhere in the ES 1.1 CM registry (`GL_OES_query_matrix` is unrelated — it queries the current matrix stack, not visibility) | ⬜ (confirmed impossible) | `CreateOcclusionQuery()` keeps the base class's `nullptr` default; `SupportsCapability(OcclusionQuery)` stays `false` permanently, joining skinning/PBR/custom-shader in the "genuinely no fixed-function/extension path exists" category rather than the "not yet implemented" one. |
 | OPENGLES1-76 | Wireframe emulation: re-expands `TriangleList`/`TriangleStrip` draws into `GL_LINES`, the same technique `EasyGLGraphicsBackend::DrawWireframe` already uses for its own no-`glPolygonMode` problem | ✅ | Indexed draws read the real triangle indices from `OpenGLES1IndexBufferBackend`'s CPU shadow (`OPENGLES1-73`); non-indexed draws use sequential vertex order. `SupportsCapability(WireFrame)` now reports `true`. |
 | OPENGLES1-77 | Runtime verification on an ES1-capable driver | ✅ | Done 2026-07-22. Debian builds Mesa `-Dgles1=disabled`, so no stock Debian driver creates an ES1 context; a local `-Dgles1=enabled` softpipe build does (recipe in `docs/opengles1-backend.md`, environment in `scripts/opengles1-test-env.sh`). Seven test executables — 51 pixel-asserted checks — now pass against a real `OpenGL ES-CM 1.1` context, flipping every runtime row to ✅ and exposing four real defects on the way (OPENGLES1-24 inverted alpha test, OPENGLES1-72 missing render-target readback, OPENGLES1-11 textures and OPENGLES1-80 buffers not restored after a context loss). |
-| OPENGLES1-78 | Cross-backend pixel-parity test (same scene rendered on OPENGLES1 vs. an already-verified backend) | ⬜ | Same shape as `plan_webgpu.md`'s own `WEBGPU-123`; needs OPENGLES1-77 first. |
+| OPENGLES1-78 | Cross-backend pixel-parity test (same scene rendered on OPENGLES1 vs. an already-verified backend) | ✅ | Done 2026-07-22. `cna_oracle_render_opengles1` builds the same `tools/xna-oracle/CnaOracleRender.cpp` the D3D9/EasyGL measurements already use, and `scripts/run-oracle-corpus-diff-opengles1.sh` renders all 39 checked-in scenes and diffs them against the real XNA 4.0 reference PNGs. Result: **6/39 exact at tolerance 0, 11/39 at tolerance 1**, against **10/39** for EasyGL on the same corpus and machine. A measurement, not a gate (same precedent as `D9-A6`). It found two real defects — sampler state applied to the wrong texture object on the 3D paths, and `TextureAddressMode::Mirror` degrading to Wrap despite `GL_OES_texture_mirrored_repeat` being available — both fixed. Full per-scene table and the two still-unexplained rows (`dualtexture_quad`, `fog_gradient_quad`) are in `docs/opengles1-parity-report.md`. |
 | OPENGLES1-79 | Runtime coverage for the rows the baseline smoke test does not reach | ✅ | Done 2026-07-22. Five new test executables (`RenderState`, `ViewportScissor`, `LightingFogAlphaTest`, `BuffersRenderTarget`, `MultitextureContextLoss`) covering blend/depth/cull/sampler state, viewport and scissor, lighting/fog/alpha test, real VBO/IBO draws, render targets, wireframe, dual texture, environment mapping and context loss — 37 checks, all passing. Three backend defects found and fixed (see OPENGLES1-24/72/11). Remaining uncovered rows are listed in OPENGLES1-77. |
 | OPENGLES1-80 | Restore vertex/index buffer contents across a GL context loss | ✅ | Done 2026-07-22. `OpenGLES1VertexBufferBackend` gained a raw-byte CPU shadow (draws still always read the GPU buffer) and `OpenGLES1IndexBufferBackend` reuses the shadow wireframe emulation already kept; both register with the backend and are rebuilt in `DebugRestoreContext()` alongside textures, unregistering in their destructors so the tracked pointers cannot dangle. Covered by a check in `OpenGLES1_MultitextureContextLoss_Readback` that fills both buffers, loses the context, and draws without re-uploading — verified to fail (black) with the restore loop removed and pass (green quad) with it. |
 

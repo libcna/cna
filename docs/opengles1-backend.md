@@ -122,6 +122,12 @@ zeroes because the backend never overrode the interface's no-op default, and nei
 vertex/index buffers were rebuilt after a context loss (textures sampled as plain white, buffer
 draws rendered nothing). All four are fixed.
 
+Rendering the 39-scene XNA oracle corpus afterwards (`OPENGLES1-78`) found two further real
+defects that those targeted tests had missed — sampler state was applied to whichever texture
+happened to be bound rather than the one the 3D draw binds, and `TextureAddressMode::Mirror`
+degraded to Wrap even though `GL_OES_texture_mirrored_repeat` was available. Both are fixed;
+`docs/opengles1-parity-report.md` has the per-scene numbers and the comparison against EasyGL.
+
 One behaviour that looks like a bug but is not: `Clear` deliberately forces the depth mask writable
 so the clear value always lands, which means a `SetDepthWriteEnabled(false)` issued *before* a clear
 is undone by it. That is OPENGLES1-7's stated behaviour and matches EasyGL; set the toggle after
