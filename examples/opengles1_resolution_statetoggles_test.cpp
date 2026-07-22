@@ -16,6 +16,9 @@
 // Check G -- SpriteBatch::Begin(..., transformMatrix) translates the drawn sprite.
 // Check H -- a BlendState with different colour and alpha blend factors is honoured
 //   (glBlendFuncSeparateOES where the driver exposes it).
+// Check I -- the reported backbuffer MSAA count and SupportsCapability(MultiSampleAntiAliasing)
+//   agree with each other, and the count is what the driver granted rather than what was asked
+//   for (OPENGLES1-87).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver; see
 // docs/opengles1-backend.md.
@@ -35,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "CNA/Internal/Backends/OpenGLES1/OpenGLES1GraphicsBackend.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -78,7 +82,7 @@ namespace
 
 class OpenGLES1ResolutionStateTogglesTest : public Game
 {
-    static constexpr int kChecks = 8;
+    static constexpr int kChecks = 9;
 
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     SpriteBatch* spriteBatch_ = nullptr;
@@ -250,6 +254,18 @@ protected:
             check(colorNear(got, Color(255, 0, 255)),
                   "BlendState with separate colour/alpha factors sums the colour channels");
             dev.setBlendStateProperty(BlendState::Opaque);
+        }
+
+        // ---- Check I: MSAA is reported honestly ------------------------------------------
+        {
+            const int samples = backend.GetMultiSampleCount();
+            const bool claims = dev.SupportsCapability(CNA::GraphicsCapability::MultiSampleAntiAliasing);
+            std::printf("       (backbuffer MSAA samples = %d, SupportsCapability = %s)\n",
+                        samples, claims ? "true" : "false");
+            // The two must never disagree, and a count of exactly 1 is meaningless -- it has to be
+            // reported as "no MSAA" (0) so callers cannot mistake it for a multisampled buffer.
+            check(claims == (samples > 1) && samples != 1,
+                  "backbuffer MSAA count and its capability flag agree, and 1 is never reported");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);

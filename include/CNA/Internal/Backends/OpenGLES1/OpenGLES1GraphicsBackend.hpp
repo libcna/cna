@@ -516,6 +516,13 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// NOXNA. True when GL_OES_framebuffer_object is usable (see fboSupported_).
         [[nodiscard]] bool HasFramebufferObjectsEXT() const { return fboSupported_; }
 
+        /**
+         * @brief Returns the backbuffer's actual multisample count.
+         *
+         * @return The granted sample count, or 0 when the backbuffer is not multisampled.
+         */
+        [[nodiscard]] int GetMultiSampleCount() const override { return actualMultiSampleCount_; }
+
         /** @brief Creates a framebuffer object. @param out Receives the new name. */
         void GenFramebufferEXT(unsigned int* out) const { if (glGenFramebuffersOES_) glGenFramebuffersOES_(1, out); }
         /** @brief Deletes a framebuffer object. @param name Name to delete, then zeroed. */
@@ -676,6 +683,10 @@ namespace CNA::Internal::Backends::OpenGLES1
         bool mirroredRepeatSupported_ = false;
         bool elementIndexUintSupported_ = false;
         bool blendMinMaxSupported_ = false;
+        // Requested vs. granted backbuffer MSAA (OPENGLES1-87). Only the granted count is ever
+        // reported outwards; a driver that silently ignores the request must not be believed.
+        int requestedMultiSampleCount_ = 1;
+        int actualMultiSampleCount_ = 0;
         float maxAnisotropy_ = 1.0f;   // 1.0 means GL_EXT_texture_filter_anisotropic is absent
         int maxTextureUnits_ = 1;
 

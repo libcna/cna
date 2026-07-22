@@ -567,6 +567,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)
         , swapInterval_(args.swapInterval)
+        , requestedMultiSampleCount_(args.multiSampleCount)
     {
         if (!window_) throw std::runtime_error("OpenGLES1GraphicsBackend initialized with null window.");
 
@@ -604,13 +605,36 @@ namespace CNA::Internal::Backends::OpenGLES1
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
         SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
+        // OPENGLES1-87: backbuffer MSAA. Requesting samples the driver cannot give makes context
+        // creation fail outright, so a failed attempt is retried without them rather than taking
+        // the whole device down over an optional quality setting.
+        const bool wantMsaa = requestedMultiSampleCount_ > 1;
+        if (wantMsaa)
+        {
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, requestedMultiSampleCount_);
+        }
+
         glContext_ = SDL_GL_CreateContext(window_);
+        if (!glContext_ && wantMsaa)
+        {
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+            glContext_ = SDL_GL_CreateContext(window_);
+        }
+
         if (!glContext_)
         {
             throw std::runtime_error(
                 std::string("OpenGLES1: SDL_GL_CreateContext failed (no OpenGL ES 1.1 driver "
                             "available on this system): ") + SDL_GetError());
         }
+
+        // Report what was actually granted, never what was asked for.
+        int grantedBuffers = 0, grantedSamples = 0;
+        SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &grantedBuffers);
+        SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &grantedSamples);
+        actualMultiSampleCount_ = (grantedBuffers > 0 && grantedSamples > 1) ? grantedSamples : 0;
     }
 
     void OpenGLES1GraphicsBackend::DestroyGLContext()
@@ -2070,7 +2094,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         {
         case CNA::GraphicsCapability::ThreeD: return true;
         case CNA::GraphicsCapability::DepthStencilBuffer: return true;
-        case CNA::GraphicsCapability::MultiSampleAntiAliasing: return false;
+        case CNA::GraphicsCapability::MultiSampleAntiAliasing: return actualMultiSampleCount_ > 1;
         case CNA::GraphicsCapability::MultipleRenderTargets: return false;
         case CNA::GraphicsCapability::AnisotropicFiltering: return maxAnisotropy_ > 1.0f;
         // OPENGLES1-76: emulated via GL_LINES re-expansion (see ApplyRasterizerState/Draw*).
