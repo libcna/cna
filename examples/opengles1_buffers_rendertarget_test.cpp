@@ -6,6 +6,8 @@
 // Check A -- a VertexBuffer draw (glDrawArrays over a real VBO) reaches the backbuffer.
 // Check B -- an IndexBuffer draw (glDrawElements over a real IBO) reaches it too...
 // Check C -- ...and respects the indices, leaving a region the indices exclude untouched.
+// Check C2 -- a 32-bit index buffer (OPENGLES1-83) addresses a vertex above the 16-bit limit,
+//   which a silently-truncating 16-bit fallback could not reach.
 // Check D -- rendering into a RenderTarget2D writes the target, not the backbuffer...
 // Check E -- ...the backbuffer is genuinely left alone while the target is bound...
 // Check F -- ...and unbinding restores drawing to the backbuffer.
@@ -38,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Backends/OpenGLES1/OpenGLES1GraphicsBackend.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -116,6 +119,8 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
+        auto& backend = static_cast<CNA::Internal::Backends::OpenGLES1::OpenGLES1GraphicsBackend&>(
+            dev.GetBackend());
         const int mid = kSize / 2;
 
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -183,6 +188,55 @@ protected:
                   "IndexBuffer -- an indexed draw out of a real GPU index buffer reaches the backbuffer");
             check(colorNear(readPixel(dev, 3 * kSize / 4, mid), Color::Black),
                   "IndexBuffer -- vertices the indices never reference stay unrasterised");
+
+            dev.SetIndexBuffer(nullptr);
+            dev.SetVertexBuffer(nullptr);
+        }
+
+        // ---- Check C2: 32-bit indices ----------------------------------------------------
+        if (!backend.SupportsThirtyTwoBitIndicesEXT())
+        {
+            skip("IndexBuffer -- 32-bit indices (driver lacks GL_OES_element_index_uint)");
+        }
+        else
+        {
+            // A vertex buffer deliberately larger than the 16-bit index space, whose ONLY non-black
+            // vertices live past index 65535. A 16-bit fallback cannot address them at all, so a
+            // green quad here proves real 32-bit indexing rather than a silent narrowing.
+            constexpr int kBeyond16Bit = 70000;
+            std::vector<VertexPositionColor> verts(
+                kBeyond16Bit + 4, VertexPositionColor(Vector3(0.0f, 0.0f, 0.0f), Color::Black));
+            verts[kBeyond16Bit + 0] = { Vector3(-1.0f, 1.0f, 0.0f), Color::Lime };
+            verts[kBeyond16Bit + 1] = { Vector3(-1.0f, -1.0f, 0.0f), Color::Lime };
+            verts[kBeyond16Bit + 2] = { Vector3(1.0f, -1.0f, 0.0f), Color::Lime };
+            verts[kBeyond16Bit + 3] = { Vector3(1.0f, 1.0f, 0.0f), Color::Lime };
+
+            const std::vector<std::uint32_t> indices = {
+                static_cast<std::uint32_t>(kBeyond16Bit + 0),
+                static_cast<std::uint32_t>(kBeyond16Bit + 1),
+                static_cast<std::uint32_t>(kBeyond16Bit + 2),
+                static_cast<std::uint32_t>(kBeyond16Bit + 0),
+                static_cast<std::uint32_t>(kBeyond16Bit + 2),
+                static_cast<std::uint32_t>(kBeyond16Bit + 3),
+            };
+
+            auto decl = posColorDecl();
+            VertexBuffer vb(dev, decl, static_cast<int>(verts.size()), BufferUsage::None);
+            vb.SetData(verts.data(), 0, static_cast<int>(verts.size()));
+
+            IndexBuffer ib(dev, IndexElementSize::ThirtyTwoBits,
+                           static_cast<int>(indices.size()), BufferUsage::None);
+            ib.SetData(indices.data(), 0, static_cast<int>(indices.size()));
+
+            dev.Clear(Color::Black);
+            dev.SetVertexBuffer(&vb);
+            dev.SetIndexBuffer(&ib);
+            fx.Apply();
+            dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0,
+                                      static_cast<int>(verts.size()), 0, 2);
+
+            check(colorNear(readPixel(dev, mid, mid), Color::Lime),
+                  "IndexBuffer -- 32-bit indices reach a vertex beyond the 16-bit limit");
 
             dev.SetIndexBuffer(nullptr);
             dev.SetVertexBuffer(nullptr);

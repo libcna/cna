@@ -243,8 +243,9 @@ namespace CNA::Internal::Backends::OpenGLES1
         glBindBuffer(GL_ARRAY_BUFFER, buffer_);
     }
 
-    OpenGLES1IndexBufferBackend::OpenGLES1IndexBufferBackend(OpenGLES1GraphicsBackend* owner, int indexCapacity)
-        : owner_(owner), indexCapacity_(indexCapacity)
+    OpenGLES1IndexBufferBackend::OpenGLES1IndexBufferBackend(OpenGLES1GraphicsBackend* owner, int indexCapacity,
+                                                             bool thirtyTwoBit)
+        : owner_(owner), indexCapacity_(indexCapacity), thirtyTwoBit_(thirtyTwoBit)
     {
         glGenBuffers(1, &buffer_);
         if (owner_) owner_->RegisterIndexBufferEXT(this);
@@ -262,9 +263,20 @@ namespace CNA::Internal::Backends::OpenGLES1
         glGenBuffers(1, &buffer_);
         if (cpuShadow_.empty()) return;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_);
+
+        if (thirtyTwoBit_)
+        {
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                         static_cast<GLsizeiptr>(cpuShadow_.size() * sizeof(uint32_t)),
+                         cpuShadow_.data(), GL_DYNAMIC_DRAW);
+            return;
+        }
+
+        // The shadow is widened; narrow it back for the GPU copy.
+        std::vector<uint16_t> narrow(cpuShadow_.begin(), cpuShadow_.end());
         glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                     static_cast<GLsizeiptr>(cpuShadow_.size() * sizeof(uint16_t)),
-                     cpuShadow_.data(), GL_DYNAMIC_DRAW);
+                     static_cast<GLsizeiptr>(narrow.size() * sizeof(uint16_t)),
+                     narrow.data(), GL_DYNAMIC_DRAW);
     }
 
     void OpenGLES1IndexBufferBackend::SetData16(const void* data, int index_count)
@@ -273,9 +285,24 @@ namespace CNA::Internal::Backends::OpenGLES1
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(static_cast<std::size_t>(index_count) * sizeof(uint16_t)),
                     data, GL_DYNAMIC_DRAW);
-        cpuShadow_.resize(static_cast<std::size_t>(index_count));
-        if (index_count > 0)
-            std::memcpy(cpuShadow_.data(), data, cpuShadow_.size() * sizeof(uint16_t));
+
+        // Widened on the CPU side so the shadow has one shape regardless of index size.
+        const auto* src = static_cast<const uint16_t*>(data);
+        cpuShadow_.assign(src, src + (index_count > 0 ? index_count : 0));
+    }
+
+    void OpenGLES1IndexBufferBackend::SetData32(const void* data, int index_count)
+    {
+        if (!thirtyTwoBit_)
+            throw std::runtime_error("OpenGLES1IndexBufferBackend: SetData32 on a 16-bit index buffer");
+
+        indexCount_ = index_count;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(static_cast<std::size_t>(index_count) * sizeof(uint32_t)),
+                    data, GL_DYNAMIC_DRAW);
+
+        const auto* src = static_cast<const uint32_t*>(data);
+        cpuShadow_.assign(src, src + (index_count > 0 ? index_count : 0));
     }
 
     void OpenGLES1IndexBufferBackend::Bind() const
@@ -529,6 +556,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         // Pure state-only extension -- no entry points to resolve, so the string is the whole
         // capability check (unlike the FBO/cube-map ones below).
         mirroredRepeatSupported_ = HasGLExtension("GL_OES_texture_mirrored_repeat");
+        elementIndexUintSupported_ = HasGLExtension("GL_OES_element_index_uint");
 
         fboSupported_ = HasGLExtension("GL_OES_framebuffer_object");
         if (fboSupported_)
@@ -872,6 +900,17 @@ namespace CNA::Internal::Backends::OpenGLES1
     std::unique_ptr<IIndexBufferBackend> OpenGLES1GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
         return std::make_unique<OpenGLES1IndexBufferBackend>(this, index_capacity);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> OpenGLES1GraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    {
+        // GL_UNSIGNED_INT indices are not ES 1.1 core. Without the extension, fall back to the base
+        // class's 16-bit delegation rather than silently handing back a buffer that cannot address
+        // what the caller asked for.
+        if (!elementIndexUintSupported_)
+            return IGraphicsBackend::CreateIndexBuffer32(index_capacity);
+
+        return std::make_unique<OpenGLES1IndexBufferBackend>(this, index_capacity, /*thirtyTwoBit=*/true);
     }
 
     // -------------------------------------------------------------------------
@@ -1249,20 +1288,20 @@ namespace CNA::Internal::Backends::OpenGLES1
         // each triangle into a GL_LINES edge list, mirroring
         // EasyGLGraphicsBackend::DrawWireframe's identical technique. `indices` is null for a
         // non-indexed draw (vertex sequence read directly 0..N-1).
-        std::vector<uint16_t> BuildWireframeLineIndices(PrimitiveType primitive, int primitiveCount,
-                                                        const uint16_t* indices)
+        std::vector<uint32_t> BuildWireframeLineIndices(PrimitiveType primitive, int primitiveCount,
+                                                        const uint32_t* indices)
         {
-            std::vector<uint16_t> lines;
-            auto readSrc = [&](int pos) -> uint16_t
+            std::vector<uint32_t> lines;
+            auto readSrc = [&](int pos) -> uint32_t
             {
-                return indices ? indices[pos] : static_cast<uint16_t>(pos);
+                return indices ? indices[pos] : static_cast<uint32_t>(pos);
             };
-            auto edge = [&](uint16_t a, uint16_t b) { lines.push_back(a); lines.push_back(b); };
+            auto edge = [&](uint32_t a, uint32_t b) { lines.push_back(a); lines.push_back(b); };
             if (primitive == PrimitiveType::TriangleList)
             {
                 for (int t = 0; t < primitiveCount; ++t)
                 {
-                    const uint16_t a = readSrc(3 * t), b = readSrc(3 * t + 1), c = readSrc(3 * t + 2);
+                    const uint32_t a = readSrc(3 * t), b = readSrc(3 * t + 1), c = readSrc(3 * t + 2);
                     edge(a, b); edge(b, c); edge(c, a);
                 }
             }
@@ -1270,7 +1309,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             {
                 for (int t = 0; t < primitiveCount; ++t)
                 {
-                    const uint16_t a = readSrc(t), b = readSrc(t + 1), c = readSrc(t + 2);
+                    const uint32_t a = readSrc(t), b = readSrc(t + 1), c = readSrc(t + 2);
                     edge(a, b); edge(b, c); edge(c, a);
                 }
             }
@@ -1281,11 +1320,23 @@ namespace CNA::Internal::Backends::OpenGLES1
         // GL_ELEMENT_ARRAY_BUFFER must be unbound first so glDrawElements' pointer argument is
         // interpreted as a real client pointer, not an offset into whatever IBO the real
         // (non-wireframe) draw had bound.
-        void DrawWireframeLines(const std::vector<uint16_t>& lines)
+        void DrawWireframeLines(const std::vector<uint32_t>& lines, bool elementIndexUintSupported)
         {
             if (lines.empty()) return;
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-            glDrawElements(GL_LINES, static_cast<GLsizei>(lines.size()), GL_UNSIGNED_SHORT, lines.data());
+
+            // The expansion is built in 32 bits so one code path serves both index sizes, but
+            // GL_UNSIGNED_INT itself needs GL_OES_element_index_uint -- narrow the copy when the
+            // driver lacks it. Indices above 65535 cannot occur there anyway, since a 32-bit index
+            // buffer is never handed out without the extension (see CreateIndexBuffer32).
+            if (elementIndexUintSupported)
+            {
+                glDrawElements(GL_LINES, static_cast<GLsizei>(lines.size()), GL_UNSIGNED_INT, lines.data());
+                return;
+            }
+
+            std::vector<uint16_t> narrow(lines.begin(), lines.end());
+            glDrawElements(GL_LINES, static_cast<GLsizei>(narrow.size()), GL_UNSIGNED_SHORT, narrow.data());
         }
 
         // Sets up GL_LIGHTn (n=0..2) from a BasicEffect-shaped GpuDrawParams, called with
@@ -1450,7 +1501,8 @@ namespace CNA::Internal::Backends::OpenGLES1
         SetupClientArraysForStride(vb.Stride(), /*color*/true, /*texture*/false, /*normal*/false);
 
         if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
-            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, nullptr));
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, nullptr),
+                               elementIndexUintSupported_);
         else
             glDrawArrays(ToGLPrimitive(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
     }
@@ -1484,12 +1536,15 @@ namespace CNA::Internal::Backends::OpenGLES1
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
         {
-            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, ib.CpuShadow().data()));
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, ib.CpuShadow().data()),
+                               elementIndexUintSupported_);
         }
         else
         {
             ib.Bind();
-            glDrawElements(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const void*>(std::size_t{0}));
+            glDrawElements(ToGLPrimitive(primitive), indexCount,
+                           ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
+                           reinterpret_cast<const void*>(std::size_t{0}));
         }
     }
 
@@ -1591,7 +1646,8 @@ namespace CNA::Internal::Backends::OpenGLES1
                                    wantNormal, wantDualTexture);
 
         if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
-            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, nullptr));
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, nullptr),
+                               elementIndexUintSupported_);
         else
             glDrawArrays(ToGLPrimitive(primitive), 0, VertexCountForPrimitives(primitive, primitiveCount));
 
@@ -1687,12 +1743,15 @@ namespace CNA::Internal::Backends::OpenGLES1
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
         {
-            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, ib.CpuShadow().data()));
+            DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, ib.CpuShadow().data()),
+                               elementIndexUintSupported_);
         }
         else
         {
             ib.Bind();
-            glDrawElements(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT, reinterpret_cast<const void*>(std::size_t{0}));
+            glDrawElements(ToGLPrimitive(primitive), indexCount,
+                           ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT,
+                           reinterpret_cast<const void*>(std::size_t{0}));
         }
 
         glDisable(GL_FOG);

@@ -133,13 +133,31 @@ namespace CNA::Internal::Backends::OpenGLES1
     class OpenGLES1IndexBufferBackend : public IIndexBufferBackend
     {
     public:
-        OpenGLES1IndexBufferBackend(OpenGLES1GraphicsBackend* owner, int indexCapacity);
+        /**
+         * @brief Creates a 16- or 32-bit index buffer.
+         *
+         * @param owner Backend used for context-loss restoration; may be null.
+         * @param indexCapacity Number of indices the buffer must hold.
+         * @param thirtyTwoBit True for 32-bit indices, which require `GL_OES_element_index_uint`.
+         */
+        OpenGLES1IndexBufferBackend(OpenGLES1GraphicsBackend* owner, int indexCapacity,
+                                    bool thirtyTwoBit = false);
         ~OpenGLES1IndexBufferBackend() override;
 
         OpenGLES1IndexBufferBackend(const OpenGLES1IndexBufferBackend&) = delete;
         OpenGLES1IndexBufferBackend& operator=(const OpenGLES1IndexBufferBackend&) = delete;
 
         void SetData16(const void* data, int index_count) override;
+
+        /**
+         * @brief Uploads 32-bit indices; only valid on a buffer created as 32-bit.
+         *
+         * @param data Source indices.
+         * @param index_count Number of indices to upload.
+         */
+        void SetData32(const void* data, int index_count) override;
+
+        [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
         int GetIndexCount() const override { return indexCount_; }
 
         /**
@@ -152,15 +170,18 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// NOXNA. Binds this buffer's VBO to GL_ELEMENT_ARRAY_BUFFER -- callers then pass a byte
         /// offset (not a raw pointer) as glDrawElements' `indices` argument.
         void Bind() const;
-        /// NOXNA. CPU-side shadow of the index values, for wireframe emulation only (see above).
-        [[nodiscard]] const std::vector<uint16_t>& CpuShadow() const { return cpuShadow_; }
+        /// NOXNA. CPU-side shadow of the index values, for wireframe emulation and context-loss
+        /// restore only (see above). Always widened to 32 bits so one accessor serves both index
+        /// sizes; the GPU buffer still holds the narrow form for 16-bit buffers.
+        [[nodiscard]] const std::vector<uint32_t>& CpuShadow() const { return cpuShadow_; }
 
     private:
         OpenGLES1GraphicsBackend* owner_ = nullptr;
         unsigned int buffer_ = 0;
         int indexCapacity_ = 0;
         int indexCount_ = 0;
-        std::vector<uint16_t> cpuShadow_;
+        bool thirtyTwoBit_ = false;
+        std::vector<uint32_t> cpuShadow_;
     };
 
     class OpenGLES1GraphicsBackend;
@@ -376,6 +397,14 @@ namespace CNA::Internal::Backends::OpenGLES1
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
 
+        /**
+         * @brief Creates a 32-bit index buffer when `GL_OES_element_index_uint` is available.
+         *
+         * @param index_capacity Number of indices the buffer must hold.
+         * @return A 32-bit buffer, or the base class's 16-bit fallback when the extension is absent.
+         */
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
+
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -443,6 +472,10 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// NOXNA. True when GL_OES_texture_mirrored_repeat is present, i.e. when
         /// TextureAddressMode::Mirror can be honoured instead of degrading to Wrap.
         [[nodiscard]] bool SupportsMirroredRepeat() const { return mirroredRepeatSupported_; }
+
+        /// NOXNA. True when GL_OES_element_index_uint is present, i.e. when 32-bit index buffers
+        /// are real rather than silently narrowed to 16 bits.
+        [[nodiscard]] bool SupportsThirtyTwoBitIndicesEXT() const { return elementIndexUintSupported_; }
         /// NOXNA. Whether a second texture unit is actually available (GL_MAX_TEXTURE_UNITS >= 2),
         /// needed for a real DualTextureEffect dispatch.
         [[nodiscard]] bool SupportsSecondTextureUnit() const { return maxTextureUnits_ >= 2; }
@@ -559,6 +592,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         std::vector<OpenGLES1IndexBufferBackend*> liveIndexBuffers_;
         bool cubeMapSupported_ = false;
         bool mirroredRepeatSupported_ = false;
+        bool elementIndexUintSupported_ = false;
         int maxTextureUnits_ = 1;
 
         // Wireframe emulation (OPENGLES1-76): FillMode::WireFrame has no glPolygonMode
