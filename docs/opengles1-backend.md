@@ -105,35 +105,79 @@ registers `OpenGLES1_Clear_Readback` unconditionally (no automatic skip) — on 
 real ES1 driver it fails fast with the `SDL_GL_CreateContext failed` message above, same as a
 Vulkan test would fail without an ICD.
 
-### Getting an ES1-capable Mesa locally (the route to `OPENGLES1-77`)
+### Getting an ES1-capable Mesa locally — done, and it works
 
 Since the blocker is only Debian's `-Dgles1=disabled`, a side-by-side Mesa build with ES1 turned
-back on is enough — no special hardware, and it does not have to replace the system Mesa:
+back on is enough: no special hardware, no replacing the system Mesa, and **no root** — the build
+below was actually performed and produced a working ES1 driver on this host on 2026-07-22.
+
+Toolchain first. `meson`, `bison`, `flex` and a few `-dev` headers are missing from this host, but
+none of them need `sudo`: `apt-get download` works as an ordinary user, and `dpkg-deb -x` unpacks
+into a private prefix.
 
 ```bash
-sudo apt-get install -y meson bison flex libdrm-dev libexpat1-dev \
-    libxcb-dri3-dev libxcb-present-dev libxcb-glx0-dev libxshmfence-dev
+mkdir -p ~/deps/es1-toolchain/debs && cd ~/deps/es1-toolchain/debs
+apt-get download m4 bison flex libfl-dev libexpat1-dev \
+    libxcb-dri3-dev libxcb-present-dev libxcb-glx0-dev libxshmfence-dev \
+    libxcb-dri2-0-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-sync-dev \
+    libxcb-xfixes0-dev libxcb-shape0-dev libxcb-keysyms1-dev libxcb-util-dev \
+    libx11-xcb-dev libxcb-render0-dev libxfixes-dev libxdamage-dev
+for d in *.deb; do dpkg-deb -x "$d" ~/deps/es1-toolchain/root; done
+pip install --user meson mako
+```
 
+Three gotchas, all of which will fail the build if skipped:
+
+1. The unpacked `bison` cannot find its own skeleton files — set `BISON_PKGDATADIR` (and `M4`,
+   since `m4` is not on the system either).
+2. `xcb/dri3.h` uses a *quoted* `#include "xcb.h"`, so it resolves against its own directory. The
+   unpacked headers live in a different prefix from the system `libxcb1-dev` ones, so symlink the
+   system `xcb` headers alongside them.
+3. The `-dev` packages' `.so` symlinks are relative and therefore dangle inside the private prefix.
+   Repoint them at the real system libraries and expose the directory through `LIBRARY_PATH`
+   (`meson` has already baked its link commands by then, so a late `-L` will not help).
+
+```bash
+TC=~/deps/es1-toolchain/root
+for h in /usr/include/xcb/*.h; do
+    [ -e "$TC/usr/include/xcb/$(basename $h)" ] || ln -s "$h" "$TC/usr/include/xcb/"
+done
+for l in $TC/usr/lib/x86_64-linux-gnu/*.so; do
+    [ -L "$l" ] && [ ! -e "$l" ] && ln -sf "/usr/lib/x86_64-linux-gnu/$(readlink $l)" "$l"
+done
+
+export PATH="$HOME/.local/bin:$TC/usr/bin:$PATH"
+export PKG_CONFIG_PATH="$TC/usr/lib/x86_64-linux-gnu/pkgconfig:$TC/usr/share/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig"
+export CPPFLAGS="-I$TC/usr/include"
+export BISON_PKGDATADIR="$TC/usr/share/bison" M4="$TC/usr/bin/m4"
+export LIBRARY_PATH="$TC/usr/lib/x86_64-linux-gnu"
+```
+
+Then Mesa itself (software drivers only — ES1 conformance here is about the fixed-function
+pipeline, not GPU throughput):
+
+```bash
 git clone --depth 1 -b mesa-25.0.7 https://gitlab.freedesktop.org/mesa/mesa.git ~/deps/mesa
 meson setup ~/deps/mesa/build-es1 ~/deps/mesa \
-    -Dprefix=$HOME/deps/mesa-es1-install \
+    --prefix=$HOME/deps/mesa-es1-install --buildtype=release \
     -Dgles1=enabled -Dgles2=enabled -Dopengl=true \
-    -Dgallium-drivers=softpipe -Dvulkan-drivers= -Dplatforms=x11
-ninja -C ~/deps/mesa/build-es1 install
+    -Dgallium-drivers=softpipe,llvmpipe -Dvulkan-drivers= \
+    -Dplatforms=x11 -Dglx=dri -Degl=enabled -Dgbm=enabled -Dvideo-codecs=
+ninja -C ~/deps/mesa/build-es1 -j4 install
 ```
 
-Then point the loader at it for the test run only (system Mesa left untouched):
+Confirm `gles1: enabled` in meson's summary, and `-DHAVE_OPENGL_ES_1=1` in the compile lines.
+
+To run the tests against it — system Mesa untouched — use the wrapper committed alongside this
+document, which sets the loader variables (and forces SDL off Wayland onto X11):
 
 ```bash
-export LD_LIBRARY_PATH=$HOME/deps/mesa-es1-install/lib/x86_64-linux-gnu
-export __EGL_VENDOR_LIBRARY_DIRS=$HOME/deps/mesa-es1-install/share/glvnd/egl_vendor.d
-export LIBGL_DRIVERS_PATH=$HOME/deps/mesa-es1-install/lib/x86_64-linux-gnu/dri
-export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=softpipe
-ctest --test-dir cmake-build-opengles1 -R OpenGLES1_Clear_Readback --output-on-failure
+scripts/opengles1-test-env.sh ctest --test-dir cmake-build-opengles1 -R OpenGLES1 --output-on-failure
 ```
 
-Verify the ES1 path is genuinely live before trusting a PASS — the raw EGL probe should report a
-created context, and `glGetString(GL_VERSION)` should start with `OpenGL ES-CM 1.1`.
+Do not trust a PASS without checking the ES1 path is genuinely live: the backend prints its
+context version at startup, and it must read `OpenGL ES-CM 1.1` — anything else means the loader
+silently fell back to the system Mesa.
 
 ## Implemented baseline
 

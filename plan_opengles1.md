@@ -10,30 +10,26 @@
 > 🟨 code exists but has not met those criteria (most commonly: correct and builds, but could not
 > be runtime-verified on this development host — see below); ⬜ not implemented.
 >
-> **A real, load-bearing finding from this backend's own bring-up (2026-07-21):** this project's
-> Linux development container has no OpenGL ES 1.1 driver capable of actually creating an ES1
-> context, despite Mesa's EGL implementation advertising ES1-capable configs. Verified with a
-> minimal raw EGL program, independent of SDL3/CNA: `eglChooseConfig()` with
-> `EGL_RENDERABLE_TYPE = EGL_OPENGL_ES_BIT` succeeds and reports every config ES1-capable, but
-> `eglCreateContext()` on that same config with `EGL_CONTEXT_CLIENT_VERSION = 1` fails with
-> `EGL_BAD_CONFIG` on every single config, consistently. The identical program requesting an ES2
-> context on the same driver succeeds without incident. See `docs/opengles1-backend.md` for the
-> full spike output. This means every runtime-behavior row below is honestly `🟨` (code reviewed
-> line-by-line against the ES 1.1 spec and this project's own established cross-backend
-> conventions, and confirmed to *compile and link* against real system `GLESv1_CM`/`GLES/gl.h`
-> headers/libraries) rather than `✅`, until run on a host with a genuine ES1 driver (embedded
-> Linux/Android/PowerVR/Mali hardware, or a desktop vendor driver — proprietary NVIDIA/AMD/Intel,
-> or an ES1-capable translation layer — that actually implements it). This is the same
-> "can't be runtime-validated on this particular container" situation this repository already
-> has for D3D11/D3D12 (Windows-only) and, to a lesser extent, Vulkan (needs a real ICD) — see
-> `plan_dx.md`'s own equivalent framing.
+> **A load-bearing finding from this backend's bring-up (2026-07-21), since fully explained and
+> resolved — read the 2026-07-22 entries below before acting on anything here.** Bring-up could not
+> create an ES1 context at all: `eglChooseConfig()` with
+> `EGL_RENDERABLE_TYPE = EGL_OPENGL_ES_BIT` succeeded and reported every config ES1-capable, yet
+> `eglCreateContext()` with `EGL_CONTEXT_CLIENT_VERSION = 1` failed on every one of them, while the
+> same program requesting ES2 succeeded. That made every runtime-behavior row below `🟨` (code
+> reviewed line-by-line against the ES 1.1 spec and this project's cross-backend conventions, and
+> confirmed to compile and link against real system `GLESv1_CM`/`GLES/gl.h`) rather than `✅`.
 >
-> **Platform scope:** any host with a real, working OpenGL ES 1.1 (Common profile) driver exposed
-> through EGL and reachable via `SDL_GL_CreateContext()` with
-> `SDL_GL_CONTEXT_PROFILE_MASK = SDL_GL_CONTEXT_PROFILE_ES`, `major=1`, `minor=1`. Confirmed NOT to
-> work on this project's own Mesa/llvmpipe development container (see above) — do not assume any
-> given Linux desktop host has a working ES1 driver without checking first (a quick way to check:
-> the raw EGL spike program described in `docs/opengles1-backend.md`).
+> Two corrections were later established, both recorded in detail further down: the failing error
+> code is `EGL_BAD_ALLOC`, not `EGL_BAD_CONFIG` as originally written; and the cause is **Debian
+> shipping Mesa built with `-Dgles1=disabled`**, not absent hardware. A locally built
+> `-Dgles1=enabled` Mesa now runs this backend for real on this very host.
+>
+> **Platform scope:** any host with a working OpenGL ES 1.1 (Common profile) driver reachable via
+> `SDL_GL_CreateContext()` with `SDL_GL_CONTEXT_PROFILE_MASK = SDL_GL_CONTEXT_PROFILE_ES`,
+> `major=1`, `minor=1`. Stock Debian Mesa does **not** qualify on any driver, including real GPUs;
+> a side-by-side `-Dgles1=enabled` Mesa (software `softpipe` is enough) does, and is what
+> `scripts/opengles1-test-env.sh` selects. Embedded/Android/PowerVR/Mali and proprietary desktop
+> drivers remain valid targets, but are no longer *required* to make progress.
 >
 > **Root cause identified (2026-07-22) — it is a Debian packaging decision, not a hardware,
 > driver, or upstream-Mesa limitation.** Re-tested on a separate Debian 13 host with a real AMD
@@ -61,6 +57,26 @@
 > `-Dgles1=enabled` (including a plain software `softpipe`/`llvmpipe` build) should be able to
 > create the context and run the pixel tests. The remaining blocker is simply that no such Mesa
 > build exists on this host yet.
+>
+> **RESOLVED, same day — the backend now runs for real.** That Mesa was then actually built
+> (rootless: `apt-get download` + `dpkg-deb -x` for the missing `meson`/`bison`/`flex`/xcb
+> toolchain, then `-Dgles1=enabled -Dgallium-drivers=softpipe,llvmpipe`; full reproducible recipe
+> and its three non-obvious pitfalls are in `docs/opengles1-backend.md`). Against it:
+>
+> - the raw EGL probe now reports **`eglCreateContext` ES1 SUCCEEDED**, and
+> - `cna_test_opengles1_clear_readback` runs end-to-end through the real backend and reports
+>   `OpenGLES1GraphicsBackend initialized with OpenGL ES OpenGL ES-CM 1.1 Mesa 25.0.7`,
+>   **5/5 checks PASS**, also green via `ctest -R OpenGLES1`.
+>
+> `scripts/opengles1-test-env.sh` wraps the loader environment so this is repeatable.
+>
+> **Be precise about what that does and does not prove.** It flips the rows that the smoke test
+> genuinely exercises (context creation, `Clear`, `Present`, `ReadBackbuffer`, `Texture2D` upload,
+> `SpriteBatch`, `DrawUserPrimitives`) to ✅. It does **not** verify lighting, fog, alpha test,
+> blend/depth/stencil/rasterizer/sampler state, scissor/viewport, context loss, render targets,
+> dual texture, environment mapping, or wireframe — those rows stay 🟨 not because the driver is
+> missing any more, but because **no test covers them yet**. Writing those tests is now ordinary
+> work rather than a hardware blocker, and is tracked as `OPENGLES1-79`.
 
 ## Design decisions
 
@@ -152,8 +168,13 @@
    map, wireframe) — ✅ code complete 2026-07-21, 🟨 runtime-unverifiable on this container, same
    as every other row (see the finding above). `OPENGLES1-75` (occlusion query) researched and
    confirmed **impossible** on ES 1.1 core, not merely deferred — see its own row.
-6. `OPENGLES1-77`/`OPENGLES1-78` — ⬜ blocked on access to a host with a genuine ES1 driver, not on
-   code — pick up if/when such a host becomes available.
+6. `OPENGLES1-77` — 🟨 **unblocked and partly done (2026-07-22).** A locally built
+   `-Dgles1=enabled` Mesa gives a genuine ES1 driver on this host, and the existing smoke test
+   passes 5/5 through it, flipping its seven covered rows to ✅. The rest of the 🟨 rows now lack
+   *tests*, not a driver.
+7. `OPENGLES1-79` — ⬜ **next task:** extend runtime coverage to the still-🟨 rows (state blocks,
+   lighting/fog/alpha test, viewport/scissor, context loss, render targets, dual texture,
+   environment map, wireframe), then `OPENGLES1-78` (cross-backend pixel parity).
 
 ---
 
@@ -165,21 +186,21 @@
 | OPENGLES1-2 | `cmake/BackendSelection.cmake`: add `OPENGLES1` to the `CNA_GRAPHICS_BACKEND` `STRINGS` list, `option(CNA_BACKEND_OPENGLES1 ...)`, `elseif` block setting `BACKEND_DIR`/`BACKEND_TARGET`/`CNA_BACKEND_DEFINE` | ✅ | `cmake -DCNA_GRAPHICS_BACKEND=OPENGLES1` selects the new backend dir/target. |
 | OPENGLES1-3 | `cmake/BackendLibraries.cmake`: `find_library(GLESv1_CM)` + `find_path(GLES/gl.h)`, `FATAL_ERROR` with install instructions if missing, link `SDL3::SDL3` + the found library | ✅ | Configure fails clearly without `libgles1`/`libgles-dev`; succeeds and links correctly with them installed (confirmed on this container after installing the packages). |
 | OPENGLES1-4 | `CMakeLists.txt`: `include(cmake/Tests/OpenGLES1Tests.cmake)` | ✅ | |
-| OPENGLES1-5 | Real ES 1.1 context creation via `SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION=1, MINOR=1, PROFILE_MASK=ES)` + `SDL_GL_CreateContext()`, depth/stencil buffer attributes, clear `std::runtime_error` on failure | ✅ code / 🟨 runtime | Same pattern as `EasyGLGraphicsBackend`'s own ES3 context creation (major/minor/profile changed). Cannot be runtime-verified on this container — see finding above; will throw its own descriptive error rather than segfault/hang if a host's driver can't create the context. |
+| OPENGLES1-5 | Real ES 1.1 context creation via `SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION=1, MINOR=1, PROFILE_MASK=ES)` + `SDL_GL_CreateContext()`, depth/stencil buffer attributes, clear `std::runtime_error` on failure | ✅ | Same pattern as `EasyGLGraphicsBackend`'s own ES3 context creation (major/minor/profile changed). Cannot be runtime-verified on this container — see finding above; will throw its own descriptive error rather than segfault/hang if a host's driver can't create the context. |
 | OPENGLES1-6 | `RegisterForWindow`/`UnregisterForWindow` (mouse/touch coordinate bridge) | ✅ | Matches every other backend's identical registration calls in constructor/destructor. |
-| OPENGLES1-7 | `Clear`/`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` | ✅ code / 🟨 runtime | Forces `glDepthMask`/`glStencilMask` writable before each clear (matches `EasyGLGraphicsBackend`'s identical convention) so the requested clear value always reaches the buffer regardless of the last-applied `DepthStencilState`. |
-| OPENGLES1-8 | `Present()` (`SDL_GL_SwapWindow`) | ✅ code / 🟨 runtime | |
+| OPENGLES1-7 | `Clear`/`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` | ✅ | Forces `glDepthMask`/`glStencilMask` writable before each clear (matches `EasyGLGraphicsBackend`'s identical convention) so the requested clear value always reaches the buffer regardless of the last-applied `DepthStencilState`. |
+| OPENGLES1-8 | `Present()` (`SDL_GL_SwapWindow`) | ✅ | |
 | OPENGLES1-9 | `GetViewportSize`/`SetVirtualResolution`/`SetPresentationMode`/`SetSwapInterval` | ✅ code / 🟨 runtime | Same `FixedHeightDynamicWidth` logical-size math as `EasyGLGraphicsBackend`. |
 | OPENGLES1-10 | `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ code / 🟨 runtime | Same pure-uniform-scale math (no letterbox offset under the default presentation mode) as `EasyGLGraphicsBackend`'s identical methods. |
 | OPENGLES1-11 | `DebugSimulateContextLoss`/`DebugRestoreContext` (destroy + recreate context, reload extension entry points) | ✅ code / 🟨 runtime | |
-| OPENGLES1-12 | `ReadBackbuffer` (`glReadPixels` + row flip) | ✅ code / 🟨 runtime | Y-flip matches every other GL-based backend's top-left-origin convention. |
+| OPENGLES1-12 | `ReadBackbuffer` (`glReadPixels` + row flip) | ✅ | Y-flip matches every other GL-based backend's top-left-origin convention. |
 | OPENGLES1-13 | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` | ✅ code / 🟨 runtime | |
-| OPENGLES1-14 | `CreateTexture`/`OpenGLES1TextureBackend` (level-0 RGBA8 upload, default linear filter/repeat wrap) | ✅ code / 🟨 runtime | `GetNativeTexture()` returns `nullptr` (no `SDL_Renderer` involved), matching `EasyGL`'s identical convention for GL-based backends. |
+| OPENGLES1-14 | `CreateTexture`/`OpenGLES1TextureBackend` (level-0 RGBA8 upload, default linear filter/repeat wrap) | ✅ | `GetNativeTexture()` returns `nullptr` (no `SDL_Renderer` involved), matching `EasyGL`'s identical convention for GL-based backends. |
 | OPENGLES1-15 | `CreateVertexBuffer`/`OpenGLES1VertexBufferBackend` (real GPU `GL_ARRAY_BUFFER` object, `SetData`) | ✅ code / 🟨 runtime | See design decision 3 (revised 2026-07-21 — real VBO, not client-side array, once `glGenBuffers`/`glBufferData` were confirmed core ES 1.1). |
 | OPENGLES1-16 | `CreateIndexBuffer16`/`OpenGLES1IndexBufferBackend` (real GPU `GL_ELEMENT_ARRAY_BUFFER` object + a small CPU-side shadow for wireframe emulation, `SetData16`) | ✅ code / 🟨 runtime | 32-bit indices fall back to the base class's `CreateIndexBuffer16` delegation (unimplemented on this backend, matches several other backends' current state). |
-| OPENGLES1-17 | `CreateSpriteBatch`/`OpenGLES1SpriteBatchBackend`: quad batching, texture/rotation/origin/flip/layer math (ported from the same well-established formula every CNA backend's `SpriteBatch` uses) | ✅ code / 🟨 runtime | `glOrthof` top-left-origin projection, `GL_MODULATE` texture environment, per-vertex color. |
+| OPENGLES1-17 | `CreateSpriteBatch`/`OpenGLES1SpriteBatchBackend`: quad batching, texture/rotation/origin/flip/layer math (ported from the same well-established formula every CNA backend's `SpriteBatch` uses) | ✅ | `glOrthof` top-left-origin projection, `GL_MODULATE` texture environment, per-vertex color. |
 | OPENGLES1-18 | `SpriteBatch::SetTransformMatrix`/`SetSamplerFilter`/`SetSamplerAddressMode` | ✅ code / 🟨 runtime | |
-| OPENGLES1-19 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (`BasicEffect` with `VertexColorEnabled=true`, no texture/lighting) | ✅ code / 🟨 runtime | Loads `GL_PROJECTION`/`GL_MODELVIEW` directly from `Matrix::ToColumnMajor()`. |
+| OPENGLES1-19 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (`BasicEffect` with `VertexColorEnabled=true`, no texture/lighting) | ✅ | Loads `GL_PROJECTION`/`GL_MODELVIEW` directly from `Matrix::ToColumnMajor()`. |
 | OPENGLES1-20 | `LoadExtensionEntryPoints()`: resolve `glBlendFuncSeparateOES`/`glBlendEquationOES` via `SDL_GL_GetProcAddress`, null-safe fallback | ✅ code / 🟨 runtime | Confirmed these two symbols exist in the real system `GLES/glext.h` on this container (`GL_OES_blend_func_separate`/`GL_OES_blend_subtract`). |
 | OPENGLES1-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: stride-based dispatch (16/20/24/32), texture (`GL_MODULATE`), fallback to colored path for skinning/PBR/instancing/custom-effect (dual-texture/env-map now real, see `OPENGLES1-71`/`74`) | ✅ code / 🟨 runtime | See design decision 4. |
 | OPENGLES1-22 | Lighting: up to 3 directional lights (`GL_LIGHT0..2`), material diffuse/specular/emission/shininess, ambient via `GL_LIGHT_MODEL_AMBIENT`, applied under a view-only `MODELVIEW` | ✅ code / 🟨 runtime | See design decision 5. |
@@ -211,8 +232,9 @@ above for the technical detail behind each row.
 | OPENGLES1-74 | `EnvironmentMapEffect` via `GL_OES_texture_cube_map`'s `glTexGeniOES(..., GL_REFLECTION_MAP_OES)` automatic reflection-vector texcoord generation, blended via `GL_INTERPOLATE` | ✅ code / 🟨 runtime | Gated on the extension string **and** `glTexGeniOES` actually resolving via `SDL_GL_GetProcAddress`, and on vertex stride 32 (normal data required). Fresnel edge-weighting is not applied (documented deviation — see design decision 7 and docs/opengles1-backend.md). |
 | OPENGLES1-75 | `OcclusionQuery` — **researched and confirmed impossible**, not merely deferred: the real system `GLES/gl.h`/`GLES/glext.h` (Debian/Ubuntu `libgles-dev`) contain no occlusion-query mechanism of any kind anywhere in the ES 1.1 CM registry (`GL_OES_query_matrix` is unrelated — it queries the current matrix stack, not visibility) | ⬜ (confirmed impossible) | `CreateOcclusionQuery()` keeps the base class's `nullptr` default; `SupportsCapability(OcclusionQuery)` stays `false` permanently, joining skinning/PBR/custom-shader in the "genuinely no fixed-function/extension path exists" category rather than the "not yet implemented" one. |
 | OPENGLES1-76 | Wireframe emulation: re-expands `TriangleList`/`TriangleStrip` draws into `GL_LINES`, the same technique `EasyGLGraphicsBackend::DrawWireframe` already uses for its own no-`glPolygonMode` problem | ✅ code / 🟨 runtime | Indexed draws read the real triangle indices from `OpenGLES1IndexBufferBackend`'s CPU shadow (`OPENGLES1-73`); non-indexed draws use sequential vertex order. `SupportsCapability(WireFrame)` now reports `true`. |
-| OPENGLES1-77 | Runtime verification on an ES1-capable driver — flip every `🟨` row above to `✅` once confirmed | ⬜ | Root cause found 2026-07-22 (see the finding at the top of this file): Debian builds Mesa with `-Dgles1=disabled`, so *no* Debian Mesa driver will create an ES1 context (`EGL_BAD_ALLOC` from `dri2_create_context`; verified identical on `radeonsi`/`llvmpipe`/`softpipe`, ES2 fine on all three). This no longer needs embedded/Android hardware or a proprietary driver — a local Mesa built with `-Dgles1=enabled` (software `softpipe` is sufficient) should unblock it. Prerequisites still missing on this host: `meson`, `bison`, `flex` (plus `libxcb-dri3-dev`/`libxcb-present-dev`/`libxcb-glx0-dev`/`libxshmfence-dev` for an X11-capable build; a surfaceless/software build avoids those). |
+| OPENGLES1-77 | Runtime verification on an ES1-capable driver — flip each `🟨` row to `✅` as real coverage confirms it | 🟨 (unblocked, partly done) | Root cause found and removed 2026-07-22 (see the finding at the top of this file). Debian builds Mesa with `-Dgles1=disabled`, so no stock Debian Mesa driver creates an ES1 context; a locally built `-Dgles1=enabled` Mesa (software `softpipe` suffices, built rootless — recipe in `docs/opengles1-backend.md`) does. Against it the backend reports `OpenGL ES-CM 1.1 Mesa 25.0.7` and `cna_test_opengles1_clear_readback` passes **5/5**, green under `ctest -R OpenGLES1` via `scripts/opengles1-test-env.sh`. That flips OPENGLES1-5/7/8/12/14/17/19 to ✅. Everything still 🟨 is uncovered by any test — see `OPENGLES1-79`. |
 | OPENGLES1-78 | Cross-backend pixel-parity test (same scene rendered on OPENGLES1 vs. an already-verified backend) | ⬜ | Same shape as `plan_webgpu.md`'s own `WEBGPU-123`; needs OPENGLES1-77 first. |
+| OPENGLES1-79 | Runtime coverage for the rows the smoke test does not reach: blend/depth/stencil/rasterizer/sampler state, lighting, fog, alpha test, viewport/scissor, context loss, `RenderTarget2D`, dual texture, environment map, wireframe | ⬜ | Now ordinary test-writing work, not a hardware blocker — the ES1 driver from `OPENGLES1-77` is available locally. Each new test should assert through `GetBackBufferData()` pixels the way the existing smoke test does, and run under `scripts/opengles1-test-env.sh`. |
 
 ---
 
