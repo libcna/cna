@@ -3932,6 +3932,9 @@ namespace CNA::Internal::Backends::Vulkan
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076: allow individual vkFreeDescriptorSets so a set evicted when its sampled
+        // view dies is returned to the pool (bounded memory), not leaked until teardown.
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pi.maxSets       = maxSets;
         pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPool2Tex_) != VK_SUCCESS)
@@ -3970,7 +3973,7 @@ namespace CNA::Internal::Backends::Vulkan
                            ^ reinterpret_cast<uint64_t>(sampler1) * 3266489917ULL;
         auto& cache = dualTexDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second;
+        if (it != cache.end()) return it->second.set;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -4010,7 +4013,8 @@ namespace CNA::Internal::Backends::Vulkan
         writes[2].descriptorCount = 1;
         writes[2].pBufferInfo     = &bufInfo;
         vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
-        cache[key] = ds;
+        // REMED-GFX-076: record the sampled views so this entry is evicted+freed when either dies.
+        cache[key] = EffectDescSetEntry{ ds, { view0, view1, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -4181,6 +4185,9 @@ namespace CNA::Internal::Backends::Vulkan
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076: allow individual vkFreeDescriptorSets so a set evicted when its sampled
+        // view dies is returned to the pool (bounded memory), not leaked until teardown.
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pi.maxSets       = maxSets;
         pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolEnvMap_) != VK_SUCCESS)
@@ -4296,7 +4303,7 @@ namespace CNA::Internal::Backends::Vulkan
                            ^ reinterpret_cast<uint64_t>(viewCube);
         auto& cache = envMapDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second;
+        if (it != cache.end()) return it->second.set;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -4334,7 +4341,8 @@ namespace CNA::Internal::Backends::Vulkan
         writes[2].pBufferInfo     = &bufInfo;
         vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
 
-        cache[key] = ds;
+        // REMED-GFX-076: record the sampled views so this entry is evicted+freed when either dies.
+        cache[key] = EffectDescSetEntry{ ds, { view2D, viewCube, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -4492,6 +4500,9 @@ namespace CNA::Internal::Backends::Vulkan
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076: allow individual vkFreeDescriptorSets so a set evicted when its sampled
+        // view dies is returned to the pool (bounded memory), not leaked until teardown.
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pi.maxSets       = maxSets;
         pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolLitTextured_) != VK_SUCCESS)
@@ -4527,7 +4538,7 @@ namespace CNA::Internal::Backends::Vulkan
         const uint64_t key = reinterpret_cast<uint64_t>(view2D);
         auto& cache = litTexturedDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second;
+        if (it != cache.end()) return it->second.set;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -4560,7 +4571,8 @@ namespace CNA::Internal::Backends::Vulkan
         writes[1].pBufferInfo     = &bufInfo;
         vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
 
-        cache[key] = ds;
+        // REMED-GFX-076: record the sampled view so this entry is evicted+freed when it dies.
+        cache[key] = EffectDescSetEntry{ ds, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -4828,6 +4840,9 @@ namespace CNA::Internal::Backends::Vulkan
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076: allow individual vkFreeDescriptorSets so a set evicted when its sampled
+        // view dies is returned to the pool (bounded memory), not leaked until teardown.
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pi.maxSets       = maxSets;
         pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolFogTex3D_) != VK_SUCCESS)
@@ -4865,7 +4880,7 @@ namespace CNA::Internal::Backends::Vulkan
         const uint64_t key = reinterpret_cast<uint64_t>(view2D);
         auto& cache = fogTex3DDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second;
+        if (it != cache.end()) return it->second.set;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -4898,7 +4913,8 @@ namespace CNA::Internal::Backends::Vulkan
         writes[1].pBufferInfo     = &bufInfo;
         vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
 
-        cache[key] = ds;
+        // REMED-GFX-076: record the sampled view so this entry is evicted+freed when it dies.
+        cache[key] = EffectDescSetEntry{ ds, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -5188,6 +5204,9 @@ namespace CNA::Internal::Backends::Vulkan
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets * 2 }; // BoneBlock + fog
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076: allow individual vkFreeDescriptorSets so a set evicted when its sampled
+        // view dies is returned to the pool (bounded memory), not leaked until teardown.
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pi.maxSets       = maxSets;
         pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolSkinned_) != VK_SUCCESS)
@@ -5233,7 +5252,7 @@ namespace CNA::Internal::Backends::Vulkan
         const uint64_t key = reinterpret_cast<uint64_t>(view2D);
         auto& cache = skinnedDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second;
+        if (it != cache.end()) return it->second.set;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -5284,7 +5303,8 @@ namespace CNA::Internal::Backends::Vulkan
         writes[2].pBufferInfo     = &fogBufInfo;
         vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
 
-        cache[key] = ds;
+        // REMED-GFX-076: record the sampled view so this entry is evicted+freed when it dies.
+        cache[key] = EffectDescSetEntry{ ds, { view2D, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE } };
         return ds;
     }
 
@@ -5582,6 +5602,9 @@ namespace CNA::Internal::Backends::Vulkan
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076: allow individual vkFreeDescriptorSets so a set evicted when its sampled
+        // view dies is returned to the pool (bounded memory), not leaked until teardown.
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pi.maxSets       = maxSets;
         pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolPbr_) != VK_SUCCESS)
@@ -5623,7 +5646,7 @@ namespace CNA::Internal::Backends::Vulkan
             key = (key ^ reinterpret_cast<uint64_t>(v)) * 1099511628211ull;
         auto& cache = pbrDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second;
+        if (it != cache.end()) return it->second.set;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -5661,7 +5684,8 @@ namespace CNA::Internal::Backends::Vulkan
         writes[5].pBufferInfo     = &bufInfo;
         vkUpdateDescriptorSets(device_, 6, writes, 0, nullptr);
 
-        cache[key] = ds;
+        // REMED-GFX-076: record the sampled views so this entry is evicted+freed when any dies.
+        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive, occlusion } };
         return ds;
     }
 
@@ -5810,6 +5834,9 @@ namespace CNA::Internal::Backends::Vulkan
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets * 2 }; // BoneBlock + PbrParams
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        // REMED-GFX-076: allow individual vkFreeDescriptorSets so a set evicted when its sampled
+        // view dies is returned to the pool (bounded memory), not leaked until teardown.
+        pi.flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         pi.maxSets       = maxSets;
         pi.poolSizeCount = 2; pi.pPoolSizes = ps;
         if (vkCreateDescriptorPool(device_, &pi, nullptr, &descriptorPoolPbrSkinned_) != VK_SUCCESS)
@@ -5859,7 +5886,7 @@ namespace CNA::Internal::Backends::Vulkan
             key = (key ^ reinterpret_cast<uint64_t>(v)) * 1099511628211ull;
         auto& cache = pbrSkinnedDescSets_[frameIdx];
         auto it = cache.find(key);
-        if (it != cache.end()) return it->second;
+        if (it != cache.end()) return it->second.set;
 
         VkDescriptorSetAllocateInfo ai{};
         ai.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -5908,7 +5935,8 @@ namespace CNA::Internal::Backends::Vulkan
         writes[6].pBufferInfo     = &paramsBufInfo;
         vkUpdateDescriptorSets(device_, 7, writes, 0, nullptr);
 
-        cache[key] = ds;
+        // REMED-GFX-076: record the sampled views so this entry is evicted+freed when any dies.
+        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive, occlusion } };
         return ds;
     }
 
@@ -7598,6 +7626,7 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanGraphicsBackend::EvictSampledViewFromCaches(VkImageView view, RetiredResources& into)
     {
         if (view == VK_NULL_HANDLE) return;
+        // The plain sprite/3D single-sampler cache is (view,sampler)-keyed -> direct reverse lookup.
         for (auto it = texSamplerDescSets_.begin(); it != texSamplerDescSets_.end(); )
         {
             if (it->first.first == view) {
@@ -7607,6 +7636,63 @@ namespace CNA::Internal::Backends::Vulkan
                 ++it;
             }
         }
+        // REMED-GFX-076 fix wiring goes here (added in the fix commit).
+    }
+
+    // REMED-GFX-076: drop every entry in one effect descriptor-set cache (all frame slots) that
+    // references `view`, moving its set to `into` for frame-fence-gated free from `pool`. Mirrors
+    // the texSamplerDescSets_ eviction above, but keyed via each entry's recorded views (the hash
+    // key is not reversible). Rare (once per dying sampled resource) and bounded by the small,
+    // pool-capped cache size, so the full-cache scan is acceptable.
+    void VulkanGraphicsBackend::EvictViewFromEffectCache(EffectDescSetCache& caches,
+        VkDescriptorPool pool, VkImageView view, RetiredResources& into)
+    {
+        for (auto& cache : caches)
+        {
+            for (auto it = cache.begin(); it != cache.end(); )
+            {
+                bool refs = false;
+                for (VkImageView v : it->second.views) if (v == view) { refs = true; break; }
+                if (refs) {
+                    if (it->second.set != VK_NULL_HANDLE)
+                        into.poolDescriptorSets.emplace_back(pool, it->second.set);
+                    it = cache.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
+
+    // REMED-GFX-076: read-only test introspection (see header). Sum of live entries over all seven
+    // per-frame effect descriptor-set caches. Not part of the render path.
+    std::size_t VulkanGraphicsBackend::TotalEffectDescSetEntriesForTests() const
+    {
+        std::size_t n = 0;
+        auto add = [&n](const EffectDescSetCache& c) { for (const auto& m : c) n += m.size(); };
+        add(dualTexDescSets_);     add(envMapDescSets_);   add(litTexturedDescSets_);
+        add(fogTex3DDescSets_);    add(skinnedDescSets_);  add(pbrDescSets_);
+        add(pbrSkinnedDescSets_);
+        return n;
+    }
+
+    // REMED-GFX-076: read-only test introspection (see header). Count effect-cache entries whose
+    // recorded views include `rawImageViewHandle` (a VkImageView cast to uint64_t).
+    std::size_t VulkanGraphicsBackend::EffectDescSetEntriesForViewInTests(uint64_t rawImageViewHandle) const
+    {
+        const VkImageView view = reinterpret_cast<VkImageView>(rawImageViewHandle);
+        if (view == VK_NULL_HANDLE) return 0; // never match the unused (VK_NULL_HANDLE) padding slots
+        std::size_t n = 0;
+        auto scan = [&](const EffectDescSetCache& c) {
+            for (const auto& m : c)
+                for (const auto& kv : m)
+                    for (VkImageView v : kv.second.views)
+                        if (v == view) { ++n; break; }
+        };
+        scan(dualTexDescSets_);     scan(envMapDescSets_);   scan(litTexturedDescSets_);
+        scan(fogTex3DDescSets_);    scan(skinnedDescSets_);  scan(pbrDescSets_);
+        scan(pbrSkinnedDescSets_);
+        return n;
     }
 
     // REMED-GFX-075: free every retirement bucket whose consuming frame's fence has certainly
@@ -7622,6 +7708,11 @@ namespace CNA::Internal::Backends::Vulkan
             for (VkDescriptorSet s : r.descriptorSets)
                 if (s != VK_NULL_HANDLE && descriptorPool_ != VK_NULL_HANDLE)
                     vkFreeDescriptorSets(device_, descriptorPool_, 1, &s);
+            // REMED-GFX-076: effect-cache sets evicted on a sampled view's death, each freed from its
+            // own pool (created with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT).
+            for (auto& ps : r.poolDescriptorSets)
+                if (ps.second != VK_NULL_HANDLE && ps.first != VK_NULL_HANDLE)
+                    vkFreeDescriptorSets(device_, ps.first, 1, &ps.second);
             for (VkImageView v : r.imageViews)       if (v  != VK_NULL_HANDLE) vkDestroyImageView(device_, v, nullptr);
             for (VkImage im : r.images)              if (im != VK_NULL_HANDLE) vkDestroyImage(device_, im, nullptr);
             for (VkDeviceMemory m : r.memories)      if (m  != VK_NULL_HANDLE) vkFreeMemory(device_, m, nullptr);

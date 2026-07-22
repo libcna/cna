@@ -902,6 +902,25 @@ namespace CNA::Internal::Backends::Vulkan
         bool anisotropySupported_ = false;
         float maxSamplerAnisotropy_ = 1.f;
 
+        // REMED-GFX-076: a cached effect descriptor set together with the sampled VkImageViews it
+        // was written against. The seven per-frame effect descriptor caches below key on a *hash* of
+        // raw VkImageView handle values and persist across frames with no per-view free path. A view
+        // handle is recyclable once its view is destroyed (GFX-075 retirement only *defers* the free
+        // past the consuming frame's fence -- it does not keep the value reserved forever), so a
+        // stale hash-keyed entry could later be handed to a different resource that reuses the same
+        // VkImageView value, sampling the destroyed image. Recording each entry's referencing views
+        // lets EvictSampledViewFromCaches() drop (and fence-retire) every entry a dying view
+        // participates in -- exactly as texSamplerDescSets_ is already evicted per (view,sampler)
+        // key -- closing the reuse-aliasing window and giving these caches a bounded free path.
+        // Padded to the max sampled-view count of any effect (PbrEffect/SkinnedPbrEffect: 5).
+        static constexpr std::size_t kMaxEffectSampledViews = 5;
+        struct EffectDescSetEntry {
+            VkDescriptorSet                                  set = VK_NULL_HANDLE;
+            std::array<VkImageView, kMaxEffectSampledViews>  views{}; // VK_NULL_HANDLE-padded
+        };
+        using EffectDescSetCache =
+            std::array<std::unordered_map<uint64_t, EffectDescSetEntry>, MaxFramesInFlight>;
+
         // --- Pipeline resources (permanent) ---
         VkSampler             defaultSampler_        = VK_NULL_HANDLE;
         VkDescriptorSetLayout descriptorSetLayout_   = VK_NULL_HANDLE;
@@ -920,7 +939,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesDualTex3D_;
         // Task 899: per-frame cache (was a single flat map) -- binding=2's fog UBO now makes the
         // descriptor set's buffer binding frame-specific, mirroring litTexturedDescSets_/skinnedDescSets_.
-        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        dualTexDescSets_;
         // Task 899: per-frame UBO ring buffer for DualTextureEffect fog (binding=2, dynamic).
         static constexpr uint32_t kDualTexFogUBOStride   = 256;
@@ -934,7 +953,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineLayout      pipelineLayoutEnvMap3D_      = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesEnvMap3D_;
         // Per-frame descriptor set cache: key = hash(view2D, viewCube)
-        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        envMapDescSets_;
         // Per-frame UBO ring buffer for env map FS params (world+eye+lighting)
         static constexpr uint32_t kEnvMapUBOStride   = 256; // 96 bytes used, padded to 256
@@ -955,7 +974,7 @@ namespace CNA::Internal::Backends::Vulkan
         // same descriptor set layout/pipeline layout as pipelinesLitTextured3D_ above, different
         // shader modules only (lighting moved into the vertex stage).
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesLitTextured3DVertexLit_;
-        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        litTexturedDescSets_;
         // Per-frame UBO ring buffer for light1/light2/emissive (5×vec4 = 80 bytes used, padded to 256)
         static constexpr uint32_t kLitTexturedUBOStride   = 256;
@@ -976,7 +995,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineLayout      pipelineLayoutFogTex3D_      = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesFogColored3D_;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesFogTex3D_; // textured+coloredTextured, keyed by stride
-        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        fogTex3DDescSets_;
         static constexpr uint32_t kFogTex3DUBOStride   = 256;
         static constexpr uint32_t kFogTex3DUBOMaxDraws = 512;
@@ -992,7 +1011,7 @@ namespace CNA::Internal::Backends::Vulkan
         // same descriptor set layout/pipeline layout as pipelinesSkinned3D_ above, different
         // shader modules only.
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>              pipelinesSkinned3DVertexLit_;
-        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                         skinnedDescSets_;
         // Per-frame bone matrix UBO ring buffer (4608 bytes/draw × 32 draws max)
         static constexpr uint32_t kSkinnedUBOStride   = 4608; // 72×64, multiple of 256
@@ -1021,7 +1040,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorPool      descriptorPoolPbr_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutPbr3D_    = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbr3D_;
-        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        pbrDescSets_;
         static constexpr uint32_t kPbrUBOStride   = 256; // 192 bytes used (48 floats), padded to 256
         static constexpr uint32_t kPbrUBOMaxDraws = 512;
@@ -1039,7 +1058,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorPool      descriptorPoolPbrSkinned_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutPbrSkinned3D_    = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbrSkinned3D_;
-        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+        std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        pbrSkinnedDescSets_;
         static constexpr uint32_t kPbrSkinnedBoneUBOStride   = 4608; // 72×64, multiple of 256
         static constexpr uint32_t kPbrSkinnedBoneUBOMaxDraws = 32;
@@ -1272,6 +1291,10 @@ namespace CNA::Internal::Backends::Vulkan
             std::vector<VkShaderModule>    shaderModules;
             std::vector<VkQueryPool>       queryPools;
             std::vector<VkDescriptorSet>   descriptorSets; // all allocated from descriptorPool_
+            // REMED-GFX-076: effect descriptor sets evicted from the seven per-frame effect caches
+            // when a sampled view they reference dies. Unlike `descriptorSets` (all from
+            // descriptorPool_), each is freed from its OWN pool, so the pool is carried with the set.
+            std::vector<std::pair<VkDescriptorPool, VkDescriptorSet>> poolDescriptorSets;
         };
         std::vector<RetiredResources>                                    retiredResources_;
         // MRT proxies are retired as whole objects (they are VulkanRTSource DESTINATIONS referenced
@@ -1290,6 +1313,23 @@ namespace CNA::Internal::Backends::Vulkan
         // later resource that happens to reuse the freed VkImageView handle value can never collide
         // with a stale cached descriptor set.
         void EvictSampledViewFromCaches(VkImageView view, RetiredResources& into);
+        // REMED-GFX-076: erase (and fence-retire to `pool`) every entry in one effect descriptor-set
+        // cache that references `view`, so a later resource reusing the freed VkImageView handle
+        // value gets a fresh descriptor set rather than aliasing this (now-destroyed) one. Called
+        // once per effect cache from EvictSampledViewFromCaches().
+        void EvictViewFromEffectCache(EffectDescSetCache& caches, VkDescriptorPool pool,
+                                      VkImageView view, RetiredResources& into);
+    public:
+        // REMED-GFX-076: read-only test introspection -- total live entries across all seven
+        // per-frame effect descriptor-set caches. The resource-identity regression uses it to prove
+        // a destroyed sampled resource's cached sets are evicted (count returns to baseline). No
+        // effect on rendering.
+        NOXNA [[nodiscard]] std::size_t TotalEffectDescSetEntriesForTests() const;
+        // REMED-GFX-076: read-only test introspection -- number of effect-cache entries that
+        // reference the given VkImageView handle value (cast to uint64_t). Proves a specific view's
+        // entries are gone after its resource dies, and detects a later resource reusing the handle.
+        NOXNA [[nodiscard]] std::size_t EffectDescSetEntriesForViewInTests(uint64_t rawImageViewHandle) const;
+    private:
         // REMED-GFX-075: free every retirement bucket whose consuming frame's fence has certainly
         // completed (generation + MaxFramesInFlight < frameGeneration_); `force` frees all of them
         // (used at teardown, after a full device wait). Run once per frame from SubmitFrame().

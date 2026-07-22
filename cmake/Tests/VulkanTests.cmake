@@ -1056,6 +1056,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_DeferredResourceLifetime COMMAND cna_test_vulkan_deferred_resource_lifetime
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-076: effect descriptor-set caches must key resource IDENTITY, not a recyclable
+        # VkImageView handle value. A cached set is evicted the instant its sampled source is
+        # destroyed, so a later texture reusing the freed handle value cannot be handed a stale set
+        # sampling the destroyed image. Deterministic (reads backend cache introspection) + a
+        # best-effort real-handle-reuse scene + a memory-bounded stress loop.
+        cna_vulkan_test(cna_test_vulkan_effect_descriptor_cache_identity
+                        examples/vulkan_effect_descriptor_cache_identity_test.cpp)
+        cna_register_backend_test(NAME Vulkan_EffectDescriptorCacheIdentity COMMAND cna_test_vulkan_effect_descriptor_cache_identity
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 
 
     endif()
