@@ -152,4 +152,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_transformcoords examples/opengl4_transformcoords_test.cpp)
     cna_register_backend_test(NAME OpenGL4_TransformCoords COMMAND cna_test_opengl4_transformcoords
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-29: real PreferPerPixelLighting vertex-lit shader variant for
+    # BasicEffect/SkinnedEffect (XNA's own default is PreferPerPixelLighting=false).
+    cna_opengl4_test(cna_test_opengl4_preferperpixellighting examples/opengl4_preferperpixellighting_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_PreferPerPixelLighting COMMAND cna_test_opengl4_preferperpixellighting
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

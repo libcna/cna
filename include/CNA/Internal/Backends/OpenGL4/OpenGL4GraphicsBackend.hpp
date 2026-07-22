@@ -525,11 +525,21 @@ namespace CNA::Internal::Backends::OpenGL4
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
         void EnsureLitTextured3DProgram();
+        /// plan_opengl4.md GL4-29: real XNA's BasicEffect defaults PreferPerPixelLighting=false --
+        /// per-vertex/Gouraud-shaded lighting, the opposite of litTextured3DProgram_ above (which
+        /// is the PreferPerPixelLighting=true family). Selected by BindProgramForStride instead of
+        /// litTextured3DProgram_ when params.lightingEnabled && !params.preferPerPixelLighting.
+        void EnsureLitTextured3DVertexLitProgram();
         /// plan_opengl4.md GL4-21: EnvironmentMapEffect's own dedicated stride-32 program,
         /// selected instead of litTextured3DProgram_ when GpuDrawParams::envMapping is set.
         void EnsureEnvMap3DProgram();
         /// plan_opengl4.md GL4-22: SkinnedEffect's own dedicated stride-52/56 program.
         void EnsureSkinned3DProgram();
+        /// plan_opengl4.md GL4-29: SkinnedEffect's own per-vertex-lit sibling of
+        /// skinned3DProgram_ above -- real XNA's SkinnedEffect also defaults
+        /// PreferPerPixelLighting=false. Selected instead of skinned3DProgram_ when
+        /// params.lightingEnabled && !params.preferPerPixelLighting.
+        void EnsureSkinned3DVertexLitProgram();
         /// plan_opengl4.md GL4-23: PbrEffect's own dedicated stride-48 program (glTF
         /// metallic-roughness BRDF).
         void EnsurePbr3DProgram();
@@ -605,8 +615,12 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4RawProgram textured3DProgram_;
         OpenGL4RawProgram coloredTextured3DProgram_;
         OpenGL4RawProgram litTextured3DProgram_;
+        /// plan_opengl4.md GL4-29: per-vertex-lit sibling of litTextured3DProgram_ above.
+        OpenGL4RawProgram litTextured3DVertexLitProgram_;
         OpenGL4RawProgram envMap3DProgram_;
         OpenGL4RawProgram skinned3DProgram_;
+        /// plan_opengl4.md GL4-29: per-vertex-lit sibling of skinned3DProgram_ above.
+        OpenGL4RawProgram skinned3DVertexLitProgram_;
         OpenGL4RawProgram pbr3DProgram_;
         OpenGL4RawProgram pbrSkinned3DProgram_;
         unsigned int defaultWhiteTexture_ = 0;

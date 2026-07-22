@@ -397,6 +397,101 @@ void main()
 }
 )GLSL";
 
+        // plan_opengl4.md GL4-29: lit_textured3d's own per-vertex-lit sibling -- real XNA's
+        // BasicEffect defaults PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting),
+        // the opposite of what kLitTextured3DVertSrc/FragSrc above render unconditionally.
+        // Identical Blinn-Phong math to kLitTextured3DFragSrc (same formula, same inputs), just
+        // computed once per vertex and Gouraud-interpolated via vLitRGB/vSpecularRGB instead of
+        // being re-evaluated per fragment. Selected by BindProgramForStride instead of
+        // litTextured3DProgram_ when params.lightingEnabled && !params.preferPerPixelLighting
+        // (XNA's own default) -- only meaningfully distinct while lighting is actually on, so this
+        // variant always computes lighting unconditionally (no uLightingEnabled branch needed,
+        // unlike kLitTextured3DFragSrc, since it's never bound with lighting off). Ported from
+        // EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram's GLSL ES 300 source (desktop GLSL 410
+        // core translation only).
+        const char* kLitTextured3DVertexLitVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
+uniform mat4 uWorldViewProj;
+uniform mat4 uWorld;
+uniform vec4 uDiffuseColor;
+uniform vec3 uAmbientColor;
+uniform vec3 uLight0Dir;
+uniform vec3 uLight0Diffuse;
+uniform vec3 uLight0Specular;
+uniform vec3 uLight1Dir;
+uniform vec3 uLight1Diffuse;
+uniform vec3 uLight1Specular;
+uniform vec3 uLight2Dir;
+uniform vec3 uLight2Diffuse;
+uniform vec3 uLight2Specular;
+uniform vec3 uEmissiveColor;
+uniform vec3 uEyePosition;
+uniform vec3 uSpecularColor;
+uniform float uSpecularPower;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
+out vec2 vUV;
+out float vFogFactor;
+out vec3 vLitRGB;
+out vec3 vSpecularRGB;
+
+vec3 safeNormalize(vec3 v)
+{
+    float len = length(v);
+    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
+}
+
+void main()
+{
+    vUV = aUV;
+    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
+    vec3 N = normalize(normalMatrix * aNormal);
+    vec3 worldPos = (uWorld * vec4(aPos, 1.0)).xyz;
+    vec3 E = normalize(uEyePosition - worldPos);
+    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+    vec3 nL0 = safeNormalize(uLight0Dir);
+    vec3 nL1 = safeNormalize(uLight1Dir);
+    vec3 nL2 = safeNormalize(uLight2Dir);
+    float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+    float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+    float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+    vec3 lightSum = uAmbientColor + NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
+    vLitRGB = lightSum * uDiffuseColor.rgb + uEmissiveColor;
+    vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
+    vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
+    vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
+    vSpecularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
+}
+)GLSL";
+
+        const char* kLitTextured3DVertexLitFragSrc = R"GLSL(
+#version 410 core
+in vec2 vUV;
+in float vFogFactor;
+in vec3 vLitRGB;
+in vec3 vSpecularRGB;
+uniform sampler2D uTexture;
+uniform bool uTextureEnabled;
+uniform vec4 uDiffuseColor;
+uniform vec3 uFogColor;
+out vec4 fragColor;
+void main()
+{
+    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
+    vec4 color = vec4(vLitRGB, uDiffuseColor.a) * tex;
+    color.rgb += vSpecularRGB * color.a;
+    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
+    fragColor = color;
+}
+)GLSL";
+
         // plan_opengl4.md GL4-21: env_map3d (VertexPositionNormalTexture, stride 32) --
         // EnvironmentMapEffect's own dedicated program, selected instead of lit_textured3d when
         // GpuDrawParams::envMapping is set (BindProgramForStride branches on it before the stride
@@ -513,8 +608,8 @@ void main()
         // already-correct 3-light Lambertian-diffuse + Blinn-Phong-specular + EmissiveColor
         // formula (EmissiveColor pre-folds AmbientLightColor*DiffuseColor via
         // SkinnedEffect::FillGpuDrawParams, same as lit_textured3d/env_map3d), plus a vertex-color
-        // modulate (VertexColorEnabled) exercised via the stride-56 aColor attribute. No fog
-        // (same deliberate deferral as every other 3D stride variant on this backend).
+        // modulate (VertexColorEnabled) exercised via the stride-56 aColor attribute. Real fog
+        // support landed later, GL4-25 (see kColoredParams3DVertSrc's own comment for the formula).
         //
         // NOTE (matches EasyGL's own established formula, not independently re-derived here):
         // the skinned normal is only rotated by the bone skinning matrix (mat3(skinMat)), not
@@ -623,6 +718,117 @@ void main()
     vec3 lit = lightSum * uDiffuseColor.rgb + uEmissiveColor;
     vec4 color = vec4(lit, uDiffuseColor.a) * tex;
     color.rgb += specularRGB * color.a;
+    if (uVertexColorEnabled) color *= vColor;
+    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
+    fragColor = color;
+}
+)GLSL";
+
+        // plan_opengl4.md GL4-29: skinned3d's own per-vertex-lit sibling, mirroring
+        // kLitTextured3DVertexLitVertSrc/FragSrc's technique exactly -- real XNA's SkinnedEffect
+        // also defaults PreferPerPixelLighting=false, same as BasicEffect. The skinning itself is
+        // unchanged from kSkinned3DVertSrc above; only WHERE lighting is evaluated moves (once per
+        // vertex, Gouraud-interpolated, instead of once per fragment). No separate uAmbientColor
+        // uniform here, matching kSkinned3DFragSrc's own shape: SkinnedEffect::FillGpuDrawParams
+        // already pre-folds ambient into uEmissiveColor. Ported from
+        // EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram's GLSL ES 300 source (desktop GLSL
+        // 410 core translation only).
+        const char* kSkinned3DVertexLitVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
+layout(location = 3) in vec4 aBoneWeights;
+layout(location = 4) in uvec4 aBoneIndices;
+layout(location = 5) in vec4 aColor;
+uniform mat4 uWorldViewProj;
+uniform mat4 uWorld;
+uniform mat4 uBones[72];
+uniform int uWeightsPerVertex;
+uniform vec4 uDiffuseColor;
+uniform vec3 uLight0Dir;
+uniform vec3 uLight0Diffuse;
+uniform vec3 uLight0Specular;
+uniform vec3 uLight1Dir;
+uniform vec3 uLight1Diffuse;
+uniform vec3 uLight1Specular;
+uniform vec3 uLight2Dir;
+uniform vec3 uLight2Diffuse;
+uniform vec3 uLight2Specular;
+uniform vec3 uEmissiveColor;
+uniform vec3 uEyePosition;
+uniform vec3 uSpecularColor;
+uniform float uSpecularPower;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
+out vec2 vUV;
+out vec4 vColor;
+out float vFogFactor;
+out vec3 vLitRGB;
+out vec3 vSpecularRGB;
+
+vec3 safeNormalize(vec3 v)
+{
+    float len = length(v);
+    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
+}
+
+void main()
+{
+    mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
+    if (uWeightsPerVertex >= 2)
+        skinMat += uBones[aBoneIndices.y] * aBoneWeights.y;
+    if (uWeightsPerVertex >= 4)
+    {
+        skinMat += uBones[aBoneIndices.z] * aBoneWeights.z;
+        skinMat += uBones[aBoneIndices.w] * aBoneWeights.w;
+    }
+    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    gl_Position = uWorldViewProj * skinnedPos;
+    vec3 skinnedNormal = mat3(skinMat) * aNormal;
+    float len = length(skinnedNormal);
+    vec3 N = (len > 1e-6) ? (skinnedNormal / len) : aNormal;
+    vUV = aUV;
+    vColor = aColor;
+    vec3 worldPos = (uWorld * skinnedPos).xyz;
+    vec3 E = normalize(uEyePosition - worldPos);
+    vec3 nL0 = safeNormalize(uLight0Dir);
+    vec3 nL1 = safeNormalize(uLight1Dir);
+    vec3 nL2 = safeNormalize(uLight2Dir);
+    float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+    float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+    float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+    vec3 lightSum = NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
+    vLitRGB = lightSum * uDiffuseColor.rgb + uEmissiveColor;
+    vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
+    vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
+    vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
+    vSpecularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
+}
+)GLSL";
+
+        const char* kSkinned3DVertexLitFragSrc = R"GLSL(
+#version 410 core
+in vec2 vUV;
+in vec4 vColor;
+in float vFogFactor;
+in vec3 vLitRGB;
+in vec3 vSpecularRGB;
+uniform sampler2D uTexture;
+uniform bool uTextureEnabled;
+uniform bool uVertexColorEnabled;
+uniform vec4 uDiffuseColor;
+uniform vec3 uFogColor;
+out vec4 fragColor;
+void main()
+{
+    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
+    vec4 color = vec4(vLitRGB, uDiffuseColor.a) * tex;
+    color.rgb += vSpecularRGB * color.a;
     if (uVertexColorEnabled) color *= vColor;
     color.rgb = mix(uFogColor, color.rgb, vFogFactor);
     fragColor = color;
@@ -2591,6 +2797,14 @@ void main()
             throw std::runtime_error("OpenGL4: lit_textured3d program failed to compile: " + litTextured3DProgram_.GetError());
     }
 
+    void OpenGL4GraphicsBackend::EnsureLitTextured3DVertexLitProgram()
+    {
+        if (litTextured3DVertexLitProgram_.IsValid()) return;
+        if (!litTextured3DVertexLitProgram_.Compile(kLitTextured3DVertexLitVertSrc, kLitTextured3DVertexLitFragSrc))
+            throw std::runtime_error("OpenGL4: lit_textured3d (vertex-lit) program failed to compile: " +
+                                      litTextured3DVertexLitProgram_.GetError());
+    }
+
     void OpenGL4GraphicsBackend::EnsureEnvMap3DProgram()
     {
         if (envMap3DProgram_.IsValid()) return;
@@ -2603,6 +2817,14 @@ void main()
         if (skinned3DProgram_.IsValid()) return;
         if (!skinned3DProgram_.Compile(kSkinned3DVertSrc, kSkinned3DFragSrc))
             throw std::runtime_error("OpenGL4: skinned3d program failed to compile: " + skinned3DProgram_.GetError());
+    }
+
+    void OpenGL4GraphicsBackend::EnsureSkinned3DVertexLitProgram()
+    {
+        if (skinned3DVertexLitProgram_.IsValid()) return;
+        if (!skinned3DVertexLitProgram_.Compile(kSkinned3DVertexLitVertSrc, kSkinned3DVertexLitFragSrc))
+            throw std::runtime_error("OpenGL4: skinned3d (vertex-lit) program failed to compile: " +
+                                      skinned3DVertexLitProgram_.GetError());
     }
 
     void OpenGL4GraphicsBackend::EnsurePbr3DProgram()
@@ -2908,25 +3130,30 @@ void main()
         }
         case 32: // VertexPositionNormalTexture
         {
-            EnsureLitTextured3DProgram();
-            litTextured3DProgram_.Use();
+            // plan_opengl4.md GL4-29: real XNA's BasicEffect defaults PreferPerPixelLighting=false
+            // (per-vertex/Gouraud-shaded lighting) -- only meaningfully distinct while lighting is
+            // actually on, matching EasyGLGraphicsBackend::SelectProgram's own identical gate.
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            if (vertexLit) EnsureLitTextured3DVertexLitProgram(); else EnsureLitTextured3DProgram();
+            OpenGL4RawProgram& prog = vertexLit ? litTextured3DVertexLitProgram_ : litTextured3DProgram_;
+            prog.Use();
             float worldCol[16];
             world.ToColumnMajor(worldCol);
             const auto setM4 = [&](const char* name, const float* m) {
-                const int loc = litTextured3DProgram_.UniformLocation(name);
+                const int loc = prog.UniformLocation(name);
                 if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
             };
             const auto setV3 = [&](const char* name, const float* v) {
-                const int loc = litTextured3DProgram_.UniformLocation(name);
+                const int loc = prog.UniformLocation(name);
                 if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
             };
             const auto setB = [&](const char* name, bool v) {
-                const int loc = litTextured3DProgram_.UniformLocation(name);
+                const int loc = prog.UniformLocation(name);
                 if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
             };
             setM4("uWorldViewProj", wvpCol);
             setM4("uWorld", worldCol);
-            const int diffuseLoc = litTextured3DProgram_.UniformLocation("uDiffuseColor");
+            const int diffuseLoc = prog.UniformLocation("uDiffuseColor");
             if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
                                                  params.diffuseColor[2], params.diffuseColor[3]);
             setB("uTextureEnabled", params.textureEnabled && hasTexture0);
@@ -2944,40 +3171,44 @@ void main()
             setV3("uEmissiveColor", params.emissiveColor);
             setV3("uEyePosition", params.eyePositionWorld);
             setV3("uSpecularColor", params.specularColor);
-            const int specPowerLoc = litTextured3DProgram_.UniformLocation("uSpecularPower");
+            const int specPowerLoc = prog.UniformLocation("uSpecularPower");
             if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
-            const int texLoc = litTextured3DProgram_.UniformLocation("uTexture");
+            const int texLoc = prog.UniformLocation("uTexture");
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            setFog(litTextured3DProgram_);
+            setFog(prog);
             return true;
         }
         case 52: // VertexPositionNormalTextureSkinned
         case 56: // VertexPositionNormalTextureSkinned + Color
         {
-            EnsureSkinned3DProgram();
-            skinned3DProgram_.Use();
+            // plan_opengl4.md GL4-29: real XNA's SkinnedEffect also defaults
+            // PreferPerPixelLighting=false, same gate as the stride-32 case above.
+            const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+            if (vertexLit) EnsureSkinned3DVertexLitProgram(); else EnsureSkinned3DProgram();
+            OpenGL4RawProgram& prog = vertexLit ? skinned3DVertexLitProgram_ : skinned3DProgram_;
+            prog.Use();
             float worldCol[16];
             world.ToColumnMajor(worldCol);
             const auto setM4 = [&](const char* name, const float* m) {
-                const int loc = skinned3DProgram_.UniformLocation(name);
+                const int loc = prog.UniformLocation(name);
                 if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
             };
             const auto setV3 = [&](const char* name, const float* v) {
-                const int loc = skinned3DProgram_.UniformLocation(name);
+                const int loc = prog.UniformLocation(name);
                 if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
             };
             const auto setB = [&](const char* name, bool v) {
-                const int loc = skinned3DProgram_.UniformLocation(name);
+                const int loc = prog.UniformLocation(name);
                 if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
             };
             setM4("uWorldViewProj", wvpCol);
             setM4("uWorld", worldCol);
-            const int bonesLoc = skinned3DProgram_.UniformLocation("uBones[0]");
+            const int bonesLoc = prog.UniformLocation("uBones[0]");
             if (bonesLoc >= 0 && params.boneCount > 0)
                 gl4_glUniformMatrix4fv(bonesLoc, params.boneCount, GL_FALSE, params.boneTransforms);
-            const int weightsLoc = skinned3DProgram_.UniformLocation("uWeightsPerVertex");
+            const int weightsLoc = prog.UniformLocation("uWeightsPerVertex");
             if (weightsLoc >= 0) gl4_glUniform1i(weightsLoc, params.weightsPerVertex);
-            const int diffuseLoc = skinned3DProgram_.UniformLocation("uDiffuseColor");
+            const int diffuseLoc = prog.UniformLocation("uDiffuseColor");
             if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
                                                  params.diffuseColor[2], params.diffuseColor[3]);
             setB("uTextureEnabled", params.textureEnabled && hasTexture0);
@@ -2994,11 +3225,11 @@ void main()
             setV3("uEmissiveColor", params.emissiveColor);
             setV3("uEyePosition", params.eyePositionWorld);
             setV3("uSpecularColor", params.specularColor);
-            const int specPowerLoc = skinned3DProgram_.UniformLocation("uSpecularPower");
+            const int specPowerLoc = prog.UniformLocation("uSpecularPower");
             if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
-            const int texLoc = skinned3DProgram_.UniformLocation("uTexture");
+            const int texLoc = prog.UniformLocation("uTexture");
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
-            setFog(skinned3DProgram_);
+            setFog(prog);
             return true;
         }
         default:
