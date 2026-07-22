@@ -141,4 +141,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_samplerstate examples/opengl4_samplerstate_test.cpp)
     cna_register_backend_test(NAME OpenGL4_SamplerState COMMAND cna_test_opengl4_samplerstate
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support via glDrawElementsBaseVertex.
+    cna_opengl4_test(cna_test_opengl4_basevertex examples/opengl4_basevertex_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_BaseVertex COMMAND cna_test_opengl4_basevertex
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

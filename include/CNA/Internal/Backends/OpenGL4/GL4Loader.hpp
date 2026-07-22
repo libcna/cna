@@ -258,6 +258,11 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     using PFNGL4ENDQUERYPROC                    = void (*)(GLenum);
     using PFNGL4GETQUERYOBJECTUIVPROC           = void (*)(GLuint, GLenum, GLuint*);
 
+    // plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- GL 3.2 core
+    // (ARB_draw_elements_base_vertex, core since GL 3.2), not guaranteed to be declared by a
+    // GL-1.1-vintage <GL/gl.h>.
+    using PFNGL4DRAWELEMENTSBASEVERTEXPROC      = void (*)(GLenum, GLsizei, GLenum, const void*, GLint);
+
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
     extern PFNGL4BINDBUFFERPROC               gl4_glBindBuffer;
@@ -338,6 +343,8 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4BEGINQUERYPROC                  gl4_glBeginQuery;
     extern PFNGL4ENDQUERYPROC                    gl4_glEndQuery;
     extern PFNGL4GETQUERYOBJECTUIVPROC           gl4_glGetQueryObjectuiv;
+
+    extern PFNGL4DRAWELEMENTSBASEVERTEXPROC      gl4_glDrawElementsBaseVertex;
 
     /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
     /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this

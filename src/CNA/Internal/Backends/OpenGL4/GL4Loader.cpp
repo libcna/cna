@@ -85,6 +85,8 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     PFNGL4ENDQUERYPROC                    gl4_glEndQuery                    = nullptr;
     PFNGL4GETQUERYOBJECTUIVPROC           gl4_glGetQueryObjectuiv           = nullptr;
 
+    PFNGL4DRAWELEMENTSBASEVERTEXPROC      gl4_glDrawElementsBaseVertex      = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -183,6 +185,8 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glBeginQuery", gl4_glBeginQuery);
         ok &= Resolve(getProcAddress, "glEndQuery", gl4_glEndQuery);
         ok &= Resolve(getProcAddress, "glGetQueryObjectuiv", gl4_glGetQueryObjectuiv);
+
+        ok &= Resolve(getProcAddress, "glDrawElementsBaseVertex", gl4_glDrawElementsBaseVertex);
 
         return ok;
     }

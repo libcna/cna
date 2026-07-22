@@ -376,6 +376,38 @@
 > CTest suites confirms no regression from the corrected default (no existing test depended on the
 > old, incorrect Clamp default).
 >
+> **Status (2026-07-22): `GL4-27` (real `GpuDrawParams::baseVertex` support) landed and verified.**
+> `DrawIndexedPrimitivesEx` now calls the real GL 3.2 core `glDrawElementsBaseVertex` entry point
+> (newly loaded via `GL4Loader`, resolved through the same `SDL_GL_GetProcAddress` mechanism as
+> every other GL 1.2+ entry point this backend uses) instead of plain `glDrawElements` —
+> `params.baseVertex` is added to every fetched index before it indexes into the currently bound
+> vertex buffer, letting multiple sub-meshes share one large vertex buffer with per-draw,
+> index-space-relative indices (matches FNA's own D3D9/OpenGL `baseVertex` parameter exactly).
+> Previously `params.baseVertex` was silently ignored entirely (always treated as `0`); the field
+> already defaults to `0`, so this is a genuine no-op for every existing draw that never set it —
+> confirmed by the full regression re-run below.
+>
+> Verified by the new `OpenGL4_BaseVertex` CTest (2/2): a single shared 8-vertex
+> `VertexPositionColor` buffer holds two quads (vertices `[0..3]` = RED on NDC's left half,
+> vertices `[4..7]` = BLUE on NDC's right half), and a single shared 6-index buffer holds one
+> quad's worth of *local* indices (`{0,1,2,0,2,3}`), reused **unchanged** for both draws — only
+> `baseVertex` differs (`0` then `4`). If `baseVertex` were still silently ignored, the second draw
+> would incorrectly re-fetch vertices `[0..3]` again (the LEFT-half RED quad's own data), leaving
+> the right half at the background colour instead of BLUE — a decisive, unambiguous distinction
+> between "honored" and "ignored" with no exact-value derivation needed. Both checks passed on the
+> first real run — no backend or test bugs found. Full re-run of the other 18 OpenGL4 CTest suites
+> confirms no regression.
+>
+> **A separate, newly-discovered gap noted for a future task, not fixed here (out of this task's
+> scope):** `OpenGL4IndexBufferBackend::IsThirtyTwoBit()` unconditionally returns `false` and
+> `DrawIndexedPrimitivesEx`/`DrawColoredPrimitives`' index-buffer paths hardcode
+> `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` everywhere — this backend has **no 32-bit index buffer
+> support at all** (`CreateIndexBuffer32` isn't overridden either), unlike every other established
+> backend. Not attempted as part of `GL4-27` since it's materially larger (new backend class, new
+> `IGraphicsBackend` overrides, a new GL4Loader entry for `GL_UNSIGNED_INT` is already available
+> without a loader addition since it's GL 1.1, but the index-buffer class hierarchy itself needs
+> real new work) and unrelated to `baseVertex` itself.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -404,13 +436,18 @@
 >   NOXNA extensions or known simplifications, not missing built-in effect coverage.
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
-> - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplification (`GL4-13`)** — one real gap
->   remains: `params.baseVertex` is ignored (no `glDrawElementsBaseVertex` call — only
->   `params.startIndex` is honored, via a byte offset into the index buffer). The sibling sampler
->   gap this bullet used to describe is fixed — see `GL4-26`. ⬜
+> - ~~**`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `params.baseVertex`**~~ — done, `GL4-27`
+>   (2026-07-22). Real `glDrawElementsBaseVertex` call, verified by `OpenGL4_BaseVertex` (2/2). ✅
 > - ~~**`SamplerState` for direct 3D draws**~~ — done, `GL4-26` (2026-07-22). Real bug found+fixed
 >   (hardcoded Clamp silently overwrote the real, already-correctly-applied per-slot
 >   `SamplerState` on every draw); verified by `OpenGL4_SamplerState` (3/3). ✅
+> - **No 32-bit index buffer support at all** (newly discovered while scoping `GL4-27`, not part of
+>   that task) — `OpenGL4IndexBufferBackend::IsThirtyTwoBit()` unconditionally returns `false`,
+>   `CreateIndexBuffer32` isn't overridden, and every index-buffer draw path
+>   (`DrawIndexedPrimitivesEx`/`DrawIndexedColoredPrimitives`) hardcodes `GL_UNSIGNED_SHORT`/
+>   `sizeof(uint16_t)`, unlike every other established backend. A real, materially larger task (a
+>   new backend class + new `IGraphicsBackend` overrides), not a quick pick-up alongside something
+>   else. ⬜
 > - **`preferPerPixelLighting`** — `GpuDrawParams::preferPerPixelLighting` is read by no shader;
 >   `lit_textured3d` always renders per-pixel regardless of its value, same known, tracked
 >   divergence from XNA's real per-vertex-lit default that every backend except D3D9 currently has
@@ -478,7 +515,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -512,6 +549,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-24` | Real occlusion queries — `OpenGL4OcclusionQueryBackend` wraps a genuine GL 1.5 core query object using `GL_SAMPLES_PASSED` (an exact passed-sample count, unlike `EasyGLOcclusionQueryBackend`'s GLES3 `GL_ANY_SAMPLES_PASSED` 0/1-only query — matches real XNA's own desktop `OcclusionQuery.PixelCount()` semantics). `GL4Loader` gained the GL 1.5 query entry points (`glGenQueries`/`glDeleteQueries`/`glBeginQuery`/`glEndQuery`/`glGetQueryObjectuiv`). `IsComplete()` polls `GL_QUERY_RESULT_AVAILABLE` and caches the result once ready; no busy-wait/forced sync. | ✅ | Ported `vulkan_occlusionquery_pixelcount_test.cpp`'s 3-scenario methodology (visible/occluded/multi-draw-span-sums-correctly) verbatim. All 6 checks passed on the first real run — no backend or test bugs found. |
 | `GL4-25` | Real fog on all 7 `GpuDrawParams`-driven stride/dispatch shaders (Task 1111's formula, ported from `EasyGLGraphicsBackend`'s own per-program fog blocks), plus a **new** `case 16:`/`coloredParams3DProgram_` closing a separate pre-existing parity gap (stride-16 `VertexPositionColor` draws previously bypassed `GpuDrawParams` entirely — no `DiffuseColor`/`VertexColorEnabled`/`AlphaTest`/fog — falling back to the params-free `DrawColoredPrimitives` path even when a real `Effect.Apply()` was in play). | ✅ | Real gap found+fixed (the stride-16 parity gap above, not a fog-formula bug). Checks A–C reuse `easygl_basiceffect_fog_test.cpp`'s own 3-scenario oracle verbatim; Checks D–H use `mix(fogColor,colour,0)==fogColor` at `Z=FogStart` as an exact, effect-agnostic proof across the other 5 shader families — all matched exactly. All 8 checks passed on the first real run. |
 | `GL4-26` | Real dynamic `SamplerState` for direct 3D draws — deleted 7 redundant/incorrect `ApplySamplerState(slot, 0, 1, 1, 1)` override call sites in `BindProgramForStride`; `GraphicsDevice::applySamplerStatesToBackend()` already applies the real per-slot `SamplerState` for all 16 slots immediately before every `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` call, so nothing needed to be added. | ✅ | Real bug found+fixed (by inspection, not a failing test): the old hardcoded value ran *after* the real one and silently overwrote it on every draw, always Clamp — and real XNA's own default is Linear+**Wrap**, not Clamp, so untouched `SamplerStates` were also wrong before this fix. `OpenGL4_SamplerState` (3/3) ports `easygl_sampler_state_effect_test.cpp`'s Wrap-vs-Clamp proof verbatim plus a new default-reads-Wrap check. All 3 passed once the fix landed. |
+| `GL4-27` | Real `GpuDrawParams::baseVertex` support — `DrawIndexedPrimitivesEx` now calls the real GL 3.2 core `glDrawElementsBaseVertex` (newly loaded) instead of plain `glDrawElements`, adding `params.baseVertex` to every fetched index before it indexes into the bound vertex buffer. | ✅ | `OpenGL4_BaseVertex` (2/2): a shared 8-vertex buffer (2 quads, distinct colours/positions) + a shared 6-index buffer of purely *local* indices, reused unchanged for both draws (only `baseVertex` differs, `0` then `4`) — a decisive, unambiguous "honored vs ignored" distinction (an ignored `baseVertex` would leave the second quad's half at the background colour instead of its own colour). Both checks passed on the first real run. Also documented a separate, newly-discovered gap for a future task (not fixed here): this backend has no 32-bit index buffer support at all (`IsThirtyTwoBit()` hardcoded `false`, `GL_UNSIGNED_SHORT` hardcoded throughout). |
 
 ---
 
@@ -534,7 +572,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All eighteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All nineteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -619,6 +657,10 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   Wrap-vs-Clamp proof verbatim, plus a new check proving the untouched default `SamplerState` now
   reads Wrap (matching real XNA), not the old hardcoded Clamp. Full re-run of the other 17
   OpenGL4 CTest suites confirmed no regression from the corrected default.
+- `OpenGL4_BaseVertex` — 2/2, a shared 8-vertex/6-index buffer pair with purely local indices
+  proving `baseVertex=4` genuinely offsets the vertex fetch (right-half quad renders its own BLUE,
+  not a silent re-fetch of the left-half RED quad's data). Full re-run of the other 18 OpenGL4
+  CTest suites confirmed no regression.
 
 ---
 
@@ -681,10 +723,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
     all ✅ (`OpenGL4_SamplerState`, 3/3). See `GL4-26`'s own row: a real bug (hardcoded Clamp
     silently overwriting the already-correctly-applied real sampler state on every draw) found by
     inspection and fixed by deleting 7 redundant call sites, not adding anything.
-16. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
+17. ~~`GL4-27`~~ — real `params.baseVertex` support done and verified 2026-07-22, all ✅
+    (`OpenGL4_BaseVertex`, 2/2). See `GL4-27`'s own row; also logged a new, separate,
+    not-yet-fixed finding: no 32-bit index buffer support at all on this backend.
+18. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
     recovery explicitly, permanently deferred — do not pick it up):**
-    - `GL4-27` — `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `params.baseVertex` support
-      (`glDrawElementsBaseVertex`).
     - `GL4-28` — `TransformWindowToLogical`/`TransformLogicalToWindow`.
     - `GL4-29` — `preferPerPixelLighting` vertex-lit shader variant.
     - `GL4-30` — custom `ShaderEffect` (`CreateEffectBackend`) — API already established and

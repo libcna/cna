@@ -3011,7 +3011,15 @@ void main()
             static_cast<std::uintptr_t>(params.startIndex) * sizeof(uint16_t));
         gl4_glBindVertexArray(vb.VaoHandle());
         gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-        glDrawElements(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT, byteOffset);
+        // plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- glDrawElementsBaseVertex
+        // adds params.baseVertex to every fetched index before it indexes into the currently bound
+        // vertex buffer (maps directly to FNA's own D3D9/OpenGL baseVertex parameter), letting
+        // multiple sub-meshes share one large vertex buffer with per-draw index-space-relative
+        // indices, matching every effect's own DrawIndexedPrimitivesEx(..., baseVertex, ...)
+        // contract. params.baseVertex defaults to 0, so this is a genuine no-op for every existing
+        // draw that never set it.
+        gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT,
+                                     byteOffset, params.baseVertex);
         gl4_glBindVertexArray(0);
     }
 
