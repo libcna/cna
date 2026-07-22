@@ -558,6 +558,23 @@ namespace CNA::Internal::Backends::OpenGLES1
         mirroredRepeatSupported_ = HasGLExtension("GL_OES_texture_mirrored_repeat");
         elementIndexUintSupported_ = HasGLExtension("GL_OES_element_index_uint");
 
+        // OPENGLES1-88: Min/Max blend equations and a separate alpha equation.
+        blendMinMaxSupported_ = HasGLExtension("GL_EXT_blend_minmax");
+        glBlendEquationSeparateOES_ = reinterpret_cast<PFNGLBLENDEQUATIONSEPARATEOESPROC>(
+            SDL_GL_GetProcAddress("glBlendEquationSeparateOES"));
+        if (!HasGLExtension("GL_OES_blend_equation_separate"))
+            glBlendEquationSeparateOES_ = nullptr;
+
+        // OPENGLES1-86: anisotropic filtering. The cap is queried rather than assumed -- never
+        // request more than the driver grants.
+        maxAnisotropy_ = 1.0f;
+        if (HasGLExtension("GL_EXT_texture_filter_anisotropic"))
+        {
+            GLfloat cap = 1.0f;
+            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &cap);
+            if (cap > 1.0f) maxAnisotropy_ = cap;
+        }
+
         fboSupported_ = HasGLExtension("GL_OES_framebuffer_object");
         if (fboSupported_)
         {
@@ -1784,21 +1801,28 @@ namespace CNA::Internal::Backends::OpenGLES1
             glBlendFunc(ToGLBlendFactor(colorSrcBlend), ToGLBlendFactor(colorDstBlend));
         }
 
-        if (glBlendEquationOES_)
+        if (glBlendEquationOES_ || glBlendEquationSeparateOES_)
         {
-            // GL_OES_blend_subtract only defines Add/Subtract/ReverseSubtract -- Max/Min
-            // (BlendFunction ordinals 3/4) have no ES1.1 equivalent and fall back to Add
-            // (documented deviation, see docs/opengles1-backend.md).
-            const auto toEquation = [](int xnaBlendFunc) -> GLenum
+            // GL_OES_blend_subtract covers Add/Subtract/ReverseSubtract; Max/Min (BlendFunction
+            // ordinals 3/4) need GL_EXT_blend_minmax and fall back to Add only where that is
+            // absent -- this driver has it, so they are honoured.
+            const bool minMax = blendMinMaxSupported_;
+            const auto toEquation = [minMax](int xnaBlendFunc) -> GLenum
             {
                 switch (xnaBlendFunc)
                 {
                 case 1: return GL_FUNC_SUBTRACT_OES;
                 case 2: return GL_FUNC_REVERSE_SUBTRACT_OES;
+                case 3: return minMax ? static_cast<GLenum>(GL_MAX_EXT) : static_cast<GLenum>(GL_FUNC_ADD_OES);
+                case 4: return minMax ? static_cast<GLenum>(GL_MIN_EXT) : static_cast<GLenum>(GL_FUNC_ADD_OES);
                 default: return GL_FUNC_ADD_OES;
                 }
             };
-            glBlendEquationOES_(toEquation(colorBlendFunc));
+
+            if (glBlendEquationSeparateOES_)
+                glBlendEquationSeparateOES_(toEquation(colorBlendFunc), toEquation(alphaBlendFunc));
+            else
+                glBlendEquationOES_(toEquation(colorBlendFunc));
         }
     }
 
@@ -1855,7 +1879,6 @@ namespace CNA::Internal::Backends::OpenGLES1
 
     void OpenGLES1GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
     {
-        (void)maxAnisotropy;  // No GL_EXT_texture_filter_anisotropic dependency in this baseline.
 
         // Remember it: GraphicsDevice pushes sampler state down BEFORE the draw call binds its
         // textures, and GL stores filter/wrap on the texture object, so applying it here alone
@@ -1866,6 +1889,7 @@ namespace CNA::Internal::Backends::OpenGLES1
             samplerFilter_[slot] = filter;
             samplerAddressU_[slot] = addressU;
             samplerAddressV_[slot] = addressV;
+            samplerAnisotropy_[slot] = maxAnisotropy;
         }
 
         // Still apply immediately as well, which is what the SpriteBatch path (already binding
@@ -1874,6 +1898,14 @@ namespace CNA::Internal::Backends::OpenGLES1
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ToGLFilter(filter));
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(addressU, mirroredRepeatSupported_));
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(addressV, mirroredRepeatSupported_));
+        ApplyAnisotropy(GL_TEXTURE_2D, maxAnisotropy);
+    }
+
+    void OpenGLES1GraphicsBackend::ApplyAnisotropy(unsigned int target, int requested) const
+    {
+        if (maxAnisotropy_ <= 1.0f) return;   // extension absent -- nothing to set
+        const float clamped = std::clamp(static_cast<float>(requested), 1.0f, maxAnisotropy_);
+        glTexParameterf(static_cast<GLenum>(target), GL_TEXTURE_MAX_ANISOTROPY_EXT, clamped);
     }
 
     void OpenGLES1GraphicsBackend::ApplySamplerToBoundTextureEXT(int slot, unsigned int target) const
@@ -1884,6 +1916,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glTexParameteri(t, GL_TEXTURE_MAG_FILTER, ToGLFilter(samplerFilter_[slot]));
         glTexParameteri(t, GL_TEXTURE_WRAP_S, ToGLWrapMode(samplerAddressU_[slot], mirroredRepeatSupported_));
         glTexParameteri(t, GL_TEXTURE_WRAP_T, ToGLWrapMode(samplerAddressV_[slot], mirroredRepeatSupported_));
+        ApplyAnisotropy(target, samplerAnisotropy_[slot]);
     }
 
     void OpenGLES1GraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -1908,7 +1941,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         case CNA::GraphicsCapability::DepthStencilBuffer: return true;
         case CNA::GraphicsCapability::MultiSampleAntiAliasing: return false;
         case CNA::GraphicsCapability::MultipleRenderTargets: return false;
-        case CNA::GraphicsCapability::AnisotropicFiltering: return false;
+        case CNA::GraphicsCapability::AnisotropicFiltering: return maxAnisotropy_ > 1.0f;
         // OPENGLES1-76: emulated via GL_LINES re-expansion (see ApplyRasterizerState/Draw*).
         case CNA::GraphicsCapability::WireFrame: return true;
         // ES 1.1 core has no occlusion-query mechanism at all (confirmed: no such extension

@@ -13,6 +13,11 @@
 // Check G -- ...and exactly one of CullClockwise/CullCounterClockwise culls it (which one is a
 //   winding convention, so asserting "exactly one" keeps this independent of that convention).
 // Check H -- SamplerState::PointClamp vs LinearClamp differ across a magnified texel boundary.
+// Check I -- BlendFunction::Max keeps the brighter of source and destination (OPENGLES1-88),
+//   which a fallback to Add could not produce: Add would saturate, Max must not.
+// Check J -- BlendFunction::Min keeps the darker of the two.
+// Check K -- SupportsCapability(AnisotropicFiltering) agrees with the driver, and a sampler
+//   requesting anisotropy still renders (OPENGLES1-86).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver; see
 // docs/opengles1-backend.md (stock Debian Mesa is built with -Dgles1=disabled and cannot run this).
@@ -24,6 +29,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
@@ -99,7 +107,7 @@ namespace
 
 class OpenGLES1RenderStateTest : public Game
 {
-    static constexpr int kChecks = 8;
+    static constexpr int kChecks = 11;
 
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     SpriteBatch* spriteBatch_ = nullptr;
@@ -234,6 +242,68 @@ protected:
 
         check(colorNear(pointPixel, Color::Red) && !colorNear(linearPixel, Color::Red),
               "SamplerState -- PointClamp keeps the texel pure where LinearClamp blends it");
+
+        // ---- Checks I/J: Min/Max blend equations -----------------------------------------
+        {
+            // dst = (200,60,60), src = (60,200,60).
+            //   Max -> (200,200,60); Min -> (60,60,60); Add would saturate towards (255,255,120).
+            // All three outcomes are distinct, so this cannot pass by accident on a fallback.
+            BlendState maxState = BlendState::Opaque;
+            maxState.setColorSourceBlendProperty(Blend::One);
+            maxState.setColorDestinationBlendProperty(Blend::One);
+            maxState.setColorBlendFunctionProperty(BlendFunction::Max);
+            maxState.setAlphaSourceBlendProperty(Blend::One);
+            maxState.setAlphaDestinationBlendProperty(Blend::One);
+            maxState.setAlphaBlendFunctionProperty(BlendFunction::Max);
+
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.Clear(Color::Black);
+            drawFullScreen(dev, Color(200, 60, 60, 255));
+            dev.setBlendStateProperty(maxState);
+            drawFullScreen(dev, Color(60, 200, 60, 255));
+            const Color maxPixel = readPixel(dev, mid, mid);
+            std::printf("       (BlendFunction::Max = %d,%d,%d)\n", maxPixel.getRProperty(),
+                        maxPixel.getGProperty(), maxPixel.getBProperty());
+            check(colorNear(maxPixel, Color(200, 200, 60), 12),
+                  "BlendFunction::Max keeps the brighter channel of source and destination");
+
+            BlendState minState = maxState;
+            minState.setColorBlendFunctionProperty(BlendFunction::Min);
+            minState.setAlphaBlendFunctionProperty(BlendFunction::Min);
+
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.Clear(Color::Black);
+            drawFullScreen(dev, Color(200, 60, 60, 255));
+            dev.setBlendStateProperty(minState);
+            drawFullScreen(dev, Color(60, 200, 60, 255));
+            const Color minPixel = readPixel(dev, mid, mid);
+            std::printf("       (BlendFunction::Min = %d,%d,%d)\n", minPixel.getRProperty(),
+                        minPixel.getGProperty(), minPixel.getBProperty());
+            check(colorNear(minPixel, Color(60, 60, 60), 12),
+                  "BlendFunction::Min keeps the darker channel of source and destination");
+
+            dev.setBlendStateProperty(BlendState::Opaque);
+        }
+
+        // ---- Check K: anisotropic filtering ----------------------------------------------
+        {
+            SamplerState aniso = SamplerState::LinearClamp;
+            aniso.setMaxAnisotropyProperty(4);
+            dev.getSamplerStatesProperty()[0] = aniso;
+
+            dev.Clear(Color::Black);
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &aniso, nullptr, nullptr);
+            spriteBatch_->Draw(splitTex_, Rectangle(0, 0, kSize, kSize), Color::White);
+            spriteBatch_->End();
+
+            const bool drew = !colorNear(readPixel(dev, kSize / 4, mid), Color::Black);
+            const bool claims = dev.SupportsCapability(CNA::GraphicsCapability::AnisotropicFiltering);
+            std::printf("       (SupportsCapability(AnisotropicFiltering) = %s)\n", claims ? "true" : "false");
+            check(drew,
+                  "SamplerState::MaxAnisotropy is accepted and the textured draw still renders");
+
+            dev.getSamplerStatesProperty()[0] = SamplerState::LinearClamp;
+        }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);
         result_ = (passCount_ == kChecks) ? 0 : 1;

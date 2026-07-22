@@ -513,6 +513,16 @@ namespace CNA::Internal::Backends::OpenGLES1
          */
         void ApplySamplerToBoundTextureEXT(int slot, unsigned int target) const;
 
+        /**
+         * @brief Applies anisotropic filtering to the bound texture, clamped to the driver's cap.
+         *
+         * No-op when `GL_EXT_texture_filter_anisotropic` is absent.
+         *
+         * @param target GL texture target of the bound object.
+         * @param requested Anisotropy level asked for by the sampler state.
+         */
+        void ApplyAnisotropy(unsigned int target, int requested) const;
+
         void RegisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer);
 
         /**
@@ -576,6 +586,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         // glBlendFunc/default-Add accordingly (documented deviation, see docs/opengles1-backend.md).
         PFNGLBLENDFUNCSEPARATEOESPROC glBlendFuncSeparateOES_ = nullptr;
         PFNGLBLENDEQUATIONOESPROC glBlendEquationOES_ = nullptr;
+        PFNGLBLENDEQUATIONSEPARATEOESPROC glBlendEquationSeparateOES_ = nullptr;
 
         bool fboSupported_ = false;
         // Every live texture, so DebugRestoreContext() can rebuild them all against the new
@@ -586,6 +597,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         int samplerFilter_[kMaxSamplerSlots] = {};
         int samplerAddressU_[kMaxSamplerSlots] = {};
         int samplerAddressV_[kMaxSamplerSlots] = {};
+        int samplerAnisotropy_[kMaxSamplerSlots] = {};
 
         std::vector<OpenGLES1TextureBackend*> liveTextures_;
         std::vector<OpenGLES1VertexBufferBackend*> liveVertexBuffers_;
@@ -593,6 +605,8 @@ namespace CNA::Internal::Backends::OpenGLES1
         bool cubeMapSupported_ = false;
         bool mirroredRepeatSupported_ = false;
         bool elementIndexUintSupported_ = false;
+        bool blendMinMaxSupported_ = false;
+        float maxAnisotropy_ = 1.0f;   // 1.0 means GL_EXT_texture_filter_anisotropic is absent
         int maxTextureUnits_ = 1;
 
         // Wireframe emulation (OPENGLES1-76): FillMode::WireFrame has no glPolygonMode
