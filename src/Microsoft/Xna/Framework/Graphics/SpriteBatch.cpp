@@ -83,7 +83,7 @@ namespace Microsoft::Xna::Framework::Graphics
                             BlendState blendState,
                             SamplerState* samplerState,
                             DepthStencilState* depthStencilState,
-                            RasterizerState* /*rasterizerState*/,
+                            RasterizerState* rasterizerState,
                             Effect* effect,
                             Matrix transformMatrix)
     {
@@ -102,6 +102,18 @@ namespace Microsoft::Xna::Framework::Graphics
             // samplerState handling immediately below).
             graphicsDevice_->setDepthStencilStateProperty(
                 depthStencilState ? *depthStencilState : DepthStencilState::None);
+            // REMED-GFX-081: this parameter was previously discarded (`/*rasterizerState*/`), so a
+            // RasterizerState supplied to Begin -- e.g. one with ScissorTestEnable/CullMode/FillMode
+            // set -- never reached the device or backend; the only way to affect sprite rasterizer
+            // state was to assign GraphicsDevice.RasterizerState directly. FNA's PrepRenderState
+            // applies `rasterizerState ?? RasterizerState.CullCounterClockwise`; do the same here
+            // (a null rasterizerState always resolves to the SpriteBatch default and is always
+            // (re-)applied, never left over from a previous Begin -- mirrors the blend/depth/sampler
+            // handling). Applied via the GraphicsDevice property so it routes through the same
+            // ApplyRasterizerState path every backend already uses; the state is copied (no raw
+            // pointer to the caller's RasterizerState is retained).
+            graphicsDevice_->setRasterizerStateProperty(
+                rasterizerState ? *rasterizerState : RasterizerState::CullCounterClockwise);
         }
 
         customEffect_    = effect;

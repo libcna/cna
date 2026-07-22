@@ -96,6 +96,11 @@ class SoftwareScissorTest : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     Texture2D whiteTex_;
     Texture2D greenTex_;
+    // REMED-GFX-081: the current scissor RasterizerState, passed THROUGH SpriteBatch.Begin (now that
+    // Begin honors its rasterizerState argument) for the 2D checks, and also assigned to the device
+    // (SetScissorEnabled) so the 3D DrawPrimitives checks, which read GraphicsDevice.RasterizerState
+    // directly, see the same state.
+    RasterizerState scissorRS_;
     bool done_ = false;
     int passCount_ = 0;
     int totalCount_ = 0;
@@ -114,16 +119,16 @@ class SoftwareScissorTest : public Game
         dev.setViewportProperty(Viewport(x, y, w, h));
     }
 
-    // REMED-GFX-080: a game enables scissor testing through RasterizerState.ScissorTestEnable, set
-    // on the device (SpriteBatch.Begin's rasterizerState argument is a separate, currently-unwired
-    // path -- see the new-finding note in REMEDIATION_PROGRESS). CullNone so the raster geometry is
-    // winding-agnostic and the check isolates scissor clipping.
+    // REMED-GFX-080/081: build the scissor RasterizerState (CullNone so the raster geometry is
+    // winding-agnostic and the check isolates scissor clipping) and BOTH store it for DrawSprite to
+    // pass through SpriteBatch.Begin (REMED-GFX-081 made Begin honor its rasterizerState argument)
+    // AND assign it to the device so the 3D DrawPrimitives checks (which read
+    // GraphicsDevice.RasterizerState directly) see the same state.
     void SetScissorEnabled(GraphicsDevice& dev, bool enable)
     {
-        RasterizerState rs;
-        rs.setCullModeProperty(CullMode::None);
-        rs.setScissorTestEnableProperty(enable);
-        dev.setRasterizerStateProperty(rs);
+        scissorRS_.setCullModeProperty(CullMode::None);
+        scissorRS_.setScissorTestEnableProperty(enable);
+        dev.setRasterizerStateProperty(scissorRS_);
     }
 
     void SetScissorRect(GraphicsDevice& dev, int x, int y, int w, int h)
@@ -137,7 +142,7 @@ class SoftwareScissorTest : public Game
     {
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
-        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr);
+        sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorRS_);
         sb.Draw(whiteTex_, destination, Rectangle(0, 0, 1, 1), tint, rotation, origin, effects, 0.0f);
         sb.End();
     }
@@ -471,7 +476,7 @@ protected:
                 Matrix transform = Matrix::getIdentityProperty();
                 transform.M11 = 1.3f; transform.M22 = 1.3f;
                 transform.M41 = 2.0f; transform.M42 = 3.0f;
-                sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, nullptr,
+                sb.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point, nullptr, &scissorRS_,
                          nullptr, transform);
                 sb.Draw(whiteTex_, Rectangle(0, 0, 50, 40), Rectangle(0, 0, 1, 1), red,
                         0.0f, Vector2(0.0f, 0.0f),
