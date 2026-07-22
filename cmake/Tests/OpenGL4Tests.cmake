@@ -72,4 +72,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_msaa examples/opengl4_msaa_test.cpp)
     cna_register_backend_test(NAME OpenGL4_MSAA COMMAND cna_test_opengl4_msaa
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-18: real Texture2D mip level support -- UpdatePixelsLevel() uploads real
+    # per-level data, GL_TEXTURE_MAX_LEVEL is clamped to the real level count, and mip-aware
+    # TextureFilter values now map to real GL_*_MIPMAP_* sampler filters.
+    cna_opengl4_test(cna_test_opengl4_mipmap examples/opengl4_mipmap_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_Mipmap COMMAND cna_test_opengl4_mipmap
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

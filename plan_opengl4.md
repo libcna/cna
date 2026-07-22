@@ -117,6 +117,27 @@
 > documented, codebase-wide `GraphicsDevice` architectural constraint, not an OpenGL4-specific
 > gap). Plus a full re-run of the other 7 OpenGL4 CTest suites confirming no regression.
 >
+> **Status (2026-07-22): `GL4-18` (real `Texture2D` mip levels) landed and verified.**
+> `OpenGL4TextureBackend::UpdatePixelsLevel()` is real now — `Texture2D::SetData(level, ...)` for
+> `level>0` previously reached an unoverridden no-op, silently discarding every mip level beyond
+> 0. `GL_TEXTURE_MAX_LEVEL` is clamped to the real requested level count at construction (matches
+> `EasyGLTextureBackend`'s own Task-924 fix — otherwise a mip-aware `TextureFilter` treats *any*
+> texture, including the overwhelmingly common single-level case, as an incomplete mipmap chain
+> and renders solid black, since GL's own default max level is 1000). `FilterToGL`'s mapping table
+> also gained real `GL_*_MIPMAP_*` min-filter tokens for every `TextureFilter` `Mip*`
+> variant — previously every one of them collapsed to a plain non-mip filter, so even a
+> genuinely-uploaded mip chain was never actually sampled from past level 0 regardless of
+> minification. `TextureFilter::Point`/`Linear` deliberately keep their existing non-mip-aware GL
+> filters, matching `EasyGLGraphicsBackend`'s own identical, documented choice. Verified by the new
+> `OpenGL4_Mipmap` CTest (4/4, methodology matching this project's own established Task-298 mip-
+> filter test family): a real high mip level is genuinely GPU-selected and its own real uploaded
+> content sampled (not "didn't throw") under heavy minification with a mip-aware filter, `Point`
+> confirmed to still never mip-select (a known, intentional limitation, not a regression), level 0
+> still samples correctly, and an ordinary single-level texture sampled with a mip-aware filter no
+> longer renders solid black. The test itself needed the same `Color::Green`-is-`(0,128,0)`-not-
+> `(0,255,0)` correction `GL4-16` already found once. Full re-run of the other 8 OpenGL4 CTest
+> suites confirms no regression.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -169,8 +190,6 @@
 >   documented-permanent-limitation shape as `Headless`/`Software`/`SDL_gpu` for their own reasons
 >   — unlike those, this is not a hard API limitation for OpenGL4 (`glGenQueries`/
 >   `GL_SAMPLES_PASSED` exist), just not implemented yet). ⬜
-> - **Mipmaps** — `CreateTexture`'s `ImageData::mipLevels` field is ignored; every texture is a
->   single mip level. `UpdatePixelsLevel` (per-level upload) is not overridden either. ⬜
 > - **`TransformWindowToLogical`/`TransformLogicalToWindow`** — not overridden (default `false`),
 >   so `Mouse`/touch physical→logical coordinate mapping doesn't work yet on this backend when a
 >   non-default `virtualWidth`/`virtualHeight` is set. ⬜
@@ -218,7 +237,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -243,6 +262,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-15` | `RenderTargetCube`: real per-face FBO (`OpenGL4RenderTargetCubeBackend`) — one shared cube-map texture, re-attaching the requested face (`GL_TEXTURE_CUBE_MAP_POSITIVE_X + face`) on `BindAsRenderTargetFace`, same depth/MSAA/mip machinery as `GL4-14`'s 2D target, real per-face `GetData()`. `SetRenderTargets` (plural): real MRT via a persistent multi-attachment FBO (`glFramebufferTexture2D` at `GL_COLOR_ATTACHMENT0+i` per target) + `glDrawBuffers`. `GL4Loader` gained `glDrawBuffers` and the `GL_TEXTURE_CUBE_MAP`/`GL_TEXTURE_CUBE_MAP_POSITIVE_X` tokens. | ✅ | No depth attachment for MRT and no multi-output shader variant (only `COLOR_ATTACHMENT0` receives a draw) — both explicitly verified, not silently assumed, by `OpenGL4_RenderTargetCube_MRT`'s own Check H, and match `EasyGLGraphicsBackend`'s own identical, documented MRT gap. |
 | `GL4-16` | Real dynamic `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`SetBlendFactor`/`SetScissorRect` — blend factors/equations (`glBlendFuncSeparate`/`glBlendEquationSeparate`), `glBlendColor`, real depth+stencil (incl. two-sided via `glStencilFuncSeparate`/`glStencilOpSeparate`/`glStencilMaskSeparate`), cull mode, scissor test, wireframe fill mode (`glPolygonMode`). `GL4Loader` gained the 3 two-sided-stencil GL-2.0 entry points, `GL_INCR_WRAP`/`GL_DECR_WRAP`. | ✅ | Since `GraphicsDevice` applies its own default `RasterizerState`/`BlendState`/`DepthStencilState` at construction (matching real XNA), turning cull mode on for real exposed that `opengl4_3d_test.cpp`/`opengl4_textured3d_test.cpp` (`GL4-9`/`GL4-13`) had never been exercised under real culling and used a quad winding XNA's actual default (`CullCounterClockwiseFace`) culls — fixed with an explicit `RasterizerState::CullNone` opt-out (the same established idiom `bgfx_basiceffect_texture_enabled_test.cpp` already uses for the identical reason, not new). The new test itself needed 2 of its own corrections: `BlendState::AlphaBlend` assumes premultiplied source colour (switched to `BlendState::NonPremultiplied` for a straight-alpha check), and this codebase's `Color::Green` is real XNA `(0,128,0)`, not `(0,255,0)` (`Lime`). |
 | `GL4-17` | Real backbuffer MSAA — a manually-managed multisample FBO (`msaaFbo_`/`msaaColorRbo_`/`msaaDepthRbo_`, real `GL_DEPTH24_STENCIL8` combined depth+stencil) resolved via `glBlitFramebuffer` before `Present()`/`ReadBackbuffer()`, mirroring `EasyGLGraphicsBackend`'s own `CreateMsaaBuffers`/`ResolveMsaa`/`BindDefaultFramebuffer` shape rather than an SDL_GL window pixel-format request. Fixed at backend-construction time; `ApplyMultiSampleCount` not overridden (same documented limitation `EasyGLGraphicsBackend` already has). `GetMultiSampleCount()` (top-level `IGraphicsBackend`) now reports the real `GL_MAX_SAMPLES`-clamped value. | ✅ | `GraphicsDeviceManager.PreferMultiSampling` set in a `Game` subclass's constructor never reaches the *first* backend construction at all (a documented, codebase-wide `GraphicsDevice` architectural constraint — the device member is unconditionally default-constructed with `MultiSampleCount=0` first) — verification used `GraphicsDevice::RecreateBackendForMultiSampleCount(8)` (the same NOXNA test-only escape hatch Vulkan's own pre-Task-902 MSAA tests used), not a design gap specific to this backend. |
+| `GL4-18` | Real `Texture2D` mip level support — `OpenGL4TextureBackend::UpdatePixelsLevel()` uploads real per-level data via `glTexImage2D` (level storage is never pre-allocated beyond level 0), `GL_TEXTURE_MAX_LEVEL` is clamped to the real requested level count at construction (matches `EasyGLTextureBackend`'s own Task-924 fix), and `FilterToGL`'s mapping table gained real `GL_*_MIPMAP_*` min-filter tokens for every `TextureFilter` `Mip*` variant. `Point`/`Linear` deliberately keep their non-mip-aware GL filters, matching `EasyGLGraphicsBackend`'s own identical, documented choice. | ✅ | The new test needed the same `Color::Green`-is-`(0,128,0)`-not-`(0,255,0)` correction `GL4-16` already found once. |
 
 ---
 
@@ -265,7 +285,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All eight dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All nine dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -304,6 +324,10 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   MSAA off, genuinely blended intermediate pixels for the identical geometry after
   `RecreateBackendForMultiSampleCount(8)`, and a real non-zero `GetMultiSampleCount()`). Full
   re-run of the other 7 OpenGL4 CTest suites confirmed no regression.
+- `OpenGL4_Mipmap` — 4/4 (a real high mip level genuinely GPU-selected and sampled under heavy
+  minification with a mip-aware filter, `Point` confirmed to still never mip-select, level 0
+  still correct, and an ordinary single-level texture sampled with a mip-aware filter no longer
+  solid black). Full re-run of the other 8 OpenGL4 CTest suites confirmed no regression.
 
 ---
 
@@ -332,15 +356,18 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 6. ~~`GL4-17`~~ — real backbuffer MSAA done and verified 2026-07-22, all ✅ (`OpenGL4_MSAA`, 3/3).
    See `GL4-17`'s own row for why it's fixed at construction time (matching EasyGL) and the
    `RecreateBackendForMultiSampleCount()` test methodology this required.
-7. **Next up (not yet started, no priority order implied):**
+7. ~~`GL4-18`~~ — real `Texture2D` mip level support done and verified 2026-07-22, all ✅
+   (`OpenGL4_Mipmap`, 4/4). See `GL4-18`'s own row for the `GL_TEXTURE_MAX_LEVEL`/`FilterToGL`
+   fixes this required.
+8. **Next up (not yet started, no priority order implied):**
    - `AlphaTestEffect`/`DualTextureEffect` — now unblocked by `GL4-13`'s stride dispatch; each
      needs its own shader variant (per-pixel discard for the former, a second sampler for the
      latter) plumbed through `BindProgramForStride`.
    - `EnvironmentMapEffect` — now unblocked by `GL4-15`'s `RenderTargetCube` (its env-map source),
      but also needs plain `CreateTextureCube` (a non-render-target cube texture a game can load
      from disk) and its own shader variant.
-   - Mipmap generation (`glGenerateMipmap`) for `CreateTexture`'s `mipLevels` request and
-     `UpdatePixelsLevel`.
+   - `Texture3D`/`TextureCube` (plain, non-render-target) — `CreateTexture3D`/`CreateTextureCube`
+     still return `nullptr`.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
 everything else still open — do not treat the picks above as the only next options.

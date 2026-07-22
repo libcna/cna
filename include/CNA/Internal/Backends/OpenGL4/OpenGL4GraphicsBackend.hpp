@@ -69,6 +69,11 @@ namespace CNA::Internal::Backends::OpenGL4
         [[nodiscard]] int GetHeight() const override { return height_; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+        /// plan_opengl4.md GL4-18: uploads mip level @p level (allocating its storage via
+        /// glTexImage2D, since only level 0 is allocated at construction -- matches
+        /// EasyGLTextureBackend::UpdatePixelsLevel's identical "caller supplies every level
+        /// explicitly" contract; this backend does not auto-generate mips for plain textures).
+        void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         void BindGL() const override;
 
         NOXNA [[nodiscard]] unsigned int GLHandle() const { return texture_; }
@@ -77,6 +82,12 @@ namespace CNA::Internal::Backends::OpenGL4
         unsigned int texture_ = 0;
         int width_ = 0;
         int height_ = 0;
+        /// plan_opengl4.md GL4-18: real ImageData::mipLevels count this texture was created
+        /// with -- GL_TEXTURE_MAX_LEVEL is clamped to levelCount_-1 so a mipmap-requiring
+        /// TextureFilter (e.g. Anisotropic) doesn't treat this as an incomplete mipmap chain
+        /// (GL's own default max level is 1000), even for an ordinary single-level texture that
+        /// never uploads anything beyond level 0.
+        int levelCount_ = 1;
     };
 
     /**
