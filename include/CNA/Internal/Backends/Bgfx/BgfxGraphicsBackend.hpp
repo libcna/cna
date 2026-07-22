@@ -479,6 +479,14 @@ namespace CNA::Internal::Backends::Bgfx
         bool     segCurIsBase_ = true;   ///< is the active view the target's base view (vs a segment)?
         bool     segCurHasVp_ = false;   ///< active view's custom-viewport flag
         uint16_t segCurX_ = 0, segCurY_ = 0, segCurW_ = 0, segCurH_ = 0;  ///< active view's custom viewport
+        // REMED-GFX-084: the active view's SpriteBatch view-transform identity. EnsureViewState bakes
+        // spriteTransform_ into the view-global setViewTransform (last-wins at bgfx::frame()), so the
+        // sprite transform is part of a segment's view-global state exactly like its viewport rect. Set
+        // when a SpriteBatch batch commits to the active view; a later same-viewport sprite batch with a
+        // different transform starts a new ordered segment. A 3D draw leaves ...Valid_ false (it never
+        // programs setViewTransform), so a sprite can still adopt the view afterwards without churn.
+        bool     segCurSpriteTransformValid_ = false;
+        Matrix   segCurSpriteTransform_ = Matrix::getIdentityProperty();
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
@@ -738,7 +746,12 @@ namespace CNA::Internal::Backends::Bgfx
         // segment* members). Redirects currentViewId_ and spriteViewId; called at the very start of
         // the 3D (ApplyViewportOverride) and SpriteBatch (SubmitSprite) submit paths. In the common
         // single-viewport case it keeps the target's base view and allocates nothing.
-        void SelectViewportSegment();
+        // REMED-GFX-084: spritePath == true also keys the segment on the SpriteBatch view transform
+        // (spriteTransform_), which EnsureViewState bakes into the view-global setViewTransform, so a
+        // same-viewport batch with a different Begin(transformMatrix) starts a new ordered segment. The
+        // 3D path (spritePath == false) never programs setViewTransform, so it neither keys on nor
+        // commits the sprite transform.
+        void SelectViewportSegment(bool spritePath);
         // Whether the active GraphicsDevice.Viewport is a genuine custom sub-region of the current target
         // (vs the full-target/default viewport); also returns the target's full pixel size. Shared by
         // SelectViewportSegment() and ApplyViewportOverride(); mirrors EnsureViewState()'s own test.

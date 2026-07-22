@@ -1543,7 +1543,9 @@ namespace CNA::Internal::Backends::Bgfx
 
         // REMED-GFX-065: pick/allocate this sprite's ordered viewport segment BEFORE EnsureViewState so
         // its full-rect + offset-ortho land on the segment view belonging to this batch's viewport.
-        SelectViewportSegment();
+        // REMED-GFX-084: spritePath=true also segments on the batch's view transform (spriteTransform_),
+        // which EnsureViewState is about to bake into this view's view-global setViewTransform.
+        SelectViewportSegment(true);
 
         EnsureViewState();
 
@@ -2044,10 +2046,29 @@ namespace CNA::Internal::Backends::Bgfx
     // frame's clear values) so the new viewport's 3D draws depth-test against a fresh buffer rather than
     // a stale one -- while preserving colour (the earlier segments' pixels). Consecutive draws sharing
     // the active view's viewport reuse it (no id churn). Once off the base we never return to it.
-    void BgfxGraphicsBackend::SelectViewportSegment()
+    void BgfxGraphicsBackend::SelectViewportSegment(bool spritePath)
     {
         uint16_t fullW = 0, fullH = 0;
         const bool hasVp = CurrentCustomViewport(fullW, fullH);
+
+        // REMED-GFX-084: for a SpriteBatch submission the batch's Begin(transformMatrix) is baked into
+        // the view-GLOBAL setViewTransform by EnsureViewState (orthoWithTransform = spriteTransform_ *
+        // ortho), resolved once at bgfx::frame() -> last-write-wins. So the sprite view transform is part
+        // of the view-global state a segment owns, exactly like the viewport rect: two same-viewport
+        // batches with different transforms must land on DIFFERENT ordered segments. The 3D path never
+        // programs setViewTransform (it supplies its own world-view-projection per draw via a uniform and
+        // ignores bgfx's built-in view/proj), so a 3D draw neither keys on nor commits the sprite
+        // transform (segCurSpriteTransformValid_ stays false, letting a following sprite adopt the view).
+        // Because the viewport rect is also part of the segment key, keying on the raw spriteTransform_
+        // is exactly equivalent to keying on the effective orthoWithTransform (ortho is a pure function
+        // of the viewport + full size, and is invertible): identical (viewport, transform) <=> identical
+        // effective view matrix. Matrix::operator== is exact per-component float equality, so a default
+        // Begin() (Matrix::Identity) and an explicit Matrix::Identity reuse; a genuinely different
+        // transform does not (no epsilon merging of meaningfully different transforms).
+        auto commitSpriteTransform = [&] {
+            if (spritePath) { segCurSpriteTransformValid_ = true; segCurSpriteTransform_ = spriteTransform_; }
+            else            { segCurSpriteTransformValid_ = false; }
+        };
 
         if (!segmentActive_)
         {
@@ -2059,23 +2080,41 @@ namespace CNA::Internal::Backends::Bgfx
             segCurIsBase_  = true;
             segCurHasVp_   = hasVp;
             segCurX_ = viewportX_; segCurY_ = viewportY_; segCurW_ = viewportW_; segCurH_ = viewportH_;
+            commitSpriteTransform();
             return;
         }
 
         const bool sameVp = (segCurHasVp_ == hasVp) &&
             (!hasVp || (segCurX_ == viewportX_ && segCurY_ == viewportY_ &&
                         segCurW_ == viewportW_ && segCurH_ == viewportH_));
-        if (sameVp)
-            return;  // same viewport as the active view (base or segment) -> reuse it, no allocation
 
-        // A different viewport appeared on this target within the frame -> next ordered segment view.
+        // Sprite-transform compatibility (only for the sprite path): the active view is compatible if no
+        // sprite has committed a transform to it yet (it can adopt this batch's) or its committed
+        // transform equals this batch's. A 3D reuse never consults or changes this.
+        bool transformCompatible = true;
+        if (spritePath && segCurSpriteTransformValid_)
+            transformCompatible = (segCurSpriteTransform_ == spriteTransform_);
+
+        if (sameVp && transformCompatible)
+        {
+            // Reuse the active view (base or segment) -> no allocation. If it has no committed sprite
+            // transform yet (e.g. established by a 3D draw), adopt this batch's now so a later differing
+            // transform on the same viewport starts a new ordered segment.
+            if (spritePath && !segCurSpriteTransformValid_)
+            { segCurSpriteTransformValid_ = true; segCurSpriteTransform_ = spriteTransform_; }
+            return;
+        }
+
+        // A different viewport OR (sprite path) a different view transform appeared on this target within
+        // the frame -> next ordered segment view.
         const bgfx::ViewId segId = AllocateSegmentViewId();
         bgfx::setViewFrameBuffer(segId, segmentTargetFbo_);
         // Default to the target's FULL rect (the sprite path keeps this + an offset ortho; a custom 3D
         // viewport shrinks it in ApplyViewportOverride). Clear this segment's DEPTH+STENCIL to the frame's
         // clear values (the base view's clear was scoped to the FIRST viewport, so this region's depth is
         // otherwise stale/accumulated), but PRESERVE colour so earlier segments' pixels survive. The
-        // sprite path resets this to CLEAR_NONE in EnsureViewState (sprites don't depth-test).
+        // sprite path resets this to CLEAR_NONE in EnsureViewState (sprites don't depth-test), so a
+        // transform-only sprite segment loads the earlier segments' colour and never clears depth.
         bgfx::setViewRect(segId, 0, 0, fullW, fullH);
         bgfx::setViewClear(segId, static_cast<uint16_t>(BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL),
                            0, clearDepthValue_, clearStencilValue_);
@@ -2083,6 +2122,7 @@ namespace CNA::Internal::Backends::Bgfx
         segCurIsBase_  = false;
         segCurHasVp_   = hasVp;
         segCurX_ = viewportX_; segCurY_ = viewportY_; segCurW_ = viewportW_; segCurH_ = viewportH_;
+        commitSpriteTransform();
     }
 
     void BgfxGraphicsBackend::ApplyViewportOverride()
@@ -2090,8 +2130,9 @@ namespace CNA::Internal::Backends::Bgfx
         // REMED-GFX-065: pick/allocate this draw's ordered viewport segment BEFORE setting the rect, so a
         // second viewport's sub-rect lands on its OWN segment view rather than clobbering the first
         // viewport's draws on a shared view. For the first viewport this is still the base view (shrunk
-        // here just like pre-GFX-065, REMED-GFX-063).
-        SelectViewportSegment();
+        // here just like pre-GFX-063). REMED-GFX-084: spritePath=false -- the 3D path never programs
+        // setViewTransform, so it keys on the viewport only and does not touch the sprite-transform key.
+        SelectViewportSegment(false);
 
         // REMED-GFX-063: a custom sub-region Viewport applies to render-target views too, not only the
         // backbuffer. bgfx view rect is PER-VIEW state; SelectViewportSegment() has pointed currentViewId_
