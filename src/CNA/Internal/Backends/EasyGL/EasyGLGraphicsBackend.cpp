@@ -1102,12 +1102,37 @@ void main()
 
         int logW = 0, logH = 0;
         int rtW = 0, rtH = 0;
+        const bool haveRt = graphicsBackend_ && graphicsBackend_->GetCurrentRenderTarget2DSize(rtW, rtH)
+                            && rtW > 0 && rtH > 0;
+
+        // REMED-GFX-072: honor a custom GraphicsDevice.Viewport. XNA/FNA build the SpriteBatch ortho
+        // from Viewport.Width/Height (CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height,
+        // 0)), so a custom sub-Viewport makes sprite coordinates VIEWPORT-LOCAL. The GL viewport that
+        // GraphicsDevice.Viewport set via SetViewport() survives Clear() (Task 880), so read it here:
+        // if it is a genuine sub-region of the full target, size the projection to it AND leave it in
+        // place as the rasterizer viewport (its X/Y position the [-1,1] result at Viewport.X/Y).
+        // Previously FlushBatch unconditionally reset the GL viewport to the full target and built the
+        // ortho from the full target/logical size, so a custom Viewport was ignored for sprites. The
+        // default full-target viewport keeps the exact prior behavior (reset + full-target/logical ortho).
+        int curVx = 0, curVy = 0, curVw = 0, curVh = 0;
+        device_.get_viewport(curVx, curVy, curVw, curVh);
+        int fullW = 0, fullH = 0;
+        if (haveRt) { fullW = rtW; fullH = rtH; }
+        else if (graphicsBackend_) graphicsBackend_->getPhysicalSize(fullW, fullH);
+        const bool customVp = curVw > 0 && curVh > 0 && fullW > 0 && fullH > 0
+                              && (curVx != 0 || curVy != 0 || curVw != fullW || curVh != fullH);
+
         // Task 1078: a custom-effect draw into a bound RenderTarget2D must size its viewport
         // and orthographic projection to that RT, not the window -- getPhysicalSize()/
         // getLogicalSize() are always window-sized, which only happened to work in every prior
         // test because those tests' RTs all coincidentally matched the window size.
-        if (graphicsBackend_ && graphicsBackend_->GetCurrentRenderTarget2DSize(rtW, rtH)
-            && rtW > 0 && rtH > 0)
+        if (customVp)
+        {
+            // Keep the custom GL viewport (do NOT reset to the full target); project by Viewport.W/H.
+            logW = curVw;
+            logH = curVh;
+        }
+        else if (haveRt)
         {
             device_.set_viewport(0, 0, rtW, rtH);
             logW = rtW;

@@ -1577,4 +1577,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_SkinnedEffect_WorldNormal COMMAND cna_test_easygl_skinnedeffect_world_normal
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
+        # (Viewport.Width/Height), not the full target. EasyGL's FlushBatch built the ortho from the
+        # RT/logical dims AND reset the GL viewport to the full target, so a custom sub-Viewport was
+        # ignored for sprites; it must instead project by Viewport.W/H and raster into Viewport.X/Y/W/H.
+        cna_easygl_test(cna_test_easygl_spritebatch_custom_viewport
+                        examples/spritebatch_custom_viewport_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_CustomViewport COMMAND cna_test_easygl_spritebatch_custom_viewport
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-072 (Phase 9): two SpriteBatch batches with DIFFERENT viewports in one frame --
+        # EasyGL flushes per End() (immediate), so each batch gets its own glViewport + ortho.
+        cna_easygl_test(cna_test_easygl_spritebatch_viewport_switch
+                        examples/spritebatch_viewport_switch_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_ViewportSwitch COMMAND cna_test_easygl_spritebatch_viewport_switch
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
