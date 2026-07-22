@@ -54,6 +54,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_3D_CustomViewport COMMAND cna_test_software_3d_viewport
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-080: GraphicsDevice.ScissorRectangle must clip both the 2D SpriteBatch path and the
+    # 3D raster path when RasterizerState.ScissorTestEnable is true, in framebuffer/target space
+    # (effective clip = framebuffer ∩ Viewport ∩ Scissor) -- the Software counterpart of the GPU
+    # backends' scissor contract (GFX-013 Vulkan, GFX-068 SdlGpu). Reuses GFX-073/079's RasterClipRect.
+    cna_software_test(cna_test_software_scissor examples/software_scissor_test.cpp)
+    cna_register_backend_test(NAME Software_Scissor COMMAND cna_test_software_scissor
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
