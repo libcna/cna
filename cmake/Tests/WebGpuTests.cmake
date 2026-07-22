@@ -209,4 +209,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_mipgen examples/webgpu_mipgen_test.cpp)
     cna_register_backend_test(NAME WebGPU_MipGen COMMAND cna_test_webgpu_mipgen
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
+    # (Viewport.Width/Height), not the full target. GFX-019 fixed the RT-size selection but the
+    # QueueSprite NDC divide still used the full target dims, while the render pass applied the
+    # custom Viewport as the rasterizer viewport -- squishing the sprite. QueueSprite must bake
+    # viewport-relative NDC for a custom sub-Viewport. (Two different viewports in one backbuffer
+    # frame remain a per-pass last-wins limitation -- a WebGPU analog of REMED-GFX-065 -- so only
+    # the single-custom-viewport case is asserted.)
+    cna_webgpu_test(cna_test_webgpu_spritebatch_custom_viewport
+                    examples/spritebatch_custom_viewport_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SpriteBatch_CustomViewport COMMAND cna_test_webgpu_spritebatch_custom_viewport
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

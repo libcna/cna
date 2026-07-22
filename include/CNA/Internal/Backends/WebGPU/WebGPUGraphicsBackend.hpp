@@ -439,6 +439,14 @@ namespace CNA::Internal::Backends::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            // REMED-GFX-072: the GraphicsDevice.Viewport that was active when this sprite was
+            // enqueued. The vertices above are baked VIEWPORT-LOCAL (normalized by Viewport.W/H)
+            // when viewportCustom is true; RenderSprites() then sets the rasterizer viewport to this
+            // captured sub-region per draw, so a viewport restore before Present cannot mis-place it
+            // (WebGPU records the pass viewport live at flush time, unlike Vulkan/SdlGpu snapshots).
+            bool viewportCustom = false;
+            int viewportX = 0, viewportY = 0, viewportW = 0, viewportH = 0;
+            float viewportMinDepth = 0.0f, viewportMaxDepth = 1.0f;
         };
 
         /// WEBGPU-78: real per-draw BlendState factors/op, mirroring
@@ -674,7 +682,7 @@ namespace CNA::Internal::Backends::WebGPU
         // requested count in [2,4] rounds down to 1 unless 4x is supported (in which case it
         // rounds UP to 4, since 4 is the only value above 1), and anything >= 4 clamps down to 4.
         [[nodiscard]] int PickSampleCount(int requestedMultiSampleCount);
-        void RenderSprites(WGPURenderPassEncoder pass);
+        void RenderSprites(WGPURenderPassEncoder pass, std::uint32_t targetWidth, std::uint32_t targetHeight);
         void RenderColoredDraws(WGPURenderPassEncoder pass);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        bool depthTest, bool depthWrite,

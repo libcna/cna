@@ -4824,6 +4824,16 @@ struct VSOut {
         if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f || targetWidth <= 0 || targetHeight <= 0)
             return;
 
+        // REMED-GFX-072: when a custom sub-Viewport is active, XNA/FNA make SpriteBatch coordinates
+        // VIEWPORT-LOCAL (CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0)): sprite
+        // (0,0) is the viewport's top-left and the projection extent is Viewport.Width/Height. Bake
+        // the NDC relative to the Viewport (divide by viewportW_/viewportH_, no letterbox), and
+        // capture the Viewport into the SpriteCommand so RenderSprites can set the rasterizer viewport
+        // to it per draw. Only a genuine sub-region (differs from the target extent) overrides -- the
+        // default full-target viewport keeps the existing letterbox/1:1 NDC path byte-identical.
+        const bool customViewport = viewportSet_ && viewportW_ > 0 && viewportH_ > 0 &&
+            (viewportX_ != 0 || viewportY_ != 0 || viewportW_ != targetWidth || viewportH_ != targetHeight);
+
         const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
         const float scaleY = static_cast<float>(destination.Height) / static_cast<float>(source.Height);
         const float left = -origin.X * scaleX;
@@ -4856,6 +4866,16 @@ struct VSOut {
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
+        command.viewportCustom = customViewport;
+        if (customViewport)
+        {
+            command.viewportX = viewportX_;
+            command.viewportY = viewportY_;
+            command.viewportW = viewportW_;
+            command.viewportH = viewportH_;
+            command.viewportMinDepth = viewportMinDepth_;
+            command.viewportMaxDepth = viewportMaxDepth_;
+        }
         const float rgba[4] = {
             static_cast<float>(color.getRProperty()) / 255.0f,
             static_cast<float>(color.getGProperty()) / 255.0f,
@@ -4865,11 +4885,24 @@ struct VSOut {
         for (int i = 0; i < 6; ++i)
         {
             const int corner = indices[i];
-            const float px = viewport.x + points[corner].X * viewport.width / viewport.logicalWidth;
-            const float py = viewport.y + points[corner].Y * viewport.height / viewport.logicalHeight;
+            float ndcX, ndcY;
+            if (customViewport)
+            {
+                // Viewport-local: divide by Viewport.W/H; RenderSprites places the [-1,1] result at
+                // Viewport.X/Y via the per-draw rasterizer viewport.
+                ndcX = 2.0f * points[corner].X / static_cast<float>(viewportW_) - 1.0f;
+                ndcY = 1.0f - 2.0f * points[corner].Y / static_cast<float>(viewportH_);
+            }
+            else
+            {
+                const float px = viewport.x + points[corner].X * viewport.width / viewport.logicalWidth;
+                const float py = viewport.y + points[corner].Y * viewport.height / viewport.logicalHeight;
+                ndcX = 2.0f * px / static_cast<float>(targetWidth) - 1.0f;
+                ndcY = 1.0f - 2.0f * py / static_cast<float>(targetHeight);
+            }
             auto& vertex = command.vertices[static_cast<std::size_t>(i)];
-            vertex.position[0] = 2.0f * px / static_cast<float>(targetWidth) - 1.0f;
-            vertex.position[1] = 1.0f - 2.0f * py / static_cast<float>(targetHeight);
+            vertex.position[0] = ndcX;
+            vertex.position[1] = ndcY;
             vertex.position[2] = std::clamp(layerDepth, 0.0f, 1.0f);
             vertex.uv[0] = uv[corner].X;
             vertex.uv[1] = uv[corner].Y;
@@ -4879,7 +4912,8 @@ struct VSOut {
         framePending_ = true;
     }
 
-    void WebGPUGraphicsBackend::RenderSprites(WGPURenderPassEncoder pass)
+    void WebGPUGraphicsBackend::RenderSprites(WGPURenderPassEncoder pass, std::uint32_t targetWidth,
+                                              std::uint32_t targetHeight)
     {
         if (spriteCommands_.empty())
             return;
@@ -4904,9 +4938,44 @@ struct VSOut {
         wgpuRenderPassEncoderSetPipeline(pass, blendEnabled_ ? spritePipelineBlend_ : spritePipelineOpaque_);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, 0, vertices.size() * sizeof(SpriteVertex));
 
+        // REMED-GFX-072: does any sprite carry a custom Viewport? If so, drive the rasterizer
+        // viewport per draw (the vertices are baked viewport-local for those). WebGPU records the
+        // pass viewport live at flush time (this method runs after any viewport restore), so a
+        // per-draw viewport here -- not the pass-level one -- is what keeps a custom-Viewport sprite
+        // placed at Viewport.X/Y. RenderSprites runs last in the pass, so overriding the viewport
+        // cannot disturb the already-recorded 3D draws.
+        bool anyCustomViewport = false;
+        for (const SpriteCommand& c : spriteCommands_)
+            if (c.viewportCustom) { anyCustomViewport = true; break; }
+
         for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
         {
             const SpriteCommand& command = spriteCommands_[i];
+            if (anyCustomViewport)
+            {
+                if (command.viewportCustom)
+                {
+                    const float vx = static_cast<float>(std::clamp(command.viewportX, 0,
+                                                        static_cast<int>(targetWidth)));
+                    const float vy = static_cast<float>(std::clamp(command.viewportY, 0,
+                                                        static_cast<int>(targetHeight)));
+                    const float vw = static_cast<float>(std::min(
+                        static_cast<std::uint32_t>(std::max(0, command.viewportW)),
+                        targetWidth - std::min(static_cast<std::uint32_t>(vx), targetWidth)));
+                    const float vh = static_cast<float>(std::min(
+                        static_cast<std::uint32_t>(std::max(0, command.viewportH)),
+                        targetHeight - std::min(static_cast<std::uint32_t>(vy), targetHeight)));
+                    wgpuRenderPassEncoderSetViewport(pass, vx, vy, std::max(vw, 1.0f), std::max(vh, 1.0f),
+                                                     command.viewportMinDepth, command.viewportMaxDepth);
+                }
+                else
+                {
+                    // A full-target sprite baked full-target-relative: reset to the whole target so a
+                    // preceding custom-viewport draw does not mis-place it.
+                    wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(targetWidth),
+                                                     static_cast<float>(targetHeight), 0.0f, 1.0f);
+                }
+            }
             std::array<WGPUBindGroupEntry, 2> entries{};
             entries[0].binding = 0;
             entries[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
@@ -5195,7 +5264,7 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass);
+        RenderSprites(pass, fullW, fullH);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -5327,7 +5396,7 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass);
+        RenderSprites(pass, fullW, fullH);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -5450,7 +5519,7 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass);
+        RenderSprites(pass, fullW, fullH);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
