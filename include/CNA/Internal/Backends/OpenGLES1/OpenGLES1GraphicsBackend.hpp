@@ -260,7 +260,18 @@ namespace CNA::Internal::Backends::OpenGLES1
     class OpenGLES1RenderTargetBackend : public IRenderTargetBackend
     {
     public:
-        OpenGLES1RenderTargetBackend(OpenGLES1GraphicsBackend* owner, int width, int height, int depthFormat);
+        /**
+         * @brief Creates the off-screen colour target and its optional depth/stencil renderbuffer.
+         *
+         * @param owner Owning backend, used for the FBO entry points.
+         * @param width Target width in pixels.
+         * @param height Target height in pixels.
+         * @param depthFormat XNA `DepthFormat` ordinal; 0 means no depth buffer.
+         * @param mipMap True to allocate a full mip chain and regenerate it whenever the target is
+         *        unbound.
+         */
+        OpenGLES1RenderTargetBackend(OpenGLES1GraphicsBackend* owner, int width, int height,
+                                     int depthFormat, bool mipMap = false);
         ~OpenGLES1RenderTargetBackend() override;
 
         OpenGLES1RenderTargetBackend(const OpenGLES1RenderTargetBackend&) = delete;
@@ -307,6 +318,8 @@ namespace CNA::Internal::Backends::OpenGLES1
         int height_ = 0;
         bool hasDepth_ = false;
         bool hasStencil_ = false;
+        bool mipMap_ = false;
+        int levelCount_ = 1;
     };
 
     /**
@@ -476,6 +489,20 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// NOXNA. True when GL_OES_element_index_uint is present, i.e. when 32-bit index buffers
         /// are real rather than silently narrowed to 16 bits.
         [[nodiscard]] bool SupportsThirtyTwoBitIndicesEXT() const { return elementIndexUintSupported_; }
+
+        /// NOXNA. True when glGenerateMipmapOES resolved, i.e. when render-target mip chains can be
+        /// regenerated.
+        [[nodiscard]] bool HasGenerateMipmapEXT() const { return glGenerateMipmapOES_ != nullptr; }
+
+        /**
+         * @brief Regenerates the bound texture's mip chain from level 0.
+         *
+         * @param target GL texture target of the bound object.
+         */
+        void GenerateMipmapEXT(unsigned int target) const
+        {
+            if (glGenerateMipmapOES_) glGenerateMipmapOES_(static_cast<GLenum>(target));
+        }
         /// NOXNA. Whether a second texture unit is actually available (GL_MAX_TEXTURE_UNITS >= 2),
         /// needed for a real DualTextureEffect dispatch.
         [[nodiscard]] bool SupportsSecondTextureUnit() const { return maxTextureUnits_ >= 2; }
@@ -587,6 +614,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         PFNGLBLENDFUNCSEPARATEOESPROC glBlendFuncSeparateOES_ = nullptr;
         PFNGLBLENDEQUATIONOESPROC glBlendEquationOES_ = nullptr;
         PFNGLBLENDEQUATIONSEPARATEOESPROC glBlendEquationSeparateOES_ = nullptr;
+        PFNGLGENERATEMIPMAPOESPROC glGenerateMipmapOES_ = nullptr;
 
         bool fboSupported_ = false;
         // Every live texture, so DebugRestoreContext() can rebuild them all against the new

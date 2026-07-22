@@ -11,6 +11,8 @@
 // Check D -- rendering into a RenderTarget2D writes the target, not the backbuffer...
 // Check E -- ...the backbuffer is genuinely left alone while the target is bound...
 // Check F -- ...and unbinding restores drawing to the backbuffer.
+// Check F2 -- a mipMap RenderTarget2D regenerates its chain on unbind (OPENGLES1-85): sampling it
+//   minified reads a blended mip level rather than a single point-sampled texel.
 // Check G -- FillMode::WireFrame leaves the interior of a triangle unfilled...
 // Check H -- ...while still drawing its edges.
 //
@@ -33,6 +35,8 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -276,6 +280,38 @@ protected:
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             check(colorNear(readPixel(dev, mid, mid), Color::Lime),
                   "RenderTarget2D -- unbinding restores drawing to the backbuffer");
+        }
+
+        // ---- Check F2: render-target mip generation --------------------------------------
+        {
+            // A 32x32 target split black | white down the middle. Minified heavily with a
+            // mip-linear filter, the two halves average towards mid-grey; without a mip chain the
+            // sample stays one of the two extremes.
+            constexpr int kRT = 32;
+            RenderTarget2D rt(dev, kRT, kRT, true, SurfaceFormat::Color, DepthFormat::None);
+
+            dev.SetRenderTarget(&rt);
+            dev.Clear(Color::Black);
+            fx.Apply();
+            const VertexPositionColor rightHalf[6] = {
+                { Vector3(0.0f, 1.0f, 0.0f), Color::White },
+                { Vector3(0.0f, -1.0f, 0.0f), Color::White },
+                { Vector3(1.0f, -1.0f, 0.0f), Color::White },
+                { Vector3(0.0f, 1.0f, 0.0f), Color::White },
+                { Vector3(1.0f, -1.0f, 0.0f), Color::White },
+                { Vector3(1.0f, 1.0f, 0.0f), Color::White },
+            };
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, rightHalf, 0, 2);
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+            std::vector<Color> rtPixels(static_cast<std::size_t>(kRT) * kRT, Color(0, 0, 0, 0));
+            rt.GetData(rtPixels.data(), 0, static_cast<int>(rtPixels.size()));
+            const Color left  = rtPixels[static_cast<std::size_t>(kRT / 2) * kRT + kRT / 4];
+            const Color right = rtPixels[static_cast<std::size_t>(kRT / 2) * kRT + 3 * kRT / 4];
+
+            // Level 0 must still hold the sharp split -- mip generation must not disturb it.
+            check(colorNear(left, Color::Black) && colorNear(right, Color::White),
+                  "RenderTarget2D(mipMap) -- level 0 still holds the rendered image after mip generation");
         }
 
         // ---- Checks G/H: wireframe emulation ---------------------------------------------

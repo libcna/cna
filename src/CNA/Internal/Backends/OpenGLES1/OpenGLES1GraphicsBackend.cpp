@@ -123,9 +123,41 @@ namespace CNA::Internal::Backends::OpenGLES1
         // XNA TextureFilter ordinal 1 (Point) -> nearest; everything else -> linear (matches the
         // ISpriteBatchBackend::SetSamplerFilter doc comment's own "others map to nearest" wording
         // for the inverse case -- here the default/linear-ish values map to GL_LINEAR).
-        GLenum ToGLFilter(int xnaFilter)
+        // XNA TextureFilter ordinals: Linear=0, Point=1, Anisotropic=2, LinearMipPoint=3,
+        // PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
+        // MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8.
+        //
+        // Magnification has no mip component by definition, so only the "Mag" half of each mode
+        // matters here. Returning GL_LINEAR for everything except Point (as this did originally)
+        // silently ignored the four Min*Mag* modes.
+        GLenum ToGLMagFilter(int xnaFilter)
         {
-            return xnaFilter == 1 ? GL_NEAREST : GL_LINEAR;
+            switch (xnaFilter)
+            {
+            case 1:  // Point
+            case 5:  // MinLinearMagPointMipLinear
+            case 6:  // MinLinearMagPointMipPoint
+                return GL_NEAREST;
+            default:
+                return GL_LINEAR;
+            }
+        }
+
+        // Minification without a mip chain: the mip half of the mode is irrelevant, so this only
+        // distinguishes point from linear. Mip-aware minification filters are not selected yet --
+        // see OPENGLES1-85's row for what remains.
+        GLenum ToGLMinFilter(int xnaFilter)
+        {
+            switch (xnaFilter)
+            {
+            case 1:  // Point
+            case 4:  // PointMipLinear
+            case 7:  // MinPointMagLinearMipLinear
+            case 8:  // MinPointMagLinearMipPoint
+                return GL_NEAREST;
+            default:
+                return GL_LINEAR;
+            }
         }
     }
 
@@ -575,6 +607,9 @@ namespace CNA::Internal::Backends::OpenGLES1
             if (cap > 1.0f) maxAnisotropy_ = cap;
         }
 
+        glGenerateMipmapOES_ = reinterpret_cast<PFNGLGENERATEMIPMAPOESPROC>(
+            SDL_GL_GetProcAddress("glGenerateMipmapOES"));
+
         fboSupported_ = HasGLExtension("GL_OES_framebuffer_object");
         if (fboSupported_)
         {
@@ -935,16 +970,47 @@ namespace CNA::Internal::Backends::OpenGLES1
     // -------------------------------------------------------------------------
 
     OpenGLES1RenderTargetBackend::OpenGLES1RenderTargetBackend(OpenGLES1GraphicsBackend* owner,
-                                                                int width, int height, int depthFormat)
-        : owner_(owner), width_(width), height_(height)
+                                                                int width, int height, int depthFormat,
+                                                                bool mipMap)
+        : owner_(owner), width_(width), height_(height), mipMap_(mipMap)
     {
+        // Mip generation needs glGenerateMipmapOES; without it the request is honoured as a
+        // single-level target rather than pretending to have a chain.
+        if (mipMap_ && !owner_->HasGenerateMipmapEXT()) mipMap_ = false;
+
+        if (mipMap_)
+        {
+            int levelW = width, levelH = height;
+            levelCount_ = 1;
+            while (levelW > 1 || levelH > 1)
+            {
+                levelW = levelW > 1 ? levelW / 2 : 1;
+                levelH = levelH > 1 ? levelH / 2 : 1;
+                ++levelCount_;
+            }
+        }
+
         glGenTextures(1, &colorTexture_);
         glBindTexture(GL_TEXTURE_2D, colorTexture_);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        mipMap_ ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        // Every level needs defined storage before glGenerateMipmapOES writes into it -- otherwise
+        // levels 1+ are GL-incomplete and the texture samples as undefined. Same lesson EasyGL's
+        // own render target already records.
+        {
+            int levelW = width, levelH = height;
+            for (int level = 0; level < levelCount_; ++level)
+            {
+                glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA, levelW, levelH, 0,
+                             GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                levelW = levelW > 1 ? levelW / 2 : 1;
+                levelH = levelH > 1 ? levelH / 2 : 1;
+            }
+        }
 
         owner_->glGenFramebuffersOES_(1, &fbo_);
         owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, fbo_);
@@ -1010,6 +1076,14 @@ namespace CNA::Internal::Backends::OpenGLES1
     void OpenGLES1RenderTargetBackend::UnbindAsRenderTarget()
     {
         owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, 0);
+
+        // Regenerate the chain from the freshly rendered level 0, mirroring FNA3D's own
+        // ResolveTarget behaviour (and EasyGL's copy of it).
+        if (mipMap_ && owner_->HasGenerateMipmapEXT())
+        {
+            glBindTexture(GL_TEXTURE_2D, colorTexture_);
+            owner_->GenerateMipmapEXT(GL_TEXTURE_2D);
+        }
     }
 
     void OpenGLES1RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
@@ -1052,12 +1126,12 @@ namespace CNA::Internal::Backends::OpenGLES1
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         (void)preserveContents;
-        // Mip generation and multisampling are not implemented on this backend (documented gap,
-        // see docs/opengles1-backend.md) -- accepted-and-ignored, matching several other CNA
-        // backends' own current state for these two parameters.
-        (void)mipMap; (void)multiSampleCount;
+        // Render-target multisampling stays unimplemented: no framebuffer-multisample extension is
+        // exposed by this driver (documented gap, see docs/opengles1-backend.md). mipMap IS now
+        // honoured -- see OPENGLES1-85.
+        (void)multiSampleCount;
         if (!fboSupported_) return nullptr;
-        return std::make_unique<OpenGLES1RenderTargetBackend>(this, w, h, depthFormat);
+        return std::make_unique<OpenGLES1RenderTargetBackend>(this, w, h, depthFormat, mipMap);
     }
 
     void OpenGLES1GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -1894,8 +1968,8 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         // Still apply immediately as well, which is what the SpriteBatch path (already binding
         // before it calls this) relies on.
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ToGLFilter(filter));
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ToGLFilter(filter));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ToGLMinFilter(filter));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ToGLMagFilter(filter));
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, ToGLWrapMode(addressU, mirroredRepeatSupported_));
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, ToGLWrapMode(addressV, mirroredRepeatSupported_));
         ApplyAnisotropy(GL_TEXTURE_2D, maxAnisotropy);
@@ -1912,8 +1986,8 @@ namespace CNA::Internal::Backends::OpenGLES1
     {
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
         const GLenum t = static_cast<GLenum>(target);
-        glTexParameteri(t, GL_TEXTURE_MIN_FILTER, ToGLFilter(samplerFilter_[slot]));
-        glTexParameteri(t, GL_TEXTURE_MAG_FILTER, ToGLFilter(samplerFilter_[slot]));
+        glTexParameteri(t, GL_TEXTURE_MIN_FILTER, ToGLMinFilter(samplerFilter_[slot]));
+        glTexParameteri(t, GL_TEXTURE_MAG_FILTER, ToGLMagFilter(samplerFilter_[slot]));
         glTexParameteri(t, GL_TEXTURE_WRAP_S, ToGLWrapMode(samplerAddressU_[slot], mirroredRepeatSupported_));
         glTexParameteri(t, GL_TEXTURE_WRAP_T, ToGLWrapMode(samplerAddressV_[slot], mirroredRepeatSupported_));
         ApplyAnisotropy(target, samplerAnisotropy_[slot]);
