@@ -70,6 +70,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_SpriteBatch_RasterizerState COMMAND cna_test_software_spritebatch_rasterizerstate
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-082: RasterizerState.FillMode must be honored -- FillMode.WireFrame rasterizes only
+    # triangle EDGES (no interior fill) across all four 3D draw entry points and the SpriteBatch quad
+    # geometry (through Begin, REMED-GFX-081), with culling/viewport/scissor/depth semantics identical
+    # to Solid. Pre-fix ApplyRasterizerState dropped fillMode, so WireFrame rendered as a solid fill.
+    cna_software_test(cna_test_software_wireframe examples/software_wireframe_test.cpp)
+    cna_register_backend_test(NAME Software_Wireframe COMMAND cna_test_software_wireframe
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
