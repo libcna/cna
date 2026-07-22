@@ -135,10 +135,28 @@ namespace CNA::Internal::Backends::Software
             return count;
         }
 
-        /// Converts one clip-space vertex into a screen-space RasterVertex: perspective divide,
-        /// viewport transform, and premultiplying color/UV by invW for perspective-correct
-        /// barycentric interpolation later.
-        RasterVertex ClipVertexToRasterVertex(const ClipVertex& cv, int viewportWidth, int viewportHeight)
+        /// REMED-GFX-079: the XNA/FNA viewport transform parameters used to map a post-perspective-
+        /// divide NDC position into framebuffer pixel coordinates -- Viewport.X/Y (pixel origin of
+        /// the viewport within the active target), Viewport.Width/Height (pixel extent the NDC
+        /// [-1,1] range is mapped over), and the MinDepth/MaxDepth depth range. A default full-target
+        /// viewport is {0, 0, framebufferWidth, framebufferHeight, 0, 1}, for which the transform in
+        /// ClipVertexToRasterVertex reduces to the pre-GFX-079 full-framebuffer mapping byte-for-byte.
+        struct ViewportTransform
+        {
+            float x = 0.0f, y = 0.0f, width = 0.0f, height = 0.0f;
+            float minDepth = 0.0f, maxDepth = 1.0f;
+        };
+
+        /// Converts one clip-space vertex into a screen-space RasterVertex: perspective divide, the
+        /// XNA/FNA viewport transform, and premultiplying color/UV by invW for perspective-correct
+        /// barycentric interpolation later. REMED-GFX-079: the viewport transform matches FNA's
+        /// Viewport.Project exactly --
+        ///   screenX = (ndcX*0.5 + 0.5) * Viewport.Width  + Viewport.X
+        ///   screenY = (1 - (ndcY*0.5 + 0.5)) * Viewport.Height + Viewport.Y
+        ///   depth   = Viewport.MinDepth + ndcZ * (Viewport.MaxDepth - Viewport.MinDepth)
+        /// -- so a custom GraphicsDevice.Viewport positions (X/Y), sub-scales (Width/Height), and
+        /// depth-range-remaps 3D geometry, instead of the old mapping over the full framebuffer.
+        RasterVertex ClipVertexToRasterVertex(const ClipVertex& cv, const ViewportTransform& vp)
         {
             const float invW = 1.0f / cv.w;
             const float ndcX = cv.x * invW;
@@ -146,9 +164,9 @@ namespace CNA::Internal::Backends::Software
             const float ndcZ = cv.z * invW;
 
             RasterVertex out;
-            out.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(viewportWidth);
-            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(viewportHeight);
-            out.depth = ndcZ;
+            out.x = (ndcX * 0.5f + 0.5f) * vp.width + vp.x;
+            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * vp.height + vp.y;
+            out.depth = vp.minDepth + ndcZ * (vp.maxDepth - vp.minDepth);
             out.invW = invW;
             out.r = cv.r * invW;
             out.g = cv.g * invW;
@@ -169,6 +187,17 @@ namespace CNA::Internal::Backends::Software
         {
             return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
         }
+
+        /// REMED-GFX-073/079: an inclusive pixel clip rectangle for the rasterizer. Pre-intersected
+        /// with the framebuffer bounds by its ViewportClip() factory, so RasterizeTriangle /
+        /// RasterizeTriangleShaded only have to clamp each triangle's bounding box against it. An
+        /// empty rectangle (minX>maxX or minY>maxY) draws nothing -- the raster loops simply do not
+        /// execute. GFX-080 will later intersect this same rectangle with the ScissorRectangle when
+        /// scissor testing is enabled, reusing this exact clip path.
+        struct RasterClipRect
+        {
+            int minX = 0, minY = 0, maxX = -1, maxY = -1;
+        };
 
         /// Bilinear texture sample (SOFTWARE-80), clamp-to-edge at the boundaries -- matches this
         /// backend's own existing "texture address modes not honored, UVs are simply clamped"
@@ -297,6 +326,7 @@ namespace CNA::Internal::Backends::Software
         /// with a per-pixel depth test against `fb.depthBuffer` when `depthTestEnabled` and
         /// backface culling per `cullMode` (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
         void RasterizeTriangle(SoftwareFramebuffer& fb, bool depthTestEnabled, int cullMode,
+                               const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
@@ -310,10 +340,14 @@ namespace CNA::Internal::Backends::Software
             const float minYf = std::min({v0.y, v1.y, v2.y});
             const float maxYf = std::max({v0.y, v1.y, v2.y});
 
-            const int minX = std::max(0, static_cast<int>(std::floor(minXf)));
-            const int maxX = std::min(fb.width - 1, static_cast<int>(std::ceil(maxXf)));
-            const int minY = std::max(0, static_cast<int>(std::floor(minYf)));
-            const int maxY = std::min(fb.height - 1, static_cast<int>(std::ceil(maxYf)));
+            // REMED-GFX-079: clamp the raster bounding box to the clip rectangle (framebuffer ∩
+            // active Viewport) instead of the raw framebuffer -- pixels outside the Viewport are
+            // never touched. A default full-target viewport yields the pre-GFX-079
+            // [0,width-1] x [0,height-1] clamp byte-for-byte.
+            const int minX = std::max(clip.minX, static_cast<int>(std::floor(minXf)));
+            const int maxX = std::min(clip.maxX, static_cast<int>(std::ceil(maxXf)));
+            const int minY = std::max(clip.minY, static_cast<int>(std::floor(minYf)));
+            const int maxY = std::min(clip.maxY, static_cast<int>(std::ceil(maxYf)));
 
             for (int y = minY; y <= maxY; ++y)
             {
@@ -488,24 +522,7 @@ namespace CNA::Internal::Backends::Software
             return out;
         }
 
-        /// REMED-GFX-073: an inclusive pixel clip rectangle for the rasterizer. Pre-intersected
-        /// with the framebuffer bounds by its factory helpers, so RasterizeTriangleShaded only has
-        /// to clamp each triangle's bounding box against it. An empty rectangle (minX>maxX or
-        /// minY>maxY) draws nothing -- the raster loops simply do not execute.
-        struct RasterClipRect
-        {
-            int minX = 0, minY = 0, maxX = -1, maxY = -1;
-        };
-
-        /// The full-framebuffer clip rectangle (identical to the rasterizer's pre-GFX-073 hardcoded
-        /// [0, width-1] x [0, height-1] clamp) -- used by the 3D DrawPrimitivesEx path, which is not
-        /// viewport-clipped in this task.
-        RasterClipRect FullFramebufferClip(const SoftwareFramebuffer& fb)
-        {
-            return RasterClipRect{0, 0, fb.width - 1, fb.height - 1};
-        }
-
-        /// REMED-GFX-073: the SpriteBatch clip rectangle = the GraphicsDevice.Viewport rectangle
+        /// REMED-GFX-073/079: the raster clip rectangle = the GraphicsDevice.Viewport rectangle
         /// intersected with the framebuffer. Uses a wider intermediate for the right/bottom edge so
         /// a large Viewport.X+Width / Viewport.Y+Height cannot overflow int; a zero/negative-size
         /// viewport collapses to an empty rectangle (nothing drawn).
@@ -1212,6 +1229,18 @@ namespace CNA::Internal::Backends::Software
         h = viewportHeight_;
     }
 
+    void SoftwareGraphicsBackend::GetActiveViewportRaster(int& x, int& y, int& w, int& h,
+                                                          float& minDepth, float& maxDepth) const
+    {
+        GetActiveViewport(x, y, w, h);
+        // The depth range defaults to the full [0,1] until a custom viewport is set (matching
+        // GetActiveViewport's full-framebuffer x/y/w/h fallback); once SetViewport has run, the
+        // stored MinDepth/MaxDepth apply. This is the single point where the 3D path resolves its
+        // viewport, so all four draw entry points stay consistent.
+        minDepth = viewportSet_ ? viewportMinDepth_ : 0.0f;
+        maxDepth = viewportSet_ ? viewportMaxDepth_ : 1.0f;
+    }
+
     void SoftwareGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         SoftwareFramebuffer& fb = CurrentFramebuffer();
@@ -1267,8 +1296,16 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
-        int vw = 0, vh = 0;
-        GetViewportSize(vw, vh);
+        // REMED-GFX-079: map NDC over the active GraphicsDevice.Viewport (X/Y offset, Width/Height
+        // sub-scale, MinDepth/MaxDepth range) and clip rasterization to framebuffer ∩ Viewport --
+        // a default full-target viewport reduces to the pre-GFX-079 full-framebuffer mapping.
+        int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
+        float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
+        GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
+        const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
+                                    static_cast<float>(vpW), static_cast<float>(vpH),
+                                    vpMinDepth, vpMaxDepth};
+        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -1286,11 +1323,11 @@ namespace CNA::Internal::Backends::Software
 
             RasterVertex rv[4];
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
 
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[1], rv[2]);
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[2], rv[3]);
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3]);
         }
     }
 
@@ -1315,8 +1352,14 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
-        int vw = 0, vh = 0;
-        GetViewportSize(vw, vh);
+        // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
+        int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
+        float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
+        GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
+        const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
+                                    static_cast<float>(vpW), static_cast<float>(vpH),
+                                    vpMinDepth, vpMaxDepth};
+        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
 
         const auto readIndex = [&](int i) -> std::uint32_t {
             if (thirtyTwoBit)
@@ -1347,11 +1390,11 @@ namespace CNA::Internal::Backends::Software
 
             RasterVertex rv[4];
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
 
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[1], rv[2]);
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[2], rv[3]);
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3]);
         }
     }
 
@@ -1391,8 +1434,14 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
-        int vw = 0, vh = 0;
-        GetViewportSize(vw, vh);
+        // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
+        int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
+        float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
+        GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
+        const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
+                                    static_cast<float>(vpW), static_cast<float>(vpH),
+                                    vpMinDepth, vpMaxDepth};
+        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -1410,15 +1459,15 @@ namespace CNA::Internal::Backends::Software
 
             RasterVertex rv[4];
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
 
-            // REMED-GFX-073: the 3D path is not viewport-clipped in this task -- pass the full
-            // framebuffer clip, identical to the rasterizer's pre-GFX-073 hardcoded clamp.
+            // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
+            // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                    FullFramebufferClip(fb), rv[0], rv[1], rv[2]);
+                                    clip, rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                        FullFramebufferClip(fb), rv[0], rv[2], rv[3]);
+                                        clip, rv[0], rv[2], rv[3]);
         }
     }
 
@@ -1455,8 +1504,14 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
-        int vw = 0, vh = 0;
-        GetViewportSize(vw, vh);
+        // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
+        int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
+        float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
+        GetActiveViewportRaster(vpX, vpY, vpW, vpH, vpMinDepth, vpMaxDepth);
+        const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
+                                    static_cast<float>(vpW), static_cast<float>(vpH),
+                                    vpMinDepth, vpMaxDepth};
+        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
 
         const auto readIndex = [&](int i) -> std::uint32_t {
             if (thirtyTwoBit)
@@ -1487,15 +1542,15 @@ namespace CNA::Internal::Backends::Software
 
             RasterVertex rv[4];
             for (int k = 0; k < clippedCount; ++k)
-                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
 
-            // REMED-GFX-073: the 3D path is not viewport-clipped in this task -- pass the full
-            // framebuffer clip, identical to the rasterizer's pre-GFX-073 hardcoded clamp.
+            // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
+            // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                    FullFramebufferClip(fb), rv[0], rv[1], rv[2]);
+                                    clip, rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                        FullFramebufferClip(fb), rv[0], rv[2], rv[3]);
+                                        clip, rv[0], rv[2], rv[3]);
         }
     }
 }

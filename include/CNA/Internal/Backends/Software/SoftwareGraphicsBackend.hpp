@@ -330,6 +330,14 @@ namespace CNA::Internal::Backends::Software
         void GetActiveViewport(int& x, int& y, int& w, int& h) const;
 
     private:
+        /// REMED-GFX-079: the active viewport as raster parameters for the 3D draw path --
+        /// (x,y,w,h) from GetActiveViewport() plus the MinDepth/MaxDepth depth range (defaulting to
+        /// [0,1] before any custom viewport is set, matching GetActiveViewport's full-framebuffer
+        /// x/y/w/h fallback). One source of truth shared by all four 3D draw entry points, so a
+        /// custom GraphicsDevice.Viewport positions, sub-scales, and depth-range-remaps 3D geometry.
+        void GetActiveViewportRaster(int& x, int& y, int& w, int& h,
+                                     float& minDepth, float& maxDepth) const;
+
         SoftwareFramebuffer backbuffer_;
         SoftwareRenderTargetBackend* currentRenderTarget_ = nullptr;
         int virtualWidth_ = 0;
