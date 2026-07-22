@@ -2645,12 +2645,25 @@ void main()
             EnsureDefaultFlatNormalTexture();
         }
 
+        // plan_opengl4.md GL4-26: no ApplySamplerState() call is needed here for any texture
+        // unit -- GraphicsDevice::applySamplerStatesToBackend() already calls
+        // backend_->ApplySamplerState(slot, ...) for ALL 16 sampler slots, reading each slot's
+        // REAL GraphicsDevice.SamplerStates[slot] value, immediately before every
+        // DrawPrimitivesEx/DrawIndexedPrimitivesEx call reaches this function (every call site in
+        // GraphicsDevice.cpp pairs the two calls back to back). A real, now-fixed bug: this
+        // function used to call ApplySamplerState(slot, 0, 1, 1, 1) (Linear + hardcoded Clamp)
+        // for every bound unit AFTER that real state was already applied, silently overwriting
+        // it -- always Clamp, and ignoring the real per-slot SamplerState entirely, on every
+        // single direct 3D draw. Real XNA's own SamplerState default is Linear+Wrap (not Clamp),
+        // so the old hardcoded value was not just non-dynamic but the wrong default too. Matches
+        // EasyGLGraphicsBackend::BindDrawParams's own established convention of never touching
+        // sampler state itself during a 3D draw dispatch, relying solely on the same upstream
+        // GraphicsDevice call.
         const bool hasTexture0 = params.texture0 != nullptr;
         if (hasTexture0)
         {
             gl4_glActiveTexture(GL_TEXTURE0);
             params.texture0->BindGL();
-            ApplySamplerState(0, 0, 1, 1, 1); // Linear/Clamp -- matches this phase's SpriteBatch default.
         }
         // plan_opengl4.md GL4-19: DualTextureEffect's second sampler.
         const bool hasTexture1 = params.texture1 != nullptr;
@@ -2658,7 +2671,6 @@ void main()
         {
             gl4_glActiveTexture(GL_TEXTURE1);
             params.texture1->BindGL();
-            ApplySamplerState(1, 0, 1, 1, 1); // Linear/Clamp -- matches texture0's own default.
         }
         // plan_opengl4.md GL4-21: EnvironmentMapEffect's cube map -- unit 1, same slot
         // DualTextureEffect's texture1 uses (the two effects are mutually exclusive per draw, so
@@ -2668,7 +2680,6 @@ void main()
         {
             gl4_glActiveTexture(GL_TEXTURE1);
             params.envMap->BindGL();
-            ApplySamplerState(1, 0, 1, 1, 1); // Linear/Clamp.
         }
 
         // plan_opengl4.md GL4-23: PbrEffect's 4 extra texture units (1=normal, 2=metallic-
@@ -2682,22 +2693,18 @@ void main()
             gl4_glActiveTexture(GL_TEXTURE1);
             if (params.pbrNormalMap) params.pbrNormalMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture_);
-            ApplySamplerState(1, 0, 1, 1, 1);
 
             gl4_glActiveTexture(GL_TEXTURE2);
             if (params.pbrMetallicRoughnessMap) params.pbrMetallicRoughnessMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-            ApplySamplerState(2, 0, 1, 1, 1);
 
             gl4_glActiveTexture(GL_TEXTURE3);
             if (params.pbrEmissiveMap) params.pbrEmissiveMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-            ApplySamplerState(3, 0, 1, 1, 1);
 
             gl4_glActiveTexture(GL_TEXTURE4);
             if (params.pbrOcclusionMap) params.pbrOcclusionMap->BindGL();
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
-            ApplySamplerState(4, 0, 1, 1, 1);
         }
 
         if (params.pbr && (strideInBytes == 48 || strideInBytes == 68))

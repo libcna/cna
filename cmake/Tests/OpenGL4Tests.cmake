@@ -135,4 +135,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_fog examples/opengl4_fog_test.cpp)
     cna_register_backend_test(NAME OpenGL4_Fog COMMAND cna_test_opengl4_fog
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-26: real dynamic SamplerState for direct 3D draws (was previously
+    # always overwritten with a hardcoded Linear/Clamp value after the real state was applied).
+    cna_opengl4_test(cna_test_opengl4_samplerstate examples/opengl4_samplerstate_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_SamplerState COMMAND cna_test_opengl4_samplerstate
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -343,6 +343,39 @@
 > in the fog formula itself (only the pre-existing stride-16 gap, described above). Full re-run of
 > the other 16 OpenGL4 CTest suites confirms no regression from the new stride-16 dispatch path.
 >
+> **Status (2026-07-22): `GL4-26` (real dynamic `SamplerState` for direct 3D draws) landed and
+> verified.** A real bug, found by inspection while scoping this task (not by a failing test):
+> `BindProgramForStride` was unconditionally calling `ApplySamplerState(slot, 0, 1, 1, 1)` (Linear
+> + hardcoded Clamp) for every bound texture unit — but `GraphicsDevice::applySamplerStatesToBackend()`
+> (the shared XNA layer, not backend-specific) already calls `backend_->ApplySamplerState(slot,
+> realFilter, realAddressU, realAddressV, realMaxAnisotropy)` for **all 16 sampler slots**,
+> reading each slot's real `GraphicsDevice.SamplerStates[slot]` value, immediately before every
+> single `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` call reaches this function (every call site
+> in `GraphicsDevice.cpp` pairs the two calls back to back — confirmed by direct inspection, not
+> assumed). `BindProgramForStride`'s own hardcoded calls ran *after* that and silently clobbered
+> the real, already-correct value on every single direct 3D draw. Worse: real XNA's own
+> `SamplerState` default is `Linear`+**`Wrap`** (`SamplerState.cpp`'s own default constructor,
+> confirmed), not `Clamp` — so the old hardcoded value was not just non-dynamic but the wrong
+> default too, for every draw that never touched `GraphicsDevice.SamplerStates` at all. Fixed by
+> simply **deleting** the 7 redundant/incorrect override call sites (texture0, texture1, envMap,
+> and the 4 PBR texture units) — nothing needed to be added, since the correct mechanism already
+> existed and just needed to stop being overwritten. This matches
+> `EasyGLGraphicsBackend::BindDrawParams`'s own established convention (confirmed by inspection:
+> it never calls its own `ApplySamplerState` during a 3D draw dispatch either, relying solely on
+> the same upstream `GraphicsDevice` call) — this fix brings `OpenGL4` into alignment with EasyGL,
+> not a divergence from it.
+>
+> Verified by the new `OpenGL4_SamplerState` CTest (3/3), porting
+> `easygl_sampler_state_effect_test.cpp`'s own already-cross-backend-verified Wrap-vs-Clamp proof
+> verbatim (a 2-texel red/green pattern texture, UV spanning `u=[0,2]`, sampled at `u=1.25` —
+> `SamplerState::PointWrap` wraps to the pattern's own red texel, `SamplerState::PointClamp`
+> clamps to its green edge), plus a new Check B specifically proving the untouched *default*
+> `SamplerState` now also reads Wrap (red), not the old hardcoded Clamp (green) — the decisive
+> proof this backend's own default was wrong before, not just that explicit assignment works. All
+> 3 checks passed on the first real run once the fix landed. Full re-run of the other 17 OpenGL4
+> CTest suites confirms no regression from the corrected default (no existing test depended on the
+> old, incorrect Clamp default).
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -371,12 +404,13 @@
 >   NOXNA extensions or known simplifications, not missing built-in effect coverage.
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
-> - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplifications (`GL4-13`)** — real, but
->   two real gaps remain: (1) `params.baseVertex` is ignored (no `glDrawElementsBaseVertex` call —
->   only `params.startIndex` is honored, via a byte offset into the index buffer); (2) the texture
->   sampler used for `params.texture0` is hardcoded Linear/Clamp (`ApplySamplerState(0, 0, 1, 1,
->   1)`), not driven by the real bound `SamplerState` — same documented gap as `plan_sdlgpu.md`'s
->   own `SDLGPU-21` ("dynamic `SamplerState` for direct 3D draws"). ⬜
+> - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplification (`GL4-13`)** — one real gap
+>   remains: `params.baseVertex` is ignored (no `glDrawElementsBaseVertex` call — only
+>   `params.startIndex` is honored, via a byte offset into the index buffer). The sibling sampler
+>   gap this bullet used to describe is fixed — see `GL4-26`. ⬜
+> - ~~**`SamplerState` for direct 3D draws**~~ — done, `GL4-26` (2026-07-22). Real bug found+fixed
+>   (hardcoded Clamp silently overwrote the real, already-correctly-applied per-slot
+>   `SamplerState` on every draw); verified by `OpenGL4_SamplerState` (3/3). ✅
 > - **`preferPerPixelLighting`** — `GpuDrawParams::preferPerPixelLighting` is read by no shader;
 >   `lit_textured3d` always renders per-pixel regardless of its value, same known, tracked
 >   divergence from XNA's real per-vertex-lit default that every backend except D3D9 currently has
@@ -444,7 +478,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -477,6 +511,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-23` | `PbrEffect`/`SkinnedPbrEffect` — two new dedicated programs on two brand-new strides: `pbr3d` (stride 48, `VertexPositionNormalTangentTexture`) and `pbr_skinned3d` (stride 68, PBR+skinning combined, sharing `pbr3d`'s fragment shader). `OpenGL4VertexBufferBackend::ApplyLayout` gained matching stride-48/68 cases. Ported near-verbatim from `EasyGLGraphicsBackend::EnsurePbrProgram()` — the real glTF 2.0 metallic-roughness BRDF (GGX/Smith-Schlick-GGX/Schlick Fresnel) — cross-checked against `VulkanGraphicsBackend`'s `pbr3d.frag.glsl` and `BgfxGraphicsBackend`'s `fs_pbr3d.sc` (byte-for-byte identical `PbrLight()` math). 5 texture units sampled unconditionally every fragment, so two new lazily-created 1×1 fallback textures (`defaultWhiteTexture_`/`defaultFlatNormalTexture_`) are bound whenever a `GpuDrawParams::pbr*Map` pointer is null. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — last remaining built-in XNA/CNA effect for this backend. | ✅ | Real bug found+fixed: the very first PBR draw of a process rendered near-black because `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()`'s own trailing `glBindTexture(GL_TEXTURE_2D, 0)` clobbered/unbound the base-colour texture that had *already* been bound to unit 0 moments earlier — fixed by moving both `Ensure*` calls to the very top of `BindProgramForStride`, before any real per-draw texture gets bound. Check A reuses `easygl_pbreffect_golden_test.cpp`'s own oracle and matched it exactly (`(64,74,87)`) after the fix. |
 | `GL4-24` | Real occlusion queries — `OpenGL4OcclusionQueryBackend` wraps a genuine GL 1.5 core query object using `GL_SAMPLES_PASSED` (an exact passed-sample count, unlike `EasyGLOcclusionQueryBackend`'s GLES3 `GL_ANY_SAMPLES_PASSED` 0/1-only query — matches real XNA's own desktop `OcclusionQuery.PixelCount()` semantics). `GL4Loader` gained the GL 1.5 query entry points (`glGenQueries`/`glDeleteQueries`/`glBeginQuery`/`glEndQuery`/`glGetQueryObjectuiv`). `IsComplete()` polls `GL_QUERY_RESULT_AVAILABLE` and caches the result once ready; no busy-wait/forced sync. | ✅ | Ported `vulkan_occlusionquery_pixelcount_test.cpp`'s 3-scenario methodology (visible/occluded/multi-draw-span-sums-correctly) verbatim. All 6 checks passed on the first real run — no backend or test bugs found. |
 | `GL4-25` | Real fog on all 7 `GpuDrawParams`-driven stride/dispatch shaders (Task 1111's formula, ported from `EasyGLGraphicsBackend`'s own per-program fog blocks), plus a **new** `case 16:`/`coloredParams3DProgram_` closing a separate pre-existing parity gap (stride-16 `VertexPositionColor` draws previously bypassed `GpuDrawParams` entirely — no `DiffuseColor`/`VertexColorEnabled`/`AlphaTest`/fog — falling back to the params-free `DrawColoredPrimitives` path even when a real `Effect.Apply()` was in play). | ✅ | Real gap found+fixed (the stride-16 parity gap above, not a fog-formula bug). Checks A–C reuse `easygl_basiceffect_fog_test.cpp`'s own 3-scenario oracle verbatim; Checks D–H use `mix(fogColor,colour,0)==fogColor` at `Z=FogStart` as an exact, effect-agnostic proof across the other 5 shader families — all matched exactly. All 8 checks passed on the first real run. |
+| `GL4-26` | Real dynamic `SamplerState` for direct 3D draws — deleted 7 redundant/incorrect `ApplySamplerState(slot, 0, 1, 1, 1)` override call sites in `BindProgramForStride`; `GraphicsDevice::applySamplerStatesToBackend()` already applies the real per-slot `SamplerState` for all 16 slots immediately before every `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` call, so nothing needed to be added. | ✅ | Real bug found+fixed (by inspection, not a failing test): the old hardcoded value ran *after* the real one and silently overwrote it on every draw, always Clamp — and real XNA's own default is Linear+**Wrap**, not Clamp, so untouched `SamplerStates` were also wrong before this fix. `OpenGL4_SamplerState` (3/3) ports `easygl_sampler_state_effect_test.cpp`'s Wrap-vs-Clamp proof verbatim plus a new default-reads-Wrap check. All 3 passed once the fix landed. |
 
 ---
 
@@ -499,7 +534,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All seventeen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All eighteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -580,6 +615,10 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   `Z=FogStart` for `textured3d`/`lit_textured3d`/`env_map3d`/`skinned3d`/`pbr3d` (all matched
   exactly). Full re-run of the other 16 OpenGL4 CTest suites confirmed no regression from the new
   stride-16 dispatch path.
+- `OpenGL4_SamplerState` — 3/3, porting `easygl_sampler_state_effect_test.cpp`'s own
+  Wrap-vs-Clamp proof verbatim, plus a new check proving the untouched default `SamplerState` now
+  reads Wrap (matching real XNA), not the old hardcoded Clamp. Full re-run of the other 17
+  OpenGL4 CTest suites confirmed no regression from the corrected default.
 
 ---
 
@@ -638,10 +677,12 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
     `GL4-25`'s own row for the new `coloredParams3d` stride-16 program and the separate
     pre-existing parity gap it closed along the way (stride-16 draws previously bypassed
     `GpuDrawParams` entirely).
-15. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
+15. ~~`GL4-26`~~ — real dynamic `SamplerState` for direct 3D draws done and verified 2026-07-22,
+    all ✅ (`OpenGL4_SamplerState`, 3/3). See `GL4-26`'s own row: a real bug (hardcoded Clamp
+    silently overwriting the already-correctly-applied real sampler state on every draw) found by
+    inspection and fixed by deleting 7 redundant call sites, not adding anything.
+16. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
     recovery explicitly, permanently deferred — do not pick it up):**
-    - `GL4-26` — dynamic `SamplerState` for direct 3D draws (`DrawPrimitivesEx`/
-      `DrawIndexedPrimitivesEx`'s `params.texture0` sampler, currently hardcoded Linear/Clamp).
     - `GL4-27` — `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `params.baseVertex` support
       (`glDrawElementsBaseVertex`).
     - `GL4-28` — `TransformWindowToLogical`/`TransformLogicalToWindow`.
