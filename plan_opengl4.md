@@ -466,6 +466,36 @@
 > run (`(127,127,127)`/`(152,152,152)`/differs, both effects) — no backend or test bugs found. Full
 > re-run of the other 20 OpenGL4 CTest suites confirms no regression (21/21 total).
 >
+> **Status (2026-07-22): `GL4-30` (real custom `ShaderEffect`/`CreateEffectBackend`) landed and
+> verified — every item on this branch's active plan is now done.** `CreateEffectBackend()` was
+> previously unoverridden (default returns `nullptr`), so a caller-supplied GLSL vertex/fragment
+> source pair had no way to compile on this backend at all. Added `OpenGL4EffectBackend` (a thin
+> `IEffectBackend` wrapper around one `OpenGL4RawProgram`, modeled on `EasyGLEffectBackend`'s
+> identical shape) plus a `params.customEffectBackend` check at the top of
+> `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (a new local `BindCustomEffectMatrices` helper,
+> ported from `EasyGLGraphicsBackend`'s own identical helper): when
+> `ShaderEffect::FillGpuDrawParams()` sets `GpuDrawParams::customEffectBackend`, the compiled
+> program is bound directly and its `World`/`View`/`Projection` uniforms are set, bypassing
+> `BindProgramForStride`'s built-in stride-dispatched shaders entirely — matching the exact
+> uniform names every original XNA sample's own `.fx` source already declares.
+>
+> Verified by the new `OpenGL4_ShaderEffect3D` CTest (2/2), porting
+> `easygl_shadereffect_3d_test.cpp`'s own scene, methodology, and expected values exactly (desktop
+> GLSL 410 core translation only — no ES precision qualifiers, otherwise identical), constructing
+> `ShaderEffect` directly from source strings (no `ContentManager`/`.cnj` indirection needed, since
+> `ShaderEffect`'s own constructor already accepts `vertSrc`/`fragSrc` strings). Check A
+> (`World=Identity`, N·L=1) and Check B (`World=RotationY(180°)`, same on-screen footprint but a
+> flipped world normal, N·L clamped to 0) both passed exactly on the first real run
+> (`(200,100,50)`/`(0,0,0)`) — no backend or test bugs found. Full re-run of the other 21 OpenGL4
+> CTest suites confirms no regression (22/22 total).
+>
+> **Scope (deliberate, matching the EasyGL precedent this ports from):** proves the wiring for a
+> vertex format this backend already supports (`VertexPositionNormalTexture`, stride 32), not a new
+> vertex-attribute-layout mechanism. `SpriteBatch::SetCustomEffect` integration — letting a custom
+> `ShaderEffect` drive 2D sprite rendering too, not just 3D `DrawIndexedPrimitives` — is a separate,
+> larger feature and remains unoverridden on this backend, same as it is on every other backend
+> that has landed `CreateEffectBackend` without it. ⬜ (not attempted, not blocking)
+>
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
@@ -479,8 +509,10 @@
 >   `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`/
 >   `SkinnedPbrEffect`, `GL4-13`/`GL4-19`/`GL4-21`/`GL4-22`/`GL4-23`) — remaining gaps below are all
 >   NOXNA extensions or known simplifications, not missing built-in effect coverage.
-> - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
->   `nullptr`). ⬜
+> - ~~**Custom `ShaderEffect`**~~ (NOXNA) — done, `GL4-30` (2026-07-22). New
+>   `OpenGL4EffectBackend`/`params.customEffectBackend` dispatch, verified by
+>   `OpenGL4_ShaderEffect3D` (2/2). `SpriteBatch::SetCustomEffect` integration remains a separate,
+>   unattempted, non-blocking gap (see this task's own status paragraph). ✅
 > - ~~**`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `params.baseVertex`**~~ — done, `GL4-27`
 >   (2026-07-22). Real `glDrawElementsBaseVertex` call, verified by `OpenGL4_BaseVertex` (2/2). ✅
 > - ~~**`SamplerState` for direct 3D draws**~~ — done, `GL4-26` (2026-07-22). Real bug found+fixed
@@ -560,7 +592,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting`, `OpenGL4_ShaderEffect3D` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -597,6 +629,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-27` | Real `GpuDrawParams::baseVertex` support — `DrawIndexedPrimitivesEx` now calls the real GL 3.2 core `glDrawElementsBaseVertex` (newly loaded) instead of plain `glDrawElements`, adding `params.baseVertex` to every fetched index before it indexes into the bound vertex buffer. | ✅ | `OpenGL4_BaseVertex` (2/2): a shared 8-vertex buffer (2 quads, distinct colours/positions) + a shared 6-index buffer of purely *local* indices, reused unchanged for both draws (only `baseVertex` differs, `0` then `4`) — a decisive, unambiguous "honored vs ignored" distinction (an ignored `baseVertex` would leave the second quad's half at the background colour instead of its own colour). Both checks passed on the first real run. Also documented a separate, newly-discovered gap for a future task (not fixed here): this backend has no 32-bit index buffer support at all (`IsThirtyTwoBit()` hardcoded `false`, `GL_UNSIGNED_SHORT` hardcoded throughout). |
 | `GL4-28` | Real `TransformWindowToLogical`/`TransformLogicalToWindow` — pure-uniform-scale (no offset) physical↔logical coordinate mapping (`scale = virtualHeight_ / physicalWindowHeight`), ported from `EasyGLGraphicsBackend`'s identical formula/rationale; exact for this backend's own default `FixedHeightDynamicWidth` presentation. Used by `Mouse::SetPosition` (logical→window) and `SdlInputBridge` (window→logical, incoming physical mouse events). | ✅ | `OpenGL4_TransformCoords` (4/4): 64×64 physical window + `SetVirtualResolution(128,128)` forces a deterministic 2x scale; checks both directions at a centre point and a non-centre point, proving a genuine scale (not identity) and an exact round-trip inverse. All 4 checks passed on the first real run — no backend or test bugs found. |
 | `GL4-29` | Real `PreferPerPixelLighting` vertex-lit shader variant — two new dedicated per-vertex-lit programs, `litTextured3DVertexLitProgram_` (stride 32) and `skinned3DVertexLitProgram_` (stride 52/56), ported from `EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram()`/`EnsureSkinnedVertexLitProgram()` — identical Blinn-Phong math to the existing per-pixel programs, moved into the vertex stage and Gouraud-interpolated via new `vLitRGB`/`vSpecularRGB` varyings. `BindProgramForStride`'s stride-32/52/56 cases select between the two via `params.lightingEnabled && !params.preferPerPixelLighting` (XNA's own default gate). | ✅ | `OpenGL4_PreferPerPixelLighting` (6/6): reuses `easygl_basiceffect_preferperpixellighting_test.cpp`'s/`easygl_skinnedeffect_preferperpixellighting_test.cpp`'s exact scene and analytically re-derived expected values verbatim (same ported formula, same oracle applies) — Checks A–C cover `BasicEffect`, D–F cover `SkinnedEffect`. All 6 passed on the first real run (`(127,127,127)` vertex-lit vs `(152,152,152)` pixel-lit, both effects) — no backend or test bugs found. |
+| `GL4-30` | Real custom `ShaderEffect` (`CreateEffectBackend`) — new `OpenGL4EffectBackend` (thin `IEffectBackend` wrapper around one `OpenGL4RawProgram`, modeled on `EasyGLEffectBackend`), plus a `params.customEffectBackend` check + new `BindCustomEffectMatrices` helper at the top of `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (ported from `EasyGLGraphicsBackend`'s own identical helper) that binds the compiled program and its `World`/`View`/`Projection` uniforms directly, bypassing `BindProgramForStride` entirely. | ✅ | `OpenGL4_ShaderEffect3D` (2/2): ports `easygl_shadereffect_3d_test.cpp`'s exact scene/methodology/expected values (desktop GLSL 410 core translation only). Check A (`World=Identity`) and Check B (`World=RotationY(180°)`, same footprint but flipped world normal) both matched exactly (`(200,100,50)`/`(0,0,0)`) on the first real run — no backend or test bugs found. `SpriteBatch::SetCustomEffect` integration deliberately out of scope (separate, larger feature, unattempted on every other backend that has landed `CreateEffectBackend` too). |
 
 ---
 
@@ -619,7 +652,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All twenty-one dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All twenty-two dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -719,6 +752,12 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   discriminates cleanly between the vertex-lit average (`(127,127,127)`) and a fresh per-fragment
   evaluation (`(152,152,152)`), for both effects. Full re-run of the other 20 OpenGL4 CTest suites
   confirmed no regression (21/21 total).
+- `OpenGL4_ShaderEffect3D` — 2/2, porting `easygl_shadereffect_3d_test.cpp`'s exact scene/
+  methodology/expected values: `World=Identity` (surface facing the light, N·L=1) reads full
+  `diffuseColor` `(200,100,50)`, `World=RotationY(180°)` (same on-screen footprint, flipped world
+  normal, N·L clamped to 0) reads genuinely lit black `(0,0,0)`, proving the custom program's own
+  `World` uniform reaches the vertex shader and affects real, visible world-space lighting. Full
+  re-run of the other 21 OpenGL4 CTest suites confirmed no regression (22/22 total).
 
 ---
 
@@ -790,11 +829,14 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 19. ~~`GL4-29`~~ — real `PreferPerPixelLighting` vertex-lit shader variant done and verified
     2026-07-22, all ✅ (`OpenGL4_PreferPerPixelLighting`, 6/6). See `GL4-29`'s own row for the two
     new per-vertex-lit programs ported from `EasyGLGraphicsBackend`.
-20. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
-    recovery explicitly, permanently deferred — do not pick it up):**
-    - `GL4-30` — custom `ShaderEffect` (`CreateEffectBackend`) — API already established and
-      implemented on 8 other backends (EasyGL is the direct GLSL template), so this is a normal
-      port, not an open design question.
+20. ~~`GL4-30`~~ — real custom `ShaderEffect`/`CreateEffectBackend` done and verified 2026-07-22,
+    all ✅ (`OpenGL4_ShaderEffect3D`, 2/2). See `GL4-30`'s own row for the new
+    `OpenGL4EffectBackend`/`BindCustomEffectMatrices` dispatch ported from `EasyGLGraphicsBackend`.
+    **Every item on this branch's active plan (as scoped by the 2026-07-22 project-owner
+    decisions — OpenGL4-only, context-loss recovery explicitly deferred) is now done.**
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
-everything else still open — do not treat the picks above as the only next options.
+what's still open (the 32-bit index buffer gap found while scoping `GL4-27`, `SpriteBatch::
+SetCustomEffect` integration found while scoping `GL4-30`, Windows/macOS validation, and the
+permanently-deferred context-loss recovery feature) — these are candidates for a fresh scoping
+pass, not blocking anything above.

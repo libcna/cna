@@ -158,4 +158,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_preferperpixellighting examples/opengl4_preferperpixellighting_test.cpp)
     cna_register_backend_test(NAME OpenGL4_PreferPerPixelLighting COMMAND cna_test_opengl4_preferperpixellighting
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-30: real custom ShaderEffect (CreateEffectBackend) for a 3D
+    # DrawIndexedPrimitives call, bypassing the built-in stride-dispatched shaders.
+    cna_opengl4_test(cna_test_opengl4_shadereffect_3d examples/opengl4_shadereffect_3d_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_ShaderEffect3D COMMAND cna_test_opengl4_shadereffect_3d
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

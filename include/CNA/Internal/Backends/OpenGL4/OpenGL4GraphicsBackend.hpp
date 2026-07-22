@@ -242,6 +242,47 @@ namespace CNA::Internal::Backends::OpenGL4
     };
 
     /**
+     * @brief `OpenGL4`-backed custom `ShaderEffect` program (plan_opengl4.md `GL4-30`) -- wraps a
+     * caller-supplied GLSL 410 core vertex+fragment source pair, modeled on
+     * `EasyGLEffectBackend`'s own shape (a thin `IEffectBackend` wrapper around one compiled
+     * program). Uses `OpenGL4RawProgram` internally, the same compiled-program type every
+     * built-in stride-dispatched shader on this backend already uses.
+     */
+    class OpenGL4EffectBackend final : public IEffectBackend
+    {
+    public:
+        OpenGL4EffectBackend() = default;
+        ~OpenGL4EffectBackend() override = default;
+
+        OpenGL4EffectBackend(const OpenGL4EffectBackend&) = delete;
+        OpenGL4EffectBackend& operator=(const OpenGL4EffectBackend&) = delete;
+
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
+        void Bind() override;
+        void Unbind() override;
+        [[nodiscard]] bool IsValid() const override;
+        [[nodiscard]] std::string GetCompileError() const override;
+        void SetUniformFloat(const char* name, float value) override;
+        void SetUniformInt(const char* name, int value) override;
+        void SetUniformVec2(const char* name, float x, float y) override;
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        void SetUniformMat4(const char* name, const float* matrix) override;
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        void BindTexture(int unit, ITextureBackend* texture) override;
+        void BindTextureCube(int unit, ITextureCubeBackend* texture) override;
+        void BindTexture3D(int unit, ITexture3DBackend* texture) override;
+
+        /// Returns the underlying compiled program, so a backend (e.g. SpriteBatch) can bind
+        /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.
+        [[nodiscard]] OpenGL4RawProgram& GetProgram() { return program_; }
+
+    private:
+        OpenGL4RawProgram program_;
+    };
+
+    /**
      * @brief `OpenGL4`-backed occlusion query -- a real GL 1.5 core `GL_SAMPLES_PASSED` query
      * object (plan_opengl4.md `GL4-24`), unlike `EasyGLOcclusionQueryBackend`'s `GLES3`
      * `GL_ANY_SAMPLES_PASSED` (0/1-only) query -- desktop GL reports an exact passed-sample
@@ -432,6 +473,11 @@ namespace CNA::Internal::Backends::OpenGL4
 
         /// plan_opengl4.md GL4-24: real GL_SAMPLES_PASSED occlusion queries.
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+
+        /// plan_opengl4.md GL4-30: compiles a caller-supplied GLSL 410 core vertex+fragment
+        /// source pair for a custom Microsoft::Xna::Framework::Graphics::ShaderEffect (NOXNA).
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 

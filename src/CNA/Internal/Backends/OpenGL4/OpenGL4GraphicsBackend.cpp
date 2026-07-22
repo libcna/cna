@@ -2537,6 +2537,116 @@ void main()
         return std::make_unique<OpenGL4OcclusionQueryBackend>();
     }
 
+    std::unique_ptr<IEffectBackend> OpenGL4GraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<OpenGL4EffectBackend>();
+        backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
+    }
+
+    // --- OpenGL4EffectBackend (plan_opengl4.md GL4-30) ---
+
+    bool OpenGL4EffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        return program_.Compile(vertSrc, fragSrc);
+    }
+
+    void OpenGL4EffectBackend::Bind()
+    {
+        if (program_.IsValid())
+            program_.Use();
+    }
+
+    void OpenGL4EffectBackend::Unbind()
+    {
+        // No explicit "unbind program" concept in raw GL -- the next Use() (built-in shader or
+        // another effect) simply overrides it, matching OpenGL4RawProgram's own convention (every
+        // built-in stride-dispatched shader in BindProgramForStride behaves identically).
+    }
+
+    bool OpenGL4EffectBackend::IsValid() const
+    {
+        return program_.IsValid();
+    }
+
+    std::string OpenGL4EffectBackend::GetCompileError() const
+    {
+        return program_.GetError();
+    }
+
+    void OpenGL4EffectBackend::SetUniformFloat(const char* name, float value)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform1f(loc, value);
+    }
+
+    void OpenGL4EffectBackend::SetUniformInt(const char* name, int value)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform1i(loc, value);
+    }
+
+    void OpenGL4EffectBackend::SetUniformVec2(const char* name, float x, float y)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform2f(loc, x, y);
+    }
+
+    void OpenGL4EffectBackend::SetUniformVec3(const char* name, float x, float y, float z)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform3f(loc, x, y, z);
+    }
+
+    void OpenGL4EffectBackend::SetUniformVec4(const char* name, float x, float y, float z, float w)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform4f(loc, x, y, z, w);
+    }
+
+    void OpenGL4EffectBackend::SetUniformMat4(const char* name, const float* matrix)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, matrix);
+    }
+
+    void OpenGL4EffectBackend::SetUniformFloatArray(const char* name, const float* values, int count)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform1fv(loc, count, values);
+    }
+
+    void OpenGL4EffectBackend::SetUniformVec2Array(const char* name, const float* values, int count)
+    {
+        const int loc = program_.UniformLocation(name);
+        if (loc >= 0) gl4_glUniform2fv(loc, count, values);
+    }
+
+    void OpenGL4EffectBackend::BindTexture(int unit, ITextureBackend* texture)
+    {
+        if (!texture) return;
+        gl4_glActiveTexture(GL_TEXTURE0 + unit);
+        texture->BindGL();
+        gl4_glActiveTexture(GL_TEXTURE0);
+    }
+
+    void OpenGL4EffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
+    {
+        if (!texture) return;
+        gl4_glActiveTexture(GL_TEXTURE0 + unit);
+        texture->BindGL();
+        gl4_glActiveTexture(GL_TEXTURE0);
+    }
+
+    void OpenGL4EffectBackend::BindTexture3D(int unit, ITexture3DBackend* texture)
+    {
+        if (!texture) return;
+        gl4_glActiveTexture(GL_TEXTURE0 + unit);
+        texture->BindGL();
+        gl4_glActiveTexture(GL_TEXTURE0);
+    }
+
     std::unique_ptr<ISpriteBatchBackend> OpenGL4GraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<OpenGL4SpriteBatchBackend>(*this);
@@ -3237,12 +3347,43 @@ void main()
         }
     }
 
+    namespace
+    {
+        // plan_opengl4.md GL4-30: binds a ShaderEffect's own compiled program (bypassing the
+        // built-in stride-dispatched shaders) and its World/View/Projection uniforms, matching
+        // the exact uniform names every original XNA sample's own .fx source already declares.
+        // Mirrors EasyGLGraphicsBackend's own BindCustomEffectMatrices helper exactly.
+        void BindCustomEffectMatrices(IEffectBackend& backend,
+                                      const Matrix& world, const Matrix& view, const Matrix& projection)
+        {
+            backend.Bind();
+            float worldCol[16], viewCol[16], projCol[16];
+            world.ToColumnMajor(worldCol);
+            view.ToColumnMajor(viewCol);
+            projection.ToColumnMajor(projCol);
+            backend.SetUniformMat4("World", worldCol);
+            backend.SetUniformMat4("View", viewCol);
+            backend.SetUniformMat4("Projection", projCol);
+        }
+    }
+
     void OpenGL4GraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
+
+        if (params.customEffectBackend)
+        {
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+            const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            gl4_glBindVertexArray(vb.VaoHandle());
+            glDrawArrays(ToGLPrimitive(primitive), params.vertexStart, vertexCount);
+            gl4_glBindVertexArray(0);
+            return;
+        }
+
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
             DrawColoredPrimitives(vb_in, world, view, projection, primitive, primitiveCount);
@@ -3262,6 +3403,21 @@ void main()
     {
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferBackend&>(ib_in);
+
+        if (params.customEffectBackend)
+        {
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+            const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+            const auto byteOffsetCustom = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) * sizeof(uint16_t));
+            gl4_glBindVertexArray(vb.VaoHandle());
+            gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
+            gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT,
+                                         byteOffsetCustom, params.baseVertex);
+            gl4_glBindVertexArray(0);
+            return;
+        }
+
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
             DrawIndexedColoredPrimitives(vb_in, ib_in, world, view, projection, primitive, primitiveCount);
