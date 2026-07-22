@@ -124,4 +124,9 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_pbreffect examples/opengl4_pbreffect_test.cpp)
     cna_register_backend_test(NAME OpenGL4_PbrEffect COMMAND cna_test_opengl4_pbreffect
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-24: real GL_SAMPLES_PASSED occlusion queries.
+    cna_opengl4_test(cna_test_opengl4_occlusionquery examples/opengl4_occlusionquery_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_OcclusionQuery COMMAND cna_test_opengl4_occlusionquery
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

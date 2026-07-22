@@ -79,6 +79,12 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     PFNGL4TEXSUBIMAGE3DPROC               gl4_glTexSubImage3D               = nullptr;
     PFNGL4FRAMEBUFFERTEXTURELAYERPROC     gl4_glFramebufferTextureLayer     = nullptr;
 
+    PFNGL4GENQUERIESPROC                  gl4_glGenQueries                  = nullptr;
+    PFNGL4DELETEQUERIESPROC               gl4_glDeleteQueries               = nullptr;
+    PFNGL4BEGINQUERYPROC                  gl4_glBeginQuery                  = nullptr;
+    PFNGL4ENDQUERYPROC                    gl4_glEndQuery                    = nullptr;
+    PFNGL4GETQUERYOBJECTUIVPROC           gl4_glGetQueryObjectuiv           = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -171,6 +177,12 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glTexImage3D", gl4_glTexImage3D);
         ok &= Resolve(getProcAddress, "glTexSubImage3D", gl4_glTexSubImage3D);
         ok &= Resolve(getProcAddress, "glFramebufferTextureLayer", gl4_glFramebufferTextureLayer);
+
+        ok &= Resolve(getProcAddress, "glGenQueries", gl4_glGenQueries);
+        ok &= Resolve(getProcAddress, "glDeleteQueries", gl4_glDeleteQueries);
+        ok &= Resolve(getProcAddress, "glBeginQuery", gl4_glBeginQuery);
+        ok &= Resolve(getProcAddress, "glEndQuery", gl4_glEndQuery);
+        ok &= Resolve(getProcAddress, "glGetQueryObjectuiv", gl4_glGetQueryObjectuiv);
 
         return ok;
     }

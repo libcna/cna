@@ -241,6 +241,33 @@ namespace CNA::Internal::Backends::OpenGL4
         int levelCount_ = 1;
     };
 
+    /**
+     * @brief `OpenGL4`-backed occlusion query -- a real GL 1.5 core `GL_SAMPLES_PASSED` query
+     * object (plan_opengl4.md `GL4-24`), unlike `EasyGLOcclusionQueryBackend`'s `GLES3`
+     * `GL_ANY_SAMPLES_PASSED` (0/1-only) query -- desktop GL reports an exact passed-sample
+     * count, matching real XNA's own desktop `OcclusionQuery.PixelCount()` semantics (see
+     * `IOcclusionQueryBackend`'s own doc comment contrasting the two).
+     */
+    class OpenGL4OcclusionQueryBackend final : public IOcclusionQueryBackend
+    {
+    public:
+        OpenGL4OcclusionQueryBackend();
+        ~OpenGL4OcclusionQueryBackend() override;
+
+        OpenGL4OcclusionQueryBackend(const OpenGL4OcclusionQueryBackend&) = delete;
+        OpenGL4OcclusionQueryBackend& operator=(const OpenGL4OcclusionQueryBackend&) = delete;
+
+        void Begin() override;
+        void End() override;
+        [[nodiscard]] bool IsComplete() const override;
+        [[nodiscard]] int PixelCount() const override;
+
+    private:
+        unsigned int query_ = 0;
+        mutable bool resultCached_ = false;
+        mutable int cachedResult_ = 0;
+    };
+
     /** @brief `OpenGL4`-backed vertex buffer (VBO + its own VAO). */
     class OpenGL4VertexBufferBackend final : public IVertexBufferBackend
     {
@@ -393,6 +420,9 @@ namespace CNA::Internal::Backends::OpenGL4
                                                             int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
+
+        /// plan_opengl4.md GL4-24: real GL_SAMPLES_PASSED occlusion queries.
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 

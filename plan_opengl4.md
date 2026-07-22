@@ -285,6 +285,25 @@
 > `BindProgramForStride`, before *any* real per-draw texture gets bound. Full re-run of the other
 > 14 OpenGL4 CTest suites confirms no regression.
 >
+> **Status (2026-07-22): `GL4-24` (real occlusion queries) landed and verified.**
+> `OpenGL4OcclusionQueryBackend` wraps a genuine GL 1.5 core query object using
+> `GL_SAMPLES_PASSED` — an **exact** passed-sample count — unlike `EasyGLOcclusionQueryBackend`'s
+> GLES3 `GL_ANY_SAMPLES_PASSED` (0/1-only) query; this matches real XNA's own desktop
+> `OcclusionQuery.PixelCount()` semantics (see `IOcclusionQueryBackend`'s own doc comment
+> contrasting the two). `GL4Loader` gained the GL 1.5 query entry points (`glGenQueries`/
+> `glDeleteQueries`/`glBeginQuery`/`glEndQuery`/`glGetQueryObjectuiv`) plus the
+> `GL_SAMPLES_PASSED`/`GL_QUERY_RESULT`/`GL_QUERY_RESULT_AVAILABLE` tokens. `IsComplete()` polls
+> `GL_QUERY_RESULT_AVAILABLE` and caches the real result once ready (no busy-wait, no forced
+> synchronization); `PixelCount()` returns the cached exact count, `0` before the result is ready.
+> Verified by the new `OpenGL4_OcclusionQuery` CTest (6/6), porting
+> `vulkan_occlusionquery_pixelcount_test.cpp`'s own already-verified 3-scenario methodology (a
+> fully visible quad reporting a positive count, a nearer opaque occluder making the target read
+> exactly `0` via the real depth test, and — the most discriminating check — two non-overlapping
+> half-quads drawn within a single `Begin()`/`End()` span summing to the *same* total a single
+> full-quad draw would produce, proving the query isn't just capturing the last draw in its span).
+> All 6 checks passed on the first real run — no backend or test bugs found. Full re-run of the
+> other 15 OpenGL4 CTest suites confirms no regression.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -324,21 +343,26 @@
 >   divergence from XNA's real per-vertex-lit default that every backend except D3D9 currently has
 >   (see the field's own doc comment in `IGraphicsBackend.hpp`). ⬜
 > - **Fog** — `GpuDrawParams::fogEnabled`/`fogColor`/`fogStart`/`fogEnd` are not read by any of the
->   4 stride shaders (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`), a deliberate
->   deferral matching `plan_webgpu.md`'s own "No fog (same deliberate deferral as the other 3
->   stride variants)" precedent for `lit_textured3d`. ⬜
-> - **Occlusion queries** — `CreateOcclusionQuery` not overridden (returns `nullptr`, same
->   documented-permanent-limitation shape as `Headless`/`Software`/`SDL_gpu` for their own reasons
->   — unlike those, this is not a hard API limitation for OpenGL4 (`glGenQueries`/
->   `GL_SAMPLES_PASSED` exist), just not implemented yet). ⬜
+>   7 stride/dispatch shaders (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/
+>   `env_map3d`/`skinned3d`/`pbr3d`), a deliberate deferral matching `plan_webgpu.md`'s own "No fog
+>   (same deliberate deferral as the other 3 stride variants)" precedent for `lit_textured3d`. ⬜
+> - ~~**Occlusion queries**~~ — done, `GL4-24` (2026-07-22). Real `GL_SAMPLES_PASSED` queries via
+>   `OpenGL4OcclusionQueryBackend`, verified by `OpenGL4_OcclusionQuery` (6/6). ✅
 > - **`TransformWindowToLogical`/`TransformLogicalToWindow`** — not overridden (default `false`),
 >   so `Mouse`/touch physical→logical coordinate mapping doesn't work yet on this backend when a
 >   non-default `virtualWidth`/`virtualHeight` is set. ⬜
-> - **`DebugSimulateContextLoss`/`DebugRestoreContext`/`SetContextRecoveryEnabled`** — not
->   overridden (safe no-op defaults); this backend has no context-loss-recovery/CPU-shadow-copy
->   mechanism at all yet, unlike EasyGL's `metagl`-based one. ⬜
+> - **`DebugSimulateContextLoss`/`DebugRestoreContext`/`SetContextRecoveryEnabled`** — **explicitly,
+>   permanently deferred (2026-07-22 project-owner decision)**, not overridden (safe no-op
+>   defaults). EasyGL's own `metagl`-based `RecoverableResource` mechanism is a cross-cutting base
+>   class touching nearly every GPU resource backend (textures, render targets, buffers, occlusion
+>   queries, sprite batch) — a much larger retrofit than every other item on this list, and not
+>   worth the ROI for this backend right now. Same permanent-deferral status as
+>   `Headless`/`Software`/`SDL_gpu` already have for their own reasons — treat this the same way:
+>   do not pick this up without a fresh, explicit go-ahead. ⬜ (permanently deferred, not a pick-up
+>   candidate)
 > - **Windows/macOS validation** — code paths only (see Platform scope above), not run on real
->   hardware yet. ⬜
+>   hardware yet. Not reachable from this development environment (no Windows/macOS machine
+>   available) — not a pick-up candidate here either. ⬜ (environment-blocked)
 
 ---
 
@@ -378,7 +402,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -409,6 +433,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-21` | `EnvironmentMapEffect` — a dedicated `env_map3d` GLSL 410 core program (stride 32, same `VertexPositionNormalTexture` layout as `lit_textured3d`), selected by `BindProgramForStride` instead of `lit_textured3d` when `GpuDrawParams::envMapping` is set. Ported near-verbatim from `EasyGLGraphicsBackend::EnsureEnvMapped3DProgram`, cross-checked against `VulkanGraphicsBackend`'s `env_map3d.frag.glsl` for the exact reflection/Fresnel/lerp/alpha-scaling formula (`docs/environmentmapeffect-support.md` documents the 2 real formula bugs — additive-not-lerp, missing alpha scaling — already found and fixed on 3 other backends; this port used the corrected formula from the start). Cube map binds to texture unit 1 (`GL4-19`'s `DualTextureEffect` slot, safe since the two effects are mutually exclusive per draw). No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — every field was already present from earlier phases. | ✅ | Check A reuses Task 399's own cross-backend-verified combined-scene oracle verbatim (`(151,101,76)` ± 20) and passed on the first run at `(131,91,71)`. All 4 checks passed on the first real run — no backend or test bugs found. |
 | `GL4-22` | `SkinnedEffect` — a dedicated `skinned3d` GLSL 410 core program on **new** strides 52/56 (`VertexPositionNormalTextureSkinned` + optional trailing `Color`), plus matching `OpenGL4VertexBufferBackend::ApplyLayout` attribute cases (blend-indices via the newly-loaded `gl4_glVertexAttribIPointer` — a true GLSL integer attribute, not float-converted, since it subscripts `uBones[]`). Ported near-verbatim from `EasyGLGraphicsBackend::EnsureSkinnedProgram`, matching real XNA `SkinnedEffect.fx`'s `Skin()` function: skin matrix = sum of only the first `WeightsPerVertex` (1/2/4) `uBones[index]*weight` pairs (`Task 895`'s already-fixed formula, not the naive always-sum-4 bug). Lighting reuses `lit_textured3d`'s 3-light diffuse+specular+emissive formula plus a `VertexColorEnabled`-gated vertex-colour modulate for stride 56. No fog (same deliberate deferral as every other 3D stride variant). All 72 bones upload via one `gl4_glUniformMatrix4fv(loc, boneCount, ...)` call. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed. | ✅ | 5 checks across 4 scenarios (identity no-op, single-bone translate, two-bone weighted blend reaching the same net shift as a decisive both-bones-contribute proof, and `VertexColorEnabled` reusing `easygl_skinnedeffect_vertexcolor_test.cpp`'s own `(174,0,0)` oracle) all passed on the first real run — no backend or test bugs found. |
 | `GL4-23` | `PbrEffect`/`SkinnedPbrEffect` — two new dedicated programs on two brand-new strides: `pbr3d` (stride 48, `VertexPositionNormalTangentTexture`) and `pbr_skinned3d` (stride 68, PBR+skinning combined, sharing `pbr3d`'s fragment shader). `OpenGL4VertexBufferBackend::ApplyLayout` gained matching stride-48/68 cases. Ported near-verbatim from `EasyGLGraphicsBackend::EnsurePbrProgram()` — the real glTF 2.0 metallic-roughness BRDF (GGX/Smith-Schlick-GGX/Schlick Fresnel) — cross-checked against `VulkanGraphicsBackend`'s `pbr3d.frag.glsl` and `BgfxGraphicsBackend`'s `fs_pbr3d.sc` (byte-for-byte identical `PbrLight()` math). 5 texture units sampled unconditionally every fragment, so two new lazily-created 1×1 fallback textures (`defaultWhiteTexture_`/`defaultFlatNormalTexture_`) are bound whenever a `GpuDrawParams::pbr*Map` pointer is null. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — last remaining built-in XNA/CNA effect for this backend. | ✅ | Real bug found+fixed: the very first PBR draw of a process rendered near-black because `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()`'s own trailing `glBindTexture(GL_TEXTURE_2D, 0)` clobbered/unbound the base-colour texture that had *already* been bound to unit 0 moments earlier — fixed by moving both `Ensure*` calls to the very top of `BindProgramForStride`, before any real per-draw texture gets bound. Check A reuses `easygl_pbreffect_golden_test.cpp`'s own oracle and matched it exactly (`(64,74,87)`) after the fix. |
+| `GL4-24` | Real occlusion queries — `OpenGL4OcclusionQueryBackend` wraps a genuine GL 1.5 core query object using `GL_SAMPLES_PASSED` (an exact passed-sample count, unlike `EasyGLOcclusionQueryBackend`'s GLES3 `GL_ANY_SAMPLES_PASSED` 0/1-only query — matches real XNA's own desktop `OcclusionQuery.PixelCount()` semantics). `GL4Loader` gained the GL 1.5 query entry points (`glGenQueries`/`glDeleteQueries`/`glBeginQuery`/`glEndQuery`/`glGetQueryObjectuiv`). `IsComplete()` polls `GL_QUERY_RESULT_AVAILABLE` and caches the result once ready; no busy-wait/forced sync. | ✅ | Ported `vulkan_occlusionquery_pixelcount_test.cpp`'s 3-scenario methodology (visible/occluded/multi-draw-span-sums-correctly) verbatim. All 6 checks passed on the first real run — no backend or test bugs found. |
 
 ---
 
@@ -431,7 +456,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All fifteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All sixteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -503,6 +528,10 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   fully-dielectric-red proven measurably different). Found and fixed a real first-PBR-draw texture
   unit 0 clobbering bug along the way (see `GL4-23`'s own row). Full re-run of the other 14
   OpenGL4 CTest suites confirmed no regression.
+- `OpenGL4_OcclusionQuery` — 6/6, porting `vulkan_occlusionquery_pixelcount_test.cpp`'s own
+  3-scenario methodology (visible quad -> positive count, occluded quad -> exactly 0 via the real
+  depth test, two half-quads summed within one query span -> the same total a single full-quad
+  draw would produce). Full re-run of the other 15 OpenGL4 CTest suites confirmed no regression.
 
 ---
 
@@ -554,12 +583,21 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
     See `GL4-23`'s own row for the new stride-48/68 vertex layouts, the real glTF BRDF
     cross-checked against 2 other backends, and the real first-PBR-draw texture-clobbering bug
     found and fixed along the way.
-13. **Next up (not yet started, no priority order implied):** every built-in effect is done — see
-    the "Remaining work" section in the status banner above for what's left (custom `ShaderEffect`,
-    `DrawPrimitivesEx` known simplifications, `preferPerPixelLighting`, fog on the stride shaders,
-    occlusion queries, `TransformWindowToLogical`/`TransformLogicalToWindow`,
-    `DebugSimulateContextLoss`, Windows/macOS validation) — no single item is obviously "next" over
-    the others.
+13. ~~`GL4-24`~~ — real occlusion queries done and verified 2026-07-22, all ✅
+    (`OpenGL4_OcclusionQuery`, 6/6). See `GL4-24`'s own row for the exact-count
+    `GL_SAMPLES_PASSED` vs EasyGL's ES-only 0/1 `GL_ANY_SAMPLES_PASSED` distinction.
+14. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
+    recovery explicitly, permanently deferred — do not pick it up):**
+    - `GL4-25` — fog support on all 7 stride/dispatch shaders.
+    - `GL4-26` — dynamic `SamplerState` for direct 3D draws (`DrawPrimitivesEx`/
+      `DrawIndexedPrimitivesEx`'s `params.texture0` sampler, currently hardcoded Linear/Clamp).
+    - `GL4-27` — `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `params.baseVertex` support
+      (`glDrawElementsBaseVertex`).
+    - `GL4-28` — `TransformWindowToLogical`/`TransformLogicalToWindow`.
+    - `GL4-29` — `preferPerPixelLighting` vertex-lit shader variant.
+    - `GL4-30` — custom `ShaderEffect` (`CreateEffectBackend`) — API already established and
+      implemented on 8 other backends (EasyGL is the direct GLSL template), so this is a normal
+      port, not an open design question.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
 everything else still open — do not treat the picks above as the only next options.

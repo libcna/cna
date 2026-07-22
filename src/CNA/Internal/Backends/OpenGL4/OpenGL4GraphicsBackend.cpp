@@ -1172,6 +1172,54 @@ void main()
     }
 
     // ------------------------------------------------------------------------------------
+    // OpenGL4OcclusionQueryBackend
+    // ------------------------------------------------------------------------------------
+
+    OpenGL4OcclusionQueryBackend::OpenGL4OcclusionQueryBackend()
+    {
+        gl4_glGenQueries(1, &query_);
+    }
+
+    OpenGL4OcclusionQueryBackend::~OpenGL4OcclusionQueryBackend()
+    {
+        if (query_ != 0)
+            gl4_glDeleteQueries(1, &query_);
+    }
+
+    void OpenGL4OcclusionQueryBackend::Begin()
+    {
+        if (query_ == 0) return;
+        resultCached_ = false;
+        gl4_glBeginQuery(GL_SAMPLES_PASSED, query_);
+    }
+
+    void OpenGL4OcclusionQueryBackend::End()
+    {
+        if (query_ == 0) return;
+        gl4_glEndQuery(GL_SAMPLES_PASSED);
+    }
+
+    bool OpenGL4OcclusionQueryBackend::IsComplete() const
+    {
+        if (query_ == 0) return false;
+        if (resultCached_) return true;
+        GLuint available = 0;
+        gl4_glGetQueryObjectuiv(query_, GL_QUERY_RESULT_AVAILABLE, &available);
+        if (!available) return false;
+        GLuint result = 0;
+        gl4_glGetQueryObjectuiv(query_, GL_QUERY_RESULT, &result);
+        cachedResult_ = static_cast<int>(result);
+        resultCached_ = true;
+        return true;
+    }
+
+    int OpenGL4OcclusionQueryBackend::PixelCount() const
+    {
+        if (!IsComplete()) return 0;
+        return cachedResult_;
+    }
+
+    // ------------------------------------------------------------------------------------
     // OpenGL4RenderTargetBackend
     // ------------------------------------------------------------------------------------
 
@@ -2105,6 +2153,11 @@ void main()
                                                                                     int /*surfaceFormat*/)
     {
         return std::make_unique<OpenGL4TextureCubeBackend>(size, mipMap);
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> OpenGL4GraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<OpenGL4OcclusionQueryBackend>();
     }
 
     std::unique_ptr<ISpriteBatchBackend> OpenGL4GraphicsBackend::CreateSpriteBatch()

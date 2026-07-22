@@ -153,6 +153,15 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 #ifndef GL_TEXTURE_3D
 #define GL_TEXTURE_3D 0x806F
 #endif
+#ifndef GL_SAMPLES_PASSED
+#define GL_SAMPLES_PASSED 0x8914
+#endif
+#ifndef GL_QUERY_RESULT
+#define GL_QUERY_RESULT 0x8866
+#endif
+#ifndef GL_QUERY_RESULT_AVAILABLE
+#define GL_QUERY_RESULT_AVAILABLE 0x8867
+#endif
 
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
@@ -241,6 +250,14 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     // than this FBO-per-slice approach).
     using PFNGL4FRAMEBUFFERTEXTURELAYERPROC     = void (*)(GLenum, GLenum, GLuint, GLint, GLint);
 
+    // plan_opengl4.md GL4-24: real occlusion queries -- GL 1.5 core, not guaranteed to be
+    // declared by a GL-1.1-vintage <GL/gl.h>.
+    using PFNGL4GENQUERIESPROC                  = void (*)(GLsizei, GLuint*);
+    using PFNGL4DELETEQUERIESPROC               = void (*)(GLsizei, const GLuint*);
+    using PFNGL4BEGINQUERYPROC                  = void (*)(GLenum, GLuint);
+    using PFNGL4ENDQUERYPROC                    = void (*)(GLenum);
+    using PFNGL4GETQUERYOBJECTUIVPROC           = void (*)(GLuint, GLenum, GLuint*);
+
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
     extern PFNGL4BINDBUFFERPROC               gl4_glBindBuffer;
@@ -315,6 +332,12 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4TEXIMAGE3DPROC                  gl4_glTexImage3D;
     extern PFNGL4TEXSUBIMAGE3DPROC               gl4_glTexSubImage3D;
     extern PFNGL4FRAMEBUFFERTEXTURELAYERPROC     gl4_glFramebufferTextureLayer;
+
+    extern PFNGL4GENQUERIESPROC                  gl4_glGenQueries;
+    extern PFNGL4DELETEQUERIESPROC               gl4_glDeleteQueries;
+    extern PFNGL4BEGINQUERYPROC                  gl4_glBeginQuery;
+    extern PFNGL4ENDQUERYPROC                    gl4_glEndQuery;
+    extern PFNGL4GETQUERYOBJECTUIVPROC           gl4_glGetQueryObjectuiv;
 
     /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
     /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this
