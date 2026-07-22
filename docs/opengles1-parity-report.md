@@ -79,8 +79,8 @@ difference from XNA is the *shared* GL-versus-XNA divergence rather than anythin
 | `envmap_specular_quad` | 307 | 23716 | **Expected, documented.** `EnvironmentMapEffect`'s specular tint from the cube alpha has no fixed-function analogue. |
 | `envmap_fresnel_quad` | 18820 | 23716 | **Expected, documented.** Fresnel edge-weighting needs a per-vertex-varying blend factor ES1 cannot express. Note EasyGL diverges heavily here too. |
 | `lit_textured_quad_pixellighting`, `skinned_pixellighting_*` | 7956–8569 | 23563–27694 | **Expected.** "Pixel lighting" is per-pixel by definition; ES 1.1 lighting is per-vertex and interpolated. EasyGL is closer because it has a real fragment shader. |
-| `dualtexture_quad` | 307 | 23716 | **Not yet explained.** The `GL_COMBINE` stages reproduce `(tex0*2)*tex1*tint` and the dedicated runtime test confirms the arithmetic exactly (grey×2×white = 255, grey×2×quarter-grey = 64), so this is likely a texture-coordinate or stage-ordering difference rather than the formula. Worth a follow-up. |
-| `fog_gradient_quad` | 19661 | 23716 | **Not yet explained**, though both backends diverge badly, suggesting a shared fog-range convention difference from XNA rather than an ES1 fault. |
+| `dualtexture_quad` | 307 | ~~23716~~ **307** | **Explained and fixed** (`OPENGLES1-81`): the second UV set never reached unit 1, and the 28-byte dual-UV layout did not even pass the dispatch gate. Now byte-identical to EasyGL. |
+| `fog_gradient_quad` | 19661 | 23716 | **Explained, not fixable** (`OPENGLES1-82`): the scene uses an inverted fog range (`fogstart=0`, `fogend=-1`). FNA's signed-viewZ formula still yields a gradient; fixed-function fog is driven by an unsigned eye distance and clamps. EasyGL diverges here too, so it is not ES1-specific. The `FogStart == FogEnd` degenerate case, which *is* expressible, was found and fixed while investigating. |
 | `colored_trianglestrip_quad` | 23716 | 23716 | Identical to EasyGL — shared divergence, not ES1-specific. |
 
 The `sprite_flipped_quad`, `sprite_rotated_quad` and three `sprite_sortmode_*` scenes differ only
@@ -91,8 +91,8 @@ by **max per-channel delta = 1** — sub-LSB rounding, which is why the toleranc
 
 - It runs against a locally built software Mesa (`softpipe`), not real ES1 hardware, so rasterisation
   tie-breaking and interpolation may differ from a vendor driver.
-- Only the `dualtexture_quad` and `fog_gradient_quad` rows above are genuinely unexplained. They are
-  recorded as open rather than rationalised away, and neither has been ruled a backend defect or a
-  documented deviation yet.
+- Both previously-unexplained rows have since been resolved: `dualtexture_quad` was a real defect
+  (fixed, `OPENGLES1-81`) and `fog_gradient_quad` is a documented inexpressible case
+  (`OPENGLES1-82`). No row in the table is unexplained any more.
 - Widening the tolerance to make a red row green without a per-scene reason is not acceptable —
   the same discipline `scripts/xna-diff.py`'s own header states.

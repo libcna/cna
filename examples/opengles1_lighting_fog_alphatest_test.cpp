@@ -9,6 +9,8 @@
 // Check C -- DiffuseColor tints an unlit surface (the fixed-function "current colour" path).
 // Check D -- fog fully applied at the far plane reproduces the fog colour...
 // Check E -- ...while geometry at the near plane is left unfogged.
+// Check F0 -- FogStart == FogEnd is XNA's documented degenerate case: everything 100% fogged.
+//   Fixed-function GL would divide by zero here, so the backend has to emulate it.
 // Check F -- AlphaTestEffect rejects fragments below the reference alpha...
 // Check G -- ...keeps fragments above it,
 // Check H -- ...mirrors correctly for CompareFunction::Less,
@@ -98,7 +100,7 @@ namespace
 
 class OpenGLES1LightingFogAlphaTest : public Game
 {
-    static constexpr int kChecks = 9;
+    static constexpr int kChecks = 10;
 
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     Texture2D whiteTex_;
@@ -229,6 +231,27 @@ protected:
             const Color unfogged = readPixel(dev, mid, mid);
             check(unfogged.getRProperty() > unfogged.getBProperty(),
                   "BasicEffect fog -- geometry in front of the fog ramp is left unfogged");
+        }
+
+        // ---- Check F0: the FogStart == FogEnd degenerate case ---------------------------
+        {
+            dev.Clear(Color::Black);
+            BasicEffect fx(dev);
+            setIdentityTransforms(fx);
+            fx.setLightingEnabledProperty(false);
+            fx.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+            fx.setFogEnabledProperty(true);
+            fx.setFogColorProperty(Vector3(0.0f, 0.0f, 1.0f));
+            // XNA: "force everything to 100% fogged if start and end are the same".
+            fx.setFogStartProperty(5.0f);
+            fx.setFogEndProperty(5.0f);
+            drawLitQuad(dev, fx);
+
+            const Color got = readPixel(dev, mid, mid);
+            std::printf("       (FogStart == FogEnd pixel = %d,%d,%d)\n",
+                        got.getRProperty(), got.getGProperty(), got.getBProperty());
+            check(got.getBProperty() > 200 && got.getRProperty() < 60,
+                  "BasicEffect fog -- FogStart == FogEnd fogs everything completely");
         }
 
         // ---- Checks F/G: alpha test ------------------------------------------------------

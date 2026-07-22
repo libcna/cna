@@ -1335,6 +1335,46 @@ namespace CNA::Internal::Backends::OpenGLES1
         // no single-comparison fixed-function equivalent (glAlphaFunc takes exactly one GLenum
         // compare function). Approximates the common cases (a plain >= / <= / == cutoff) and
         // documents the rest as an intentional deviation (see docs/opengles1-backend.md).
+        // FNA/XNA computes fog as `saturate((viewZ + fogStart) / (fogStart - fogEnd))`, which maps
+        // onto GL's own linear ramp for ordinary ranges -- but it also defines a degenerate case
+        // GL cannot express: when fogStart == fogEnd, everything is 100% fogged, where GL would
+        // divide by zero. Emulated with a ramp that saturates immediately.
+        //
+        // Deliberately NOT emulated: inverted ranges (fogEnd < fogStart). FNA's signed-viewZ form
+        // still produces a gradient there, while fixed-function fog works from a distance and
+        // clamps. See docs/opengles1-backend.md -- EasyGL diverges from the reference on that case
+        // too, so it is not an ES1-specific fault.
+        void ApplyFog(const GpuDrawParams& params)
+        {
+            if (!params.fogEnabled)
+            {
+                glDisable(GL_FOG);
+                return;
+            }
+
+            glEnable(GL_FOG);
+            glFogf(GL_FOG_MODE, GL_LINEAR);
+
+            if (params.fogStart == params.fogEnd)
+            {
+                // GL's visibility factor is (end - z) / (end - start), clamped to [0,1], with z the
+                // eye distance (never negative). start = -1, end = 0 gives -z, which is <= 0 for
+                // every z including z == 0 -- so it clamps to "no visibility", i.e. fully fogged
+                // everywhere. A near-zero-width ramp would NOT do: geometry sitting exactly at the
+                // eye would still come out unfogged.
+                glFogf(GL_FOG_START, -1.0f);
+                glFogf(GL_FOG_END, 0.0f);
+            }
+            else
+            {
+                glFogf(GL_FOG_START, params.fogStart);
+                glFogf(GL_FOG_END, params.fogEnd);
+            }
+
+            const float fogColor4[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2], 1.0f};
+            glFogfv(GL_FOG_COLOR, fogColor4);
+        }
+
         void ApplyAlphaTest(const GpuDrawParams& params)
         {
             // The vector's shape comes from AlphaTestEffect and is evaluated by the shader-based
@@ -1510,19 +1550,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glMatrixMode(GL_MODELVIEW);
         glLoadMatrixf(mvCol);
 
-        if (params.fogEnabled)
-        {
-            glEnable(GL_FOG);
-            glFogf(GL_FOG_MODE, GL_LINEAR);
-            glFogf(GL_FOG_START, params.fogStart);
-            glFogf(GL_FOG_END, params.fogEnd);
-            const float fogColor4[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2], 1.0f};
-            glFogfv(GL_FOG_COLOR, fogColor4);
-        }
-        else
-        {
-            glDisable(GL_FOG);
-        }
+        ApplyFog(params);
 
         ApplyAlphaTest(params);
 
@@ -1621,19 +1649,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         glMatrixMode(GL_MODELVIEW);
         glLoadMatrixf(mvCol);
 
-        if (params.fogEnabled)
-        {
-            glEnable(GL_FOG);
-            glFogf(GL_FOG_MODE, GL_LINEAR);
-            glFogf(GL_FOG_START, params.fogStart);
-            glFogf(GL_FOG_END, params.fogEnd);
-            const float fogColor4[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2], 1.0f};
-            glFogfv(GL_FOG_COLOR, fogColor4);
-        }
-        else
-        {
-            glDisable(GL_FOG);
-        }
+        ApplyFog(params);
 
         ApplyAlphaTest(params);
 
