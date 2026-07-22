@@ -268,6 +268,57 @@ above for the technical detail behind each row.
 
 ---
 
+## Phase 3 — EasyGL feature-parity audit (2026-07-22)
+
+`plan_opengles1.md`'s row table was fully ✅ after `OPENGLES1-78`, but "every planned row done" is
+not the same as "everything this backend could do". This phase is the result of auditing the
+OpenGLES1 backend against **EasyGL** — CNA's most complete graphics backend — method by method
+(`IGraphicsBackend` overrides, `SupportsCapability`, and EasyGL's own 241-test feature inventory).
+
+**Feasibility is grounded in what the driver actually exposes, not in what the spec permits.** The
+ES1 extension list was dumped from a real ES 1.1 context on this host (`softpipe`, Mesa 25.0.7,
+50 extensions) rather than assumed. Relevant findings:
+
+- **Available:** `GL_OES_element_index_uint`, `GL_OES_framebuffer_object`, `GL_OES_fbo_render_mipmap`,
+  `GL_OES_texture_cube_map`, `GL_OES_texture_mirrored_repeat`, `GL_OES_blend_func_separate`,
+  `GL_OES_blend_equation_separate`, `GL_OES_blend_subtract`, `GL_EXT_blend_minmax`,
+  `GL_EXT_texture_filter_anisotropic`, `GL_OES_texture_env_crossbar`, `GL_OES_draw_texture`,
+  `GL_OES_point_sprite`, `GL_OES_stencil8`, `GL_OES_depth24`, `GL_OES_packed_depth_stencil`,
+  `GL_OES_rgb8_rgba8`, `GL_OES_mapbuffer`, `GL_OES_vertex_array_object`,
+  `GL_EXT_texture_compression_dxt1`, `GL_ANGLE_texture_compression_dxt3/dxt5`,
+  `GL_OES_compressed_ETC1_RGB8_texture`.
+- **Absent, confirming existing permanent gaps:** no `GL_OES_matrix_palette` (so skinning stays
+  impossible), no 3D-texture extension, no shader stage of any kind, no occlusion query, no
+  `glBlendColor` equivalent, no multiple-render-target mechanism.
+
+Rows below are ordered roughly by value. Anything requiring a change to shared cross-backend
+interfaces is marked as such and deliberately scoped small.
+
+| # | Task | Status | Notes |
+| --- | --- | --- | --- |
+| OPENGLES1-81 | **`DualTextureEffect` ignores the second texture-coordinate set.** Design decision 7 asserts both units sample the same UV set; the `dualtexture_quad` oracle scene proves otherwise -- it uses `vertexformat=PositionDualTexture` with two independent UV pairs, and the backend binds only one `glTexCoordPointer`, so unit 1 samples the wrong coordinates | ⬜ | Found by `OPENGLES1-78`'s corpus run (23716 differing pixels vs. EasyGL's 307). Needs a second `glClientActiveTexture`/`glTexCoordPointer` for the unit-1 UV set, and the stride gate widening past 20/24. Correct design decision 7's claim at the same time -- it is factually wrong. |
+| OPENGLES1-82 | **Linear fog diverges when `FogEnd <= FogStart`.** `fog_gradient_quad` sets `fogstart=0`, `fogend=-1`; GL's own `(end - z)/(end - start)` ramp then clamps to "no fog" while XNA/FNA produce a fully-fogged result | ⬜ | Also found by `OPENGLES1-78` (23716 differing pixels; EasyGL diverges too at 19661, so check FNA's own formula before assuming the ES1 side is at fault). |
+| OPENGLES1-83 | 32-bit index buffers via `GL_OES_element_index_uint` (`CreateIndexBuffer32`, `SetData32`, `IsThirtyTwoBit`) | ⬜ | Currently `CreateIndexBuffer32` falls back to the base class's 16-bit delegation, silently truncating meshes above 65535 vertices. Extension confirmed present. |
+| OPENGLES1-84 | `RenderTargetCube` + `SetRenderTargetCubeFace`/`BindAsRenderTargetFace` | ⬜ | Both prerequisites already used by this backend (`GL_OES_framebuffer_object` for `OPENGLES1-72`, `GL_OES_texture_cube_map` for `OPENGLES1-74`); needs per-face FBO colour attachment. |
+| OPENGLES1-85 | Mip generation for `Texture2D`/`RenderTarget2D` via `glGenerateMipmapOES` + `GL_OES_fbo_render_mipmap` | ⬜ | `CreateRenderTarget2D`'s `mipMap` parameter is currently accepted and ignored; `Texture2D` mip levels upload only through `UpdatePixelsLevel`. Also enables trilinear (`GL_LINEAR_MIPMAP_LINEAR`) filtering, which `ToGLFilter` cannot currently select. |
+| OPENGLES1-86 | Anisotropic filtering via `GL_EXT_texture_filter_anisotropic`; flip `SupportsCapability(AnisotropicFiltering)` to true when present | ⬜ | `ApplySamplerState` currently discards `maxAnisotropy` outright. Extension confirmed present. |
+| OPENGLES1-87 | Backbuffer MSAA via EGL/SDL multisample attributes; flip `SupportsCapability(MultiSampleAntiAliasing)` accordingly | ⬜ | `SDL_GL_MULTISAMPLEBUFFERS`/`SDL_GL_MULTISAMPLESAMPLES` at context creation, with the real sample count read back (never claim more than the driver granted). Render-target MSAA stays out of scope -- no `GL_..._framebuffer_multisample` in the list. |
+| OPENGLES1-88 | Separate alpha blend equation via `GL_OES_blend_equation_separate`, and `BlendFunction::Min`/`Max` via `GL_EXT_blend_minmax` | ⬜ | Both currently documented as falling back to `Add`, but both extensions are present -- the deviation table's `Min`/`Max` row is now wrong and must be corrected, not just the code. |
+| OPENGLES1-89 | `Texture2D::GetData()` for ordinary (non-render-target) textures | ⬜ | `ITextureBackend::GetData` is implemented only on the render target (`OPENGLES1-72`). Plain textures answer from their CPU shadow today, which is correct but leaves the backend unable to report what the GPU actually holds -- the same asymmetry that hid the render-target bug. |
+| OPENGLES1-90 | Real `SetVertexDeclaration` support instead of stride-based dispatch (16/20/24/32) | ⬜ | The current convention cannot express layouts the corpus already uses (see `OPENGLES1-81`, stride 28). Larger change; keep it backend-local and do it after `OPENGLES1-81` proves the specific gap. |
+| OPENGLES1-91 | `SetContextRecoveryEnabled` | ⬜ | EasyGL uses it to decide whether to retain CPU pixel shadows for context-loss restore. This backend now always retains them (`OPENGLES1-11`/`80`), so the knob is about memory, not correctness. |
+| OPENGLES1-92 | Simultaneous per-vertex `Color` **and** `BasicEffect.DiffuseColor` via a `GL_COMBINE` stage | ⬜ | Listed in the deviation table as "only one is applied". `GL_OES_texture_env_crossbar` plus the two-stage setup `OPENGLES1-71` already builds make this expressible -- so it is a fixable gap, not a permanent one. Correct the deviation table when done. |
+| OPENGLES1-93 | Compressed texture upload (DXT1/3/5, ETC1) | ⬜ | Extensions present, but per `NEXT.md` no CNA backend does real native compressed upload today and it needs a shared `ImageData`/`Texture2D.cpp` change. **Cross-backend: do not start without a decision** -- recorded here so the capability is not forgotten. |
+| OPENGLES1-94 | `GL_OES_draw_texture` fast path for axis-aligned, unrotated `SpriteBatch` quads | ⬜ | Optional performance work, not correctness. Only valid for unrotated, unflipped, screen-aligned sprites; must fall back to the existing batcher otherwise. Measure before and after -- do not land it on the assumption that it is faster. |
+
+**Confirmed permanently impossible on this driver (no task, recorded so they are not re-audited):**
+`SetCustomEffect`/`CompileProgram`/`SetUniform*` (no shader stage), `CreateTexture3D`/`BindTexture3D`
+(no 3D-texture extension), `SetRenderTargets` (no MRT mechanism), `SetBlendFactor` (no
+`glBlendColor`), skinning (`GL_OES_matrix_palette` absent), PBR, and `OcclusionQuery`
+(`OPENGLES1-75`).
+
+---
+
 ## Table of intentional deviations from XNA/FNA behavior (ES 1.1 fixed-function constraints)
 
 | Area | XNA/FNA behavior | This backend's behavior | Why |
