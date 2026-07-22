@@ -65,4 +65,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_renderstate examples/opengl4_renderstate_test.cpp)
     cna_register_backend_test(NAME OpenGL4_RenderState COMMAND cna_test_opengl4_renderstate
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-17: real backbuffer (window-level) MSAA -- a manually-managed multisample
+    # FBO resolved via glBlitFramebuffer before Present()/ReadBackbuffer, fixed at construction
+    # time (mirrors EasyGLGraphicsBackend's own CreateMsaaBuffers/ResolveMsaa approach).
+    cna_opengl4_test(cna_test_opengl4_msaa examples/opengl4_msaa_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_MSAA COMMAND cna_test_opengl4_msaa
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

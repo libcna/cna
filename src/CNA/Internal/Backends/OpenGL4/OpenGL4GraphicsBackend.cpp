@@ -1240,12 +1240,16 @@ void main()
     // ------------------------------------------------------------------------------------
 
     OpenGL4GraphicsBackend::OpenGL4GraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                   CnaPresentationMode mode, int swapInterval)
+                                                   CnaPresentationMode mode, int multiSampleCount, int swapInterval)
         : window_(window)
         , virtualWidth_(virtualWidth)
         , virtualHeight_(virtualHeight)
         , presentationMode_(mode)
         , swapInterval_(swapInterval)
+        // GraphicsBackendCreateArgs::multiSampleCount uses 1 = "no MSAA" (matches
+        // EasyGLGraphicsBackend's own sampleCount_ convention); this backend's own internal
+        // convention is 0 = disabled (matching OpenGL4RenderTargetBackend's multiSampleCount_).
+        , msaaSampleCount_(multiSampleCount > 1 ? multiSampleCount : 0)
     {
         if (!window_) throw std::runtime_error("OpenGL4GraphicsBackend initialized with null window.");
 
@@ -1284,6 +1288,14 @@ void main()
 
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
+
+        if (msaaSampleCount_ > 0)
+        {
+            int physW = 0, physH = 0;
+            SDL_GetWindowSize(window_, &physW, &physH);
+            CreateMsaaBuffers(physW, physH);
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+        }
     }
 
     OpenGL4GraphicsBackend::~OpenGL4GraphicsBackend()
@@ -1291,8 +1303,60 @@ void main()
         IGraphicsBackend::UnregisterForWindow(window_);
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
         if (mrtFbo_) gl4_glDeleteFramebuffers(1, &mrtFbo_);
+        if (msaaDepthRbo_) gl4_glDeleteRenderbuffers(1, &msaaDepthRbo_);
+        if (msaaColorRbo_) gl4_glDeleteRenderbuffers(1, &msaaColorRbo_);
+        if (msaaFbo_) gl4_glDeleteFramebuffers(1, &msaaFbo_);
         if (glContext_)
             SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
+    }
+
+    void OpenGL4GraphicsBackend::CreateMsaaBuffers(int w, int h)
+    {
+        GLint maxSamples = 0;
+        glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+        if (maxSamples > 0 && msaaSampleCount_ > static_cast<int>(maxSamples))
+            msaaSampleCount_ = static_cast<int>(maxSamples);
+
+        msaaW_ = w;
+        msaaH_ = h;
+        if (!msaaFbo_) gl4_glGenFramebuffers(1, &msaaFbo_);
+        if (!msaaColorRbo_) gl4_glGenRenderbuffers(1, &msaaColorRbo_);
+        if (!msaaDepthRbo_) gl4_glGenRenderbuffers(1, &msaaDepthRbo_);
+
+        gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRbo_);
+        gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaaSampleCount_, GL_RGBA8, w, h);
+        gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaDepthRbo_);
+        gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, msaaSampleCount_, GL_DEPTH24_STENCIL8, w, h);
+
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+        gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msaaColorRbo_);
+        gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, msaaDepthRbo_);
+    }
+
+    void OpenGL4GraphicsBackend::BindDefaultFramebufferOrMsaa()
+    {
+        if (msaaSampleCount_ > 0)
+        {
+            // Recreate the MSAA FBO if the window was resized since the last time it was built.
+            int physW = 0, physH = 0;
+            SDL_GetWindowSize(window_, &physW, &physH);
+            if (physW != msaaW_ || physH != msaaH_)
+                CreateMsaaBuffers(physW, physH);
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
+        }
+        else
+        {
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+    }
+
+    void OpenGL4GraphicsBackend::ResolveMsaa()
+    {
+        if (msaaSampleCount_ <= 0) return;
+        gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, msaaFbo_);
+        gl4_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        gl4_glBlitFramebuffer(0, 0, msaaW_, msaaH_, 0, 0, msaaW_, msaaH_, GL_COLOR_BUFFER_BIT,
+                              GL_NEAREST);
     }
 
     void OpenGL4GraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1303,7 +1367,9 @@ void main()
 
     void OpenGL4GraphicsBackend::Present()
     {
+        if (msaaSampleCount_ > 0) ResolveMsaa();
         SDL_GL_SwapWindow(window_);
+        if (msaaSampleCount_ > 0) gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
     }
 
     void OpenGL4GraphicsBackend::GetPhysicalSize(int& width, int& height) const
@@ -1389,7 +1455,7 @@ void main()
         else
         {
             currentRtHeight_ = 0;
-            gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            BindDefaultFramebufferOrMsaa();
         }
     }
 
@@ -1461,6 +1527,17 @@ void main()
         int fbH = 0, fbW = 0;
         GetPhysicalSize(fbW, fbH);
 
+        // glReadPixels cannot sample a multisample attachment directly -- resolve into FBO 0
+        // first (plan_opengl4.md GL4-17), matching EasyGLGraphicsBackend::ReadBackbuffer's own
+        // sampleCount_>1 handling. Guarded by currentRtHeight_==0 (no RT bound) since this method
+        // is only ever meant to read the real backbuffer, never an active render target's FBO.
+        const bool resolvingBackbufferMsaa = msaaSampleCount_ > 0 && currentRtHeight_ == 0;
+        if (resolvingBackbufferMsaa)
+        {
+            ResolveMsaa();
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
         // OpenGL's origin is bottom-left; flip Y so the caller gets top-left-origin game
         // coordinates, matching EasyGLGraphicsBackend::ReadBackbuffer's own convention.
         const int glY = fbH - y - h;
@@ -1477,6 +1554,9 @@ void main()
             std::memcpy(a, b, rowBytes);
             std::memcpy(b, tmp.data(), rowBytes);
         }
+
+        // Restore the MSAA FBO as the draw target after reading from FBO 0.
+        if (resolvingBackbufferMsaa) gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
     }
 
     void OpenGL4GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
@@ -1954,7 +2034,8 @@ namespace CNA::Internal::Backends
     std::unique_ptr<IGraphicsBackend> CreateGraphicsBackend(const GraphicsBackendCreateArgs& args)
     {
         return std::make_unique<OpenGL4::OpenGL4GraphicsBackend>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
+            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
+            args.multiSampleCount, args.swapInterval);
     }
 #endif
 }

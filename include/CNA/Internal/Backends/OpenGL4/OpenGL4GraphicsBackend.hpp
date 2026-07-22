@@ -290,7 +290,7 @@ namespace CNA::Internal::Backends::OpenGL4
     {
     public:
         OpenGL4GraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                               CnaPresentationMode mode, int swapInterval);
+                               CnaPresentationMode mode, int multiSampleCount, int swapInterval);
         ~OpenGL4GraphicsBackend() override;
 
         OpenGL4GraphicsBackend(const OpenGL4GraphicsBackend&) = delete;
@@ -302,6 +302,16 @@ namespace CNA::Internal::Backends::OpenGL4
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+
+        /// plan_opengl4.md GL4-17: real window/backbuffer MSAA -- a manually-managed multisample
+        /// FBO (mirroring EasyGLGraphicsBackend's own msaaFbo_/CreateMsaaBuffers/ResolveMsaa
+        /// approach) rather than an SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, ...) window
+        /// pixel format, since the latter can't be resolved through our own controlled
+        /// glBlitFramebuffer call and would fight this backend's existing Y-flip/ReadBackbuffer
+        /// conventions. Fixed at construction time; ApplyMultiSampleCount is not overridden
+        /// (inherited no-op default -- same documented "no way to change after construction"
+        /// limitation EasyGLGraphicsBackend already has).
+        [[nodiscard]] int GetMultiSampleCount() const override { return msaaSampleCount_; }
 
         [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
         [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
@@ -404,6 +414,18 @@ namespace CNA::Internal::Backends::OpenGL4
         bool BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
                                   const Matrix& projection, const GpuDrawParams& params);
 
+        /// plan_opengl4.md GL4-17: (re)allocates the manual backbuffer MSAA FBO's colour+depth
+        /// renderbuffers at the given physical size, mirroring
+        /// EasyGLGraphicsBackend::CreateMsaaBuffers.
+        void CreateMsaaBuffers(int w, int h);
+        /// Binds the default framebuffer for drawing -- FBO 0 when backbuffer MSAA is off, the
+        /// manual MSAA FBO (recreated first if the window was resized) otherwise. Mirrors
+        /// EasyGLGraphicsBackend::BindDefaultFramebuffer.
+        void BindDefaultFramebufferOrMsaa();
+        /// Blits the manual MSAA FBO's colour attachment into FBO 0 (mirrors
+        /// EasyGLGraphicsBackend::ResolveMsaa). No-op when backbuffer MSAA is off.
+        void ResolveMsaa();
+
         static constexpr int kMaxSamplerSlots = 16;
 
         SDL_Window* window_ = nullptr;
@@ -426,6 +448,15 @@ namespace CNA::Internal::Backends::OpenGL4
         /// plan_opengl4.md GL4-15: lazily-created, persistent FBO reused across every
         /// SetRenderTargets(count > 1) MRT call (mirrors EasyGLGraphicsBackend::mrtFbo_).
         unsigned int mrtFbo_ = 0;
+
+        /// plan_opengl4.md GL4-17: manual backbuffer MSAA FBO (0 = disabled). Sized to the
+        /// window's physical size; recreated on resize by BindDefaultFramebufferOrMsaa.
+        unsigned int msaaFbo_ = 0;
+        unsigned int msaaColorRbo_ = 0;
+        unsigned int msaaDepthRbo_ = 0;
+        int msaaSampleCount_ = 0;
+        int msaaW_ = 0;
+        int msaaH_ = 0;
 
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;
