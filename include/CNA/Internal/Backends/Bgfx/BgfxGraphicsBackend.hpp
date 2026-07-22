@@ -33,6 +33,20 @@ namespace CNA::Internal::Backends::Bgfx
         // render target's own view.
         inline constexpr bgfx::ViewId kBackbufferFlushViewId = 255;
 
+        // REMED-GFX-065: bgfx view state (setViewRect / setViewTransform) is PER-VIEW (resolved once
+        // at bgfx::frame(), last-write-wins), so two DIFFERENT GraphicsDevice.Viewport states drawn to
+        // one target within a frame would collapse onto its single base view id -- the first draw's
+        // viewport is lost. The fix allocates an ordered per-FRAME "viewport segment" view id whenever
+        // the viewport changes on a target, keeping each draw under its own rect/ortho while bgfx's
+        // ascending-view-id execution order preserves submission order. View-id space is partitioned:
+        //   0                              backbuffer base view
+        //   [1, kFirstSegmentViewId)       persistent render-target base ids (AllocateRtViewId)
+        //   [kFirstSegmentViewId, 255)     per-frame ephemeral viewport-segment ids (recycled each frame)
+        //   255 (kBackbufferFlushViewId)   reserved backbuffer-flush view
+        // Segment ids sit ABOVE every RT base id, so within one target its base view (lowest id) plus
+        // its later segments (higher ids, monotonic in submission order) always execute in draw order.
+        inline constexpr bgfx::ViewId kFirstSegmentViewId = 192;
+
         // Task 910: each concurrently-live render target (2D or cube) needs its own bgfx view id
         // -- bgfx::setViewFrameBuffer(viewId, fbo) is a per-view-per-*frame* setting, resolved
         // once at bgfx::frame(), not per bgfx::submit() call. Every render target previously
@@ -444,6 +458,27 @@ namespace CNA::Internal::Backends::Bgfx
         uint16_t spriteVpX_ = 0, spriteVpY_ = 0, spriteVpW_ = 0, spriteVpH_ = 0;
         bool     spriteVpSet_ = false;
         bool     spriteVpValid_ = false;
+
+        // REMED-GFX-065: ordered per-frame viewport segmentation. When the active GraphicsDevice.Viewport
+        // changes on a target within one un-advanced frame, SelectViewportSegment() redirects
+        // currentViewId_/spriteViewId to a freshly-allocated segment view (id in [kFirstSegmentViewId,255))
+        // configured for the SAME framebuffer with clear suppressed, so each draw keeps its own view rect
+        // (3D) / offset ortho (sprite) and bgfx's ascending-view-id order preserves submission order.
+        // The base view of the current target (0 for the backbuffer, the RT/MRT's own id otherwise) is
+        // always tried first; only a genuine viewport change consumes a segment id. Reset each frame.
+        bgfx::ViewId segmentTargetBaseId_ = 0;                       ///< base view id of the bound target
+        bgfx::FrameBufferHandle segmentTargetFbo_ = BGFX_INVALID_HANDLE; ///< bound target's fbo (invalid=backbuffer)
+        bgfx::ViewId segmentNextId_ = Detail::kFirstSegmentViewId;  ///< next free per-frame segment id
+        bool     segmentActive_ = false;                            ///< has the first draw on this binding happened?
+        // The active view's viewport identity. The FIRST viewport on a target uses its BASE view (view 0 /
+        // RT id) exactly as before this task -- a custom viewport still shrinks that base view's rect
+        // (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065. A draw whose
+        // viewport differs from the active view's starts the next ordered segment view (which clears its
+        // own depth+stencil, since bgfx's per-view clear was scoped to the first viewport's rect); once
+        // off the base view we never return to it (that would reorder it before the segments).
+        bool     segCurIsBase_ = true;   ///< is the active view the target's base view (vs a segment)?
+        bool     segCurHasVp_ = false;   ///< active view's custom-viewport flag
+        uint16_t segCurX_ = 0, segCurY_ = 0, segCurW_ = 0, segCurH_ = 0;  ///< active view's custom viewport
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;
@@ -698,9 +733,28 @@ namespace CNA::Internal::Backends::Bgfx
     private:
         void EnsureViewState();
 
+        // REMED-GFX-065: select the view id this draw/batch must submit to, allocating an ordered
+        // per-frame viewport-segment view when the viewport changed on the current target (see the
+        // segment* members). Redirects currentViewId_ and spriteViewId; called at the very start of
+        // the 3D (ApplyViewportOverride) and SpriteBatch (SubmitSprite) submit paths. In the common
+        // single-viewport case it keeps the target's base view and allocates nothing.
+        void SelectViewportSegment();
+        // Whether the active GraphicsDevice.Viewport is a genuine custom sub-region of the current target
+        // (vs the full-target/default viewport); also returns the target's full pixel size. Shared by
+        // SelectViewportSegment() and ApplyViewportOverride(); mirrors EnsureViewState()'s own test.
+        bool CurrentCustomViewport(uint16_t& fullW, uint16_t& fullH) const;
+        // Allocate the next ordered per-frame segment view id; throws when the frame exhausts the
+        // reserved [kFirstSegmentViewId, 255) range (a deliberate, deterministic cap -- see the .cpp).
+        bgfx::ViewId AllocateSegmentViewId();
+        // Point the segment tracker at a newly-bound target (base view id + framebuffer), resetting so
+        // the next draw starts from that target's base view. Called by SetRenderTarget* and the cube path.
+        void ResetSegmentTarget(bgfx::ViewId baseId, bgfx::FrameBufferHandle fbo);
+        // Recycle the per-frame segment id pool at a frame boundary (after bgfx::frame()).
+        void EndFrameSegments();
+
         // Task 880: overrides the current 3D view's rect with a custom Viewport, if one was set
-        // via SetViewport() and the current view is the backbuffer (view 0). RT passes are
-        // deliberately left at their full-RT-size default -- see viewportX_/Y_/W_/H_'s comment.
+        // via SetViewport(). Since REMED-GFX-063 this applies to render-target views too, and since
+        // REMED-GFX-065 it runs after SelectViewportSegment() so it targets the right segment view.
         void ApplyViewportOverride();
 
         // Task 768: applies the current scissor rect (if any) to the pending 3D draw. Previously

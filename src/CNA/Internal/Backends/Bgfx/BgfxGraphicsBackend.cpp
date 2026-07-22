@@ -320,6 +320,7 @@ namespace CNA::Internal::Backends::Bgfx
         for (int attempt = 0; attempt < 3 && !readbackCallback_.screenshotReady; ++attempt)
             bgfx::frame();
         spriteVpValid_ = false; // REMED-GFX-072: sprite viewport is per-frame; clear for the next one.
+        EndFrameSegments();     // REMED-GFX-065: recycle the per-frame viewport-segment view ids.
 
         if (!readbackCallback_.screenshotReady)
             throw std::runtime_error(
@@ -679,9 +680,10 @@ namespace CNA::Internal::Backends::Bgfx
         {
             // Mirrors bgfx's own internal BGFX_CONFIG_MAX_VIEWS default (src/config.h, not part
             // of the public bgfx.h API so not #include-able here) -- view id 0 is reserved for
-            // the backbuffer and kBackbufferFlushViewId (Task 951) is reserved at the top end,
-            // leaving ids [1, kMaxBgfxViews) for render targets/MRT.
-            static constexpr bgfx::ViewId kMaxBgfxViews = kBackbufferFlushViewId;
+            // the backbuffer, [kFirstSegmentViewId, 255) is reserved for REMED-GFX-065's per-frame
+            // viewport-segment views, and kBackbufferFlushViewId (Task 951) is reserved at the top
+            // end, leaving ids [1, kFirstSegmentViewId) for render targets/MRT base views.
+            static constexpr bgfx::ViewId kMaxBgfxViews = kFirstSegmentViewId;
             auto& pool = RtViewIdFreeList();
             if (!pool.empty())
             {
@@ -789,6 +791,8 @@ namespace CNA::Internal::Backends::Bgfx
             spriteViewId = bgfxRt->viewId_;
             currentRtWidth_  = static_cast<uint16_t>(rt->GetWidth());
             currentRtHeight_ = static_cast<uint16_t>(rt->GetHeight());
+            // REMED-GFX-065: this RT's own view is the base for its segment chain this frame.
+            ResetSegmentTarget(bgfxRt->viewId_, bgfxRt->fbo);
         }
         else
         {
@@ -796,6 +800,8 @@ namespace CNA::Internal::Backends::Bgfx
             currentViewId_ = 0;
             spriteViewId = 0;
             currentRtWidth_ = currentRtHeight_ = 0;
+            // REMED-GFX-065: back to the backbuffer -> base view 0, its own default framebuffer.
+            ResetSegmentTarget(0, BGFX_INVALID_HANDLE);
         }
     }
 
@@ -832,6 +838,9 @@ namespace CNA::Internal::Backends::Bgfx
         spriteViewId = mrtViewId_;
         currentRtWidth_  = static_cast<uint16_t>(rts[0]->GetWidth());
         currentRtHeight_ = static_cast<uint16_t>(rts[0]->GetHeight());
+        // REMED-GFX-065: the MRT view is the base for its segment chain; a segment preserves the whole
+        // multi-attachment framebuffer (mrtFbo_ carries every color attachment).
+        ResetSegmentTarget(mrtViewId_, mrtFbo_);
     }
 
     // --- BgfxRenderTargetCubeBackend ---
@@ -933,6 +942,9 @@ namespace CNA::Internal::Backends::Bgfx
         spriteViewId     = bgfxRt->viewId_;
         currentRtWidth_  = static_cast<uint16_t>(rt->GetSize());
         currentRtHeight_ = static_cast<uint16_t>(rt->GetSize());
+        // REMED-GFX-065: this cube face's view (BindAsRenderTargetFace just (re)bound fbo to it) is the
+        // base for its segment chain. Binding a new face rebuilds fbo, so re-point the tracker each time.
+        ResetSegmentTarget(bgfxRt->viewId_, bgfxRt->fbo);
     }
 
     BgfxSpriteBatchBackend::BgfxSpriteBatchBackend(BgfxGraphicsBackend& graphicsBackend)
@@ -1452,8 +1464,13 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 871: BGFX_CLEAR_STENCIL and the real requested stencil value were previously
         // never included here -- a requested stencil clear silently did nothing.
         // Task 950: clearDepthValue_ replaces a previously-hardcoded 1.0f.
-        bgfx::setViewClear(spriteViewId, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL,
-                            clearRgba, clearDepthValue_, clearStencilValue_);
+        // REMED-GFX-065: a per-frame viewport-segment view (id >= kFirstSegmentViewId) must PRESERVE the
+        // contents drawn by the earlier segment(s) of this frame -- only the target's base view performs
+        // the requested clear. Suppress the clear on segment views so they LOAD rather than clear.
+        const uint16_t clearFlags = (spriteViewId >= Detail::kFirstSegmentViewId)
+            ? static_cast<uint16_t>(BGFX_CLEAR_NONE)
+            : static_cast<uint16_t>(BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL);
+        bgfx::setViewClear(spriteViewId, clearFlags, clearRgba, clearDepthValue_, clearStencilValue_);
     }
 
     void BgfxGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1468,6 +1485,7 @@ namespace CNA::Internal::Backends::Bgfx
         EnsureViewState();
         bgfx::frame();
         spriteVpValid_ = false; // REMED-GFX-072: sprite viewport is per-frame; clear for the next one.
+        EndFrameSegments();     // REMED-GFX-065: recycle the per-frame viewport-segment view ids.
     }
 
     void BgfxGraphicsBackend::SetSwapInterval(int interval)
@@ -1522,6 +1540,10 @@ namespace CNA::Internal::Backends::Bgfx
         spriteVpSet_ = viewportSet_;
         spriteVpX_ = viewportX_; spriteVpY_ = viewportY_;
         spriteVpW_ = viewportW_; spriteVpH_ = viewportH_;
+
+        // REMED-GFX-065: pick/allocate this sprite's ordered viewport segment BEFORE EnsureViewState so
+        // its full-rect + offset-ortho land on the segment view belonging to this batch's viewport.
+        SelectViewportSegment();
 
         EnsureViewState();
 
@@ -1964,25 +1986,121 @@ namespace CNA::Internal::Backends::Bgfx
         viewportSet_ = true;
     }
 
+    // REMED-GFX-065: allocate the next ordered per-frame viewport-segment view id. Monotonic so bgfx's
+    // ascending-view-id execution order == CNA submission order for a target's segments. Recycled every
+    // frame by EndFrameSegments(). Exhausting the reserved [kFirstSegmentViewId, 255) range throws a
+    // clear error rather than silently wrapping (which would corrupt an earlier view's state) -- a
+    // deliberate, deterministic hard cap on distinct viewport changes per target-chain per frame.
+    bgfx::ViewId BgfxGraphicsBackend::AllocateSegmentViewId()
+    {
+        if (segmentNextId_ >= Detail::kBackbufferFlushViewId)
+            throw std::runtime_error("Bgfx: exhausted per-frame viewport-segment view ids (more than "
+                                     "63 distinct GraphicsDevice.Viewport changes on one target in a "
+                                     "single frame -- REMED-GFX-065)");
+        return segmentNextId_++;
+    }
+
+    // REMED-GFX-065: repoint the segment tracker at a newly-bound target. The next draw starts from this
+    // target's base view (segmentActive_ = false); a later viewport change on it consumes a segment id.
+    void BgfxGraphicsBackend::ResetSegmentTarget(bgfx::ViewId baseId, bgfx::FrameBufferHandle fbo)
+    {
+        segmentTargetBaseId_ = baseId;
+        segmentTargetFbo_    = fbo;
+        segmentActive_       = false;
+    }
+
+    // REMED-GFX-065: recycle the per-frame segment id pool and fall back to the current target's base
+    // view. Called right after every bgfx::frame() (Present / ReadBackbuffer), so next frame's first
+    // draw on the still-bound target starts from its base view again.
+    void BgfxGraphicsBackend::EndFrameSegments()
+    {
+        segmentNextId_  = Detail::kFirstSegmentViewId;
+        segmentActive_  = false;
+        currentViewId_  = segmentTargetBaseId_;
+        spriteViewId    = segmentTargetBaseId_;
+    }
+
+    // REMED-GFX-065: resolve whether the active GraphicsDevice.Viewport is a genuine CUSTOM sub-region
+    // of the current target (vs the full-target/default viewport), and hand back the target's full pixel
+    // size. Mirrors EnsureViewState()'s own `spriteCustomVp` test exactly: a full-target viewport (what
+    // GraphicsDevice resets on every SetRenderTarget) must NOT be treated as custom, else every ordinary
+    // draw would needlessly segment. RT size when a target is bound (base id != 0), else backbuffer size.
+    bool BgfxGraphicsBackend::CurrentCustomViewport(uint16_t& fullW, uint16_t& fullH) const
+    {
+        fullW = (segmentTargetBaseId_ != 0 && currentRtWidth_  > 0) ? currentRtWidth_  : cachedWidth;
+        fullH = (segmentTargetBaseId_ != 0 && currentRtHeight_ > 0) ? currentRtHeight_ : cachedHeight;
+        return viewportSet_ && viewportW_ > 0 && viewportH_ > 0 &&
+               (viewportX_ != 0 || viewportY_ != 0 || viewportW_ != fullW || viewportH_ != fullH);
+    }
+
+    // REMED-GFX-065: pick the view id this draw/batch submits to, preserving XNA draw order across
+    // multiple viewports on one target in one frame. The FIRST viewport on a target uses its BASE view
+    // (view 0 / RT id) exactly as before this task -- a custom viewport still shrinks that base view's
+    // rect (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065 (one view, no
+    // extra state). Only a SECOND, DIFFERENT viewport in the same frame routes to a freshly-allocated
+    // ordered segment view (same framebuffer, higher id so bgfx's ascending-view-id execution keeps
+    // submission order). Because bgfx's per-view clear is scoped to the view rect, the base view only
+    // cleared the FIRST viewport's region; each segment therefore clears its OWN depth+stencil (to the
+    // frame's clear values) so the new viewport's 3D draws depth-test against a fresh buffer rather than
+    // a stale one -- while preserving colour (the earlier segments' pixels). Consecutive draws sharing
+    // the active view's viewport reuse it (no id churn). Once off the base we never return to it.
+    void BgfxGraphicsBackend::SelectViewportSegment()
+    {
+        uint16_t fullW = 0, fullH = 0;
+        const bool hasVp = CurrentCustomViewport(fullW, fullH);
+
+        if (!segmentActive_)
+        {
+            // First draw/batch on this target-binding -> the base view already bound (view 0 / RT id).
+            // ApplyViewportOverride() / EnsureViewState() shrink/offset it for a custom viewport exactly
+            // as before REMED-GFX-065; nothing is allocated for a single-viewport frame.
+            segmentActive_ = true;
+            currentViewId_ = spriteViewId = segmentTargetBaseId_;
+            segCurIsBase_  = true;
+            segCurHasVp_   = hasVp;
+            segCurX_ = viewportX_; segCurY_ = viewportY_; segCurW_ = viewportW_; segCurH_ = viewportH_;
+            return;
+        }
+
+        const bool sameVp = (segCurHasVp_ == hasVp) &&
+            (!hasVp || (segCurX_ == viewportX_ && segCurY_ == viewportY_ &&
+                        segCurW_ == viewportW_ && segCurH_ == viewportH_));
+        if (sameVp)
+            return;  // same viewport as the active view (base or segment) -> reuse it, no allocation
+
+        // A different viewport appeared on this target within the frame -> next ordered segment view.
+        const bgfx::ViewId segId = AllocateSegmentViewId();
+        bgfx::setViewFrameBuffer(segId, segmentTargetFbo_);
+        // Default to the target's FULL rect (the sprite path keeps this + an offset ortho; a custom 3D
+        // viewport shrinks it in ApplyViewportOverride). Clear this segment's DEPTH+STENCIL to the frame's
+        // clear values (the base view's clear was scoped to the FIRST viewport, so this region's depth is
+        // otherwise stale/accumulated), but PRESERVE colour so earlier segments' pixels survive. The
+        // sprite path resets this to CLEAR_NONE in EnsureViewState (sprites don't depth-test).
+        bgfx::setViewRect(segId, 0, 0, fullW, fullH);
+        bgfx::setViewClear(segId, static_cast<uint16_t>(BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL),
+                           0, clearDepthValue_, clearStencilValue_);
+        currentViewId_ = spriteViewId = segId;
+        segCurIsBase_  = false;
+        segCurHasVp_   = hasVp;
+        segCurX_ = viewportX_; segCurY_ = viewportY_; segCurW_ = viewportW_; segCurH_ = viewportH_;
+    }
+
     void BgfxGraphicsBackend::ApplyViewportOverride()
     {
-        // REMED-GFX-063: honor a custom sub-region Viewport for RENDER-TARGET views too, not only
-        // the backbuffer (view 0). bgfx view rect is PER-VIEW state (unlike the per-draw scissor
-        // in ApplyScissorOverride): the last setViewRect(viewId,...) before bgfx::frame() applies
-        // to every draw submitted to that view. Each RenderTarget2D/Cube/MRT owns a distinct view
-        // id (currentViewId_ points at the bound target's own view), so applying the custom rect to
-        // currentViewId_ here -- called right before every 3D submit, after any EnsureViewState()/
-        // BindAsRenderTarget() full-target reset -- makes it the winning view rect for that pass's
-        // draws. Viewport coordinates are in the bound target's own pixel space (top-left origin),
-        // which is exactly bgfx::setViewRect's convention (bgfx normalizes the underlying renderer's
-        // origin internally), so no Y-flip. When no custom viewport is set (viewportSet_ false or a
-        // zero-sized rect) this is a no-op and the view keeps its full-target rect.
-        //
-        // Bgfx cannot represent two DIFFERENT viewports on one view within a single frame (a
-        // pre-existing per-view-model limitation shared with the backbuffer -- REMED-GFX-065);
-        // Viewport.MinDepth/MaxDepth remain an accepted Bgfx deviation (no per-view depth-range
-        // knob -- see SetViewport()).
-        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0)
+        // REMED-GFX-065: pick/allocate this draw's ordered viewport segment BEFORE setting the rect, so a
+        // second viewport's sub-rect lands on its OWN segment view rather than clobbering the first
+        // viewport's draws on a shared view. For the first viewport this is still the base view (shrunk
+        // here just like pre-GFX-065, REMED-GFX-063).
+        SelectViewportSegment();
+
+        // REMED-GFX-063: a custom sub-region Viewport applies to render-target views too, not only the
+        // backbuffer. bgfx view rect is PER-VIEW state; SelectViewportSegment() has pointed currentViewId_
+        // at this viewport's own view, so setting the sub-rect here no longer clobbers an earlier
+        // viewport's draws (REMED-GFX-065). A full/default viewport keeps the view's full rect. Top-left
+        // origin, no Y-flip (bgfx normalizes the renderer origin). Viewport.MinDepth/MaxDepth remain an
+        // accepted Bgfx deviation (no per-view depth-range knob -- see SetViewport()).
+        uint16_t fullW = 0, fullH = 0;
+        if (CurrentCustomViewport(fullW, fullH))
             bgfx::setViewRect(currentViewId_, viewportX_, viewportY_, viewportW_, viewportH_);
     }
 
