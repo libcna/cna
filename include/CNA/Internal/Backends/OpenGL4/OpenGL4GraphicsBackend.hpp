@@ -323,10 +323,23 @@ namespace CNA::Internal::Backends::OpenGL4
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
+        /// plan_opengl4.md GL4-33: supplies a caller-owned VertexDeclaration so ApplyLayout() can
+        /// bind genuinely custom vertex layouts generically (attribute location = the element's
+        /// own index within the declaration), instead of only the fixed byte-strides the switch
+        /// in ApplyLayout() otherwise recognizes -- needed by hardware instancing's per-instance
+        /// attribute buffer, which never matches one of those fixed strides. Mirrors
+        /// EasyGLVertexBufferBackend::SetVertexDeclaration's own shape.
+        void SetVertexDeclaration(const std::vector<VertexElement>& elements) override;
 
         NOXNA [[nodiscard]] unsigned int VaoHandle() const { return vao_; }
         NOXNA [[nodiscard]] unsigned int VboHandle() const { return vbo_; }
         NOXNA [[nodiscard]] std::size_t GetStrideInBytes() const { return strideInBytes_; }
+        /// plan_opengl4.md GL4-33: the declaration set via SetVertexDeclaration(), or empty if
+        /// none was ever supplied (this buffer uses the fixed stride-keyed layout instead).
+        NOXNA [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const
+        {
+            return declarationElements_;
+        }
 
     private:
         void ApplyLayout(std::size_t strideInBytes);
@@ -336,6 +349,7 @@ namespace CNA::Internal::Backends::OpenGL4
         int capacity_ = 0;
         int vertexCount_ = 0;
         std::size_t strideInBytes_ = 0;
+        std::vector<VertexElement> declarationElements_;
     };
 
     /**
@@ -530,6 +544,15 @@ namespace CNA::Internal::Backends::OpenGL4
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        /// plan_opengl4.md GL4-33: real hardware instancing (glDrawElementsInstanced). With a
+        /// custom ShaderEffect (params.customEffectBackend), also binds params.instanceVb's own
+        /// attributes generically (via its VertexDeclaration) at locations continuing right after
+        /// the mesh buffer's own, each with glVertexAttribDivisor(location, 1) -- matches
+        /// EasyGLGraphicsBackend::DrawInstancedPrimitivesEx's own Task 1082 shape.
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
 
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;

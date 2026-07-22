@@ -72,6 +72,11 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 #ifndef GL_TEXTURE0
 #define GL_TEXTURE0 0x84C0
 #endif
+// plan_opengl4.md GL4-33: needed by the generic VertexElement-to-GL-attribute mapper's
+// HalfVector2/HalfVector4 case (GL 3.0 core / ARB_half_float_vertex).
+#ifndef GL_HALF_FLOAT
+#define GL_HALF_FLOAT 0x140B
+#endif
 #ifndef GL_CLAMP_TO_EDGE
 #define GL_CLAMP_TO_EDGE 0x812F
 #endif
@@ -263,6 +268,12 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     // GL-1.1-vintage <GL/gl.h>.
     using PFNGL4DRAWELEMENTSBASEVERTEXPROC      = void (*)(GLenum, GLsizei, GLenum, const void*, GLint);
 
+    // plan_opengl4.md GL4-33: real GpuDrawParams-driven hardware instancing -- GL 3.1 core
+    // (glDrawElementsInstanced) and GL 3.3 core / ARB_instanced_arrays (glVertexAttribDivisor),
+    // neither guaranteed to be declared by a GL-1.1-vintage <GL/gl.h>.
+    using PFNGL4DRAWELEMENTSINSTANCEDPROC       = void (*)(GLenum, GLsizei, GLenum, const void*, GLsizei);
+    using PFNGL4VERTEXATTRIBDIVISORPROC         = void (*)(GLuint, GLuint);
+
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
     extern PFNGL4BINDBUFFERPROC               gl4_glBindBuffer;
@@ -345,6 +356,9 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4GETQUERYOBJECTUIVPROC           gl4_glGetQueryObjectuiv;
 
     extern PFNGL4DRAWELEMENTSBASEVERTEXPROC      gl4_glDrawElementsBaseVertex;
+
+    extern PFNGL4DRAWELEMENTSINSTANCEDPROC       gl4_glDrawElementsInstanced;
+    extern PFNGL4VERTEXATTRIBDIVISORPROC         gl4_glVertexAttribDivisor;
 
     /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
     /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this

@@ -87,6 +87,9 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 
     PFNGL4DRAWELEMENTSBASEVERTEXPROC      gl4_glDrawElementsBaseVertex      = nullptr;
 
+    PFNGL4DRAWELEMENTSINSTANCEDPROC       gl4_glDrawElementsInstanced       = nullptr;
+    PFNGL4VERTEXATTRIBDIVISORPROC         gl4_glVertexAttribDivisor         = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -187,6 +190,9 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glGetQueryObjectuiv", gl4_glGetQueryObjectuiv);
 
         ok &= Resolve(getProcAddress, "glDrawElementsBaseVertex", gl4_glDrawElementsBaseVertex);
+
+        ok &= Resolve(getProcAddress, "glDrawElementsInstanced", gl4_glDrawElementsInstanced);
+        ok &= Resolve(getProcAddress, "glVertexAttribDivisor", gl4_glVertexAttribDivisor);
 
         return ok;
     }

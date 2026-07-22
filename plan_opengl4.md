@@ -547,6 +547,42 @@
 > full-screen side effect) both passed exactly on the first real run — no backend or test bugs
 > found. Full re-run of the other 23 OpenGL4 CTest suites confirms no regression (24/24 total).
 >
+> **Status (2026-07-22): `GL4-33` (real hardware instancing) landed and verified — the project
+> owner explicitly asked to continue on OpenGL4 tasks after the final post-`GL4-32` audit found
+> this gap.** `OpenGL4GraphicsBackend` previously didn't override `DrawInstancedPrimitivesEx` at
+> all (inherited `IGraphicsBackend`'s default, which unconditionally throws
+> `std::runtime_error`). `GraphicsDevice::DrawInstancedPrimitives`/`SetVertexBuffers`/
+> `VertexBufferBinding` were already fully wired at the XNA API layer — only this backend's own
+> implementation was missing. Unlike every other gap closed this session, this needed a real
+> prerequisite first: a generic `VertexElement`-driven attribute mapper.
+> `OpenGL4VertexBufferBackend` gained `SetVertexDeclaration()`/`GetDeclarationElements()` (Task
+> 1080-equivalent, ported from `EasyGLVertexBufferBackend`'s identical shape) and `ApplyLayout()`
+> gained a new generic binding path (attribute location = the element's own index in the
+> declaration), used whenever a `VertexDeclaration` was supplied (via `VertexBuffer::SetDataRaw()`,
+> already wired at the XNA layer) instead of matching one of the fixed byte-strides the existing
+> switch recognizes — needed because a per-instance attribute buffer never matches those.
+> `DrawInstancedPrimitivesEx` (with a custom `ShaderEffect`) binds the per-instance buffer's own
+> attributes generically into the mesh buffer's VAO, continuing at locations right after the mesh
+> buffer's own declared attributes, each with `glVertexAttribDivisor(location, 1)`, then calls the
+> real GL 3.1 core `glDrawElementsInstanced` (both newly loaded via `GL4Loader`, along with a
+> `GL_HALF_FLOAT` token guard for the element-format mapper's `HalfVector2`/`HalfVector4` cases) —
+> matches `EasyGLGraphicsBackend::DrawInstancedPrimitivesEx`'s own Task 1082 shape exactly. Also
+> added a shared `VertexElementFormat` alias to `IGraphicsBackend.hpp` (purely additive, matching
+> the existing `VertexElement`/`PrimitiveType`/etc. alias pattern already there) since no backend
+> had previously needed to name that type outside its own translation unit.
+>
+> Verified by the new `OpenGL4_InstancedModel` CTest (2/2), porting
+> `easygl_instancedmodel_shader_test.cpp`'s own scene, packing derivation, and expected values
+> exactly (desktop GLSL 410 core translation only). A single quad mesh is drawn twice in ONE
+> `DrawInstancedPrimitives` call, driven by 2 instances' own 4x4 transforms supplied as 4
+> consecutive per-instance `vec4` attributes (the classic D3D9 hardware-instancing convention).
+> Check A (instance 0, pure translation, faces the light — pure white `(255,255,255,255)`) and
+> Check B (instance 1, 180° Y-rotation then translation, faces away — dim gray `(64,64,64,255)`)
+> both matched exactly on the first real run: two different colors at two different on-screen
+> positions from one draw call, proving the per-instance data is genuinely read per-instance
+> (`glVertexAttribDivisor=1`), not per-vertex or left constant. Full re-run of the other 24
+> OpenGL4 CTest suites confirms no regression (25/25 total).
+>
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
@@ -602,21 +638,10 @@
 > - **Windows/macOS validation** — code paths only (see Platform scope above), not run on real
 >   hardware yet. Not reachable from this development environment (no Windows/macOS machine
 >   available) — not a pick-up candidate here either. ⬜ (environment-blocked)
-> - **Hardware instancing (`DrawInstancedPrimitivesEx`)** — newly discovered while auditing for
->   further work after `GL4-32` closed out. `OpenGL4GraphicsBackend` doesn't override
->   `DrawInstancedPrimitivesEx` at all (inherits the default, which unconditionally throws
->   `std::runtime_error`), unlike `EasyGLGraphicsBackend`'s real `Task 1082` implementation
->   (`glDrawElementsInstanced`-equivalent + a second per-instance attribute buffer bound at
->   `glVertexAttribDivisor(location, 1)`). **Not a quick pick-up**, unlike every other gap closed
->   this session: EasyGL's own instancing implementation binds the instance buffer's attributes
->   generically, driven by `EasyGLVertexBufferBackend::GetDeclarationElements()` (a
->   `VertexElement`/`VertexDeclaration`-derived per-attribute format/offset list). This backend's
->   `OpenGL4VertexBufferBackend` has no equivalent generic declaration mechanism at all — only the
->   fixed stride-keyed `ApplyLayout` switch/case this whole plan's own effect ports have used
->   throughout (16/20/24/32/48/52/56/68). A real port would need a new generic
->   `VertexElement`-to-GL-attribute mapper first, a materially larger and more architecturally
->   invasive prerequisite than any single task landed so far on this branch — not attempted here.
->   ⬜
+> - ~~**Hardware instancing (`DrawInstancedPrimitivesEx`)**~~ — done, `GL4-33` (2026-07-22). New
+>   generic `VertexElement`-driven attribute mapper (`OpenGL4VertexBufferBackend::
+>   SetVertexDeclaration`/`GetDeclarationElements`) plus real `glDrawElementsInstanced`/
+>   `glVertexAttribDivisor` dispatch, verified by `OpenGL4_InstancedModel` (2/2). ✅
 
 ---
 
@@ -656,7 +681,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting`, `OpenGL4_ShaderEffect3D`, `OpenGL4_IndexBuffer32`, `OpenGL4_ShaderEffectSpriteBatch` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting`, `OpenGL4_ShaderEffect3D`, `OpenGL4_IndexBuffer32`, `OpenGL4_ShaderEffectSpriteBatch`, `OpenGL4_InstancedModel` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -696,6 +721,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-30` | Real custom `ShaderEffect` (`CreateEffectBackend`) — new `OpenGL4EffectBackend` (thin `IEffectBackend` wrapper around one `OpenGL4RawProgram`, modeled on `EasyGLEffectBackend`), plus a `params.customEffectBackend` check + new `BindCustomEffectMatrices` helper at the top of `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (ported from `EasyGLGraphicsBackend`'s own identical helper) that binds the compiled program and its `World`/`View`/`Projection` uniforms directly, bypassing `BindProgramForStride` entirely. | ✅ | `OpenGL4_ShaderEffect3D` (2/2): ports `easygl_shadereffect_3d_test.cpp`'s exact scene/methodology/expected values (desktop GLSL 410 core translation only). Check A (`World=Identity`) and Check B (`World=RotationY(180°)`, same footprint but flipped world normal) both matched exactly (`(200,100,50)`/`(0,0,0)`) on the first real run — no backend or test bugs found. `SpriteBatch::SetCustomEffect` integration deliberately out of scope (separate, larger feature, unattempted on every other backend that has landed `CreateEffectBackend` too). |
 | `GL4-31` | Real 32-bit index buffer support (discovered while scoping `GL4-27`) — `OpenGL4IndexBufferBackend` gained a `thirtyTwoBit_` flag plus real `SetData32`/`SetData32WithOptions` overrides (`GL_UNSIGNED_INT` storage), `IsThirtyTwoBit()` now reports the real flag, `CreateIndexBuffer32()` is now overridden, and every index-buffer draw call site selects `GL_UNSIGNED_INT`/`sizeof(uint32_t)` vs `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` from `IsThirtyTwoBit()` instead of hardcoding 16-bit. | ✅ | `OpenGL4_IndexBuffer32` (3/3): combines `OpenGL4_BaseVertex`'s own shared-vertex-buffer/two-draws methodology with a real `IndexElementSize::ThirtyTwoBits` `IndexBuffer` — a discriminating proof, since a still-16-bit-reinterpreted 32-bit buffer would misread the 6 `uint32_t` indices' raw bytes as 12 `uint16_t` values, producing garbage vertex fetches instead of a clean two-triangle quad. All 3 checks passed on the first real run — no backend or test bugs found. |
 | `GL4-32` | Real `SpriteBatch::SetCustomEffect` integration (discovered while scoping `GL4-30`) — `OpenGL4SpriteBatchBackend` gained a `customEffect_` field and a real `SetCustomEffect()` override; `FlushBatch()` now binds the same compiled program a custom `ShaderEffect` itself owns (`Effect::GetEffectBackendPtr()`) instead of the built-in sprite program when one is set, calls `Effect::Apply()`, and sets `"projection"` (this codebase's established custom-2D-effect uniform-name convention). | ✅ | `OpenGL4_ShaderEffectSpriteBatch` (2/2): ports `easygl_shader_effect_test.cpp`'s exact scene (a red-tint custom shader applied to a white sprite over a green background). Check A (sprite centre reads red-tinted, proving the custom program is genuinely bound) and Check B (background stays unmodified green, proving no full-screen side effect) both passed exactly on the first real run — no backend or test bugs found. |
+| `GL4-33` | Real hardware instancing (`DrawInstancedPrimitivesEx`, discovered in a final post-`GL4-32` audit) — new generic `VertexElement`-driven attribute mapper (`OpenGL4VertexBufferBackend::SetVertexDeclaration`/`GetDeclarationElements`, `ApplyLayout`'s new generic path), plus `DrawInstancedPrimitivesEx` binding the per-instance buffer's own attributes at locations continuing after the mesh buffer's own, each with `glVertexAttribDivisor(location, 1)`, then real GL 3.1 core `glDrawElementsInstanced` (both newly loaded via `GL4Loader`). Added a shared `VertexElementFormat` alias to `IGraphicsBackend.hpp` (purely additive). | ✅ | `OpenGL4_InstancedModel` (2/2): ports `easygl_instancedmodel_shader_test.cpp`'s exact scene/packing derivation/expected values — a single quad mesh drawn twice in ONE `DrawInstancedPrimitives` call, driven by 2 instances' own transforms as per-instance attributes. Instance 0 (pure translation, faces the light) reads pure white; instance 1 (180° rotation then translation, faces away) reads dim gray — both matched exactly on the first real run, proving per-instance data is genuinely read per-instance, not per-vertex or constant. |
 
 ---
 
@@ -718,7 +744,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All twenty-four dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All twenty-five dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -835,6 +861,14 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   shader genuinely bound, not the built-in one), background corner stays unmodified green
   `(0,255,0)`. Full re-run of the other 23 OpenGL4 CTest suites confirmed no regression
   (24/24 total).
+- `OpenGL4_InstancedModel` — 2/2, porting `easygl_instancedmodel_shader_test.cpp`'s exact scene/
+  packing derivation: one quad mesh drawn twice in a SINGLE `DrawInstancedPrimitives` call, driven
+  by 2 instances' own 4x4 transforms as per-instance attributes. Instance 0 (pure translation,
+  faces the light) reads pure white `(255,255,255,255)`; instance 1 (180° Y-rotation then
+  translation, faces away) reads dim gray `(64,64,64,255)` — two different colors at two different
+  on-screen positions from one draw call, proving `glVertexAttribDivisor=1` genuinely reads
+  per-instance data. Full re-run of the other 24 OpenGL4 CTest suites confirmed no regression
+  (25/25 total).
 
 ---
 
@@ -918,9 +952,12 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 22. ~~`GL4-32`~~ — real `SpriteBatch::SetCustomEffect` integration done and verified 2026-07-22,
     all ✅ (`OpenGL4_ShaderEffectSpriteBatch`, 2/2). A newly-discovered gap found while scoping
     `GL4-30` — see `GL4-32`'s own row.
+23. ~~`GL4-33`~~ — real hardware instancing done and verified 2026-07-22, all ✅
+    (`OpenGL4_InstancedModel`, 2/2). A newly-discovered gap found in a final post-`GL4-32` audit,
+    picked up after the project owner explicitly asked to continue on OpenGL4 tasks — see
+    `GL4-33`'s own row for the new generic `VertexElement`-driven attribute mapper this needed
+    first.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
-what's still open (Windows/macOS validation, hardware instancing — needs a new generic
-`VertexElement`-to-GL-attribute mapper first, a materially larger prerequisite than anything
-landed so far — and the permanently-deferred context-loss recovery feature) — these are
-candidates for a fresh scoping pass, not blocking anything above.
+what's still open (Windows/macOS validation and the permanently-deferred context-loss recovery
+feature) — these are candidates for a fresh scoping pass, not blocking anything above.

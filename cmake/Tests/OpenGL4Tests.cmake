@@ -176,4 +176,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_shadereffect_spritebatch examples/opengl4_shadereffect_spritebatch_test.cpp)
     cna_register_backend_test(NAME OpenGL4_ShaderEffectSpriteBatch COMMAND cna_test_opengl4_shadereffect_spritebatch
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-33: real hardware instancing (DrawInstancedPrimitivesEx), found in a
+    # final audit after GL4-32 closed out.
+    cna_opengl4_test(cna_test_opengl4_instancedmodel examples/opengl4_instancedmodel_shader_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_InstancedModel COMMAND cna_test_opengl4_instancedmodel
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

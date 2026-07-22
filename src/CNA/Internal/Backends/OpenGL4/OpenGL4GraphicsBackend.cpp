@@ -1948,11 +1948,78 @@ void main()
         if (vao_ != 0) gl4_glDeleteVertexArrays(1, &vao_);
     }
 
+    namespace
+    {
+        struct VertexAttribFormat
+        {
+            int componentCount;
+            GLenum type;
+            bool normalized;
+            bool isInteger;
+        };
+
+        // plan_opengl4.md GL4-33: maps XNA's VertexElementFormat to the GL attribute shape needed
+        // to bind it -- component count, GL scalar type, whether values are normalized to
+        // [0,1]/[-1,1], and whether the attribute must be read as a true integer
+        // (glVertexAttribIPointer) rather than converted to float (glVertexAttribPointer). Ported
+        // from EasyGLGraphicsBackend's own DescribeVertexElementFormat (Task 1080) verbatim.
+        VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
+        {
+            switch (format)
+            {
+            case VertexElementFormat::Single:           return { 1, GL_FLOAT,         false, false };
+            case VertexElementFormat::Vector2:          return { 2, GL_FLOAT,         false, false };
+            case VertexElementFormat::Vector3:          return { 3, GL_FLOAT,         false, false };
+            case VertexElementFormat::Vector4:          return { 4, GL_FLOAT,         false, false };
+            case VertexElementFormat::Color:            return { 4, GL_UNSIGNED_BYTE, true,  false };
+            case VertexElementFormat::Byte4:            return { 4, GL_UNSIGNED_BYTE, false, true  };
+            case VertexElementFormat::Short2:           return { 2, GL_SHORT,         false, false };
+            case VertexElementFormat::Short4:           return { 4, GL_SHORT,         false, false };
+            case VertexElementFormat::NormalizedShort2: return { 2, GL_SHORT,         true,  false };
+            case VertexElementFormat::NormalizedShort4: return { 4, GL_SHORT,         true,  false };
+            case VertexElementFormat::HalfVector2:      return { 2, GL_HALF_FLOAT,    false, false };
+            case VertexElementFormat::HalfVector4:      return { 4, GL_HALF_FLOAT,    false, false };
+            }
+            return { 3, GL_FLOAT, false, false };
+        }
+    }
+
+    void OpenGL4VertexBufferBackend::SetVertexDeclaration(const std::vector<VertexElement>& elements)
+    {
+        declarationElements_ = elements;
+    }
+
     void OpenGL4VertexBufferBackend::ApplyLayout(std::size_t stride)
     {
         const auto s = static_cast<GLsizei>(stride);
         gl4_glBindVertexArray(vao_);
         gl4_glBindBuffer(GL_ARRAY_BUFFER, vbo_);
+
+        if (!declarationElements_.empty())
+        {
+            // plan_opengl4.md GL4-33: generic layout binding driven by the caller's own
+            // VertexDeclaration -- attribute location = the element's own index within the
+            // declaration's element list, matching EasyGLVertexBufferBackend::ApplyLayout's own
+            // Task 1080 convention. Covers layouts that don't match any of the fixed strides the
+            // switch below recognizes (needed by hardware instancing's per-instance buffer).
+            for (std::size_t i = 0; i < declarationElements_.size(); ++i)
+            {
+                const VertexElement& element = declarationElements_[i];
+                const VertexAttribFormat desc =
+                    DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                const auto location = static_cast<GLuint>(i);
+                const void* offset = reinterpret_cast<void*>(
+                    static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                gl4_glEnableVertexAttribArray(location);
+                if (desc.isInteger)
+                    gl4_glVertexAttribIPointer(location, desc.componentCount, desc.type, s, offset);
+                else
+                    gl4_glVertexAttribPointer(location, desc.componentCount, desc.type,
+                                              desc.normalized ? GL_TRUE : GL_FALSE, s, offset);
+            }
+            gl4_glBindVertexArray(0);
+            return;
+        }
 
         switch (stride)
         {
@@ -3500,6 +3567,97 @@ void main()
         // draw that never set it.
         gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, idxType,
                                      byteOffset, params.baseVertex);
+        gl4_glBindVertexArray(0);
+    }
+
+    void OpenGL4GraphicsBackend::DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb_in, const IIndexBufferBackend& ib_in,
+                                                           const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                           PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                                           const GpuDrawParams& params)
+    {
+        const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
+        const auto& ib = static_cast<const OpenGL4IndexBufferBackend&>(ib_in);
+
+        const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
+        const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+
+        if (params.customEffectBackend)
+        {
+            // plan_opengl4.md GL4-33: hardware instancing with a custom ShaderEffect. The
+            // per-vertex mesh buffer's own attributes are already bound (via ApplyLayout, at
+            // SetData time) into vb's own VAO; bind the *second*, per-instance buffer's own
+            // attributes into that same VAO here, continuing at locations right after the mesh
+            // buffer's own, each with a divisor of 1 (advance once per instance -- XNA's most
+            // common instancing pattern, matches EasyGLGraphicsBackend::
+            // DrawInstancedPrimitivesEx's own Task 1082 shape exactly).
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+
+            gl4_glBindVertexArray(vb.VaoHandle());
+
+            const auto& meshDecl = vb.GetDeclarationElements();
+            const auto baseLocation = static_cast<GLuint>(meshDecl.size());
+            if (params.instanceVb)
+            {
+                const auto& instVb = static_cast<const OpenGL4VertexBufferBackend&>(*params.instanceVb);
+                const auto& instDecl = instVb.GetDeclarationElements();
+                const auto instStride = static_cast<GLsizei>(instVb.GetStrideInBytes());
+
+                gl4_glBindBuffer(GL_ARRAY_BUFFER, instVb.VboHandle());
+                for (std::size_t i = 0; i < instDecl.size(); ++i)
+                {
+                    const VertexElement& element = instDecl[i];
+                    const VertexAttribFormat desc =
+                        DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                    const auto location = baseLocation + static_cast<GLuint>(i);
+                    const void* offset = reinterpret_cast<void*>(
+                        static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                    gl4_glEnableVertexAttribArray(location);
+                    if (desc.isInteger)
+                        gl4_glVertexAttribIPointer(location, desc.componentCount, desc.type, instStride, offset);
+                    else
+                        gl4_glVertexAttribPointer(location, desc.componentCount, desc.type,
+                                                  desc.normalized ? GL_TRUE : GL_FALSE, instStride, offset);
+                    gl4_glVertexAttribDivisor(location, 1);
+                }
+            }
+
+            gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
+            gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
+
+            if (params.instanceVb)
+            {
+                const auto& instVb = static_cast<const OpenGL4VertexBufferBackend&>(*params.instanceVb);
+                const auto& instDecl = instVb.GetDeclarationElements();
+                for (std::size_t i = 0; i < instDecl.size(); ++i)
+                    gl4_glDisableVertexAttribArray(baseLocation + static_cast<GLuint>(i));
+            }
+
+            gl4_glBindVertexArray(0);
+            return;
+        }
+
+        if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
+        {
+            // plan_opengl4.md GL4-33: unrecognized stride, no custom effect -- fall back to the
+            // params-free colored3d program, mirroring DrawIndexedColoredPrimitives's own
+            // fallback shape (matches EasyGLGraphicsBackend::SelectProgram's own `default:`
+            // colored-program case, which always succeeds for any stride rather than failing).
+            EnsureColored3DProgram();
+            const Matrix wvp = world * view * projection;
+            float wvpCol[16];
+            wvp.ToColumnMajor(wvpCol);
+            colored3DProgram_.Use();
+            if (colored3DWvpLoc_ >= 0) gl4_glUniformMatrix4fv(colored3DWvpLoc_, 1, GL_FALSE, wvpCol);
+            gl4_glBindVertexArray(vb.VaoHandle());
+            gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
+            gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
+            gl4_glBindVertexArray(0);
+            return;
+        }
+
+        gl4_glBindVertexArray(vb.VaoHandle());
+        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
+        gl4_glDrawElementsInstanced(ToGLPrimitive(primitive), indexCount, idxType, nullptr, instanceCount);
         gl4_glBindVertexArray(0);
     }
 
