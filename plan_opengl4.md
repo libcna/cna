@@ -248,6 +248,43 @@
 > first real run — no backend or test bugs found. Full re-run of the other 13 OpenGL4 CTest suites
 > confirms no regression.
 >
+> **Status (2026-07-22): `GL4-23` (`PbrEffect`) landed and verified — the last remaining built-in
+> XNA/CNA effect for this backend.** Two new dedicated programs on two brand-new strides:
+> `pbr3d` (stride 48, `VertexPositionNormalTangentTexture`) for plain `PbrEffect`, and
+> `pbr_skinned3d` (stride 68, PBR + bone skinning combined) for `SkinnedPbrEffect`, sharing the
+> same fragment shader (only the vertex stage differs — the skinned variant skins position,
+> normal, *and* tangent through the blended bone matrix before the identical BRDF runs).
+> `OpenGL4VertexBufferBackend::ApplyLayout` gained the matching stride-48/68 attribute cases
+> (tangent as a real `vec4`, `xyz` + bitangent-handedness sign in `w`; stride 68 appends
+> blend-weight/blend-indices after the stride-48 layout, same "append, don't insert" precedent
+> `GL4-22`'s stride-52→56 case already established). Ported near-verbatim from
+> `EasyGLGraphicsBackend::EnsurePbrProgram()`'s GLSL ES 300 source — the real glTF 2.0 spec's own
+> reference metallic-roughness BRDF (GGX normal distribution, Smith-Schlick-GGX visibility, Schlick
+> Fresnel) — cross-checked against `VulkanGraphicsBackend`'s `pbr3d.frag.glsl` and
+> `BgfxGraphicsBackend`'s `fs_pbr3d.sc` (both byte-for-byte identical `PbrLight()` math) before
+> writing any OpenGL4 code. 5 texture units (0=base colour, 1=normal, 2=metallic-roughness,
+> 3=emissive, 4=occlusion) are sampled *unconditionally* every fragment — unlike
+> `DualTextureEffect`/`EnvironmentMapEffect`'s uniform-gated optional samplers — so two new lazily
+> created 1×1 fallback textures (`defaultWhiteTexture_`/`defaultFlatNormalTexture_`) are bound
+> whenever the corresponding `GpuDrawParams::pbr*Map` pointer is null, matching
+> `EasyGLGraphicsBackend::BindDrawParams`'s own fallback convention. No `GpuDrawParams`/
+> `IGraphicsBackend.hpp` changes were needed — every PBR field already existed from earlier phases
+> that implemented this effect on 5 other backends. Verified by the new `OpenGL4_PbrEffect` CTest
+> (4/4), reusing `easygl_pbreffect_golden_test.cpp`'s own independently hand-derived+captured
+> 4-quad scene and expected pixel values verbatim (white/rough/non-metallic baseline, a tilted
+> normal map proven to render measurably darker, and fully-metallic-red vs fully-dielectric-red
+> proven to render measurably differently) — the strongest possible correctness proof for a
+> 5th/6th backend port of the same BRDF formula. **One real bug found and fixed**: the very first
+> PBR draw of a process (the only time `EnsureDefaultWhiteTexture()`/
+> `EnsureDefaultFlatNormalTexture()` actually create anything) rendered near-black instead of the
+> expected lit colour — both `Ensure*` functions do their own `glBindTexture`/final
+> `glBindTexture(GL_TEXTURE_2D, 0)` on whatever GL texture unit is *currently active*, and they
+> were being called **after** the base-colour texture had already been bound to unit 0, so their
+> trailing unbind clobbered/unbound it; every later PBR draw was unaffected since both functions
+> early-return once created. Fixed by moving both `Ensure*` calls to the very top of
+> `BindProgramForStride`, before *any* real per-draw texture gets bound. Full re-run of the other
+> 14 OpenGL4 CTest suites confirms no regression.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -270,11 +307,10 @@
 > `SDL_GL_CONTEXT_PROFILE_MASK` attributes and the loader are portable, and macOS's 4.1 ceiling is
 > the reason this backend requests 4.1 rather than a higher minimum), not validation claims.
 >
-> **`PbrEffect`** — not implemented yet (`AlphaTestEffect`/`DualTextureEffect` done, `GL4-19`;
->   plain `Texture3D`/`TextureCube` done, `GL4-20`; `EnvironmentMapEffect` done, `GL4-21`;
->   `SkinnedEffect` done, `GL4-22`). `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done)
->   unblocks it — needs its own metallic-roughness BRDF shader variant/uniform wiring
->   (`GpuDrawParams::pbr`) on top of the stride dispatch that now exists. ⬜
+> **Every built-in XNA/CNA effect is now implemented on this backend** (`BasicEffect`/
+>   `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`/
+>   `SkinnedPbrEffect`, `GL4-13`/`GL4-19`/`GL4-21`/`GL4-22`/`GL4-23`) — remaining gaps below are all
+>   NOXNA extensions or known simplifications, not missing built-in effect coverage.
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
 > - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplifications (`GL4-13`)** — real, but
@@ -342,7 +378,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -372,6 +408,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-20` | Plain (non-render-target) `Texture3D`/`TextureCube` — `OpenGL4Texture3DBackend` (real `GL_TEXTURE_3D`, every mip level pre-allocated via the newly-loaded `gl4_glTexImage3D`, per-Z-slice `GetData` via a temporary FBO + the newly-loaded `gl4_glFramebufferTextureLayer` + `glReadPixels`) and `OpenGL4TextureCubeBackend` (reuses `GL4-15`'s `GL_TEXTURE_CUBE_MAP_POSITIVE_X+face` arithmetic, every face × every mip level pre-allocated via `glTexImage2D`), both modeled on `EasyGLTexture3DBackend`/`EasyGLTextureCubeBackend`'s resource shape. Both add `GL_TEXTURE_MAX_LEVEL` clamping (stricter than the EasyGL reference, matching `GL4-18`'s own fix). `TextureCube::GetData` deliberately does not Y-flip, unlike `OpenGL4RenderTargetCubeBackend::GetData` (a framebuffer-origin render target) — matches `EasyGLTextureCubeBackend`'s own plain-texture convention. | ✅ | Both new tests (`OpenGL4_Texture3D` 3/3, `OpenGL4_TextureCube` 4/4) passed every check on their first real run — no backend or test bugs found this time. |
 | `GL4-21` | `EnvironmentMapEffect` — a dedicated `env_map3d` GLSL 410 core program (stride 32, same `VertexPositionNormalTexture` layout as `lit_textured3d`), selected by `BindProgramForStride` instead of `lit_textured3d` when `GpuDrawParams::envMapping` is set. Ported near-verbatim from `EasyGLGraphicsBackend::EnsureEnvMapped3DProgram`, cross-checked against `VulkanGraphicsBackend`'s `env_map3d.frag.glsl` for the exact reflection/Fresnel/lerp/alpha-scaling formula (`docs/environmentmapeffect-support.md` documents the 2 real formula bugs — additive-not-lerp, missing alpha scaling — already found and fixed on 3 other backends; this port used the corrected formula from the start). Cube map binds to texture unit 1 (`GL4-19`'s `DualTextureEffect` slot, safe since the two effects are mutually exclusive per draw). No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — every field was already present from earlier phases. | ✅ | Check A reuses Task 399's own cross-backend-verified combined-scene oracle verbatim (`(151,101,76)` ± 20) and passed on the first run at `(131,91,71)`. All 4 checks passed on the first real run — no backend or test bugs found. |
 | `GL4-22` | `SkinnedEffect` — a dedicated `skinned3d` GLSL 410 core program on **new** strides 52/56 (`VertexPositionNormalTextureSkinned` + optional trailing `Color`), plus matching `OpenGL4VertexBufferBackend::ApplyLayout` attribute cases (blend-indices via the newly-loaded `gl4_glVertexAttribIPointer` — a true GLSL integer attribute, not float-converted, since it subscripts `uBones[]`). Ported near-verbatim from `EasyGLGraphicsBackend::EnsureSkinnedProgram`, matching real XNA `SkinnedEffect.fx`'s `Skin()` function: skin matrix = sum of only the first `WeightsPerVertex` (1/2/4) `uBones[index]*weight` pairs (`Task 895`'s already-fixed formula, not the naive always-sum-4 bug). Lighting reuses `lit_textured3d`'s 3-light diffuse+specular+emissive formula plus a `VertexColorEnabled`-gated vertex-colour modulate for stride 56. No fog (same deliberate deferral as every other 3D stride variant). All 72 bones upload via one `gl4_glUniformMatrix4fv(loc, boneCount, ...)` call. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed. | ✅ | 5 checks across 4 scenarios (identity no-op, single-bone translate, two-bone weighted blend reaching the same net shift as a decisive both-bones-contribute proof, and `VertexColorEnabled` reusing `easygl_skinnedeffect_vertexcolor_test.cpp`'s own `(174,0,0)` oracle) all passed on the first real run — no backend or test bugs found. |
+| `GL4-23` | `PbrEffect`/`SkinnedPbrEffect` — two new dedicated programs on two brand-new strides: `pbr3d` (stride 48, `VertexPositionNormalTangentTexture`) and `pbr_skinned3d` (stride 68, PBR+skinning combined, sharing `pbr3d`'s fragment shader). `OpenGL4VertexBufferBackend::ApplyLayout` gained matching stride-48/68 cases. Ported near-verbatim from `EasyGLGraphicsBackend::EnsurePbrProgram()` — the real glTF 2.0 metallic-roughness BRDF (GGX/Smith-Schlick-GGX/Schlick Fresnel) — cross-checked against `VulkanGraphicsBackend`'s `pbr3d.frag.glsl` and `BgfxGraphicsBackend`'s `fs_pbr3d.sc` (byte-for-byte identical `PbrLight()` math). 5 texture units sampled unconditionally every fragment, so two new lazily-created 1×1 fallback textures (`defaultWhiteTexture_`/`defaultFlatNormalTexture_`) are bound whenever a `GpuDrawParams::pbr*Map` pointer is null. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — last remaining built-in XNA/CNA effect for this backend. | ✅ | Real bug found+fixed: the very first PBR draw of a process rendered near-black because `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()`'s own trailing `glBindTexture(GL_TEXTURE_2D, 0)` clobbered/unbound the base-colour texture that had *already* been bound to unit 0 moments earlier — fixed by moving both `Ensure*` calls to the very top of `BindProgramForStride`, before any real per-draw texture gets bound. Check A reuses `easygl_pbreffect_golden_test.cpp`'s own oracle and matched it exactly (`(64,74,87)`) after the fix. |
 
 ---
 
@@ -394,7 +431,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All fourteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All fifteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -460,6 +497,12 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   single bone alone could not reach, and `VertexColorEnabled` gating the stride-56 `aColor`
   attribute against `easygl_skinnedeffect_vertexcolor_test.cpp`'s own `(174,0,0)` oracle). Full
   re-run of the other 13 OpenGL4 CTest suites confirmed no regression.
+- `OpenGL4_PbrEffect` — 4/4, reusing `easygl_pbreffect_golden_test.cpp`'s own 4-quad scene and
+  independently hand-derived+captured expected pixel values verbatim (white/rough/non-metallic
+  baseline, a tilted normal map proven measurably darker, fully-metallic-red vs
+  fully-dielectric-red proven measurably different). Found and fixed a real first-PBR-draw texture
+  unit 0 clobbering bug along the way (see `GL4-23`'s own row). Full re-run of the other 14
+  OpenGL4 CTest suites confirmed no regression.
 
 ---
 
@@ -506,11 +549,17 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
     (`OpenGL4_SkinnedEffect`, 5 checks/4 scenarios). See `GL4-22`'s own row for the new stride-52/
     56 vertex layout, the `gl4_glVertexAttribIPointer` loader addition, and the two-bone weighted
     blend proof.
-12. **Next up (not yet started, no priority order implied):**
-    - `PbrEffect` — not implemented yet. `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`)
-      and the stride-32/52/56 vertex layouts now all exist; `PbrEffect` needs its own
-      metallic-roughness BRDF shader variant (`GpuDrawParams::pbr`) plumbed through
-      `BindProgramForStride`, following the same reused-stride-program pattern as `GL4-19`/`GL4-21`.
+12. ~~`GL4-23`~~ — `PbrEffect`/`SkinnedPbrEffect` done and verified 2026-07-22, all ✅
+    (`OpenGL4_PbrEffect`, 4/4) — **the last remaining built-in XNA/CNA effect for this backend.**
+    See `GL4-23`'s own row for the new stride-48/68 vertex layouts, the real glTF BRDF
+    cross-checked against 2 other backends, and the real first-PBR-draw texture-clobbering bug
+    found and fixed along the way.
+13. **Next up (not yet started, no priority order implied):** every built-in effect is done — see
+    the "Remaining work" section in the status banner above for what's left (custom `ShaderEffect`,
+    `DrawPrimitivesEx` known simplifications, `preferPerPixelLighting`, fog on the stride shaders,
+    occlusion queries, `TransformWindowToLogical`/`TransformLogicalToWindow`,
+    `DebugSimulateContextLoss`, Windows/macOS validation) — no single item is obviously "next" over
+    the others.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
 everything else still open — do not treat the picks above as the only next options.

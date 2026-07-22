@@ -117,4 +117,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_skinnedeffect examples/opengl4_skinnedeffect_test.cpp)
     cna_register_backend_test(NAME OpenGL4_SkinnedEffect COMMAND cna_test_opengl4_skinnedeffect
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-23: PbrEffect -- a dedicated pbr3d GLSL program (new stride 48,
+    # VertexPositionNormalTangentTexture) implementing the real glTF metallic-roughness BRDF, plus
+    # OpenGL4VertexBufferBackend::ApplyLayout's new stride-48/68 vertex attribute cases.
+    cna_opengl4_test(cna_test_opengl4_pbreffect examples/opengl4_pbreffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_PbrEffect COMMAND cna_test_opengl4_pbreffect
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -508,6 +508,172 @@ void main()
 }
 )GLSL";
 
+        // plan_opengl4.md GL4-23: pbr3d (VertexPositionNormalTangentTexture, stride 48) and
+        // pbr_skinned3d (stride 68, PBR + bone skinning combined) -- PbrEffect/SkinnedPbrEffect's
+        // own dedicated programs. Ported near-verbatim from EasyGLGraphicsBackend's
+        // EnsurePbrProgram()/EnsurePbrSkinnedProgram() GLSL ES 300 source, which is itself the
+        // real glTF 2.0 spec's own reference metallic-roughness BRDF (GGX normal distribution,
+        // Smith-Schlick-GGX visibility, Schlick Fresnel) -- cross-verified against
+        // VulkanGraphicsBackend's pbr3d.frag.glsl and BgfxGraphicsBackend's fs_pbr3d.sc, both
+        // byte-for-byte identical in their PbrLight() math, before writing any OpenGL4 code.
+        // 5 texture units: 0=base colour, 1=normal map (tangent-space RGB), 2=metallic-roughness
+        // (glTF packing: G=roughness, B=metallic), 3=emissive, 4=occlusion (R channel). All 5 are
+        // sampled unconditionally every fragment (unlike DualTextureEffect/EnvironmentMapEffect's
+        // uniform-gated optional samplers) -- BindProgramForStride always binds a real texture to
+        // every unit, falling back to defaultWhiteTexture_/defaultFlatNormalTexture_ when the
+        // corresponding GpuDrawParams::pbr*Map pointer is null.
+        const char* kPbr3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec4 aTangent;
+layout(location = 3) in vec2 aUV;
+uniform mat4 uWorldViewProj;
+uniform mat4 uWorld;
+out vec3 vNormal;
+out vec3 vTangent;
+out float vBitangentSign;
+out vec2 vUV;
+out vec3 vWorldPos;
+void main()
+{
+    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+    // In-shader inverse-transpose normal matrix, matching this backend's own established
+    // lit_textured3d/env_map3d convention (rather than EasyGL's CPU-precomputed uNormalMatrix
+    // uniform, which would need a new C++-side cofactor helper this backend doesn't otherwise
+    // have) -- numerically equivalent for any World matrix, uniform-scale or not.
+    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
+    vNormal = normalMatrix * aNormal;
+    vTangent = mat3(uWorld) * aTangent.xyz;
+    vBitangentSign = aTangent.w;
+    vUV = aUV;
+    vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
+}
+)GLSL";
+
+        const char* kPbrSkinned3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec4 aTangent;
+layout(location = 3) in vec2 aUV;
+layout(location = 4) in vec4 aBoneWeights;
+layout(location = 5) in uvec4 aBoneIndices;
+uniform mat4 uWorldViewProj;
+uniform mat4 uWorld;
+uniform mat4 uBones[72];
+uniform int uWeightsPerVertex;
+out vec3 vNormal;
+out vec3 vTangent;
+out float vBitangentSign;
+out vec2 vUV;
+out vec3 vWorldPos;
+void main()
+{
+    mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
+    if (uWeightsPerVertex >= 2)
+        skinMat += uBones[aBoneIndices.y] * aBoneWeights.y;
+    if (uWeightsPerVertex >= 4)
+    {
+        skinMat += uBones[aBoneIndices.z] * aBoneWeights.z;
+        skinMat += uBones[aBoneIndices.w] * aBoneWeights.w;
+    }
+    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    gl_Position = uWorldViewProj * skinnedPos;
+    vec3 skinnedNormal = mat3(skinMat) * aNormal;
+    vec3 skinnedTangent = mat3(skinMat) * aTangent.xyz;
+    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
+    vNormal = normalMatrix * skinnedNormal;
+    vTangent = mat3(uWorld) * skinnedTangent;
+    vBitangentSign = aTangent.w;
+    vUV = aUV;
+    vWorldPos = (uWorld * skinnedPos).xyz;
+}
+)GLSL";
+
+        const char* kPbr3DFragSrc = R"GLSL(
+#version 410 core
+in vec3 vNormal;
+in vec3 vTangent;
+in float vBitangentSign;
+in vec2 vUV;
+in vec3 vWorldPos;
+uniform sampler2D uTexture;
+uniform sampler2D uNormalMap;
+uniform sampler2D uMetallicRoughnessMap;
+uniform sampler2D uEmissiveMap;
+uniform sampler2D uOcclusionMap;
+uniform vec4 uDiffuseColor;
+uniform vec3 uAmbientColor;
+uniform vec3 uEmissiveColor;
+uniform float uMetallicFactor;
+uniform float uRoughnessFactor;
+uniform vec3 uLight0Dir;
+uniform vec3 uLight0Diffuse;
+uniform vec3 uLight1Dir;
+uniform vec3 uLight1Diffuse;
+uniform vec3 uLight2Dir;
+uniform vec3 uLight2Diffuse;
+uniform vec3 uEyePosition;
+out vec4 fragColor;
+
+vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
+{
+    vec3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 1e-4);
+    float NdotH = max(dot(N, H), 0.0);
+    float VdotH = max(dot(V, H), 0.0);
+
+    float a2 = pow(roughness, 4.0);
+    float dTerm = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+    float D = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
+
+    float k = (roughness + 1.0);
+    k = k * k / 8.0;
+    float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
+
+    vec3 F = F0 + (vec3(1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+
+    vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
+    vec3 diffuseColor = albedo * (1.0 - metallic);
+    vec3 kd = vec3(1.0) - F;
+    return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
+}
+
+void main()
+{
+    vec4 baseColorTex = texture(uTexture, vUV);
+    vec3 albedo = baseColorTex.rgb * uDiffuseColor.rgb;
+    float alpha = baseColorTex.a * uDiffuseColor.a;
+
+    vec3 N = normalize(vNormal);
+    vec3 T = normalize(vTangent - N * dot(N, vTangent));
+    vec3 B = cross(N, T) * vBitangentSign;
+    mat3 TBN = mat3(T, B, N);
+    vec3 sampledNormal = texture(uNormalMap, vUV).rgb * 2.0 - 1.0;
+    vec3 finalNormal = normalize(TBN * sampledNormal);
+
+    vec4 mr = texture(uMetallicRoughnessMap, vUV);
+    float roughness = clamp(mr.g * uRoughnessFactor, 0.045, 1.0);
+    float metallic = clamp(mr.b * uMetallicFactor, 0.0, 1.0);
+
+    vec3 V = normalize(uEyePosition - vWorldPos);
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+
+    vec3 Lo = vec3(0.0);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight0Dir), uLight0Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, roughness, metallic);
+
+    float occlusion = texture(uOcclusionMap, vUV).r;
+    vec3 ambient = uAmbientColor * albedo * occlusion;
+    vec3 emissive = uEmissiveColor * texture(uEmissiveMap, vUV).rgb;
+
+    fragColor = vec4(ambient + Lo + emissive, alpha);
+}
+)GLSL";
+
         // XNA TextureFilter ordinal -> (GL min filter, GL mag filter). plan_opengl4.md GL4-18:
         // real mip-aware GL min-filter tokens for every "Mip*" variant now that
         // OpenGL4TextureBackend::UpdatePixelsLevel() lets a texture genuinely have mip levels
@@ -1451,6 +1617,30 @@ void main()
                 gl4_glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, s, (void*)52);
             }
             break;
+        case 48:
+        case 68:
+            // plan_opengl4.md GL4-23: VertexPositionNormalTangentTexture (packed): float3
+            // position + float3 normal + float4 tangent (xyz + bitangent-handedness sign in w)
+            // + float2 texcoord (+ float4 blend weight + ubyte4 blend indices for the stride-68
+            // PBR+skinned combo -- locations 0-3 stay byte-identical to stride 48, matching
+            // GL4-22's own stride-52-to-56 "append, don't insert" precedent), matching
+            // EasyGLGraphicsBackend's own stride-48/68 cases.
+            gl4_glEnableVertexAttribArray(0);
+            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
+            gl4_glEnableVertexAttribArray(1);
+            gl4_glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, s, (void*)12);
+            gl4_glEnableVertexAttribArray(2);
+            gl4_glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, s, (void*)24);
+            gl4_glEnableVertexAttribArray(3);
+            gl4_glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, s, (void*)40);
+            if (stride == 68)
+            {
+                gl4_glEnableVertexAttribArray(4);
+                gl4_glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, s, (void*)48);
+                gl4_glEnableVertexAttribArray(5);
+                gl4_glVertexAttribIPointer(5, 4, GL_UNSIGNED_BYTE, s, (void*)64);
+            }
+            break;
         default:
             // Unknown layout (not yet ported to this backend, plan_opengl4.md remaining work):
             // bind position-only as a safe fallback, matching EasyGL's own precedent.
@@ -1782,6 +1972,8 @@ void main()
     {
         IGraphicsBackend::UnregisterForWindow(window_);
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
+        if (defaultWhiteTexture_) glDeleteTextures(1, &defaultWhiteTexture_);
+        if (defaultFlatNormalTexture_) glDeleteTextures(1, &defaultFlatNormalTexture_);
         if (mrtFbo_) gl4_glDeleteFramebuffers(1, &mrtFbo_);
         if (msaaDepthRbo_) gl4_glDeleteRenderbuffers(1, &msaaDepthRbo_);
         if (msaaColorRbo_) gl4_glDeleteRenderbuffers(1, &msaaColorRbo_);
@@ -2182,12 +2374,62 @@ void main()
             throw std::runtime_error("OpenGL4: skinned3d program failed to compile: " + skinned3DProgram_.GetError());
     }
 
+    void OpenGL4GraphicsBackend::EnsurePbr3DProgram()
+    {
+        if (pbr3DProgram_.IsValid()) return;
+        if (!pbr3DProgram_.Compile(kPbr3DVertSrc, kPbr3DFragSrc))
+            throw std::runtime_error("OpenGL4: pbr3d program failed to compile: " + pbr3DProgram_.GetError());
+    }
+
+    void OpenGL4GraphicsBackend::EnsurePbrSkinned3DProgram()
+    {
+        if (pbrSkinned3DProgram_.IsValid()) return;
+        if (!pbrSkinned3DProgram_.Compile(kPbrSkinned3DVertSrc, kPbr3DFragSrc))
+            throw std::runtime_error("OpenGL4: pbr_skinned3d program failed to compile: " + pbrSkinned3DProgram_.GetError());
+    }
+
+    void OpenGL4GraphicsBackend::EnsureDefaultWhiteTexture()
+    {
+        if (defaultWhiteTexture_ != 0) return;
+        const uint8_t white[4] = {255, 255, 255, 255};
+        glGenTextures(1, &defaultWhiteTexture_);
+        glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    void OpenGL4GraphicsBackend::EnsureDefaultFlatNormalTexture()
+    {
+        if (defaultFlatNormalTexture_ != 0) return;
+        const uint8_t flatNormal[4] = {128, 128, 255, 255};
+        glGenTextures(1, &defaultFlatNormalTexture_);
+        glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, flatNormal);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
     bool OpenGL4GraphicsBackend::BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
                                                        const Matrix& projection, const GpuDrawParams& params)
     {
         const Matrix wvp = world * view * projection;
         float wvpCol[16];
         wvp.ToColumnMajor(wvpCol);
+
+        // plan_opengl4.md GL4-23: lazily create PbrEffect's fallback textures BEFORE any real
+        // per-draw texture gets bound below -- EnsureDefaultWhiteTexture()/
+        // EnsureDefaultFlatNormalTexture() do their own glBindTexture(GL_TEXTURE_2D, ...) on
+        // whatever unit is currently active, then unbind (GL_TEXTURE_2D -> 0) when done. Calling
+        // them AFTER texture0 was already bound to unit 0 (a real bug found while testing this
+        // task) would clobber/unbind that real base-colour texture on the one draw call where
+        // these fallbacks are first created -- every later PBR draw call is unaffected, since
+        // both Ensure* functions early-return once created.
+        if (params.pbr)
+        {
+            EnsureDefaultWhiteTexture();
+            EnsureDefaultFlatNormalTexture();
+        }
 
         const bool hasTexture0 = params.texture0 != nullptr;
         if (hasTexture0)
@@ -2213,6 +2455,89 @@ void main()
             gl4_glActiveTexture(GL_TEXTURE1);
             params.envMap->BindGL();
             ApplySamplerState(1, 0, 1, 1, 1); // Linear/Clamp.
+        }
+
+        // plan_opengl4.md GL4-23: PbrEffect's 4 extra texture units (1=normal, 2=metallic-
+        // roughness, 3=emissive, 4=occlusion). Unlike texture1/envMap above, the PBR fragment
+        // shader samples all 5 units unconditionally (no uniform-gated branch), so every unit
+        // always gets a real bound texture -- defaultFlatNormalTexture_/defaultWhiteTexture_ when
+        // the corresponding GpuDrawParams::pbr*Map pointer is null, matching
+        // EasyGLGraphicsBackend::BindDrawParams's own fallback convention.
+        if (params.pbr)
+        {
+            gl4_glActiveTexture(GL_TEXTURE1);
+            if (params.pbrNormalMap) params.pbrNormalMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultFlatNormalTexture_);
+            ApplySamplerState(1, 0, 1, 1, 1);
+
+            gl4_glActiveTexture(GL_TEXTURE2);
+            if (params.pbrMetallicRoughnessMap) params.pbrMetallicRoughnessMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
+            ApplySamplerState(2, 0, 1, 1, 1);
+
+            gl4_glActiveTexture(GL_TEXTURE3);
+            if (params.pbrEmissiveMap) params.pbrEmissiveMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
+            ApplySamplerState(3, 0, 1, 1, 1);
+
+            gl4_glActiveTexture(GL_TEXTURE4);
+            if (params.pbrOcclusionMap) params.pbrOcclusionMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_);
+            ApplySamplerState(4, 0, 1, 1, 1);
+        }
+
+        if (params.pbr && (strideInBytes == 48 || strideInBytes == 68))
+        {
+            OpenGL4RawProgram& prog = (strideInBytes == 68) ? pbrSkinned3DProgram_ : pbr3DProgram_;
+            if (strideInBytes == 68) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram();
+            prog.Use();
+            float worldCol[16];
+            world.ToColumnMajor(worldCol);
+            const auto setM4 = [&](const char* name, const float* m) {
+                const int loc = prog.UniformLocation(name);
+                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
+            };
+            const auto setV3 = [&](const char* name, const float* v) {
+                const int loc = prog.UniformLocation(name);
+                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
+            };
+            setM4("uWorldViewProj", wvpCol);
+            setM4("uWorld", worldCol);
+            if (strideInBytes == 68)
+            {
+                const int bonesLoc = prog.UniformLocation("uBones[0]");
+                if (bonesLoc >= 0 && params.boneCount > 0)
+                    gl4_glUniformMatrix4fv(bonesLoc, params.boneCount, GL_FALSE, params.boneTransforms);
+                const int weightsLoc = prog.UniformLocation("uWeightsPerVertex");
+                if (weightsLoc >= 0) gl4_glUniform1i(weightsLoc, params.weightsPerVertex);
+            }
+            const int diffuseLoc = prog.UniformLocation("uDiffuseColor");
+            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
+                                                 params.diffuseColor[2], params.diffuseColor[3]);
+            setV3("uAmbientColor", params.ambientColor);
+            setV3("uEmissiveColor", params.emissiveColor);
+            const int metallicLoc = prog.UniformLocation("uMetallicFactor");
+            if (metallicLoc >= 0) gl4_glUniform1f(metallicLoc, params.pbrMetallicFactor);
+            const int roughnessLoc = prog.UniformLocation("uRoughnessFactor");
+            if (roughnessLoc >= 0) gl4_glUniform1f(roughnessLoc, params.pbrRoughnessFactor);
+            setV3("uLight0Dir", params.light0Dir);
+            setV3("uLight0Diffuse", params.light0Diffuse);
+            setV3("uLight1Dir", params.light1Dir);
+            setV3("uLight1Diffuse", params.light1Diffuse);
+            setV3("uLight2Dir", params.light2Dir);
+            setV3("uLight2Diffuse", params.light2Diffuse);
+            setV3("uEyePosition", params.eyePositionWorld);
+            const int texLoc = prog.UniformLocation("uTexture");
+            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            const int normalMapLoc = prog.UniformLocation("uNormalMap");
+            if (normalMapLoc >= 0) gl4_glUniform1i(normalMapLoc, 1);
+            const int mrLoc = prog.UniformLocation("uMetallicRoughnessMap");
+            if (mrLoc >= 0) gl4_glUniform1i(mrLoc, 2);
+            const int emissiveMapLoc = prog.UniformLocation("uEmissiveMap");
+            if (emissiveMapLoc >= 0) gl4_glUniform1i(emissiveMapLoc, 3);
+            const int occlusionMapLoc = prog.UniformLocation("uOcclusionMap");
+            if (occlusionMapLoc >= 0) gl4_glUniform1i(occlusionMapLoc, 4);
+            return true;
         }
 
         if (params.envMapping && strideInBytes == 32)

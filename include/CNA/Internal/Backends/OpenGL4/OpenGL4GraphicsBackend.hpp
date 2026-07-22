@@ -486,6 +486,22 @@ namespace CNA::Internal::Backends::OpenGL4
         void EnsureEnvMap3DProgram();
         /// plan_opengl4.md GL4-22: SkinnedEffect's own dedicated stride-52/56 program.
         void EnsureSkinned3DProgram();
+        /// plan_opengl4.md GL4-23: PbrEffect's own dedicated stride-48 program (glTF
+        /// metallic-roughness BRDF).
+        void EnsurePbr3DProgram();
+        /// plan_opengl4.md GL4-23: SkinnedPbrEffect's own dedicated stride-68 program (PBR BRDF +
+        /// bone skinning combined).
+        void EnsurePbrSkinned3DProgram();
+        /// plan_opengl4.md GL4-23: lazily-created 1x1 opaque white fallback, bound to
+        /// PbrEffect's MetallicRoughnessMap/EmissiveMap/OcclusionMap texture units whenever the
+        /// corresponding GpuDrawParams::pbr*Map pointer is null (the PBR fragment shader samples
+        /// all 5 texture units unconditionally, unlike DualTextureEffect/EnvironmentMapEffect's
+        /// uniform-gated optional samplers -- an unbound/stale unit would otherwise sample
+        /// whatever GL texture a previous, unrelated draw last left bound to that unit).
+        void EnsureDefaultWhiteTexture();
+        /// plan_opengl4.md GL4-23: lazily-created 1x1 tangent-space "flat" normal (128,128,255 ->
+        /// decodes to (0,0,1)) fallback for PbrEffect's NormalMap when unset.
+        void EnsureDefaultFlatNormalTexture();
 
         /// Binds the correct stride-keyed program for @p strideInBytes, uploads its uniforms
         /// from @p world/@p view/@p projection/@p params, and binds texture unit 0 if
@@ -546,6 +562,10 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4RawProgram litTextured3DProgram_;
         OpenGL4RawProgram envMap3DProgram_;
         OpenGL4RawProgram skinned3DProgram_;
+        OpenGL4RawProgram pbr3DProgram_;
+        OpenGL4RawProgram pbrSkinned3DProgram_;
+        unsigned int defaultWhiteTexture_ = 0;
+        unsigned int defaultFlatNormalTexture_ = 0;
         unsigned int samplers_[kMaxSamplerSlots] = {};
     };
 }
