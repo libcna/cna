@@ -20,6 +20,10 @@
 // Check F -- ...as does an indexed draw out of vertex/index buffers filled before the loss
 //   (OPENGLES1-80), which would otherwise render nothing from dead buffer names.
 //
+// Check F2 -- SetContextRecoveryEnabled(false) genuinely gives recovery up (OPENGLES1-91): a
+//   texture uploaded afterwards no longer survives a context loss, proving the CPU copy was
+//   really released rather than merely promised to be.
+//
 // Both multitexturing paths are optional on ES 1.1 (dual texture needs GL_MAX_TEXTURE_UNITS >= 2,
 // environment mapping needs GL_OES_texture_cube_map). When the driver lacks them the backend
 // falls back to the plain colored path by design, so those checks are skipped rather than failed.
@@ -426,6 +430,38 @@ protected:
 
             dev.SetIndexBuffer(nullptr);
             dev.SetVertexBuffer(nullptr);
+        }
+
+        // ---- Check F2: context recovery can be switched off ------------------------------
+        {
+            // With recovery disabled the backend must decline to keep a CPU copy, so the same
+            // loss/restore that check E proves survivable must now NOT restore the texture.
+            dev.SetContextRecoveryEnabled(false);
+
+            Texture2D volatileTex = makeSolid(dev, 128, 128, 128);
+            dev.Clear(Color::Black);
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(volatileTex, Rectangle(0, 0, kSize, kSize), Color::White);
+            spriteBatch_->End();
+            const Color beforeLoss = readPixel(dev, mid, mid);
+
+            backend.DebugSimulateContextLoss();
+            backend.DebugRestoreContext();
+
+            dev.Clear(Color::Black);
+            spriteBatch_->Begin();
+            spriteBatch_->Draw(volatileTex, Rectangle(0, 0, kSize, kSize), Color::White);
+            spriteBatch_->End();
+            const Color afterLoss = readPixel(dev, mid, mid);
+
+            std::printf("       (recovery disabled: before loss = %d,%d,%d, after = %d,%d,%d)\n",
+                        beforeLoss.getRProperty(), beforeLoss.getGProperty(), beforeLoss.getBProperty(),
+                        afterLoss.getRProperty(), afterLoss.getGProperty(), afterLoss.getBProperty());
+            check(colorNear(beforeLoss, Color(128, 128, 128), 24) &&
+                      !colorNear(afterLoss, Color(128, 128, 128), 24),
+                  "SetContextRecoveryEnabled(false) really releases the copy, so restore no longer works");
+
+            dev.SetContextRecoveryEnabled(true);
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);

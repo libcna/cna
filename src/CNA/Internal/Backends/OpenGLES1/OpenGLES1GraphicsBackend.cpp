@@ -179,6 +179,8 @@ namespace CNA::Internal::Backends::OpenGLES1
 
     void OpenGLES1TextureBackend::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
     {
+        // Declining the share is what makes "recovery disabled" actually free memory.
+        if (owner_ && !owner_->IsContextRecoveryEnabledEXT()) return;
         pixels_ = std::move(pixels);
     }
 
@@ -312,8 +314,20 @@ namespace CNA::Internal::Backends::OpenGLES1
         glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(bytes), data, GL_DYNAMIC_DRAW);
 
         // Shadowed only to survive a context loss (OPENGLES1-80); draws never read this copy.
+        if (owner_ && !owner_->IsContextRecoveryEnabledEXT())
+        {
+            cpuShadow_.clear();
+            cpuShadow_.shrink_to_fit();
+            return;
+        }
         cpuShadow_.resize(bytes);
         if (bytes > 0 && data) std::memcpy(cpuShadow_.data(), data, bytes);
+    }
+
+    void OpenGLES1VertexBufferBackend::DropCpuShadowEXT()
+    {
+        cpuShadow_.clear();
+        cpuShadow_.shrink_to_fit();
     }
 
     void OpenGLES1VertexBufferBackend::RestoreAfterContextLoss()
@@ -999,6 +1013,22 @@ namespace CNA::Internal::Backends::OpenGLES1
         if (!texture) return;
         liveTextures_.erase(std::remove(liveTextures_.begin(), liveTextures_.end(), texture),
                             liveTextures_.end());
+    }
+
+    void OpenGLES1GraphicsBackend::SetContextRecoveryEnabled(bool enabled)
+    {
+        contextRecoveryEnabled_ = enabled;
+        if (enabled) return;
+
+        // Actually release the memory. Texture2D dropping its own copy achieves nothing on its own,
+        // because ShareCpuPixels gave this backend shared ownership of the very same buffer.
+        for (auto* texture : liveTextures_)
+            if (texture) texture->DropCpuShadowEXT();
+        for (auto* buffer : liveVertexBuffers_)
+            if (buffer) buffer->DropCpuShadowEXT();
+
+        // Index shadows stay: wireframe emulation reads them, so dropping them would break
+        // rendering rather than just recovery (see OPENGLES1-76).
     }
 
     void OpenGLES1GraphicsBackend::RegisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer)

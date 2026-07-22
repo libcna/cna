@@ -82,6 +82,9 @@ namespace CNA::Internal::Backends::OpenGLES1
          */
         void RestoreAfterContextLoss();
 
+        /// NOXNA. Releases the shared pixel copy; the texture can no longer survive a context loss.
+        void DropCpuShadowEXT() { pixels_.reset(); }
+
         [[nodiscard]] unsigned int GetGLHandle() const { return texture_; }
 
     private:
@@ -113,6 +116,9 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         int GetVertexCount() const override { return vertexCount_; }
+
+        /// NOXNA. Releases the raw vertex shadow; the buffer can no longer survive a context loss.
+        void DropCpuShadowEXT();
 
         /**
          * @brief Recreates this buffer's GL object after the context it lived in was destroyed.
@@ -189,6 +195,9 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// NOXNA. Binds this buffer's VBO to GL_ELEMENT_ARRAY_BUFFER -- callers then pass a byte
         /// offset (not a raw pointer) as glDrawElements' `indices` argument.
         void Bind() const;
+        /// NOXNA. Releases the raw vertex shadow; the buffer can no longer survive a context loss.
+        void DropCpuShadowEXT();
+
         /// NOXNA. CPU-side shadow of the index values, for wireframe emulation and context-loss
         /// restore only (see above). Always widened to 32 bits so one accessor serves both index
         /// sizes; the GPU buffer still holds the narrow form for 16-bit buffers.
@@ -700,6 +709,24 @@ namespace CNA::Internal::Backends::OpenGLES1
          */
         void ApplyAnisotropy(unsigned int target, int requested) const;
 
+        /**
+         * @brief Enables or disables retaining CPU copies needed for GL context-loss recovery.
+         *
+         * Disabling drops the copies this backend holds for textures and vertex buffers, which is
+         * the memory saving the flag exists for -- `Texture2D` releasing its own copy alone would
+         * not free anything, since the backend shares ownership of the same buffer. Index-buffer
+         * shadows are kept regardless: wireframe emulation reads them (`OPENGLES1-76`).
+         *
+         * Re-enabling does not resurrect what was already dropped; only resources created or
+         * uploaded afterwards are recoverable again.
+         *
+         * @param enabled False to release the retained copies and give up context-loss recovery.
+         */
+        void SetContextRecoveryEnabled(bool enabled) override;
+
+        /// NOXNA. Whether CPU copies for context-loss recovery are currently retained.
+        [[nodiscard]] bool IsContextRecoveryEnabledEXT() const { return contextRecoveryEnabled_; }
+
         void RegisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer);
 
         /**
@@ -791,6 +818,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         // 1x1 white texture used only as a carrier for the GL_COMBINE stage that multiplies vertex
         // colour by DiffuseColor (OPENGLES1-92) -- the texture itself contributes nothing.
         unsigned int whiteTexture_ = 0;
+        bool contextRecoveryEnabled_ = true;
         float maxAnisotropy_ = 1.0f;   // 1.0 means GL_EXT_texture_filter_anisotropic is absent
         int maxTextureUnits_ = 1;
 
