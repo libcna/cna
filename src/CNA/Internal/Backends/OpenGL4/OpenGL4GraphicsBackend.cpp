@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Backends/OpenGL4/OpenGL4GraphicsBackend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "System/InvalidOperationException.hpp"
 
 #include <SDL3/SDL.h>
@@ -2151,6 +2152,18 @@ void main()
         begun_ = false;
     }
 
+    void OpenGL4SpriteBatchBackend::SetCustomEffect(Effect* effect)
+    {
+        // plan_opengl4.md GL4-32: flush any already-batched sprites under the PREVIOUS effect
+        // (built-in or a different custom one) before switching, mirroring
+        // EasyGLSpriteBatchBackend::SetCustomEffect's own identical guard.
+        if (customEffect_ != effect)
+        {
+            FlushBatch();
+            customEffect_ = effect;
+        }
+    }
+
     void OpenGL4SpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
     {
         const int w = texture.GetWidth();
@@ -2279,12 +2292,36 @@ void main()
         float ortho[16];
         combined.ToColumnMajor(ortho);
 
-        OpenGL4RawProgram& prog = owner_->GetOrCreateSpriteProgram();
-        prog.Use();
-        const int projLoc = prog.UniformLocation("uProjection");
-        if (projLoc >= 0) gl4_glUniformMatrix4fv(projLoc, 1, GL_FALSE, ortho);
-        const int texLoc = prog.UniformLocation("uTexture");
-        if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+        // plan_opengl4.md GL4-32: bind the SAME compiled program the custom ShaderEffect itself
+        // owns (Effect::GetEffectBackendPtr(), overridden by ShaderEffect) instead of the
+        // built-in sprite program -- mirrors EasyGLSpriteBatchBackend::FlushBatch's own
+        // customEffect_ dispatch (Task 1077's "bind the same program" fix, applied here from the
+        // start). "projection" is this codebase's established custom-2D-effect uniform-name
+        // convention (see easygl_shader_effect_test.cpp); the built-in program's own
+        // "uProjection"/"uTexture" names are this backend's private internal naming, unrelated to
+        // what a caller-authored shader declares.
+        OpenGL4RawProgram* prog = &owner_->GetOrCreateSpriteProgram();
+        if (customEffect_)
+        {
+            auto* backend = dynamic_cast<OpenGL4EffectBackend*>(customEffect_->GetEffectBackendPtr());
+            if (backend && backend->IsValid())
+                prog = &backend->GetProgram();
+            customEffect_->Apply();
+        }
+
+        prog->Use();
+        if (customEffect_)
+        {
+            const int projLoc = prog->UniformLocation("projection");
+            if (projLoc >= 0) gl4_glUniformMatrix4fv(projLoc, 1, GL_FALSE, ortho);
+        }
+        else
+        {
+            const int projLoc = prog->UniformLocation("uProjection");
+            if (projLoc >= 0) gl4_glUniformMatrix4fv(projLoc, 1, GL_FALSE, ortho);
+            const int texLoc = prog->UniformLocation("uTexture");
+            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+        }
 
         glDisable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);

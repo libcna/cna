@@ -522,6 +522,31 @@
 > real 32-bit index data. All 3 checks passed on the first real run — no backend or test bugs
 > found. Full re-run of the other 22 OpenGL4 CTest suites confirms no regression (23/23 total).
 >
+> **Status (2026-07-22): `GL4-32` (real `SpriteBatch::SetCustomEffect` integration) landed and
+> verified.** Discovered as a separate, newly-found gap while scoping `GL4-30` (not attempted
+> there since it's a separate feature — driving 2D sprite rendering, not 3D
+> `DrawIndexedPrimitives`): `OpenGL4SpriteBatchBackend` had no `SetCustomEffect()` override
+> (inherited the default no-op), so a custom `ShaderEffect` passed to `SpriteBatch::Begin()` was
+> silently ignored — every sprite still rendered with the built-in sprite program regardless.
+> Fixed by adding a `customEffect_` field and a real `SetCustomEffect()` override (flushes any
+> already-batched sprites under the previous effect before switching, mirroring
+> `EasyGLSpriteBatchBackend::SetCustomEffect`'s own guard); `FlushBatch()` now binds the SAME
+> compiled program the custom `ShaderEffect` itself owns (`Effect::GetEffectBackendPtr()`,
+> overridden by `ShaderEffect`) instead of the built-in sprite program when one is set, calls
+> `Effect::Apply()`, and sets `"projection"` — this codebase's established custom-2D-effect
+> uniform-name convention (see `easygl_shader_effect_test.cpp`), distinct from the built-in
+> program's own private `"uProjection"`/`"uTexture"` internal naming.
+>
+> Verified by the new `OpenGL4_ShaderEffectSpriteBatch` CTest (2/2), porting
+> `easygl_shader_effect_test.cpp`'s own scene, methodology, and expected values exactly (desktop
+> GLSL 410 core translation only). A custom shader outputs only the red channel of a sampled
+> white texel, applied via `SpriteBatch` to a sprite drawn over a green background. Check A
+> (sprite centre reads red-tinted `(255,0,0)`, proving the custom program is genuinely bound and
+> driving the draw — the built-in program would leave it plain white) and Check B (a background
+> corner outside the sprite's destination rectangle stays unmodified green `(0,255,0)`, proving no
+> full-screen side effect) both passed exactly on the first real run — no backend or test bugs
+> found. Full re-run of the other 23 OpenGL4 CTest suites confirms no regression (24/24 total).
+>
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
@@ -537,8 +562,10 @@
 >   NOXNA extensions or known simplifications, not missing built-in effect coverage.
 > - ~~**Custom `ShaderEffect`**~~ (NOXNA) — done, `GL4-30` (2026-07-22). New
 >   `OpenGL4EffectBackend`/`params.customEffectBackend` dispatch, verified by
->   `OpenGL4_ShaderEffect3D` (2/2). `SpriteBatch::SetCustomEffect` integration remains a separate,
->   unattempted, non-blocking gap (see this task's own status paragraph). ✅
+>   `OpenGL4_ShaderEffect3D` (2/2). ✅
+> - ~~**`SpriteBatch::SetCustomEffect` integration**~~ (NOXNA) — done, `GL4-32` (2026-07-22). New
+>   `customEffect_` dispatch in `OpenGL4SpriteBatchBackend::FlushBatch`, verified by
+>   `OpenGL4_ShaderEffectSpriteBatch` (2/2). ✅
 > - ~~**`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `params.baseVertex`**~~ — done, `GL4-27`
 >   (2026-07-22). Real `glDrawElementsBaseVertex` call, verified by `OpenGL4_BaseVertex` (2/2). ✅
 > - ~~**`SamplerState` for direct 3D draws**~~ — done, `GL4-26` (2026-07-22). Real bug found+fixed
@@ -614,7 +641,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting`, `OpenGL4_ShaderEffect3D`, `OpenGL4_IndexBuffer32` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting`, `OpenGL4_ShaderEffect3D`, `OpenGL4_IndexBuffer32`, `OpenGL4_ShaderEffectSpriteBatch` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -653,6 +680,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-29` | Real `PreferPerPixelLighting` vertex-lit shader variant — two new dedicated per-vertex-lit programs, `litTextured3DVertexLitProgram_` (stride 32) and `skinned3DVertexLitProgram_` (stride 52/56), ported from `EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram()`/`EnsureSkinnedVertexLitProgram()` — identical Blinn-Phong math to the existing per-pixel programs, moved into the vertex stage and Gouraud-interpolated via new `vLitRGB`/`vSpecularRGB` varyings. `BindProgramForStride`'s stride-32/52/56 cases select between the two via `params.lightingEnabled && !params.preferPerPixelLighting` (XNA's own default gate). | ✅ | `OpenGL4_PreferPerPixelLighting` (6/6): reuses `easygl_basiceffect_preferperpixellighting_test.cpp`'s/`easygl_skinnedeffect_preferperpixellighting_test.cpp`'s exact scene and analytically re-derived expected values verbatim (same ported formula, same oracle applies) — Checks A–C cover `BasicEffect`, D–F cover `SkinnedEffect`. All 6 passed on the first real run (`(127,127,127)` vertex-lit vs `(152,152,152)` pixel-lit, both effects) — no backend or test bugs found. |
 | `GL4-30` | Real custom `ShaderEffect` (`CreateEffectBackend`) — new `OpenGL4EffectBackend` (thin `IEffectBackend` wrapper around one `OpenGL4RawProgram`, modeled on `EasyGLEffectBackend`), plus a `params.customEffectBackend` check + new `BindCustomEffectMatrices` helper at the top of `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (ported from `EasyGLGraphicsBackend`'s own identical helper) that binds the compiled program and its `World`/`View`/`Projection` uniforms directly, bypassing `BindProgramForStride` entirely. | ✅ | `OpenGL4_ShaderEffect3D` (2/2): ports `easygl_shadereffect_3d_test.cpp`'s exact scene/methodology/expected values (desktop GLSL 410 core translation only). Check A (`World=Identity`) and Check B (`World=RotationY(180°)`, same footprint but flipped world normal) both matched exactly (`(200,100,50)`/`(0,0,0)`) on the first real run — no backend or test bugs found. `SpriteBatch::SetCustomEffect` integration deliberately out of scope (separate, larger feature, unattempted on every other backend that has landed `CreateEffectBackend` too). |
 | `GL4-31` | Real 32-bit index buffer support (discovered while scoping `GL4-27`) — `OpenGL4IndexBufferBackend` gained a `thirtyTwoBit_` flag plus real `SetData32`/`SetData32WithOptions` overrides (`GL_UNSIGNED_INT` storage), `IsThirtyTwoBit()` now reports the real flag, `CreateIndexBuffer32()` is now overridden, and every index-buffer draw call site selects `GL_UNSIGNED_INT`/`sizeof(uint32_t)` vs `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` from `IsThirtyTwoBit()` instead of hardcoding 16-bit. | ✅ | `OpenGL4_IndexBuffer32` (3/3): combines `OpenGL4_BaseVertex`'s own shared-vertex-buffer/two-draws methodology with a real `IndexElementSize::ThirtyTwoBits` `IndexBuffer` — a discriminating proof, since a still-16-bit-reinterpreted 32-bit buffer would misread the 6 `uint32_t` indices' raw bytes as 12 `uint16_t` values, producing garbage vertex fetches instead of a clean two-triangle quad. All 3 checks passed on the first real run — no backend or test bugs found. |
+| `GL4-32` | Real `SpriteBatch::SetCustomEffect` integration (discovered while scoping `GL4-30`) — `OpenGL4SpriteBatchBackend` gained a `customEffect_` field and a real `SetCustomEffect()` override; `FlushBatch()` now binds the same compiled program a custom `ShaderEffect` itself owns (`Effect::GetEffectBackendPtr()`) instead of the built-in sprite program when one is set, calls `Effect::Apply()`, and sets `"projection"` (this codebase's established custom-2D-effect uniform-name convention). | ✅ | `OpenGL4_ShaderEffectSpriteBatch` (2/2): ports `easygl_shader_effect_test.cpp`'s exact scene (a red-tint custom shader applied to a white sprite over a green background). Check A (sprite centre reads red-tinted, proving the custom program is genuinely bound) and Check B (background stays unmodified green, proving no full-screen side effect) both passed exactly on the first real run — no backend or test bugs found. |
 
 ---
 
@@ -675,7 +703,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All twenty-three dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All twenty-four dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -786,6 +814,12 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   16-bit one — a discriminating proof, since a still-16-bit-reinterpreted 32-bit buffer would
   misread its raw index bytes and fail to render a clean two-triangle quad at all. Full re-run of
   the other 22 OpenGL4 CTest suites confirmed no regression (23/23 total).
+- `OpenGL4_ShaderEffectSpriteBatch` — 2/2, porting `easygl_shader_effect_test.cpp`'s exact scene:
+  a red-tint custom shader applied via `SpriteBatch::Begin(..., &fx)` to a white sprite over a
+  green background. Sprite centre reads red-tinted `(255,0,0)` (the custom program's own compiled
+  shader genuinely bound, not the built-in one), background corner stays unmodified green
+  `(0,255,0)`. Full re-run of the other 23 OpenGL4 CTest suites confirmed no regression
+  (24/24 total).
 
 ---
 
@@ -866,8 +900,10 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 21. ~~`GL4-31`~~ — real 32-bit index buffer support done and verified 2026-07-22, all ✅
     (`OpenGL4_IndexBuffer32`, 3/3). A newly-discovered gap found while scoping `GL4-27`, picked up
     after the original active plan closed out — see `GL4-31`'s own row.
+22. ~~`GL4-32`~~ — real `SpriteBatch::SetCustomEffect` integration done and verified 2026-07-22,
+    all ✅ (`OpenGL4_ShaderEffectSpriteBatch`, 2/2). A newly-discovered gap found while scoping
+    `GL4-30` — see `GL4-32`'s own row.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
-what's still open (`SpriteBatch::SetCustomEffect` integration found while scoping `GL4-30`,
-Windows/macOS validation, and the permanently-deferred context-loss recovery feature) — these are
-candidates for a fresh scoping pass, not blocking anything above.
+what's still open (Windows/macOS validation, and the permanently-deferred context-loss recovery
+feature) — these are candidates for a fresh scoping pass, not blocking anything above.

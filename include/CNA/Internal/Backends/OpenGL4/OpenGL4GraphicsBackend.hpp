@@ -384,6 +384,10 @@ namespace CNA::Internal::Backends::OpenGL4
         void Begin() override;
         void End() override;
         void SetTransformMatrix(const Matrix& m) override { transform_ = m; }
+        /// plan_opengl4.md GL4-32: lets a custom Microsoft::Xna::Framework::Graphics::ShaderEffect
+        /// (NOXNA) drive 2D SpriteBatch rendering instead of the built-in sprite program, mirroring
+        /// EasyGLGraphicsBackend::SetCustomEffect's own shape.
+        void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override { pendingFilter_ = textureFilter; }
         void SetSamplerAddressMode(int addressU, int addressV) override
         {
@@ -423,6 +427,9 @@ namespace CNA::Internal::Backends::OpenGL4
         int pendingFilter_ = 0;
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1;
+        /// plan_opengl4.md GL4-32: non-owning; set via SetCustomEffect(), matching
+        /// EasyGLGraphicsBackend::customEffect_'s own lifetime convention (caller-owned).
+        Effect* customEffect_ = nullptr;
         const ITextureBackend* currentTexture_ = nullptr;
         std::vector<SpriteVertex> pendingVertices_;
         std::vector<uint16_t> pendingIndices_;

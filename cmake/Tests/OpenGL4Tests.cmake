@@ -170,4 +170,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_indexbuffer32 examples/opengl4_indexbuffer32_test.cpp)
     cna_register_backend_test(NAME OpenGL4_IndexBuffer32 COMMAND cna_test_opengl4_indexbuffer32
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-32: real SpriteBatch::SetCustomEffect integration, found as a separate
+    # gap while scoping GL4-30.
+    cna_opengl4_test(cna_test_opengl4_shadereffect_spritebatch examples/opengl4_shadereffect_spritebatch_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_ShaderEffectSpriteBatch COMMAND cna_test_opengl4_shadereffect_spritebatch
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
