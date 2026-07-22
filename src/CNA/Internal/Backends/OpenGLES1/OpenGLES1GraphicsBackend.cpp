@@ -678,6 +678,18 @@ namespace CNA::Internal::Backends::OpenGLES1
         if (!HasGLExtension("GL_OES_blend_equation_separate"))
             glBlendEquationSeparateOES_ = nullptr;
 
+        // OPENGLES1-92: a 1x1 white carrier texture for the vertex-colour x DiffuseColor combine.
+        // Recreated here rather than in the constructor so it survives DebugRestoreContext().
+        whiteTexture_ = 0;
+        glGenTextures(1, &whiteTexture_);
+        glBindTexture(GL_TEXTURE_2D, whiteTexture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        {
+            static constexpr uint8_t kWhite[4] = {255, 255, 255, 255};
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, kWhite);
+        }
+
         // OPENGLES1-86: anisotropic filtering. The cap is queried rather than assumed -- never
         // request more than the driver grants.
         maxAnisotropy_ = 1.0f;
@@ -1413,6 +1425,51 @@ namespace CNA::Internal::Backends::OpenGLES1
         // `stride`-relative offsets, not raw pointers -- OPENGLES1-73's real VBO is bound to
         // GL_ARRAY_BUFFER by the caller first, so glVertexPointer/glColorPointer/glTexCoordPointer/
         // glNormalPointer all interpret their pointer argument as a byte offset into it.
+        // OPENGLES1-92: XNA multiplies per-vertex Color by BasicEffect.DiffuseColor. Fixed-function
+        // has a single "current colour" input, so the two cannot both feed GL_MODULATE directly --
+        // but a GL_COMBINE stage can multiply GL_PRIMARY_COLOR (the vertex colour) by GL_CONSTANT
+        // (the diffuse tint). The stage needs an enabled texture unit to exist on, hence the 1x1
+        // white carrier texture; the texture's own value never enters the result.
+        //
+        // Only engaged when the combination actually occurs, so every other draw is untouched.
+        bool NeedsVertexColorTimesDiffuse(const GpuDrawParams& params, bool wantColorArray)
+        {
+            if (!wantColorArray || params.lightingEnabled) return false;
+            return params.diffuseColor[0] < 1.0f || params.diffuseColor[1] < 1.0f
+                || params.diffuseColor[2] < 1.0f || params.diffuseColor[3] < 1.0f;
+        }
+
+        void SetupVertexColorTimesDiffuse(unsigned int whiteTexture, const GpuDrawParams& params,
+                                          bool wantTexture)
+        {
+            // Untextured draws put the stage on unit 0; textured draws leave unit 0 doing
+            // texture x primary and chain the tint on unit 1, which the plain-textured branch never
+            // otherwise uses (dual-texture and environment-map draws are separate branches).
+            const GLenum unit = wantTexture ? GL_TEXTURE1 : GL_TEXTURE0;
+            const GLenum src0 = wantTexture ? GL_PREVIOUS : GL_PRIMARY_COLOR;
+
+            glActiveTexture(unit);
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, whiteTexture);
+
+            const float tint[4] = {params.diffuseColor[0], params.diffuseColor[1],
+                                   params.diffuseColor[2], params.diffuseColor[3]};
+            glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, tint);
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, src0);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_CONSTANT);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, src0);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
+            glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_CONSTANT);
+            glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
+
+            glActiveTexture(GL_TEXTURE0);
+        }
+
         void SetupClientArraysForStride(std::size_t stride, bool wantColor, bool wantTexture,
                                         bool wantNormal, bool wantDualTexture = false)
         {
@@ -1921,11 +1978,14 @@ namespace CNA::Internal::Backends::OpenGLES1
         if (!wantColorArray && !params.lightingEnabled)
         {
             // No per-vertex color and no lighting to compute one -- use the flat DiffuseColor as
-            // the constant "current color" GL_MODULATE multiplies the texture sample by. When
-            // vertex color IS enabled, DiffuseColor is not separately multiplied in (no
-            // multiply-both-inputs fixed-function stage without extra GL_COMBINE setup) --
-            // documented limitation, see docs/opengles1-backend.md.
+            // the constant "current color" GL_MODULATE multiplies the texture sample by.
             glColor4f(params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2], params.diffuseColor[3]);
+        }
+        else if (!wantDualTexture && !wantEnvMap
+                 && NeedsVertexColorTimesDiffuse(params, wantColorArray))
+        {
+            // OPENGLES1-92: fold DiffuseColor in on top of the per-vertex colour.
+            SetupVertexColorTimesDiffuse(whiteTexture_, params, wantTexture);
         }
 
         vb.Bind();
@@ -2021,6 +2081,12 @@ namespace CNA::Internal::Backends::OpenGLES1
         if (!wantColorArray && !params.lightingEnabled)
         {
             glColor4f(params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2], params.diffuseColor[3]);
+        }
+        else if (!wantDualTexture && !wantEnvMap
+                 && NeedsVertexColorTimesDiffuse(params, wantColorArray))
+        {
+            // OPENGLES1-92: fold DiffuseColor in on top of the per-vertex colour.
+            SetupVertexColorTimesDiffuse(whiteTexture_, params, wantTexture);
         }
 
         vb.Bind();

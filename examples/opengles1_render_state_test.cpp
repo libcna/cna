@@ -18,6 +18,8 @@
 // Check J -- BlendFunction::Min keeps the darker of the two.
 // Check K -- SupportsCapability(AnisotropicFiltering) agrees with the driver, and a sampler
 //   requesting anisotropy still renders (OPENGLES1-86).
+// Check L -- per-vertex Color and BasicEffect.DiffuseColor multiply together (OPENGLES1-92),
+//   which the deviation table used to call impossible. Neither input alone gives the answer.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs. Requires a genuine OpenGL ES 1.1 driver; see
 // docs/opengles1-backend.md (stock Debian Mesa is built with -Dgles1=disabled and cannot run this).
@@ -107,7 +109,7 @@ namespace
 
 class OpenGLES1RenderStateTest : public Game
 {
-    static constexpr int kChecks = 11;
+    static constexpr int kChecks = 12;
 
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     SpriteBatch* spriteBatch_ = nullptr;
@@ -303,6 +305,38 @@ protected:
                   "SamplerState::MaxAnisotropy is accepted and the textured draw still renders");
 
             dev.getSamplerStatesProperty()[0] = SamplerState::LinearClamp;
+        }
+
+        // ---- Check L: vertex colour x DiffuseColor ---------------------------------------
+        {
+            // Vertex colour (255,128,0) with DiffuseColor (0.5, 1, 1) must give (128,128,0).
+            // Vertex colour alone would be (255,128,0); DiffuseColor alone (128,255,255).
+            dev.Clear(Color::Black);
+            BasicEffect fx(dev);
+            fx.setWorldProperty(Matrix::getIdentityProperty());
+            fx.setViewProperty(Matrix::getIdentityProperty());
+            fx.setProjectionProperty(Matrix::getIdentityProperty());
+            fx.setLightingEnabledProperty(false);
+            fx.VertexColorEnabled = true;
+            fx.setDiffuseColorProperty(Vector3(0.5f, 1.0f, 1.0f));
+            fx.Apply();
+
+            const Color vertexColor(255, 128, 0, 255);
+            const VertexPositionColor quad[6] = {
+                { Vector3(-1.0f, 1.0f, 0.0f), vertexColor },
+                { Vector3(-1.0f, -1.0f, 0.0f), vertexColor },
+                { Vector3(1.0f, -1.0f, 0.0f), vertexColor },
+                { Vector3(-1.0f, 1.0f, 0.0f), vertexColor },
+                { Vector3(1.0f, -1.0f, 0.0f), vertexColor },
+                { Vector3(1.0f, 1.0f, 0.0f), vertexColor },
+            };
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+
+            const Color got = readPixel(dev, mid, mid);
+            std::printf("       (vertex colour x DiffuseColor = %d,%d,%d)\n",
+                        got.getRProperty(), got.getGProperty(), got.getBProperty());
+            check(colorNear(got, Color(128, 128, 0), 12),
+                  "per-vertex Color and DiffuseColor multiply together");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);

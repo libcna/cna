@@ -788,6 +788,9 @@ namespace CNA::Internal::Backends::OpenGLES1
         // reported outwards; a driver that silently ignores the request must not be believed.
         int requestedMultiSampleCount_ = 1;
         int actualMultiSampleCount_ = 0;
+        // 1x1 white texture used only as a carrier for the GL_COMBINE stage that multiplies vertex
+        // colour by DiffuseColor (OPENGLES1-92) -- the texture itself contributes nothing.
+        unsigned int whiteTexture_ = 0;
         float maxAnisotropy_ = 1.0f;   // 1.0 means GL_EXT_texture_filter_anisotropic is absent
         int maxTextureUnits_ = 1;
 
