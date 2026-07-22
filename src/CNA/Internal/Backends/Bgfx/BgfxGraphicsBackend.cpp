@@ -319,6 +319,7 @@ namespace CNA::Internal::Backends::Bgfx
         // In single-threaded bgfx mode (typical on Linux) the first frame() suffices.
         for (int attempt = 0; attempt < 3 && !readbackCallback_.screenshotReady; ++attempt)
             bgfx::frame();
+        spriteVpValid_ = false; // REMED-GFX-072: sprite viewport is per-frame; clear for the next one.
 
         if (!readbackCallback_.screenshotReady)
             throw std::runtime_error(
@@ -1351,15 +1352,44 @@ namespace CNA::Internal::Backends::Bgfx
         // comment). Never caught before because no earlier test both rendered into a
         // differently-sized RT AND could pixel-verify the result (blocked by the separate Task
         // 873 SpriteBatch RT-sampling cast bug, fixed alongside this one).
-        const uint16_t viewWidth  = (spriteViewId != 0 && currentRtWidth_  > 0) ? currentRtWidth_  : cachedWidth;
-        const uint16_t viewHeight = (spriteViewId != 0 && currentRtHeight_ > 0) ? currentRtHeight_ : cachedHeight;
+        const uint16_t fullViewWidth  = (spriteViewId != 0 && currentRtWidth_  > 0) ? currentRtWidth_  : cachedWidth;
+        const uint16_t fullViewHeight = (spriteViewId != 0 && currentRtHeight_ > 0) ? currentRtHeight_ : cachedHeight;
 
-        bgfx::setViewRect(spriteViewId, 0, 0, viewWidth, viewHeight);
+        // REMED-GFX-072: honor a custom GraphicsDevice.Viewport for the sprite view. XNA/FNA build
+        // the SpriteBatch ortho from Viewport.Width/Height (CreateOrthographicOffCenter(0,
+        // Viewport.Width, Viewport.Height, 0)) with a rasterizer viewport at Viewport.X/Y/W/H, so a
+        // sprite at viewport-local (0,0) lands at the target pixel (Viewport.X, Viewport.Y) at 1:1
+        // pixel scale. In bgfx the view rect is BOTH the rasterizer viewport AND the region that
+        // setViewClear() clears, so we CANNOT shrink the sprite view rect to the sub-region without
+        // scoping Clear() to it (Clear must clear the whole target -- XNA semantics). Instead we keep
+        // the view rect full and use an OFFSET ortho: screen = Viewport.XY + local, which reproduces
+        // the exact XNA placement and 1:1 scale over the full target. The viewport is the one captured
+        // at sprite-submit time (spriteVp*, see SubmitSprite), so it survives a viewport restore
+        // before Present/readback. Default full-target viewport keeps the prior full-target ortho.
+        // Deviation vs a true rasterizer viewport: a sprite whose local coordinates exceed the
+        // Viewport is not hard-clipped at the Viewport edge (only at the target edge); acceptable
+        // because SpriteBatch content is authored in viewport-local space. Multiple differing
+        // viewports on one view in one frame remain last-wins (REMED-GFX-065).
+        const bool spriteCustomVp = spriteVpValid_ && spriteVpSet_ && spriteVpW_ > 0 && spriteVpH_ > 0 &&
+            (spriteVpX_ != 0 || spriteVpY_ != 0 || spriteVpW_ != fullViewWidth || spriteVpH_ != fullViewHeight);
+
+        bgfx::setViewRect(spriteViewId, 0, 0, fullViewWidth, fullViewHeight);
 
         float ortho[16];
-        bx::mtxOrtho(ortho, 0.0f, static_cast<float>(viewWidth), static_cast<float>(viewHeight), 0.0f, 0.0f,
-                     1000.0f, 0.0f,
-                     bgfx::getCaps()->homogeneousDepth);
+        if (spriteCustomVp)
+        {
+            const float vx = static_cast<float>(spriteVpX_);
+            const float vy = static_cast<float>(spriteVpY_);
+            bx::mtxOrtho(ortho, -vx, static_cast<float>(fullViewWidth) - vx,
+                         static_cast<float>(fullViewHeight) - vy, -vy, 0.0f, 1000.0f, 0.0f,
+                         bgfx::getCaps()->homogeneousDepth);
+        }
+        else
+        {
+            bx::mtxOrtho(ortho, 0.0f, static_cast<float>(fullViewWidth), static_cast<float>(fullViewHeight),
+                         0.0f, 0.0f, 1000.0f, 0.0f,
+                         bgfx::getCaps()->homogeneousDepth);
+        }
         // Task 808: fold in SpriteBatch::Begin()'s transformMatrix (identity when not explicitly
         // set, so this is a no-op for ordinary 3D draws sharing this same view -- 3D draws supply
         // their own world-view-projection via a per-draw uniform and never read bgfx's built-in
@@ -1392,6 +1422,7 @@ namespace CNA::Internal::Backends::Bgfx
     {
         EnsureViewState();
         bgfx::frame();
+        spriteVpValid_ = false; // REMED-GFX-072: sprite viewport is per-frame; clear for the next one.
     }
 
     void BgfxGraphicsBackend::SetSwapInterval(int interval)
@@ -1437,6 +1468,14 @@ namespace CNA::Internal::Backends::Bgfx
         {
             return;
         }
+
+        // REMED-GFX-072: capture the GraphicsDevice.Viewport active for THIS sprite before
+        // EnsureViewState sizes/places the sprite view, so a custom sub-Viewport survives a viewport
+        // restore before Present/readback (bgfx applies view state at frame(); see spriteVp* decl).
+        spriteVpValid_ = true;
+        spriteVpSet_ = viewportSet_;
+        spriteVpX_ = viewportX_; spriteVpY_ = viewportY_;
+        spriteVpW_ = viewportW_; spriteVpH_ = viewportH_;
 
         EnsureViewState();
 

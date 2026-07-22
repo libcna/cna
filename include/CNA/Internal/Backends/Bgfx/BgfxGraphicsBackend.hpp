@@ -425,6 +425,16 @@ namespace CNA::Internal::Backends::Bgfx
         // into EnsureViewState() to avoid entangling the shared 2D SpriteBatch view-rect reset.
         uint16_t viewportX_ = 0, viewportY_ = 0, viewportW_ = 0, viewportH_ = 0;
         bool     viewportSet_ = false;
+        // REMED-GFX-072: the GraphicsDevice.Viewport captured at SpriteBatch-submit time. bgfx view
+        // state (setViewRect/setViewTransform) is per-view and applied at frame(); Present()/
+        // ReadBackbuffer() may re-run EnsureViewState() after the game has restored the viewport, so
+        // the sprite view must be sized/placed from the viewport that was live when the sprite was
+        // submitted -- not the current one. Single custom viewport per view/frame only; multiple
+        // differing viewports on one view in one frame remain last-wins (REMED-GFX-065). spriteVpValid_
+        // is reset after each bgfx::frame().
+        uint16_t spriteVpX_ = 0, spriteVpY_ = 0, spriteVpW_ = 0, spriteVpH_ = 0;
+        bool     spriteVpSet_ = false;
+        bool     spriteVpValid_ = false;
         // Stencil state (per-draw-call via bgfx::setStencil)
         uint32_t stencilFront_ = BGFX_STENCIL_NONE;
         uint32_t stencilBack_  = BGFX_STENCIL_NONE;

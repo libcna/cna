@@ -939,4 +939,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_SkinnedEffect_VertexColor COMMAND cna_test_bgfx_skinnedeffect_vertexcolor
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
+    # (Viewport.Width/Height), not the full target. Bgfx's sprite view built its ortho from the
+    # RT/window dims and set the sprite view rect to the full target (ApplyViewportOverride was wired
+    # only into the 3D path), so a custom sub-Viewport was ignored for sprites. The sprite view must
+    # project by Viewport.W/H and setViewRect the sub-region. (Multiple viewports on one view in one
+    # frame remain last-wins -- REMED-GFX-065 -- so only the single-custom-viewport case is asserted.)
+    cna_bgfx_test(cna_test_bgfx_spritebatch_custom_viewport
+                  examples/spritebatch_custom_viewport_test.cpp)
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_CustomViewport COMMAND cna_test_bgfx_spritebatch_custom_viewport
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
 endif()
