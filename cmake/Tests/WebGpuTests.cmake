@@ -191,6 +191,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_RenderTargetCube COMMAND cna_test_webgpu_rendertargetcube
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-019: SpriteBatch drawn INTO an off-screen RenderTarget2D of a different size than
+    # the backbuffer must map its destination rectangle in the render target's OWN pixel space, not
+    # the backbuffer's (QueueSprite() previously divided clip-space by physicalWidth_/physicalHeight_
+    # + ComputeLogicalViewport() unconditionally). Asymmetric 96x72 backbuffer vs 48x32/64x40 render
+    # targets, transformMatrix, different-sized targets, transition isolation, orientation control.
+    cna_webgpu_test(cna_test_webgpu_spritebatch_rendertarget examples/webgpu_spritebatch_rendertarget_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SpriteBatch_RenderTarget COMMAND cna_test_webgpu_spritebatch_rendertarget
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-52: real, render-pass-based, genuinely-linear-filtered mip generation for a plain
     # Texture2D/TextureCube from level 0 -- previously mipMap=true only pre-allocated empty
     # levels. A hard-edged red/blue stripe proves genuine LINEAR blending at the boundary (not a

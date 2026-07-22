@@ -799,6 +799,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_SpriteBatch_ScaleOverloads COMMAND cna_test_easygl_spritebatch_scale
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-019 cross-backend parity: SpriteBatch INTO a RenderTarget2D whose size differs
+        # from the backbuffer must place its destination rectangle in the render target's own pixel
+        # space. Same geometry/probes as examples/webgpu_spritebatch_rendertarget_test.cpp, so EasyGL
+        # (already render-target-aware) is an independent oracle for the WebGPU fix's expected bounds.
+        cna_easygl_test(cna_test_easygl_spritebatch_rendertarget_size
+                        examples/easygl_spritebatch_rendertarget_size_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_RenderTargetSize COMMAND cna_test_easygl_spritebatch_rendertarget_size
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 419: SpriteBatch Draw sourceRectangle must crop, not stretch the whole texture
         cna_easygl_test(cna_test_easygl_spritebatch_sourcerect
                         examples/easygl_spritebatch_sourcerect_test.cpp)
