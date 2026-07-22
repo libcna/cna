@@ -39,6 +39,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-073: SpriteBatch must honor a custom GraphicsDevice.Viewport (viewport-local
+    # coordinates, Viewport.X/Y placement, Width/Height extent, viewport clipping) -- the Software
+    # counterpart of the GFX-072 GPU-backend SpriteBatch viewport campaign.
+    cna_software_test(cna_test_software_spritebatch_viewport examples/software_spritebatch_viewport_test.cpp)
+    cna_register_backend_test(NAME Software_SpriteBatch_CustomViewport COMMAND cna_test_software_spritebatch_viewport
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
