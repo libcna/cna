@@ -451,6 +451,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_MultiViewport COMMAND cna_test_bgfx_multi_viewport
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-084: two SpriteBatch batches sharing the SAME GraphicsDevice.Viewport but a DIFFERENT
+    # Begin(transformMatrix) in one frame must each render under their own transform. bgfx
+    # setViewTransform is per-view/last-wins and GFX-065's segmentation keys only the viewport, so a
+    # transform-only change collapsed onto one view id -> last transform won for both. Covers translation
+    # + scale + A->B->A ordering + same-transform reuse + RenderTarget2D + 32-transform stress +
+    # viewport/transform composition + default/identity/custom.
+    cna_bgfx_test(cna_test_bgfx_spritebatch_transform
+                  examples/bgfx_spritebatch_transform_test.cpp)
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_Transform COMMAND cna_test_bgfx_spritebatch_transform
+        TIMEOUT 90 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-066: per-draw ScissorRectangle must clip on FBO-bound (render-target) views too
     cna_bgfx_test(cna_test_bgfx_rendertarget_scissor
                   examples/bgfx_rendertarget_scissor_test.cpp)
