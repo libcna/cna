@@ -671,6 +671,10 @@ namespace CNA::Internal::Backends::Vulkan
     VulkanRenderTargetBackend::~VulkanRenderTargetBackend()
     {
         if (owner_) {
+            // REMED-GFX-074: drop any deferred work still queued into this target BEFORE its GPU
+            // resources are freed, otherwise the raw VulkanRTSource* left in activeBatches_/
+            // pending3D_/clearedRTs_ dangles and the next Present dereferences freed memory.
+            owner_->PurgeDeferredWorkForTarget(this);
             auto& list = owner_->liveRenderTargets_;
             list.erase(std::remove(list.begin(), list.end(), this), list.end());
             if (owner_->currentRT_ == this) owner_->currentRT_ = nullptr;
@@ -771,6 +775,62 @@ namespace CNA::Internal::Backends::Vulkan
 
             srcW = dstW; srcH = dstH;
         }
+    }
+
+    // REMED-GFX-074: read this render target's colour image back to CPU memory. Because Vulkan
+    // defers every draw to a Present-time record, first flush any sprite/3D work queued into this
+    // target so colorImage_ actually holds the rendered result (FlushDeferredRenderTarget is a
+    // no-op when nothing is pending -- e.g. after a previous Present already recorded the pass, in
+    // which case the RT render pass's SHADER_READ_ONLY_OPTIMAL finalLayout / the constructor's
+    // initial transition already left colorImage_ readable). Then copy the requested sub-rectangle
+    // via a host-visible staging buffer, mirroring VulkanTexture3DBackend::GetData, applying the
+    // swapchain BGRA->RGBA swap since the RT colour image uses swapchainFormat_.
+    void VulkanRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                            void* data, int dataLength) const
+    {
+        if (!owner_ || colorImage_ == VK_NULL_HANDLE || !data || dataLength <= 0) return;
+
+        owner_->FlushDeferredRenderTarget(const_cast<VulkanRenderTargetBackend*>(this));
+
+        VkDevice dev = owner_->device_;
+        VkBuffer       stagingBuf = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMem = VK_NULL_HANDLE;
+        void*          mapped     = nullptr;
+        owner_->CreateBuffer(static_cast<VkDeviceSize>(dataLength),
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuf, stagingMem, &mapped);
+
+        // colorImage_ level 0 is always in SHADER_READ_ONLY_OPTIMAL outside a render pass (the RT
+        // render pass finalLayout, and the constructor's init barrier for a never-rendered target).
+        owner_->TransitionImageLayout(colorImage_,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
+        region.imageOffset      = { x, y, 0 };
+        region.imageExtent      = { static_cast<uint32_t>(w), static_cast<uint32_t>(h), 1 };
+        vkCmdCopyImageToBuffer(cb, colorImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                stagingBuf, 1, &region);
+        owner_->EndOneTimeCommands(cb);
+
+        owner_->TransitionImageLayout(colorImage_,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        const bool isBGRA = (owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_UNORM ||
+                             owner_->swapchainFormat_ == VK_FORMAT_B8G8R8A8_SRGB);
+        auto*       dst = static_cast<uint8_t*>(data);
+        const auto* src = static_cast<const uint8_t*>(mapped);
+        const int   pixels = dataLength / 4;
+        for (int i = 0; i < pixels; ++i) {
+            const int o = i * 4;
+            if (isBGRA) { dst[o+0] = src[o+2]; dst[o+1] = src[o+1]; dst[o+2] = src[o+0]; dst[o+3] = src[o+3]; }
+            else        { dst[o+0] = src[o+0]; dst[o+1] = src[o+1]; dst[o+2] = src[o+2]; dst[o+3] = src[o+3]; }
+        }
+
+        vkDestroyBuffer(dev, stagingBuf, nullptr);
+        vkFreeMemory(dev, stagingMem, nullptr);
     }
 
     // =========================================================================
@@ -6251,8 +6311,13 @@ namespace CNA::Internal::Backends::Vulkan
             clearedRTs_.push_back(currentRT_);
     }
 
-    void VulkanGraphicsBackend::RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex)
+    void VulkanGraphicsBackend::RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
+                                                    RecordMode mode, VulkanRTSource* onlyRT)
     {
+        // REMED-GFX-074: RenderTargetsOnly records just `onlyRT`'s off-screen pass for a GetData
+        // readback flush -- Phase 2 (backbuffer) and the backbuffer readback are skipped, and only
+        // this target's deferred entries are consumed at the end (see the cleanup below).
+        const bool rtOnly = (mode == RecordMode::RenderTargetsOnly);
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         if (vkBeginCommandBuffer(cb, &bi) != VK_SUCCESS)
@@ -6268,6 +6333,10 @@ namespace CNA::Internal::Backends::Vulkan
         {
             std::vector<VulkanOcclusionQueryBackend*> queriesThisFrame;
             for (const auto& draw : pending3D_) {
+                // REMED-GFX-074: in a RenderTargetsOnly readback flush only `onlyRT`'s draws are
+                // recorded, so only their queries are reset/recorded here; every other query is
+                // left untouched for the real Present().
+                if (rtOnly && draw.rt != onlyRT) continue;
                 if (draw.occlusionQuery &&
                     std::find(queriesThisFrame.begin(), queriesThisFrame.end(), draw.occlusionQuery)
                         == queriesThisFrame.end())
@@ -6883,6 +6952,12 @@ namespace CNA::Internal::Backends::Vulkan
             if (draw.rt && std::find(usedRTs.begin(), usedRTs.end(), draw.rt) == usedRTs.end())
                 usedRTs.push_back(draw.rt);
 
+        // REMED-GFX-074: a readback flush records exactly one target's pass. FlushDeferredRenderTarget
+        // only invokes this mode when `onlyRT` genuinely has pending work, so forcing it into usedRTs
+        // (even if the only queued entry was a bare Clear()) is always correct and never over-clears
+        // an untouched target.
+        if (rtOnly) { usedRTs.clear(); if (onlyRT) usedRTs.push_back(onlyRT); }
+
         for (auto* rt : usedRTs) {
             const uint32_t nColor = rt->GetColorAttachmentCount();
             const bool rtMsaa = rt->WantsMsaa();
@@ -6926,6 +7001,24 @@ namespace CNA::Internal::Backends::Vulkan
 
             // Task 878: regenerate this RT's mip chain (no-op unless it actually owns mips).
             rt->MaybeGenerateMips(cb);
+        }
+
+        // REMED-GFX-074: a RenderTargetsOnly readback flush stops here -- no backbuffer pass, no
+        // swapchain, no backbuffer readback. Consume only `onlyRT`'s deferred entries so Present()
+        // does not replay them (no double-render), leaving every other target's and the
+        // backbuffer's pending work untouched, then close the command buffer.
+        if (rtOnly) {
+            activeBatches_.erase(std::remove_if(activeBatches_.begin(), activeBatches_.end(),
+                [onlyRT](const std::pair<std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot>,
+                                         VulkanRTSource*>& p) { return p.second == onlyRT; }),
+                activeBatches_.end());
+            pending3D_.erase(std::remove_if(pending3D_.begin(), pending3D_.end(),
+                [onlyRT](const Pending3DDraw& d) { return d.rt == onlyRT; }), pending3D_.end());
+            clearedRTs_.erase(std::remove(clearedRTs_.begin(), clearedRTs_.end(), onlyRT),
+                              clearedRTs_.end());
+            if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+                throw std::runtime_error("vkEndCommandBuffer failed");
+            return;
         }
 
         // ---- Phase 2: backbuffer pass ----
@@ -7455,6 +7548,58 @@ namespace CNA::Internal::Backends::Vulkan
         d.blendFactorR = blendFactorR_; d.blendFactorG = blendFactorG_;
         d.blendFactorB = blendFactorB_; d.blendFactorA = blendFactorA_;
         pending3D_.push_back(std::move(d));
+    }
+
+    // REMED-GFX-074: see the header. Removes every deferred entry (sprite batch, 3D draw, bare
+    // Clear()) targeting `rt`, so a render target destroyed before Present() leaves no dangling
+    // VulkanRTSource* behind for RecordCommandBuffer() to dereference.
+    void VulkanGraphicsBackend::PurgeDeferredWorkForTarget(VulkanRTSource* rt)
+    {
+        if (!rt) return;
+        activeBatches_.erase(std::remove_if(activeBatches_.begin(), activeBatches_.end(),
+            [rt](const std::pair<std::unique_ptr<VulkanSpriteBatchBackend::BatchSnapshot>,
+                                 VulkanRTSource*>& p) { return p.second == rt; }),
+            activeBatches_.end());
+        pending3D_.erase(std::remove_if(pending3D_.begin(), pending3D_.end(),
+            [rt](const Pending3DDraw& d) { return d.rt == rt; }), pending3D_.end());
+        clearedRTs_.erase(std::remove(clearedRTs_.begin(), clearedRTs_.end(), rt),
+                          clearedRTs_.end());
+    }
+
+    // REMED-GFX-074: record + submit ONLY `rt`'s off-screen pass now (no present) so its colour
+    // image holds the queued sprite/3D result before a GetData readback, then drop the consumed
+    // entries so the eventual Present() does not replay them. No-op when nothing is queued for
+    // `rt` (its colour image already holds the last rendered content). A device wait first ensures
+    // no in-flight frame is still using the per-frame ring buffers / UBO pools this record reuses.
+    void VulkanGraphicsBackend::FlushDeferredRenderTarget(VulkanRTSource* rt)
+    {
+        if (!initialized_ || !rt || device_ == VK_NULL_HANDLE) return;
+
+        bool pending = false;
+        for (const auto& p : activeBatches_) if (p.second == rt) { pending = true; break; }
+        if (!pending) for (const auto& d : pending3D_) if (d.rt == rt) { pending = true; break; }
+        if (!pending) for (auto* r : clearedRTs_)      if (r == rt)    { pending = true; break; }
+        if (!pending) return;
+
+        vkDeviceWaitIdle(device_);
+
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool        = commandPool_;
+        ai.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ai.commandBufferCount = 1;
+        VkCommandBuffer cb = VK_NULL_HANDLE;
+        if (vkAllocateCommandBuffers(device_, &ai, &cb) != VK_SUCCESS) return;
+
+        RecordCommandBuffer(cb, 0, RecordMode::RenderTargetsOnly, rt);
+
+        VkSubmitInfo si{};
+        si.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        si.commandBufferCount = 1;
+        si.pCommandBuffers    = &cb;
+        vkQueueSubmit(graphicsQueue_, 1, &si, VK_NULL_HANDLE);
+        vkQueueWaitIdle(graphicsQueue_);
+        vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
     }
 
     void VulkanGraphicsBackend::SetStringMarkerEXT(const char* marker)
@@ -9060,9 +9205,12 @@ namespace CNA::Internal::Backends::Vulkan
     VulkanRenderTargetCubeBackend::~VulkanRenderTargetCubeBackend()
     {
         if (owner_) {
-            // Clear currentRT_ if it points to any of our face proxies.
+            // REMED-GFX-074: purge deferred work queued into any of this cube's 6 face proxies and
+            // clear currentRT_ if it points to one, before their GPU resources are freed -- same
+            // dangling-VulkanRTSource* hazard as the 2D render target destructor.
             for (auto& fp : faceProxies_) {
-                if (owner_->currentRT_ == &fp) { owner_->currentRT_ = nullptr; break; }
+                owner_->PurgeDeferredWorkForTarget(&fp);
+                if (owner_->currentRT_ == &fp) owner_->currentRT_ = nullptr;
             }
         }
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;

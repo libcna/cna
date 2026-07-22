@@ -173,6 +173,17 @@ namespace CNA::Internal::Backends::Vulkan
         // (see VulkanGraphicsBackend::RecordCommandBuffer). No-op when mipMap was false.
         void MaybeGenerateMips(VkCommandBuffer cb) override;
 
+        // REMED-GFX-074: real GPU readback of this render target's colour image so that
+        // RenderTarget2D::GetData() observes prior sprite/3D rendering into it even BEFORE
+        // Present() runs. Vulkan defers all draw work to a single Present-time record, so this
+        // first flushes any deferred passes queued into this target (FlushDeferredRenderTarget),
+        // then copies colorImage_ back via a host-visible staging buffer -- mirroring
+        // VulkanTexture3DBackend::GetData's pattern, plus the swapchain BGRA->RGBA channel swap
+        // (the RT colour image uses swapchainFormat_). Pre-fix this was the unimplemented base
+        // no-op, so a RenderTarget2D read back before Present returned all-zeros.
+        void GetData(int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
+
         void ReleaseVulkanResources();
         void DisconnectOwner() { owner_ = nullptr; }
 
@@ -1521,7 +1532,31 @@ namespace CNA::Internal::Backends::Vulkan
         void CleanupSwapchain();
 
         // ---- Frame recording ----
-        void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex);
+        // REMED-GFX-074: Full records the whole deferred frame (all render-target passes + the
+        // backbuffer pass) and clears every pending queue, as before. RenderTargetsOnly records
+        // ONLY `onlyRT`'s off-screen pass into a transient command buffer for a mid-frame GetData
+        // readback flush -- it skips the backbuffer pass entirely (no swapchain image needed, so
+        // `imageIndex` is unused) and consumes only that target's deferred entries, leaving every
+        // other target's and the backbuffer's pending work intact for the eventual real Present().
+        enum class RecordMode { Full, RenderTargetsOnly };
+        void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex,
+                                 RecordMode mode = RecordMode::Full,
+                                 VulkanRTSource* onlyRT = nullptr);
+
+        // REMED-GFX-074: drop every deferred sprite-batch / 3D-draw / clear entry whose target is
+        // `rt` from the pending queues, so a render target destroyed before Present() cannot leave
+        // a dangling VulkanRTSource* for RecordCommandBuffer() to dereference. Called from each
+        // render-target backend destructor. A destroyed target is unobservable (its GetData can no
+        // longer be called, and sampling its freed image is already broken independently), so
+        // discarding its unflushed draws is observationally identical to XNA's eager model where
+        // those draws had already executed by the time the resource was disposed.
+        void PurgeDeferredWorkForTarget(VulkanRTSource* rt);
+
+        // REMED-GFX-074: if `rt` has pending deferred work, record + submit ONLY its off-screen
+        // pass now (no present, no swapchain, no frame-bookkeeping advance) so its colour image
+        // holds the rendered result before a GetData readback, then drop the consumed entries so
+        // Present() never replays them (no double-render). No-op if nothing is queued for `rt`.
+        void FlushDeferredRenderTarget(VulkanRTSource* rt);
 
         // Submits one frame (render + optional deferred readback copy). When deferSwap is
         // true the swapchain image is acquired, rendered and the GPU is waited on, but
