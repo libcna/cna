@@ -116,4 +116,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_d3d11_ctest_command(_d3d11_alphatest_fog_cmd cna_test_d3d11_alphatest_fog)
     cna_register_backend_test(NAME D3D11_AlphaTest_Fog COMMAND ${_d3d11_alphatest_fog_cmd}
         TIMEOUT 60 LABELS "D3D11")
+
+    # REMED-GFX-072: D3D11 is the XNA-CORRECT ORACLE for SpriteBatch custom-Viewport behavior
+    # (D3D11SpriteBatchBackend feeds the sprite2d ViewportSize from the LIVE viewport via
+    # RSGetViewports, so its projection is already viewport-relative). This runs the SAME conformance
+    # test the fixed backends run, and must pass 10/10 with NO D3D11 code change -- proving the
+    # viewport-relative contract the other backends were corrected to match.
+    cna_d3d11_test(cna_test_d3d11_spritebatch_custom_viewport examples/spritebatch_custom_viewport_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_spritebatch_custom_viewport_cmd cna_test_d3d11_spritebatch_custom_viewport)
+    cna_register_backend_test(NAME D3D11_SpriteBatch_CustomViewport COMMAND ${_d3d11_spritebatch_custom_viewport_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 endif()
