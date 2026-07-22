@@ -11,7 +11,9 @@
 // Check C -- EnvironmentMapEffect renders using its cube map.
 // Check D -- a simulated context loss followed by a restore leaves the device drawing correctly.
 // Check E -- ...and a texture uploaded before the loss still samples correctly afterwards, i.e.
-//   the backend really re-uploaded it rather than leaving a dead GL name bound.
+//   the backend really re-uploaded it rather than leaving a dead GL name bound...
+// Check F -- ...as does an indexed draw out of vertex/index buffers filled before the loss
+//   (OPENGLES1-80), which would otherwise render nothing from dead buffer names.
 //
 // Both multitexturing paths are optional on ES 1.1 (dual texture needs GL_MAX_TEXTURE_UNITS >= 2,
 // environment mapping needs GL_OES_texture_cube_map). When the driver lacks them the backend
@@ -36,6 +38,11 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -258,6 +265,57 @@ protected:
                         afterLoss.getRProperty(), afterLoss.getGProperty(), afterLoss.getBProperty());
             check(colorNear(afterLoss, Color(128, 128, 128), 24),
                   "context loss -- a texture uploaded before the loss still samples after restore");
+        }
+
+        // ---- Check F: buffers survive the loss too (OPENGLES1-80) -------------------------
+        {
+            VertexDeclaration decl(16, {
+                VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            });
+            const std::vector<VertexPositionColor> verts = {
+                { Vector3(-1.0f, 1.0f, 0.0f), Color::Lime },
+                { Vector3(-1.0f, -1.0f, 0.0f), Color::Lime },
+                { Vector3(1.0f, -1.0f, 0.0f), Color::Lime },
+                { Vector3(1.0f, 1.0f, 0.0f), Color::Lime },
+            };
+            const std::vector<std::uint16_t> indices = { 0, 1, 2, 0, 2, 3 };
+
+            // Fill both buffers, THEN lose the context -- nothing is re-uploaded afterwards, so
+            // the draw can only work if the backend rebuilt them itself.
+            VertexBuffer vb(dev, decl, static_cast<int>(verts.size()), BufferUsage::None);
+            vb.SetData(verts.data(), 0, static_cast<int>(verts.size()));
+            IndexBuffer ib(dev, IndexElementSize::SixteenBits,
+                           static_cast<int>(indices.size()), BufferUsage::None);
+            ib.SetData(indices.data(), 0, static_cast<int>(indices.size()));
+
+            backend.DebugSimulateContextLoss();
+            backend.DebugRestoreContext();
+
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
+            dev.setBlendStateProperty(BlendState::Opaque);
+
+            dev.Clear(Color::Black);
+            dev.SetVertexBuffer(&vb);
+            dev.SetIndexBuffer(&ib);
+            BasicEffect fx(dev);
+            fx.setWorldProperty(Matrix::getIdentityProperty());
+            fx.setViewProperty(Matrix::getIdentityProperty());
+            fx.setProjectionProperty(Matrix::getIdentityProperty());
+            fx.VertexColorEnabled = true;
+            fx.Apply();
+            dev.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0,
+                                      static_cast<int>(verts.size()), 0, 2);
+
+            const Color got = readPixel(dev, mid, mid);
+            std::printf("       (pre-loss buffers after restore = %d,%d,%d)\n",
+                        got.getRProperty(), got.getGProperty(), got.getBProperty());
+            check(colorNear(got, Color::Lime),
+                  "context loss -- vertex/index buffers filled before the loss still draw after restore");
+
+            dev.SetIndexBuffer(nullptr);
+            dev.SetVertexBuffer(nullptr);
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);

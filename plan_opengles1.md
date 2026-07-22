@@ -86,8 +86,9 @@
 > - `OPENGLES1-11` — a texture uploaded before a context loss sampled as plain white afterwards.
 >   The context was recreated but no GPU object was ever rebuilt.
 >
-> All three are fixed. Buffer contents still do not survive a context loss — tracked honestly as
-> `OPENGLES1-80` rather than left implicit.
+> All three are fixed. A fourth gap found the same way — vertex/index buffer contents also died
+> with the context — was tracked as `OPENGLES1-80` and has since been fixed too, so a restored
+> context now rebuilds textures *and* buffers.
 >
 > **What is still 🟨, and why.** `OPENGLES1-9`/`10` (virtual resolution and window↔logical
 > transforms), `OPENGLES1-13` (the `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled`
@@ -190,8 +191,9 @@
    against it, flipping 25 rows to ✅ and exposing three real backend defects (see the finding
    above). Five rows remain uncovered, none of them blocked.
 7. `OPENGLES1-79` — ✅ done 2026-07-22 (the five new test executables above).
-8. **Next:** `OPENGLES1-80` (buffer contents across a context loss), the five uncovered rows listed
-   in `OPENGLES1-77`, then `OPENGLES1-78` (cross-backend pixel parity).
+8. `OPENGLES1-80` — ✅ done 2026-07-22 (buffer contents now survive a context loss).
+9. **Next:** the five uncovered rows listed in `OPENGLES1-77`, then `OPENGLES1-78` (cross-backend
+   pixel parity).
 
 ---
 
@@ -252,7 +254,7 @@ above for the technical detail behind each row.
 | OPENGLES1-77 | Runtime verification on an ES1-capable driver — flip each `🟨` row to `✅` as real coverage confirms it | 🟨 (largely done) | Driver blocker removed 2026-07-22 (Debian's Mesa is built `-Dgles1=disabled`; a local `-Dgles1=enabled` softpipe build runs the backend — recipe in `docs/opengles1-backend.md`, environment in `scripts/opengles1-test-env.sh`). Six test executables now pass against a real `OpenGL ES-CM 1.1` context, flipping OPENGLES1-5/7/8/11/12/14/15/16/17/19/21/22/23/24/25/26/27/28/29/32/71/72/73/74/76 to ✅ and finding three real defects on the way (OPENGLES1-24 inverted alpha test, OPENGLES1-72 missing render-target readback, OPENGLES1-11 textures not restored). Still 🟨: OPENGLES1-9/10 (virtual resolution + window/logical transforms), OPENGLES1-13 (the SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled trio, as distinct from the state objects), OPENGLES1-18 (SpriteBatch SetTransformMatrix) and OPENGLES1-20 (`glBlendFuncSeparateOES`/`glBlendEquationOES`) — none blocked, simply not covered yet. |
 | OPENGLES1-78 | Cross-backend pixel-parity test (same scene rendered on OPENGLES1 vs. an already-verified backend) | ⬜ | Same shape as `plan_webgpu.md`'s own `WEBGPU-123`; needs OPENGLES1-77 first. |
 | OPENGLES1-79 | Runtime coverage for the rows the baseline smoke test does not reach | ✅ | Done 2026-07-22. Five new test executables (`RenderState`, `ViewportScissor`, `LightingFogAlphaTest`, `BuffersRenderTarget`, `MultitextureContextLoss`) covering blend/depth/cull/sampler state, viewport and scissor, lighting/fog/alpha test, real VBO/IBO draws, render targets, wireframe, dual texture, environment mapping and context loss — 37 checks, all passing. Three backend defects found and fixed (see OPENGLES1-24/72/11). Remaining uncovered rows are listed in OPENGLES1-77. |
-| OPENGLES1-80 | Restore vertex/index buffer contents across a GL context loss | ⬜ | `DebugRestoreContext()` now rebuilds textures (OPENGLES1-11) but not buffer objects, whose GPU contents die with the old context. `OpenGLES1IndexBufferBackend` already keeps a CPU shadow for wireframe emulation and could reuse it; `OpenGLES1VertexBufferBackend` has no CPU copy and would need one. Not covered by a test yet — a real gap on any platform that genuinely loses the context (Android `onPause`), rather than a theoretical one. |
+| OPENGLES1-80 | Restore vertex/index buffer contents across a GL context loss | ✅ | Done 2026-07-22. `OpenGLES1VertexBufferBackend` gained a raw-byte CPU shadow (draws still always read the GPU buffer) and `OpenGLES1IndexBufferBackend` reuses the shadow wireframe emulation already kept; both register with the backend and are rebuilt in `DebugRestoreContext()` alongside textures, unregistering in their destructors so the tracked pointers cannot dangle. Covered by a check in `OpenGLES1_MultitextureContextLoss_Readback` that fills both buffers, loses the context, and draws without re-uploading — verified to fail (black) with the restore loop removed and pass (green quad) with it. |
 
 ---
 

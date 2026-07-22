@@ -3,6 +3,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -197,14 +198,16 @@ namespace CNA::Internal::Backends::OpenGLES1
     // OpenGLES1VertexBufferBackend / OpenGLES1IndexBufferBackend
     // -------------------------------------------------------------------------
 
-    OpenGLES1VertexBufferBackend::OpenGLES1VertexBufferBackend(int vertexCapacity)
-        : vertexCapacity_(vertexCapacity)
+    OpenGLES1VertexBufferBackend::OpenGLES1VertexBufferBackend(OpenGLES1GraphicsBackend* owner, int vertexCapacity)
+        : owner_(owner), vertexCapacity_(vertexCapacity)
     {
         glGenBuffers(1, &buffer_);
+        if (owner_) owner_->RegisterVertexBufferEXT(this);
     }
 
     OpenGLES1VertexBufferBackend::~OpenGLES1VertexBufferBackend()
     {
+        if (owner_) owner_->UnregisterVertexBufferEXT(this);
         if (buffer_) glDeleteBuffers(1, &buffer_);
     }
 
@@ -212,9 +215,24 @@ namespace CNA::Internal::Backends::OpenGLES1
     {
         stride_ = stride_in_bytes;
         vertexCount_ = vertex_count;
+        const std::size_t bytes = static_cast<std::size_t>(vertex_count) * stride_in_bytes;
         glBindBuffer(GL_ARRAY_BUFFER, buffer_);
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(static_cast<std::size_t>(vertex_count) * stride_in_bytes),
-                    data, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(bytes), data, GL_DYNAMIC_DRAW);
+
+        // Shadowed only to survive a context loss (OPENGLES1-80); draws never read this copy.
+        cpuShadow_.resize(bytes);
+        if (bytes > 0 && data) std::memcpy(cpuShadow_.data(), data, bytes);
+    }
+
+    void OpenGLES1VertexBufferBackend::RestoreAfterContextLoss()
+    {
+        // The old name died with the old context -- deleting it would be meaningless.
+        buffer_ = 0;
+        glGenBuffers(1, &buffer_);
+        if (cpuShadow_.empty()) return;
+        glBindBuffer(GL_ARRAY_BUFFER, buffer_);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cpuShadow_.size()),
+                     cpuShadow_.data(), GL_DYNAMIC_DRAW);
     }
 
     void OpenGLES1VertexBufferBackend::Bind() const
@@ -222,15 +240,28 @@ namespace CNA::Internal::Backends::OpenGLES1
         glBindBuffer(GL_ARRAY_BUFFER, buffer_);
     }
 
-    OpenGLES1IndexBufferBackend::OpenGLES1IndexBufferBackend(int indexCapacity)
-        : indexCapacity_(indexCapacity)
+    OpenGLES1IndexBufferBackend::OpenGLES1IndexBufferBackend(OpenGLES1GraphicsBackend* owner, int indexCapacity)
+        : owner_(owner), indexCapacity_(indexCapacity)
     {
         glGenBuffers(1, &buffer_);
+        if (owner_) owner_->RegisterIndexBufferEXT(this);
     }
 
     OpenGLES1IndexBufferBackend::~OpenGLES1IndexBufferBackend()
     {
+        if (owner_) owner_->UnregisterIndexBufferEXT(this);
         if (buffer_) glDeleteBuffers(1, &buffer_);
+    }
+
+    void OpenGLES1IndexBufferBackend::RestoreAfterContextLoss()
+    {
+        buffer_ = 0;
+        glGenBuffers(1, &buffer_);
+        if (cpuShadow_.empty()) return;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                     static_cast<GLsizeiptr>(cpuShadow_.size() * sizeof(uint16_t)),
+                     cpuShadow_.data(), GL_DYNAMIC_DRAW);
     }
 
     void OpenGLES1IndexBufferBackend::SetData16(const void* data, int index_count)
@@ -538,11 +569,15 @@ namespace CNA::Internal::Backends::OpenGLES1
         glShadeModel(GL_SMOOTH);
         glEnable(GL_NORMALIZE);
 
-        // Every GL object died with the old context. Textures carry a shared CPU copy of their
-        // pixels, so they can be rebuilt here -- otherwise a restored context samples all of them
-        // as plain white. Vertex/index buffer contents are NOT restored (see OPENGLES1-80).
+        // Every GL object died with the old context, so each live resource is rebuilt from its own
+        // CPU-side copy -- otherwise a restored context samples every texture as plain white and
+        // draws from dead buffer names.
         for (auto* texture : liveTextures_)
             if (texture) texture->RestoreAfterContextLoss();
+        for (auto* buffer : liveVertexBuffers_)
+            if (buffer) buffer->RestoreAfterContextLoss();
+        for (auto* buffer : liveIndexBuffers_)
+            if (buffer) buffer->RestoreAfterContextLoss();
     }
 
     // -------------------------------------------------------------------------
@@ -786,6 +821,30 @@ namespace CNA::Internal::Backends::OpenGLES1
                             liveTextures_.end());
     }
 
+    void OpenGLES1GraphicsBackend::RegisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer)
+    {
+        if (buffer) liveVertexBuffers_.push_back(buffer);
+    }
+
+    void OpenGLES1GraphicsBackend::UnregisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer)
+    {
+        if (!buffer) return;
+        liveVertexBuffers_.erase(std::remove(liveVertexBuffers_.begin(), liveVertexBuffers_.end(), buffer),
+                                 liveVertexBuffers_.end());
+    }
+
+    void OpenGLES1GraphicsBackend::RegisterIndexBufferEXT(OpenGLES1IndexBufferBackend* buffer)
+    {
+        if (buffer) liveIndexBuffers_.push_back(buffer);
+    }
+
+    void OpenGLES1GraphicsBackend::UnregisterIndexBufferEXT(OpenGLES1IndexBufferBackend* buffer)
+    {
+        if (!buffer) return;
+        liveIndexBuffers_.erase(std::remove(liveIndexBuffers_.begin(), liveIndexBuffers_.end(), buffer),
+                                liveIndexBuffers_.end());
+    }
+
     std::unique_ptr<ITextureBackend> OpenGLES1GraphicsBackend::CreateTexture(const ImageData& data)
     {
         auto tex = std::make_unique<OpenGLES1TextureBackend>(this, data.width, data.height);
@@ -800,12 +859,12 @@ namespace CNA::Internal::Backends::OpenGLES1
 
     std::unique_ptr<IVertexBufferBackend> OpenGLES1GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        return std::make_unique<OpenGLES1VertexBufferBackend>(vertex_capacity);
+        return std::make_unique<OpenGLES1VertexBufferBackend>(this, vertex_capacity);
     }
 
     std::unique_ptr<IIndexBufferBackend> OpenGLES1GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<OpenGLES1IndexBufferBackend>(index_capacity);
+        return std::make_unique<OpenGLES1IndexBufferBackend>(this, index_capacity);
     }
 
     // -------------------------------------------------------------------------

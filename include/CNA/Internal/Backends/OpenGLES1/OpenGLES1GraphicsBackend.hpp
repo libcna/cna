@@ -15,6 +15,9 @@ struct SDL_Window;
 namespace CNA::Internal::Backends::OpenGLES1
 {
     class OpenGLES1GraphicsBackend;
+    class OpenGLES1TextureBackend;
+    class OpenGLES1VertexBufferBackend;
+    class OpenGLES1IndexBufferBackend;
 
     /**
      * @brief NOXNA. Real OpenGL ES 1.1 (fixed-function, no shaders) texture handle.
@@ -83,7 +86,7 @@ namespace CNA::Internal::Backends::OpenGLES1
     class OpenGLES1VertexBufferBackend : public IVertexBufferBackend
     {
     public:
-        explicit OpenGLES1VertexBufferBackend(int vertexCapacity);
+        OpenGLES1VertexBufferBackend(OpenGLES1GraphicsBackend* owner, int vertexCapacity);
         ~OpenGLES1VertexBufferBackend() override;
 
         OpenGLES1VertexBufferBackend(const OpenGLES1VertexBufferBackend&) = delete;
@@ -92,16 +95,28 @@ namespace CNA::Internal::Backends::OpenGLES1
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         int GetVertexCount() const override { return vertexCount_; }
 
+        /**
+         * @brief Recreates this buffer's GL object after the context it lived in was destroyed.
+         *
+         * Re-uploads from the CPU shadow kept by `SetData()`; without it a restored context draws
+         * from a dead buffer name and renders nothing.
+         */
+        void RestoreAfterContextLoss();
+
         /// NOXNA. Binds this buffer's VBO to GL_ARRAY_BUFFER -- callers then use byte offsets
         /// (not raw pointers) with glVertexPointer/glColorPointer/glTexCoordPointer/glNormalPointer.
         void Bind() const;
         [[nodiscard]] std::size_t Stride() const { return stride_; }
 
     private:
+        OpenGLES1GraphicsBackend* owner_ = nullptr;
         unsigned int buffer_ = 0;
         int vertexCapacity_ = 0;
         int vertexCount_ = 0;
         std::size_t stride_ = 0;
+        // Raw vertex bytes, kept solely so the GPU buffer can be rebuilt after a context loss
+        // (OPENGLES1-80) -- draws always read from the GPU buffer, never from here.
+        std::vector<uint8_t> cpuShadow_;
     };
 
     /**
@@ -118,7 +133,7 @@ namespace CNA::Internal::Backends::OpenGLES1
     class OpenGLES1IndexBufferBackend : public IIndexBufferBackend
     {
     public:
-        explicit OpenGLES1IndexBufferBackend(int indexCapacity);
+        OpenGLES1IndexBufferBackend(OpenGLES1GraphicsBackend* owner, int indexCapacity);
         ~OpenGLES1IndexBufferBackend() override;
 
         OpenGLES1IndexBufferBackend(const OpenGLES1IndexBufferBackend&) = delete;
@@ -127,6 +142,13 @@ namespace CNA::Internal::Backends::OpenGLES1
         void SetData16(const void* data, int index_count) override;
         int GetIndexCount() const override { return indexCount_; }
 
+        /**
+         * @brief Recreates this buffer's GL object after the context it lived in was destroyed.
+         *
+         * Re-uploads from the CPU shadow that wireframe emulation already maintains.
+         */
+        void RestoreAfterContextLoss();
+
         /// NOXNA. Binds this buffer's VBO to GL_ELEMENT_ARRAY_BUFFER -- callers then pass a byte
         /// offset (not a raw pointer) as glDrawElements' `indices` argument.
         void Bind() const;
@@ -134,6 +156,7 @@ namespace CNA::Internal::Backends::OpenGLES1
         [[nodiscard]] const std::vector<uint16_t>& CpuShadow() const { return cpuShadow_; }
 
     private:
+        OpenGLES1GraphicsBackend* owner_ = nullptr;
         unsigned int buffer_ = 0;
         int indexCapacity_ = 0;
         int indexCount_ = 0;
@@ -434,6 +457,34 @@ namespace CNA::Internal::Backends::OpenGLES1
          */
         void UnregisterTextureEXT(OpenGLES1TextureBackend* texture);
 
+        /**
+         * @brief Registers a vertex buffer so it can be rebuilt if the GL context is lost.
+         *
+         * @param buffer Buffer to track; ignored when null.
+         */
+        void RegisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer);
+
+        /**
+         * @brief Stops tracking a vertex buffer that is being destroyed.
+         *
+         * @param buffer Buffer to forget; ignored when null or not tracked.
+         */
+        void UnregisterVertexBufferEXT(OpenGLES1VertexBufferBackend* buffer);
+
+        /**
+         * @brief Registers an index buffer so it can be rebuilt if the GL context is lost.
+         *
+         * @param buffer Buffer to track; ignored when null.
+         */
+        void RegisterIndexBufferEXT(OpenGLES1IndexBufferBackend* buffer);
+
+        /**
+         * @brief Stops tracking an index buffer that is being destroyed.
+         *
+         * @param buffer Buffer to forget; ignored when null or not tracked.
+         */
+        void UnregisterIndexBufferEXT(OpenGLES1IndexBufferBackend* buffer);
+
         // GL_OES_framebuffer_object entry points -- resolved once at startup via
         // SDL_GL_GetProcAddress (see LoadExtensionEntryPoints()), used by
         // OpenGLES1RenderTargetBackend. Public so that class can call them without this class
@@ -479,6 +530,8 @@ namespace CNA::Internal::Backends::OpenGLES1
         // Every live texture, so DebugRestoreContext() can rebuild them all against the new
         // context. Raw pointers are safe here because each texture unregisters in its destructor.
         std::vector<OpenGLES1TextureBackend*> liveTextures_;
+        std::vector<OpenGLES1VertexBufferBackend*> liveVertexBuffers_;
+        std::vector<OpenGLES1IndexBufferBackend*> liveIndexBuffers_;
         bool cubeMapSupported_ = false;
         int maxTextureUnits_ = 1;
 
