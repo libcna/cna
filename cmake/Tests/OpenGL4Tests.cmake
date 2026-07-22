@@ -58,4 +58,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_rendertargetcube_mrt examples/opengl4_rendertargetcube_mrt_test.cpp)
     cna_register_backend_test(NAME OpenGL4_RenderTargetCube_MRT COMMAND cna_test_opengl4_rendertargetcube_mrt
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState mapping --
+    # blend factors/equations, glBlendColor, real depth+stencil test state, cull mode, scissor
+    # test, and wireframe fill mode.
+    cna_opengl4_test(cna_test_opengl4_renderstate examples/opengl4_renderstate_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_RenderState COMMAND cna_test_opengl4_renderstate
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
@@ -73,6 +74,14 @@ protected:
     void RunTest() override
     {
         auto& dev = getGraphicsDeviceProperty();
+
+        // plan_opengl4.md GL4-16: RasterizerState.CullMode now really applies, and
+        // GraphicsDevice's own default RasterizerState (CullCounterClockwiseFace, XNA's real
+        // default) would otherwise cull this file's own quad winding -- irrelevant to what this
+        // test actually checks (texturing/lighting, not winding), so opt out explicitly. Same
+        // idiom already established by e.g. bgfx_basiceffect_texture_enabled_test.cpp for the
+        // identical reason.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         const Matrix view = Matrix::CreateLookAt(
             Vector3(0.0f, 0.0f, 10.0f), Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f));

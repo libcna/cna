@@ -144,6 +144,12 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 #ifndef GL_TEXTURE_CUBE_MAP_POSITIVE_X
 #define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
 #endif
+#ifndef GL_INCR_WRAP
+#define GL_INCR_WRAP 0x8507
+#endif
+#ifndef GL_DECR_WRAP
+#define GL_DECR_WRAP 0x8508
+#endif
 
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
@@ -212,6 +218,12 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     using PFNGL4BLITFRAMEBUFFERPROC             = void (*)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
     using PFNGL4DRAWBUFFERSPROC                 = void (*)(GLsizei, const GLenum*);
 
+    // plan_opengl4.md GL4-16: two-sided (front/back) stencil state -- GL 2.0 core, not
+    // guaranteed to be declared by a GL-1.1-vintage <GL/gl.h>.
+    using PFNGL4STENCILFUNCSEPARATEPROC         = void (*)(GLenum, GLenum, GLint, GLuint);
+    using PFNGL4STENCILOPSEPARATEPROC           = void (*)(GLenum, GLenum, GLenum, GLenum);
+    using PFNGL4STENCILMASKSEPARATEPROC         = void (*)(GLenum, GLuint);
+
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
     extern PFNGL4BINDBUFFERPROC               gl4_glBindBuffer;
@@ -277,6 +289,10 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4FRAMEBUFFERRENDERBUFFERPROC     gl4_glFramebufferRenderbuffer;
     extern PFNGL4BLITFRAMEBUFFERPROC             gl4_glBlitFramebuffer;
     extern PFNGL4DRAWBUFFERSPROC                 gl4_glDrawBuffers;
+
+    extern PFNGL4STENCILFUNCSEPARATEPROC         gl4_glStencilFuncSeparate;
+    extern PFNGL4STENCILOPSEPARATEPROC           gl4_glStencilOpSeparate;
+    extern PFNGL4STENCILMASKSEPARATEPROC         gl4_glStencilMaskSeparate;
 
     /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
     /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this

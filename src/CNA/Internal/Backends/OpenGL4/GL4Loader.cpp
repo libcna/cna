@@ -70,6 +70,10 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     PFNGL4BLITFRAMEBUFFERPROC             gl4_glBlitFramebuffer             = nullptr;
     PFNGL4DRAWBUFFERSPROC                 gl4_glDrawBuffers                 = nullptr;
 
+    PFNGL4STENCILFUNCSEPARATEPROC         gl4_glStencilFuncSeparate         = nullptr;
+    PFNGL4STENCILOPSEPARATEPROC           gl4_glStencilOpSeparate           = nullptr;
+    PFNGL4STENCILMASKSEPARATEPROC         gl4_glStencilMaskSeparate         = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -153,6 +157,10 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glFramebufferRenderbuffer", gl4_glFramebufferRenderbuffer);
         ok &= Resolve(getProcAddress, "glBlitFramebuffer", gl4_glBlitFramebuffer);
         ok &= Resolve(getProcAddress, "glDrawBuffers", gl4_glDrawBuffers);
+
+        ok &= Resolve(getProcAddress, "glStencilFuncSeparate", gl4_glStencilFuncSeparate);
+        ok &= Resolve(getProcAddress, "glStencilOpSeparate", gl4_glStencilOpSeparate);
+        ok &= Resolve(getProcAddress, "glStencilMaskSeparate", gl4_glStencilMaskSeparate);
 
         return ok;
     }

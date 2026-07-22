@@ -322,6 +322,79 @@ void main()
             while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
             return levels;
         }
+
+        // plan_opengl4.md GL4-16: XNA Blend enum -> GL blend factor token.
+        // Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
+        //        InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
+        //        DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
+        //        InverseBlendFactor=11, SourceAlphaSaturation=12
+        GLenum ToGLBlendFactor(int xnaBlend)
+        {
+            switch (xnaBlend)
+            {
+            case  1: return GL_ZERO;
+            case  2: return GL_SRC_COLOR;
+            case  3: return GL_ONE_MINUS_SRC_COLOR;
+            case  4: return GL_SRC_ALPHA;
+            case  5: return GL_ONE_MINUS_SRC_ALPHA;
+            case  6: return GL_DST_COLOR;
+            case  7: return GL_ONE_MINUS_DST_COLOR;
+            case  8: return GL_DST_ALPHA;
+            case  9: return GL_ONE_MINUS_DST_ALPHA;
+            case 10: return GL_CONSTANT_COLOR;
+            case 11: return GL_ONE_MINUS_CONSTANT_COLOR;
+            case 12: return GL_SRC_ALPHA_SATURATE;
+            default: return GL_ONE; // Blend::One = 0
+            }
+        }
+
+        // XNA BlendFunction enum -> GL blend equation token. Add=0, Subtract=1,
+        // ReverseSubtract=2, Max=3, Min=4.
+        GLenum ToGLBlendEquation(int xnaBlendFunc)
+        {
+            switch (xnaBlendFunc)
+            {
+            case 1: return GL_FUNC_SUBTRACT;
+            case 2: return GL_FUNC_REVERSE_SUBTRACT;
+            case 3: return GL_MAX;
+            case 4: return GL_MIN;
+            default: return GL_FUNC_ADD; // BlendFunction::Add = 0
+            }
+        }
+
+        // XNA CompareFunction enum -> GL compare-func token. Always=0, Never=1, Less=2,
+        // LessEqual=3, Equal=4, GreaterEqual=5, Greater=6, NotEqual=7.
+        GLenum ToGLCompareFunc(int xnaCompare)
+        {
+            switch (xnaCompare)
+            {
+            case 1: return GL_NEVER;
+            case 2: return GL_LESS;
+            case 3: return GL_LEQUAL;
+            case 4: return GL_EQUAL;
+            case 5: return GL_GEQUAL;
+            case 6: return GL_GREATER;
+            case 7: return GL_NOTEQUAL;
+            default: return GL_ALWAYS; // CompareFunction::Always = 0
+            }
+        }
+
+        // XNA StencilOperation enum -> GL stencil-op token. Keep=0, Zero=1, Replace=2,
+        // Increment=3, Decrement=4, IncrementSaturation=5, DecrementSaturation=6, Invert=7.
+        GLenum ToGLStencilOp(int xnaOp)
+        {
+            switch (xnaOp)
+            {
+            case 1: return GL_ZERO;
+            case 2: return GL_REPLACE;
+            case 3: return GL_INCR_WRAP;
+            case 4: return GL_DECR_WRAP;
+            case 5: return GL_INCR;
+            case 6: return GL_DECR;
+            case 7: return GL_INVERT;
+            default: return GL_KEEP; // StencilOperation::Keep = 0
+            }
+        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -1752,6 +1825,126 @@ void main()
             gl4_glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, static_cast<float>(maxAnisotropy));
 
         gl4_glBindSampler(static_cast<GLuint>(slot), sampler);
+    }
+
+    void OpenGL4GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                 int colorDstBlend, int alphaDstBlend,
+                                                 int colorBlendFunc, int alphaBlendFunc)
+    {
+        // Blend::One=0, Blend::Zero=1 -> the Opaque preset (src=One, dst=Zero) is XNA's own
+        // encoding of "no blending", matching EasyGLGraphicsBackend::ApplyBlendState's identical
+        // derivation (there's no separate BlendState.Enabled flag in the XNA API).
+        const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
+                                    alphaSrcBlend == 0 && alphaDstBlend == 1);
+        if (blendEnabled) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+        if (blendEnabled)
+        {
+            gl4_glBlendFuncSeparate(ToGLBlendFactor(colorSrcBlend), ToGLBlendFactor(colorDstBlend),
+                                    ToGLBlendFactor(alphaSrcBlend), ToGLBlendFactor(alphaDstBlend));
+            gl4_glBlendEquationSeparate(ToGLBlendEquation(colorBlendFunc),
+                                        ToGLBlendEquation(alphaBlendFunc));
+        }
+    }
+
+    void OpenGL4GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                         int depthFunc,
+                                                         bool stencilEnable, int stencilFunc,
+                                                         int stencilPass, int stencilFail, int stencilDepthFail,
+                                                         int stencilMask, int stencilWriteMask, int referenceStencil,
+                                                         bool twoSidedStencilMode,
+                                                         int ccwStencilFunc, int ccwStencilPass,
+                                                         int ccwStencilFail, int ccwStencilDepthFail)
+    {
+        if (depthEnable) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+        glDepthMask(depthWriteEnable ? GL_TRUE : GL_FALSE);
+        depthWriteEnabled_ = depthWriteEnable;
+        if (depthEnable) glDepthFunc(ToGLCompareFunc(depthFunc));
+
+        if (stencilEnable) glEnable(GL_STENCIL_TEST); else glDisable(GL_STENCIL_TEST);
+        if (stencilEnable)
+        {
+            const GLenum glSFail = ToGLStencilOp(stencilFail);
+            const GLenum glDFail = ToGLStencilOp(stencilDepthFail);
+            const GLenum glPass  = ToGLStencilOp(stencilPass);
+            if (twoSidedStencilMode)
+            {
+                gl4_glStencilFuncSeparate(GL_FRONT, ToGLCompareFunc(stencilFunc),
+                                          referenceStencil, static_cast<GLuint>(stencilMask));
+                gl4_glStencilOpSeparate(GL_FRONT, glSFail, glDFail, glPass);
+                gl4_glStencilMaskSeparate(GL_FRONT, static_cast<GLuint>(stencilWriteMask));
+
+                gl4_glStencilFuncSeparate(GL_BACK, ToGLCompareFunc(ccwStencilFunc),
+                                          referenceStencil, static_cast<GLuint>(stencilMask));
+                gl4_glStencilOpSeparate(GL_BACK, ToGLStencilOp(ccwStencilFail),
+                                        ToGLStencilOp(ccwStencilDepthFail),
+                                        ToGLStencilOp(ccwStencilPass));
+                gl4_glStencilMaskSeparate(GL_BACK, static_cast<GLuint>(stencilWriteMask));
+            }
+            else
+            {
+                glStencilFunc(ToGLCompareFunc(stencilFunc), referenceStencil,
+                             static_cast<GLuint>(stencilMask));
+                glStencilOp(glSFail, glDFail, glPass);
+                glStencilMask(static_cast<GLuint>(stencilWriteMask));
+            }
+        }
+    }
+
+    void OpenGL4GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
+                                                       bool scissorTestEnable,
+                                                       float depthBias,
+                                                       float slopeScaleDepthBias)
+    {
+        // CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2. OpenGL's default
+        // front face is CCW, so CW faces are back faces.
+        if (cullMode == 0)
+        {
+            glDisable(GL_CULL_FACE);
+        }
+        else
+        {
+            glEnable(GL_CULL_FACE);
+            glCullFace(cullMode == 1 ? GL_BACK : GL_FRONT);
+        }
+
+        if (scissorTestEnable) glEnable(GL_SCISSOR_TEST); else glDisable(GL_SCISSOR_TEST);
+
+        // FillMode: Solid=0, WireFrame=1. Desktop core-profile GL keeps a real glPolygonMode
+        // (only GL_FRONT_AND_BACK is valid for `face` in a core-profile context, which is exactly
+        // what XNA's single FillMode value needs -- unlike EasyGL's ES target, which has no
+        // glPolygonMode at all and instead re-expands triangles into GL_LINES at draw time).
+        glPolygonMode(GL_FRONT_AND_BACK, fillMode == 1 ? GL_LINE : GL_FILL);
+
+        // DepthBias/SlopeScaleDepthBias map directly onto real GL polygon offset (matches this
+        // project's own established Vulkan/EasyGL convention: glPolygonOffset(slopeScale, bias)).
+        // Always enabled -- factor=0/units=0 is a genuine no-op in GL, no need to conditionally
+        // disable it.
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(slopeScaleDepthBias, depthBias);
+    }
+
+    void OpenGL4GraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        gl4_glBlendColor(r, g, b, a);
+    }
+
+    void OpenGL4GraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        if (w <= 0 || h <= 0) return; // invalid rect -- leave scissor state unchanged
+
+        // OpenGL's scissor origin is bottom-left; convert from top-left XNA coordinates using
+        // the same currentRtHeight_-or-window-height pattern as SetViewport (plan_opengl4.md
+        // GL4-14/GL4-16).
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int physW = 0;
+            GetPhysicalSize(physW, fbH);
+        }
+        glScissor(x, fbH - y - h, w, h);
+        // Does NOT enable/disable the scissor test itself -- that is controlled exclusively by
+        // ApplyRasterizerState via RasterizerState.ScissorTestEnable, matching
+        // EasyGLGraphicsBackend::SetScissorRect's identical division of responsibility.
     }
 }
 

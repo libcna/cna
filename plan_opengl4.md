@@ -65,6 +65,35 @@
 > `OpenGL4_RenderTarget2D` confirming no regression from `SetRenderTarget2D`'s new
 > `currentRtCube_` unbind check.
 >
+> **Status (2026-07-22): `GL4-16` (dynamic `BlendState`/`DepthStencilState`/`RasterizerState`)
+> landed and verified.** `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/
+> `SetBlendFactor`/`SetScissorRect` are real now — blend factors/equations
+> (`glBlendFuncSeparate`/`glBlendEquationSeparate`), `glBlendColor`, real depth+stencil test state
+> including two-sided stencil (`glStencilFuncSeparate`/`glStencilOpSeparate`/
+> `glStencilMaskSeparate`, `GL4Loader` gained these 3 GL-2.0 entry points), cull mode
+> (`glCullFace`/`glFrontFace`), scissor test, and wireframe fill mode (`glPolygonMode`, a real
+> desktop-GL capability EasyGL's ES target has to fake by re-expanding triangles into
+> `GL_LINES` at draw time — this backend doesn't need that workaround). Since every
+> `GraphicsDevice` applies its own default `RasterizerState`/`BlendState`/`DepthStencilState`
+> automatically at construction (matching real XNA, not just when a game explicitly assigns one),
+> turning this on for real immediately exposed that `GL4-9`/`GL4-13`'s own pre-existing test files
+> (`opengl4_3d_test.cpp`, `opengl4_textured3d_test.cpp`) had never been exercised under real
+> culling and used quad windings that XNA's actual default (`CullCounterClockwiseFace`) culls —
+> both fixed with an explicit `RasterizerState::CullNone` opt-out, the same established idiom
+> already used by e.g. `bgfx_basiceffect_texture_enabled_test.cpp` for the identical reason (not a
+> new pattern invented here). The new test itself needed two of its own genuine authoring
+> corrections before it reflected real behavior: `BlendState::AlphaBlend` assumes an
+> already-premultiplied source colour (`One`/`InverseSourceAlpha`) and was misused for a
+> straight-alpha blend check (fixed by switching to `BlendState::NonPremultiplied`,
+> `SourceAlpha`/`InverseSourceAlpha`), and a wrong assumption that this codebase's `Color::Green`
+> is `(0,255,0)` rather than real XNA's `(0,128,0)` (`Lime` is the pure-green one) skewed an
+> expected blend result. Verified by the new `OpenGL4_RenderState` CTest (12/12: `BlendState`
+> preset/custom/`SetBlendFactor` checks, a `DepthStencilState`-object depth-test check, a real
+> 2-pass stencil-buffer check, `CullMode` checked against
+> `easygl_rasterizerstate_cullmode_test.cpp`'s own already-empirically-verified triangle winding,
+> scissor-rect gating, and wireframe fill mode), plus a full re-run of the other 6 OpenGL4 CTest
+> suites confirming everything (including the 2 fixed pre-existing test files) is green.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -99,11 +128,6 @@
 >   `TextureCube` (see above) as its env-map source. ⬜
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
-> - **`ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`** — not overridden (inherited
->   no-op defaults). `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` (the 3 pure
->   virtuals) and `SetViewport`/`ApplySamplerState` (both genuinely implemented) are the only real
->   per-draw state currently wired to real GL calls — cull mode, fill mode, scissor, blend
->   factors/equations, and stencil ops are all still whatever GL's own defaults are. ⬜
 > - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplifications (`GL4-13`)** — real, but
 >   two real gaps remain: (1) `params.baseVertex` is ignored (no `glDrawElementsBaseVertex` call —
 >   only `params.startIndex` is honored, via a byte offset into the index buffer); (2) the texture
@@ -174,7 +198,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -197,6 +221,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-13` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: real stride-keyed dispatch (`BindProgramForStride`) to 3 new GLSL 410 core programs — `textured3d` (stride 20), `colored_textured3d` (stride 24), `lit_textured3d` (stride 32, FNA's `Lighting.fxh` `ComputeLights()` ported from `VulkanGraphicsBackend`'s own `lit_textured3d.vert/frag.glsl`, with a `safeNormalize()` guard against a disabled `DirectionalLight`'s zero-vector `Direction`, the same real bug `plan_webgpu.md` found and fixed independently). Unrecognized strides still fall back to `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`. | ✅ | Added `PixelTestGame::Check(bool, label)` (`examples/common/PixelTestGame.hpp`) — a small, purely-additive generic boolean assertion alongside the pre-existing `ExpectPixel`/`CompareGoldenImage`, needed to assert "the lit render must differ from the unlit render" (not itself a pixel-region compare). |
 | `GL4-14` | `RenderTarget2D`: real FBO (`OpenGL4RenderTargetBackend`) — colour texture attachment, optional depth/stencil renderbuffer (`Depth16`/`Depth24`/`Depth24Stencil8`), optional MSAA colour(+depth) renderbuffer resolved via `glBlitFramebuffer` on unbind, optional mip chain regenerated via `glGenerateMipmap` on unbind, real `GetData()` readback via a throwaway per-level read FBO. `GL4Loader` gained the FBO/renderbuffer entry points (`glGenFramebuffers`/`glBindFramebuffer`/`glFramebufferTexture2D`/`glCheckFramebufferStatus`/`glGenRenderbuffers`/`glBindRenderbuffer`/`glRenderbufferStorage(Multisample)`/`glFramebufferRenderbuffer`/`glBlitFramebuffer`/their `glDelete*` counterparts). | ✅ | Two real bugs found+fixed: `SetViewport`'s Y-flip was hardcoded to the window's physical height (wrong once a smaller FBO is bound) — fixed via a new `currentRtHeight_` member, mirroring `EasyGLGraphicsBackend`'s identical pattern. `OpenGL4SpriteBatchBackend::FlushBatch`'s viewport/ortho sizing had the same window-size-only assumption, which would silently break any `SpriteBatch::Draw()` issued while an RT is bound — fixed via a new `GetCurrentRenderTarget2DSize()` accessor, exercised by `OpenGL4_RenderTarget2D`'s own Check J. `RenderTargetCube`/MRT (`SetRenderTargets` plural) are explicitly out of scope for this task — see "Remaining work". |
 | `GL4-15` | `RenderTargetCube`: real per-face FBO (`OpenGL4RenderTargetCubeBackend`) — one shared cube-map texture, re-attaching the requested face (`GL_TEXTURE_CUBE_MAP_POSITIVE_X + face`) on `BindAsRenderTargetFace`, same depth/MSAA/mip machinery as `GL4-14`'s 2D target, real per-face `GetData()`. `SetRenderTargets` (plural): real MRT via a persistent multi-attachment FBO (`glFramebufferTexture2D` at `GL_COLOR_ATTACHMENT0+i` per target) + `glDrawBuffers`. `GL4Loader` gained `glDrawBuffers` and the `GL_TEXTURE_CUBE_MAP`/`GL_TEXTURE_CUBE_MAP_POSITIVE_X` tokens. | ✅ | No depth attachment for MRT and no multi-output shader variant (only `COLOR_ATTACHMENT0` receives a draw) — both explicitly verified, not silently assumed, by `OpenGL4_RenderTargetCube_MRT`'s own Check H, and match `EasyGLGraphicsBackend`'s own identical, documented MRT gap. |
+| `GL4-16` | Real dynamic `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`SetBlendFactor`/`SetScissorRect` — blend factors/equations (`glBlendFuncSeparate`/`glBlendEquationSeparate`), `glBlendColor`, real depth+stencil (incl. two-sided via `glStencilFuncSeparate`/`glStencilOpSeparate`/`glStencilMaskSeparate`), cull mode, scissor test, wireframe fill mode (`glPolygonMode`). `GL4Loader` gained the 3 two-sided-stencil GL-2.0 entry points, `GL_INCR_WRAP`/`GL_DECR_WRAP`. | ✅ | Since `GraphicsDevice` applies its own default `RasterizerState`/`BlendState`/`DepthStencilState` at construction (matching real XNA), turning cull mode on for real exposed that `opengl4_3d_test.cpp`/`opengl4_textured3d_test.cpp` (`GL4-9`/`GL4-13`) had never been exercised under real culling and used a quad winding XNA's actual default (`CullCounterClockwiseFace`) culls — fixed with an explicit `RasterizerState::CullNone` opt-out (the same established idiom `bgfx_basiceffect_texture_enabled_test.cpp` already uses for the identical reason, not new). The new test itself needed 2 of its own corrections: `BlendState::AlphaBlend` assumes premultiplied source colour (switched to `BlendState::NonPremultiplied` for a straight-alpha check), and this codebase's `Color::Green` is real XNA `(0,128,0)`, not `(0,255,0)` (`Lime`). |
 
 ---
 
@@ -219,7 +244,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All six dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All seven dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -246,6 +271,14 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   `OpenGL4_Smoke`/`OpenGL4_Readback`/`OpenGL4_3D`/`OpenGL4_Textured3D`/`OpenGL4_RenderTarget2D`
   were all re-run after this task's `SetRenderTarget2D` change (new `currentRtCube_` unbind
   check) and still pass at their original counts — no regression.
+- `OpenGL4_RenderState` — 12/12 (`BlendState::Opaque`/`NonPremultiplied` preset checks, a custom
+  additive `BlendState`, `SetBlendFactor`'s constant colour reaching the GPU, a
+  `DepthStencilState`-object depth test, a real 2-pass stencil-buffer test, `CullMode`
+  cross-checked against `easygl_rasterizerstate_cullmode_test.cpp`'s own already-verified
+  winding, scissor-rect gating, wireframe fill mode). Turning cull mode on for real broke
+  `OpenGL4_3D`/`OpenGL4_Textured3D` (both had quad windings XNA's real default culls) until fixed
+  with an explicit `RasterizerState::CullNone`; all 7 dedicated OpenGL4 CTest suites re-ran green
+  afterward.
 
 ---
 
@@ -267,16 +300,17 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
    (`OpenGL4_RenderTargetCube_MRT`, 13/13). See `GL4-15`'s own row for the documented MRT gaps
    (no depth attachment, no multi-output shader variant) carried over from `EasyGLGraphicsBackend`'s
    own identical MRT limitations.
-5. **Next up (not yet started, no priority order implied):**
+5. ~~`GL4-16`~~ — dynamic `BlendState`/`DepthStencilState`/`RasterizerState` mapping done and
+   verified 2026-07-22, all ✅ (`OpenGL4_RenderState`, 12/12). See `GL4-16`'s own row for the real
+   cull-mode regression this exposed in 2 pre-existing test files (fixed, not papered over) and
+   the 2 authoring mistakes found in the new test itself along the way.
+6. **Next up (not yet started, no priority order implied):**
    - `AlphaTestEffect`/`DualTextureEffect` — now unblocked by `GL4-13`'s stride dispatch; each
      needs its own shader variant (per-pixel discard for the former, a second sampler for the
      latter) plumbed through `BindProgramForStride`.
    - `EnvironmentMapEffect` — now unblocked by `GL4-15`'s `RenderTargetCube` (its env-map source),
      but also needs plain `CreateTextureCube` (a non-render-target cube texture a game can load
      from disk) and its own shader variant.
-   - `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState` dynamic mapping — currently
-     every 3D draw is hardcoded (whatever GL's own defaults are); a real `BlendState`/
-     `DepthStencilState`/`RasterizerState` assigned on `GraphicsDevice` has no effect yet.
    - MSAA (`SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, ...)` at context creation, plus honoring
      `ApplyMultiSampleCount` for a runtime change).
    - Mipmap generation (`glGenerateMipmap`) for `CreateTexture`'s `mipLevels` request and
