@@ -1167,20 +1167,50 @@ namespace CNA::Internal::Backends::OpenGLES1
         // documents the rest as an intentional deviation (see docs/opengles1-backend.md).
         void ApplyAlphaTest(const GpuDrawParams& params)
         {
+            // The vector's shape comes from AlphaTestEffect and is evaluated by the shader-based
+            // backends as:
+            //     at = (y > 0) ? (|a - x| < y ? z : w)
+            //                  : (a < x       ? z : w)
+            //     discard when at < 0
+            // So z is the branch taken when the comparison holds and w the branch taken when it
+            // does not -- they are *branch outcomes*, not "pass"/"fail" weights.
             const float ref = params.alphaTest[0];
             const float tolerance = params.alphaTest[1];
-            const float passWeight = params.alphaTest[2];
-            const float failWeight = params.alphaTest[3];
-            if (passWeight >= failWeight && tolerance <= 0.0f && ref <= 0.0f)
+            const float whenLess = params.alphaTest[2];
+            const float whenGreaterEqual = params.alphaTest[3];
+
+            // No AlphaTestEffect in play leaves the whole vector zeroed.
+            if (whenLess == 0.0f && whenGreaterEqual == 0.0f)
             {
                 glDisable(GL_ALPHA_TEST);
                 return;
             }
+
+            const bool keepLess = whenLess >= 0.0f;
+            const bool keepGreaterEqual = whenGreaterEqual >= 0.0f;
+
+            // CompareFunction::Always -- both branches survive, so the test is a no-op.
+            if (keepLess && keepGreaterEqual)
+            {
+                glDisable(GL_ALPHA_TEST);
+                return;
+            }
+
             glEnable(GL_ALPHA_TEST);
+
+            // CompareFunction::Never -- neither branch survives.
+            if (!keepLess && !keepGreaterEqual)
+            {
+                glAlphaFunc(GL_NEVER, 0.0f);
+                return;
+            }
+
+            // Documented deviation: GL_EQUAL/GL_NOTEQUAL compare exactly and cannot express the
+            // effect's tolerance band (see docs/opengles1-backend.md).
             if (tolerance > 0.0f)
-                glAlphaFunc(passWeight >= failWeight ? GL_EQUAL : GL_NOTEQUAL, ref);
+                glAlphaFunc(keepLess ? GL_EQUAL : GL_NOTEQUAL, ref);
             else
-                glAlphaFunc(passWeight >= failWeight ? GL_GEQUAL : GL_LESS, ref);
+                glAlphaFunc(keepLess ? GL_LESS : GL_GEQUAL, ref);
         }
     }
 
