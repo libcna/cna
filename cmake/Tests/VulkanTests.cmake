@@ -1029,6 +1029,22 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_SpriteBatch_ViewportSwitch COMMAND cna_test_vulkan_spritebatch_viewport_switch
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-074: RenderTarget2D::GetData() now flushes deferred sprite work into the target
+        # and reads it back, so the RT-readback variant of the GFX-072 conformance test (previously
+        # routed through the backbuffer path on Vulkan) runs directly here as an additional oracle.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_custom_viewport_rt
+                        examples/spritebatch_custom_viewport_rt_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_CustomViewport_RT COMMAND cna_test_vulkan_spritebatch_custom_viewport_rt
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-074: GetData-before-Present visibility + destroy-before-Present lifetime safety
+        # for deferred RenderTarget2D work (sprite + 3D), multiple targets/batches, and no double
+        # replay. The destroy-before-Present scene is the UAF regression (run under ASan).
+        cna_vulkan_test(cna_test_vulkan_rendertarget_getdata_lifetime
+                        examples/vulkan_rendertarget_getdata_lifetime_test.cpp)
+        cna_register_backend_test(NAME Vulkan_RenderTarget_GetDataLifetime COMMAND cna_test_vulkan_rendertarget_getdata_lifetime
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 
 
     endif()
