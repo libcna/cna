@@ -467,7 +467,7 @@
 > re-run of the other 20 OpenGL4 CTest suites confirms no regression (21/21 total).
 >
 > **Status (2026-07-22): `GL4-30` (real custom `ShaderEffect`/`CreateEffectBackend`) landed and
-> verified — every item on this branch's active plan is now done.** `CreateEffectBackend()` was
+> verified — every item on this branch's original active plan is now done.** `CreateEffectBackend()` was
 > previously unoverridden (default returns `nullptr`), so a caller-supplied GLSL vertex/fragment
 > source pair had no way to compile on this backend at all. Added `OpenGL4EffectBackend` (a thin
 > `IEffectBackend` wrapper around one `OpenGL4RawProgram`, modeled on `EasyGLEffectBackend`'s
@@ -496,6 +496,32 @@
 > larger feature and remains unoverridden on this backend, same as it is on every other backend
 > that has landed `CreateEffectBackend` without it. ⬜ (not attempted, not blocking)
 >
+> **Status (2026-07-22): `GL4-31` (real 32-bit index buffer support) landed and verified.**
+> Discovered as a separate, newly-found gap while scoping `GL4-27` (`baseVertex`), not attempted
+> there since it needed real new work: `OpenGL4IndexBufferBackend::IsThirtyTwoBit()` was
+> unconditionally `false`, `CreateIndexBuffer32` wasn't overridden (silently fell back to a 16-bit
+> buffer via the `IGraphicsBackend` default), and every index-buffer draw path hardcoded
+> `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` — this backend had no 32-bit index buffer support at all,
+> unlike every other established backend. Fixed by: `OpenGL4IndexBufferBackend` gained a
+> `thirtyTwoBit_` flag (set at construction) and real `SetData32`/`SetData32WithOptions` overrides
+> (`GL_UNSIGNED_INT` storage); `IsThirtyTwoBit()` now reports the real flag;
+> `OpenGL4GraphicsBackend::CreateIndexBuffer32()` is now overridden. Every index-buffer draw call
+> site (`DrawIndexedPrimitivesEx`'s `customEffectBackend` branch and its normal
+> `BindProgramForStride` branch, `DrawIndexedColoredPrimitives`) now selects
+> `GL_UNSIGNED_INT`/`sizeof(uint32_t)` vs `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` from
+> `IIndexBufferBackend::IsThirtyTwoBit()` instead of hardcoding the 16-bit path.
+>
+> Verified by the new `OpenGL4_IndexBuffer32` CTest (3/3), combining `OpenGL4_BaseVertex`'s own
+> shared-vertex-buffer/two-draws methodology with a real `IndexElementSize::ThirtyTwoBits`
+> `IndexBuffer` instead of a 16-bit one — a genuinely discriminating proof: if 32-bit indices were
+> still silently reinterpreted as 16-bit data (the old bug), the 6 `uint32_t` indices' raw bytes
+> would be misread as 12 `uint16_t` values, producing wildly wrong/out-of-range vertex fetches
+> instead of the intended `{0,1,2,0,2,3}` triangle list, so the quad would not render as a clean
+> two-triangle shape at all. Check A confirms the buffer reports `ThirtyTwoBits` (not silently
+> downgraded); Checks B/C reuse the baseVertex proof's own left-RED/right-BLUE distinction with
+> real 32-bit index data. All 3 checks passed on the first real run — no backend or test bugs
+> found. Full re-run of the other 22 OpenGL4 CTest suites confirms no regression (23/23 total).
+>
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
@@ -518,13 +544,9 @@
 > - ~~**`SamplerState` for direct 3D draws**~~ — done, `GL4-26` (2026-07-22). Real bug found+fixed
 >   (hardcoded Clamp silently overwrote the real, already-correctly-applied per-slot
 >   `SamplerState` on every draw); verified by `OpenGL4_SamplerState` (3/3). ✅
-> - **No 32-bit index buffer support at all** (newly discovered while scoping `GL4-27`, not part of
->   that task) — `OpenGL4IndexBufferBackend::IsThirtyTwoBit()` unconditionally returns `false`,
->   `CreateIndexBuffer32` isn't overridden, and every index-buffer draw path
->   (`DrawIndexedPrimitivesEx`/`DrawIndexedColoredPrimitives`) hardcodes `GL_UNSIGNED_SHORT`/
->   `sizeof(uint16_t)`, unlike every other established backend. A real, materially larger task (a
->   new backend class + new `IGraphicsBackend` overrides), not a quick pick-up alongside something
->   else. ⬜
+> - ~~**No 32-bit index buffer support at all**~~ — done, `GL4-31` (2026-07-22, discovered while
+>   scoping `GL4-27`). Real `SetData32`/`GL_UNSIGNED_INT` support, verified by
+>   `OpenGL4_IndexBuffer32` (3/3). ✅
 > - ~~**`preferPerPixelLighting`**~~ — done, `GL4-29` (2026-07-22). New
 >   `litTextured3DVertexLitProgram_`/`skinned3DVertexLitProgram_` per-vertex-lit programs, selected
 >   by `BindProgramForStride` when `params.lightingEnabled && !params.preferPerPixelLighting`
@@ -592,7 +614,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting`, `OpenGL4_ShaderEffect3D` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords`, `OpenGL4_PreferPerPixelLighting`, `OpenGL4_ShaderEffect3D`, `OpenGL4_IndexBuffer32` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -630,6 +652,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-28` | Real `TransformWindowToLogical`/`TransformLogicalToWindow` — pure-uniform-scale (no offset) physical↔logical coordinate mapping (`scale = virtualHeight_ / physicalWindowHeight`), ported from `EasyGLGraphicsBackend`'s identical formula/rationale; exact for this backend's own default `FixedHeightDynamicWidth` presentation. Used by `Mouse::SetPosition` (logical→window) and `SdlInputBridge` (window→logical, incoming physical mouse events). | ✅ | `OpenGL4_TransformCoords` (4/4): 64×64 physical window + `SetVirtualResolution(128,128)` forces a deterministic 2x scale; checks both directions at a centre point and a non-centre point, proving a genuine scale (not identity) and an exact round-trip inverse. All 4 checks passed on the first real run — no backend or test bugs found. |
 | `GL4-29` | Real `PreferPerPixelLighting` vertex-lit shader variant — two new dedicated per-vertex-lit programs, `litTextured3DVertexLitProgram_` (stride 32) and `skinned3DVertexLitProgram_` (stride 52/56), ported from `EasyGLGraphicsBackend::EnsureLit3DVertexLitProgram()`/`EnsureSkinnedVertexLitProgram()` — identical Blinn-Phong math to the existing per-pixel programs, moved into the vertex stage and Gouraud-interpolated via new `vLitRGB`/`vSpecularRGB` varyings. `BindProgramForStride`'s stride-32/52/56 cases select between the two via `params.lightingEnabled && !params.preferPerPixelLighting` (XNA's own default gate). | ✅ | `OpenGL4_PreferPerPixelLighting` (6/6): reuses `easygl_basiceffect_preferperpixellighting_test.cpp`'s/`easygl_skinnedeffect_preferperpixellighting_test.cpp`'s exact scene and analytically re-derived expected values verbatim (same ported formula, same oracle applies) — Checks A–C cover `BasicEffect`, D–F cover `SkinnedEffect`. All 6 passed on the first real run (`(127,127,127)` vertex-lit vs `(152,152,152)` pixel-lit, both effects) — no backend or test bugs found. |
 | `GL4-30` | Real custom `ShaderEffect` (`CreateEffectBackend`) — new `OpenGL4EffectBackend` (thin `IEffectBackend` wrapper around one `OpenGL4RawProgram`, modeled on `EasyGLEffectBackend`), plus a `params.customEffectBackend` check + new `BindCustomEffectMatrices` helper at the top of `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (ported from `EasyGLGraphicsBackend`'s own identical helper) that binds the compiled program and its `World`/`View`/`Projection` uniforms directly, bypassing `BindProgramForStride` entirely. | ✅ | `OpenGL4_ShaderEffect3D` (2/2): ports `easygl_shadereffect_3d_test.cpp`'s exact scene/methodology/expected values (desktop GLSL 410 core translation only). Check A (`World=Identity`) and Check B (`World=RotationY(180°)`, same footprint but flipped world normal) both matched exactly (`(200,100,50)`/`(0,0,0)`) on the first real run — no backend or test bugs found. `SpriteBatch::SetCustomEffect` integration deliberately out of scope (separate, larger feature, unattempted on every other backend that has landed `CreateEffectBackend` too). |
+| `GL4-31` | Real 32-bit index buffer support (discovered while scoping `GL4-27`) — `OpenGL4IndexBufferBackend` gained a `thirtyTwoBit_` flag plus real `SetData32`/`SetData32WithOptions` overrides (`GL_UNSIGNED_INT` storage), `IsThirtyTwoBit()` now reports the real flag, `CreateIndexBuffer32()` is now overridden, and every index-buffer draw call site selects `GL_UNSIGNED_INT`/`sizeof(uint32_t)` vs `GL_UNSIGNED_SHORT`/`sizeof(uint16_t)` from `IsThirtyTwoBit()` instead of hardcoding 16-bit. | ✅ | `OpenGL4_IndexBuffer32` (3/3): combines `OpenGL4_BaseVertex`'s own shared-vertex-buffer/two-draws methodology with a real `IndexElementSize::ThirtyTwoBits` `IndexBuffer` — a discriminating proof, since a still-16-bit-reinterpreted 32-bit buffer would misread the 6 `uint32_t` indices' raw bytes as 12 `uint16_t` values, producing garbage vertex fetches instead of a clean two-triangle quad. All 3 checks passed on the first real run — no backend or test bugs found. |
 
 ---
 
@@ -652,7 +675,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All twenty-two dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All twenty-three dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -758,6 +781,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   normal, N·L clamped to 0) reads genuinely lit black `(0,0,0)`, proving the custom program's own
   `World` uniform reaches the vertex shader and affects real, visible world-space lighting. Full
   re-run of the other 21 OpenGL4 CTest suites confirmed no regression (22/22 total).
+- `OpenGL4_IndexBuffer32` — 3/3, combining `OpenGL4_BaseVertex`'s own shared-vertex-buffer/
+  two-draws methodology with a real `IndexElementSize::ThirtyTwoBits` `IndexBuffer` instead of a
+  16-bit one — a discriminating proof, since a still-16-bit-reinterpreted 32-bit buffer would
+  misread its raw index bytes and fail to render a clean two-triangle quad at all. Full re-run of
+  the other 22 OpenGL4 CTest suites confirmed no regression (23/23 total).
 
 ---
 
@@ -832,11 +860,14 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 20. ~~`GL4-30`~~ — real custom `ShaderEffect`/`CreateEffectBackend` done and verified 2026-07-22,
     all ✅ (`OpenGL4_ShaderEffect3D`, 2/2). See `GL4-30`'s own row for the new
     `OpenGL4EffectBackend`/`BindCustomEffectMatrices` dispatch ported from `EasyGLGraphicsBackend`.
-    **Every item on this branch's active plan (as scoped by the 2026-07-22 project-owner
-    decisions — OpenGL4-only, context-loss recovery explicitly deferred) is now done.**
+    **Every item on this branch's original active plan (as scoped by the 2026-07-22
+    project-owner decisions — OpenGL4-only, context-loss recovery explicitly deferred) was done
+    at this point.**
+21. ~~`GL4-31`~~ — real 32-bit index buffer support done and verified 2026-07-22, all ✅
+    (`OpenGL4_IndexBuffer32`, 3/3). A newly-discovered gap found while scoping `GL4-27`, picked up
+    after the original active plan closed out — see `GL4-31`'s own row.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
-what's still open (the 32-bit index buffer gap found while scoping `GL4-27`, `SpriteBatch::
-SetCustomEffect` integration found while scoping `GL4-30`, Windows/macOS validation, and the
-permanently-deferred context-loss recovery feature) — these are candidates for a fresh scoping
-pass, not blocking anything above.
+what's still open (`SpriteBatch::SetCustomEffect` integration found while scoping `GL4-30`,
+Windows/macOS validation, and the permanently-deferred context-loss recovery feature) — these are
+candidates for a fresh scoping pass, not blocking anything above.

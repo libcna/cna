@@ -2067,8 +2067,9 @@ void main()
     // OpenGL4IndexBufferBackend
     // ------------------------------------------------------------------------------------
 
-    OpenGL4IndexBufferBackend::OpenGL4IndexBufferBackend(int indexCapacity)
+    OpenGL4IndexBufferBackend::OpenGL4IndexBufferBackend(int indexCapacity, bool thirtyTwoBit)
         : capacity_(indexCapacity)
+        , thirtyTwoBit_(thirtyTwoBit)
     {
         gl4_glGenBuffers(1, &ibo_);
     }
@@ -2087,6 +2088,19 @@ void main()
     {
         indexCount_ = index_count;
         const auto byteCount = static_cast<GLsizeiptr4>(static_cast<std::size_t>(index_count) * sizeof(uint16_t));
+        gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
+        gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER, byteCount, data, GL_DYNAMIC_DRAW);
+    }
+
+    void OpenGL4IndexBufferBackend::SetData32(const void* data, int index_count)
+    {
+        SetData32WithOptions(data, index_count, SetDataOptions::None);
+    }
+
+    void OpenGL4IndexBufferBackend::SetData32WithOptions(const void* data, int index_count, SetDataOptions /*options*/)
+    {
+        indexCount_ = index_count;
+        const auto byteCount = static_cast<GLsizeiptr4>(static_cast<std::size_t>(index_count) * sizeof(uint32_t));
         gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
         gl4_glBufferData(GL_ELEMENT_ARRAY_BUFFER, byteCount, data, GL_DYNAMIC_DRAW);
     }
@@ -2868,7 +2882,12 @@ void main()
 
     std::unique_ptr<IIndexBufferBackend> OpenGL4GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        return std::make_unique<OpenGL4IndexBufferBackend>(index_capacity);
+        return std::make_unique<OpenGL4IndexBufferBackend>(index_capacity, /*thirtyTwoBit=*/false);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> OpenGL4GraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<OpenGL4IndexBufferBackend>(index_capacity, /*thirtyTwoBit=*/true);
     }
 
     void OpenGL4GraphicsBackend::EnsureColored3DProgram()
@@ -3404,15 +3423,21 @@ void main()
         const auto& vb = static_cast<const OpenGL4VertexBufferBackend&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferBackend&>(ib_in);
 
+        // plan_opengl4.md GL4-31: real 32-bit index buffer support -- honors
+        // IIndexBufferBackend::IsThirtyTwoBit() instead of hardcoding GL_UNSIGNED_SHORT, matching
+        // every other established backend's own idxType-selection convention.
+        const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+        const std::size_t idxSize = ib.IsThirtyTwoBit() ? sizeof(uint32_t) : sizeof(uint16_t);
+
         if (params.customEffectBackend)
         {
             BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
             const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
             const auto byteOffsetCustom = reinterpret_cast<const void*>(
-                static_cast<std::uintptr_t>(params.startIndex) * sizeof(uint16_t));
+                static_cast<std::uintptr_t>(params.startIndex) * idxSize);
             gl4_glBindVertexArray(vb.VaoHandle());
             gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-            gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT,
+            gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, idxType,
                                          byteOffsetCustom, params.baseVertex);
             gl4_glBindVertexArray(0);
             return;
@@ -3426,7 +3451,7 @@ void main()
 
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         const auto byteOffset = reinterpret_cast<const void*>(
-            static_cast<std::uintptr_t>(params.startIndex) * sizeof(uint16_t));
+            static_cast<std::uintptr_t>(params.startIndex) * idxSize);
         gl4_glBindVertexArray(vb.VaoHandle());
         gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
         // plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- glDrawElementsBaseVertex
@@ -3436,7 +3461,7 @@ void main()
         // indices, matching every effect's own DrawIndexedPrimitivesEx(..., baseVertex, ...)
         // contract. params.baseVertex defaults to 0, so this is a genuine no-op for every existing
         // draw that never set it.
-        gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT,
+        gl4_glDrawElementsBaseVertex(ToGLPrimitive(primitive), indexCount, idxType,
                                      byteOffset, params.baseVertex);
         gl4_glBindVertexArray(0);
     }
@@ -3491,7 +3516,9 @@ void main()
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         gl4_glBindVertexArray(vb.VaoHandle());
         gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-        glDrawElements(ToGLPrimitive(primitive), indexCount, GL_UNSIGNED_SHORT, nullptr);
+        // plan_opengl4.md GL4-31: real 32-bit index buffer support.
+        const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+        glDrawElements(ToGLPrimitive(primitive), indexCount, idxType, nullptr);
         gl4_glBindVertexArray(0);
     }
 

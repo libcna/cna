@@ -338,11 +338,15 @@ namespace CNA::Internal::Backends::OpenGL4
         std::size_t strideInBytes_ = 0;
     };
 
-    /** @brief `OpenGL4`-backed 16-bit index buffer. */
+    /**
+     * @brief `OpenGL4`-backed index buffer -- 16-bit by default, real 32-bit support
+     * (plan_opengl4.md `GL4-31`) when constructed with `thirtyTwoBit=true` (`GL_UNSIGNED_INT`
+     * storage/draw-call index type instead of `GL_UNSIGNED_SHORT`).
+     */
     class OpenGL4IndexBufferBackend final : public IIndexBufferBackend
     {
     public:
-        explicit OpenGL4IndexBufferBackend(int indexCapacity);
+        explicit OpenGL4IndexBufferBackend(int indexCapacity, bool thirtyTwoBit = false);
         ~OpenGL4IndexBufferBackend() override;
 
         OpenGL4IndexBufferBackend(const OpenGL4IndexBufferBackend&) = delete;
@@ -350,8 +354,11 @@ namespace CNA::Internal::Backends::OpenGL4
 
         void SetData16(const void* data, int index_count) override;
         void SetData16WithOptions(const void* data, int index_count, SetDataOptions options) override;
+        /// plan_opengl4.md GL4-31: real 32-bit index upload (GL_UNSIGNED_INT storage).
+        void SetData32(const void* data, int index_count) override;
+        void SetData32WithOptions(const void* data, int index_count, SetDataOptions options) override;
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
-        [[nodiscard]] bool IsThirtyTwoBit() const override { return false; }
+        [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
         NOXNA [[nodiscard]] unsigned int IboHandle() const { return ibo_; }
 
@@ -359,6 +366,7 @@ namespace CNA::Internal::Backends::OpenGL4
         unsigned int ibo_ = 0;
         int capacity_ = 0;
         int indexCount_ = 0;
+        bool thirtyTwoBit_ = false;
     };
 
     /**
@@ -494,6 +502,8 @@ namespace CNA::Internal::Backends::OpenGL4
 
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        /// plan_opengl4.md GL4-31: real 32-bit index buffer support (GL_UNSIGNED_INT).
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,

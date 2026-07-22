@@ -164,4 +164,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_shadereffect_3d examples/opengl4_shadereffect_3d_test.cpp)
     cna_register_backend_test(NAME OpenGL4_ShaderEffect3D COMMAND cna_test_opengl4_shadereffect_3d
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-31: real 32-bit index buffer support (GL_UNSIGNED_INT), found as a
+    # separate gap while scoping GL4-27.
+    cna_opengl4_test(cna_test_opengl4_indexbuffer32 examples/opengl4_indexbuffer32_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_IndexBuffer32 COMMAND cna_test_opengl4_indexbuffer32
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
