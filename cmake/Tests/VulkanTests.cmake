@@ -497,6 +497,18 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_RenderTarget_BlendFactor COMMAND cna_test_vulkan_rendertarget_blendfactor
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-071: the Vulkan 2D SpriteBatch pipeline must honor the SpriteBatch.Begin()
+        # BlendState (colour/alpha factors + function + BlendFactor), not one hardcoded alpha-blend
+        # equation. Opaque/AlphaBlend(premultiplied)/NonPremultiplied/Additive/custom factors/
+        # custom function/separate alpha/Blend::BlendFactor into a RenderTarget2D, read back with
+        # GetData (GFX-074). Pre-fix all colored scenes read the hardcoded (130,80,110,128); the fix
+        # plumbs BlendKeyParams into the 2D pipeline cache key + FillBlendAttachmentState (the 3D
+        # path's proven translation). The GFX-070 per-batch blend-constant capture becomes live here.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_blendstate
+                        examples/vulkan_spritebatch_blendstate_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_BlendState COMMAND cna_test_vulkan_spritebatch_blendstate
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
         cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
                         examples/vulkan_spritebatch_multi_begin_end_test.cpp)
