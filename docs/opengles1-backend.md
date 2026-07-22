@@ -28,7 +28,7 @@ which provides `libGLESv1_CM.so` plus `GLES/gl.h`/`GLES/glext.h`. `cmake/Backend
 shape as Vulkan's `find_package(Vulkan REQUIRED)`) if they are absent — this is a hard system
 dependency, not a vendored/fetched one.
 
-## A real, empirically-found limitation: not every EGL driver implements ES1
+## A real, empirically-found limitation: Debian's Mesa is built without ES1
 
 During this backend's own bring-up, a genuine OpenGL ES 1.1 context could **not** be created on
 this project's Linux development container, whose only GL driver is Mesa's software rasterizer
@@ -37,14 +37,33 @@ this project's Linux development container, whose only GL driver is Mesa's softw
 - `eglChooseConfig()` with `EGL_RENDERABLE_TYPE = EGL_OPENGL_ES_BIT` **succeeds** and reports
   every enumerated config as ES1-capable (`EGL_CONFORMANT` includes the ES1 bit).
 - `eglCreateContext()` on that same config with `EGL_CONTEXT_CLIENT_VERSION = 1` **fails** with
-  `EGL_BAD_CONFIG` (`0x3003`), on every config, consistently.
+  `EGL_BAD_ALLOC` (`0x3003`), on every config, consistently. (Earlier revisions of this document
+  called `0x3003` `EGL_BAD_CONFIG` — that was wrong; `EGL_BAD_CONFIG` is `0x3005`. Mesa's own debug
+  output names it exactly: `EGL user error 0x3003 (EGL_BAD_ALLOC) in eglCreateContext:
+  dri2_create_context`.)
 - The identical program requesting an ES2 context (`EGL_CONTEXT_CLIENT_VERSION = 2`,
   `EGL_RENDERABLE_TYPE = EGL_OPENGL_ES2_BIT`) **succeeds** on the same driver.
 
-In other words: this specific Mesa/llvmpipe build advertises ES1-capable EGL configs but does not
-actually implement ES1 context creation — a real, known category of Mesa limitation (desktop
-Linux software rendering dropped genuine "Common profile" ES1 support in a way ES2/ES3 was not),
-not a CNA or SDL3 bug. Building and running `cna_test_opengles1_clear_readback` end-to-end on
+In other words: Mesa as packaged here advertises ES1-capable EGL configs but refuses to create an
+ES1 context — not a CNA or SDL3 bug.
+
+**Root cause (established 2026-07-22):** Debian's Mesa source package sets, in its `debian/rules`:
+
+```make
+confflags_GLES = -Dgles1=disabled -Dgles2=enabled
+```
+
+Debian deliberately builds Mesa **without** OpenGL ES 1.x. Upstream Mesa still implements ES1; the
+Debian binary packages simply don't contain it. With `gles1` disabled Mesa reports
+`max_gl_es1_version = 0`, which drops `__DRI_API_GLES` from the DRI screen's `api_mask`, so
+`dri2_create_context()` rejects the ES1 API — while the EGL config list, computed on a separate
+path, keeps advertising every config as ES1-renderable and ES1-conformant. That inconsistency is
+exactly what makes the failure look like a driver/hardware problem when it is a build-flag one.
+
+This was confirmed on a Debian 13 host with a **real AMD Radeon 780M (`radeonsi`) GPU**, where all
+three available Mesa drivers — `radeonsi`, `llvmpipe`, and `softpipe` — refuse ES1 identically
+while ES2 succeeds on every one of them. Per-driver and "software rasterizer only" explanations are
+therefore both ruled out. Building and running `cna_test_opengles1_clear_readback` end-to-end on
 this same container reaches the identical conclusion through the real backend/SDL3 stack (which
 routes an `SDL_WINDOW_OPENGL` window through GLX on X11, a distinct code path from the raw EGL
 spike above, yet fails for the same underlying reason):
@@ -63,27 +82,20 @@ instead), so it fails identically and throws a clear `std::runtime_error` identi
 driver, rather than silently falling back to something else.
 
 **Practical implication:** this backend cannot be runtime-verified (context creation, Clear/
-Present, any pixel-level test) on a plain desktop Linux container using stock Mesa. It targets:
+Present, any pixel-level test) against Debian's stock Mesa packages, on any GPU. Suitable targets
+are:
 
+- **a locally built Mesa configured with `-Dgles1=enabled`** — the cheapest option by far, and
+  hardware-independent: a pure-software `softpipe`/`llvmpipe` build is enough to exercise the whole
+  backend including pixel readback. This is the recommended route for CI/dev verification,
 - embedded/mobile Linux targets with a vendor ES1 driver (PowerVR, Mali, VideoCore/Broadcom,
   older Android devices via the NDK's `libGLESv1_CM.so`),
 - desktop hosts whose GL vendor driver (proprietary NVIDIA/AMD/Intel, or a translation layer such
-  as ANGLE) genuinely implements ES1 CM,
-- CI/dev environments with a real GPU and driver stack, as opposed to Mesa's software renderer.
+  as ANGLE, which does implement ES1) genuinely provides ES1 CM.
 
-**Re-confirmed on real GPU hardware (2026-07-22):** the above was re-tested on a separate Debian 13
-host with a real AMD Radeon 780M (`radeonsi`/`amdgpu`, Mesa 25.0.7 — not the software-rasterizer
-container the original finding was made on). Result: identical failure. The raw EGL spike
-(`eglChooseConfig(EGL_OPENGL_ES_BIT)` succeeds, `eglCreateContext(EGL_CONTEXT_CLIENT_VERSION=1)`
-fails `EGL_BAD_CONFIG`/`0x3003`, ES2 succeeds on the same driver) reproduces exactly, and so does
-the real backend via full `SDL3`/GLX against a real X11 `:0` display —
-`glxinfo` even advertises `GLX_EXT_create_context_es_profile`, yet context creation still fails the
-same way. This demonstrates the limitation is **not** specific to `llvmpipe`/software rendering or
-to any one container: it is Mesa itself. Recent Mesa versions ship `libGLESv1_CM.so` and the ES1
-headers for ABI/link compatibility, but no gallium driver (`radeonsi` included) actually implements
-genuine ES1 (Common profile, non-CL) context creation any more. A working `🟨`→`✅` verification
-therefore needs a genuinely non-Mesa driver stack (proprietary vendor OpenGL/EGL) or real embedded/
-Android hardware — "any Linux desktop with a real GPU" is not sufficient by itself.
+Note that "a machine with a real GPU" is *not* by itself sufficient, and neither is switching
+between Mesa drivers: the gate is Debian's Mesa build flag, so `radeonsi` on real AMD hardware
+fails exactly like `llvmpipe` and `softpipe` do.
 
 This mirrors this project's own existing precedent for D3D11/D3D12 (Windows-only, cannot be
 validated on a Linux container either) and Vulkan (requires a real Vulkan ICD) — a backend whose
@@ -92,6 +104,36 @@ pixel verification left to a host that actually has the driver. `cmake/Tests/Ope
 registers `OpenGLES1_Clear_Readback` unconditionally (no automatic skip) — on a host without a
 real ES1 driver it fails fast with the `SDL_GL_CreateContext failed` message above, same as a
 Vulkan test would fail without an ICD.
+
+### Getting an ES1-capable Mesa locally (the route to `OPENGLES1-77`)
+
+Since the blocker is only Debian's `-Dgles1=disabled`, a side-by-side Mesa build with ES1 turned
+back on is enough — no special hardware, and it does not have to replace the system Mesa:
+
+```bash
+sudo apt-get install -y meson bison flex libdrm-dev libexpat1-dev \
+    libxcb-dri3-dev libxcb-present-dev libxcb-glx0-dev libxshmfence-dev
+
+git clone --depth 1 -b mesa-25.0.7 https://gitlab.freedesktop.org/mesa/mesa.git ~/deps/mesa
+meson setup ~/deps/mesa/build-es1 ~/deps/mesa \
+    -Dprefix=$HOME/deps/mesa-es1-install \
+    -Dgles1=enabled -Dgles2=enabled -Dopengl=true \
+    -Dgallium-drivers=softpipe -Dvulkan-drivers= -Dplatforms=x11
+ninja -C ~/deps/mesa/build-es1 install
+```
+
+Then point the loader at it for the test run only (system Mesa left untouched):
+
+```bash
+export LD_LIBRARY_PATH=$HOME/deps/mesa-es1-install/lib/x86_64-linux-gnu
+export __EGL_VENDOR_LIBRARY_DIRS=$HOME/deps/mesa-es1-install/share/glvnd/egl_vendor.d
+export LIBGL_DRIVERS_PATH=$HOME/deps/mesa-es1-install/lib/x86_64-linux-gnu/dri
+export LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=softpipe
+ctest --test-dir cmake-build-opengles1 -R OpenGLES1_Clear_Readback --output-on-failure
+```
+
+Verify the ES1 path is genuinely live before trusting a PASS — the raw EGL probe should report a
+created context, and `glGetString(GL_VERSION)` should start with `OpenGL ES-CM 1.1`.
 
 ## Implemented baseline
 

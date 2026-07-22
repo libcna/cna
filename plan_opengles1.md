@@ -35,18 +35,32 @@
 > given Linux desktop host has a working ES1 driver without checking first (a quick way to check:
 > the raw EGL spike program described in `docs/opengles1-backend.md`).
 >
-> **Re-confirmed on real GPU hardware (2026-07-22, separate Debian 13 host, AMD Radeon 780M
-> `radeonsi`/`amdgpu`, Mesa 25.0.7 — not the software-rasterizer container above):** identical
-> failure. The raw EGL spike (`eglChooseConfig(EGL_OPENGL_ES_BIT)` succeeds,
-> `eglCreateContext(EGL_CONTEXT_CLIENT_VERSION=1)` fails `EGL_BAD_CONFIG`/`0x3003`; ES2 succeeds on
-> the same driver) reproduces byte-for-byte, and so does the real `OpenGLES1GraphicsBackend` via
-> full `SDL3`/GLX on a real X11 `:0` display (`GLX_EXT_create_context_es_profile` is advertised in
-> `glxinfo`, yet context creation still fails the same way). This rules out "it's just llvmpipe" or
-> "it's just this container" as the explanation — it is Mesa itself: recent Mesa versions ship
-> `libGLESv1_CM.so`/the ES1 headers for ABI/link compatibility but no gallium driver actually
-> implements genuine ES1 (Common profile, non-CL) context creation any more. `OPENGLES1-77` remains
-> blocked; it now needs either a non-Mesa driver (proprietary vendor stack) or genuine embedded/
-> Android hardware, not merely "a machine with a real GPU."
+> **Root cause identified (2026-07-22) — it is a Debian packaging decision, not a hardware,
+> driver, or upstream-Mesa limitation.** Re-tested on a separate Debian 13 host with a real AMD
+> Radeon 780M (`radeonsi`/`amdgpu`, Mesa 25.0.7 — not the software-rasterizer container above), the
+> failure reproduces identically, and digging into *why* produced a definite answer:
+>
+> - Debian's own Mesa packaging (`debian/rules` in the `mesa` source package) sets
+>   **`confflags_GLES = -Dgles1=disabled -Dgles2=enabled`**. Debian deliberately builds Mesa
+>   *without* OpenGL ES 1.x support. Upstream Mesa still implements ES1 — Debian just does not
+>   ship it.
+> - This matches the observed behaviour exactly. With `gles1` disabled, Mesa reports
+>   `max_gl_es1_version = 0`, which drops `__DRI_API_GLES` from the screen's `api_mask`, so
+>   `dri2_create_context()` refuses the ES1 API — while the EGL config list, computed separately,
+>   still advertises every config as ES1-renderable *and* ES1-conformant.
+> - The error is **`EGL_BAD_ALLOC` (`0x3003`)**, not `EGL_BAD_CONFIG` — earlier revisions of this
+>   file and of `docs/opengles1-backend.md` mislabelled that code (`EGL_BAD_CONFIG` is `0x3005`).
+>   Mesa's own debug log names the failure precisely:
+>   `EGL user error 0x3003 (EGL_BAD_ALLOC) in eglCreateContext: dri2_create_context`.
+> - All three Mesa drivers available on that host — `radeonsi` (real GPU), `llvmpipe`, and
+>   `softpipe` — fail ES1 identically while ES2 succeeds on every one of them. A per-driver or
+>   software-rasterizer explanation is therefore ruled out; the gate is build-time and common to
+>   the whole Mesa package.
+>
+> So `OPENGLES1-77` is **not** blocked on exotic hardware after all: any Mesa built with
+> `-Dgles1=enabled` (including a plain software `softpipe`/`llvmpipe` build) should be able to
+> create the context and run the pixel tests. The remaining blocker is simply that no such Mesa
+> build exists on this host yet.
 
 ## Design decisions
 
@@ -197,7 +211,7 @@ above for the technical detail behind each row.
 | OPENGLES1-74 | `EnvironmentMapEffect` via `GL_OES_texture_cube_map`'s `glTexGeniOES(..., GL_REFLECTION_MAP_OES)` automatic reflection-vector texcoord generation, blended via `GL_INTERPOLATE` | ✅ code / 🟨 runtime | Gated on the extension string **and** `glTexGeniOES` actually resolving via `SDL_GL_GetProcAddress`, and on vertex stride 32 (normal data required). Fresnel edge-weighting is not applied (documented deviation — see design decision 7 and docs/opengles1-backend.md). |
 | OPENGLES1-75 | `OcclusionQuery` — **researched and confirmed impossible**, not merely deferred: the real system `GLES/gl.h`/`GLES/glext.h` (Debian/Ubuntu `libgles-dev`) contain no occlusion-query mechanism of any kind anywhere in the ES 1.1 CM registry (`GL_OES_query_matrix` is unrelated — it queries the current matrix stack, not visibility) | ⬜ (confirmed impossible) | `CreateOcclusionQuery()` keeps the base class's `nullptr` default; `SupportsCapability(OcclusionQuery)` stays `false` permanently, joining skinning/PBR/custom-shader in the "genuinely no fixed-function/extension path exists" category rather than the "not yet implemented" one. |
 | OPENGLES1-76 | Wireframe emulation: re-expands `TriangleList`/`TriangleStrip` draws into `GL_LINES`, the same technique `EasyGLGraphicsBackend::DrawWireframe` already uses for its own no-`glPolygonMode` problem | ✅ code / 🟨 runtime | Indexed draws read the real triangle indices from `OpenGLES1IndexBufferBackend`'s CPU shadow (`OPENGLES1-73`); non-indexed draws use sequential vertex order. `SupportsCapability(WireFrame)` now reports `true`. |
-| OPENGLES1-77 | Runtime verification on an actual ES1-capable host (embedded Linux/Android device, or a desktop vendor driver confirmed to support ES1 CM) — flip every `🟨` row above to `✅` once confirmed | ⬜ | Blocked on hardware/environment access, not on code — see the finding at the top of this file. Re-checked 2026-07-22 on a real AMD Radeon 780M (`radeonsi`) host running plain Mesa 25.0.7: same `EGL_BAD_CONFIG` failure, both via a raw EGL spike and via the real backend's `SDL3`/GLX path, ruling out "just llvmpipe" as the cause — this is a Mesa-wide gap, so a non-Mesa (proprietary vendor) driver or genuine embedded/Android hardware is now required, not just "any machine with a real GPU." |
+| OPENGLES1-77 | Runtime verification on an ES1-capable driver — flip every `🟨` row above to `✅` once confirmed | ⬜ | Root cause found 2026-07-22 (see the finding at the top of this file): Debian builds Mesa with `-Dgles1=disabled`, so *no* Debian Mesa driver will create an ES1 context (`EGL_BAD_ALLOC` from `dri2_create_context`; verified identical on `radeonsi`/`llvmpipe`/`softpipe`, ES2 fine on all three). This no longer needs embedded/Android hardware or a proprietary driver — a local Mesa built with `-Dgles1=enabled` (software `softpipe` is sufficient) should unblock it. Prerequisites still missing on this host: `meson`, `bison`, `flex` (plus `libxcb-dri3-dev`/`libxcb-present-dev`/`libxcb-glx0-dev`/`libxshmfence-dev` for an X11-capable build; a surfaceless/software build avoids those). |
 | OPENGLES1-78 | Cross-backend pixel-parity test (same scene rendered on OPENGLES1 vs. an already-verified backend) | ⬜ | Same shape as `plan_webgpu.md`'s own `WEBGPU-123`; needs OPENGLES1-77 first. |
 
 ---
