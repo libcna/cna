@@ -105,6 +105,21 @@ registers `OpenGLES1_Clear_Readback` unconditionally (no automatic skip) — on 
 real ES1 driver it fails fast with the `SDL_GL_CreateContext failed` message above, same as a
 Vulkan test would fail without an ICD.
 
+### Verified behaviour
+
+Against that Mesa the backend runs for real. Six test executables
+(`ctest -R OpenGLES1`, driven through `scripts/opengles1-test-env.sh`) assert 37 checks via
+`GetBackBufferData()`/`RenderTarget2D::GetData()` readback and all pass: clear/present/readback,
+`SpriteBatch`, colored and textured draws, blend/depth/cull/sampler state, viewport and scissor
+clipping, directional lighting, linear fog, the alpha test, real GPU vertex/index buffers, render
+targets, wireframe emulation, dual texturing, environment mapping and context loss/restore.
+
+Actually running the code exposed three defects that had shipped as "code complete" after review:
+the alpha test was inverted for the Less/Greater family, `RenderTarget2D::GetData()` returned all
+zeroes because the backend never overrode the interface's no-op default, and textures were not
+rebuilt after a context loss (they sampled as plain white). All three are fixed. Buffer *contents*
+still do not survive a context loss.
+
 ### Getting an ES1-capable Mesa locally — done, and it works
 
 Since the blocker is only Debian's `-Dgles1=disabled`, a side-by-side Mesa build with ES1 turned

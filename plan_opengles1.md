@@ -70,13 +70,30 @@
 >
 > `scripts/opengles1-test-env.sh` wraps the loader environment so this is repeatable.
 >
-> **Be precise about what that does and does not prove.** It flips the rows that the smoke test
-> genuinely exercises (context creation, `Clear`, `Present`, `ReadBackbuffer`, `Texture2D` upload,
-> `SpriteBatch`, `DrawUserPrimitives`) to ✅. It does **not** verify lighting, fog, alpha test,
-> blend/depth/stencil/rasterizer/sampler state, scissor/viewport, context loss, render targets,
-> dual texture, environment mapping, or wireframe — those rows stay 🟨 not because the driver is
-> missing any more, but because **no test covers them yet**. Writing those tests is now ordinary
-> work rather than a hardware blocker, and is tracked as `OPENGLES1-79`.
+> **`OPENGLES1-79` then closed most of the remaining gap, same day.** Five further test
+> executables now cover blend/depth/cull/sampler state, viewport and scissor, lighting, fog, the
+> alpha test, real VBO/IBO draws, render targets, wireframe, dual texture, environment mapping and
+> context loss — 37 pixel-asserted checks, all green under `ctest -R OpenGLES1`.
+>
+> **Running the code found three real defects that code review had not.** Each had shipped as
+> "✅ code complete" and was wrong:
+>
+> - `OPENGLES1-24` — the alpha test was **inverted** for the Less/Greater family. The `AlphaTest`
+>   vector's `z`/`w` are *branch outcomes*, not pass/fail weights, so `Greater` mapped to `GL_LESS`
+>   and vice versa. `CompareFunction::Never` also passed everything instead of discarding it.
+> - `OPENGLES1-72` — `RenderTarget2D::GetData()` returned all zeroes. Rendering into the target
+>   worked; the backend simply never overrode `ITextureBackend::GetData`, which is a no-op default.
+> - `OPENGLES1-11` — a texture uploaded before a context loss sampled as plain white afterwards.
+>   The context was recreated but no GPU object was ever rebuilt.
+>
+> All three are fixed. Buffer contents still do not survive a context loss — tracked honestly as
+> `OPENGLES1-80` rather than left implicit.
+>
+> **What is still 🟨, and why.** `OPENGLES1-9`/`10` (virtual resolution and window↔logical
+> transforms), `OPENGLES1-13` (the `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled`
+> trio, as distinct from the state objects that *are* covered), `OPENGLES1-18` (`SpriteBatch::
+> SetTransformMatrix`) and `OPENGLES1-20` (`glBlendFuncSeparateOES`/`glBlendEquationOES`). Nothing
+> blocks these; they simply have no test yet.
 
 ## Design decisions
 
@@ -168,13 +185,13 @@
    map, wireframe) — ✅ code complete 2026-07-21, 🟨 runtime-unverifiable on this container, same
    as every other row (see the finding above). `OPENGLES1-75` (occlusion query) researched and
    confirmed **impossible** on ES 1.1 core, not merely deferred — see its own row.
-6. `OPENGLES1-77` — 🟨 **unblocked and partly done (2026-07-22).** A locally built
-   `-Dgles1=enabled` Mesa gives a genuine ES1 driver on this host, and the existing smoke test
-   passes 5/5 through it, flipping its seven covered rows to ✅. The rest of the 🟨 rows now lack
-   *tests*, not a driver.
-7. `OPENGLES1-79` — ⬜ **next task:** extend runtime coverage to the still-🟨 rows (state blocks,
-   lighting/fog/alpha test, viewport/scissor, context loss, render targets, dual texture,
-   environment map, wireframe), then `OPENGLES1-78` (cross-backend pixel parity).
+6. `OPENGLES1-77` — 🟨 **unblocked and largely done (2026-07-22).** A locally built
+   `-Dgles1=enabled` Mesa gives a genuine ES1 driver on this host; six test executables pass
+   against it, flipping 25 rows to ✅ and exposing three real backend defects (see the finding
+   above). Five rows remain uncovered, none of them blocked.
+7. `OPENGLES1-79` — ✅ done 2026-07-22 (the five new test executables above).
+8. **Next:** `OPENGLES1-80` (buffer contents across a context loss), the five uncovered rows listed
+   in `OPENGLES1-77`, then `OPENGLES1-78` (cross-backend pixel parity).
 
 ---
 
@@ -192,28 +209,28 @@
 | OPENGLES1-8 | `Present()` (`SDL_GL_SwapWindow`) | ✅ | |
 | OPENGLES1-9 | `GetViewportSize`/`SetVirtualResolution`/`SetPresentationMode`/`SetSwapInterval` | ✅ code / 🟨 runtime | Same `FixedHeightDynamicWidth` logical-size math as `EasyGLGraphicsBackend`. |
 | OPENGLES1-10 | `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ code / 🟨 runtime | Same pure-uniform-scale math (no letterbox offset under the default presentation mode) as `EasyGLGraphicsBackend`'s identical methods. |
-| OPENGLES1-11 | `DebugSimulateContextLoss`/`DebugRestoreContext` (destroy + recreate context, reload extension entry points) | ✅ code / 🟨 runtime | |
+| OPENGLES1-11 | `DebugSimulateContextLoss`/`DebugRestoreContext` (destroy + recreate context, reload extension entry points) | ✅ | |
 | OPENGLES1-12 | `ReadBackbuffer` (`glReadPixels` + row flip) | ✅ | Y-flip matches every other GL-based backend's top-left-origin convention. |
 | OPENGLES1-13 | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` | ✅ code / 🟨 runtime | |
 | OPENGLES1-14 | `CreateTexture`/`OpenGLES1TextureBackend` (level-0 RGBA8 upload, default linear filter/repeat wrap) | ✅ | `GetNativeTexture()` returns `nullptr` (no `SDL_Renderer` involved), matching `EasyGL`'s identical convention for GL-based backends. |
-| OPENGLES1-15 | `CreateVertexBuffer`/`OpenGLES1VertexBufferBackend` (real GPU `GL_ARRAY_BUFFER` object, `SetData`) | ✅ code / 🟨 runtime | See design decision 3 (revised 2026-07-21 — real VBO, not client-side array, once `glGenBuffers`/`glBufferData` were confirmed core ES 1.1). |
-| OPENGLES1-16 | `CreateIndexBuffer16`/`OpenGLES1IndexBufferBackend` (real GPU `GL_ELEMENT_ARRAY_BUFFER` object + a small CPU-side shadow for wireframe emulation, `SetData16`) | ✅ code / 🟨 runtime | 32-bit indices fall back to the base class's `CreateIndexBuffer16` delegation (unimplemented on this backend, matches several other backends' current state). |
+| OPENGLES1-15 | `CreateVertexBuffer`/`OpenGLES1VertexBufferBackend` (real GPU `GL_ARRAY_BUFFER` object, `SetData`) | ✅ | See design decision 3 (revised 2026-07-21 — real VBO, not client-side array, once `glGenBuffers`/`glBufferData` were confirmed core ES 1.1). |
+| OPENGLES1-16 | `CreateIndexBuffer16`/`OpenGLES1IndexBufferBackend` (real GPU `GL_ELEMENT_ARRAY_BUFFER` object + a small CPU-side shadow for wireframe emulation, `SetData16`) | ✅ | 32-bit indices fall back to the base class's `CreateIndexBuffer16` delegation (unimplemented on this backend, matches several other backends' current state). |
 | OPENGLES1-17 | `CreateSpriteBatch`/`OpenGLES1SpriteBatchBackend`: quad batching, texture/rotation/origin/flip/layer math (ported from the same well-established formula every CNA backend's `SpriteBatch` uses) | ✅ | `glOrthof` top-left-origin projection, `GL_MODULATE` texture environment, per-vertex color. |
 | OPENGLES1-18 | `SpriteBatch::SetTransformMatrix`/`SetSamplerFilter`/`SetSamplerAddressMode` | ✅ code / 🟨 runtime | |
 | OPENGLES1-19 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (`BasicEffect` with `VertexColorEnabled=true`, no texture/lighting) | ✅ | Loads `GL_PROJECTION`/`GL_MODELVIEW` directly from `Matrix::ToColumnMajor()`. |
 | OPENGLES1-20 | `LoadExtensionEntryPoints()`: resolve `glBlendFuncSeparateOES`/`glBlendEquationOES` via `SDL_GL_GetProcAddress`, null-safe fallback | ✅ code / 🟨 runtime | Confirmed these two symbols exist in the real system `GLES/glext.h` on this container (`GL_OES_blend_func_separate`/`GL_OES_blend_subtract`). |
-| OPENGLES1-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: stride-based dispatch (16/20/24/32), texture (`GL_MODULATE`), fallback to colored path for skinning/PBR/instancing/custom-effect (dual-texture/env-map now real, see `OPENGLES1-71`/`74`) | ✅ code / 🟨 runtime | See design decision 4. |
-| OPENGLES1-22 | Lighting: up to 3 directional lights (`GL_LIGHT0..2`), material diffuse/specular/emission/shininess, ambient via `GL_LIGHT_MODEL_AMBIENT`, applied under a view-only `MODELVIEW` | ✅ code / 🟨 runtime | See design decision 5. |
-| OPENGLES1-23 | Fog (`GL_FOG`, `GL_LINEAR` mode, `fogStart`/`fogEnd`/`fogColor`) | ✅ code / 🟨 runtime | Matches `BasicEffect`'s eye-space start/end convention (same semantics as every shader-based backend's fog implementation, just via fixed-function `glFog*` instead of a shader uniform). |
-| OPENGLES1-24 | Alpha test: best-effort `glAlphaFunc` mapping of `GpuDrawParams::alphaTest`'s 4-way tolerance-band test | ✅ code / 🟨 runtime | Documented deviation: fixed-function has exactly one comparison function, not a 4-way weighted band — see `docs/opengles1-backend.md`. |
-| OPENGLES1-25 | `ApplyBlendState` (`glBlendFunc`/`glBlendFuncSeparateOES`, `glBlendEquationOES` where available) | ✅ code / 🟨 runtime | `BlendFactor`/`InverseBlendFactor` fall back to `SourceAlpha`/`InverseSourceAlpha` (no `glBlendColor` in ES 1.1 core); `BlendFunction::Max`/`Min` fall back to `Add` (no ES1.1 equivalent). |
-| OPENGLES1-26 | `ApplyDepthStencilState` (depth func/write, single-sided stencil func/op/mask) | ✅ code / 🟨 runtime | Two-sided stencil not supported (documented deviation — no separate front/back stencil functions in ES 1.1 core). |
-| OPENGLES1-27 | `ApplyRasterizerState` (cull mode, scissor enable, `FillMode::WireFrame` tracked for `OPENGLES1-76`) | ✅ code / 🟨 runtime | `DepthBias`/`SlopeScaleDepthBias` still silently ignored (no `glPolygonOffset` in ES 1.1). |
-| OPENGLES1-28 | `ApplySamplerState` (filter/wrap per the bound texture unit) | ✅ code / 🟨 runtime | Single texture unit only in this baseline. |
-| OPENGLES1-29 | `SetScissorRect`/`SetViewport` | ✅ code / 🟨 runtime | |
+| OPENGLES1-21 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: stride-based dispatch (16/20/24/32), texture (`GL_MODULATE`), fallback to colored path for skinning/PBR/instancing/custom-effect (dual-texture/env-map now real, see `OPENGLES1-71`/`74`) | ✅ | See design decision 4. |
+| OPENGLES1-22 | Lighting: up to 3 directional lights (`GL_LIGHT0..2`), material diffuse/specular/emission/shininess, ambient via `GL_LIGHT_MODEL_AMBIENT`, applied under a view-only `MODELVIEW` | ✅ | See design decision 5. |
+| OPENGLES1-23 | Fog (`GL_FOG`, `GL_LINEAR` mode, `fogStart`/`fogEnd`/`fogColor`) | ✅ | Matches `BasicEffect`'s eye-space start/end convention (same semantics as every shader-based backend's fog implementation, just via fixed-function `glFog*` instead of a shader uniform). |
+| OPENGLES1-24 | Alpha test: best-effort `glAlphaFunc` mapping of `GpuDrawParams::alphaTest`'s 4-way tolerance-band test | ✅ | Documented deviation: fixed-function has exactly one comparison function, not a 4-way weighted band — see `docs/opengles1-backend.md`. |
+| OPENGLES1-25 | `ApplyBlendState` (`glBlendFunc`/`glBlendFuncSeparateOES`, `glBlendEquationOES` where available) | ✅ | `BlendFactor`/`InverseBlendFactor` fall back to `SourceAlpha`/`InverseSourceAlpha` (no `glBlendColor` in ES 1.1 core); `BlendFunction::Max`/`Min` fall back to `Add` (no ES1.1 equivalent). |
+| OPENGLES1-26 | `ApplyDepthStencilState` (depth func/write, single-sided stencil func/op/mask) | ✅ | Two-sided stencil not supported (documented deviation — no separate front/back stencil functions in ES 1.1 core). |
+| OPENGLES1-27 | `ApplyRasterizerState` (cull mode, scissor enable, `FillMode::WireFrame` tracked for `OPENGLES1-76`) | ✅ | `DepthBias`/`SlopeScaleDepthBias` still silently ignored (no `glPolygonOffset` in ES 1.1). |
+| OPENGLES1-28 | `ApplySamplerState` (filter/wrap per the bound texture unit) | ✅ | Single texture unit only in this baseline. |
+| OPENGLES1-29 | `SetScissorRect`/`SetViewport` | ✅ | |
 | OPENGLES1-30 | `SupportsCapability()` overrides: `MultiSampleAntiAliasing`/`MultipleRenderTargets`/`AnisotropicFiltering`/`OcclusionQuery`/`CustomEffects` all `false`; `WireFrame` `true` (revised 2026-07-21, see `OPENGLES1-76`) | ✅ | Matches this backend's actually-implemented feature set exactly — no capability is claimed that the code doesn't back. |
 | OPENGLES1-31 | `docs/opengles1-backend.md`: status, build instructions, the EGL/Mesa ES1 finding, implemented baseline, important limitations, architecture notes | ✅ | |
-| OPENGLES1-32 | `examples/opengles1_clear_readback_test.cpp` + `cmake/Tests/OpenGLES1Tests.cmake` (`OpenGLES1_Clear_Readback` CTest: `Clear`, `SpriteBatch` quad, `DrawUserPrimitives(VertexPositionColor)`, all via `GetBackBufferData()` pixel assertions) | 🟨 | Compiles and links against the real backend; cannot execute to a PASS/FAIL result on this container (context creation throws — see the finding above). No automatic CTest skip is registered (mirrors `VulkanTests.cmake`'s own no-skip precedent — a missing driver is a real, visible test failure, not silently swallowed). |
+| OPENGLES1-32 | `examples/opengles1_clear_readback_test.cpp` + `cmake/Tests/OpenGLES1Tests.cmake` (`OpenGLES1_Clear_Readback` CTest: `Clear`, `SpriteBatch` quad, `DrawUserPrimitives(VertexPositionColor)`, all via `GetBackBufferData()` pixel assertions) | ✅ | Compiles and links against the real backend; cannot execute to a PASS/FAIL result on this container (context creation throws — see the finding above). No automatic CTest skip is registered (mirrors `VulkanTests.cmake`'s own no-skip precedent — a missing driver is a real, visible test failure, not silently swallowed). |
 
 ---
 
@@ -226,15 +243,16 @@ above for the technical detail behind each row.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| OPENGLES1-71 | `DualTextureEffect` real dispatch via genuine ES 1.1 multitexturing (`glActiveTexture`/`glClientActiveTexture`, two `GL_COMBINE` stages reproducing the exact `(tex0*2)*tex1*diffuseTint` formula) | ✅ code / 🟨 runtime | Gated on `GL_MAX_TEXTURE_UNITS >= 2` (`SupportsSecondTextureUnit()`) and on the vertex stride being 20 or 24 (no normal data needed) — falls back to the plain colored path otherwise, not a silent wrong-output approximation. |
-| OPENGLES1-72 | `RenderTarget2D` via `GL_OES_framebuffer_object` (runtime extension + entry-point-resolution check, `nullptr` returned when absent — no `FATAL_ERROR`, matching `IGraphicsBackend`'s own "backend can't support this" contract) | ✅ code / 🟨 runtime | `OpenGLES1RenderTargetBackend`: color texture + optional depth/stencil renderbuffer (`GL_DEPTH_COMPONENT16_OES` baseline, upgraded to 24-bit/packed-stencil only when `GL_OES_depth24`/`GL_OES_packed_depth_stencil` are also present). `ApplyLogicalViewportAndOrtho2D()` (used by `SpriteBatch`) now also sizes to the bound RT, mirroring `EasyGLGraphicsBackend::FlushBatch`'s identical `GetCurrentRenderTarget2DSize()` check. Mip generation and multisampling remain unimplemented (accepted-and-ignored parameters, matching several other backends' current gaps). |
-| OPENGLES1-73 | Real GPU-side vertex/index buffer objects — `glGenBuffers`/`glBindBuffer`/`glBufferData` confirmed **core** ES 1.1 (not the originally-assumed optional extension), so no runtime check or client-array fallback was actually needed | ✅ code / 🟨 runtime | See design decision 3 (revised). `OpenGLES1IndexBufferBackend` also keeps a small CPU-side index shadow, needed only by `OPENGLES1-76`'s wireframe emulation. |
-| OPENGLES1-74 | `EnvironmentMapEffect` via `GL_OES_texture_cube_map`'s `glTexGeniOES(..., GL_REFLECTION_MAP_OES)` automatic reflection-vector texcoord generation, blended via `GL_INTERPOLATE` | ✅ code / 🟨 runtime | Gated on the extension string **and** `glTexGeniOES` actually resolving via `SDL_GL_GetProcAddress`, and on vertex stride 32 (normal data required). Fresnel edge-weighting is not applied (documented deviation — see design decision 7 and docs/opengles1-backend.md). |
+| OPENGLES1-71 | `DualTextureEffect` real dispatch via genuine ES 1.1 multitexturing (`glActiveTexture`/`glClientActiveTexture`, two `GL_COMBINE` stages reproducing the exact `(tex0*2)*tex1*diffuseTint` formula) | ✅ | Gated on `GL_MAX_TEXTURE_UNITS >= 2` (`SupportsSecondTextureUnit()`) and on the vertex stride being 20 or 24 (no normal data needed) — falls back to the plain colored path otherwise, not a silent wrong-output approximation. |
+| OPENGLES1-72 | `RenderTarget2D` via `GL_OES_framebuffer_object` (runtime extension + entry-point-resolution check, `nullptr` returned when absent — no `FATAL_ERROR`, matching `IGraphicsBackend`'s own "backend can't support this" contract) | ✅ | `OpenGLES1RenderTargetBackend`: color texture + optional depth/stencil renderbuffer (`GL_DEPTH_COMPONENT16_OES` baseline, upgraded to 24-bit/packed-stencil only when `GL_OES_depth24`/`GL_OES_packed_depth_stencil` are also present). `ApplyLogicalViewportAndOrtho2D()` (used by `SpriteBatch`) now also sizes to the bound RT, mirroring `EasyGLGraphicsBackend::FlushBatch`'s identical `GetCurrentRenderTarget2DSize()` check. Mip generation and multisampling remain unimplemented (accepted-and-ignored parameters, matching several other backends' current gaps). |
+| OPENGLES1-73 | Real GPU-side vertex/index buffer objects — `glGenBuffers`/`glBindBuffer`/`glBufferData` confirmed **core** ES 1.1 (not the originally-assumed optional extension), so no runtime check or client-array fallback was actually needed | ✅ | See design decision 3 (revised). `OpenGLES1IndexBufferBackend` also keeps a small CPU-side index shadow, needed only by `OPENGLES1-76`'s wireframe emulation. |
+| OPENGLES1-74 | `EnvironmentMapEffect` via `GL_OES_texture_cube_map`'s `glTexGeniOES(..., GL_REFLECTION_MAP_OES)` automatic reflection-vector texcoord generation, blended via `GL_INTERPOLATE` | ✅ | Gated on the extension string **and** `glTexGeniOES` actually resolving via `SDL_GL_GetProcAddress`, and on vertex stride 32 (normal data required). Fresnel edge-weighting is not applied (documented deviation — see design decision 7 and docs/opengles1-backend.md). |
 | OPENGLES1-75 | `OcclusionQuery` — **researched and confirmed impossible**, not merely deferred: the real system `GLES/gl.h`/`GLES/glext.h` (Debian/Ubuntu `libgles-dev`) contain no occlusion-query mechanism of any kind anywhere in the ES 1.1 CM registry (`GL_OES_query_matrix` is unrelated — it queries the current matrix stack, not visibility) | ⬜ (confirmed impossible) | `CreateOcclusionQuery()` keeps the base class's `nullptr` default; `SupportsCapability(OcclusionQuery)` stays `false` permanently, joining skinning/PBR/custom-shader in the "genuinely no fixed-function/extension path exists" category rather than the "not yet implemented" one. |
-| OPENGLES1-76 | Wireframe emulation: re-expands `TriangleList`/`TriangleStrip` draws into `GL_LINES`, the same technique `EasyGLGraphicsBackend::DrawWireframe` already uses for its own no-`glPolygonMode` problem | ✅ code / 🟨 runtime | Indexed draws read the real triangle indices from `OpenGLES1IndexBufferBackend`'s CPU shadow (`OPENGLES1-73`); non-indexed draws use sequential vertex order. `SupportsCapability(WireFrame)` now reports `true`. |
-| OPENGLES1-77 | Runtime verification on an ES1-capable driver — flip each `🟨` row to `✅` as real coverage confirms it | 🟨 (unblocked, partly done) | Root cause found and removed 2026-07-22 (see the finding at the top of this file). Debian builds Mesa with `-Dgles1=disabled`, so no stock Debian Mesa driver creates an ES1 context; a locally built `-Dgles1=enabled` Mesa (software `softpipe` suffices, built rootless — recipe in `docs/opengles1-backend.md`) does. Against it the backend reports `OpenGL ES-CM 1.1 Mesa 25.0.7` and `cna_test_opengles1_clear_readback` passes **5/5**, green under `ctest -R OpenGLES1` via `scripts/opengles1-test-env.sh`. That flips OPENGLES1-5/7/8/12/14/17/19 to ✅. Everything still 🟨 is uncovered by any test — see `OPENGLES1-79`. |
+| OPENGLES1-76 | Wireframe emulation: re-expands `TriangleList`/`TriangleStrip` draws into `GL_LINES`, the same technique `EasyGLGraphicsBackend::DrawWireframe` already uses for its own no-`glPolygonMode` problem | ✅ | Indexed draws read the real triangle indices from `OpenGLES1IndexBufferBackend`'s CPU shadow (`OPENGLES1-73`); non-indexed draws use sequential vertex order. `SupportsCapability(WireFrame)` now reports `true`. |
+| OPENGLES1-77 | Runtime verification on an ES1-capable driver — flip each `🟨` row to `✅` as real coverage confirms it | 🟨 (largely done) | Driver blocker removed 2026-07-22 (Debian's Mesa is built `-Dgles1=disabled`; a local `-Dgles1=enabled` softpipe build runs the backend — recipe in `docs/opengles1-backend.md`, environment in `scripts/opengles1-test-env.sh`). Six test executables now pass against a real `OpenGL ES-CM 1.1` context, flipping OPENGLES1-5/7/8/11/12/14/15/16/17/19/21/22/23/24/25/26/27/28/29/32/71/72/73/74/76 to ✅ and finding three real defects on the way (OPENGLES1-24 inverted alpha test, OPENGLES1-72 missing render-target readback, OPENGLES1-11 textures not restored). Still 🟨: OPENGLES1-9/10 (virtual resolution + window/logical transforms), OPENGLES1-13 (the SetDepthTestEnabled/SetBlendEnabled/SetDepthWriteEnabled trio, as distinct from the state objects), OPENGLES1-18 (SpriteBatch SetTransformMatrix) and OPENGLES1-20 (`glBlendFuncSeparateOES`/`glBlendEquationOES`) — none blocked, simply not covered yet. |
 | OPENGLES1-78 | Cross-backend pixel-parity test (same scene rendered on OPENGLES1 vs. an already-verified backend) | ⬜ | Same shape as `plan_webgpu.md`'s own `WEBGPU-123`; needs OPENGLES1-77 first. |
-| OPENGLES1-79 | Runtime coverage for the rows the smoke test does not reach: blend/depth/stencil/rasterizer/sampler state, lighting, fog, alpha test, viewport/scissor, context loss, `RenderTarget2D`, dual texture, environment map, wireframe | ⬜ | Now ordinary test-writing work, not a hardware blocker — the ES1 driver from `OPENGLES1-77` is available locally. Each new test should assert through `GetBackBufferData()` pixels the way the existing smoke test does, and run under `scripts/opengles1-test-env.sh`. |
+| OPENGLES1-79 | Runtime coverage for the rows the baseline smoke test does not reach | ✅ | Done 2026-07-22. Five new test executables (`RenderState`, `ViewportScissor`, `LightingFogAlphaTest`, `BuffersRenderTarget`, `MultitextureContextLoss`) covering blend/depth/cull/sampler state, viewport and scissor, lighting/fog/alpha test, real VBO/IBO draws, render targets, wireframe, dual texture, environment mapping and context loss — 37 checks, all passing. Three backend defects found and fixed (see OPENGLES1-24/72/11). Remaining uncovered rows are listed in OPENGLES1-77. |
+| OPENGLES1-80 | Restore vertex/index buffer contents across a GL context loss | ⬜ | `DebugRestoreContext()` now rebuilds textures (OPENGLES1-11) but not buffer objects, whose GPU contents die with the old context. `OpenGLES1IndexBufferBackend` already keeps a CPU shadow for wireframe emulation and could reuse it; `OpenGLES1VertexBufferBackend` has no CPU copy and would need one. Not covered by a test yet — a real gap on any platform that genuinely loses the context (Android `onPause`), rather than a theoretical one. |
 
 ---
 
