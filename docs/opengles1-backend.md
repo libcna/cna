@@ -71,6 +71,20 @@ Present, any pixel-level test) on a plain desktop Linux container using stock Me
   as ANGLE) genuinely implements ES1 CM,
 - CI/dev environments with a real GPU and driver stack, as opposed to Mesa's software renderer.
 
+**Re-confirmed on real GPU hardware (2026-07-22):** the above was re-tested on a separate Debian 13
+host with a real AMD Radeon 780M (`radeonsi`/`amdgpu`, Mesa 25.0.7 — not the software-rasterizer
+container the original finding was made on). Result: identical failure. The raw EGL spike
+(`eglChooseConfig(EGL_OPENGL_ES_BIT)` succeeds, `eglCreateContext(EGL_CONTEXT_CLIENT_VERSION=1)`
+fails `EGL_BAD_CONFIG`/`0x3003`, ES2 succeeds on the same driver) reproduces exactly, and so does
+the real backend via full `SDL3`/GLX against a real X11 `:0` display —
+`glxinfo` even advertises `GLX_EXT_create_context_es_profile`, yet context creation still fails the
+same way. This demonstrates the limitation is **not** specific to `llvmpipe`/software rendering or
+to any one container: it is Mesa itself. Recent Mesa versions ship `libGLESv1_CM.so` and the ES1
+headers for ABI/link compatibility, but no gallium driver (`radeonsi` included) actually implements
+genuine ES1 (Common profile, non-CL) context creation any more. A working `🟨`→`✅` verification
+therefore needs a genuinely non-Mesa driver stack (proprietary vendor OpenGL/EGL) or real embedded/
+Android hardware — "any Linux desktop with a real GPU" is not sufficient by itself.
+
 This mirrors this project's own existing precedent for D3D11/D3D12 (Windows-only, cannot be
 validated on a Linux container either) and Vulkan (requires a real Vulkan ICD) — a backend whose
 correctness this repository can assert by code review and compile-time verification, with runtime
