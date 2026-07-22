@@ -107,18 +107,25 @@ Vulkan test would fail without an ICD.
 
 ### Verified behaviour
 
-Against that Mesa the backend runs for real. Six test executables
-(`ctest -R OpenGLES1`, driven through `scripts/opengles1-test-env.sh`) assert 37 checks via
+Against that Mesa the backend runs for real. Seven test executables
+(`ctest -R OpenGLES1`, driven through `scripts/opengles1-test-env.sh`) assert 51 checks via
 `GetBackBufferData()`/`RenderTarget2D::GetData()` readback and all pass: clear/present/readback,
-`SpriteBatch`, colored and textured draws, blend/depth/cull/sampler state, viewport and scissor
-clipping, directional lighting, linear fog, the alpha test, real GPU vertex/index buffers, render
-targets, wireframe emulation, dual texturing, environment mapping and context loss/restore.
+`SpriteBatch` (including its transform matrix), colored and textured draws, blend/depth/cull/
+sampler state and the direct depth/blend toggles, viewport and scissor clipping, virtual resolution
+and window↔logical transforms, directional lighting, linear fog, the alpha test, real GPU vertex/
+index buffers, render targets, wireframe emulation, dual texturing, environment mapping and context
+loss/restore.
 
-Actually running the code exposed three defects that had shipped as "code complete" after review:
+Actually running the code exposed four defects that had shipped as "code complete" after review:
 the alpha test was inverted for the Less/Greater family, `RenderTarget2D::GetData()` returned all
-zeroes because the backend never overrode the interface's no-op default, and textures were not
-rebuilt after a context loss (they sampled as plain white). All three are fixed. Buffer *contents*
-still do not survive a context loss.
+zeroes because the backend never overrode the interface's no-op default, and neither textures nor
+vertex/index buffers were rebuilt after a context loss (textures sampled as plain white, buffer
+draws rendered nothing). All four are fixed.
+
+One behaviour that looks like a bug but is not: `Clear` deliberately forces the depth mask writable
+so the clear value always lands, which means a `SetDepthWriteEnabled(false)` issued *before* a clear
+is undone by it. That is OPENGLES1-7's stated behaviour and matches EasyGL; set the toggle after
+the clear.
 
 ### Getting an ES1-capable Mesa locally — done, and it works
 

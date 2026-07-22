@@ -48,6 +48,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME OpenGLES1_MultitextureContextLoss_Readback COMMAND cna_test_opengles1_multitexture_contextloss
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_opengles1.md OPENGLES1-79: virtual resolution, coordinate transforms, the direct
+    # depth/blend toggles and the SpriteBatch transform (OPENGLES1-9/10/13/18/20).
+    cna_opengles1_test(cna_test_opengles1_resolution_statetoggles examples/opengles1_resolution_statetoggles_test.cpp)
+    cna_register_backend_test(NAME OpenGLES1_ResolutionStateToggles_Readback COMMAND cna_test_opengles1_resolution_statetoggles
+        TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_opengles1.md OPENGLES1-79: viewport and scissor clipping (OPENGLES1-29).
     cna_opengles1_test(cna_test_opengles1_viewport_scissor examples/opengles1_viewport_scissor_test.cpp)
     cna_register_backend_test(NAME OpenGLES1_ViewportScissor_Readback COMMAND cna_test_opengles1_viewport_scissor
