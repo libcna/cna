@@ -2341,7 +2341,8 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-019 | P1 | **DONE and VERIFIED (WebGPU runtime, wgpu-native v29.0.1.1, Xvfb :99; EasyGL parity, Xvfb :99)** | test `3a0e510d`, fix `be51ec4f`, docs (this entry) | feature/audit | Hypothesis CONFIRMED at HEAD and reproduced at runtime. `WebGPUGraphicsBackend::QueueSprite()` baked sprite clip space CPU-side from `ComputeLogicalViewport()` + `physicalWidth_/physicalHeight_` (all backbuffer-scoped) with **no** branch on `currentRenderTarget_`/`currentRenderTargetCubeFace_`, so a `SpriteBatch.Draw()` into an off-screen RenderTarget2D/cube face of a different size than the backbuffer mis-mapped its destination rectangle. Pre-fix evidence (96×72 backbuffer, 48×32 RT, `Rectangle(7,5,17,11)`): the sprite landed at RT pixels ≈x[3.5,12) y[2.2,7.1) (half of 96 wide, 72/32 tall) instead of x[7,24) y[5,16) — the bug-witness pixel (5,3) read `(255,0,0)` and the true interior (15,10) read `(0,0,0)`. Fixed by mirroring `SdlGpuGraphicsBackend::QueueSprite()`'s `currentRenderTarget_` branch (extended to the cube face): when a RenderTarget2D or RenderTargetCube face is bound, use an identity viewport (x=y=0, width=height=logical=target size) and divide the NDC by the target's own dimensions, not the backbuffer's; presentation-mode letterbox is a backbuffer-only concept. State-lifetime: NDC is baked at enqueue and `FlushCurrentRenderTarget()` flushes each target's pending sprites into that target's own pass on the next target switch, so enqueue-time target == render-time target — a per-draw snapshot (Vulkan/SdlGpu style) is unnecessary. New `WebGPU_SpriteBatch_RenderTarget` **12/23 → 23/23** (asymmetric RT2D, two different sizes, RT→backbuffer→RT isolation, transformMatrix scale+translate, orientation control, RenderTargetCube face — the exact path the frozen cube audit test routed around). Backbuffer control passes pre- and post-fix (backbuffer path unchanged). Full WebGPU shard **26/26**, **zero** wgpu validation errors, GFX-006 WorldNormal + GFX-007 EnvMapEmissive controls unregressed. No WGSL/SPIR-V/generated diff (CPU-only). Parity: WebGPU was the sole backbuffer-hardcoded backend of 6 (Vulkan/EasyGL/Bgfx/D3D11/SdlGpu already RT-aware — independently source-surveyed); empirically confirmed on **EasyGL** (`EasyGL_SpriteBatch_RenderTargetSize` 6/6, identical 17×11 RT-relative footprint at x[7..23], invariant to EasyGL's GL-bottom-left RT-sample Y-flip). Phase 11/22 sweep spawned **GFX-072** (SpriteBatch clip space ignores a custom `GraphicsDevice.Viewport` sub-region on 5/6 backends — pre-existing, cross-backend, NOT this defect). See "REMED-GFX-019 — WebGPU SpriteBatch render-target clip space" detail below. |
 | REMED-GFX-072 | P3 | **DONE and VERIFIED (Vulkan/SdlGpu/EasyGL/Bgfx/WebGPU runtime, Xvfb :99; D3D11 oracle runtime, Wine+DXVK :0; D3D12 build-verified)** | test `76f5e8a0`, fix `166a074b` (Vulkan), `b820a9b8` (SdlGpu), `dc0e6ca6` (EasyGL), `75b99860` (Bgfx), `814ebb38` (WebGPU), `3fd18152` (D3D12), oracle `e6da0ed5`, docs (this entry) | feature/audit | CNA's `SpriteBatch` did not thread `GraphicsDevice.Viewport` into the sprite clip-space bake: the backend divided the destination rectangle by the full render-target/backbuffer size, so a **custom sub-`Viewport`** either **squished** the sprite (WebGPU/Vulkan/SdlGpu/D3D12 — rasterizer viewport already correct via GFX-062/063/064, NDC baked full-target) or was **ignored entirely** (EasyGL/Bgfx — the sprite path reset the rasterizer viewport to the full target too). XNA/FNA build the SpriteBatch ortho from `Viewport.Width/Height` (`CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0)` — sprite (0,0)=viewport top-left; the rasterizer viewport positions the result at `Viewport.X/Y`; `Viewport.X/Y` are NOT subtracted from sprite coords). **D3D11 was already correct** (fills `ViewportSize` from live `RSGetViewports()`) — used as the runtime oracle. **7 SpriteBatch backends** (GFX-019 enumerated 6; the cross-backend survey found D3D12 as a 7th, also affected; D3D9 already correct via live `GetViewport`). Fixed each backend to thread the active `Viewport` W/H into its sprite NDC/ortho (gated on a genuine custom sub-region → default full-target viewport byte-identical, preserving virtual-resolution/letterbox). Shared conformance test (`spritebatch_custom_viewport_test.cpp` backbuffer readback; `_rt_test.cpp` for SdlGpu which lacks GetBackBufferData; `_viewport_switch_test.cpp` per-batch): every backend **and the unmodified D3D11 oracle** now render the canonical scene (96×72, `Viewport(19,11,41,29)`, sprite-local `Rectangle(5,4,17,11)`) to the **byte-identical** footprint `x[24,40] y[15,25] n=187` (17×11, viewport-relative) — pre-fix squished to ~7×4 at (21,13) or ignored at raw (5,4). Cross-backend numerical parity confirmed. Two new findings spawned: **GFX-073** (Software backend sprite path ignores `Viewport` entirely) and **GFX-074** (Vulkan deferred SpriteBatch-into-RT UAF/no-flush). See detail below. |
 | REMED-GFX-073 | P3 | **NEW — surfaced by GFX-072 Phase 2 backend survey, NOT fixed** | | feature/audit | The **Software** (CPU-raster) backend's SpriteBatch path places sprites at raw framebuffer pixel coordinates (`SoftwareGraphicsBackend.cpp` `MakeScreenSpaceVertex` sets `out.x = x; out.y = y`, bypassing World*View*Projection) and `SoftwareGraphicsBackend::SetViewport(...)` is a **no-op** (`{}`), so a custom `GraphicsDevice.Viewport` neither positions nor clips sprites — unlike the Software 3D path, which does consume the viewport via `ClipVertexToRasterVertex`. This is NOT the GFX-072 mis-scale (Software never divides by a target size); it is a broader "Software backend ignores `Viewport` for 2D" gap. The Software backend is a CPU reference with several such gaps and no pixel-test harness registered here; needs its own task (implement a viewport-relative sprite transform + viewport clip, mirroring the 3D path). Source-identified only. |
-| REMED-GFX-074 | P2 | **NEW — surfaced while building the GFX-072 test harness, NOT fixed** | | feature/audit | **Vulkan** defers a `SpriteBatch.Draw()` into a `RenderTarget2D` to Present-time replay (`activeBatches_` in `VulkanGraphicsBackend`), so (a) reading the RT via `RenderTarget2D::GetData` after unbind but **before** any Present returns the CLEARED target — the sprite batch is never flushed into the RT's pass by `GetData` (only Present drives `drawSpritesFor`) — and (b) destroying the `RenderTarget2D` before that Present leaves a **dangling `batchRT` raw pointer** in `activeBatches_`, dereferenced at the next Present → **use-after-free / SIGSEGV**. Reproduced repeatedly while building the GFX-072 harness (worked around by routing Vulkan's GFX-072 test through the backbuffer path). Distinct from GFX-072 (a lifetime/flush-ordering bug in the deferred model, not a coordinate bug). Likely fix: flush/replay a target's pending sprite batches when it is read back or destroyed (or hold a strong ref to referenced RTs until Present). Source+runtime-identified; NOT fixed. |
+| REMED-GFX-074 | P2 | **DONE and VERIFIED (Vulkan runtime + ASan, Xvfb :99; Vulkan validation clean)** | test `b129825c`, fix `202211b6`, docs (this entry) | feature/audit | **Root cause (generic, not SpriteBatch-only):** Vulkan defers every draw/clear into a `RenderTarget2D` to a single Present-time `RecordCommandBuffer`; deferred entries (`activeBatches_`/`pending3D_`/`clearedRTs_`) store a **raw `VulkanRTSource*`** target identity. (1) **UAF** — `~VulkanRenderTargetBackend` freed the target's GPU resources but left its pointer in the queues, so the next Present's `usedRTs` loop dereferenced freed memory (`GetColorAttachmentCount()`/`GetRenderPass()`/…) → **heap-use-after-free/SIGSEGV**. Affects 3D draws and bare `Clear()`s identically, not just sprites. (2) **GetData visibility** — `VulkanRenderTargetBackend` never overrode `ITextureBackend::GetData`, so `RenderTarget2D::GetData` hit the base no-op and returned **all-zeros**; and the target's deferred work isn't recorded until Present, so nothing existed to read. **Fix:** (a) `PurgeDeferredWorkForTarget(rt)` — every render-target destructor (2D + RenderTargetCube's 6 face proxies) drops deferred entries targeting the dying source *before* its resources are freed (a destroyed target is unobservable, so discarding its unflushed draws matches XNA's eager model). (b) `RecordCommandBuffer` gains a **`RenderTargetsOnly`** mode that records exactly one target's off-screen pass into a transient command buffer — no backbuffer pass, no swapchain, no present — consuming only that target's entries (no double-replay). (c) `FlushDeferredRenderTarget(rt)` drives it (submit+wait). (d) `VulkanRenderTargetBackend::GetData` flushes then copies `colorImage_` back via a host-visible staging buffer (swapchain BGRA→RGBA swap), mirroring `VulkanTexture3DBackend::GetData`. **This matches the flush-inside-GetData contract WebGPU (`RenderPendingDrawsToRenderTarget`) and SdlGpu (`EnsureFrameRendered`) already implement** — the only other backends that support RT2D `GetData` (EasyGL/Bgfx/D3D11/D3D12/D3D9/SdlRenderer never override it → return zeros; cross-backend gap, out of scope). **Verification:** new `Vulkan_RenderTarget_GetDataLifetime` **13/13** (GetData-before-Present visibility w/ spatial probes, 2 batches, 2 independent RTs, mixed 3D+2D, destroy-before-Present, no-double-replay) both Debug + ASan; previously-skipped GFX-072 RT-readback variant now runs **directly via RT GetData 8/8** on Vulkan (was routed through the backbuffer). **ASan: pre-fix UAF reproduced** — `heap-use-after-free` at `RecordCommandBuffer` usedRTs deref, freed by `~VulkanRenderTargetBackend`, allocated by `CreateRenderTarget2D`; **post-fix clean**. **Vulkan validation layer loaded, zero VUIDs.** GFX-013/062/070/072/012 replay preserved (flush reuses the same recording path); full Vulkan gtest shard **5613 passed / 5 skipped / 3 pre-existing failures** (`DoesNotSupportWireFrame` [llvmpipe supports it], 2 Cnj effect-fixture — all 3 fail identically on the stashed baseline). No shader/generated-artifact changes. Phase-25 deferred-resource lifetime sweep spawned **GFX-075** (Texture2D/TextureCube/RT-as-sampler, custom Effect, and OcclusionQuery destroyed before Present dangle their descriptor-set/pipeline/query references — same UAF class, different reference path not covered by `PurgeDeferredWorkForTarget`). See detail below. |
+| REMED-GFX-075 | P2 | **NEW — surfaced by the GFX-074 Phase-25 deferred-resource lifetime sweep, NOT fixed** | | feature/audit | Same **use-after-free class** as GFX-074 (a Vulkan deferred draw outlives a resource destroyed before Present), but reached through **non-render-target reference paths** that GFX-074's `PurgeDeferredWorkForTarget` (keyed on the `d.rt`/`batchRT` destination) does not cover, and whose backends perform no equivalent purge: **(1)** destroying a **Texture2D / TextureCube / RenderTarget2D-used-as-sampler** after queuing a textured 3D or sprite draw dangles the `VkImageView` baked into the backend-owned descriptor set captured in the deferred entry (`Pending3DDraw::descSet` + the six effect descriptor-set fields `dualTex/envMap/skinned/pbr/litTextured/fogTex3D`, and sprite `DrawCall::descSet`) — dereferenced at `vkCmdBindDescriptorSets` in `RecordCommandBuffer`; `VulkanTextureBackend::~`/`ReleaseVulkanResources` destroys `imageView_` with no purge, and the per-frame `texSamplerDescSets_` cache also keys on the raw view pointer (handle-reuse collision risk). **(2)** destroying a **custom `Effect`** (`VulkanEffectBackend`) referenced by a sprite `BatchSnapshot::customEffectBackend` dangles the pointer + its `VkPipeline` (`~VulkanEffectBackend` destroys the pipeline, only nulls `activeCustomEffect_` if current). **(3)** destroying an **`OcclusionQuery`** referenced by `Pending3DDraw::occlusionQuery` dangles the pointer (`->pool_`/`->recordedThisFrame_` read at record time). Vertex/index/instance buffers are **safe** (bytes are copied into the entry at enqueue, no `VkBuffer` handle retained). Fix direction: a general enqueue-time strong-reference or a symmetric purge-on-destroy for textures/effects/queries (mirroring GFX-074's target purge). Source-identified via read-only sweep; NOT fixed (separable ownership model, own task per GFX-074 Phase-25 instructions). |
 | REMED-GFX-020 | P2 | **DONE (2026-07-21)** | GRAPHICS | feature/audit | Two UNRELATED root causes, neither a shader-math bug. Specular (DX-125) = **test-oracle defect**: check asserted the per-pixel 255 but ran the vertex-lit (Gouraud, correct ~228) variant because it left `preferPerPixelLighting=false`; per-pixel variant verified = exactly 255. Black-vertex-color (PBR quad D) = **real production bug**: `Draw`/`DrawIndexed` hardcoded StartVertex/StartIndex/BaseVertex=0, ignoring `params.vertexStart/startIndex/baseVertex`, so `DrawPrimitives(...,startVertex=6,...)` silently redrew vertices 0..5. `D3D11_Pbr_VertexColor` 6/6, `D3D11_Smoke` 154/154, D3D11 shard 11/11 on real DXVK. Commits `ed1d906b`, `796885b3`. The 8 co-failing fog checks split out as **REMED-GFX-055** (`0453dc1c`). See detail below. |
 | REMED-GFX-060 | P2 | **DONE (2026-07-21)** | GRAPHICS | feature/audit | D3D9 counterpart of GFX-020 (split out from its Phase-12 sweep). Every effect-aware D3D9 draw site hardcoded StartVertex=0 / BaseVertexIndex=0/StartIndex=0, dropping `params.vertexStart/startIndex/baseVertex`. 15 sites across 4 files fixed (`D3D9EffectDraw` ×10, `D3D9PbrDraw` ×2, `D3D9SkinnedVertexColorDraw` ×2, `D3D9InstancedDraw` ×1); colored-primitive + SpriteBatch paths carry no offsets (NOT_APPLICABLE). New `D3D9_DrawOffset` test **0/7 → 7/7** on real DXVK 2.6.0; full D3D9 shard **20/20**; D3D11 GFX-020 regression still 6/6 (change is D3D9-local); EasyGL vertexStart control green; Vulkan honors by construction. Fog-comment/scalar-field cleanup split as **REMED-GFX-061**. Commits `aa23eed2` (test), `d2491a17` (fix). See detail below. |
 | REMED-GFX-021 | P2 | NOT STARTED | | | |
@@ -4828,3 +4829,146 @@ Two pre-fix failure modes, both fail the conformance test: **squish** (rasterize
 | New findings | **GFX-073** — Software backend `SpriteBatchBackend` rasterizes sprites at raw framebuffer pixel coordinates and its `SetViewport` is a no-op, so a custom `Viewport` neither positions nor clips sprites (the 3D path does use the viewport). Not the mis-scale defect; the Software backend is a CPU reference with a broader viewport gap — its own task. **GFX-074** — Vulkan defers SpriteBatch-into-`RenderTarget2D` to Present: reading the RT via `GetData` before Present returns cleared content (sprites not flushed), and destroying the `RenderTarget2D` before Present leaves a dangling `batchRT` pointer in `activeBatches_` → use-after-free at the next Present. Surfaced while building the GFX-072 harness (worked around by using the backbuffer path for Vulkan). |
 | Affected files | `src/CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.cpp`, `.../SdlGpu/SdlGpuGraphicsBackend.cpp`, `.../EasyGL/EasyGLGraphicsBackend.cpp`, `.../Bgfx/BgfxGraphicsBackend.{cpp,hpp}`, `.../WebGPU/WebGPUGraphicsBackend.{cpp,hpp}`, `.../D3D12/D3D12SpriteBatch.cpp` (fixes); `examples/spritebatch_custom_viewport_test.cpp`, `spritebatch_custom_viewport_rt_test.cpp`, `spritebatch_viewport_switch_test.cpp`, `cmake/Tests/{Vulkan,SdlGpu,EasyGL,Bgfx,WebGpu,D3D11}Tests.cmake` (tests) |
 | Backends / Platforms | Vulkan, SdlGpu, EasyGL, Bgfx, WebGPU (experimental), D3D12 (fixed); D3D11, D3D9 (already correct) / ALL |
+
+---
+
+## REMED-GFX-074 — Vulkan deferred RenderTarget2D GetData synchronization + target lifetime
+
+**Status:** DONE and VERIFIED (feature/audit). Test `b129825c`, fix `202211b6`.
+**Scope:** Vulkan backend only (`VulkanGraphicsBackend.{cpp,hpp}`). Memory-safety + correctness.
+
+### Root cause (generic to the target identity, not SpriteBatch-specific)
+
+The Vulkan backend records the *entire* frame lazily in `RecordCommandBuffer` at Present. Draws
+and clears issued while a `RenderTarget2D` is bound are appended to three deferred queues, each
+tagging the work with a **raw `VulkanRTSource*`** (the target's identity):
+
+- `activeBatches_` — `std::pair<unique_ptr<BatchSnapshot>, VulkanRTSource*>` (SpriteBatch)
+- `pending3D_` — `Pending3DDraw{ …, VulkanRTSource* rt; }` (3D draws)
+- `clearedRTs_` — `std::vector<VulkanRTSource*>` (bare `Clear()` with no draw)
+
+`RecordCommandBuffer` builds `usedRTs` from all three, then (Phase 1) opens each target's render
+pass and replays its sprites + 3D draws; only then (Phase 2) does the backbuffer pass run.
+
+Two independent defects fell out of this:
+
+1. **Lifetime / UAF.** `~VulkanRenderTargetBackend` removed itself from `liveRenderTargets_` and
+   cleared `currentRT_`, but **left its `VulkanRTSource*` in the deferred queues**. Destroying a
+   `RenderTarget2D` after queuing work into it but before Present left a dangling pointer that the
+   next Present's `usedRTs` loop dereferenced (`rt->GetColorAttachmentCount()`,
+   `rt->GetRenderPass()`, `rt->GetFramebuffer()`) → **heap-use-after-free / SIGSEGV**. The bug is
+   about the *target identity*, so 3D draws (`pending3D_`) and bare clears (`clearedRTs_`) dangle
+   exactly like sprites — not a SpriteBatch-only defect.
+
+2. **GetData visibility.** `VulkanRenderTargetBackend` never overrode
+   `ITextureBackend::GetData(level,x,y,w,h,data,len)`. `Texture2D::GetData` zero-fills its buffer
+   then calls the backend for a GPU-only render target, hitting the **base no-op** → all-zeros.
+   Even conceptually, the target's deferred work is not recorded until Present, so nothing existed
+   to read back. (Existing Vulkan RT tests dodged this by sampling the RT onto the backbuffer and
+   using `GetBackBufferData`, which *does* force a submit.)
+
+### Ownership graph (before → after)
+
+```
+RenderTarget2D (XNA, shared_ptr<ITextureBackend>)
+        │ owns
+        ▼
+VulkanRenderTargetBackend  ── is-a ──▶ VulkanRTSource  (raw* captured into queues)
+        │ owns
+        ▼
+colorImage_ / framebuffer_ / renderPass  (freed in ReleaseVulkanResources)
+
+BEFORE:  ~VulkanRenderTargetBackend frees GPU resources, leaves raw VulkanRTSource*
+         in activeBatches_/pending3D_/clearedRTs_  →  Present derefs freed memory (UAF)
+AFTER:   ~VulkanRenderTargetBackend calls PurgeDeferredWorkForTarget(this) first, so no
+         deferred entry outlives the target it references. RenderTargetCube destructor does
+         the same for its 6 face proxies.
+```
+
+Raw references audited in the deferred entries: the target `VulkanRTSource*` (this fix); vertex/
+index/instance bytes are **copies** (safe); sampler `VkDescriptorSet`s, custom-effect pointers and
+occlusion-query pointers are **borrowed and can dangle** — a *different* reference path, filed as
+**GFX-075** (Phase 25 below), not fixed here.
+
+### Chosen architecture — target-scoped flush + purge-on-destroy
+
+- **UAF:** `PurgeDeferredWorkForTarget(VulkanRTSource*)` erases every entry referencing the dying
+  target from all three queues; called from `~VulkanRenderTargetBackend` and (per face proxy)
+  `~VulkanRenderTargetCubeBackend`, before `ReleaseVulkanResources`. Narrow, no GPU stall.
+  **Semantics:** a destroyed target is unobservable — its `GetData` can no longer be called, and
+  sampling its freed image is already broken independently — so dropping its unflushed draws is
+  observationally identical to XNA's eager model, where those draws had already executed by the
+  time the resource was disposed. (Flush-on-destroy was rejected: a device-wide stall on every RT
+  disposal, with no observable benefit over the purge.)
+- **GetData visibility:** `RecordCommandBuffer` gains a `RecordMode::RenderTargetsOnly` that records
+  exactly one target's off-screen pass into a transient command buffer — **skips Phase 2 (no
+  backbuffer, no swapchain image, no present, no frame-bookkeeping advance)** and consumes only that
+  target's deferred entries so Present never replays them (no double-render). `FlushDeferredRenderTarget(rt)`
+  drives it (`vkDeviceWaitIdle` → record → submit → `vkQueueWaitIdle`), a no-op when nothing is
+  queued for `rt`. `VulkanRenderTargetBackend::GetData` calls it, then reads `colorImage_` back via
+  a host-visible staging buffer (`vkCmdCopyImageToBuffer`, SHADER_READ_ONLY↔TRANSFER_SRC transitions,
+  swapchain **BGRA→RGBA** swap since the RT uses `swapchainFormat_`), mirroring
+  `VulkanTexture3DBackend::GetData`.
+
+This is **target-scoped** (a `GetData` on RT-A never forces RT-B or the backbuffer through a fake
+Present) and reuses the exact per-draw/batch replay path, so GFX-013 scissor / GFX-062 viewport /
+GFX-070 blend-constant / GFX-072 viewport-relative sprite projection / GFX-012 transform are all
+preserved unchanged.
+
+### CPU/GPU synchronization
+
+`GetData` is a hard sync point (allowed by design). The flush waits the device idle first (so no
+in-flight frame is using the shared per-frame sprite/3D ring buffers it reuses), submits the
+off-screen pass, and `vkQueueWaitIdle`s before the readback copy — render writes happen-before the
+transfer read via the RT render pass's `SHADER_READ_ONLY_OPTIMAL` finalLayout plus the
+`GetData` layout transition. **The normal Present path is untouched** — no global wait or flush is
+added to ordinary SpriteBatch/3D rendering; the cost is paid only inside `GetData` and only when the
+target has pending work.
+
+### XNA/FNA + cross-backend semantics (Phase 24)
+
+`RenderTarget2D::GetData`-before-Present is supported by exactly three backends, and **all three
+flush inside GetData**: Vulkan (this fix, `FlushDeferredRenderTarget`), WebGPU
+(`RenderPendingDrawsToRenderTarget`), SdlGpu (`EnsureFrameRendered`). The other six
+(EasyGL/Bgfx/D3D11/D3D12/D3D9/SdlRenderer) never override the 2D-texture/RT `GetData` and return the
+frontend's zero-filled buffer — a broader cross-backend gap, out of scope here. So this fix aligns
+Vulkan with the established deferred-backend contract rather than inventing one.
+
+### Verification
+
+- **`Vulkan_RenderTarget_GetDataLifetime` 13/13** (Debug + ASan): S1 GetData-before-Present
+  visibility w/ spatial probes (red block on black clear, count ≈ 20×16=320), S2 two batches
+  composite, S3 two independent RTs each read their own content, S4 content survives a later Present
+  (consumed batch not re-cleared), S5 mixed 3D(left half)+2D(right half) both flushed, S6
+  destroy-before-Present no crash.
+- **RT-readback GFX-072 variant** (`spritebatch_custom_viewport_rt_test.cpp`) now runs **directly
+  through RT GetData on Vulkan: 8/8** (previously routed through the backbuffer path). Confirms both
+  the readback flush and GFX-072 viewport-relative projection through the new path.
+- **ASan pre-fix reproduction:** with the destructor purge disabled, `heap-use-after-free` READ at
+  `RecordCommandBuffer` (usedRTs deref), **freed by** `~VulkanRenderTargetBackend`, **allocated by**
+  `CreateRenderTarget2D`, via `GraphicsDevice::Present → SubmitFrame → RecordCommandBuffer`. **Post-fix
+  ASan clean, 13/13.**
+- **Vulkan validation:** `VK_LAYER_KHRONOS_validation` confirmed loaded (loader debug) — **zero VUIDs**
+  across the lifetime + RT-readback tests, including the new offscreen flush + readback transitions.
+- **Regression matrix:** existing `Vulkan_RenderTarget_Viewport/Scissor/BlendFactor`, `Vulkan_SpriteBatch_CustomViewport`
+  (10/10), `Vulkan_SpriteBatch_ViewportSwitch` (6/6) all green. Full Vulkan gtest shard **5613 passed /
+  5 skipped / 3 failed**; the 3 (`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` — llvmpipe
+  *does* support wireframe; `CnjEffectTest.LoadsRealCnjFixture`; `CnjStockEffectTest.CustomGlslEffectStillWorks`)
+  **fail identically on the stashed baseline** — pre-existing/environmental, unrelated to RT.
+- **Generated artifacts:** none — CPU-side backend logic + one new test; no shader/SPIR-V diff.
+
+### Phase 25 — deferred-resource lifetime sweep → new finding GFX-075
+
+Read-only audit of every raw reference a deferred entry retains: the target `VulkanRTSource*` is
+fixed here; vertex/index/instance data is copied (safe); but **sampler descriptor sets (the
+`VkImageView` they bake), custom-effect pointers/pipelines, and occlusion-query pointers are borrowed
+and dangle if their resource is destroyed before Present** — the same UAF class through a different
+reference path that `PurgeDeferredWorkForTarget` (destination-keyed) does not cover. Filed as
+**GFX-075**; not fixed opportunistically (separable ownership model).
+
+### Recommended next GRAPHICS task
+
+**GFX-075** (the deferred-resource lifetime generalization this task surfaced — Texture2D/Effect/
+OcclusionQuery destroyed-before-Present UAFs), since it shares GFX-074's queue-ownership context.
+Otherwise **GFX-071** (Vulkan 2D sprite pipeline hardcodes alpha-blend, ignores BlendState) or
+**GFX-073** (Software backend sprite path ignores Viewport).
