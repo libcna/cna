@@ -538,6 +538,35 @@ namespace CNA::Internal::Backends::Software
             return c;
         }
 
+        /// REMED-GFX-080: intersects a viewport-derived raster clip (framebuffer ∩ Viewport, from
+        /// ViewportClip) with the GraphicsDevice.ScissorRectangle when scissor testing is enabled.
+        /// The ScissorRectangle is in framebuffer/target space (NOT viewport-local), so it is
+        /// intersected DIRECTLY against the base clip -- no Viewport.X/Y offset is added, matching
+        /// XNA/FNA/D3D11 where the scissor is independent of the viewport origin. A disabled scissor
+        /// (`scissorEnabled == false`) returns the base clip unchanged, so a small ScissorRectangle
+        /// left over from a previous RasterizerState has no effect. A zero/negative-size or
+        /// non-overlapping scissor collapses the clip to empty (minX>maxX / minY>maxY -> the raster
+        /// loops draw nothing). Uses a wider intermediate for the right/bottom edge so a large
+        /// Scissor.X+Width / Scissor.Y+Height cannot overflow int (same overflow-safe pattern as
+        /// ViewportClip); base.minX/minY are already >= 0, so a negative scissor origin is clamped
+        /// away by the std::max without indexing outside the framebuffer.
+        RasterClipRect ScissorClip(const RasterClipRect& base, bool scissorEnabled,
+                                   int scX, int scY, int scW, int scH)
+        {
+            if (!scissorEnabled)
+                return base;
+            const long long scRightExclusive =
+                static_cast<long long>(scX) + static_cast<long long>(std::max(0, scW));
+            const long long scBottomExclusive =
+                static_cast<long long>(scY) + static_cast<long long>(std::max(0, scH));
+            RasterClipRect c = base;
+            c.minX = std::max(base.minX, scX);
+            c.minY = std::max(base.minY, scY);
+            c.maxX = static_cast<int>(std::min<long long>(static_cast<long long>(base.maxX), scRightExclusive - 1));
+            c.maxY = static_cast<int>(std::min<long long>(static_cast<long long>(base.maxY), scBottomExclusive - 1));
+            return c;
+        }
+
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
         /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
         /// a simplified Opaque/AlphaBlend choice (design decisions 7/6) on top of RasterizeTriangle's
@@ -1027,7 +1056,13 @@ namespace CNA::Internal::Backends::Software
         const bool depthTestEnabled = owner_.IsDepthTestEnabled();
         const bool blendEnabled = owner_.IsBlendEnabled();
         const int cullMode = owner_.GetCullMode();
-        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
+        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
+        // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
+        int scX = 0, scY = 0, scW = 0, scH = 0;
+        owner_.GetActiveScissor(scX, scY, scW, scH);
+        const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
+                                                owner_.IsScissorTestEnabled(), scX, scY, scW, scH);
         GpuDrawParams spriteParams;
         spriteParams.texture0 = swTexture;
         spriteParams.textureEnabled = true;
@@ -1182,9 +1217,13 @@ namespace CNA::Internal::Backends::Software
         depthTestEnabled_ = depthEnable;
     }
 
-    void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int, bool, float, float)
+    void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int, bool scissorTestEnable,
+                                                       float, float)
     {
         cullMode_ = cullMode;
+        // REMED-GFX-080: capture ScissorTestEnable (previously discarded). Independent of the stored
+        // ScissorRectangle -- toggling this on/off enables/disables the same stored rectangle.
+        scissorTestEnable_ = scissorTestEnable;
     }
 
     void SoftwareGraphicsBackend::ApplySamplerState(int slot, int, int, int, int)
@@ -1193,7 +1232,20 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error("SoftwareGraphicsBackend::ApplySamplerState: slot must be 0..15");
     }
 
-    void SoftwareGraphicsBackend::SetScissorRect(int, int, int, int) {}
+    // REMED-GFX-080: store the ScissorRectangle so the raster paths can intersect it into their
+    // effective clip when scissor testing is enabled (previously a no-op, so ScissorRectangle never
+    // clipped anything). GraphicsDevice pushes this on every setScissorRectangleProperty() and
+    // resets it to the full target on each RenderTarget transition, so this single field is always
+    // relative to the currently active target. The rectangle is stored regardless of the current
+    // ScissorTestEnable flag -- it becomes active if a later RasterizerState enables scissor testing.
+    void SoftwareGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        scissorSet_ = true;
+        scissorX_ = x;
+        scissorY_ = y;
+        scissorWidth_ = w;
+        scissorHeight_ = h;
+    }
 
     // REMED-GFX-073: store the viewport so the SpriteBatch path can place its viewport-local quads
     // at (x,y) and clip them to (x,y,w,h). GraphicsDevice pushes this on every setViewportProperty()
@@ -1227,6 +1279,26 @@ namespace CNA::Internal::Backends::Software
         y = viewportY_;
         w = viewportWidth_;
         h = viewportHeight_;
+    }
+
+    // REMED-GFX-080: mirrors GetActiveViewport -- returns the stored ScissorRectangle, or the full
+    // current framebuffer when none was set (so enabling scissor testing without an explicit
+    // rectangle is an inert clip, matching XNA's default full-target ScissorRectangle).
+    void SoftwareGraphicsBackend::GetActiveScissor(int& x, int& y, int& w, int& h) const
+    {
+        if (!scissorSet_)
+        {
+            const SoftwareFramebuffer& fb = CurrentFramebuffer();
+            x = 0;
+            y = 0;
+            w = fb.width;
+            h = fb.height;
+            return;
+        }
+        x = scissorX_;
+        y = scissorY_;
+        w = scissorWidth_;
+        h = scissorHeight_;
     }
 
     void SoftwareGraphicsBackend::GetActiveViewportRaster(int& x, int& y, int& w, int& h,
@@ -1305,7 +1377,13 @@ namespace CNA::Internal::Backends::Software
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth};
-        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
+        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
+        // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
+        int scX = 0, scY = 0, scW = 0, scH = 0;
+        GetActiveScissor(scX, scY, scW, scH);
+        const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
+                                                scissorTestEnable_, scX, scY, scW, scH);
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -1359,7 +1437,13 @@ namespace CNA::Internal::Backends::Software
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth};
-        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
+        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
+        // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
+        int scX = 0, scY = 0, scW = 0, scH = 0;
+        GetActiveScissor(scX, scY, scW, scH);
+        const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
+                                                scissorTestEnable_, scX, scY, scW, scH);
 
         const auto readIndex = [&](int i) -> std::uint32_t {
             if (thirtyTwoBit)
@@ -1441,7 +1525,13 @@ namespace CNA::Internal::Backends::Software
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth};
-        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
+        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
+        // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
+        int scX = 0, scY = 0, scW = 0, scH = 0;
+        GetActiveScissor(scX, scY, scW, scH);
+        const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
+                                                scissorTestEnable_, scX, scY, scW, scH);
 
         for (int i = 0; i < primitiveCount; ++i)
         {
@@ -1511,7 +1601,13 @@ namespace CNA::Internal::Backends::Software
         const ViewportTransform vpT{static_cast<float>(vpX), static_cast<float>(vpY),
                                     static_cast<float>(vpW), static_cast<float>(vpH),
                                     vpMinDepth, vpMaxDepth};
-        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
+        // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
+        // RasterizerState.ScissorTestEnable). The scissor is framebuffer-space, intersected after
+        // the viewport clip (not viewport-local); disabled scissor leaves the viewport clip intact.
+        int scX = 0, scY = 0, scW = 0, scH = 0;
+        GetActiveScissor(scX, scY, scW, scH);
+        const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
+                                                scissorTestEnable_, scX, scY, scW, scH);
 
         const auto readIndex = [&](int i) -> std::uint32_t {
             if (thirtyTwoBit)

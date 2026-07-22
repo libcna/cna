@@ -329,6 +329,23 @@ namespace CNA::Internal::Backends::Software
         /// SpriteBatch semantics (the GPU backends' GFX-072 contract).
         void GetActiveViewport(int& x, int& y, int& w, int& h) const;
 
+        /// REMED-GFX-080: whether RasterizerState.ScissorTestEnable is currently on (the flag from
+        /// the most recent ApplyRasterizerState() call). ScissorRectangle only clips rasterization
+        /// when this is true; when false the stored rectangle has no effect. Consumed by the 2D and
+        /// 3D raster paths (and by SoftwareSpriteBatchBackend via owner_).
+        [[nodiscard]] bool IsScissorTestEnabled() const { return scissorTestEnable_; }
+
+        /// REMED-GFX-080: the active GraphicsDevice.ScissorRectangle in pixels of the currently
+        /// bound target (framebuffer/target space -- NOT viewport-local). When no scissor rectangle
+        /// has been set (SetScissorRect never called), the full current framebuffer is returned, so
+        /// enabling scissor testing without an explicit rectangle is a no-op clip, matching XNA's
+        /// default full-target ScissorRectangle. GraphicsDevice pushes this on every
+        /// setScissorRectangleProperty() and resets it to the full target on each RenderTarget
+        /// transition, so this single field is always relative to the active target. The rectangle
+        /// is stored independently of IsScissorTestEnabled(): a later RasterizerState change can
+        /// enable it without re-setting the rectangle.
+        void GetActiveScissor(int& x, int& y, int& w, int& h) const;
+
     private:
         /// REMED-GFX-079: the active viewport as raster parameters for the 3D draw path --
         /// (x,y,w,h) from GetActiveViewport() plus the MinDepth/MaxDepth depth range (defaulting to
@@ -369,5 +386,26 @@ namespace CNA::Internal::Backends::Software
         int viewportHeight_ = 0;
         float viewportMinDepth_ = 0.0f;
         float viewportMaxDepth_ = 1.0f;
+
+        /// REMED-GFX-080: RasterizerState.ScissorTestEnable, stored by ApplyRasterizerState() (its
+        /// third argument, previously discarded). Independent of the stored ScissorRectangle below
+        /// -- the rectangle is meaningful even while this is false, because a later RasterizerState
+        /// change can enable scissor testing without re-setting the rectangle. Defaults to false,
+        /// matching real XNA/FNA's default RasterizerState.ScissorTestEnable (off).
+        bool scissorTestEnable_ = false;
+
+        /// REMED-GFX-080: current GraphicsDevice.ScissorRectangle, stored by SetScissorRect() (a
+        /// no-op before this task). `scissorSet_` starts false so that -- before GraphicsDevice sets
+        /// any scissor rectangle, or for direct-backend use -- GetActiveScissor() falls back to the
+        /// full current framebuffer (an inert clip, matching XNA's default full-target
+        /// ScissorRectangle). GraphicsDevice pushes this on every setScissorRectangleProperty() and
+        /// resets it to the full target on each RenderTarget transition, so a single stored
+        /// rectangle is always relative to the active target. Stored in framebuffer/target space,
+        /// NOT viewport-local: it is intersected directly with the framebuffer∩Viewport clip.
+        bool scissorSet_ = false;
+        int scissorX_ = 0;
+        int scissorY_ = 0;
+        int scissorWidth_ = 0;
+        int scissorHeight_ = 0;
     };
 }
