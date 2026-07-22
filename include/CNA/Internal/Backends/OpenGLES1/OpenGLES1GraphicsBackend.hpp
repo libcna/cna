@@ -7,12 +7,15 @@
 #include <GLES/glext.h>
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 struct SDL_Window;
 
 namespace CNA::Internal::Backends::OpenGLES1
 {
+    class OpenGLES1GraphicsBackend;
+
     /**
      * @brief NOXNA. Real OpenGL ES 1.1 (fixed-function, no shaders) texture handle.
      *
@@ -23,7 +26,7 @@ namespace CNA::Internal::Backends::OpenGLES1
     class OpenGLES1TextureBackend : public ITextureBackend
     {
     public:
-        OpenGLES1TextureBackend(int width, int height);
+        OpenGLES1TextureBackend(OpenGLES1GraphicsBackend* owner, int width, int height);
         ~OpenGLES1TextureBackend() override;
 
         OpenGLES1TextureBackend(const OpenGLES1TextureBackend&) = delete;
@@ -37,12 +40,34 @@ namespace CNA::Internal::Backends::OpenGLES1
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         void BindGL() const override;
 
+        /**
+         * @brief Adopts `Texture2D`'s own CPU pixel buffer so the texture can be rebuilt after a
+         *        GL context loss.
+         *
+         * Sharing rather than duplicating matches the interface's stated intent and keeps a single
+         * copy of the pixels between `Texture2D` and this backend.
+         *
+         * @param pixels Shared RGBA8 pixel storage owned by `Texture2D`.
+         */
+        void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
+
+        /**
+         * @brief Recreates this texture's GL object after the context it lived in was destroyed.
+         *
+         * The old GL name dies with the old context, so it is regenerated, its default sampler
+         * state reapplied, and its pixels re-uploaded from the shared CPU copy. Without this a
+         * restored context samples every pre-loss texture as plain white.
+         */
+        void RestoreAfterContextLoss();
+
         [[nodiscard]] unsigned int GetGLHandle() const { return texture_; }
 
     private:
+        OpenGLES1GraphicsBackend* owner_ = nullptr;
         unsigned int texture_ = 0;
         int width_ = 0;
         int height_ = 0;
+        std::shared_ptr<std::vector<uint8_t>> pixels_;
     };
 
     /**
@@ -395,6 +420,20 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// needed for a real DualTextureEffect dispatch.
         [[nodiscard]] bool SupportsSecondTextureUnit() const { return maxTextureUnits_ >= 2; }
 
+        /**
+         * @brief Registers a texture so it can be rebuilt if the GL context is lost.
+         *
+         * @param texture Texture to track; ignored when null.
+         */
+        void RegisterTextureEXT(OpenGLES1TextureBackend* texture);
+
+        /**
+         * @brief Stops tracking a texture that is being destroyed.
+         *
+         * @param texture Texture to forget; ignored when null or not tracked.
+         */
+        void UnregisterTextureEXT(OpenGLES1TextureBackend* texture);
+
         // GL_OES_framebuffer_object entry points -- resolved once at startup via
         // SDL_GL_GetProcAddress (see LoadExtensionEntryPoints()), used by
         // OpenGLES1RenderTargetBackend. Public so that class can call them without this class
@@ -437,6 +476,9 @@ namespace CNA::Internal::Backends::OpenGLES1
         PFNGLBLENDEQUATIONOESPROC glBlendEquationOES_ = nullptr;
 
         bool fboSupported_ = false;
+        // Every live texture, so DebugRestoreContext() can rebuild them all against the new
+        // context. Raw pointers are safe here because each texture unregisters in its destructor.
+        std::vector<OpenGLES1TextureBackend*> liveTextures_;
         bool cubeMapSupported_ = false;
         int maxTextureUnits_ = 1;
 

@@ -129,8 +129,8 @@ namespace CNA::Internal::Backends::OpenGLES1
     // OpenGLES1TextureBackend
     // -------------------------------------------------------------------------
 
-    OpenGLES1TextureBackend::OpenGLES1TextureBackend(int width, int height)
-        : width_(width), height_(height)
+    OpenGLES1TextureBackend::OpenGLES1TextureBackend(OpenGLES1GraphicsBackend* owner, int width, int height)
+        : owner_(owner), width_(width), height_(height)
     {
         glGenTextures(1, &texture_);
         glBindTexture(GL_TEXTURE_2D, texture_);
@@ -138,10 +138,39 @@ namespace CNA::Internal::Backends::OpenGLES1
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        if (owner_) owner_->RegisterTextureEXT(this);
+    }
+
+    void OpenGLES1TextureBackend::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
+    {
+        pixels_ = std::move(pixels);
+    }
+
+    void OpenGLES1TextureBackend::RestoreAfterContextLoss()
+    {
+        // The old name belonged to the destroyed context; asking GL to delete it would be
+        // meaningless, so just take a fresh one and rebuild the whole object.
+        texture_ = 0;
+        glGenTextures(1, &texture_);
+        glBindTexture(GL_TEXTURE_2D, texture_);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+        // Without a CPU copy there is nothing to restore from -- leave the (now empty) texture
+        // rather than sampling from a dead name.
+        if (!pixels_ || pixels_->empty()) return;
+        if (pixels_->size() < static_cast<std::size_t>(width_) * height_ * 4) return;
+
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     pixels_->data());
     }
 
     OpenGLES1TextureBackend::~OpenGLES1TextureBackend()
     {
+        if (owner_) owner_->UnregisterTextureEXT(this);
         if (texture_) glDeleteTextures(1, &texture_);
     }
 
@@ -508,6 +537,12 @@ namespace CNA::Internal::Backends::OpenGLES1
         SDL_GL_SetSwapInterval(swapInterval_);
         glShadeModel(GL_SMOOTH);
         glEnable(GL_NORMALIZE);
+
+        // Every GL object died with the old context. Textures carry a shared CPU copy of their
+        // pixels, so they can be rebuilt here -- otherwise a restored context samples all of them
+        // as plain white. Vertex/index buffer contents are NOT restored (see OPENGLES1-80).
+        for (auto* texture : liveTextures_)
+            if (texture) texture->RestoreAfterContextLoss();
     }
 
     // -------------------------------------------------------------------------
@@ -739,9 +774,21 @@ namespace CNA::Internal::Backends::OpenGLES1
     // Resource creation
     // -------------------------------------------------------------------------
 
+    void OpenGLES1GraphicsBackend::RegisterTextureEXT(OpenGLES1TextureBackend* texture)
+    {
+        if (texture) liveTextures_.push_back(texture);
+    }
+
+    void OpenGLES1GraphicsBackend::UnregisterTextureEXT(OpenGLES1TextureBackend* texture)
+    {
+        if (!texture) return;
+        liveTextures_.erase(std::remove(liveTextures_.begin(), liveTextures_.end(), texture),
+                            liveTextures_.end());
+    }
+
     std::unique_ptr<ITextureBackend> OpenGLES1GraphicsBackend::CreateTexture(const ImageData& data)
     {
-        auto tex = std::make_unique<OpenGLES1TextureBackend>(data.width, data.height);
+        auto tex = std::make_unique<OpenGLES1TextureBackend>(this, data.width, data.height);
         tex->UpdatePixels(data.pixels.data(), data.width * 4);
         return tex;
     }
