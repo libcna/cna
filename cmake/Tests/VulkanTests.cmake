@@ -1013,4 +1013,22 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_SkinnedEffect_VertexColor COMMAND cna_test_vulkan_skinnedeffect_vertexcolor
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
+        # (Viewport.Width/Height), not the full target -- a custom sub-Viewport made sprites
+        # viewport-relative in XNA/FNA (D3D11-correct) but the Vulkan sprite push-constant
+        # viewportSize was fed the full target/virtual dims, squishing the sprite into the sub-region.
+        cna_vulkan_test(cna_test_vulkan_spritebatch_custom_viewport
+                        examples/spritebatch_custom_viewport_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_CustomViewport COMMAND cna_test_vulkan_spritebatch_custom_viewport
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # REMED-GFX-072 (Phase 9): two SpriteBatch batches with DIFFERENT viewports in one frame --
+        # each batch must use the viewport active for its own Begin/End (per-batch snapshot).
+        cna_vulkan_test(cna_test_vulkan_spritebatch_viewport_switch
+                        examples/spritebatch_viewport_switch_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_ViewportSwitch COMMAND cna_test_vulkan_spritebatch_viewport_switch
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+
+
     endif()

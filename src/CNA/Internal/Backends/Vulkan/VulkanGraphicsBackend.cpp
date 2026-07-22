@@ -6400,7 +6400,34 @@ namespace CNA::Internal::Backends::Vulkan
                 vkCmdBindVertexBuffers(cb, 0, 1, &spriteVB_[currentFrame_], &vbBindOff);
                 vkCmdBindIndexBuffer(cb, spriteIB_[currentFrame_], ibOff, VK_INDEX_TYPE_UINT16);
 
-                float vpSize[2] = { vpW, vpH };
+                // REMED-GFX-072: the sprite2d vertex shader divides pixel-space positions by this
+                // vpSize to reach NDC. XNA/FNA build the SpriteBatch ortho from GraphicsDevice.
+                // Viewport.Width/Height (CreateOrthographicOffCenter(0, Viewport.Width,
+                // Viewport.Height, 0), FNA SpriteBatch.cs PrepRenderState), so a custom sub-Viewport
+                // makes sprite coordinates VIEWPORT-LOCAL: the divide must use the active Viewport's
+                // W/H, not the full target/virtual size (vpW/vpH). The rasterizer viewport
+                // (computeViewport below, GFX-062) already positions the [-1,1] result at Viewport.
+                // X/Y, so this is the missing projection half. Only override for a genuine custom
+                // sub-region (differs from the physical target extent) -- the default full-target
+                // viewport keeps the pre-existing vpW/vpH (byte-identical, and preserves the
+                // backbuffer's virtual-resolution divisor). The sprite vertices are already the raw
+                // viewport-local pixel coordinates the game passed (Draw() bakes dest.X/Y directly),
+                // so only the divisor changes; the transform matrix (GFX-012) is applied CPU-side
+                // before this and is unaffected.
+                float projW = vpW, projH = vpH;
+                {
+                    const uint32_t physW = targetRT ? static_cast<uint32_t>(targetRT->GetWidth())
+                                                    : swapchainExtent_.width;
+                    const uint32_t physH = targetRT ? static_cast<uint32_t>(targetRT->GetHeight())
+                                                    : swapchainExtent_.height;
+                    if (snapshot->viewportSet && snapshot->viewportW > 0 && snapshot->viewportH > 0 &&
+                        (snapshot->viewportX != 0 || snapshot->viewportY != 0 ||
+                         snapshot->viewportW != physW || snapshot->viewportH != physH)) {
+                        projW = static_cast<float>(snapshot->viewportW);
+                        projH = static_cast<float>(snapshot->viewportH);
+                    }
+                }
+                float vpSize[2] = { projW, projH };
                 if (customPC) {
                     // Push 128-byte block: vpSize at [0..7], user uniforms at [8..127].
                     float fullPC[32];
