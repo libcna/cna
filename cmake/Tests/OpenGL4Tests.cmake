@@ -100,4 +100,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_texturecube examples/opengl4_texturecube_test.cpp)
     cna_register_backend_test(NAME OpenGL4_TextureCube COMMAND cna_test_opengl4_texturecube
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-21: EnvironmentMapEffect -- a dedicated env_map3d GLSL program (stride
+    # 32) selected instead of lit_textured3d when GpuDrawParams::envMapping is set, reusing the
+    # real XNA reflection/Fresnel/lerp/alpha-scaling formula already cross-verified on 3 other
+    # backends (see docs/environmentmapeffect-support.md).
+    cna_opengl4_test(cna_test_opengl4_environmentmapeffect examples/opengl4_environmentmapeffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_EnvironmentMapEffect COMMAND cna_test_opengl4_environmentmapeffect
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

@@ -301,6 +301,98 @@ void main()
 }
 )GLSL";
 
+        // plan_opengl4.md GL4-21: env_map3d (VertexPositionNormalTexture, stride 32) --
+        // EnvironmentMapEffect's own dedicated program, selected instead of lit_textured3d when
+        // GpuDrawParams::envMapping is set (BindProgramForStride branches on it before the stride
+        // switch, matching EasyGLGraphicsBackend::SelectProgram's own envMapping-overrides-stride
+        // dispatch order). Ported from EasyGLGraphicsBackend::EnsureEnvMapped3DProgram's GLSL ES
+        // 300 source (near-verbatim translation to desktop GLSL 410 core -- no ES precision
+        // qualifiers, otherwise identical), cross-verified against VulkanGraphicsBackend's
+        // env_map3d.frag.glsl (per-fragment Fresnel instead of EasyGL's per-vertex Gouraud
+        // interpolation -- a documented, accepted, strictly-more-accurate deviation kept here in
+        // its EasyGL per-vertex form since this is the closer sibling GLSL backend to port from).
+        // Real XNA EnvironmentMapEffect.fx formula (src/CNA/Internal/Backends/D3D9/shaders/xna/
+        // EnvironmentMapEffect.fx): reflection vector reflect(-eyeVector, worldNormal); Fresnel
+        // blend factor pow(max(1-|dot(eye,normal)|,0), FresnelFactor)*EnvironmentMapAmount; final
+        // colour is a LERP (not additive) between the lit diffuse*texture colour and the
+        // alpha-scaled cubemap sample, plus a separately alpha-scaled specular term -- see
+        // docs/environmentmapeffect-support.md for the two real formula bugs (additive-not-lerp,
+        // missing alpha scaling) found and fixed while porting this to 3 other backends.
+        const char* kEnvMap3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
+uniform mat4 uWorldViewProj;
+uniform mat4 uWorld;
+uniform vec3 uEyePosition;
+uniform float uEnvMapAmount;
+uniform bool uFresnelEnabled;
+uniform float uFresnelFactor;
+out vec3 vWorldNormal;
+out vec3 vEyeDir;
+out vec2 vUV;
+out float vFresnel;
+void main()
+{
+    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+    vec3 worldPos = (uWorld * vec4(aPos, 1.0)).xyz;
+    mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
+    vec3 worldNormal = normalize(normalMatrix * aNormal);
+    vec3 eyeVector = normalize(uEyePosition - worldPos);
+    vWorldNormal = worldNormal;
+    vEyeDir = eyeVector;
+    vUV = aUV;
+    // Fresnel is computed per-vertex in real XNA, then Gouraud-interpolated across the triangle.
+    float viewAngle = dot(eyeVector, worldNormal);
+    vFresnel = uFresnelEnabled
+        ? pow(max(1.0 - abs(viewAngle), 0.0), uFresnelFactor) * uEnvMapAmount
+        : uEnvMapAmount;
+}
+)GLSL";
+
+        const char* kEnvMap3DFragSrc = R"GLSL(
+#version 410 core
+in vec3 vWorldNormal;
+in vec3 vEyeDir;
+in vec2 vUV;
+in float vFresnel;
+uniform sampler2D uTexture;
+uniform bool uTextureEnabled;
+uniform samplerCube uEnvMap;
+uniform vec4 uDiffuseColor;
+uniform vec3 uEmissiveColor;
+uniform vec3 uLight0Dir;
+uniform vec3 uLight0Diffuse;
+uniform vec3 uLight1Dir;
+uniform vec3 uLight1Diffuse;
+uniform vec3 uLight2Dir;
+uniform vec3 uLight2Diffuse;
+uniform vec3 uEnvMapSpecular;
+out vec4 fragColor;
+void main()
+{
+    vec3 N = normalize(vWorldNormal);
+    vec3 E = normalize(vEyeDir);
+    float NdotL0 = max(dot(N, -uLight0Dir), 0.0);
+    float NdotL1 = max(dot(N, -uLight1Dir), 0.0);
+    float NdotL2 = max(dot(N, -uLight2Dir), 0.0);
+    vec3 lightSum = uLight0Diffuse * NdotL0 + uLight1Diffuse * NdotL1 + uLight2Diffuse * NdotL2;
+    // EmissiveColor is pre-combined with AmbientLightColor*DiffuseColor by
+    // EnvironmentMapEffect::FillGpuDrawParams -- added after the light-sum*DiffuseColor multiply,
+    // matching FNA's Lighting.fxh.
+    vec3 litRGB = lightSum * uDiffuseColor.rgb + uEmissiveColor;
+    vec4 texColor = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
+    vec3 reflDir = reflect(-E, N);
+    vec4 envSample = texture(uEnvMap, reflDir);
+    vec3 baseColor = litRGB * texColor.rgb;
+    float combinedAlpha = uDiffuseColor.a * texColor.a;
+    vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, vFresnel) +
+               uEnvMapSpecular * envSample.a * combinedAlpha;
+    fragColor = vec4(rgb, combinedAlpha);
+}
+)GLSL";
+
         // XNA TextureFilter ordinal -> (GL min filter, GL mag filter). plan_opengl4.md GL4-18:
         // real mip-aware GL min-filter tokens for every "Mip*" variant now that
         // OpenGL4TextureBackend::UpdatePixelsLevel() lets a texture genuinely have mip levels
@@ -1937,6 +2029,13 @@ void main()
             throw std::runtime_error("OpenGL4: lit_textured3d program failed to compile: " + litTextured3DProgram_.GetError());
     }
 
+    void OpenGL4GraphicsBackend::EnsureEnvMap3DProgram()
+    {
+        if (envMap3DProgram_.IsValid()) return;
+        if (!envMap3DProgram_.Compile(kEnvMap3DVertSrc, kEnvMap3DFragSrc))
+            throw std::runtime_error("OpenGL4: env_map3d program failed to compile: " + envMap3DProgram_.GetError());
+    }
+
     bool OpenGL4GraphicsBackend::BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
                                                        const Matrix& projection, const GpuDrawParams& params)
     {
@@ -1958,6 +2057,61 @@ void main()
             gl4_glActiveTexture(GL_TEXTURE1);
             params.texture1->BindGL();
             ApplySamplerState(1, 0, 1, 1, 1); // Linear/Clamp -- matches texture0's own default.
+        }
+        // plan_opengl4.md GL4-21: EnvironmentMapEffect's cube map -- unit 1, same slot
+        // DualTextureEffect's texture1 uses (the two effects are mutually exclusive per draw, so
+        // there's no conflict), matching EasyGLGraphicsBackend::BindDrawParams's own unit choice.
+        const bool hasEnvMap = params.envMapping && params.envMap != nullptr;
+        if (hasEnvMap)
+        {
+            gl4_glActiveTexture(GL_TEXTURE1);
+            params.envMap->BindGL();
+            ApplySamplerState(1, 0, 1, 1, 1); // Linear/Clamp.
+        }
+
+        if (params.envMapping && strideInBytes == 32)
+        {
+            EnsureEnvMap3DProgram();
+            envMap3DProgram_.Use();
+            float worldCol[16];
+            world.ToColumnMajor(worldCol);
+            const auto setM4 = [&](const char* name, const float* m) {
+                const int loc = envMap3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
+            };
+            const auto setV3 = [&](const char* name, const float* v) {
+                const int loc = envMap3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
+            };
+            const auto setB = [&](const char* name, bool v) {
+                const int loc = envMap3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
+            };
+            setM4("uWorldViewProj", wvpCol);
+            setM4("uWorld", worldCol);
+            setV3("uEyePosition", params.eyePositionWorld);
+            const int envAmountLoc = envMap3DProgram_.UniformLocation("uEnvMapAmount");
+            if (envAmountLoc >= 0) gl4_glUniform1f(envAmountLoc, params.envMapAmount);
+            setB("uFresnelEnabled", params.fresnelEnabled);
+            const int fresnelFactorLoc = envMap3DProgram_.UniformLocation("uFresnelFactor");
+            if (fresnelFactorLoc >= 0) gl4_glUniform1f(fresnelFactorLoc, params.fresnelFactor);
+            const int diffuseLoc = envMap3DProgram_.UniformLocation("uDiffuseColor");
+            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
+                                                 params.diffuseColor[2], params.diffuseColor[3]);
+            setB("uTextureEnabled", params.textureEnabled && hasTexture0);
+            setV3("uEmissiveColor", params.emissiveColor);
+            setV3("uLight0Dir", params.light0Dir);
+            setV3("uLight0Diffuse", params.light0Diffuse);
+            setV3("uLight1Dir", params.light1Dir);
+            setV3("uLight1Diffuse", params.light1Diffuse);
+            setV3("uLight2Dir", params.light2Dir);
+            setV3("uLight2Diffuse", params.light2Diffuse);
+            setV3("uEnvMapSpecular", params.envMapSpecular);
+            const int texLoc = envMap3DProgram_.UniformLocation("uTexture");
+            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            const int envMapLoc = envMap3DProgram_.UniformLocation("uEnvMap");
+            if (envMapLoc >= 0) gl4_glUniform1i(envMapLoc, 1);
+            return true;
         }
 
         switch (strideInBytes)

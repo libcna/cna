@@ -481,6 +481,9 @@ namespace CNA::Internal::Backends::OpenGL4
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
         void EnsureLitTextured3DProgram();
+        /// plan_opengl4.md GL4-21: EnvironmentMapEffect's own dedicated stride-32 program,
+        /// selected instead of litTextured3DProgram_ when GpuDrawParams::envMapping is set.
+        void EnsureEnvMap3DProgram();
 
         /// Binds the correct stride-keyed program for @p strideInBytes, uploads its uniforms
         /// from @p world/@p view/@p projection/@p params, and binds texture unit 0 if
@@ -539,6 +542,7 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4RawProgram textured3DProgram_;
         OpenGL4RawProgram coloredTextured3DProgram_;
         OpenGL4RawProgram litTextured3DProgram_;
+        OpenGL4RawProgram envMap3DProgram_;
         unsigned int samplers_[kMaxSamplerSlots] = {};
     };
 }

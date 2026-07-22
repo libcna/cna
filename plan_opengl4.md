@@ -189,6 +189,37 @@
 > round-trip). Both new tests passed every check on their first real run — no backend or test bugs
 > found this time. Full re-run of the other 10 OpenGL4 CTest suites confirms no regression.
 >
+> **Status (2026-07-22): `GL4-21` (`EnvironmentMapEffect`) landed and verified.**
+> A dedicated `env_map3d` GLSL 410 core program (stride 32, same `VertexPositionNormalTexture`
+> layout `lit_textured3d` already uses) is selected by `BindProgramForStride` instead of
+> `lit_textured3d` whenever `GpuDrawParams::envMapping` is set — no `GpuDrawParams`/
+> `IGraphicsBackend.hpp` changes were needed at all (every field `EnvironmentMapEffect::
+> FillGpuDrawParams()` populates already existed, added by earlier phases for the other 5
+> backends that already implement this effect). Ported near-verbatim from `EasyGLGraphicsBackend
+> ::EnsureEnvMapped3DProgram`'s GLSL ES 300 source (per-vertex Fresnel, Gouraud-interpolated —
+> kept as-is rather than switching to `VulkanGraphicsBackend`'s per-fragment variant, since EasyGL
+> is the closer sibling GLSL backend to port from), cross-checked against `VulkanGraphicsBackend`'s
+> own `env_map3d.frag.glsl` for the exact formula: reflection vector `reflect(-eyeVector,
+> worldNormal)`, Fresnel blend factor `pow(max(1-|dot(eye,normal)|,0),FresnelFactor)*
+> EnvironmentMapAmount`, and critically a **lerp** (not additive) blend between the lit
+> diffuse×texture colour and the alpha-scaled cubemap sample, plus a separately alpha-scaled
+> specular term — `docs/environmentmapeffect-support.md` documents these as the two real formula
+> bugs (additive-not-lerp, missing alpha scaling) found and fixed while porting this effect to 3
+> other backends, so this OpenGL4 port used the already-corrected formula from the start rather
+> than rediscovering them. The cube map binds to texture unit 1 (`GL4-19`'s `DualTextureEffect`
+> texture1 slot, reused safely since the two effects are mutually exclusive per draw). Verified by
+> the new `OpenGL4_EnvironmentMapEffect` CTest (4/4): Check A reuses Task 399's own
+> cross-backend-verified combined-scene oracle verbatim (same texture/cube/emissive/specular/
+> Fresnel/World/View/Projection setup as `easygl_environmentmapeffect_golden_test.cpp`, same
+> expected `(151,101,76)` ± 20 tolerance) — the strongest possible correctness proof for a 4th
+> backend port, and it passed on the very first run at `(131,91,71)`, comfortably within
+> tolerance. Checks B–D isolate individual terms: `EnvironmentMapAmount=0` making the cube map's
+> own colour provably irrelevant, `EnvironmentMapAmount=1`/`FresnelFactor=0` with a zeroed base
+> colour producing an exact, fully-opaque pass-through of the cube map's colour, and a non-zero
+> `EnvironmentMapSpecular` provably rendering brighter than zero. All 4 checks passed on the first
+> real run — no backend or test bugs found. Full re-run of the other 12 OpenGL4 CTest suites
+> confirms no regression.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -211,16 +242,13 @@
 > `SDL_GL_CONTEXT_PROFILE_MASK` attributes and the loader are portable, and macOS's 4.1 ceiling is
 > the reason this backend requests 4.1 rather than a higher minimum), not validation claims.
 >
-> **Remaining work (read this before picking a next task):**
-> - **`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`** — none implemented yet (`AlphaTestEffect`/
->   `DualTextureEffect` done, `GL4-19`; plain `Texture3D`/`TextureCube` done, `GL4-20`).
->   `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done) unblocks these — each needs its
->   own shader variant/uniform wiring on top of the stride dispatch that now exists, plus (for
->   `SkinnedEffect`) a bone-palette uniform array and a new stride-52/56 vertex layout
+> **`SkinnedEffect`/`PbrEffect`** — neither implemented yet (`AlphaTestEffect`/`DualTextureEffect`
+>   done, `GL4-19`; plain `Texture3D`/`TextureCube` done, `GL4-20`; `EnvironmentMapEffect` done,
+>   `GL4-21`). `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done) unblocks these — each
+>   needs its own shader variant/uniform wiring on top of the stride dispatch that now exists,
+>   plus (for `SkinnedEffect`) a bone-palette uniform array and a new stride-52/56 vertex layout
 >   `OpenGL4VertexBufferBackend::ApplyLayout` doesn't recognize yet (falls back to its own
->   documented position-only default case). `EnvironmentMapEffect` can now use `GL4-20`'s plain
->   `CreateTextureCube` (a game-loaded env map from disk) or `GL4-15`'s `RenderTargetCube` as its
->   env-map source. ⬜
+>   documented position-only default case). ⬜
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
 > - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplifications (`GL4-13`)** — real, but
@@ -288,7 +316,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -316,6 +344,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-18` | Real `Texture2D` mip level support — `OpenGL4TextureBackend::UpdatePixelsLevel()` uploads real per-level data via `glTexImage2D` (level storage is never pre-allocated beyond level 0), `GL_TEXTURE_MAX_LEVEL` is clamped to the real requested level count at construction (matches `EasyGLTextureBackend`'s own Task-924 fix), and `FilterToGL`'s mapping table gained real `GL_*_MIPMAP_*` min-filter tokens for every `TextureFilter` `Mip*` variant. `Point`/`Linear` deliberately keep their non-mip-aware GL filters, matching `EasyGLGraphicsBackend`'s own identical, documented choice. | ✅ | The new test needed the same `Color::Green`-is-`(0,128,0)`-not-`(0,255,0)` correction `GL4-16` already found once. |
 | `GL4-19` | `AlphaTestEffect`/`DualTextureEffect` — both reuse `GL4-13`'s existing stride-20/24 programs via new uniforms only: `uAlphaTest` (`vec4` reference/tolerance/pass-weight/fail-weight discard ternary, ported from `VulkanGraphicsBackend`'s `alpha_test3d.frag.glsl`) and `uTexture2`/`uDualTextureEnabled` (a second sampler on texture unit 1, `BindProgramForStride`'s new `hasTexture1` block mirroring the existing `hasTexture0` one). Dual-texture blend is the real XNA/D3D `DualTextureEffect.fx` 2x-modulate formula (`tex1.rgb*=2.0; result=tex1*tex2*diffuseColor`), cross-verified against both `VulkanGraphicsBackend`'s `dual_texture3d.frag.glsl` and `EasyGLGraphicsBackend`'s current inline GLSL before implementation. | ✅ | The new test's first draft had one authoring mistake (not a backend bug): a white/white `DualTextureEffect` check assumed `diffuseColor` passes through unchanged, but `tex1(1.0)*2*tex2(1.0)=2.0` clamps to full brightness on write and masks `diffuseColor`'s own value — fixed with a mid-gray second texture so `tex1*2*tex2~=1.0` (identity). |
 | `GL4-20` | Plain (non-render-target) `Texture3D`/`TextureCube` — `OpenGL4Texture3DBackend` (real `GL_TEXTURE_3D`, every mip level pre-allocated via the newly-loaded `gl4_glTexImage3D`, per-Z-slice `GetData` via a temporary FBO + the newly-loaded `gl4_glFramebufferTextureLayer` + `glReadPixels`) and `OpenGL4TextureCubeBackend` (reuses `GL4-15`'s `GL_TEXTURE_CUBE_MAP_POSITIVE_X+face` arithmetic, every face × every mip level pre-allocated via `glTexImage2D`), both modeled on `EasyGLTexture3DBackend`/`EasyGLTextureCubeBackend`'s resource shape. Both add `GL_TEXTURE_MAX_LEVEL` clamping (stricter than the EasyGL reference, matching `GL4-18`'s own fix). `TextureCube::GetData` deliberately does not Y-flip, unlike `OpenGL4RenderTargetCubeBackend::GetData` (a framebuffer-origin render target) — matches `EasyGLTextureCubeBackend`'s own plain-texture convention. | ✅ | Both new tests (`OpenGL4_Texture3D` 3/3, `OpenGL4_TextureCube` 4/4) passed every check on their first real run — no backend or test bugs found this time. |
+| `GL4-21` | `EnvironmentMapEffect` — a dedicated `env_map3d` GLSL 410 core program (stride 32, same `VertexPositionNormalTexture` layout as `lit_textured3d`), selected by `BindProgramForStride` instead of `lit_textured3d` when `GpuDrawParams::envMapping` is set. Ported near-verbatim from `EasyGLGraphicsBackend::EnsureEnvMapped3DProgram`, cross-checked against `VulkanGraphicsBackend`'s `env_map3d.frag.glsl` for the exact reflection/Fresnel/lerp/alpha-scaling formula (`docs/environmentmapeffect-support.md` documents the 2 real formula bugs — additive-not-lerp, missing alpha scaling — already found and fixed on 3 other backends; this port used the corrected formula from the start). Cube map binds to texture unit 1 (`GL4-19`'s `DualTextureEffect` slot, safe since the two effects are mutually exclusive per draw). No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — every field was already present from earlier phases. | ✅ | Check A reuses Task 399's own cross-backend-verified combined-scene oracle verbatim (`(151,101,76)` ± 20) and passed on the first run at `(131,91,71)`. All 4 checks passed on the first real run — no backend or test bugs found. |
 
 ---
 
@@ -338,7 +367,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All twelve dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All thirteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -394,6 +423,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   decisive no-Y-flip proof via an asymmetric single-corner marker pixel, and a genuine
   mip-level-1 storage round-trip). Full re-run of the other 10 OpenGL4 CTest suites confirmed no
   regression.
+- `OpenGL4_EnvironmentMapEffect` — 4/4 (Task 399's cross-backend-verified combined-scene oracle,
+  `EnvironmentMapAmount=0` proven to make the cube map's own colour irrelevant,
+  `EnvironmentMapAmount=1`/`FresnelFactor=0` proven to exactly pass through the cube map's colour,
+  and a non-zero `EnvironmentMapSpecular` proven to render measurably brighter). Full re-run of
+  the other 12 OpenGL4 CTest suites confirmed no regression.
 
 ---
 
@@ -432,10 +466,15 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
    (`OpenGL4_Texture3D` 3/3, `OpenGL4_TextureCube` 4/4). See `GL4-20`'s own row for the FBO-based
    `Texture3D::GetData` per-slice readback and the `TextureCube::GetData` no-Y-flip convention
    (verified, not assumed, via a corner-marker pixel check).
-10. **Next up (not yet started, no priority order implied):**
-    - `EnvironmentMapEffect` — now unblocked by both `GL4-15`'s `RenderTargetCube` (a
-      render-target-sourced env map) and `GL4-20`'s plain `CreateTextureCube` (a game-loaded env
-      map from disk); still needs its own shader variant plumbed through `BindProgramForStride`.
+10. ~~`GL4-21`~~ — `EnvironmentMapEffect` done and verified 2026-07-22, all ✅
+    (`OpenGL4_EnvironmentMapEffect`, 4/4). See `GL4-21`'s own row for the reflection/Fresnel/lerp/
+    alpha-scaling formula cross-checked against 2 other backends and the Task-399 cross-backend
+    oracle reused as Check A.
+11. **Next up (not yet started, no priority order implied):**
+    - `SkinnedEffect`/`PbrEffect` — neither implemented yet. `SkinnedEffect` additionally needs a
+      bone-palette uniform array and a new stride-52/56 vertex layout
+      `OpenGL4VertexBufferBackend::ApplyLayout` doesn't recognize yet (falls back to its own
+      documented position-only default case).
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
 everything else still open — do not treat the picks above as the only next options.
