@@ -12,6 +12,8 @@
 //   not a copy of the first (OPENGLES1-81). Checks A/B use one shared UV set and therefore cannot
 //   tell a correct two-set implementation from one that ignores the second set entirely.
 // Check D -- EnvironmentMapEffect renders using its cube map.
+// Check C2 -- RenderTargetCube renders into an individual face and reads it back (OPENGLES1-84),
+//   with the other faces left untouched so a target that ignores the face index is detectable.
 // Check D -- a simulated context loss followed by a restore leaves the device drawing correctly.
 // Check E -- ...and a texture uploaded before the loss still samples correctly afterwards, i.e.
 //   the backend really re-uploaded it rather than leaving a dead GL name bound...
@@ -308,6 +310,43 @@ protected:
                             got.getRProperty(), got.getGProperty(), got.getBProperty());
                 check(!colorNear(got, Color::Black),
                       "EnvironmentMapEffect -- the cube-mapped surface is rendered");
+            }
+        }
+
+        // ---- Check C2: RenderTargetCube --------------------------------------------------
+        {
+            constexpr int kFaceSize = 16;
+            auto cubeTarget = backend.CreateRenderTargetCube(kFaceSize, /*depthFormat=*/0);
+            if (!cubeTarget)
+            {
+                skip("RenderTargetCube -- driver lacks framebuffer objects or cube maps");
+            }
+            else
+            {
+                // Render red into face 3 only. Every other face must stay at its initial contents,
+                // which is what catches a target that ignores the face index.
+                constexpr int kTargetFace = 3;
+                cubeTarget->BindAsRenderTargetFace(kTargetFace);
+                dev.Clear(Color::Red);
+                cubeTarget->UnbindAsRenderTarget();
+
+                std::vector<std::uint8_t> facePixels(
+                    static_cast<std::size_t>(kFaceSize) * kFaceSize * 4, 0);
+                cubeTarget->GetData(kTargetFace, 0, 0, 0, kFaceSize, kFaceSize,
+                                    facePixels.data(), static_cast<int>(facePixels.size()));
+                const Color drawn(facePixels[0], facePixels[1], facePixels[2], facePixels[3]);
+
+                std::vector<std::uint8_t> otherPixels(
+                    static_cast<std::size_t>(kFaceSize) * kFaceSize * 4, 0);
+                cubeTarget->GetData(/*face=*/0, 0, 0, 0, kFaceSize, kFaceSize,
+                                    otherPixels.data(), static_cast<int>(otherPixels.size()));
+                const Color untouched(otherPixels[0], otherPixels[1], otherPixels[2], otherPixels[3]);
+
+                std::printf("       (cube face %d = %d,%d,%d ; face 0 = %d,%d,%d)\n",
+                            kTargetFace, drawn.getRProperty(), drawn.getGProperty(), drawn.getBProperty(),
+                            untouched.getRProperty(), untouched.getGProperty(), untouched.getBProperty());
+                check(colorNear(drawn, Color::Red) && !colorNear(untouched, Color::Red),
+                      "RenderTargetCube -- the clear lands in the selected face and no other");
             }
         }
 

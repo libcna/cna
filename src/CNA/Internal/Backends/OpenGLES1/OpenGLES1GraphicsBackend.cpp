@@ -1203,6 +1203,122 @@ namespace CNA::Internal::Backends::OpenGLES1
         owner_->glBindFramebufferOES_(GL_FRAMEBUFFER_OES, static_cast<GLuint>(previousFbo));
     }
 
+
+    // -------------------------------------------------------------------------
+    // OpenGLES1RenderTargetCubeBackend (OPENGLES1-84)
+    // -------------------------------------------------------------------------
+
+    namespace
+    {
+        // Cube face ordinals follow XNA's CubeMapFace: 0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z.
+        GLenum CubeFaceTarget(int face)
+        {
+            static constexpr GLenum kFaces[6] = {
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_X_OES,
+                GL_TEXTURE_CUBE_MAP_POSITIVE_Y_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_OES,
+                GL_TEXTURE_CUBE_MAP_POSITIVE_Z_OES, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_OES,
+            };
+            return kFaces[(face >= 0 && face < 6) ? face : 0];
+        }
+    }
+
+    OpenGLES1RenderTargetCubeBackend::OpenGLES1RenderTargetCubeBackend(OpenGLES1GraphicsBackend* owner,
+                                                                       int size, int depthFormat)
+        : owner_(owner), size_(size)
+    {
+        glGenTextures(1, &cubeTexture_);
+        glBindTexture(GL_TEXTURE_CUBE_MAP_OES, cubeTexture_);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        // Every face needs defined storage before it can be a colour attachment.
+        for (int face = 0; face < 6; ++face)
+            glTexImage2D(CubeFaceTarget(face), 0, GL_RGBA, size, size, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        owner_->GenFramebufferEXT(&fbo_);
+        owner_->BindFramebufferEXT(fbo_);
+
+        if (depthFormat != 0)
+        {
+            // One depth buffer shared by all six faces: only one face is ever the draw target at a
+            // time, so a per-face buffer would waste memory for no behavioural difference.
+            owner_->GenRenderbufferEXT(&depthRenderbuffer_);
+            owner_->BindRenderbufferEXT(depthRenderbuffer_);
+            owner_->RenderbufferStorageEXT(GL_DEPTH_COMPONENT16_OES, size, size);
+            owner_->AttachDepthRenderbufferEXT(depthRenderbuffer_);
+            hasDepth_ = true;
+        }
+
+        owner_->BindFramebufferEXT(0);
+    }
+
+    OpenGLES1RenderTargetCubeBackend::~OpenGLES1RenderTargetCubeBackend()
+    {
+        if (owner_)
+        {
+            if (depthRenderbuffer_) owner_->DeleteRenderbufferEXT(&depthRenderbuffer_);
+            if (fbo_) owner_->DeleteFramebufferEXT(&fbo_);
+        }
+        if (cubeTexture_) glDeleteTextures(1, &cubeTexture_);
+    }
+
+    void OpenGLES1RenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        owner_->BindFramebufferEXT(fbo_);
+        owner_->AttachCubeFaceEXT(CubeFaceTarget(face), cubeTexture_);
+    }
+
+    void OpenGLES1RenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        owner_->BindFramebufferEXT(0);
+    }
+
+    void OpenGLES1RenderTargetCubeBackend::BindGL() const
+    {
+        glBindTexture(GL_TEXTURE_CUBE_MAP_OES, cubeTexture_);
+    }
+
+    void OpenGLES1RenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                   void* data, int dataLength) const
+    {
+        if (level != 0 || !data || w <= 0 || h <= 0) return;
+        if (dataLength < w * h * 4) return;
+        if (!owner_ || fbo_ == 0) return;
+
+        GLint previousFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING_OES, &previousFbo);
+        owner_->BindFramebufferEXT(fbo_);
+        owner_->AttachCubeFaceEXT(CubeFaceTarget(face), cubeTexture_);
+
+        auto* pixels = static_cast<uint8_t*>(data);
+        const int flippedY = size_ - y - h;
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(x, flippedY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+        std::vector<uint8_t> row(static_cast<std::size_t>(w) * 4);
+        for (int top = 0, bottom = h - 1; top < bottom; ++top, --bottom)
+        {
+            uint8_t* topRow = pixels + static_cast<std::size_t>(top) * w * 4;
+            uint8_t* bottomRow = pixels + static_cast<std::size_t>(bottom) * w * 4;
+            std::memcpy(row.data(), topRow, row.size());
+            std::memcpy(topRow, bottomRow, row.size());
+            std::memcpy(bottomRow, row.data(), row.size());
+        }
+
+        owner_->BindFramebufferEXT(static_cast<GLuint>(previousFbo));
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> OpenGLES1GraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
+    {
+        // Cube mip generation and multisampling are not implemented (documented gap).
+        (void)mipMap; (void)multiSampleCount;
+        if (!fboSupported_ || !cubeMapSupported_) return nullptr;
+        return std::make_unique<OpenGLES1RenderTargetCubeBackend>(this, size, depthFormat);
+    }
+
     std::unique_ptr<IRenderTargetBackend> OpenGLES1GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {

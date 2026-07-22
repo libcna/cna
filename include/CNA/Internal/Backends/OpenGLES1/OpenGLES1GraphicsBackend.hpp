@@ -369,6 +369,61 @@ namespace CNA::Internal::Backends::OpenGLES1
     };
 
     /**
+     * @brief NOXNA. Cube-map render target: one GPU cube image whose faces are attached to a
+     *        framebuffer one at a time (OPENGLES1-84).
+     *
+     * Needs both `GL_OES_framebuffer_object` and `GL_OES_texture_cube_map`; `CreateRenderTargetCube`
+     * returns `nullptr` when either is missing, the same "unsupported, not merely unimplemented"
+     * contract `CreateRenderTarget2D` already follows. Mip generation and multisampling are not
+     * implemented for cube targets.
+     */
+    class OpenGLES1RenderTargetCubeBackend : public IRenderTargetCubeBackend
+    {
+    public:
+        /**
+         * @brief Creates the cube colour image and the framebuffer used to render into its faces.
+         *
+         * @param owner Owning backend, used for the FBO entry points.
+         * @param size Edge length of each square face, in pixels.
+         * @param depthFormat XNA `DepthFormat` ordinal; 0 means no depth buffer.
+         */
+        OpenGLES1RenderTargetCubeBackend(OpenGLES1GraphicsBackend* owner, int size, int depthFormat);
+        ~OpenGLES1RenderTargetCubeBackend() override;
+
+        OpenGLES1RenderTargetCubeBackend(const OpenGLES1RenderTargetCubeBackend&) = delete;
+        OpenGLES1RenderTargetCubeBackend& operator=(const OpenGLES1RenderTargetCubeBackend&) = delete;
+
+        [[nodiscard]] int GetSize() const override { return size_; }
+        void BindAsRenderTargetFace(int face) override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetGLHandle() const override { return cubeTexture_; }
+        void BindGL() const override;
+
+        /**
+         * @brief Reads raw RGBA8 pixels back from one cube face.
+         *
+         * @param face Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
+         * @param level Mip level; only level 0 exists here.
+         * @param x Left edge of the sub-rectangle.
+         * @param y Top edge of the sub-rectangle, top-left origin.
+         * @param w Sub-rectangle width.
+         * @param h Sub-rectangle height.
+         * @param data Destination RGBA8 buffer.
+         * @param dataLength Size of that buffer in bytes.
+         */
+        void GetData(int face, int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
+
+    private:
+        OpenGLES1GraphicsBackend* owner_ = nullptr;
+        unsigned int fbo_ = 0;
+        unsigned int cubeTexture_ = 0;
+        unsigned int depthRenderbuffer_ = 0;
+        int size_ = 0;
+        bool hasDepth_ = false;
+    };
+
+    /**
      * @brief NOXNA. Graphics backend built on real OpenGL ES 1.1 (the fixed-function "Common"
      * profile), deliberately independent of the EasyGL backend (which targets WebGL2/OpenGL ES
      * 3.0 and cannot create an ES 1.1 context at all).
@@ -436,6 +491,18 @@ namespace CNA::Internal::Backends::OpenGLES1
          * @return A 32-bit buffer, or the base class's 16-bit fallback when the extension is absent.
          */
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
+
+        /**
+         * @brief Creates a cube-map render target (OPENGLES1-84).
+         *
+         * @param size Edge length of each face in pixels.
+         * @param depthFormat XNA `DepthFormat` ordinal; 0 means no depth buffer.
+         * @param mipMap Ignored -- cube mip generation is not implemented.
+         * @param multiSampleCount Ignored -- no framebuffer-multisample extension is available.
+         * @return The target, or `nullptr` when the required extensions are missing.
+         */
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(
+            int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
 
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -534,6 +601,40 @@ namespace CNA::Internal::Backends::OpenGLES1
         {
             if (glFramebufferTexture2DOES_)
                 glFramebufferTexture2DOES_(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_TEXTURE_2D, texture, 0);
+        }
+        /** @brief Creates a renderbuffer. @param out Receives the new name. */
+        void GenRenderbufferEXT(unsigned int* out) const { if (glGenRenderbuffersOES_) glGenRenderbuffersOES_(1, out); }
+        /** @brief Deletes a renderbuffer. @param name Name to delete, then zeroed. */
+        void DeleteRenderbufferEXT(unsigned int* name) const { if (glDeleteRenderbuffersOES_) glDeleteRenderbuffersOES_(1, name); }
+        /** @brief Binds a renderbuffer. @param name Name to bind. */
+        void BindRenderbufferEXT(unsigned int name) const { if (glBindRenderbufferOES_) glBindRenderbufferOES_(GL_RENDERBUFFER_OES, name); }
+        /**
+         * @brief Allocates renderbuffer storage.
+         * @param internalFormat GL internal format.
+         * @param w Width in pixels.
+         * @param h Height in pixels.
+         */
+        void RenderbufferStorageEXT(unsigned int internalFormat, int w, int h) const
+        {
+            if (glRenderbufferStorageOES_)
+                glRenderbufferStorageOES_(GL_RENDERBUFFER_OES, static_cast<GLenum>(internalFormat), w, h);
+        }
+        /** @brief Attaches a renderbuffer as the depth attachment. @param name Renderbuffer name. */
+        void AttachDepthRenderbufferEXT(unsigned int name) const
+        {
+            if (glFramebufferRenderbufferOES_)
+                glFramebufferRenderbufferOES_(GL_FRAMEBUFFER_OES, GL_DEPTH_ATTACHMENT_OES, GL_RENDERBUFFER_OES, name);
+        }
+        /**
+         * @brief Attaches one cube face as colour attachment 0.
+         * @param faceTarget GL cube-face target enum.
+         * @param texture Cube texture name.
+         */
+        void AttachCubeFaceEXT(unsigned int faceTarget, unsigned int texture) const
+        {
+            if (glFramebufferTexture2DOES_)
+                glFramebufferTexture2DOES_(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES,
+                                           static_cast<GLenum>(faceTarget), texture, 0);
         }
         /** @brief Reports whether the bound framebuffer is complete. @return True when complete. */
         [[nodiscard]] bool IsFramebufferCompleteEXT() const
