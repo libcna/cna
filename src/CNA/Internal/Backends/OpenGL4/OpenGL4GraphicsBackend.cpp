@@ -2258,6 +2258,37 @@ void main()
         GetLogicalSize(width, height);
     }
 
+    bool OpenGL4GraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
+                                                           float& logX, float& logY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int physW = 0, physH = 0;
+        SDL_GetWindowSize(window_, &physW, &physH);
+        if (physH <= 0) return false;
+        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
+        logX = windowX * scale;
+        logY = windowY * scale;
+        return true;
+    }
+
+    bool OpenGL4GraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+                                                           float& windowX, float& windowY) const
+    {
+        // Inverse of TransformWindowToLogical: logical = window * (virtualHeight_ / physH), so
+        // window = logical * (physH / virtualHeight_). A pure uniform scale with NO offset,
+        // exact for this backend's own default FixedHeightDynamicWidth presentation (the logical
+        // viewport always fills the whole physical window, no letterbox bars), matching
+        // EasyGLGraphicsBackend::TransformLogicalToWindow's own identical formula/rationale.
+        if (virtualHeight_ <= 0) return false;
+        int physW = 0, physH = 0;
+        SDL_GetWindowSize(window_, &physW, &physH);
+        if (physH <= 0) return false;
+        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
+        windowX = logX * invScale;
+        windowY = logY * invScale;
+        return true;
+    }
+
     void OpenGL4GraphicsBackend::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;

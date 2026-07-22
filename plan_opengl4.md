@@ -421,6 +421,24 @@
 > "zero new third-party dependency" preference for a from-scratch native backend (see
 > `plan_sdlgpu.md`'s own "Why an SDL GPU backend" rationale).
 >
+> **Status (2026-07-22): `GL4-28` (real `TransformWindowToLogical`/`TransformLogicalToWindow`)
+> landed and verified.** Both were previously unoverridden (inherited `IGraphicsBackend`'s default
+> no-op `return false`), so `Mouse::SetPosition` (which calls `TransformLogicalToWindow` to place
+> the OS cursor) and `SdlInputBridge` (which calls `TransformWindowToLogical` to map incoming
+> physical mouse events to logical coordinates) silently failed to scale coordinates on this
+> backend whenever a non-default virtual resolution was in play. Ported
+> `EasyGLGraphicsBackend`'s own pure-uniform-scale (no offset) formula exactly: `scale =
+> virtualHeight_ / physicalWindowHeight`, exact for this backend's own default
+> `FixedHeightDynamicWidth` presentation, where the logical viewport always fills the whole
+> physical window (no letterbox bars to offset for).
+>
+> Verified by the new `OpenGL4_TransformCoords` CTest (4/4): a 64x64 physical window with
+> `SetVirtualResolution(128, 128)` called directly (a deterministic 2x scale, independent of any
+> DPI/fullscreen-specific Xvfb behavior) proves both directions at a centre point (Check A/C) and a
+> non-centre point (Check B/D), showing a genuine scale (not an accidental identity pass-through)
+> and an exact round-trip inverse. All 4 checks passed on the first real run — no backend or test
+> bugs found. Full re-run of the other 19 OpenGL4 CTest suites confirms no regression (20/20 total).
+>
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
@@ -461,9 +479,9 @@
 >   at all. ✅
 > - ~~**Occlusion queries**~~ — done, `GL4-24` (2026-07-22). Real `GL_SAMPLES_PASSED` queries via
 >   `OpenGL4OcclusionQueryBackend`, verified by `OpenGL4_OcclusionQuery` (6/6). ✅
-> - **`TransformWindowToLogical`/`TransformLogicalToWindow`** — not overridden (default `false`),
->   so `Mouse`/touch physical→logical coordinate mapping doesn't work yet on this backend when a
->   non-default `virtualWidth`/`virtualHeight` is set. ⬜
+> - ~~**`TransformWindowToLogical`/`TransformLogicalToWindow`**~~ — done, `GL4-28` (2026-07-22).
+>   Real pure-uniform-scale mapping (ported from `EasyGLGraphicsBackend`), verified by
+>   `OpenGL4_TransformCoords` (4/4). ✅
 > - **`DebugSimulateContextLoss`/`DebugRestoreContext`/`SetContextRecoveryEnabled`** — **explicitly,
 >   permanently deferred (2026-07-22 project-owner decision)**, not overridden (safe no-op
 >   defaults). EasyGL's own `metagl`-based `RecoverableResource` mechanism is a cross-cutting base
@@ -515,7 +533,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog`, `OpenGL4_SamplerState`, `OpenGL4_BaseVertex`, `OpenGL4_TransformCoords` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -550,6 +568,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-25` | Real fog on all 7 `GpuDrawParams`-driven stride/dispatch shaders (Task 1111's formula, ported from `EasyGLGraphicsBackend`'s own per-program fog blocks), plus a **new** `case 16:`/`coloredParams3DProgram_` closing a separate pre-existing parity gap (stride-16 `VertexPositionColor` draws previously bypassed `GpuDrawParams` entirely — no `DiffuseColor`/`VertexColorEnabled`/`AlphaTest`/fog — falling back to the params-free `DrawColoredPrimitives` path even when a real `Effect.Apply()` was in play). | ✅ | Real gap found+fixed (the stride-16 parity gap above, not a fog-formula bug). Checks A–C reuse `easygl_basiceffect_fog_test.cpp`'s own 3-scenario oracle verbatim; Checks D–H use `mix(fogColor,colour,0)==fogColor` at `Z=FogStart` as an exact, effect-agnostic proof across the other 5 shader families — all matched exactly. All 8 checks passed on the first real run. |
 | `GL4-26` | Real dynamic `SamplerState` for direct 3D draws — deleted 7 redundant/incorrect `ApplySamplerState(slot, 0, 1, 1, 1)` override call sites in `BindProgramForStride`; `GraphicsDevice::applySamplerStatesToBackend()` already applies the real per-slot `SamplerState` for all 16 slots immediately before every `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` call, so nothing needed to be added. | ✅ | Real bug found+fixed (by inspection, not a failing test): the old hardcoded value ran *after* the real one and silently overwrote it on every draw, always Clamp — and real XNA's own default is Linear+**Wrap**, not Clamp, so untouched `SamplerStates` were also wrong before this fix. `OpenGL4_SamplerState` (3/3) ports `easygl_sampler_state_effect_test.cpp`'s Wrap-vs-Clamp proof verbatim plus a new default-reads-Wrap check. All 3 passed once the fix landed. |
 | `GL4-27` | Real `GpuDrawParams::baseVertex` support — `DrawIndexedPrimitivesEx` now calls the real GL 3.2 core `glDrawElementsBaseVertex` (newly loaded) instead of plain `glDrawElements`, adding `params.baseVertex` to every fetched index before it indexes into the bound vertex buffer. | ✅ | `OpenGL4_BaseVertex` (2/2): a shared 8-vertex buffer (2 quads, distinct colours/positions) + a shared 6-index buffer of purely *local* indices, reused unchanged for both draws (only `baseVertex` differs, `0` then `4`) — a decisive, unambiguous "honored vs ignored" distinction (an ignored `baseVertex` would leave the second quad's half at the background colour instead of its own colour). Both checks passed on the first real run. Also documented a separate, newly-discovered gap for a future task (not fixed here): this backend has no 32-bit index buffer support at all (`IsThirtyTwoBit()` hardcoded `false`, `GL_UNSIGNED_SHORT` hardcoded throughout). |
+| `GL4-28` | Real `TransformWindowToLogical`/`TransformLogicalToWindow` — pure-uniform-scale (no offset) physical↔logical coordinate mapping (`scale = virtualHeight_ / physicalWindowHeight`), ported from `EasyGLGraphicsBackend`'s identical formula/rationale; exact for this backend's own default `FixedHeightDynamicWidth` presentation. Used by `Mouse::SetPosition` (logical→window) and `SdlInputBridge` (window→logical, incoming physical mouse events). | ✅ | `OpenGL4_TransformCoords` (4/4): 64×64 physical window + `SetVirtualResolution(128,128)` forces a deterministic 2x scale; checks both directions at a centre point and a non-centre point, proving a genuine scale (not identity) and an exact round-trip inverse. All 4 checks passed on the first real run — no backend or test bugs found. |
 
 ---
 
@@ -572,7 +591,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All nineteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All twenty dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -661,6 +680,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   proving `baseVertex=4` genuinely offsets the vertex fetch (right-half quad renders its own BLUE,
   not a silent re-fetch of the left-half RED quad's data). Full re-run of the other 18 OpenGL4
   CTest suites confirmed no regression.
+- `OpenGL4_TransformCoords` — 4/4, a 64x64 physical window forced to a deterministic 2x scale via
+  `SetVirtualResolution(128,128)`, proving both `TransformWindowToLogical`/`TransformLogicalToWindow`
+  apply a genuine scale (not identity) at both a centre and a non-centre point, and that the two
+  directions are exact inverses of each other. Full re-run of the other 19 OpenGL4 CTest suites
+  confirmed no regression (20/20 total).
 
 ---
 
@@ -726,9 +750,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 17. ~~`GL4-27`~~ — real `params.baseVertex` support done and verified 2026-07-22, all ✅
     (`OpenGL4_BaseVertex`, 2/2). See `GL4-27`'s own row; also logged a new, separate,
     not-yet-fixed finding: no 32-bit index buffer support at all on this backend.
-18. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
+18. ~~`GL4-28`~~ — real `TransformWindowToLogical`/`TransformLogicalToWindow` done and verified
+    2026-07-22, all ✅ (`OpenGL4_TransformCoords`, 4/4). See `GL4-28`'s own row for the
+    pure-uniform-scale formula ported from `EasyGLGraphicsBackend`.
+19. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
     recovery explicitly, permanently deferred — do not pick it up):**
-    - `GL4-28` — `TransformWindowToLogical`/`TransformLogicalToWindow`.
     - `GL4-29` — `preferPerPixelLighting` vertex-lit shader variant.
     - `GL4-30` — custom `ShaderEffect` (`CreateEffectBackend`) — API already established and
       implemented on 8 other backends (EasyGL is the direct GLSL template), so this is a normal

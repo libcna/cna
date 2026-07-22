@@ -399,6 +399,15 @@ namespace CNA::Internal::Backends::OpenGL4
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
 
+        /// plan_opengl4.md GL4-28: real physical<->logical coordinate mapping for
+        /// Mouse/touch, matching EasyGLGraphicsBackend's own pure-uniform-scale (no offset)
+        /// formula -- exact for this backend's own default FixedHeightDynamicWidth presentation,
+        /// where the logical viewport always fills the whole physical window (no letterbox bars).
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
+
         /// plan_opengl4.md GL4-17: real window/backbuffer MSAA -- a manually-managed multisample
         /// FBO (mirroring EasyGLGraphicsBackend's own msaaFbo_/CreateMsaaBuffers/ResolveMsaa
         /// approach) rather than an SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, ...) window
