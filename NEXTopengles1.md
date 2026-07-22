@@ -94,6 +94,7 @@ Closed this session: `OPENGLES1-81`, `82`, `83`, `84`, `85` (partly), `86`, `87`
 Still ⬜, in the order I would pick them up:
 
 1. `OPENGLES1-90` — real `SetVertexDeclaration` instead of stride-based dispatch (16/20/24/28/32).
+   Backend-local, so it needs no decision from anyone.
    The largest remaining item and the most structural: it replaces a convention every draw path
    depends on. `OPENGLES1-81` already showed the cost of the current scheme — a layout the corpus
    uses did not even reach its own code path. Do this one with a clear head, not at the end of a
@@ -105,15 +106,19 @@ Still ⬜, in the order I would pick them up:
 **Blocked, do not start without a human decision:** `OPENGLES1-93` (compressed texture upload)
 needs a shared `ImageData`/`Texture2D.cpp` change affecting every backend.
 
-### Partial work worth knowing about
+### Cross-backend follow-ups — now their own rows, not notes
 
-- `OPENGLES1-85` is ✅ *partly*: render-target mip chains are generated and magnification filters
-  are now correct, but selecting `GL_*_MIPMAP_*` **minification** filters needs per-texture
-  knowledge of whether a chain exists — which means adding to the shared `ITextureBackend`. Left
-  undone deliberately.
-- `OPENGLES1-89` is implemented but **unreachable from the public API**: `Texture2D::GetData()`
-  answers plain textures from their CPU shadow and only asks the backend for render targets.
-  Making it reachable is a shared-`Texture2D.cpp` change.
+`OPENGLES1-85` and `89` are marked ✅ for the part that is genuinely done, and the work left over
+was **split into its own ⬜ rows** rather than left inside a ✅ row where nobody scanning for open
+work would find it:
+
+- `OPENGLES1-95` (⬜ **needs_human**) — make `ITextureBackend::GetData()` reachable for ordinary
+  textures. Only **3 of 16** backends implement that method; the other 13 inherit a no-op default,
+  so naively always asking the backend would replace correct CPU-shadow answers with silent zeroes
+  in 13 backends. Low value, real blast radius.
+- `OPENGLES1-96` (⬜ cross-backend) — mip-aware **minification** filters. Needs per-texture "does a
+  mip chain exist" knowledge on the shared `ITextureBackend`; picking a mipmap filter on a texture
+  without a chain makes it GL-incomplete.
 
 ## Three further defects found this session
 
