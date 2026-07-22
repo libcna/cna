@@ -78,6 +78,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_Wireframe COMMAND cna_test_software_wireframe
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias must offset the per-fragment depth
+    # -- ApplyRasterizerState previously dropped both floats. Constant bias (DepthBias * r) and slope
+    # bias (SlopeScaleDepthBias * max|dz/dx,dz/dy|) are added to the post-viewport window depth (sign:
+    # positive pushes away from the camera), across the colored / shaded / wireframe / RT paths, with
+    # a byte-identical zero-bias fast path. Deterministic exact-coplanar geometry (no z-fighting noise).
+    cna_software_test(cna_test_software_depthbias examples/software_depthbias_test.cpp)
+    cna_register_backend_test(NAME Software_DepthBias COMMAND cna_test_software_depthbias
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
