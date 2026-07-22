@@ -322,6 +322,13 @@ namespace CNA::Internal::Backends::Software
         /// CullCounterClockwise (not CullNone), and its quad winding is authored to survive that.
         [[nodiscard]] int GetCullMode() const { return cullMode_; }
 
+        /// REMED-GFX-073: the active GraphicsDevice.Viewport rectangle in pixels of the currently
+        /// bound target. When no custom viewport has been set (SetViewport never called), the full
+        /// current framebuffer is returned. SoftwareSpriteBatchBackend places its viewport-local
+        /// quads at (x,y) and clips them to (x,y,w,h), matching real XNA/FNA's viewport-local
+        /// SpriteBatch semantics (the GPU backends' GFX-072 contract).
+        void GetActiveViewport(int& x, int& y, int& w, int& h) const;
+
     private:
         SoftwareFramebuffer backbuffer_;
         SoftwareRenderTargetBackend* currentRenderTarget_ = nullptr;
@@ -338,5 +345,21 @@ namespace CNA::Internal::Backends::Software
         /// real via ApplyRasterizerState() before any game code runs, so this default rarely
         /// matters in practice, but is kept consistent with the real default for clarity.
         int cullMode_ = 2;
+
+        /// REMED-GFX-073: current GraphicsDevice.Viewport, stored by SetViewport() and consumed by
+        /// the SpriteBatch path (GetActiveViewport()). GraphicsDevice pushes this on every viewport
+        /// change and resets it to the full target on each RenderTarget transition, so a single
+        /// current-viewport field is always relative to the active target. `viewportSet_` starts
+        /// false so that -- before GraphicsDevice sets any viewport, or for direct-backend use --
+        /// GetActiveViewport() falls back to the full current framebuffer. MinDepth/MaxDepth are
+        /// stored for completeness but not consumed by the 2D sprite path (SpriteBatch uses
+        /// layerDepth directly), matching the pre-existing behavior.
+        bool viewportSet_ = false;
+        int viewportX_ = 0;
+        int viewportY_ = 0;
+        int viewportWidth_ = 0;
+        int viewportHeight_ = 0;
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
     };
 }

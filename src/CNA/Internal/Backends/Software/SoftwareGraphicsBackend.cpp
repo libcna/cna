@@ -488,6 +488,39 @@ namespace CNA::Internal::Backends::Software
             return out;
         }
 
+        /// REMED-GFX-073: an inclusive pixel clip rectangle for the rasterizer. Pre-intersected
+        /// with the framebuffer bounds by its factory helpers, so RasterizeTriangleShaded only has
+        /// to clamp each triangle's bounding box against it. An empty rectangle (minX>maxX or
+        /// minY>maxY) draws nothing -- the raster loops simply do not execute.
+        struct RasterClipRect
+        {
+            int minX = 0, minY = 0, maxX = -1, maxY = -1;
+        };
+
+        /// The full-framebuffer clip rectangle (identical to the rasterizer's pre-GFX-073 hardcoded
+        /// [0, width-1] x [0, height-1] clamp) -- used by the 3D DrawPrimitivesEx path, which is not
+        /// viewport-clipped in this task.
+        RasterClipRect FullFramebufferClip(const SoftwareFramebuffer& fb)
+        {
+            return RasterClipRect{0, 0, fb.width - 1, fb.height - 1};
+        }
+
+        /// REMED-GFX-073: the SpriteBatch clip rectangle = the GraphicsDevice.Viewport rectangle
+        /// intersected with the framebuffer. Uses a wider intermediate for the right/bottom edge so
+        /// a large Viewport.X+Width / Viewport.Y+Height cannot overflow int; a zero/negative-size
+        /// viewport collapses to an empty rectangle (nothing drawn).
+        RasterClipRect ViewportClip(const SoftwareFramebuffer& fb, int vpX, int vpY, int vpW, int vpH)
+        {
+            const long long rightExclusive = static_cast<long long>(vpX) + static_cast<long long>(std::max(0, vpW));
+            const long long bottomExclusive = static_cast<long long>(vpY) + static_cast<long long>(std::max(0, vpH));
+            RasterClipRect c;
+            c.minX = std::max(0, vpX);
+            c.minY = std::max(0, vpY);
+            c.maxX = static_cast<int>(std::min<long long>(static_cast<long long>(fb.width), rightExclusive)) - 1;
+            c.maxY = static_cast<int>(std::min<long long>(static_cast<long long>(fb.height), bottomExclusive)) - 1;
+            return c;
+        }
+
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
         /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
         /// a simplified Opaque/AlphaBlend choice (design decisions 7/6) on top of RasterizeTriangle's
@@ -499,7 +532,7 @@ namespace CNA::Internal::Backends::Software
         /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
         /// same simplification already used for the plain BasicEffect path.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, bool depthTestEnabled, bool blendEnabled,
-                                     int cullMode, const GpuDrawParams& params,
+                                     int cullMode, const GpuDrawParams& params, const RasterClipRect& clip,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
         {
             const auto* texture0 = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
@@ -519,10 +552,13 @@ namespace CNA::Internal::Backends::Software
             const float minYf = std::min({v0.y, v1.y, v2.y});
             const float maxYf = std::max({v0.y, v1.y, v2.y});
 
-            const int minX = std::max(0, static_cast<int>(std::floor(minXf)));
-            const int maxX = std::min(fb.width - 1, static_cast<int>(std::ceil(maxXf)));
-            const int minY = std::max(0, static_cast<int>(std::floor(minYf)));
-            const int maxY = std::min(fb.height - 1, static_cast<int>(std::ceil(maxYf)));
+            // REMED-GFX-073: clamp the raster bounding box to the clip rectangle (framebuffer for
+            // the 3D path, framebuffer-intersected Viewport for SpriteBatch) instead of the raw
+            // framebuffer -- pixels outside the Viewport are never touched.
+            const int minX = std::max(clip.minX, static_cast<int>(std::floor(minXf)));
+            const int maxX = std::min(clip.maxX, static_cast<int>(std::ceil(maxXf)));
+            const int minY = std::max(clip.minY, static_cast<int>(std::floor(minYf)));
+            const int maxY = std::min(clip.maxY, static_cast<int>(std::ceil(maxYf)));
 
             for (int y = minY; y <= maxY; ++y)
             {
@@ -937,13 +973,28 @@ namespace CNA::Internal::Backends::Software
         const float cosR = std::cos(rotation);
         const float sinR = std::sin(rotation);
 
+        SoftwareFramebuffer& fb = owner_.CurrentFramebuffer();
+
+        // REMED-GFX-073: SpriteBatch coordinates are VIEWPORT-LOCAL. FNA builds the sprite ortho
+        // from Viewport.Width/Height (sprite (0,0) = the viewport's top-left), and the rasterizer
+        // viewport then positions the [-1,1] result at Viewport.X/Y. The Software backend places
+        // quads directly in pixel space, so the equivalent is: build the viewport-local corner
+        // (destinationRectangle/origin/rotation/scale + the SpriteBatch transformMatrix, all in
+        // viewport-local space), then add the Viewport origin. Viewport.X/Y are NOT transformed by
+        // transformMatrix (they position the already-transformed result), and pixels outside the
+        // viewport are clipped by RasterizeTriangleShaded via `clip` below.
+        int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
+        owner_.GetActiveViewport(vpX, vpY, vpW, vpH);
+
         const auto placeCorner = [&](float px, float py) -> Vector2 {
             const float rx = dx + px * cosR - py * sinR;
             const float ry = dy + px * sinR + py * cosR;
             // SpriteBatch::SetTransformMatrix()'s optional 2D transform, applied as a point
-            // transform (z=0) directly on the already screen-space corner.
+            // transform (z=0) on the viewport-local corner...
             const Vector3 transformed = Vector3::Transform(Vector3(rx, ry, 0.0f), transformMatrix_);
-            return Vector2(transformed.X, transformed.Y);
+            // ...then position at the viewport origin (added AFTER transformMatrix).
+            return Vector2(transformed.X + static_cast<float>(vpX),
+                           transformed.Y + static_cast<float>(vpY));
         };
 
         const Vector2 c0 = placeCorner(p0x, p0y);
@@ -956,15 +1007,15 @@ namespace CNA::Internal::Backends::Software
         const RasterVertex rv2 = MakeScreenSpaceVertex(c2.X, c2.Y, layerDepth, r, g, b, a, u2, v2);
         const RasterVertex rv3 = MakeScreenSpaceVertex(c3.X, c3.Y, layerDepth, r, g, b, a, u1, v2);
 
-        SoftwareFramebuffer& fb = owner_.CurrentFramebuffer();
         const bool depthTestEnabled = owner_.IsDepthTestEnabled();
         const bool blendEnabled = owner_.IsBlendEnabled();
         const int cullMode = owner_.GetCullMode();
+        const RasterClipRect clip = ViewportClip(fb, vpX, vpY, vpW, vpH);
         GpuDrawParams spriteParams;
         spriteParams.texture0 = swTexture;
         spriteParams.textureEnabled = true;
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, rv0, rv1, rv2);
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, rv2, rv3, rv0);
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip, rv0, rv1, rv2);
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip, rv2, rv3, rv0);
     }
 
     // ---- SoftwareGraphicsBackend ----
@@ -1127,7 +1178,39 @@ namespace CNA::Internal::Backends::Software
 
     void SoftwareGraphicsBackend::SetScissorRect(int, int, int, int) {}
 
-    void SoftwareGraphicsBackend::SetViewport(int, int, int, int, float, float) {}
+    // REMED-GFX-073: store the viewport so the SpriteBatch path can place its viewport-local quads
+    // at (x,y) and clip them to (x,y,w,h). GraphicsDevice pushes this on every setViewportProperty()
+    // and resets it to the full target on each RenderTarget transition, so this single field is
+    // always relative to the currently active target. (The 3D DrawPrimitivesEx path still maps NDC
+    // over the full framebuffer -- a separate, non-SpriteBatch viewport gap; see the remediation
+    // notes.)
+    void SoftwareGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        viewportSet_ = true;
+        viewportX_ = x;
+        viewportY_ = y;
+        viewportWidth_ = w;
+        viewportHeight_ = h;
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
+    }
+
+    void SoftwareGraphicsBackend::GetActiveViewport(int& x, int& y, int& w, int& h) const
+    {
+        if (!viewportSet_)
+        {
+            const SoftwareFramebuffer& fb = CurrentFramebuffer();
+            x = 0;
+            y = 0;
+            w = fb.width;
+            h = fb.height;
+            return;
+        }
+        x = viewportX_;
+        y = viewportY_;
+        w = viewportWidth_;
+        h = viewportHeight_;
+    }
 
     void SoftwareGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
@@ -1329,9 +1412,13 @@ namespace CNA::Internal::Backends::Software
             for (int k = 0; k < clippedCount; ++k)
                 rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
 
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[1], rv[2]);
+            // REMED-GFX-073: the 3D path is not viewport-clipped in this task -- pass the full
+            // framebuffer clip, identical to the rasterizer's pre-GFX-073 hardcoded clamp.
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+                                    FullFramebufferClip(fb), rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[2], rv[3]);
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+                                        FullFramebufferClip(fb), rv[0], rv[2], rv[3]);
         }
     }
 
@@ -1402,9 +1489,13 @@ namespace CNA::Internal::Backends::Software
             for (int k = 0; k < clippedCount; ++k)
                 rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
 
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[1], rv[2]);
+            // REMED-GFX-073: the 3D path is not viewport-clipped in this task -- pass the full
+            // framebuffer clip, identical to the rasterizer's pre-GFX-073 hardcoded clamp.
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+                                    FullFramebufferClip(fb), rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[2], rv[3]);
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+                                        FullFramebufferClip(fb), rv[0], rv[2], rv[3]);
         }
     }
 }
