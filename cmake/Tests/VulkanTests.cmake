@@ -1045,6 +1045,17 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_RenderTarget_GetDataLifetime COMMAND cna_test_vulkan_rendertarget_getdata_lifetime
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-075: deferred SOURCE-resource lifetime safety -- a Texture2D / TextureCube /
+        # RenderTarget2D-as-sampler / custom Effect / OcclusionQuery destroyed after queuing a
+        # deferred draw but before the Present/GetData record consumes it must keep its borrowed
+        # VkImageView / VkPipeline / VkQueryPool alive (retirement queue) without dropping or
+        # altering the already-issued draw. The destroy-before-flush scenes are the UAF regression
+        # (run under ASan; validation catches destroyed-object-in-use VUIDs).
+        cna_vulkan_test(cna_test_vulkan_deferred_resource_lifetime
+                        examples/vulkan_deferred_resource_lifetime_test.cpp)
+        cna_register_backend_test(NAME Vulkan_DeferredResourceLifetime COMMAND cna_test_vulkan_deferred_resource_lifetime
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 
 
     endif()
