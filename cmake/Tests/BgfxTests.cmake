@@ -443,6 +443,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTarget_Viewport COMMAND cna_test_bgfx_rendertarget_viewport
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-065: two DIFFERENT viewports on one target in one frame must each be honored (bgfx
+    # per-view setViewRect/setViewTransform is last-wins on a shared view id -> ordered view
+    # segmentation). Covers 3D + SpriteBatch + A->B->A ordering + RenderTarget2D + same-viewport reuse.
+    cna_bgfx_test(cna_test_bgfx_multi_viewport
+                  examples/bgfx_multi_viewport_test.cpp)
+    cna_register_backend_test(NAME Bgfx_MultiViewport COMMAND cna_test_bgfx_multi_viewport
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-066: per-draw ScissorRectangle must clip on FBO-bound (render-target) views too
     cna_bgfx_test(cna_test_bgfx_rendertarget_scissor
                   examples/bgfx_rendertarget_scissor_test.cpp)
