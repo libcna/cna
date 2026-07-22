@@ -322,6 +322,12 @@ namespace CNA::Internal::Backends::Software
         /// CullCounterClockwise (not CullNone), and its quad winding is authored to survive that.
         [[nodiscard]] int GetCullMode() const { return cullMode_; }
 
+        /// REMED-GFX-082: the raw FillMode ordinal from the most recent ApplyRasterizerState() call
+        /// (0=Solid, 1=WireFrame). Used by SoftwareSpriteBatchBackend so a wireframe RasterizerState
+        /// supplied through SpriteBatch.Begin (REMED-GFX-081) outlines the sprite's quad triangles the
+        /// same way it outlines 3D geometry.
+        [[nodiscard]] int GetFillMode() const { return fillMode_; }
+
         /// REMED-GFX-073: the active GraphicsDevice.Viewport rectangle in pixels of the currently
         /// bound target. When no custom viewport has been set (SetViewport never called), the full
         /// current framebuffer is returned. SoftwareSpriteBatchBackend places its viewport-local
@@ -370,6 +376,13 @@ namespace CNA::Internal::Backends::Software
         /// real via ApplyRasterizerState() before any game code runs, so this default rarely
         /// matters in practice, but is kept consistent with the real default for clarity.
         int cullMode_ = 2;
+
+        /// REMED-GFX-082: raw FillMode ordinal (0=Solid, 1=WireFrame) from the most recent
+        /// ApplyRasterizerState() call. Defaults to 0 (Solid), matching real XNA/FNA's default
+        /// RasterizerState.FillMode -- the rasterizer fills triangle interiors unless a WireFrame
+        /// RasterizerState is applied, in which case it outlines only the triangle edges. Independent
+        /// of CullMode/ScissorTestEnable.
+        int fillMode_ = 0;
 
         /// REMED-GFX-073: current GraphicsDevice.Viewport, stored by SetViewport() and consumed by
         /// the SpriteBatch path (GetActiveViewport()). GraphicsDevice pushes this on every viewport

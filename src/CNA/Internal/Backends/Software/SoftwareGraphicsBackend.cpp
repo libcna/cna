@@ -322,18 +322,138 @@ namespace CNA::Internal::Backends::Software
             return area > 0.0f;                                  // CullCounterClockwiseFace (default)
         }
 
+        /// REMED-GFX-082: bit flags selecting which of a triangle's three edges a WireFrame pass
+        /// rasterizes. Edge bit 0 = v0->v1, bit 1 = v1->v2, bit 2 = v2->v0. A whole (unclipped)
+        /// triangle draws all three; the 3D near-plane clipper masks the artificial fan diagonal of a
+        /// clipped quad so only the real polygon boundary is outlined (see the draw entry points).
+        /// SpriteBatch always draws all three edges of each of its two quad triangles, so a wireframe
+        /// sprite shows its split diagonal -- real submitted geometry, matching D3D11/FNA.
+        enum : unsigned { kEdgeV0V1 = 1u, kEdgeV1V2 = 2u, kEdgeV2V0 = 4u, kEdgeAll = 7u };
+
+        /// REMED-GFX-082: Liang-Barsky clip of the parametric segment P(t) = a + t*(b - a), t in
+        /// [0,1], to the inclusive pixel rectangle [clip.minX,maxX] x [clip.minY,maxY]. Returns the
+        /// surviving parameter range [t0,t1] (t0 <= t1) or false if the segment is entirely outside.
+        /// Clipping the segment up front keeps a wire edge whose projected endpoints are far off-screen
+        /// from spinning the DDA over a huge invisible span (Phase 26/27) and bounds the step count.
+        bool ClipSegmentToRect(float ax, float ay, float bx, float by, const RasterClipRect& clip,
+                               float& t0, float& t1)
+        {
+            t0 = 0.0f;
+            t1 = 1.0f;
+            const float dx = bx - ax, dy = by - ay;
+            const float p[4] = {-dx, dx, -dy, dy};
+            const float q[4] = {ax - static_cast<float>(clip.minX),
+                                static_cast<float>(clip.maxX) - ax,
+                                ay - static_cast<float>(clip.minY),
+                                static_cast<float>(clip.maxY) - ay};
+            for (int i = 0; i < 4; ++i)
+            {
+                if (p[i] == 0.0f)
+                {
+                    if (q[i] < 0.0f)
+                        return false;  // parallel to this clip edge and entirely outside it
+                }
+                else
+                {
+                    const float t = q[i] / p[i];
+                    if (p[i] < 0.0f) { if (t > t1) return false; if (t > t0) t0 = t; }
+                    else             { if (t < t0) return false; if (t < t1) t1 = t; }
+                }
+            }
+            return t0 <= t1;
+        }
+
+        /// REMED-GFX-082: walks the integer pixels of a wire edge between two screen-space
+        /// RasterVertices, invoking `emit(x, y, t)` per pixel with the ORIGINAL segment parameter t
+        /// (so the caller interpolates depth/color/uv perspective-correctly at t). The segment is first
+        /// clipped to `clip`, then sampled with a DDA at unit-pixel spacing so the line is gap-free; the
+        /// per-pixel float-bounds guard also rejects any non-finite coordinate before the int cast.
+        template <typename EmitFn>
+        void WalkWireEdge(const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
+                          EmitFn&& emit)
+        {
+            float t0, t1;
+            if (!ClipSegmentToRect(a.x, a.y, b.x, b.y, clip, t0, t1))
+                return;
+            const float dx = b.x - a.x, dy = b.y - a.y;
+            const float cax = a.x + t0 * dx, cay = a.y + t0 * dy;
+            const float cbx = a.x + t1 * dx, cby = a.y + t1 * dy;
+            int steps = static_cast<int>(std::ceil(std::max(std::fabs(cbx - cax), std::fabs(cby - cay))));
+            if (steps < 1)
+                steps = 1;
+            for (int i = 0; i <= steps; ++i)
+            {
+                const float s = static_cast<float>(i) / static_cast<float>(steps);
+                const float t = t0 + s * (t1 - t0);
+                const float px = a.x + t * dx;
+                const float py = a.y + t * dy;
+                if (!(px >= static_cast<float>(clip.minX) && px <= static_cast<float>(clip.maxX) + 1.0f &&
+                      py >= static_cast<float>(clip.minY) && py <= static_cast<float>(clip.maxY) + 1.0f))
+                    continue;  // also rejects NaN/inf (all comparisons false) before the int cast
+                emit(static_cast<int>(std::floor(px)), static_cast<int>(std::floor(py)), t);
+            }
+        }
+
+        /// REMED-GFX-082: writes one already-interpolated colored fragment (the DrawColoredPrimitives
+        /// path -- opaque, no texture/blend). `pr..pa` are the perspective-premultiplied color sums
+        /// (color * invW), divided by invW here exactly as the fill loop did, so the shared helper is
+        /// byte-identical for the Solid fill and reused verbatim by the WireFrame line walk. The clip
+        /// guard is a no-op for the fill loop (its bounding box is already clamped to `clip`) and the
+        /// safety net for the line walk.
+        inline void WriteColoredFragment(SoftwareFramebuffer& fb, bool depthTestEnabled,
+                                         const RasterClipRect& clip, int x, int y,
+                                         float depth, float invW, float pr, float pg, float pb, float pa)
+        {
+            if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
+                return;
+            const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
+                                           static_cast<std::size_t>(x);
+            if (depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
+                return;
+            const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
+            fb.depthBuffer[pixelIndex] = depth;
+            const std::size_t colorIndex = pixelIndex * 4;
+            fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
+            fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
+            fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
+            fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+        }
+
         /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
         /// with a per-pixel depth test against `fb.depthBuffer` when `depthTestEnabled` and
         /// backface culling per `cullMode` (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
+        /// REMED-GFX-082: when `wireframe`, only the edges selected by `edgeMask` are rasterized
+        /// (line walk) instead of the interior fill -- culling and the zero-area reject are shared, so
+        /// a culled/degenerate triangle emits no wire either.
         void RasterizeTriangle(SoftwareFramebuffer& fb, bool depthTestEnabled, int cullMode,
                                const RasterClipRect& clip,
-                               const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
+                               const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                               bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
                 return;  // degenerate (zero-area) triangle
             if (ShouldCullTriangle(area, cullMode))
                 return;
+
+            if (wireframe)
+            {
+                // REMED-GFX-082: rasterize the selected edges as perspective-correct lines, reusing
+                // WriteColoredFragment (the same depth-test/write + clip path as the fill below).
+                const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
+                    WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
+                        const float invW  = A.invW  + t * (B.invW  - A.invW);
+                        const float depth = A.depth + t * (B.depth - A.depth);
+                        WriteColoredFragment(fb, depthTestEnabled, clip, x, y, depth, invW,
+                                             A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
+                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a));
+                    });
+                };
+                if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);
+                if (edgeMask & kEdgeV1V2) drawEdge(v1, v2);
+                if (edgeMask & kEdgeV2V0) drawEdge(v2, v0);
+                return;
+            }
 
             const float minXf = std::min({v0.x, v1.x, v2.x});
             const float maxXf = std::max({v0.x, v1.x, v2.x});
@@ -373,25 +493,12 @@ namespace CNA::Internal::Backends::Software
                     // correction needed for this one attribute (a well-known rasterization
                     // property), unlike color/UV below.
                     const float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
-
-                    const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
-                                                   static_cast<std::size_t>(x);
-                    if (depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
-                        continue;
-
                     const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
-                    const float r = (lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r) / invW;
-                    const float g = (lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g) / invW;
-                    const float b = (lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b) / invW;
-                    const float a = (lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a) / invW;
-
-                    fb.depthBuffer[pixelIndex] = depth;
-
-                    const std::size_t colorIndex = pixelIndex * 4;
-                    fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
-                    fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
-                    fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
-                    fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+                    WriteColoredFragment(fb, depthTestEnabled, clip, x, y, depth, invW,
+                                         lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
+                                         lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
+                                         lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
+                                         lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a);
                 }
             }
         }
@@ -567,6 +674,141 @@ namespace CNA::Internal::Backends::Software
             return c;
         }
 
+        /// REMED-GFX-082: the per-triangle shading state resolved once by RasterizeTriangleShaded and
+        /// shared by every fragment (fill pixel or wire-edge pixel) through WriteShadedFragment.
+        struct ShadedContext
+        {
+            const GpuDrawParams& params;
+            const SoftwareTextureBackend* texture0;
+            const SoftwareTextureBackend* texture1;
+            const SoftwareTextureCubeBackend* envMap;
+            bool useDualTexture;
+            bool useEnvMap;
+            bool needUV;
+            bool blendEnabled;
+            bool depthTestEnabled;
+        };
+
+        /// REMED-GFX-082: writes one already-interpolated shaded fragment -- the whole texture/diffuse/
+        /// dual-texture/env-map/blend pipeline that used to live inline in RasterizeTriangleShaded's
+        /// fill loop. `p*` are the perspective-premultiplied attribute sums (attr * invW), divided by
+        /// invW here exactly as before, so the Solid fill stays byte-identical and the WireFrame line
+        /// walk gets the identical shading along its edges.
+        inline void WriteShadedFragment(SoftwareFramebuffer& fb, const ShadedContext& ctx,
+                                        const RasterClipRect& clip, int x, int y, float depth, float invW,
+                                        float pr, float pg, float pb, float pa, float pu, float pv,
+                                        float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz)
+        {
+            if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
+                return;
+            const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
+                                           static_cast<std::size_t>(x);
+            if (ctx.depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
+                return;
+
+            float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
+
+            float u = 0.0f, v = 0.0f;
+            if (ctx.needUV)
+            {
+                u = pu / invW;
+                v = pv / invW;
+            }
+
+            if (ctx.useDualTexture)
+            {
+                // DualTextureEffect (SOFTWARE-82): color.rgb*=2; color *= overlay*diffuse
+                // (FNA's PSDualTexture) -- both textures reuse the SAME uv (this backend has no
+                // genuine 2-UV vertex format; established precedent already set by this codebase's own
+                // Vulkan dual_texture3d shaders).
+                float t0r, t0g, t0b, t0a;
+                SampleBilinear(*ctx.texture0, u, v, t0r, t0g, t0b, t0a);
+                float t1r, t1g, t1b, t1a;
+                SampleBilinear(*ctx.texture1, u, v, t1r, t1g, t1b, t1a);
+                r *= (t0r * 2.0f) * t1r;
+                g *= (t0g * 2.0f) * t1g;
+                b *= (t0b * 2.0f) * t1b;
+                a *= t0a * t1a;
+            }
+            else if (ctx.params.textureEnabled && ctx.texture0 != nullptr)
+            {
+                float texR, texG, texB, texA;
+                SampleBilinear(*ctx.texture0, u, v, texR, texG, texB, texA);
+                r *= texR;
+                g *= texG;
+                b *= texB;
+                a *= texA;
+            }
+
+            r *= ctx.params.diffuseColor[0];
+            g *= ctx.params.diffuseColor[1];
+            b *= ctx.params.diffuseColor[2];
+            a *= ctx.params.diffuseColor[3];
+
+            if (ctx.useEnvMap)
+            {
+                // EnvironmentMapEffect (SOFTWARE-82), FNA's PSEnvMap/PSEnvMapSpecular formula, minus
+                // the per-light diffuse sum (design decision 6): base color is what r/g/b/a already
+                // are at this point (vertexColor*diffuseColor*texture0), used as-is.
+                const float wpx = pwpx / invW;
+                const float wpy = pwpy / invW;
+                const float wpz = pwpz / invW;
+                float nx = pnx / invW;
+                float ny = pny / invW;
+                float nz = pnz / invW;
+                const float nLen = std::sqrt(nx * nx + ny * ny + nz * nz);
+                if (nLen > 1e-8f) { nx /= nLen; ny /= nLen; nz /= nLen; }
+
+                float ex = ctx.params.eyePositionWorld[0] - wpx;
+                float ey = ctx.params.eyePositionWorld[1] - wpy;
+                float ez = ctx.params.eyePositionWorld[2] - wpz;
+                const float eLen = std::sqrt(ex * ex + ey * ey + ez * ez);
+                if (eLen > 1e-8f) { ex /= eLen; ey /= eLen; ez /= eLen; }
+
+                // reflect(-E, N) = 2*dot(N,E)*N - E (HLSL's reflect(I,N) = I-2*dot(N,I)*N with I=-E).
+                const float nDotE = nx * ex + ny * ey + nz * ez;
+                const Vector3 reflDir(2.0f * nDotE * nx - ex, 2.0f * nDotE * ny - ey, 2.0f * nDotE * nz - ez);
+                float envR, envG, envB, envA;
+                SampleCubeMap(*ctx.envMap, reflDir, envR, envG, envB, envA);
+
+                const float viewAngle = nDotE;
+                const float blendFactor = ctx.params.fresnelEnabled
+                    ? std::pow(std::max(1.0f - std::abs(viewAngle), 0.0f), ctx.params.fresnelFactor) * ctx.params.envMapAmount
+                    : ctx.params.envMapAmount;
+
+                r = r * (1.0f - blendFactor) + (envR * a) * blendFactor + ctx.params.envMapSpecular[0] * envA * a;
+                g = g * (1.0f - blendFactor) + (envG * a) * blendFactor + ctx.params.envMapSpecular[1] * envA * a;
+                b = b * (1.0f - blendFactor) + (envB * a) * blendFactor + ctx.params.envMapSpecular[2] * envA * a;
+            }
+
+            fb.depthBuffer[pixelIndex] = depth;
+
+            const std::size_t colorIndex = pixelIndex * 4;
+            if (!ctx.blendEnabled)
+            {
+                fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
+                fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
+                fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
+                fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+            }
+            else
+            {
+                // Simplified "over" alpha compositing (design decision 7): result =
+                // src*srcAlpha + dst*(1-srcAlpha) on all 4 channels -- one formula covering
+                // AlphaBlend/NonPremultiplied/Additive-ish real BlendState presets alike, an
+                // intentional v1 simplification rather than a full blend-equation interpreter.
+                const float dstR = fb.color[colorIndex + 0] / 255.0f;
+                const float dstG = fb.color[colorIndex + 1] / 255.0f;
+                const float dstB = fb.color[colorIndex + 2] / 255.0f;
+                const float dstA = fb.color[colorIndex + 3] / 255.0f;
+                const float invA = 1.0f - a;
+                fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r * a + dstR * invA, 0.0f, 1.0f) * 255.0f);
+                fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g * a + dstG * invA, 0.0f, 1.0f) * 255.0f);
+                fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b * a + dstB * invA, 0.0f, 1.0f) * 255.0f);
+                fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a + dstA * invA, 0.0f, 1.0f) * 255.0f);
+            }
+        }
+
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
         /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
         /// a simplified Opaque/AlphaBlend choice (design decisions 7/6) on top of RasterizeTriangle's
@@ -579,19 +821,46 @@ namespace CNA::Internal::Backends::Software
         /// same simplification already used for the plain BasicEffect path.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, bool depthTestEnabled, bool blendEnabled,
                                      int cullMode, const GpuDrawParams& params, const RasterClipRect& clip,
-                                     const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
+                                     const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                                     bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const auto* texture0 = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
             const auto* texture1 = dynamic_cast<const SoftwareTextureBackend*>(params.texture1);
             const auto* envMap = dynamic_cast<const SoftwareTextureCubeBackend*>(params.envMap);
             const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
             const bool useEnvMap = params.envMapping && envMap != nullptr;
+            const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
+            const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
+                                    needUV, blendEnabled, depthTestEnabled};
 
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
                 return;
             if (ShouldCullTriangle(area, cullMode))
                 return;
+
+            if (wireframe)
+            {
+                // REMED-GFX-082: rasterize the selected edges as perspective-correct shaded lines,
+                // reusing WriteShadedFragment (identical texture/diffuse/env-map/blend + depth path).
+                const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
+                    WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
+                        const float invW  = A.invW  + t * (B.invW  - A.invW);
+                        const float depth = A.depth + t * (B.depth - A.depth);
+                        WriteShadedFragment(fb, ctx, clip, x, y, depth, invW,
+                                            A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
+                                            A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
+                                            A.u + t * (B.u - A.u), A.v + t * (B.v - A.v),
+                                            A.wpx + t * (B.wpx - A.wpx), A.wpy + t * (B.wpy - A.wpy),
+                                            A.wpz + t * (B.wpz - A.wpz), A.nx + t * (B.nx - A.nx),
+                                            A.ny + t * (B.ny - A.ny), A.nz + t * (B.nz - A.nz));
+                    });
+                };
+                if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);
+                if (edgeMask & kEdgeV1V2) drawEdge(v1, v2);
+                if (edgeMask & kEdgeV2V0) drawEdge(v2, v0);
+                return;
+            }
 
             const float minXf = std::min({v0.x, v1.x, v2.x});
             const float maxXf = std::max({v0.x, v1.x, v2.x});
@@ -627,121 +896,20 @@ namespace CNA::Internal::Backends::Software
                     const float lambda2 = w2 / area;
 
                     const float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
-
-                    const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
-                                                   static_cast<std::size_t>(x);
-                    if (depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
-                        continue;
-
                     const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
-                    float r = (lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r) / invW;
-                    float g = (lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g) / invW;
-                    float b = (lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b) / invW;
-                    float a = (lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a) / invW;
-
-                    const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
-                    float u = 0.0f, v = 0.0f;
-                    if (needUV)
-                    {
-                        u = (lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u) / invW;
-                        v = (lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v) / invW;
-                    }
-
-                    if (useDualTexture)
-                    {
-                        // DualTextureEffect (SOFTWARE-82): color.rgb*=2; color *= overlay*diffuse
-                        // (FNA's PSDualTexture) -- both textures reuse the SAME uv (this backend
-                        // has no genuine 2-UV vertex format; established precedent already set by
-                        // this codebase's own Vulkan dual_texture3d shaders).
-                        float t0r, t0g, t0b, t0a;
-                        SampleBilinear(*texture0, u, v, t0r, t0g, t0b, t0a);
-                        float t1r, t1g, t1b, t1a;
-                        SampleBilinear(*texture1, u, v, t1r, t1g, t1b, t1a);
-                        r *= (t0r * 2.0f) * t1r;
-                        g *= (t0g * 2.0f) * t1g;
-                        b *= (t0b * 2.0f) * t1b;
-                        a *= t0a * t1a;
-                    }
-                    else if (params.textureEnabled && texture0 != nullptr)
-                    {
-                        float texR, texG, texB, texA;
-                        SampleBilinear(*texture0, u, v, texR, texG, texB, texA);
-                        r *= texR;
-                        g *= texG;
-                        b *= texB;
-                        a *= texA;
-                    }
-
-                    r *= params.diffuseColor[0];
-                    g *= params.diffuseColor[1];
-                    b *= params.diffuseColor[2];
-                    a *= params.diffuseColor[3];
-
-                    if (useEnvMap)
-                    {
-                        // EnvironmentMapEffect (SOFTWARE-82), FNA's PSEnvMap/PSEnvMapSpecular
-                        // formula, minus the per-light diffuse sum (design decision 6): base color
-                        // is what r/g/b/a already are at this point (vertexColor*diffuseColor*
-                        // texture0), used as-is instead of ComputeLights' lit result.
-                        const float wpx = (lambda0 * v0.wpx + lambda1 * v1.wpx + lambda2 * v2.wpx) / invW;
-                        const float wpy = (lambda0 * v0.wpy + lambda1 * v1.wpy + lambda2 * v2.wpy) / invW;
-                        const float wpz = (lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz) / invW;
-                        float nx = (lambda0 * v0.nx + lambda1 * v1.nx + lambda2 * v2.nx) / invW;
-                        float ny = (lambda0 * v0.ny + lambda1 * v1.ny + lambda2 * v2.ny) / invW;
-                        float nz = (lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz) / invW;
-                        const float nLen = std::sqrt(nx * nx + ny * ny + nz * nz);
-                        if (nLen > 1e-8f) { nx /= nLen; ny /= nLen; nz /= nLen; }
-
-                        float ex = params.eyePositionWorld[0] - wpx;
-                        float ey = params.eyePositionWorld[1] - wpy;
-                        float ez = params.eyePositionWorld[2] - wpz;
-                        const float eLen = std::sqrt(ex * ex + ey * ey + ez * ez);
-                        if (eLen > 1e-8f) { ex /= eLen; ey /= eLen; ez /= eLen; }
-
-                        // reflect(-E, N) = 2*dot(N,E)*N - E (HLSL's reflect(I,N) = I-2*dot(N,I)*N
-                        // with I=-E).
-                        const float nDotE = nx * ex + ny * ey + nz * ez;
-                        const Vector3 reflDir(2.0f * nDotE * nx - ex, 2.0f * nDotE * ny - ey, 2.0f * nDotE * nz - ez);
-                        float envR, envG, envB, envA;
-                        SampleCubeMap(*envMap, reflDir, envR, envG, envB, envA);
-
-                        const float viewAngle = nDotE;
-                        const float blendFactor = params.fresnelEnabled
-                            ? std::pow(std::max(1.0f - std::abs(viewAngle), 0.0f), params.fresnelFactor) * params.envMapAmount
-                            : params.envMapAmount;
-
-                        r = r * (1.0f - blendFactor) + (envR * a) * blendFactor + params.envMapSpecular[0] * envA * a;
-                        g = g * (1.0f - blendFactor) + (envG * a) * blendFactor + params.envMapSpecular[1] * envA * a;
-                        b = b * (1.0f - blendFactor) + (envB * a) * blendFactor + params.envMapSpecular[2] * envA * a;
-                    }
-
-                    fb.depthBuffer[pixelIndex] = depth;
-
-                    const std::size_t colorIndex = pixelIndex * 4;
-                    if (!blendEnabled)
-                    {
-                        fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
-                        fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
-                        fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
-                        fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
-                    }
-                    else
-                    {
-                        // Simplified "over" alpha compositing (design decision 7): result =
-                        // src*srcAlpha + dst*(1-srcAlpha) on all 4 channels -- one formula covering
-                        // AlphaBlend/NonPremultiplied/Additive-ish real BlendState presets alike,
-                        // an intentional v1 simplification rather than a full blend-equation
-                        // interpreter.
-                        const float dstR = fb.color[colorIndex + 0] / 255.0f;
-                        const float dstG = fb.color[colorIndex + 1] / 255.0f;
-                        const float dstB = fb.color[colorIndex + 2] / 255.0f;
-                        const float dstA = fb.color[colorIndex + 3] / 255.0f;
-                        const float invA = 1.0f - a;
-                        fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r * a + dstR * invA, 0.0f, 1.0f) * 255.0f);
-                        fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g * a + dstG * invA, 0.0f, 1.0f) * 255.0f);
-                        fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b * a + dstB * invA, 0.0f, 1.0f) * 255.0f);
-                        fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a + dstA * invA, 0.0f, 1.0f) * 255.0f);
-                    }
+                    WriteShadedFragment(fb, ctx, clip, x, y, depth, invW,
+                                        lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
+                                        lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
+                                        lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
+                                        lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
+                                        lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u,
+                                        lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v,
+                                        lambda0 * v0.wpx + lambda1 * v1.wpx + lambda2 * v2.wpx,
+                                        lambda0 * v0.wpy + lambda1 * v1.wpy + lambda2 * v2.wpy,
+                                        lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz,
+                                        lambda0 * v0.nx + lambda1 * v1.nx + lambda2 * v2.nx,
+                                        lambda0 * v0.ny + lambda1 * v1.ny + lambda2 * v2.ny,
+                                        lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz);
                 }
             }
         }
@@ -1066,8 +1234,16 @@ namespace CNA::Internal::Backends::Software
         GpuDrawParams spriteParams;
         spriteParams.texture0 = swTexture;
         spriteParams.textureEnabled = true;
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip, rv0, rv1, rv2);
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip, rv2, rv3, rv0);
+        // REMED-GFX-082: honor RasterizerState.FillMode for the sprite's two quad triangles too. Each
+        // draws ALL THREE of its edges (kEdgeAll), so a wireframe sprite shows its quad outline plus
+        // the internal triangle-split diagonal -- real submitted geometry, matching D3D11/FNA (not
+        // suppressed like the 3D near-plane clip diagonal). Passed THROUGH SpriteBatch.Begin's
+        // RasterizerState via GraphicsDevice (REMED-GFX-081).
+        const bool wire = (owner_.GetFillMode() == 1);
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip,
+                                rv0, rv1, rv2, wire, kEdgeAll);
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip,
+                                rv2, rv3, rv0, wire, kEdgeAll);
     }
 
     // ---- SoftwareGraphicsBackend ----
@@ -1217,10 +1393,13 @@ namespace CNA::Internal::Backends::Software
         depthTestEnabled_ = depthEnable;
     }
 
-    void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int, bool scissorTestEnable,
+    void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                                        float, float)
     {
         cullMode_ = cullMode;
+        // REMED-GFX-082: capture FillMode (previously discarded). 0=Solid, 1=WireFrame -- the raster
+        // paths render only triangle edges when WireFrame. Independent of CullMode/ScissorTestEnable.
+        fillMode_ = fillMode;
         // REMED-GFX-080: capture ScissorTestEnable (previously discarded). Independent of the stored
         // ScissorRectangle -- toggling this on/off enables/disables the same stored rectangle.
         scissorTestEnable_ = scissorTestEnable;
@@ -1403,9 +1582,15 @@ namespace CNA::Internal::Backends::Software
             for (int k = 0; k < clippedCount; ++k)
                 rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
 
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2]);
+            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon. For a near-plane
+            // clipped quad (clippedCount==4) the two fan triangles share the diagonal rv0-rv2, so each
+            // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
+            const bool wire = (fillMode_ == 1);
+            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3]);
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3], wire,
+                                  kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1476,9 +1661,15 @@ namespace CNA::Internal::Backends::Software
             for (int k = 0; k < clippedCount; ++k)
                 rv[k] = ClipVertexToRasterVertex(clipped[k], vpT);
 
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2]);
+            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon. For a near-plane
+            // clipped quad (clippedCount==4) the two fan triangles share the diagonal rv0-rv2, so each
+            // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
+            const bool wire = (fillMode_ == 1);
+            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3]);
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3], wire,
+                                  kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1553,11 +1744,15 @@ namespace CNA::Internal::Backends::Software
 
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
+            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon; the two fan
+            // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
+            const bool wire = (fillMode_ == 1);
+            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                    clip, rv[0], rv[1], rv[2]);
+                                    clip, rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                        clip, rv[0], rv[2], rv[3]);
+                                        clip, rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1642,11 +1837,15 @@ namespace CNA::Internal::Backends::Software
 
             // REMED-GFX-079: clip 3D rasterization to framebuffer ∩ active Viewport (was the full
             // framebuffer). A default full-target viewport yields the same clip byte-for-byte.
+            // REMED-GFX-082: FillMode.WireFrame outlines the visible clipped polygon; the two fan
+            // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
+            const bool wire = (fillMode_ == 1);
+            const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                    clip, rv[0], rv[1], rv[2]);
+                                    clip, rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
-                                        clip, rv[0], rv[2], rv[3]);
+                                        clip, rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 }
