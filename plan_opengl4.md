@@ -304,6 +304,45 @@
 > All 6 checks passed on the first real run — no backend or test bugs found. Full re-run of the
 > other 15 OpenGL4 CTest suites confirms no regression.
 >
+> **Status (2026-07-22): `GL4-25` (real fog) landed and verified.**
+> `GpuDrawParams::fogEnabled`/`fogColor`/`fogStart`/`fogEnd` are now read by all 7
+> GpuDrawParams-driven stride/dispatch shaders: `textured3d`, `colored_textured3d`,
+> `lit_textured3d`, `env_map3d`, `skinned3d`, `pbr3d`/`pbr_skinned3d`, and a **brand-new**
+> `coloredParams3d` (see below). Every vertex shader computes `vFogFactor` from Task 1111's own
+> already cross-backend-verified formula (matches FNA's `EffectHelpers.SetFogVector`/`Common.fxh`
+> `ComputeFogFactor` exactly when `World`/`View` are identity, the scenario every CNA fog
+> test/scene uses) from the vertex's **pre-transform, pre-skin** `aPos.z`, ported near-verbatim
+> from `EasyGLGraphicsBackend`'s own per-program fog blocks; every fragment shader does a final
+> `mix(uFogColor, colour, vFogFactor)`.
+>
+> **A real, separate parity gap was found and closed along the way, not just fog**:
+> `BindProgramForStride` had no `case 16:` (`VertexPositionColor`) at all, so *any* stride-16 draw
+> issued via a real `Effect.Apply()` silently fell back to the entirely `GpuDrawParams`-free
+> `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` path — `DiffuseColor`/
+> `VertexColorEnabled`/`AlphaTest`/fog were all unavailable to it, unlike every other stride (this
+> was invisible in every prior test because those all left `DiffuseColor` at its default
+> `(1,1,1,1)` and `VertexColorEnabled` at `true`, the one combination where the params-free
+> pass-through happens to look correct). A **new**, separate `coloredParams3DProgram_` (kept
+> distinct from the legacy `colored3DProgram_`, which stays reserved for
+> `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`'s own params-free callers — reusing the
+> same program+uniform-name contract for both would have left `DrawColoredPrimitives`'s calls
+> silently rendering black, since GLSL uniforms never explicitly set default to zero) now backs a
+> real `case 16:`, ported from `EasyGLGraphicsBackend::EnsureColored3DProgram` — closing this gap
+> AND enabling fog for `VertexPositionColor` draws in the same change.
+>
+> Verified by the new `OpenGL4_Fog` CTest (8/8): Checks A–C port
+> `easygl_basiceffect_fog_test.cpp`'s own already-cross-backend-verified 3-scenario oracle verbatim
+> for the new `coloredParams3d` program (fog off → pure geometry colour; 50% fog → an exact purple
+> blend; full fog → exact fog colour). Checks D–H use a simpler but still-exact, effect-agnostic
+> proof for the remaining 5 shader families: `mix(fogColor, colour, 0) == fogColor` **exactly**,
+> regardless of what the effect's own lit/textured/BRDF math would otherwise produce — placing
+> each quad's Z exactly at `FogStart` (fog factor exactly `0`) and using a fog colour (cyan) none
+> of the effects' own palettes could accidentally produce predicts an exact pixel match without
+> needing to hand-derive each effect's own lit/textured/BRDF result under fog; all 5 matched
+> `(0,255,255)` exactly. All 8 checks passed on the first real run — no backend or test bugs found
+> in the fog formula itself (only the pre-existing stride-16 gap, described above). Full re-run of
+> the other 16 OpenGL4 CTest suites confirms no regression from the new stride-16 dispatch path.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -342,10 +381,13 @@
 >   `lit_textured3d` always renders per-pixel regardless of its value, same known, tracked
 >   divergence from XNA's real per-vertex-lit default that every backend except D3D9 currently has
 >   (see the field's own doc comment in `IGraphicsBackend.hpp`). ⬜
-> - **Fog** — `GpuDrawParams::fogEnabled`/`fogColor`/`fogStart`/`fogEnd` are not read by any of the
->   7 stride/dispatch shaders (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/
->   `env_map3d`/`skinned3d`/`pbr3d`), a deliberate deferral matching `plan_webgpu.md`'s own "No fog
->   (same deliberate deferral as the other 3 stride variants)" precedent for `lit_textured3d`. ⬜
+> - ~~**Fog**~~ — done, `GL4-25` (2026-07-22). All 7 `GpuDrawParams`-driven stride/dispatch shaders
+>   (`coloredParams3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`env_map3d`/`skinned3d`/
+>   `pbr3d`) now read `GpuDrawParams::fogEnabled`/`fogColor`/`fogStart`/`fogEnd`, verified by
+>   `OpenGL4_Fog` (8/8). Note: the legacy params-free `colored3DProgram_` (used only by
+>   `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`'s own fast path, not by any real
+>   `Effect.Apply()`) intentionally still has no fog — it has no `GpuDrawParams` to read fog from
+>   at all. ✅
 > - ~~**Occlusion queries**~~ — done, `GL4-24` (2026-07-22). Real `GL_SAMPLES_PASSED` queries via
 >   `OpenGL4OcclusionQueryBackend`, verified by `OpenGL4_OcclusionQuery` (6/6). ✅
 > - **`TransformWindowToLogical`/`TransformLogicalToWindow`** — not overridden (default `false`),
@@ -402,7 +444,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect`, `OpenGL4_PbrEffect`, `OpenGL4_OcclusionQuery`, `OpenGL4_Fog` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -434,6 +476,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-22` | `SkinnedEffect` — a dedicated `skinned3d` GLSL 410 core program on **new** strides 52/56 (`VertexPositionNormalTextureSkinned` + optional trailing `Color`), plus matching `OpenGL4VertexBufferBackend::ApplyLayout` attribute cases (blend-indices via the newly-loaded `gl4_glVertexAttribIPointer` — a true GLSL integer attribute, not float-converted, since it subscripts `uBones[]`). Ported near-verbatim from `EasyGLGraphicsBackend::EnsureSkinnedProgram`, matching real XNA `SkinnedEffect.fx`'s `Skin()` function: skin matrix = sum of only the first `WeightsPerVertex` (1/2/4) `uBones[index]*weight` pairs (`Task 895`'s already-fixed formula, not the naive always-sum-4 bug). Lighting reuses `lit_textured3d`'s 3-light diffuse+specular+emissive formula plus a `VertexColorEnabled`-gated vertex-colour modulate for stride 56. No fog (same deliberate deferral as every other 3D stride variant). All 72 bones upload via one `gl4_glUniformMatrix4fv(loc, boneCount, ...)` call. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed. | ✅ | 5 checks across 4 scenarios (identity no-op, single-bone translate, two-bone weighted blend reaching the same net shift as a decisive both-bones-contribute proof, and `VertexColorEnabled` reusing `easygl_skinnedeffect_vertexcolor_test.cpp`'s own `(174,0,0)` oracle) all passed on the first real run — no backend or test bugs found. |
 | `GL4-23` | `PbrEffect`/`SkinnedPbrEffect` — two new dedicated programs on two brand-new strides: `pbr3d` (stride 48, `VertexPositionNormalTangentTexture`) and `pbr_skinned3d` (stride 68, PBR+skinning combined, sharing `pbr3d`'s fragment shader). `OpenGL4VertexBufferBackend::ApplyLayout` gained matching stride-48/68 cases. Ported near-verbatim from `EasyGLGraphicsBackend::EnsurePbrProgram()` — the real glTF 2.0 metallic-roughness BRDF (GGX/Smith-Schlick-GGX/Schlick Fresnel) — cross-checked against `VulkanGraphicsBackend`'s `pbr3d.frag.glsl` and `BgfxGraphicsBackend`'s `fs_pbr3d.sc` (byte-for-byte identical `PbrLight()` math). 5 texture units sampled unconditionally every fragment, so two new lazily-created 1×1 fallback textures (`defaultWhiteTexture_`/`defaultFlatNormalTexture_`) are bound whenever a `GpuDrawParams::pbr*Map` pointer is null. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — last remaining built-in XNA/CNA effect for this backend. | ✅ | Real bug found+fixed: the very first PBR draw of a process rendered near-black because `EnsureDefaultWhiteTexture()`/`EnsureDefaultFlatNormalTexture()`'s own trailing `glBindTexture(GL_TEXTURE_2D, 0)` clobbered/unbound the base-colour texture that had *already* been bound to unit 0 moments earlier — fixed by moving both `Ensure*` calls to the very top of `BindProgramForStride`, before any real per-draw texture gets bound. Check A reuses `easygl_pbreffect_golden_test.cpp`'s own oracle and matched it exactly (`(64,74,87)`) after the fix. |
 | `GL4-24` | Real occlusion queries — `OpenGL4OcclusionQueryBackend` wraps a genuine GL 1.5 core query object using `GL_SAMPLES_PASSED` (an exact passed-sample count, unlike `EasyGLOcclusionQueryBackend`'s GLES3 `GL_ANY_SAMPLES_PASSED` 0/1-only query — matches real XNA's own desktop `OcclusionQuery.PixelCount()` semantics). `GL4Loader` gained the GL 1.5 query entry points (`glGenQueries`/`glDeleteQueries`/`glBeginQuery`/`glEndQuery`/`glGetQueryObjectuiv`). `IsComplete()` polls `GL_QUERY_RESULT_AVAILABLE` and caches the result once ready; no busy-wait/forced sync. | ✅ | Ported `vulkan_occlusionquery_pixelcount_test.cpp`'s 3-scenario methodology (visible/occluded/multi-draw-span-sums-correctly) verbatim. All 6 checks passed on the first real run — no backend or test bugs found. |
+| `GL4-25` | Real fog on all 7 `GpuDrawParams`-driven stride/dispatch shaders (Task 1111's formula, ported from `EasyGLGraphicsBackend`'s own per-program fog blocks), plus a **new** `case 16:`/`coloredParams3DProgram_` closing a separate pre-existing parity gap (stride-16 `VertexPositionColor` draws previously bypassed `GpuDrawParams` entirely — no `DiffuseColor`/`VertexColorEnabled`/`AlphaTest`/fog — falling back to the params-free `DrawColoredPrimitives` path even when a real `Effect.Apply()` was in play). | ✅ | Real gap found+fixed (the stride-16 parity gap above, not a fog-formula bug). Checks A–C reuse `easygl_basiceffect_fog_test.cpp`'s own 3-scenario oracle verbatim; Checks D–H use `mix(fogColor,colour,0)==fogColor` at `Z=FogStart` as an exact, effect-agnostic proof across the other 5 shader families — all matched exactly. All 8 checks passed on the first real run. |
 
 ---
 
@@ -456,7 +499,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All sixteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All seventeen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -532,6 +575,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   3-scenario methodology (visible quad -> positive count, occluded quad -> exactly 0 via the real
   depth test, two half-quads summed within one query span -> the same total a single full-quad
   draw would produce). Full re-run of the other 15 OpenGL4 CTest suites confirmed no regression.
+- `OpenGL4_Fog` — 8/8: 3-scenario `easygl_basiceffect_fog_test.cpp` oracle for the new
+  `coloredParams3d` stride-16 program, plus an exact `mix(fogColor,colour,0)==fogColor` proof at
+  `Z=FogStart` for `textured3d`/`lit_textured3d`/`env_map3d`/`skinned3d`/`pbr3d` (all matched
+  exactly). Full re-run of the other 16 OpenGL4 CTest suites confirmed no regression from the new
+  stride-16 dispatch path.
 
 ---
 
@@ -586,9 +634,12 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 13. ~~`GL4-24`~~ — real occlusion queries done and verified 2026-07-22, all ✅
     (`OpenGL4_OcclusionQuery`, 6/6). See `GL4-24`'s own row for the exact-count
     `GL_SAMPLES_PASSED` vs EasyGL's ES-only 0/1 `GL_ANY_SAMPLES_PASSED` distinction.
-14. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
+14. ~~`GL4-25`~~ — real fog done and verified 2026-07-22, all ✅ (`OpenGL4_Fog`, 8/8). See
+    `GL4-25`'s own row for the new `coloredParams3d` stride-16 program and the separate
+    pre-existing parity gap it closed along the way (stride-16 draws previously bypassed
+    `GpuDrawParams` entirely).
+15. **Active plan (2026-07-22 project-owner decision: `DebugSimulateContextLoss`/context-loss
     recovery explicitly, permanently deferred — do not pick it up):**
-    - `GL4-25` — fog support on all 7 stride/dispatch shaders.
     - `GL4-26` — dynamic `SamplerState` for direct 3D draws (`DrawPrimitivesEx`/
       `DrawIndexedPrimitivesEx`'s `params.texture0` sampler, currently hardcoded Linear/Clamp).
     - `GL4-27` — `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `params.baseVertex` support

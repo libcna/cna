@@ -99,19 +99,90 @@ void main()
 }
 )GLSL";
 
+        // plan_opengl4.md GL4-25: coloredParams3d (VertexPositionColor, stride 16) -- a SEPARATE
+        // program from kColored3DProgram_ above (which stays exactly as-is, used only by the
+        // GpuDrawParams-free DrawColoredPrimitives/DrawIndexedColoredPrimitives fast path that
+        // GraphicsDevice::DrawUserPrimitives(VertexPositionColor*, ...) and the generic
+        // unrecognized-stride fallback both go through). This new program is a real, dedicated
+        // stride-16 case in BindProgramForStride, closing a parity gap with
+        // EasyGLGraphicsBackend::EnsureColored3DProgram (DiffuseColor/VertexColorEnabled/
+        // AlphaTest/fog were previously silently unavailable to any stride-16 draw issued via a
+        // real Effect.Apply(), unlike every other stride, since BindProgramForStride had no
+        // stride-16 case at all and always fell back to the params-free path above). Ported
+        // formula from EasyGLGraphicsBackend::EnsureColored3DProgram (uDiffuseColor multiply
+        // gated by uVertexColorEnabled, alpha-test discard, fog).
+        const char* kColoredParams3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec4 aColor;
+uniform mat4 uWorldViewProj;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
+out vec4 vColor;
+out float vFogFactor;
+void main()
+{
+    gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+    vColor = aColor;
+    // Task 1111's own already-verified formula (matches FNA's EffectHelpers.SetFogVector/
+    // Common.fxh ComputeFogFactor exactly when World=View=Identity, the scenario every CNA fog
+    // test/scene uses): fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd);
+    // EasyGL's own vFogFactor is "fraction of original colour" (mix(fogColor,colour,vFogFactor)),
+    // the inverse of FNA's fogFactor -- simplifying 1-saturate(scale*(z+fogStart)) with
+    // uFogStart/uFogEnd naming gives the form below. Ported verbatim, not re-derived.
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
+}
+)GLSL";
+
+        const char* kColoredParams3DFragSrc = R"GLSL(
+#version 410 core
+in vec4 vColor;
+in float vFogFactor;
+uniform vec4 uDiffuseColor;
+uniform bool uVertexColorEnabled;
+uniform vec4 uAlphaTest;
+uniform vec3 uFogColor;
+out vec4 fragColor;
+void main()
+{
+    vec4 vc = uVertexColorEnabled ? vColor : vec4(1.0);
+    fragColor = vc * uDiffuseColor;
+
+    float alpha = fragColor.a;
+    bool passTest = (uAlphaTest.y > 0.0) ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y) : (alpha < uAlphaTest.x);
+    float w = passTest ? uAlphaTest.z : uAlphaTest.w;
+    if (w < 0.0) discard;
+
+    fragColor.rgb = mix(uFogColor, fragColor.rgb, vFogFactor);
+}
+)GLSL";
+
         // plan_opengl4.md GL4-13: textured3d (VertexPositionTexture, stride 20). Algorithmic
-        // reference: VulkanGraphicsBackend's textured3d.vert/frag.glsl (no fog, no Y-flip --
-        // OpenGL's own NDC convention needs none, unlike Vulkan's flipped clip space).
+        // reference: VulkanGraphicsBackend's textured3d.vert/frag.glsl (no Y-flip -- OpenGL's own
+        // NDC convention needs none, unlike Vulkan's flipped clip space). plan_opengl4.md GL4-25
+        // added real fog (Task 1111's formula, ported from EasyGLGraphicsBackend's own
+        // EnsureTextured3DProgram -- see kColoredParams3DVertSrc's own comment for the full
+        // derivation, not re-explained per shader).
         const char* kTextured3DVertSrc = R"GLSL(
 #version 410 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aUV;
 uniform mat4 uWorldViewProj;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
 out vec2 vUV;
+out float vFogFactor;
 void main()
 {
     vUV = aUV;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
 }
 )GLSL";
 
@@ -127,12 +198,14 @@ void main()
         const char* kTextured3DFragSrc = R"GLSL(
 #version 410 core
 in vec2 vUV;
+in float vFogFactor;
 uniform sampler2D uTexture;
 uniform sampler2D uTexture2;
 uniform vec4 uDiffuseColor;
 uniform bool uTextureEnabled;
 uniform bool uDualTextureEnabled;
 uniform vec4 uAlphaTest;
+uniform vec3 uFogColor;
 out vec4 fragColor;
 void main()
 {
@@ -150,11 +223,13 @@ void main()
     float w = passTest ? uAlphaTest.z : uAlphaTest.w;
     if (w < 0.0) discard;
 
+    result.rgb = mix(uFogColor, result.rgb, vFogFactor);
     fragColor = result;
 }
 )GLSL";
 
-        // colored_textured3d (VertexPositionColorTexture, stride 24).
+        // colored_textured3d (VertexPositionColorTexture, stride 24). plan_opengl4.md GL4-25
+        // added real fog (see kColoredParams3DVertSrc's own comment for the formula derivation).
         const char* kColoredTextured3DVertSrc = R"GLSL(
 #version 410 core
 layout(location = 0) in vec3 aPos;
@@ -163,13 +238,20 @@ layout(location = 2) in vec2 aUV;
 uniform mat4 uWorldViewProj;
 uniform vec4 uDiffuseColor;
 uniform bool uVertexColorEnabled;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
 out vec2 vUV;
 out vec4 vTint;
+out float vFogFactor;
 void main()
 {
     vUV = aUV;
     vTint = uVertexColorEnabled ? (aColor * uDiffuseColor) : uDiffuseColor;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
 }
 )GLSL";
 
@@ -177,11 +259,13 @@ void main()
 #version 410 core
 in vec2 vUV;
 in vec4 vTint;
+in float vFogFactor;
 uniform sampler2D uTexture;
 uniform sampler2D uTexture2;
 uniform bool uTextureEnabled;
 uniform bool uDualTextureEnabled;
 uniform vec4 uAlphaTest;
+uniform vec3 uFogColor;
 out vec4 fragColor;
 void main()
 {
@@ -199,6 +283,7 @@ void main()
     float w = passTest ? uAlphaTest.z : uAlphaTest.w;
     if (w < 0.0) discard;
 
+    result.rgb = mix(uFogColor, result.rgb, vFogFactor);
     fragColor = result;
 }
 )GLSL";
@@ -207,10 +292,11 @@ void main()
         // 3-directional-light rig. Ported from VulkanGraphicsBackend's lit_textured3d.vert/
         // frag.glsl: FNA's Lighting.fxh ComputeLights() (ambient + per-light Lambertian diffuse +
         // Blinn-Phong specular, EmissiveColor added post-multiply, specular added post-texture
-        // scaled by alpha). No fog (same deliberate deferral as the other 3D stride variants).
-        // World's inverse-transpose upper-left 3x3 is used for the normal matrix (not MVP's),
-        // matching EnvironmentMapEffect's own already-correct pattern -- an MVP-based transform
-        // would bake View/Projection into the normal.
+        // scaled by alpha). plan_opengl4.md GL4-25 added real fog (see kColoredParams3DVertSrc's
+        // own comment for the formula derivation). World's inverse-transpose upper-left 3x3 is
+        // used for the normal matrix (not MVP's), matching EnvironmentMapEffect's own
+        // already-correct pattern -- an MVP-based transform would bake View/Projection into the
+        // normal.
         const char* kLitTextured3DVertSrc = R"GLSL(
 #version 410 core
 layout(location = 0) in vec3 aPos;
@@ -218,9 +304,13 @@ layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUV;
 uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
 out vec2 vUV;
 out vec3 vNormal;
 out vec3 vWorldPos;
+out float vFogFactor;
 void main()
 {
     vUV = aUV;
@@ -228,6 +318,9 @@ void main()
     vNormal = normalize(normalMatrix * aNormal);
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
 }
 )GLSL";
 
@@ -236,6 +329,7 @@ void main()
 in vec2 vUV;
 in vec3 vNormal;
 in vec3 vWorldPos;
+in float vFogFactor;
 uniform sampler2D uTexture;
 uniform bool uTextureEnabled;
 uniform bool uLightingEnabled;
@@ -254,6 +348,7 @@ uniform vec3 uEmissiveColor;
 uniform vec3 uEyePosition;
 uniform vec3 uSpecularColor;
 uniform float uSpecularPower;
+uniform vec3 uFogColor;
 out vec4 fragColor;
 
 // Guards against normalize(0,0,0) on a disabled/unconfigured DirectionalLight -- a real bug
@@ -297,6 +392,7 @@ void main()
     {
         color = uDiffuseColor * tex;
     }
+    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
     fragColor = color;
 }
 )GLSL";
@@ -329,10 +425,14 @@ uniform vec3 uEyePosition;
 uniform float uEnvMapAmount;
 uniform bool uFresnelEnabled;
 uniform float uFresnelFactor;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
 out vec3 vWorldNormal;
 out vec3 vEyeDir;
 out vec2 vUV;
 out float vFresnel;
+out float vFogFactor;
 void main()
 {
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
@@ -348,6 +448,11 @@ void main()
     vFresnel = uFresnelEnabled
         ? pow(max(1.0 - abs(viewAngle), 0.0), uFresnelFactor) * uEnvMapAmount
         : uEnvMapAmount;
+    // plan_opengl4.md GL4-25: see kColoredParams3DVertSrc's own comment for the formula
+    // derivation (Task 1111).
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
 }
 )GLSL";
 
@@ -357,6 +462,7 @@ in vec3 vWorldNormal;
 in vec3 vEyeDir;
 in vec2 vUV;
 in float vFresnel;
+in float vFogFactor;
 uniform sampler2D uTexture;
 uniform bool uTextureEnabled;
 uniform samplerCube uEnvMap;
@@ -369,6 +475,7 @@ uniform vec3 uLight1Diffuse;
 uniform vec3 uLight2Dir;
 uniform vec3 uLight2Diffuse;
 uniform vec3 uEnvMapSpecular;
+uniform vec3 uFogColor;
 out vec4 fragColor;
 void main()
 {
@@ -389,6 +496,7 @@ void main()
     float combinedAlpha = uDiffuseColor.a * texColor.a;
     vec3 rgb = mix(baseColor, envSample.rgb * combinedAlpha, vFresnel) +
                uEnvMapSpecular * envSample.a * combinedAlpha;
+    rgb = mix(uFogColor, rgb, vFogFactor);
     fragColor = vec4(rgb, combinedAlpha);
 }
 )GLSL";
@@ -426,10 +534,14 @@ uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
 uniform mat4 uBones[72];
 uniform int uWeightsPerVertex;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
 out vec3 vNormal;
 out vec2 vUV;
 out vec3 vWorldPos;
 out vec4 vColor;
+out float vFogFactor;
 void main()
 {
     mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
@@ -450,6 +562,12 @@ void main()
     vUV = aUV;
     vWorldPos = (uWorld * skinnedPos).xyz;
     vColor = aColor;
+    // plan_opengl4.md GL4-25: see kColoredParams3DVertSrc's own comment for the formula
+    // derivation (Task 1111). Uses the pre-skin aPos.z, matching EasyGLGraphicsBackend's own
+    // EnsureSkinnedProgram convention.
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
 }
 )GLSL";
 
@@ -459,6 +577,7 @@ in vec3 vNormal;
 in vec2 vUV;
 in vec3 vWorldPos;
 in vec4 vColor;
+in float vFogFactor;
 uniform sampler2D uTexture;
 uniform bool uTextureEnabled;
 uniform bool uVertexColorEnabled;
@@ -476,6 +595,7 @@ uniform vec3 uEmissiveColor;
 uniform vec3 uEyePosition;
 uniform vec3 uSpecularColor;
 uniform float uSpecularPower;
+uniform vec3 uFogColor;
 out vec4 fragColor;
 
 vec3 safeNormalize(vec3 v)
@@ -504,6 +624,7 @@ void main()
     vec4 color = vec4(lit, uDiffuseColor.a) * tex;
     color.rgb += specularRGB * color.a;
     if (uVertexColorEnabled) color *= vColor;
+    color.rgb = mix(uFogColor, color.rgb, vFogFactor);
     fragColor = color;
 }
 )GLSL";
@@ -530,11 +651,15 @@ layout(location = 2) in vec4 aTangent;
 layout(location = 3) in vec2 aUV;
 uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
 out vec3 vNormal;
 out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
+out float vFogFactor;
 void main()
 {
     gl_Position = uWorldViewProj * vec4(aPos, 1.0);
@@ -548,6 +673,11 @@ void main()
     vBitangentSign = aTangent.w;
     vUV = aUV;
     vWorldPos = (uWorld * vec4(aPos, 1.0)).xyz;
+    // plan_opengl4.md GL4-25: see kColoredParams3DVertSrc's own comment for the formula
+    // derivation (Task 1111).
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
 }
 )GLSL";
 
@@ -563,11 +693,15 @@ uniform mat4 uWorldViewProj;
 uniform mat4 uWorld;
 uniform mat4 uBones[72];
 uniform int uWeightsPerVertex;
+uniform float uFogEnabled;
+uniform float uFogStart;
+uniform float uFogEnd;
 out vec3 vNormal;
 out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
+out float vFogFactor;
 void main()
 {
     mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
@@ -588,6 +722,9 @@ void main()
     vBitangentSign = aTangent.w;
     vUV = aUV;
     vWorldPos = (uWorld * skinnedPos).xyz;
+    vFogFactor = (uFogEnabled > 0.5)
+        ? ((abs(uFogEnd - uFogStart) < 1e-6) ? 0.0 : clamp((aPos.z + uFogEnd) / (uFogEnd - uFogStart), 0.0, 1.0))
+        : 1.0;
 }
 )GLSL";
 
@@ -598,6 +735,7 @@ in vec3 vTangent;
 in float vBitangentSign;
 in vec2 vUV;
 in vec3 vWorldPos;
+in float vFogFactor;
 uniform sampler2D uTexture;
 uniform sampler2D uNormalMap;
 uniform sampler2D uMetallicRoughnessMap;
@@ -615,6 +753,7 @@ uniform vec3 uLight1Diffuse;
 uniform vec3 uLight2Dir;
 uniform vec3 uLight2Diffuse;
 uniform vec3 uEyePosition;
+uniform vec3 uFogColor;
 out vec4 fragColor;
 
 vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
@@ -670,7 +809,8 @@ void main()
     vec3 ambient = uAmbientColor * albedo * occlusion;
     vec3 emissive = uEmissiveColor * texture(uEmissiveMap, vUV).rgb;
 
-    fragColor = vec4(ambient + Lo + emissive, alpha);
+    vec3 rgb = mix(uFogColor, ambient + Lo + emissive, vFogFactor);
+    fragColor = vec4(rgb, alpha);
 }
 )GLSL";
 
@@ -2392,6 +2532,13 @@ void main()
         colored3DWvpLoc_ = colored3DProgram_.UniformLocation("uWorldViewProj");
     }
 
+    void OpenGL4GraphicsBackend::EnsureColoredParams3DProgram()
+    {
+        if (coloredParams3DProgram_.IsValid()) return;
+        if (!coloredParams3DProgram_.Compile(kColoredParams3DVertSrc, kColoredParams3DFragSrc))
+            throw std::runtime_error("OpenGL4: coloredParams3d program failed to compile: " + coloredParams3DProgram_.GetError());
+    }
+
     void OpenGL4GraphicsBackend::EnsureTextured3DProgram()
     {
         if (textured3DProgram_.IsValid()) return;
@@ -2469,6 +2616,20 @@ void main()
         const Matrix wvp = world * view * projection;
         float wvpCol[16];
         wvp.ToColumnMajor(wvpCol);
+
+        // plan_opengl4.md GL4-25: uploads the 4 fog uniforms (a no-op via the `loc>=0` guard on
+        // any program whose shader source doesn't declare them, so this is safe to call
+        // unconditionally for every stride case below).
+        const auto setFog = [&](OpenGL4RawProgram& prog) {
+            const int fogEnabledLoc = prog.UniformLocation("uFogEnabled");
+            if (fogEnabledLoc >= 0) gl4_glUniform1f(fogEnabledLoc, params.fogEnabled ? 1.0f : 0.0f);
+            const int fogColorLoc = prog.UniformLocation("uFogColor");
+            if (fogColorLoc >= 0) gl4_glUniform3f(fogColorLoc, params.fogColor[0], params.fogColor[1], params.fogColor[2]);
+            const int fogStartLoc = prog.UniformLocation("uFogStart");
+            if (fogStartLoc >= 0) gl4_glUniform1f(fogStartLoc, params.fogStart);
+            const int fogEndLoc = prog.UniformLocation("uFogEnd");
+            if (fogEndLoc >= 0) gl4_glUniform1f(fogEndLoc, params.fogEnd);
+        };
 
         // plan_opengl4.md GL4-23: lazily create PbrEffect's fallback textures BEFORE any real
         // per-draw texture gets bound below -- EnsureDefaultWhiteTexture()/
@@ -2590,6 +2751,7 @@ void main()
             if (emissiveMapLoc >= 0) gl4_glUniform1i(emissiveMapLoc, 3);
             const int occlusionMapLoc = prog.UniformLocation("uOcclusionMap");
             if (occlusionMapLoc >= 0) gl4_glUniform1i(occlusionMapLoc, 4);
+            setFog(prog);
             return true;
         }
 
@@ -2635,11 +2797,29 @@ void main()
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
             const int envMapLoc = envMap3DProgram_.UniformLocation("uEnvMap");
             if (envMapLoc >= 0) gl4_glUniform1i(envMapLoc, 1);
+            setFog(envMap3DProgram_);
             return true;
         }
 
         switch (strideInBytes)
         {
+        case 16: // VertexPositionColor -- plan_opengl4.md GL4-25: real GpuDrawParams-aware case
+        {
+            EnsureColoredParams3DProgram();
+            coloredParams3DProgram_.Use();
+            const int wvpLoc = coloredParams3DProgram_.UniformLocation("uWorldViewProj");
+            if (wvpLoc >= 0) gl4_glUniformMatrix4fv(wvpLoc, 1, GL_FALSE, wvpCol);
+            const int diffuseLoc = coloredParams3DProgram_.UniformLocation("uDiffuseColor");
+            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
+                                                 params.diffuseColor[2], params.diffuseColor[3]);
+            const int vcLoc = coloredParams3DProgram_.UniformLocation("uVertexColorEnabled");
+            if (vcLoc >= 0) gl4_glUniform1i(vcLoc, params.vertexColorEnabled ? 1 : 0);
+            const int alphaTestLoc = coloredParams3DProgram_.UniformLocation("uAlphaTest");
+            if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
+                                                   params.alphaTest[2], params.alphaTest[3]);
+            setFog(coloredParams3DProgram_);
+            return true;
+        }
         case 20: // VertexPositionTexture
         {
             EnsureTextured3DProgram();
@@ -2660,6 +2840,7 @@ void main()
             const int alphaTestLoc = textured3DProgram_.UniformLocation("uAlphaTest");
             if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
                                                    params.alphaTest[2], params.alphaTest[3]);
+            setFog(textured3DProgram_);
             return true;
         }
         case 24: // VertexPositionColorTexture
@@ -2684,6 +2865,7 @@ void main()
             const int alphaTestLoc = coloredTextured3DProgram_.UniformLocation("uAlphaTest");
             if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
                                                    params.alphaTest[2], params.alphaTest[3]);
+            setFog(coloredTextured3DProgram_);
             return true;
         }
         case 32: // VertexPositionNormalTexture
@@ -2728,6 +2910,7 @@ void main()
             if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
             const int texLoc = litTextured3DProgram_.UniformLocation("uTexture");
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            setFog(litTextured3DProgram_);
             return true;
         }
         case 52: // VertexPositionNormalTextureSkinned
@@ -2777,6 +2960,7 @@ void main()
             if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
             const int texLoc = skinned3DProgram_.UniformLocation("uTexture");
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            setFog(skinned3DProgram_);
             return true;
         }
         default:

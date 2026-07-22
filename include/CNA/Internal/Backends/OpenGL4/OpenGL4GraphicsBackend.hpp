@@ -508,6 +508,11 @@ namespace CNA::Internal::Backends::OpenGL4
 
     private:
         void EnsureColored3DProgram();
+        /// plan_opengl4.md GL4-25: GpuDrawParams-aware stride-16 program (DiffuseColor/
+        /// VertexColorEnabled/AlphaTest/fog), a real BindProgramForStride case -- separate from
+        /// the params-free colored3DProgram_ above, which stays reserved for
+        /// DrawColoredPrimitives/DrawIndexedColoredPrimitives's own fast path.
+        void EnsureColoredParams3DProgram();
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
         void EnsureLitTextured3DProgram();
@@ -587,6 +592,7 @@ namespace CNA::Internal::Backends::OpenGL4
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;
         int colored3DWvpLoc_ = -1;
+        OpenGL4RawProgram coloredParams3DProgram_;
         OpenGL4RawProgram textured3DProgram_;
         OpenGL4RawProgram coloredTextured3DProgram_;
         OpenGL4RawProgram litTextured3DProgram_;
