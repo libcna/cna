@@ -456,6 +456,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTarget_Orientation COMMAND cna_test_bgfx_rendertarget_orientation
         TIMEOUT 40 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-078: a RenderTarget2D used as a generic 3D-effect texture (effect.Texture = rt) must
+    # bind safely (no UB static_cast to BgfxTextureBackend) and sample UPRIGHT on both bgfx renderers,
+    # per sampler slot (BasicEffect single texture + DualTextureEffect two-slot discriminator).
+    cna_bgfx_test(cna_test_bgfx_rendertarget_effect_texture
+                  examples/bgfx_rendertarget_effect_texture_test.cpp)
+    cna_register_backend_test(NAME Bgfx_RenderTarget_EffectTexture COMMAND cna_test_bgfx_rendertarget_effect_texture
+        TIMEOUT 40 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 750: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
     cna_bgfx_test(cna_test_bgfx_texture_address_mode
                   examples/bgfx_texture_address_mode_test.cpp)
