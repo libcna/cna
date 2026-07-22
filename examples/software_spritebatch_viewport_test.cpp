@@ -42,10 +42,14 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
@@ -310,6 +314,46 @@ protected:
                   CloseTo(b.minY, vpY + 3, 1) && CloseTo(b.maxY, vpY + 12, 1),
                   "G1: left-clipped footprint x[19,33] y[14,23]: " + b.str());
             check(leftLeak == 0, "G2: no red left of Viewport.X: leak=" + std::to_string(leftLeak));
+        }
+
+        // ---- Check H: custom Viewport is relative to the bound RenderTarget2D (a different-size
+        //      framebuffer), not cached backbuffer dims. Read the RT via GetBackBufferData while it
+        //      is still bound (Software GetBackBufferData reads the current target). --------------
+        {
+            const int rtW = 48, rtH = 40;
+            const int vpX = 8, vpY = 6, vpW = 28, vpH = 22;
+            const int lx = 3, ly = 2, lw = 15, lh = 12;
+            RenderTarget2D rt(dev, rtW, rtH, false, SurfaceFormat::Color, DepthFormat::None, 0,
+                              RenderTargetUsage::DiscardContents);
+            dev.SetRenderTarget(&rt);
+            SetVp(dev, vpX, vpY, vpW, vpH);
+            dev.Clear(Color::Black);
+            DrawSprite(dev, Rectangle(lx, ly, lw, lh), red);
+
+            std::vector<Color> pix(static_cast<std::size_t>(rtW) * rtH, Color(0, 0, 0, 0));
+            const Rectangle whole(0, 0, rtW, rtH);
+            dev.GetBackBufferData(&whole, pix.data(), 0, static_cast<int>(pix.size()));
+
+            int minX = rtW, minY = rtH, maxX = -1, maxY = -1, count = 0, outside = 0;
+            for (int y = 0; y < rtH; ++y)
+                for (int x = 0; x < rtW; ++x)
+                    if (Redish(pix[static_cast<std::size_t>(y) * rtW + x]))
+                    {
+                        minX = std::min(minX, x); maxX = std::max(maxX, x);
+                        minY = std::min(minY, y); maxY = std::max(maxY, y);
+                        ++count;
+                        if (x < vpX || x >= vpX + vpW || y < vpY || y >= vpY + vpH) ++outside;
+                    }
+            const std::string s = "x[" + std::to_string(minX) + "," + std::to_string(maxX) + "] y["
+                + std::to_string(minY) + "," + std::to_string(maxY) + "] n=" + std::to_string(count);
+
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            SetVp(dev, 0, 0, kBBW, kBBH);
+
+            check(count > 0 && CloseTo(maxX - minX + 1, lw, 1) && CloseTo(maxY - minY + 1, lh, 1) &&
+                  CloseTo(minX, vpX + lx, 1) && CloseTo(minY, vpY + ly, 1),
+                  "H1: RT-bound custom viewport -> 15x12 at (11,8) relative to the 48x40 RT: " + s);
+            check(outside == 0, "H2: no red outside the RT viewport rect: outside=" + std::to_string(outside));
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);
