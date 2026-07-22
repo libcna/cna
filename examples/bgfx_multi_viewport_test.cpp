@@ -149,7 +149,7 @@ class BgfxMultiViewportTest : public Game
         check(isGreen(at(buf, 70, 50)), "A: viewport B centre (70,50) is GREEN");
         check(isRed(at(buf, 20, 17)),   "A: viewport A centre (20,17) is RED [FAILS pre-fix -> black, last-wins]");
         check(count(buf, isRed) > 100,  "A: RED survives (viewport A not overwritten): " + std::to_string(count(buf, isRed)) + "px");
-        check(isBlack(at(buf, 20, 50)) && isBlack(at(buf, 70, 17)), "A: the disjoint gap stays black (no cross-contamination)");
+        check(isBlack(at(buf, 20, 50)) && isBlack(at(buf, 70, 17)), "A: the disjoint gap stays black (no cross-viewport contamination)");
     }
 
     // ---- Section B: SpriteBatch, two disjoint viewports in one frame ----
@@ -239,7 +239,45 @@ class BgfxMultiViewportTest : public Game
         };
         std::vector<Color> buf = settle(dev, scene, [&](const std::vector<Color>& b) { return isGreen(at(b, 40, 30)); });
         check(isGreen(at(buf, 40, 30)), "E: same-viewport consecutive draws -> later (green) on top (ordering within a segment)");
-        check(count(buf, isRed) == 0,   "E: no red leaks outside (both draws share the same viewport rect)");
+        // Both draws share ONE viewport -> ONE view/segment, so green fully overwrites red inside the
+        // viewport rect (20,15,40,30). (Only red WITHIN the viewport is checked: bgfx's Clear is scoped to
+        // the active view rect, matching pre-fix behavior, so content OUTSIDE the viewport is left as-is.)
+        int redInVp = 0;
+        for (int y = 15; y < 45; ++y) for (int x = 20; x < 60; ++x) if (isRed(at(buf, x, y))) ++redInVp;
+        check(redInVp == 0, "E: no red survives inside the viewport (green fully covers -- single segment reused): "
+              + std::to_string(redInVp) + "px");
+    }
+
+    // ---- Section F (stress): many distinct viewports in ONE frame -> ordered segments at scale ----
+    // 16 disjoint vertical bands (6px each) across the 96-wide backbuffer, alternating red/green, each
+    // under its own Viewport in one frame. Exercises 16 segment views + per-frame recycling across the
+    // settle loop (segment ids reset every frame; a monotonic leak would exhaust the range and throw).
+    void sectionF(GraphicsDevice& dev)
+    {
+        constexpr int kBands = 16, kBandW = 6;   // 16*6 = 96
+        auto scene = [&] {
+            dev.Clear(Color::Black);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            BasicEffect fx(dev); setupFx(fx);
+            for (int i = 0; i < kBands; ++i)
+            {
+                dev.setViewportProperty(Viewport(i * kBandW, 0, kBandW, kBBH));
+                quad3D(dev, fx, (i % 2 == 0) ? Color(255, 0, 0, 255) : Color(0, 255, 0, 255));
+            }
+        };
+        // Freshness: the last band (15, odd -> green) centre. Unique enough after the warmup drain.
+        std::vector<Color> buf = settle(dev, scene, [&](const std::vector<Color>& b) { return isGreen(at(b, 15 * kBandW + 3, 36)); });
+        int okBands = 0;
+        for (int i = 0; i < kBands; ++i)
+        {
+            const Color c = at(buf, i * kBandW + 3, 36);
+            const bool ok = (i % 2 == 0) ? isRed(c) : isGreen(c);
+            if (ok) ++okBands;
+        }
+        check(okBands == kBands,
+              "F: 16 distinct viewports in one frame each render their own colour (ordered segments at scale): "
+              + std::to_string(okBands) + "/16 bands correct");
     }
 
 protected:
@@ -261,6 +299,7 @@ protected:
         sectionC(dev);
         sectionD(dev);
         sectionE(dev);
+        sectionF(dev);
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();
     }
