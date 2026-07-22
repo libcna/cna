@@ -4789,8 +4789,39 @@ struct VSOut {
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
             return;
-        const LogicalViewport viewport = ComputeLogicalViewport();
-        if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f || physicalWidth_ <= 0 || physicalHeight_ <= 0)
+        // REMED-GFX-019: a SpriteBatch destination rectangle is expressed in the CURRENTLY-BOUND
+        // render target's own pixel coordinate system (XNA/FNA semantics), never the backbuffer's.
+        // The backbuffer's virtual-resolution letterbox/presentation-mode scaling
+        // (ComputeLogicalViewport()) is a backbuffer-only concept, so while a RenderTarget2D or a
+        // RenderTargetCube face is bound the sprite maps 1:1 into that target's own pixels (an
+        // identity viewport, x=y=0, width=height=logical=target size) and the clip-space divide
+        // below uses the target's dimensions, not physicalWidth_/physicalHeight_. Mirrors
+        // SdlGpuGraphicsBackend::QueueSprite()'s own currentRenderTarget_ branch (extended here to
+        // the cube face too, since this backend bakes NDC CPU-side at enqueue and each target's
+        // pending sprites are flushed into that target's own render pass on the next target switch).
+        LogicalViewport viewport;
+        int targetWidth;
+        int targetHeight;
+        if (currentRenderTarget_ != nullptr)
+        {
+            targetWidth = currentRenderTarget_->GetWidth();
+            targetHeight = currentRenderTarget_->GetHeight();
+            viewport.width = viewport.logicalWidth = static_cast<float>(std::max(0, targetWidth));
+            viewport.height = viewport.logicalHeight = static_cast<float>(std::max(0, targetHeight));
+        }
+        else if (currentRenderTargetCubeFace_ != nullptr)
+        {
+            targetWidth = targetHeight = currentRenderTargetCubeFace_->GetSize();
+            viewport.width = viewport.logicalWidth = static_cast<float>(std::max(0, targetWidth));
+            viewport.height = viewport.logicalHeight = static_cast<float>(std::max(0, targetHeight));
+        }
+        else
+        {
+            viewport = ComputeLogicalViewport();
+            targetWidth = physicalWidth_;
+            targetHeight = physicalHeight_;
+        }
+        if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f || targetWidth <= 0 || targetHeight <= 0)
             return;
 
         const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
@@ -4837,8 +4868,8 @@ struct VSOut {
             const float px = viewport.x + points[corner].X * viewport.width / viewport.logicalWidth;
             const float py = viewport.y + points[corner].Y * viewport.height / viewport.logicalHeight;
             auto& vertex = command.vertices[static_cast<std::size_t>(i)];
-            vertex.position[0] = 2.0f * px / static_cast<float>(physicalWidth_) - 1.0f;
-            vertex.position[1] = 1.0f - 2.0f * py / static_cast<float>(physicalHeight_);
+            vertex.position[0] = 2.0f * px / static_cast<float>(targetWidth) - 1.0f;
+            vertex.position[1] = 1.0f - 2.0f * py / static_cast<float>(targetHeight);
             vertex.position[2] = std::clamp(layerDepth, 0.0f, 1.0f);
             vertex.uv[0] = uv[corner].X;
             vertex.uv[1] = uv[corner].Y;
