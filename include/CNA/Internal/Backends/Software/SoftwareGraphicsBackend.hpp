@@ -328,6 +328,14 @@ namespace CNA::Internal::Backends::Software
         /// same way it outlines 3D geometry.
         [[nodiscard]] int GetFillMode() const { return fillMode_; }
 
+        /// REMED-GFX-083: the RasterizerState.DepthBias / SlopeScaleDepthBias floats from the most recent
+        /// ApplyRasterizerState() call (both previously discarded). Consumed by SoftwareSpriteBatchBackend
+        /// via owner_ so a bias supplied through SpriteBatch.Begin's RasterizerState (REMED-GFX-081)
+        /// offsets the sprite quad's depth exactly as it offsets 3D geometry. See the members below for
+        /// the unit convention.
+        [[nodiscard]] float GetDepthBias() const { return depthBias_; }
+        [[nodiscard]] float GetSlopeScaleDepthBias() const { return slopeScaleDepthBias_; }
+
         /// REMED-GFX-073: the active GraphicsDevice.Viewport rectangle in pixels of the currently
         /// bound target. When no custom viewport has been set (SetViewport never called), the full
         /// current framebuffer is returned. SoftwareSpriteBatchBackend places its viewport-local
@@ -383,6 +391,18 @@ namespace CNA::Internal::Backends::Software
         /// RasterizerState is applied, in which case it outlines only the triangle edges. Independent
         /// of CullMode/ScissorTestEnable.
         int fillMode_ = 0;
+
+        /// REMED-GFX-083: RasterizerState.DepthBias / SlopeScaleDepthBias, stored by ApplyRasterizerState()
+        /// (its 4th/5th float args, previously discarded). Both default to 0 (XNA/FNA default), for which
+        /// the rasterizer adds no depth offset and the output is byte-identical to pre-GFX-083. Expressed
+        /// in the same UNSCALED units GraphicsDevice forwards to every GPU backend: DepthBias in units of
+        /// the depth buffer's minimum resolvable difference (fed into vkCmdSetDepthBias's constantFactor /
+        /// glPolygonOffset's units / rounded into D3D11_RASTERIZER_DESC::DepthBias), SlopeScaleDepthBias as
+        /// a multiplier on the triangle's max screen-space depth slope (vkCmdSetDepthBias's slopeFactor /
+        /// glPolygonOffset's factor). The rasterizer folds both into the post-viewport per-fragment depth
+        /// via ComputeDepthBiasOffset (see the .cpp), matching the GPU backends' polygon-offset contract.
+        float depthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
 
         /// REMED-GFX-073: current GraphicsDevice.Viewport, stored by SetViewport() and consumed by
         /// the SpriteBatch path (GetActiveViewport()). GraphicsDevice pushes this on every viewport

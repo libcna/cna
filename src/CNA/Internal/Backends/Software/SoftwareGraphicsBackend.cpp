@@ -188,6 +188,49 @@ namespace CNA::Internal::Backends::Software
             return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
         }
 
+        /// REMED-GFX-083: the Software depth buffer's minimum resolvable difference "r" -- the unit
+        /// RasterizerState.DepthBias is expressed in. GraphicsDevice forwards the public XNA float
+        /// UNSCALED to every backend (see setRasterizerStateProperty); the GPU drivers then multiply it
+        /// by their own depth-format r (D3D11RasterizerStateCache rounds it into the 24-bit-UNORM
+        /// DepthBias INT, Vulkan/EasyGL feed it to vkCmdSetDepthBias/glPolygonOffset). The Software buffer
+        /// is float32 in [0,1]; 2^-24 is the minimum resolvable difference of XNA's canonical Depth24
+        /// format (and D3D11's 24-bit UNORM path), so a given DepthBias yields the same constant offset
+        /// here as on the D3D11 backend -- cross-backend observable parity without a per-primitive
+        /// max-z-exponent computation.
+        constexpr float kDepthBiasUnit = 1.0f / static_cast<float>(1 << 24);
+
+        /// REMED-GFX-083: the effective per-triangle depth offset added to every fragment's post-viewport
+        /// depth, matching the OpenGL/D3D/Vulkan polygon-offset contract the GPU backends map onto:
+        ///   offset = slopeScaleDepthBias * m + depthBias * r
+        /// where m = max(|dz/dx|, |dz/dy|) is the triangle's maximum depth slope in raster space (screen
+        /// x/y pixels, post-viewport window depth) -- computed ONCE per triangle from the depth plane,
+        /// never per fragment -- and r is the depth buffer's minimum resolvable difference (kDepthBiasUnit).
+        /// SIGN: a POSITIVE bias INCREASES depth == pushes the polygon AWAY from the camera (toward the far
+        /// plane), the standard XNA/D3D/GL/Vulkan convention. Returns exactly 0.0f when both biases are 0
+        /// (the overwhelmingly common case) with no slope math, so the zero-bias path stays byte-identical
+        /// to pre-GFX-083. The det (== -EdgeFunction(v0,v1,v2)) is guaranteed nonzero here: the callers
+        /// reject the exact zero-area triangle before invoking this, so no divide-by-zero (guarded anyway).
+        float ComputeDepthBiasOffset(const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                                     float depthBias, float slopeScaleDepthBias)
+        {
+            if (depthBias == 0.0f && slopeScaleDepthBias == 0.0f)
+                return 0.0f;
+            float maxDepthSlope = 0.0f;
+            if (slopeScaleDepthBias != 0.0f)
+            {
+                const float dx1 = v1.x - v0.x, dy1 = v1.y - v0.y, dz1 = v1.depth - v0.depth;
+                const float dx2 = v2.x - v0.x, dy2 = v2.y - v0.y, dz2 = v2.depth - v0.depth;
+                const float det = dx1 * dy2 - dx2 * dy1;
+                if (det != 0.0f)
+                {
+                    const float dzdx = (dz1 * dy2 - dz2 * dy1) / det;
+                    const float dzdy = (dx1 * dz2 - dx2 * dz1) / det;
+                    maxDepthSlope = std::max(std::fabs(dzdx), std::fabs(dzdy));
+                }
+            }
+            return slopeScaleDepthBias * maxDepthSlope + depthBias * kDepthBiasUnit;
+        }
+
         /// REMED-GFX-073/079: an inclusive pixel clip rectangle for the rasterizer. Pre-intersected
         /// with the framebuffer bounds by its ViewportClip() factory, so RasterizeTriangle /
         /// RasterizeTriangleShaded only have to clamp each triangle's bounding box against it. An
@@ -426,6 +469,7 @@ namespace CNA::Internal::Backends::Software
         /// (line walk) instead of the interior fill -- culling and the zero-area reject are shared, so
         /// a culled/degenerate triangle emits no wire either.
         void RasterizeTriangle(SoftwareFramebuffer& fb, bool depthTestEnabled, int cullMode,
+                               float depthBias, float slopeScaleDepthBias,
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                bool wireframe = false, unsigned edgeMask = kEdgeAll)
@@ -436,6 +480,12 @@ namespace CNA::Internal::Backends::Software
             if (ShouldCullTriangle(area, cullMode))
                 return;
 
+            // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling; a culled
+            // triangle emits no fragments, biased or not). hasBias is 0 for the common zero-bias case, so
+            // the depth expressions below are byte-identical to pre-GFX-083 then.
+            const float biasOffset = ComputeDepthBiasOffset(v0, v1, v2, depthBias, slopeScaleDepthBias);
+            const bool hasBias = (biasOffset != 0.0f);
+
             if (wireframe)
             {
                 // REMED-GFX-082: rasterize the selected edges as perspective-correct lines, reusing
@@ -443,7 +493,8 @@ namespace CNA::Internal::Backends::Software
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
-                        const float depth = A.depth + t * (B.depth - A.depth);
+                        float depth = A.depth + t * (B.depth - A.depth);
+                        if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                         WriteColoredFragment(fb, depthTestEnabled, clip, x, y, depth, invW,
                                              A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                              A.b + t * (B.b - A.b), A.a + t * (B.a - A.a));
@@ -492,7 +543,8 @@ namespace CNA::Internal::Backends::Software
                     // Post-divide depth interpolates linearly in screen space -- no perspective
                     // correction needed for this one attribute (a well-known rasterization
                     // property), unlike color/UV below.
-                    const float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+                    float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+                    if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                     const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
                     WriteColoredFragment(fb, depthTestEnabled, clip, x, y, depth, invW,
                                          lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
@@ -820,7 +872,8 @@ namespace CNA::Internal::Backends::Software
         /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
         /// same simplification already used for the plain BasicEffect path.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, bool depthTestEnabled, bool blendEnabled,
-                                     int cullMode, const GpuDrawParams& params, const RasterClipRect& clip,
+                                     int cullMode, float depthBias, float slopeScaleDepthBias,
+                                     const GpuDrawParams& params, const RasterClipRect& clip,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
@@ -839,6 +892,11 @@ namespace CNA::Internal::Backends::Software
             if (ShouldCullTriangle(area, cullMode))
                 return;
 
+            // REMED-GFX-083: one polygon-offset value for the whole triangle (after culling). hasBias is
+            // 0 for the common zero-bias case, so the depth expressions below stay byte-identical then.
+            const float biasOffset = ComputeDepthBiasOffset(v0, v1, v2, depthBias, slopeScaleDepthBias);
+            const bool hasBias = (biasOffset != 0.0f);
+
             if (wireframe)
             {
                 // REMED-GFX-082: rasterize the selected edges as perspective-correct shaded lines,
@@ -846,7 +904,8 @@ namespace CNA::Internal::Backends::Software
                 const auto drawEdge = [&](const RasterVertex& A, const RasterVertex& B) {
                     WalkWireEdge(clip, A, B, [&](int x, int y, float t) {
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
-                        const float depth = A.depth + t * (B.depth - A.depth);
+                        float depth = A.depth + t * (B.depth - A.depth);
+                        if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                         WriteShadedFragment(fb, ctx, clip, x, y, depth, invW,
                                             A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
@@ -895,7 +954,8 @@ namespace CNA::Internal::Backends::Software
                     const float lambda1 = w1 / area;
                     const float lambda2 = w2 / area;
 
-                    const float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+                    float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+                    if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                     const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
                     WriteShadedFragment(fb, ctx, clip, x, y, depth, invW,
                                         lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
@@ -1240,10 +1300,15 @@ namespace CNA::Internal::Backends::Software
         // suppressed like the 3D near-plane clip diagonal). Passed THROUGH SpriteBatch.Begin's
         // RasterizerState via GraphicsDevice (REMED-GFX-081).
         const bool wire = (owner_.GetFillMode() == 1);
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip,
-                                rv0, rv1, rv2, wire, kEdgeAll);
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, clip,
-                                rv2, rv3, rv0, wire, kEdgeAll);
+        // REMED-GFX-083: SpriteBatch's two quad triangles honor RasterizerState.DepthBias /
+        // SlopeScaleDepthBias too (a bias supplied through SpriteBatch.Begin's RasterizerState, GFX-081).
+        // A quad is flat (constant layerDepth -> zero depth slope), so only the constant term applies.
+        const float depthBias = owner_.GetDepthBias();
+        const float slopeScaleDepthBias = owner_.GetSlopeScaleDepthBias();
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
+                                spriteParams, clip, rv0, rv1, rv2, wire, kEdgeAll);
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
+                                spriteParams, clip, rv2, rv3, rv0, wire, kEdgeAll);
     }
 
     // ---- SoftwareGraphicsBackend ----
@@ -1394,7 +1459,7 @@ namespace CNA::Internal::Backends::Software
     }
 
     void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
-                                                       float, float)
+                                                       float depthBias, float slopeScaleDepthBias)
     {
         cullMode_ = cullMode;
         // REMED-GFX-082: capture FillMode (previously discarded). 0=Solid, 1=WireFrame -- the raster
@@ -1403,6 +1468,11 @@ namespace CNA::Internal::Backends::Software
         // REMED-GFX-080: capture ScissorTestEnable (previously discarded). Independent of the stored
         // ScissorRectangle -- toggling this on/off enables/disables the same stored rectangle.
         scissorTestEnable_ = scissorTestEnable;
+        // REMED-GFX-083: capture DepthBias / SlopeScaleDepthBias (both previously discarded). Folded into
+        // the post-viewport per-fragment depth by the rasterizer via ComputeDepthBiasOffset; 0/0 (the
+        // default) is a byte-identical no-op. Same unscaled units GraphicsDevice forwards to every backend.
+        depthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
 
     void SoftwareGraphicsBackend::ApplySamplerState(int slot, int, int, int, int)
@@ -1587,10 +1657,11 @@ namespace CNA::Internal::Backends::Software
             // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2], wire, mask0);
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                              rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3], wire,
-                                  kEdgeV1V2 | kEdgeV2V0);
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                                  rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1666,10 +1737,11 @@ namespace CNA::Internal::Backends::Software
             // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[1], rv[2], wire, mask0);
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                              rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, clip, rv[0], rv[2], rv[3], wire,
-                                  kEdgeV1V2 | kEdgeV2V0);
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                                  rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1748,10 +1820,12 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+                                    depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+                                        depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
@@ -1841,10 +1915,12 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+                                    depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params,
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+                                        depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
