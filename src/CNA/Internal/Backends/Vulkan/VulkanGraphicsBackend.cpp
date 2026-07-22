@@ -7636,7 +7636,16 @@ namespace CNA::Internal::Backends::Vulkan
                 ++it;
             }
         }
-        // REMED-GFX-076 fix wiring goes here (added in the fix commit).
+        // REMED-GFX-076: the seven per-frame effect caches are hash-keyed, so they carry each entry's
+        // referencing views for reverse lookup here. Evict every entry this dying view participates
+        // in; the freed set is fence-retired to its own pool (see ProcessRetiredResources).
+        EvictViewFromEffectCache(dualTexDescSets_,     descriptorPool2Tex_,        view, into);
+        EvictViewFromEffectCache(envMapDescSets_,      descriptorPoolEnvMap_,      view, into);
+        EvictViewFromEffectCache(litTexturedDescSets_, descriptorPoolLitTextured_, view, into);
+        EvictViewFromEffectCache(fogTex3DDescSets_,    descriptorPoolFogTex3D_,    view, into);
+        EvictViewFromEffectCache(skinnedDescSets_,     descriptorPoolSkinned_,     view, into);
+        EvictViewFromEffectCache(pbrDescSets_,         descriptorPoolPbr_,         view, into);
+        EvictViewFromEffectCache(pbrSkinnedDescSets_,  descriptorPoolPbrSkinned_,  view, into);
     }
 
     // REMED-GFX-076: drop every entry in one effect descriptor-set cache (all frame slots) that
@@ -8971,6 +8980,10 @@ namespace CNA::Internal::Backends::Vulkan
         // its cube VkImageView into that draw's descriptor set; retire the handles so a cube
         // destroyed before Present keeps the view alive until the record consumes the draw.
         VulkanGraphicsBackend::RetiredResources r;
+        // REMED-GFX-076: a TextureCube's cube VkImageView is baked into EnvironmentMapEffect's
+        // hash-keyed envMapDescSets_ entries; evict them so a later cube reusing the freed handle
+        // value cannot collide with this destroyed cube's cached descriptor set.
+        owner_->EvictSampledViewFromCaches(imageView_, r);
         if (imageView_ != VK_NULL_HANDLE) { r.imageViews.push_back(imageView_); imageView_ = VK_NULL_HANDLE; }
         if (image_     != VK_NULL_HANDLE) { r.images.push_back(image_);          image_     = VK_NULL_HANDLE; }
         if (memory_    != VK_NULL_HANDLE) { r.memories.push_back(memory_);        memory_    = VK_NULL_HANDLE; }
@@ -9447,6 +9460,10 @@ namespace CNA::Internal::Backends::Vulkan
         // the record consumes the draw. Retire all handles (frame-fence-gated free) rather than a
         // device stall + immediate destroy.
         VulkanGraphicsBackend::RetiredResources r;
+        // REMED-GFX-076: a RenderTargetCube sampled as a SOURCE bakes its cubeView_ into
+        // EnvironmentMapEffect's hash-keyed envMapDescSets_ (and the plain texSamplerDescSets_);
+        // evict those entries so a later resource reusing the freed handle value cannot alias them.
+        owner_->EvictSampledViewFromCaches(cubeView_, r);
         for (int i = 0; i < 6; ++i) {
             if (framebuffers_[i]     != VK_NULL_HANDLE) { r.framebuffers.push_back(framebuffers_[i]);     framebuffers_[i]     = VK_NULL_HANDLE; }
             if (msaaFramebuffers_[i] != VK_NULL_HANDLE) { r.framebuffers.push_back(msaaFramebuffers_[i]); msaaFramebuffers_[i] = VK_NULL_HANDLE; }
