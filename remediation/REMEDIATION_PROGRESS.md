@@ -4501,21 +4501,125 @@ RT-sample readback Y-mirror — still open). None inseparable from the viewport 
 
 | Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp`, `include/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp`, `examples/bgfx_multi_viewport_test.cpp`, `cmake/Tests/BgfxTests.cmake` |
 | Backends / Platforms | Bgfx / ALL (backbuffer + render targets; bgfx-OpenGL 2.1 + bgfx-Vulkan verified) |
-| New findings | **GFX-084** — SpriteBatch `setViewTransform` last-wins for two batches sharing the same viewport but different `Begin(transformMatrix)` in one frame (the segment key is viewport-only). Source-identified, NOT fixed. |
+| New findings | **GFX-084** — SpriteBatch `setViewTransform` last-wins for two batches sharing the same viewport but different `Begin(transformMatrix)` in one frame (the segment key was viewport-only). Since **DONE** (test `0e68f0dc`, fix `da8dda88`) — the segment key now also includes the sprite view transform on the sprite path. See its entry below. |
 
 ---
 
-### REMED-GFX-084 — Bgfx: SpriteBatch view transform last-wins for same-viewport / different-Begin-transform batches (NEW, discovered during GFX-065, NOT fixed)
+### REMED-GFX-084 — Bgfx: SpriteBatch view transform last-wins for same-viewport / different-Begin-transform batches — DONE and VERIFIED (bgfx-OpenGL 2.1 + bgfx-Vulkan)
 
 | Field | Value |
 |---|---|
-| Sev / Pri / Owner / Status | LOW / P3 / GRAPHICS / **NOT STARTED (recorded, deferred)** |
-| Root cause | `EnsureViewState` bakes `SpriteBatch.Begin(transformMatrix)` into the sprite view's PER-VIEW `setViewTransform` (`orthoWithTransform = transformColMajor * ortho`). Two SpriteBatch batches that share the same `GraphicsDevice.Viewport` but pass DIFFERENT transform matrices in one un-advanced frame submit to the SAME view id (GFX-065's ordered segmentation keys segments on the VIEWPORT only — a viewport change starts a new segment, a transform-only change does not), so the last batch's `setViewTransform` wins for both. Same bgfx view-global-state last-wins class GFX-065 fixed for the viewport rect, one residual axis (the view transform) not covered. |
-| Evidence | bgfx `setViewTransform` is per-view; GFX-065's `SelectViewportSegment` compares only the viewport rect. |
-| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (`SelectViewportSegment` segment key / `EnsureViewState`) |
-| Backends / Platforms | Bgfx / ALL |
-| Why separable / not fixed here | Would extend the GFX-065 segment key to also include the sprite transform (start a new ordered segment when the transform changes even if the viewport is unchanged), or give each SpriteBatch batch its own view. Independent of the viewport fix and very rare (same device viewport + different `Begin` transform + same frame); recorded to keep the bgfx view-global-state inventory complete. |
-| Suggested fix | Include `spriteTransform_` in `SelectViewportSegment`'s active-segment key so a transform change (sprite path) allocates a new ordered segment, mirroring the viewport-change path. |
+| Sev / Pri / Owner / Status | LOW / P3 / GRAPHICS / **DONE and VERIFIED (bgfx-OpenGL 2.1, Xvfb :99 + bgfx-Vulkan, real GPU :0)** |
+| Commits | test `0e68f0dc`, fix `da8dda88`, docs (this entry) |
+| Affected files | `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` (`SelectViewportSegment` gains a `spritePath` flag + transform key; `SubmitSprite`/`ApplyViewportOverride` call sites), `include/.../BgfxGraphicsBackend.hpp` (`segCurSpriteTransform*` members + signature), `examples/bgfx_spritebatch_transform_test.cpp` (new), `cmake/Tests/BgfxTests.cmake` (registration). **No shader/generated-artifact diff.** |
+| Backends / Platforms | Bgfx / ALL (verified bgfx-OpenGL 2.1 + bgfx-Vulkan) |
+
+**Root cause (confirmed at runtime).** `EnsureViewState` bakes `SpriteBatch.Begin(transformMatrix)` (stored in
+`spriteTransform_`) into the sprite view's PER-VIEW `bgfx::setViewTransform` — `orthoWithTransform =
+transformColMajor * ortho` (line 1463, the file's **only** `setViewTransform` call). bgfx resolves per-view
+state once at `bgfx::frame()` (last-write-wins). GFX-065's ordered segmentation keyed segments on the VIEWPORT
+only (`SelectViewportSegment` compared just the viewport rect), so two SpriteBatch batches that share the same
+`GraphicsDevice.Viewport` but pass DIFFERENT transforms in one un-advanced frame submitted to the SAME view id
+→ the last batch's `setViewTransform` won for BOTH; the first batch's sprites rendered under the wrong (last)
+transform. One residual axis of the same bgfx view-global-state last-wins class GFX-065 fixed for the viewport.
+
+**Pre-fix runtime signature (`Bgfx_SpriteBatch_Transform` 11/21, IDENTICAL on bgfx-OpenGL and bgfx-Vulkan).**
+Same full viewport, two batches in one frame: RED at `Begin(translation A)`, GREEN at `Begin(translation B)`.
+Pre-fix RED renders at **B's** transformed location (last-wins) and is covered by GREEN → RED's own location is
+BLACK (0 red px). Reproduced on every axis: translation (A: 0 red px), A→B→A ordering (B: the middle transform's
+region is lost/black), scale (C: the 0.5-scale batch renders unscaled at the last-wins identity → wrong place),
+RenderTarget2D (E: 0 red px), 32 distinct transforms (F: all collapse onto the last transform → **1/32** visible),
+viewport+transform composition (G: the first same-viewport transform is lost inside a multi-viewport frame),
+default/identity/custom (H: the default & identity batches are shifted by the trailing custom batch's transform).
+
+**Exact `setViewTransform` state that was overwritten.** For a sprite view, the view-global matrix is
+`orthoWithTransform = spriteTransform_(colMajor) · ortho`, where `ortho` is `bx::mtxOrtho` built from the sprite
+view's full size and (GFX-072) an offset for a custom viewport. Only `spriteTransform_` varies between two
+same-viewport batches (ortho is fixed by target+viewport), so the value stomped is precisely the earlier batch's
+`spriteTransform_·ortho`, replaced by the later batch's.
+
+**Affected SpriteBatch paths.** All of them — the single `SubmitSprite`→`EnsureViewState`→`setViewTransform`
+path serves every `SpriteBatch.Draw`/`DrawString` (Deferred/Immediate/sort modes all funnel through it), on the
+backbuffer and on RenderTarget2D/Cube/MRT (each target owns a base view id; the sprite path segments within it).
+
+**Generic 3D did NOT have the same problem (verified, not merely asserted).** `bgfx::setViewTransform` has
+exactly one caller (`EnsureViewState`, the sprite/clear view setup). The 3D draw sites
+(`DrawUserPrimitives`/`DrawPrimitives`/indexed/etc.) call `ApplyViewportOverride` (→ `setViewRect`) but **never**
+`setViewTransform`; they supply their own world-view-projection per draw via a uniform and ignore bgfx's built-in
+view/proj. So the residual view-global last-wins case really is SpriteBatch-only (GFX-065's inventory claim,
+now confirmed). No new finding.
+
+**Fix — extend the ordered segment key to the sprite view transform (sprite path only).**
+`SelectViewportSegment(bool spritePath)`: the active segment now also tracks a SpriteBatch view-transform identity
+(`segCurSpriteTransformValid_` + `segCurSpriteTransform_`). On the **sprite** path (`SubmitSprite` →
+`SelectViewportSegment(true)`), a batch reuses the active view only when the viewport matches AND (the segment has
+no committed sprite transform yet — e.g. it was established by a 3D draw/Clear, so the sprite adopts it — OR the
+committed transform equals this batch's); otherwise it allocates the next ordered segment view, exactly like a
+viewport change (same `[192,255)` recycled pool, `setViewFrameBuffer` + full rect + depth/stencil clear; the sprite
+path's `EnsureViewState` then resets that segment to `CLEAR_NONE` so it LOADs earlier colour and never clears
+depth). On the **3D** path (`ApplyViewportOverride` → `SelectViewportSegment(false)`) the transform is neither
+read nor committed (`segCurSpriteTransformValid_` stays false), so 3D behaviour is unchanged and a following sprite
+can still adopt a 3D-established view without churn.
+
+**Segment compatibility key (final).** A segment is reused iff: target/framebuffer identity matches
+(`ResetSegmentTarget`), viewport rect matches (GFX-063/065), AND — for a sprite submission — the committed sprite
+view transform matches (or is unset). A 3D submission ignores the transform axis. One ordered ViewId allocator
+(`AllocateSegmentViewId`, monotonic, recycled by `EndFrameSegments`); no second segmentation system.
+
+**Transform comparison strategy (Phase 8/13).** Keying on the raw `spriteTransform_` is **exactly** equivalent to
+keying on the effective `orthoWithTransform`: `ortho` is a pure, invertible function of the viewport + full size
+(both already in the key), so identical `(viewport, transform)` ⟺ identical effective view matrix — no divergence,
+single source of truth. `Matrix::operator==` is **exact per-component float equality**, so a default `Begin()`
+(which passes `Matrix::getIdentityProperty()`) and an explicit `Matrix::Identity` compare equal and reuse one
+segment, while a genuinely different transform always allocates — no epsilon merging of meaningfully different
+transforms, no unnecessary segment churn.
+
+**A→B→A result.** Section B (translation A → RED, B → GREEN, A → BLUE, A regions overlapping): post-fix BLUE (the
+2nd A batch, a NEW ordered segment — never merged back into the 1st A) wins in the A region and GREEN survives in
+the B region; base(A)→seg(B)→seg(A2) executes in submission order. **Same-transform reuse.** Section D: 70
+same-transform `Begin/Draw/End` cycles in ONE frame allocate ZERO segments (would exhaust the 63-id pool and throw
+if each Begin segmented) → no explosion; the last colour wins (ordering within the reused view). **Viewport+transform
+composition.** Section G: `(VpA,TxX)`, `(VpA,TxY)`, `(VpB,TxY)` all survive at distinct spots — GFX-065 (viewport)
+and GFX-084 (transform) segment axes compose. **RT result.** Section E (48×40 RenderTarget2D, two transforms, then
+sampled to the backbuffer): both batches survive (192 red + 192 green px); no backbuffer-state dependency; GFX-067
+sample orientation unchanged.
+
+**Clear / depth behaviour (Phase 21/22).** A transform-only sprite segment keeps GFX-065's sprite-segment rule:
+`EnsureViewState` sets `CLEAR_NONE` for any view id ≥ `kFirstSegmentViewId`, so it preserves earlier segments'
+colour and never clears depth (sprites don't depth-test). No new full-target clear; the base view still performs
+the requested `Clear`. Verified by the disjoint-gap-stays-black checks and the A→B→A colour-preservation checks.
+
+**Segment capacity / stress (Phase 27/44).** Transform changes now draw from the same 63-id `[192,255)` pool. Section
+F: 32 distinct transforms in one frame → 31 ordered segments (< 63), all 32 sprites land at their own spot
+(**32/32**); the pool recycles every frame across the settle loop (a monotonic leak would exhaust it and throw).
+Section D: 70 identical-state cycles → 1 view. `AllocateSegmentViewId` still throws deterministically on genuine
+exhaustion (no silent wrap).
+
+**Performance.** The common case is unchanged: one target / one viewport / one transform / repeated identical
+Begin/End → ZERO ephemeral segments (base view only). A new segment is allocated only for a genuine incompatible
+view-global transition (viewport OR sprite transform). Section D proves identical consecutive batches do not grow
+the segment count.
+
+**OpenGL / Vulkan matrix.** Defect AND fix are renderer-independent (bgfx view model): `Bgfx_SpriteBatch_Transform`
+**11/21 pre-fix and 21/21 post-fix on BOTH** bgfx-OpenGL 2.1 (Xvfb :99) and bgfx-Vulkan (real AMD Radeon 780M/RADV,
+:0). **Vulkan validation:** run under the KHRONOS validation layer (`VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation`,
+layer confirmed loaded) → 21/21 with **zero VUID / validation errors**.
+
+**Regression matrix (both renderers).** GFX-063 `Bgfx_RenderTarget_Viewport` 10/10, GFX-065 `Bgfx_MultiViewport`
+15/15, GFX-066 `Bgfx_RenderTarget_Scissor` 13/13, GFX-067 `Bgfx_RenderTarget_Orientation` 72/72, GFX-072
+`Bgfx_SpriteBatch_CustomViewport` 10/10, GFX-078 `Bgfx_RenderTarget_EffectTexture` 32/32, GFX-081
+`Bgfx_SpriteBatch_BeginRasterizerState` 4/4, existing `Bgfx_SpriteBatch_TransformMatrix` 2/2. Full `^Bgfx_` shard
+(bgfx-OpenGL) **121/125** — the 4 failures are the documented pre-existing bgfx-Vulkan→GL2.1-fallback
+`*MsaaResolve`/`RenderTargetCube_MipChain`/`*DepthFormat` env failures (unrelated to view segmentation).
+
+**Final bgfx view-global-state inventory (Phase 36/37).** `setViewRect` = viewport-keyed segment boundary
+(GFX-063/065); `setViewTransform` = sprite-transform-keyed segment boundary (GFX-084, this task) / not used by 3D;
+`setViewClear` = per-segment (base clears; sprite segments `CLEAR_NONE`; 3D viewport segments depth+stencil);
+`setViewFrameBuffer` = per-target/per-segment (`ResetSegmentTarget`); `setViewMode` / `setViewOrder` /
+`setViewScissor` = **never called** (bgfx defaults, constant, safe; per-draw `setScissor` is draw-local, GFX-066).
+**No remaining unexplained view-global last-wins state in the covered Bgfx paths.**
+
+| New findings | None. Confirmed generic 3D is immune (never programs `setViewTransform`); `setViewMode`/`setViewOrder` unused. |
 
 ---
 
