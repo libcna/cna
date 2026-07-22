@@ -16,6 +16,13 @@ uniform vec4 u_light2Diffuse;
 uniform vec4 u_envMapAmount;
 uniform vec4 u_envMapSpecular;
 uniform vec4 u_fogColor;
+uniform vec4 u_rtFlipV;
+
+// REMED-GFX-078: flip V for the 2D base texture when it is a render-target color source (bottom-up
+// FBO on originBottomLeft renderers -- see REMED-GFX-067); flip==0 leaves ordinary-texture sampling
+// byte-identical. The cube env-map is sampled by a reflection direction, not a 2D V, so it is not
+// flipped here (its orientation convention is separate -- see REMED-GFX-067 Phase 22 / GFX-078 cube).
+vec2 rtFlipUV(vec2 uv, float flip) { return vec2(uv.x, mix(uv.y, 1.0 - uv.y, flip)); }
 
 void main()
 {
@@ -30,7 +37,7 @@ void main()
     // (EmissiveColor + AmbientLightColor*DiffuseColor)*alpha from EnvironmentMapEffect.cpp, so
     // re-scaling it by DiffuseColor double-applied the diffuse tint.
     vec3 litRGB   = lightSum * u_diffuseColor.xyz + u_emissiveColor.xyz;
-    vec4 texColor  = texture2D(s_texColor, v_texcoord0);
+    vec4 texColor  = texture2D(s_texColor, rtFlipUV(v_texcoord0, u_rtFlipV.x));
     vec3 reflDir   = reflect(-E, N);
     vec4 envSample = textureCube(s_envMap, reflDir);
     vec3 baseColor = litRGB * texColor.xyz;

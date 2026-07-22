@@ -23,10 +23,15 @@ uniform vec4 u_specularColorPower; // xyz = material SpecularColor, w = Specular
 // (already set by BasicEffect's no-texture/dual-texture/alpha-test-colored paths) rather than a
 // new one -- bgfx uniforms are shared by name across every program (Task 888 precedent).
 uniform vec4 u_vertexColorEnabled3D;
+uniform vec4 u_rtFlipV;
+
+// REMED-GFX-078: flip V for a render-target color source (bottom-up FBO on originBottomLeft
+// renderers -- see REMED-GFX-067); flip==0 leaves ordinary-texture sampling byte-identical.
+vec2 rtFlipUV(vec2 uv, float flip) { return vec2(uv.x, mix(uv.y, 1.0 - uv.y, flip)); }
 
 void main()
 {
-    vec4 tex  = texture2D(s_texColor, v_texcoord0);
+    vec4 tex  = texture2D(s_texColor, rtFlipUV(v_texcoord0, u_rtFlipV.x));
     vec3 N    = normalize(v_normal);
     vec3 E    = normalize(u_eyePos.xyz - v_worldPos);
     vec3 nL0 = normalize(u_light0Dir.xyz);

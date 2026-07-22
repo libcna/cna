@@ -10,10 +10,15 @@ SAMPLER2D(s_texColor, 0);
 uniform vec4 u_fogColor;
 // CNB-67 (Phase 13C) Bgfx port: see fs_skinned3d.sc's identical comment.
 uniform vec4 u_vertexColorEnabled3D;
+uniform vec4 u_rtFlipV;
+
+// REMED-GFX-078: flip V for a render-target color source (bottom-up FBO on originBottomLeft
+// renderers -- see REMED-GFX-067); flip==0 leaves ordinary-texture sampling byte-identical.
+vec2 rtFlipUV(vec2 uv, float flip) { return vec2(uv.x, mix(uv.y, 1.0 - uv.y, flip)); }
 
 void main()
 {
-    vec4 tex = texture2D(s_texColor, v_texcoord0);
+    vec4 tex = texture2D(s_texColor, rtFlipUV(v_texcoord0, u_rtFlipV.x));
     vec4 vc = mix(vec4(1.0, 1.0, 1.0, 1.0), v_vertexColor0, u_vertexColorEnabled3D.x);
     // REMED-GFX-008: v_litRGB already bakes in DiffuseColor (lightSum*DiffuseColor + EmissiveColor),
     // so it must NOT be multiplied by v_color0 (=DiffuseColor) again; v_color0.a still carries alpha.

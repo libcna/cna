@@ -406,10 +406,46 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::SubmitViewProgram(bgfx::ProgramHandle program)
     {
+        // REMED-GFX-078: upload the per-slot render-target V-flip flags accumulated by
+        // BindSamplerSlot for this draw (all-zero = ordinary textures, sampling unchanged), then
+        // clear them so the next draw starts fresh. bgfx resets uniform state per submit(), so like
+        // the fog/depth-bias uniforms this must be set right before the submit; programs that don't
+        // declare u_rtFlipV simply ignore it.
+        if (bgfx::isValid(rtFlipVUnif_))
+            bgfx::setUniform(rtFlipVUnif_, rtFlipV_);
         if (bgfx::isValid(activeOcclusionQuery_))
             bgfx::submit(currentViewId_, program, activeOcclusionQuery_);
         else
             bgfx::submit(currentViewId_, program);
+        rtFlipV_[0] = rtFlipV_[1] = rtFlipV_[2] = rtFlipV_[3] = 0.0f;
+    }
+
+    // REMED-GFX-078: safe replacement for the former static_cast<const BgfxTextureBackend&> at every
+    // 3D-effect sampler slot. `texture` (params.texture0/1, PBR maps, dual-texture, env-map's 2D
+    // base) may be a BgfxTextureBackend OR a BgfxRenderTargetBackend (a RenderTarget2D used as an
+    // effect texture -- legal XNA, since RenderTarget2D is-a Texture2D). Those are unrelated sibling
+    // classes, so the old downcast was UB that read the wrong pooled handle for a render target;
+    // both implement IBgfxSamplable, so the real handle is resolved through that. When the source is
+    // a render-target color attachment on an originBottomLeft renderer, the slot (0-3) is recorded in
+    // rtFlipV_ so the shader V-flips its sample (REMED-GFX-067's bottom-up-FBO compensation, applied
+    // here at the generic-effect UV instead of at SpriteBatch's CPU-side quad).
+    void BgfxGraphicsBackend::BindSamplerSlot(int slot, bgfx::UniformHandle sampler,
+                                              const ITextureBackend* texture,
+                                              bgfx::TextureHandle fallback)
+    {
+        if (!bgfx::isValid(sampler)) return;
+        bgfx::TextureHandle handle = fallback;
+        if (texture)
+        {
+            if (const auto* samplable = dynamic_cast<const IBgfxSamplable*>(texture))
+            {
+                handle = samplable->GetBgfxTextureHandle();
+                if (samplable->IsRenderTargetColorSource() && slot >= 0 && slot < 4
+                    && bgfx::getCaps()->originBottomLeft)
+                    rtFlipV_[slot] = 1.0f;
+            }
+        }
+        bgfx::setTexture(static_cast<uint8_t>(slot), sampler, handle, samplerFlags_[slot]);
     }
 
     // Task 914: advances bgfx frames until the given target frame number (as returned by
@@ -1180,6 +1216,8 @@ namespace CNA::Internal::Backends::Bgfx
                 metallicRoughnessSampler_    = bgfx::createUniform("s_texMetallicRoughness",  bgfx::UniformType::Sampler);
                 emissiveMapSampler_          = bgfx::createUniform("s_texEmissive",           bgfx::UniformType::Sampler);
                 occlusionMapSampler_         = bgfx::createUniform("s_texOcclusion",          bgfx::UniformType::Sampler);
+                // REMED-GFX-078: per-slot render-target V-flip flags (see rtFlipV_ / BindSamplerSlot).
+                rtFlipVUnif_                 = bgfx::createUniform("u_rtFlipV",               bgfx::UniformType::Vec4);
 
                 // 1x1 opaque white fallback texture (Task 379) — sampled whenever a draw's
                 // texture0 is null, matching EasyGL/Vulkan's identical fallback.
@@ -2267,68 +2305,15 @@ namespace CNA::Internal::Backends::Bgfx
     // make (1,1,1,1) the correct "map absent" value.
     void BgfxGraphicsBackend::BindPbrTextures(const GpuDrawParams& params)
     {
-        if (bgfx::isValid(normalMapSampler_))
-        {
-            if (params.pbrNormalMap)
-            {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrNormalMap);
-                bgfx::setTexture(1, normalMapSampler_, tex.textureHandle, samplerFlags_[1]);
-            }
-            else
-            {
-                bgfx::setTexture(1, normalMapSampler_, defaultFlatNormalTexture3D_, samplerFlags_[1]);
-            }
-        }
-        if (bgfx::isValid(metallicRoughnessSampler_))
-        {
-            if (params.pbrMetallicRoughnessMap)
-            {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrMetallicRoughnessMap);
-                bgfx::setTexture(2, metallicRoughnessSampler_, tex.textureHandle, samplerFlags_[2]);
-            }
-            else
-            {
-                bgfx::setTexture(2, metallicRoughnessSampler_, defaultWhiteTexture3D_, samplerFlags_[2]);
-            }
-        }
-        if (bgfx::isValid(emissiveMapSampler_))
-        {
-            if (params.pbrEmissiveMap)
-            {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrEmissiveMap);
-                bgfx::setTexture(3, emissiveMapSampler_, tex.textureHandle, samplerFlags_[3]);
-            }
-            else
-            {
-                bgfx::setTexture(3, emissiveMapSampler_, defaultWhiteTexture3D_, samplerFlags_[3]);
-            }
-        }
-        if (bgfx::isValid(occlusionMapSampler_))
-        {
-            if (params.pbrOcclusionMap)
-            {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrOcclusionMap);
-                bgfx::setTexture(4, occlusionMapSampler_, tex.textureHandle, samplerFlags_[4]);
-            }
-            else
-            {
-                bgfx::setTexture(4, occlusionMapSampler_, defaultWhiteTexture3D_, samplerFlags_[4]);
-            }
-        }
-        if (bgfx::isValid(texColor3DSampler_))
-        {
-            if (params.texture0)
-            {
-                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-            }
-            else
-            {
-                // Task 379: fall back to opaque white instead of leaving the previous draw's
-                // texture bound (matches EasyGL/Vulkan's identical fallback).
-                bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-            }
-        }
+        // REMED-GFX-078: each slot resolved through IBgfxSamplable (see BindSamplerSlot) so a
+        // RenderTarget2D set as any PBR map binds its real handle instead of UB-casting to
+        // BgfxTextureBackend. Slots 1-4 are bound before slot 0 so slot 0 stays active last
+        // (matching EasyGL's unit ordering). Fallbacks are each map's "absent" constant.
+        BindSamplerSlot(1, normalMapSampler_,           params.pbrNormalMap,            defaultFlatNormalTexture3D_);
+        BindSamplerSlot(2, metallicRoughnessSampler_,   params.pbrMetallicRoughnessMap, defaultWhiteTexture3D_);
+        BindSamplerSlot(3, emissiveMapSampler_,         params.pbrEmissiveMap,          defaultWhiteTexture3D_);
+        BindSamplerSlot(4, occlusionMapSampler_,        params.pbrOcclusionMap,         defaultWhiteTexture3D_);
+        BindSamplerSlot(0, texColor3DSampler_,          params.texture0,                defaultWhiteTexture3D_);
     }
 
     static uint64_t ToTopologyFlag(PrimitiveType p)
@@ -2489,67 +2474,27 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
-            if (bgfx::isValid(texColor3DSampler2_))
-            {
-                if (params.texture1)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
-                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
-                }
-                else
-                {
-                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
-                    // instead of leaving the previous draw's texture bound.
-                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
+            // REMED-GFX-078: DualTextureEffect's second layer -- same IBgfxSamplable resolution as
+            // slot 0, so each of the two slots independently binds a RenderTarget2D safely and gets
+            // its own per-slot V-flip flag (u_rtFlipV.y here). Null falls back to opaque white.
+            BindSamplerSlot(1, texColor3DSampler2_, params.texture1, defaultWhiteTexture3D_);
             SubmitViewProgram(dualTextureColored3DProgram_);
         }
         else if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
-            if (bgfx::isValid(texColor3DSampler2_))
-            {
-                if (params.texture1)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
-                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
-                }
-                else
-                {
-                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
-                    // instead of leaving the previous draw's texture bound.
-                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
+            // REMED-GFX-078: DualTextureEffect's second layer -- same IBgfxSamplable resolution as
+            // slot 0, so each of the two slots independently binds a RenderTarget2D safely and gets
+            // its own per-slot V-flip flag (u_rtFlipV.y here). Null falls back to opaque white.
+            BindSamplerSlot(1, texColor3DSampler2_, params.texture1, defaultWhiteTexture3D_);
             SubmitViewProgram(dualTexture3DProgram_);
         }
         else if (params.pbr && params.skinned && bgfx::isValid(pbrSkinned3DProgram_))
@@ -2695,20 +2640,10 @@ namespace CNA::Internal::Backends::Bgfx
             // (1, 2, or 4) weight/index pairs.
             float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             // Task 1104: XNA's real SkinnedEffect default is per-vertex lighting
             // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
             // vertex-lit sibling failed to compile on this renderer.
@@ -2757,20 +2692,10 @@ namespace CNA::Internal::Backends::Bgfx
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
                                    params.envMapSpecular[2], params.fresnelFactor };
             bgfx::setUniform(envMapSpecularUnif_, specular);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             if (params.envMap && bgfx::isValid(envMapSampler_))
             {
                 // Task 907 (closes Task 874): dynamic_cast to the common cube-samplable
@@ -2791,40 +2716,20 @@ namespace CNA::Internal::Backends::Bgfx
             float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(alphaTestColoredTextured3DProgram_);
         }
         else if (alphaTestActive && bgfx::isValid(alphaTest3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(alphaTest3DProgram_);
         }
         else if (params.lightingEnabled && bgfx::isValid(litTextured3DProgram_))
@@ -2877,20 +2782,10 @@ namespace CNA::Internal::Backends::Bgfx
                                          params.specularColor[2], params.specularPower };
             bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
 
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             // Task 1104: XNA's real BasicEffect default is per-vertex lighting
             // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
             // vertex-lit sibling failed to compile on this renderer.
@@ -2903,39 +2798,19 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(coloredTextured3DProgram_);
         }
         else if (params.textureEnabled && bgfx::isValid(textured3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(textured3DProgram_);
         }
         else
@@ -3016,67 +2891,27 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
-            if (bgfx::isValid(texColor3DSampler2_))
-            {
-                if (params.texture1)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
-                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
-                }
-                else
-                {
-                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
-                    // instead of leaving the previous draw's texture bound.
-                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
+            // REMED-GFX-078: DualTextureEffect's second layer -- same IBgfxSamplable resolution as
+            // slot 0, so each of the two slots independently binds a RenderTarget2D safely and gets
+            // its own per-slot V-flip flag (u_rtFlipV.y here). Null falls back to opaque white.
+            BindSamplerSlot(1, texColor3DSampler2_, params.texture1, defaultWhiteTexture3D_);
             SubmitViewProgram(dualTextureColored3DProgram_);
         }
         else if (params.dualTexture && bgfx::isValid(dualTexture3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
-            if (bgfx::isValid(texColor3DSampler2_))
-            {
-                if (params.texture1)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture1);
-                    bgfx::setTexture(1, texColor3DSampler2_, tex.textureHandle, samplerFlags_[1]);
-                }
-                else
-                {
-                    // Task 387: same fallback as slot 0 (Task 379) -- fall back to opaque white
-                    // instead of leaving the previous draw's texture bound.
-                    bgfx::setTexture(1, texColor3DSampler2_, defaultWhiteTexture3D_, samplerFlags_[1]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
+            // REMED-GFX-078: DualTextureEffect's second layer -- same IBgfxSamplable resolution as
+            // slot 0, so each of the two slots independently binds a RenderTarget2D safely and gets
+            // its own per-slot V-flip flag (u_rtFlipV.y here). Null falls back to opaque white.
+            BindSamplerSlot(1, texColor3DSampler2_, params.texture1, defaultWhiteTexture3D_);
             SubmitViewProgram(dualTexture3DProgram_);
         }
         else if (params.pbr && params.skinned && bgfx::isValid(pbrSkinned3DProgram_))
@@ -3222,20 +3057,10 @@ namespace CNA::Internal::Backends::Bgfx
             // (1, 2, or 4) weight/index pairs.
             float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             // Task 1104: XNA's real SkinnedEffect default is per-vertex lighting
             // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
             // vertex-lit sibling failed to compile on this renderer.
@@ -3284,20 +3109,10 @@ namespace CNA::Internal::Backends::Bgfx
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
                                    params.envMapSpecular[2], params.fresnelFactor };
             bgfx::setUniform(envMapSpecularUnif_, specular);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             if (params.envMap && bgfx::isValid(envMapSampler_))
             {
                 // Task 907 (closes Task 874): dynamic_cast to the common cube-samplable
@@ -3318,40 +3133,20 @@ namespace CNA::Internal::Backends::Bgfx
             float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(alphaTestColoredTextured3DProgram_);
         }
         else if (alphaTestActive && bgfx::isValid(alphaTest3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(alphaTest3DProgram_);
         }
         else if (params.lightingEnabled && bgfx::isValid(litTextured3DProgram_))
@@ -3404,20 +3199,10 @@ namespace CNA::Internal::Backends::Bgfx
                                          params.specularColor[2], params.specularPower };
             bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
 
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             // Task 1104: XNA's real BasicEffect default is per-vertex lighting
             // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
             // vertex-lit sibling failed to compile on this renderer.
@@ -3430,39 +3215,19 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float vcEn[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(vertexColorEn3DUnif_, vcEn);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(coloredTextured3DProgram_);
         }
         else if (params.textureEnabled && bgfx::isValid(textured3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
-            if (bgfx::isValid(texColor3DSampler_))
-            {
-                if (params.texture0)
-                {
-                    auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
-                    bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
-                }
-                else
-                {
-                    // Task 379: fall back to opaque white instead of leaving the previous
-                    // draw's texture bound (matches EasyGL/Vulkan's identical fallback).
-                    bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
-                }
-            }
+            // REMED-GFX-078: resolve through IBgfxSamplable (see BindSamplerSlot) so a RenderTarget2D
+            // set as this effect's texture binds its real handle instead of UB-casting to
+            // BgfxTextureBackend; null falls back to opaque white (Task 379).
+            BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);
             SubmitViewProgram(textured3DProgram_);
         }
         else

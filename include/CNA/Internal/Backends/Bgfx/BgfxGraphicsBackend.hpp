@@ -557,6 +557,19 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle metallicRoughnessSampler_    = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle emissiveMapSampler_          = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle occlusionMapSampler_         = BGFX_INVALID_HANDLE;
+        // REMED-GFX-078: u_rtFlipV -- per-slot (x=slot0, y=slot1, z=slot2, w=slot3) "this sampler
+        // reads a render-target color source that must be V-flipped" flag. A RenderTarget2D's FBO
+        // color memory is bottom-up on originBottomLeft renderers (OpenGL/GLES/WebGL), so the 3D
+        // effect shaders flip the sampled V for flagged slots -- the generic-effect counterpart of
+        // REMED-GFX-067's SpriteBatch sample-stage flip. 0 for ordinary textures (sampling
+        // unchanged) and for every slot on Vulkan/D3D/Metal (originBottomLeft=false), so ordinary
+        // Texture2D output is byte-identical on all renderers. See BindSamplerSlot / SubmitViewProgram.
+        bgfx::UniformHandle rtFlipVUnif_                 = BGFX_INVALID_HANDLE;
+        // Per-draw scratch: accumulated by BindSamplerSlot before each 3D submit, uploaded to
+        // rtFlipVUnif_ and cleared inside SubmitViewProgram. Slot 4 (PBR occlusion) is intentionally
+        // outside this vec4 -- a live RenderTarget2D as a PBR occlusion map is not a real material
+        // and is left un-compensated; its cast is still made type-safe (no UB).
+        float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         /// Tangent-space "flat normal" (0,0,1) encoded as RGB (128,128,255) -- fallback for
         /// PbrEffect::NormalMap when unbound, matching EasyGLGraphicsBackend::
         /// EnsureDefaultFlatNormalTexture()'s identical rationale. The other 3 PBR map fallbacks
@@ -708,6 +721,15 @@ namespace CNA::Internal::Backends::Bgfx
         /// the unskinned and skinned PBR program variants (4 call sites), unlike this file's
         /// other per-branch texture-binding blocks (which bind only 1-2 units each).
         void BindPbrTextures(const GpuDrawParams& params);
+
+        // REMED-GFX-078: binds a Texture2D-or-RenderTarget2D effect texture to a 3D sampler slot
+        // through IBgfxSamplable (never the invalid static_cast<const BgfxTextureBackend&>, which is
+        // UB for a RenderTarget2D whose backend is the unrelated sibling BgfxRenderTargetBackend).
+        // Resolves the real pooled handle, falls back to the given "map absent" default when texture
+        // is null, and -- for a render-target color source on an originBottomLeft renderer -- records
+        // the slot in rtFlipV_ (slots 0-3) so SubmitViewProgram's u_rtFlipV upload V-flips it.
+        void BindSamplerSlot(int slot, bgfx::UniformHandle sampler,
+                             const ITextureBackend* texture, bgfx::TextureHandle fallback);
 
         // Task 448: submits a 3D draw call's already-configured bgfx state to currentViewId_,
         // routing through bgfx's occlusion-query submit() overload when activeOcclusionQuery_ is

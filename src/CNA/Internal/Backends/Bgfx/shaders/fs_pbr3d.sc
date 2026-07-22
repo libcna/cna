@@ -29,6 +29,14 @@ uniform vec4 u_light2Diffuse;
 uniform vec4 u_eyePos;
 uniform vec4 u_alphaTest;
 uniform vec4 u_fogColor;
+// REMED-GFX-078: per-slot V-flip for render-target color sources (bottom-up FBO on originBottomLeft
+// renderers -- see REMED-GFX-067). x=base color(0), y=normal(1), z=metallic-roughness(2),
+// w=emissive(3). The occlusion map (slot 4) is intentionally NOT covered -- a live RenderTarget2D as
+// a PBR occlusion map is not a real material and is left un-compensated (its bind is still type-safe,
+// no UB). flip==0 leaves ordinary-texture sampling byte-identical.
+uniform vec4 u_rtFlipV;
+
+vec2 rtFlipUV(vec2 uv, float flip) { return vec2(uv.x, mix(uv.y, 1.0 - uv.y, flip)); }
 
 vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
 {
@@ -51,7 +59,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
 
 void main()
 {
-    vec4 baseColorTex = texture2D(s_texColor, v_texcoord0);
+    vec4 baseColorTex = texture2D(s_texColor, rtFlipUV(v_texcoord0, u_rtFlipV.x));
     vec3 albedo = baseColorTex.rgb * u_diffuseColor.rgb;
     float alpha = baseColorTex.a * u_diffuseColor.a;
 
@@ -59,10 +67,10 @@ void main()
     vec3 T = normalize(v_tangent.xyz - N * dot(N, v_tangent.xyz));
     vec3 B = cross(N, T) * v_tangent.w;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture2D(s_texNormal, v_texcoord0).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture2D(s_texNormal, rtFlipUV(v_texcoord0, u_rtFlipV.y)).rgb * 2.0 - 1.0;
     vec3 finalNormal = normalize(mul(TBN, sampledNormal));
 
-    vec4 mr = texture2D(s_texMetallicRoughness, v_texcoord0);
+    vec4 mr = texture2D(s_texMetallicRoughness, rtFlipUV(v_texcoord0, u_rtFlipV.z));
     float roughness = clamp(mr.g * u_metallicRoughnessFactor.y, 0.045, 1.0);
     float metallic  = clamp(mr.b * u_metallicRoughnessFactor.x, 0.0, 1.0);
 
@@ -76,7 +84,7 @@ void main()
 
     float occlusion = texture2D(s_texOcclusion, v_texcoord0).r;
     vec3 ambient = u_ambientColor.xyz * albedo * occlusion;
-    vec3 emissive = u_emissiveColor.xyz * texture2D(s_texEmissive, v_texcoord0).rgb;
+    vec3 emissive = u_emissiveColor.xyz * texture2D(s_texEmissive, rtFlipUV(v_texcoord0, u_rtFlipV.w)).rgb;
 
     vec4 result = vec4(ambient + Lo + emissive, alpha);
 
