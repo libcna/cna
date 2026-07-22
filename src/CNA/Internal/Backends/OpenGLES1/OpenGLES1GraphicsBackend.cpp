@@ -1079,11 +1079,15 @@ namespace CNA::Internal::Backends::OpenGLES1
         constexpr std::size_t kStrideTexture = 20;
         constexpr std::size_t kStrideColorTexture = 24;
         constexpr std::size_t kStrideNormalTexture = 32;
+        // Position(12) + TexCoord0(8) + TexCoord1(8): the only layout carrying two independent UV
+        // sets, which DualTextureEffect's own vertex format uses.
+        constexpr std::size_t kStrideDualTexture = 28;
 
         // `stride`-relative offsets, not raw pointers -- OPENGLES1-73's real VBO is bound to
         // GL_ARRAY_BUFFER by the caller first, so glVertexPointer/glColorPointer/glTexCoordPointer/
         // glNormalPointer all interpret their pointer argument as a byte offset into it.
-        void SetupClientArraysForStride(std::size_t stride, bool wantColor, bool wantTexture, bool wantNormal)
+        void SetupClientArraysForStride(std::size_t stride, bool wantColor, bool wantTexture,
+                                        bool wantNormal, bool wantDualTexture = false)
         {
             glVertexPointer(3, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(std::size_t{0}));
 
@@ -1099,12 +1103,30 @@ namespace CNA::Internal::Backends::OpenGLES1
 
             if (wantTexture)
             {
+                // The dual-UV layout carries TexCoord0 right after the position and TexCoord1 after
+                // that; every other layout has a single UV set in its last 8 bytes, which both
+                // texture units then share.
+                const bool dualUv = (stride == kStrideDualTexture);
+                const std::size_t uv0Offset = dualUv ? 12 : stride - 8;
+                const std::size_t uv1Offset = dualUv ? 20 : stride - 8;
+
+                glClientActiveTexture(GL_TEXTURE0);
                 glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-                const std::size_t uvOffset = stride - 8;
-                glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uvOffset));
+                glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uv0Offset));
+
+                if (wantDualTexture)
+                {
+                    glClientActiveTexture(GL_TEXTURE1);
+                    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+                    glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uv1Offset));
+                }
+
+                // Leave unit 0 selected so later client-array calls have a predictable target.
+                glClientActiveTexture(GL_TEXTURE0);
             }
             else
             {
+                glClientActiveTexture(GL_TEXTURE0);
                 glDisableClientState(GL_TEXTURE_COORD_ARRAY);
             }
 
@@ -1163,13 +1185,9 @@ namespace CNA::Internal::Backends::OpenGLES1
             glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
             glTexEnvf(GL_TEXTURE_ENV, GL_ALPHA_SCALE, 1.0f);
 
-            const std::size_t uvOffset = stride - 8;
-            glClientActiveTexture(GL_TEXTURE0);
-            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-            glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uvOffset));
-            glClientActiveTexture(GL_TEXTURE1);
-            glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-            glTexCoordPointer(2, GL_FLOAT, static_cast<GLsizei>(stride), reinterpret_cast<const void*>(uvOffset));
+            // Client-side array pointers are deliberately NOT set here: glTexCoordPointer captures
+            // whatever GL_ARRAY_BUFFER is bound when it is called, and the vertex buffer is not
+            // bound until after this function runs. SetupClientArraysForStride() does it instead.
             glClientActiveTexture(GL_TEXTURE0);
         }
 
@@ -1450,7 +1468,8 @@ namespace CNA::Internal::Backends::OpenGLES1
         // PBR/custom-shader/instancing (see docs/opengles1-backend.md's "Important limitations").
         const bool wantDualTexture = params.dualTexture && params.texture0 && params.texture1
                                     && SupportsSecondTextureUnit()
-                                    && (stride == kStrideTexture || stride == kStrideColorTexture);
+                                    && (stride == kStrideTexture || stride == kStrideColorTexture
+                                        || stride == kStrideDualTexture);
         const bool wantEnvMap = params.envMapping && params.envMap && cubeMapSupported_
                                && stride == kStrideNormalTexture;
 
@@ -1540,7 +1559,8 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         vb.Bind();
         glEnableClientState(GL_VERTEX_ARRAY);
-        SetupClientArraysForStride(stride, wantColorArray, wantTexture || wantDualTexture || wantEnvMap, wantNormal);
+        SetupClientArraysForStride(stride, wantColorArray, wantTexture || wantDualTexture || wantEnvMap,
+                                   wantNormal, wantDualTexture);
 
         if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))
             DrawWireframeLines(BuildWireframeLineIndices(primitive, primitiveCount, nullptr));
@@ -1562,7 +1582,8 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         const bool wantDualTexture = params.dualTexture && params.texture0 && params.texture1
                                     && SupportsSecondTextureUnit()
-                                    && (stride == kStrideTexture || stride == kStrideColorTexture);
+                                    && (stride == kStrideTexture || stride == kStrideColorTexture
+                                        || stride == kStrideDualTexture);
         const bool wantEnvMap = params.envMapping && params.envMap && cubeMapSupported_
                                && stride == kStrideNormalTexture;
 
@@ -1644,7 +1665,8 @@ namespace CNA::Internal::Backends::OpenGLES1
 
         vb.Bind();
         glEnableClientState(GL_VERTEX_ARRAY);
-        SetupClientArraysForStride(stride, wantColorArray, wantTexture || wantDualTexture || wantEnvMap, wantNormal);
+        SetupClientArraysForStride(stride, wantColorArray, wantTexture || wantDualTexture || wantEnvMap,
+                                   wantNormal, wantDualTexture);
 
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         if (wireframe_ && (primitive == PrimitiveType::TriangleList || primitive == PrimitiveType::TriangleStrip))

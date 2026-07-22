@@ -163,8 +163,12 @@
      ES 1.1, `GL_MAX_TEXTURE_UNITS` queried at startup — gated on `>= 2`, since the ES 1.1 spec only
      guarantees 1) plus two `GL_COMBINE` texture-environment stages reproduce
      `dual_texture3d.frag.glsl`'s exact formula (`(tex0*2) * tex1 * diffuseTint`) with no
-     approximation — both units sample the *same* UV set (matches FNA's own vertex format: one
-     texture-coordinate pair, not two).
+     approximation. **Corrected 2026-07-22 (`OPENGLES1-81`):** this decision originally claimed
+     both units sample the *same* UV set, "matching FNA's own vertex format: one texture-coordinate
+     pair, not two". That was factually wrong — `DualTextureEffect`'s vertex format carries two
+     independent UV sets (Position(12) + TexCoord0(8) + TexCoord1(8) = 28 bytes), as the
+     `dualtexture_quad` oracle scene shows. Each unit now sources its own set; layouts with a
+     single UV set still share it between both units.
    - **`EnvironmentMapEffect`** (`OPENGLES1-74`): `GL_OES_texture_cube_map` bundles real cube-map
      texture storage **and** `glTexGeniOES(GL_TEXTURE_GEN_STR_OES, GL_TEXTURE_GEN_MODE_OES,
      GL_REFLECTION_MAP_OES)` — genuine fixed-function automatic reflection-vector texture-coordinate
@@ -296,7 +300,7 @@ interfaces is marked as such and deliberately scoped small.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| OPENGLES1-81 | **`DualTextureEffect` ignores the second texture-coordinate set.** Design decision 7 asserts both units sample the same UV set; the `dualtexture_quad` oracle scene proves otherwise -- it uses `vertexformat=PositionDualTexture` with two independent UV pairs, and the backend binds only one `glTexCoordPointer`, so unit 1 samples the wrong coordinates | ⬜ | Found by `OPENGLES1-78`'s corpus run (23716 differing pixels vs. EasyGL's 307). Needs a second `glClientActiveTexture`/`glTexCoordPointer` for the unit-1 UV set, and the stride gate widening past 20/24. Correct design decision 7's claim at the same time -- it is factually wrong. |
+| OPENGLES1-81 | **`DualTextureEffect` ignored the second texture-coordinate set.** | ✅ | Fixed 2026-07-22. Three compounding faults: the dispatch gate accepted only stride 20/24 so the real 28-byte dual-UV layout fell through to the plain colored path entirely; both units were pointed at the same `stride - 8` offset; and `SetupDualTexture` called `glTexCoordPointer` *before* `vb.Bind()`, so the pointers captured the wrong `GL_ARRAY_BUFFER`. Client-array setup now happens once, after the buffer is bound, with per-unit offsets (12/20 for the dual-UV layout, shared `stride - 8` otherwise). `dualtexture_quad` went 23716 -> **307** differing pixels, exactly matching EasyGL. Design decision 7's wrong claim corrected. New check in `OpenGLES1_MultitextureContextLoss_Readback` uses two *different* UV sets (verified to fail when the unit-1 offset is reverted); the pre-existing checks shared one set and structurally could not catch this. |
 | OPENGLES1-82 | **Linear fog diverges when `FogEnd <= FogStart`.** `fog_gradient_quad` sets `fogstart=0`, `fogend=-1`; GL's own `(end - z)/(end - start)` ramp then clamps to "no fog" while XNA/FNA produce a fully-fogged result | ⬜ | Also found by `OPENGLES1-78` (23716 differing pixels; EasyGL diverges too at 19661, so check FNA's own formula before assuming the ES1 side is at fault). |
 | OPENGLES1-83 | 32-bit index buffers via `GL_OES_element_index_uint` (`CreateIndexBuffer32`, `SetData32`, `IsThirtyTwoBit`) | ⬜ | Currently `CreateIndexBuffer32` falls back to the base class's 16-bit delegation, silently truncating meshes above 65535 vertices. Extension confirmed present. |
 | OPENGLES1-84 | `RenderTargetCube` + `SetRenderTargetCubeFace`/`BindAsRenderTargetFace` | ⬜ | Both prerequisites already used by this backend (`GL_OES_framebuffer_object` for `OPENGLES1-72`, `GL_OES_texture_cube_map` for `OPENGLES1-74`); needs per-face FBO colour attachment. |

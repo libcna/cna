@@ -8,7 +8,10 @@
 //   neither a plain modulate nor a single-texture fallback would produce...
 // Check B -- ...and darkening the second texture darkens the result, proving the second stage is
 //   genuinely sampled instead of ignored.
-// Check C -- EnvironmentMapEffect renders using its cube map.
+// Check C -- DualTextureEffect samples the SECOND texture-coordinate set for the second unit,
+//   not a copy of the first (OPENGLES1-81). Checks A/B use one shared UV set and therefore cannot
+//   tell a correct two-set implementation from one that ignores the second set entirely.
+// Check D -- EnvironmentMapEffect renders using its cube map.
 // Check D -- a simulated context loss followed by a restore leaves the device drawing correctly.
 // Check E -- ...and a texture uploaded before the loss still samples correctly afterwards, i.e.
 //   the backend really re-uploaded it rather than leaving a dead GL name bound...
@@ -43,6 +46,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -94,6 +99,24 @@ namespace
             { Vector3(1.0f, 1.0f, 0.0f), white, Vector2(1.0f, 0.0f) },
         };
         dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+    }
+
+    /// Position(12) + TexCoord0(8) + TexCoord1(8) -- the layout DualTextureEffect actually uses.
+    struct VertexPositionDualTexture
+    {
+        Vector3 Position;
+        Vector2 TextureCoordinate0;
+        Vector2 TextureCoordinate1;
+    };
+    static_assert(sizeof(VertexPositionDualTexture) == 28, "dual-UV vertex must stay 28 bytes");
+
+    VertexDeclaration dualTextureDeclaration()
+    {
+        return VertexDeclaration(28, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
     }
 
     void drawNormalQuad(GraphicsDevice& dev)
@@ -199,7 +222,55 @@ protected:
                   "DualTextureEffect -- darkening the second texture darkens the result");
         }
 
-        // ---- Check C: EnvironmentMapEffect -----------------------------------------------
+        // ---- Check C: the second UV set actually reaches the second texture unit ---------
+        if (!backend.SupportsSecondTextureUnit())
+        {
+            skip("DualTextureEffect -- second UV set (fewer than two texture units)");
+        }
+        else
+        {
+            // Unit 0 samples a 1x1 white texture, so UV0 cannot affect the result. Unit 1 samples a
+            // 2x1 red|blue texture through UV1 only. Feeding UV1 = 0.75 (right texel, blue) while
+            // UV0 stays 0 means a backend that wrongly points unit 1 at UV0 samples the LEFT texel
+            // and comes out red -- the two outcomes are unambiguous.
+            Texture2D splitTex = Texture2D::CreateFromPixels(dev, 2, 1, std::vector<std::uint8_t>{
+                255, 0, 0, 255,
+                0, 0, 255, 255,
+            });
+
+            auto decl = dualTextureDeclaration();
+            const VertexPositionDualTexture quad[6] = {
+                { Vector3(-1.0f, 1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(0.75f, 0.5f) },
+                { Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(0.75f, 0.5f) },
+                { Vector3(1.0f, -1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(0.75f, 0.5f) },
+                { Vector3(-1.0f, 1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(0.75f, 0.5f) },
+                { Vector3(1.0f, -1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(0.75f, 0.5f) },
+                { Vector3(1.0f, 1.0f, 0.0f), Vector2(0.0f, 0.0f), Vector2(0.75f, 0.5f) },
+            };
+
+            VertexBuffer vb(dev, decl, 6, BufferUsage::None);
+            vb.SetDataRaw(quad, 6, 28);   // no typed SetData overload for a dual-UV vertex
+
+            dev.Clear(Color::Black);
+            DualTextureEffect fx(dev);
+            fx.setWorldProperty(Matrix::getIdentityProperty());
+            fx.setViewProperty(Matrix::getIdentityProperty());
+            fx.setProjectionProperty(Matrix::getIdentityProperty());
+            fx.setTextureProperty(&whiteTex_);
+            fx.setTexture2Property(&splitTex);
+            dev.SetVertexBuffer(&vb);
+            fx.Apply();
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+
+            const Color got = readPixel(dev, mid, mid);
+            std::printf("       (dual texture, UV1=0.75 selects the blue texel = %d,%d,%d)\n",
+                        got.getRProperty(), got.getGProperty(), got.getBProperty());
+            check(got.getBProperty() > got.getRProperty(),
+                  "DualTextureEffect -- unit 1 samples its own UV set, not a copy of UV0");
+        }
+
+        // ---- Check D: EnvironmentMapEffect -----------------------------------------------
         {
             std::unique_ptr<TextureCube> cube;
             try
