@@ -167,6 +167,11 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     using PFNGL4VERTEXATTRIBPOINTERPROC     = void (*)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*);
     using PFNGL4ENABLEVERTEXATTRIBARRAYPROC = void (*)(GLuint);
     using PFNGL4DISABLEVERTEXATTRIBARRAYPROC= void (*)(GLuint);
+    // plan_opengl4.md GL4-22: SkinnedEffect's BlendIndices attribute is a real integer vertex
+    // attribute (bone indices, read as uvec4/ivec4 in GLSL) -- glVertexAttribPointer's implicit
+    // int-to-float conversion is wrong for this case, so the true GL 3.0 core
+    // glVertexAttribIPointer entry point is needed instead.
+    using PFNGL4VERTEXATTRIBIPOINTERPROC    = void (*)(GLuint, GLint, GLenum, GLsizei, const void*);
 
     using PFNGL4CREATESHADERPROC            = GLuint (*)(GLenum);
     using PFNGL4SHADERSOURCEPROC            = void (*)(GLuint, GLsizei, const GLchar4* const*, const GLint*);
@@ -249,6 +254,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4VERTEXATTRIBPOINTERPROC      gl4_glVertexAttribPointer;
     extern PFNGL4ENABLEVERTEXATTRIBARRAYPROC  gl4_glEnableVertexAttribArray;
     extern PFNGL4DISABLEVERTEXATTRIBARRAYPROC gl4_glDisableVertexAttribArray;
+    extern PFNGL4VERTEXATTRIBIPOINTERPROC     gl4_glVertexAttribIPointer;
 
     extern PFNGL4CREATESHADERPROC             gl4_glCreateShader;
     extern PFNGL4SHADERSOURCEPROC             gl4_glShaderSource;

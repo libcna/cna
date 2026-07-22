@@ -108,4 +108,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_environmentmapeffect examples/opengl4_environmentmapeffect_test.cpp)
     cna_register_backend_test(NAME OpenGL4_EnvironmentMapEffect COMMAND cna_test_opengl4_environmentmapeffect
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-22: SkinnedEffect -- a dedicated skinned3d GLSL program (new stride
+    # 52/56, VertexPositionNormalTextureSkinned + optional trailing Color), real GPU vertex
+    # skinning (weighted bone-matrix blend of position+normal, matching real XNA's
+    # Skin(vin,boneCount) formula), and OpenGL4VertexBufferBackend::ApplyLayout's new stride-52/56
+    # attribute cases (BlendIndices via the newly-loaded gl4_glVertexAttribIPointer).
+    cna_opengl4_test(cna_test_opengl4_skinnedeffect examples/opengl4_skinnedeffect_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_SkinnedEffect COMMAND cna_test_opengl4_skinnedeffect
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

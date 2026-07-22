@@ -220,6 +220,34 @@
 > real run — no backend or test bugs found. Full re-run of the other 12 OpenGL4 CTest suites
 > confirms no regression.
 >
+> **Status (2026-07-22): `GL4-22` (`SkinnedEffect`) landed and verified.**
+> A dedicated `skinned3d` GLSL 410 core program (**new** strides 52 and 56 —
+> `VertexPositionNormalTextureSkinned` and that layout plus a trailing `Color`) is selected by
+> `BindProgramForStride`. `OpenGL4VertexBufferBackend::ApplyLayout` gained the matching stride-52/
+> 56 attribute cases (position/normal/UV/blend-weight as `vec3`/`vec3`/`vec2`/`vec4`, blend-indices
+> as a genuine GLSL integer attribute via the newly-loaded `gl4_glVertexAttribIPointer` — plain
+> `glVertexAttribPointer`'s implicit int-to-float conversion would be wrong for values used to
+> subscript `uBones[]`, not blended as floats). Ported near-verbatim from `EasyGLGraphicsBackend
+> ::EnsureSkinnedProgram`'s GLSL ES 300 source, which already matches real XNA `SkinnedEffect.fx`'s
+> `Skin()` function: the skin matrix is the sum of only the first `WeightsPerVertex` (1, 2, or 4)
+> `uBones[index]*weight` pairs — never all 4 unconditionally (`Task 895`, a real bug already found
+> and fixed on the other backends; this port used the corrected formula from the start). The
+> lighting formula reuses `lit_textured3d`'s own already-correct 3-light Lambertian-diffuse +
+> Blinn-Phong-specular + `EmissiveColor` formula, plus a vertex-colour modulate gated by
+> `VertexColorEnabled` for the stride-56 layout. No fog (same deliberate deferral as every other 3D
+> stride variant on this backend). All 72 bone matrices upload via a single
+> `gl4_glUniformMatrix4fv(loc, params.boneCount, GL_FALSE, params.boneTransforms)` call — no
+> `GpuDrawParams`/`IGraphicsBackend.hpp` changes were needed, `boneTransforms`/`boneCount`/
+> `weightsPerVertex` already existed from earlier phases that implemented this effect on 5 other
+> backends. Verified by the new `OpenGL4_SkinnedEffect` CTest (5 checks across 4 scenarios): an
+> identity-bone no-op sanity check, a single-bone `Translate` genuinely displacing geometry, a
+> two-bone 0.5/0.5 weighted blend reaching the identical net shift a single bone alone could not
+> reach (decisive proof both weighted bones contribute, not just one), and `VertexColorEnabled`
+> genuinely gating the stride-56 `aColor` attribute (reusing the exact `(174,0,0)` cross-backend
+> oracle `easygl_skinnedeffect_vertexcolor_test.cpp` already established). All checks passed on the
+> first real run — no backend or test bugs found. Full re-run of the other 13 OpenGL4 CTest suites
+> confirms no regression.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -242,13 +270,11 @@
 > `SDL_GL_CONTEXT_PROFILE_MASK` attributes and the loader are portable, and macOS's 4.1 ceiling is
 > the reason this backend requests 4.1 rather than a higher minimum), not validation claims.
 >
-> **`SkinnedEffect`/`PbrEffect`** — neither implemented yet (`AlphaTestEffect`/`DualTextureEffect`
->   done, `GL4-19`; plain `Texture3D`/`TextureCube` done, `GL4-20`; `EnvironmentMapEffect` done,
->   `GL4-21`). `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done) unblocks these — each
->   needs its own shader variant/uniform wiring on top of the stride dispatch that now exists,
->   plus (for `SkinnedEffect`) a bone-palette uniform array and a new stride-52/56 vertex layout
->   `OpenGL4VertexBufferBackend::ApplyLayout` doesn't recognize yet (falls back to its own
->   documented position-only default case). ⬜
+> **`PbrEffect`** — not implemented yet (`AlphaTestEffect`/`DualTextureEffect` done, `GL4-19`;
+>   plain `Texture3D`/`TextureCube` done, `GL4-20`; `EnvironmentMapEffect` done, `GL4-21`;
+>   `SkinnedEffect` done, `GL4-22`). `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`, done)
+>   unblocks it — needs its own metallic-roughness BRDF shader variant/uniform wiring
+>   (`GpuDrawParams::pbr`) on top of the stride dispatch that now exists. ⬜
 > - **Custom `ShaderEffect`** (NOXNA) — `CreateEffectBackend` is not overridden (default returns
 >   `nullptr`). ⬜
 > - **`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` known simplifications (`GL4-13`)** — real, but
@@ -316,7 +342,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture`, `OpenGL4_Texture3D`, `OpenGL4_TextureCube`, `OpenGL4_EnvironmentMapEffect`, `OpenGL4_SkinnedEffect` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -345,6 +371,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-19` | `AlphaTestEffect`/`DualTextureEffect` — both reuse `GL4-13`'s existing stride-20/24 programs via new uniforms only: `uAlphaTest` (`vec4` reference/tolerance/pass-weight/fail-weight discard ternary, ported from `VulkanGraphicsBackend`'s `alpha_test3d.frag.glsl`) and `uTexture2`/`uDualTextureEnabled` (a second sampler on texture unit 1, `BindProgramForStride`'s new `hasTexture1` block mirroring the existing `hasTexture0` one). Dual-texture blend is the real XNA/D3D `DualTextureEffect.fx` 2x-modulate formula (`tex1.rgb*=2.0; result=tex1*tex2*diffuseColor`), cross-verified against both `VulkanGraphicsBackend`'s `dual_texture3d.frag.glsl` and `EasyGLGraphicsBackend`'s current inline GLSL before implementation. | ✅ | The new test's first draft had one authoring mistake (not a backend bug): a white/white `DualTextureEffect` check assumed `diffuseColor` passes through unchanged, but `tex1(1.0)*2*tex2(1.0)=2.0` clamps to full brightness on write and masks `diffuseColor`'s own value — fixed with a mid-gray second texture so `tex1*2*tex2~=1.0` (identity). |
 | `GL4-20` | Plain (non-render-target) `Texture3D`/`TextureCube` — `OpenGL4Texture3DBackend` (real `GL_TEXTURE_3D`, every mip level pre-allocated via the newly-loaded `gl4_glTexImage3D`, per-Z-slice `GetData` via a temporary FBO + the newly-loaded `gl4_glFramebufferTextureLayer` + `glReadPixels`) and `OpenGL4TextureCubeBackend` (reuses `GL4-15`'s `GL_TEXTURE_CUBE_MAP_POSITIVE_X+face` arithmetic, every face × every mip level pre-allocated via `glTexImage2D`), both modeled on `EasyGLTexture3DBackend`/`EasyGLTextureCubeBackend`'s resource shape. Both add `GL_TEXTURE_MAX_LEVEL` clamping (stricter than the EasyGL reference, matching `GL4-18`'s own fix). `TextureCube::GetData` deliberately does not Y-flip, unlike `OpenGL4RenderTargetCubeBackend::GetData` (a framebuffer-origin render target) — matches `EasyGLTextureCubeBackend`'s own plain-texture convention. | ✅ | Both new tests (`OpenGL4_Texture3D` 3/3, `OpenGL4_TextureCube` 4/4) passed every check on their first real run — no backend or test bugs found this time. |
 | `GL4-21` | `EnvironmentMapEffect` — a dedicated `env_map3d` GLSL 410 core program (stride 32, same `VertexPositionNormalTexture` layout as `lit_textured3d`), selected by `BindProgramForStride` instead of `lit_textured3d` when `GpuDrawParams::envMapping` is set. Ported near-verbatim from `EasyGLGraphicsBackend::EnsureEnvMapped3DProgram`, cross-checked against `VulkanGraphicsBackend`'s `env_map3d.frag.glsl` for the exact reflection/Fresnel/lerp/alpha-scaling formula (`docs/environmentmapeffect-support.md` documents the 2 real formula bugs — additive-not-lerp, missing alpha scaling — already found and fixed on 3 other backends; this port used the corrected formula from the start). Cube map binds to texture unit 1 (`GL4-19`'s `DualTextureEffect` slot, safe since the two effects are mutually exclusive per draw). No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed — every field was already present from earlier phases. | ✅ | Check A reuses Task 399's own cross-backend-verified combined-scene oracle verbatim (`(151,101,76)` ± 20) and passed on the first run at `(131,91,71)`. All 4 checks passed on the first real run — no backend or test bugs found. |
+| `GL4-22` | `SkinnedEffect` — a dedicated `skinned3d` GLSL 410 core program on **new** strides 52/56 (`VertexPositionNormalTextureSkinned` + optional trailing `Color`), plus matching `OpenGL4VertexBufferBackend::ApplyLayout` attribute cases (blend-indices via the newly-loaded `gl4_glVertexAttribIPointer` — a true GLSL integer attribute, not float-converted, since it subscripts `uBones[]`). Ported near-verbatim from `EasyGLGraphicsBackend::EnsureSkinnedProgram`, matching real XNA `SkinnedEffect.fx`'s `Skin()` function: skin matrix = sum of only the first `WeightsPerVertex` (1/2/4) `uBones[index]*weight` pairs (`Task 895`'s already-fixed formula, not the naive always-sum-4 bug). Lighting reuses `lit_textured3d`'s 3-light diffuse+specular+emissive formula plus a `VertexColorEnabled`-gated vertex-colour modulate for stride 56. No fog (same deliberate deferral as every other 3D stride variant). All 72 bones upload via one `gl4_glUniformMatrix4fv(loc, boneCount, ...)` call. No `GpuDrawParams`/`IGraphicsBackend.hpp` changes needed. | ✅ | 5 checks across 4 scenarios (identity no-op, single-bone translate, two-bone weighted blend reaching the same net shift as a decisive both-bones-contribute proof, and `VertexColorEnabled` reusing `easygl_skinnedeffect_vertexcolor_test.cpp`'s own `(174,0,0)` oracle) all passed on the first real run — no backend or test bugs found. |
 
 ---
 
@@ -367,7 +394,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All thirteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All fourteen dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -428,6 +455,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   `EnvironmentMapAmount=1`/`FresnelFactor=0` proven to exactly pass through the cube map's colour,
   and a non-zero `EnvironmentMapSpecular` proven to render measurably brighter). Full re-run of
   the other 12 OpenGL4 CTest suites confirmed no regression.
+- `OpenGL4_SkinnedEffect` — 5 checks/4 scenarios (identity-bone no-op, a single-bone `Translate`
+  genuinely displacing geometry, a two-bone weighted blend reaching the identical net shift a
+  single bone alone could not reach, and `VertexColorEnabled` gating the stride-56 `aColor`
+  attribute against `easygl_skinnedeffect_vertexcolor_test.cpp`'s own `(174,0,0)` oracle). Full
+  re-run of the other 13 OpenGL4 CTest suites confirmed no regression.
 
 ---
 
@@ -470,11 +502,15 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
     (`OpenGL4_EnvironmentMapEffect`, 4/4). See `GL4-21`'s own row for the reflection/Fresnel/lerp/
     alpha-scaling formula cross-checked against 2 other backends and the Task-399 cross-backend
     oracle reused as Check A.
-11. **Next up (not yet started, no priority order implied):**
-    - `SkinnedEffect`/`PbrEffect` — neither implemented yet. `SkinnedEffect` additionally needs a
-      bone-palette uniform array and a new stride-52/56 vertex layout
-      `OpenGL4VertexBufferBackend::ApplyLayout` doesn't recognize yet (falls back to its own
-      documented position-only default case).
+11. ~~`GL4-22`~~ — `SkinnedEffect` done and verified 2026-07-22, all ✅
+    (`OpenGL4_SkinnedEffect`, 5 checks/4 scenarios). See `GL4-22`'s own row for the new stride-52/
+    56 vertex layout, the `gl4_glVertexAttribIPointer` loader addition, and the two-bone weighted
+    blend proof.
+12. **Next up (not yet started, no priority order implied):**
+    - `PbrEffect` — not implemented yet. `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (`GL4-13`)
+      and the stride-32/52/56 vertex layouts now all exist; `PbrEffect` needs its own
+      metallic-roughness BRDF shader variant (`GpuDrawParams::pbr`) plumbed through
+      `BindProgramForStride`, following the same reused-stride-program pattern as `GL4-19`/`GL4-21`.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
 everything else still open — do not treat the picks above as the only next options.

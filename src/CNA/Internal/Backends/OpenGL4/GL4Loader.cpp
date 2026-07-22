@@ -17,6 +17,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     PFNGL4VERTEXATTRIBPOINTERPROC      gl4_glVertexAttribPointer      = nullptr;
     PFNGL4ENABLEVERTEXATTRIBARRAYPROC  gl4_glEnableVertexAttribArray  = nullptr;
     PFNGL4DISABLEVERTEXATTRIBARRAYPROC gl4_glDisableVertexAttribArray = nullptr;
+    PFNGL4VERTEXATTRIBIPOINTERPROC     gl4_glVertexAttribIPointer     = nullptr;
 
     PFNGL4CREATESHADERPROC             gl4_glCreateShader             = nullptr;
     PFNGL4SHADERSOURCEPROC             gl4_glShaderSource             = nullptr;
@@ -109,6 +110,7 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glVertexAttribPointer", gl4_glVertexAttribPointer);
         ok &= Resolve(getProcAddress, "glEnableVertexAttribArray", gl4_glEnableVertexAttribArray);
         ok &= Resolve(getProcAddress, "glDisableVertexAttribArray", gl4_glDisableVertexAttribArray);
+        ok &= Resolve(getProcAddress, "glVertexAttribIPointer", gl4_glVertexAttribIPointer);
 
         ok &= Resolve(getProcAddress, "glCreateShader", gl4_glCreateShader);
         ok &= Resolve(getProcAddress, "glShaderSource", gl4_glShaderSource);

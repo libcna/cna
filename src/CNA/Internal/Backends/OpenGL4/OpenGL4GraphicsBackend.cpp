@@ -393,6 +393,121 @@ void main()
 }
 )GLSL";
 
+        // plan_opengl4.md GL4-22: skinned3d (VertexPositionNormalTextureSkinned, stride 52/56) --
+        // SkinnedEffect's own dedicated program, selected instead of lit_textured3d/env_map3d/
+        // textured3d/colored_textured3d for stride 52/56 draws. Ported near-verbatim from
+        // EasyGLGraphicsBackend::EnsureSkinnedProgram's GLSL ES 300 source (desktop GLSL 410 core
+        // translation only), which itself already matches real XNA SkinnedEffect.fx's Skin()
+        // function: skinMat = sum of the first WeightsPerVertex (1, 2, or 4) uBones[index]*weight
+        // pairs (never all 4 unconditionally -- a real bug, Task 895, found and fixed while
+        // porting this effect to the other backends), position transformed by the full skinMat,
+        // normal by its upper-left 3x3. The lighting formula itself reuses lit_textured3d's own
+        // already-correct 3-light Lambertian-diffuse + Blinn-Phong-specular + EmissiveColor
+        // formula (EmissiveColor pre-folds AmbientLightColor*DiffuseColor via
+        // SkinnedEffect::FillGpuDrawParams, same as lit_textured3d/env_map3d), plus a vertex-color
+        // modulate (VertexColorEnabled) exercised via the stride-56 aColor attribute. No fog
+        // (same deliberate deferral as every other 3D stride variant on this backend).
+        //
+        // NOTE (matches EasyGL's own established formula, not independently re-derived here):
+        // the skinned normal is only rotated by the bone skinning matrix (mat3(skinMat)), not
+        // additionally by World's own rotation -- correct for the identity/translation-only World
+        // matrices this effect's own test scenarios use, but would under-rotate lighting for a
+        // rotated World on a skinned mesh. This is a pre-existing, cross-backend (EasyGL/Vulkan/
+        // Bgfx) limitation carried over here for consistency, not something to fix in isolation.
+        const char* kSkinned3DVertSrc = R"GLSL(
+#version 410 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
+layout(location = 3) in vec4 aBoneWeights;
+layout(location = 4) in uvec4 aBoneIndices;
+layout(location = 5) in vec4 aColor;
+uniform mat4 uWorldViewProj;
+uniform mat4 uWorld;
+uniform mat4 uBones[72];
+uniform int uWeightsPerVertex;
+out vec3 vNormal;
+out vec2 vUV;
+out vec3 vWorldPos;
+out vec4 vColor;
+void main()
+{
+    mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
+    if (uWeightsPerVertex >= 2)
+        skinMat += uBones[aBoneIndices.y] * aBoneWeights.y;
+    if (uWeightsPerVertex >= 4)
+    {
+        skinMat += uBones[aBoneIndices.z] * aBoneWeights.z;
+        skinMat += uBones[aBoneIndices.w] * aBoneWeights.w;
+    }
+    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    gl_Position = uWorldViewProj * skinnedPos;
+    vec3 skinnedNormal = mat3(skinMat) * aNormal;
+    float len = length(skinnedNormal);
+    // Guards against a near-zero blended normal (e.g. two opposing bone rotations cancelling
+    // out) -- normalize(0,0,0) is undefined and would poison the whole light sum with NaN.
+    vNormal = (len > 1e-6) ? (skinnedNormal / len) : aNormal;
+    vUV = aUV;
+    vWorldPos = (uWorld * skinnedPos).xyz;
+    vColor = aColor;
+}
+)GLSL";
+
+        const char* kSkinned3DFragSrc = R"GLSL(
+#version 410 core
+in vec3 vNormal;
+in vec2 vUV;
+in vec3 vWorldPos;
+in vec4 vColor;
+uniform sampler2D uTexture;
+uniform bool uTextureEnabled;
+uniform bool uVertexColorEnabled;
+uniform vec4 uDiffuseColor;
+uniform vec3 uLight0Dir;
+uniform vec3 uLight0Diffuse;
+uniform vec3 uLight0Specular;
+uniform vec3 uLight1Dir;
+uniform vec3 uLight1Diffuse;
+uniform vec3 uLight1Specular;
+uniform vec3 uLight2Dir;
+uniform vec3 uLight2Diffuse;
+uniform vec3 uLight2Specular;
+uniform vec3 uEmissiveColor;
+uniform vec3 uEyePosition;
+uniform vec3 uSpecularColor;
+uniform float uSpecularPower;
+out vec4 fragColor;
+
+vec3 safeNormalize(vec3 v)
+{
+    float len = length(v);
+    return len > 1e-6 ? (v / len) : vec3(0.0, -1.0, 0.0);
+}
+
+void main()
+{
+    vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
+    vec3 N = normalize(vNormal);
+    vec3 E = normalize(uEyePosition - vWorldPos);
+    vec3 nL0 = safeNormalize(uLight0Dir);
+    vec3 nL1 = safeNormalize(uLight1Dir);
+    vec3 nL2 = safeNormalize(uLight2Dir);
+    float dotL0 = dot(N, -nL0); float zeroL0 = step(0.0, dotL0); float NdotL0 = max(dotL0, 0.0);
+    float dotL1 = dot(N, -nL1); float zeroL1 = step(0.0, dotL1); float NdotL1 = max(dotL1, 0.0);
+    float dotL2 = dot(N, -nL2); float zeroL2 = step(0.0, dotL2); float NdotL2 = max(dotL2, 0.0);
+    vec3 lightSum = NdotL0 * uLight0Diffuse + NdotL1 * uLight1Diffuse + NdotL2 * uLight2Diffuse;
+    vec3 h0 = normalize(E - nL0); float spec0 = pow(max(dot(h0, N), 0.0) * zeroL0, uSpecularPower);
+    vec3 h1 = normalize(E - nL1); float spec1 = pow(max(dot(h1, N), 0.0) * zeroL1, uSpecularPower);
+    vec3 h2 = normalize(E - nL2); float spec2 = pow(max(dot(h2, N), 0.0) * zeroL2, uSpecularPower);
+    vec3 specularRGB = (spec0 * uLight0Specular + spec1 * uLight1Specular + spec2 * uLight2Specular) * uSpecularColor;
+    vec3 lit = lightSum * uDiffuseColor.rgb + uEmissiveColor;
+    vec4 color = vec4(lit, uDiffuseColor.a) * tex;
+    color.rgb += specularRGB * color.a;
+    if (uVertexColorEnabled) color *= vColor;
+    fragColor = color;
+}
+)GLSL";
+
         // XNA TextureFilter ordinal -> (GL min filter, GL mag filter). plan_opengl4.md GL4-18:
         // real mip-aware GL min-filter tokens for every "Mip*" variant now that
         // OpenGL4TextureBackend::UpdatePixelsLevel() lets a texture genuinely have mip levels
@@ -1312,6 +1427,30 @@ void main()
             gl4_glEnableVertexAttribArray(2);
             gl4_glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, s, (void*)24);
             break;
+        case 52:
+        case 56:
+            // plan_opengl4.md GL4-22: VertexPositionNormalTextureSkinned (packed): float3 position
+            // + float3 normal + float2 texcoord + float4 blend weight + ubyte4 blend indices
+            // (+ ubyte4 normalized color for stride 56, matching EasyGLGraphicsBackend's own
+            // stride-52/56 cases). BlendIndices (location 4) uses the true integer attribute path
+            // (glVertexAttribIPointer, not glVertexAttribPointer) since it's read as uvec4 bone
+            // indices in the shader, not float-converted color/weight data.
+            gl4_glEnableVertexAttribArray(0);
+            gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
+            gl4_glEnableVertexAttribArray(1);
+            gl4_glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, s, (void*)12);
+            gl4_glEnableVertexAttribArray(2);
+            gl4_glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, s, (void*)24);
+            gl4_glEnableVertexAttribArray(3);
+            gl4_glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, s, (void*)32);
+            gl4_glEnableVertexAttribArray(4);
+            gl4_glVertexAttribIPointer(4, 4, GL_UNSIGNED_BYTE, s, (void*)48);
+            if (stride == 56)
+            {
+                gl4_glEnableVertexAttribArray(5);
+                gl4_glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, s, (void*)52);
+            }
+            break;
         default:
             // Unknown layout (not yet ported to this backend, plan_opengl4.md remaining work):
             // bind position-only as a safe fallback, matching EasyGL's own precedent.
@@ -2036,6 +2175,13 @@ void main()
             throw std::runtime_error("OpenGL4: env_map3d program failed to compile: " + envMap3DProgram_.GetError());
     }
 
+    void OpenGL4GraphicsBackend::EnsureSkinned3DProgram()
+    {
+        if (skinned3DProgram_.IsValid()) return;
+        if (!skinned3DProgram_.Compile(kSkinned3DVertSrc, kSkinned3DFragSrc))
+            throw std::runtime_error("OpenGL4: skinned3d program failed to compile: " + skinned3DProgram_.GetError());
+    }
+
     bool OpenGL4GraphicsBackend::BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
                                                        const Matrix& projection, const GpuDrawParams& params)
     {
@@ -2203,6 +2349,55 @@ void main()
             const int specPowerLoc = litTextured3DProgram_.UniformLocation("uSpecularPower");
             if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
             const int texLoc = litTextured3DProgram_.UniformLocation("uTexture");
+            if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            return true;
+        }
+        case 52: // VertexPositionNormalTextureSkinned
+        case 56: // VertexPositionNormalTextureSkinned + Color
+        {
+            EnsureSkinned3DProgram();
+            skinned3DProgram_.Use();
+            float worldCol[16];
+            world.ToColumnMajor(worldCol);
+            const auto setM4 = [&](const char* name, const float* m) {
+                const int loc = skinned3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniformMatrix4fv(loc, 1, GL_FALSE, m);
+            };
+            const auto setV3 = [&](const char* name, const float* v) {
+                const int loc = skinned3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniform3f(loc, v[0], v[1], v[2]);
+            };
+            const auto setB = [&](const char* name, bool v) {
+                const int loc = skinned3DProgram_.UniformLocation(name);
+                if (loc >= 0) gl4_glUniform1i(loc, v ? 1 : 0);
+            };
+            setM4("uWorldViewProj", wvpCol);
+            setM4("uWorld", worldCol);
+            const int bonesLoc = skinned3DProgram_.UniformLocation("uBones[0]");
+            if (bonesLoc >= 0 && params.boneCount > 0)
+                gl4_glUniformMatrix4fv(bonesLoc, params.boneCount, GL_FALSE, params.boneTransforms);
+            const int weightsLoc = skinned3DProgram_.UniformLocation("uWeightsPerVertex");
+            if (weightsLoc >= 0) gl4_glUniform1i(weightsLoc, params.weightsPerVertex);
+            const int diffuseLoc = skinned3DProgram_.UniformLocation("uDiffuseColor");
+            if (diffuseLoc >= 0) gl4_glUniform4f(diffuseLoc, params.diffuseColor[0], params.diffuseColor[1],
+                                                 params.diffuseColor[2], params.diffuseColor[3]);
+            setB("uTextureEnabled", params.textureEnabled && hasTexture0);
+            setB("uVertexColorEnabled", params.vertexColorEnabled);
+            setV3("uLight0Dir", params.light0Dir);
+            setV3("uLight0Diffuse", params.light0Diffuse);
+            setV3("uLight0Specular", params.light0Specular);
+            setV3("uLight1Dir", params.light1Dir);
+            setV3("uLight1Diffuse", params.light1Diffuse);
+            setV3("uLight1Specular", params.light1Specular);
+            setV3("uLight2Dir", params.light2Dir);
+            setV3("uLight2Diffuse", params.light2Diffuse);
+            setV3("uLight2Specular", params.light2Specular);
+            setV3("uEmissiveColor", params.emissiveColor);
+            setV3("uEyePosition", params.eyePositionWorld);
+            setV3("uSpecularColor", params.specularColor);
+            const int specPowerLoc = skinned3DProgram_.UniformLocation("uSpecularPower");
+            if (specPowerLoc >= 0) gl4_glUniform1f(specPowerLoc, params.specularPower);
+            const int texLoc = skinned3DProgram_.UniformLocation("uTexture");
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
             return true;
         }
