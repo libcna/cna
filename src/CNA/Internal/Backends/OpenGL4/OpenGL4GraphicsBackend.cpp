@@ -4,11 +4,13 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 using namespace CNA::Internal::Backends::OpenGL4::GL4;
 
@@ -287,6 +289,39 @@ void main()
             default: return GL_CLAMP_TO_EDGE;   // Clamp
             }
         }
+
+        // plan_opengl4.md GL4-14: maps a Microsoft::Xna::Framework::Graphics::DepthFormat
+        // ordinal to the GL renderbuffer internal format and framebuffer attachment point a
+        // render target's depth/stencil buffer should use. Returns false for DepthFormat::None,
+        // meaning no depth/stencil attachment should be created at all -- mirrors
+        // EasyGLGraphicsBackend's own MapDepthFormat.
+        bool MapDepthFormatGL4(int depthFormat, GLenum& outInternalFormat, GLenum& outAttachment)
+        {
+            switch (depthFormat)
+            {
+            case 1: // DepthFormat::Depth16
+                outInternalFormat = GL_DEPTH_COMPONENT16;
+                outAttachment = GL_DEPTH_ATTACHMENT;
+                return true;
+            case 2: // DepthFormat::Depth24
+                outInternalFormat = GL_DEPTH_COMPONENT24;
+                outAttachment = GL_DEPTH_ATTACHMENT;
+                return true;
+            case 3: // DepthFormat::Depth24Stencil8
+                outInternalFormat = GL_DEPTH24_STENCIL8;
+                outAttachment = GL_DEPTH_STENCIL_ATTACHMENT;
+                return true;
+            default: // DepthFormat::None
+                return false;
+            }
+        }
+
+        int CalculateRenderTargetMipLevelsGL4(int w, int h)
+        {
+            int levels = 1;
+            while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+            return levels;
+        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -439,6 +474,189 @@ void main()
             }
         }
         glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    // ------------------------------------------------------------------------------------
+    // OpenGL4RenderTargetBackend
+    // ------------------------------------------------------------------------------------
+
+    OpenGL4RenderTargetBackend::OpenGL4RenderTargetBackend(int w, int h, int depthFormat,
+                                                            bool mipMap, int multiSampleCount)
+        : width_(w), height_(h), depthFormat_(depthFormat), mipMap_(mipMap),
+          multiSampleCount_(multiSampleCount)
+    {
+        levelCount_ = mipMap_ ? CalculateRenderTargetMipLevelsGL4(w, h) : 1;
+        CreateResources();
+    }
+
+    OpenGL4RenderTargetBackend::~OpenGL4RenderTargetBackend()
+    {
+        DestroyResources();
+    }
+
+    void OpenGL4RenderTargetBackend::CreateResources()
+    {
+        // Clamp to GL_MAX_SAMPLES so glRenderbufferStorageMultisample never errors, mirroring
+        // EasyGLRenderTargetBackend::CreateResources / FNA3D's OPENGL_GetMaxMultiSampleCount.
+        if (multiSampleCount_ > 0)
+        {
+            GLint maxSamples = 0;
+            glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+            if (maxSamples > 0 && multiSampleCount_ > static_cast<int>(maxSamples))
+                multiSampleCount_ = static_cast<int>(maxSamples);
+        }
+
+        glGenTextures(1, &colorTexture_);
+        glBindTexture(GL_TEXTURE_2D, colorTexture_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        // Pre-allocate GPU storage for every mip level up front (not just level 0): the mip
+        // chain is regenerated from level 0 via glGenerateMipmap when the target is unbound
+        // (see UnbindAsRenderTarget), mirroring FNA3D's OPENGL_ResolveTarget behavior -- without
+        // this loop, levels 1+ would have no defined image and glGenerateMipmap's writes would
+        // target GL-incomplete storage.
+        {
+            int levelW = width_, levelH = height_;
+            for (int level = 0; level < levelCount_; ++level)
+            {
+                glTexImage2D(GL_TEXTURE_2D, level, GL_RGBA8, levelW, levelH, 0, GL_RGBA,
+                             GL_UNSIGNED_BYTE, nullptr);
+                levelW = std::max(1, levelW / 2);
+                levelH = std::max(1, levelH / 2);
+            }
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        gl4_glGenFramebuffers(1, &fbo_);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+
+        if (multiSampleCount_ > 0)
+        {
+            // Render into a multisampled color renderbuffer; colorTexture_ is only ever the
+            // single-sample resolve target, written by UnbindAsRenderTarget()'s blit, never
+            // rendered into directly (glReadPixels/sampling a multisample attachment directly
+            // is disallowed by GL).
+            gl4_glGenRenderbuffers(1, &msaaColorRenderbuffer_);
+            gl4_glBindRenderbuffer(GL_RENDERBUFFER, msaaColorRenderbuffer_);
+            gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_, GL_RGBA8,
+                                                 width_, height_);
+            gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+                                          msaaColorRenderbuffer_);
+
+            gl4_glGenFramebuffers(1, &resolveFbo_);
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, resolveFbo_);
+            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                       colorTexture_, 0);
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+        }
+        else
+        {
+            gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                       colorTexture_, 0);
+        }
+
+        {
+            GLenum depthInternalFormat = 0, depthAttachment = 0;
+            if (MapDepthFormatGL4(depthFormat_, depthInternalFormat, depthAttachment))
+            {
+                gl4_glGenRenderbuffers(1, &depthRenderbuffer_);
+                gl4_glBindRenderbuffer(GL_RENDERBUFFER, depthRenderbuffer_);
+                if (multiSampleCount_ > 0)
+                    gl4_glRenderbufferStorageMultisample(GL_RENDERBUFFER, multiSampleCount_,
+                                                         depthInternalFormat, width_, height_);
+                else
+                    gl4_glRenderbufferStorage(GL_RENDERBUFFER, depthInternalFormat, width_, height_);
+                gl4_glFramebufferRenderbuffer(GL_FRAMEBUFFER, depthAttachment, GL_RENDERBUFFER,
+                                              depthRenderbuffer_);
+            }
+        }
+
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void OpenGL4RenderTargetBackend::DestroyResources()
+    {
+        if (depthRenderbuffer_) gl4_glDeleteRenderbuffers(1, &depthRenderbuffer_);
+        if (msaaColorRenderbuffer_) gl4_glDeleteRenderbuffers(1, &msaaColorRenderbuffer_);
+        if (resolveFbo_) gl4_glDeleteFramebuffers(1, &resolveFbo_);
+        if (fbo_) gl4_glDeleteFramebuffers(1, &fbo_);
+        if (colorTexture_) glDeleteTextures(1, &colorTexture_);
+        depthRenderbuffer_ = msaaColorRenderbuffer_ = resolveFbo_ = fbo_ = colorTexture_ = 0;
+    }
+
+    void OpenGL4RenderTargetBackend::BindGL() const
+    {
+        glBindTexture(GL_TEXTURE_2D, colorTexture_);
+    }
+
+    void OpenGL4RenderTargetBackend::BindAsRenderTarget()
+    {
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
+    }
+
+    void OpenGL4RenderTargetBackend::UnbindAsRenderTarget()
+    {
+        // Resolve the multisampled color renderbuffer into colorTexture_ before mips (if any)
+        // are regenerated from it, matching FNA3D's OPENGL_ResolveTarget resolve-then-mipmap
+        // order.
+        if (multiSampleCount_ > 0)
+        {
+            gl4_glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo_);
+            gl4_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, resolveFbo_);
+            gl4_glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_,
+                                  GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        }
+        if (levelCount_ > 1)
+        {
+            glBindTexture(GL_TEXTURE_2D, colorTexture_);
+            gl4_glGenerateMipmap(GL_TEXTURE_2D);
+        }
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void OpenGL4RenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                             void* data, int dataLength) const
+    {
+        if (w <= 0 || h <= 0) return;
+        const std::size_t sizeBytes = static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4;
+        if (static_cast<std::size_t>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA OpenGL4: RenderTarget2D::GetData: dataLength too small for the requested region");
+
+        // Reads from the single-sample, sampleable colour texture (already resolved-into by
+        // UnbindAsRenderTarget() when this target is MSAA) via a throwaway FBO attaching the
+        // exact requested mip level -- fbo_/resolveFbo_ only ever have level 0 attached, so an
+        // arbitrary level read needs its own attachment rather than reusing either of them.
+        GLint prevFbo = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+
+        GLuint readFbo = 0;
+        gl4_glGenFramebuffers(1, &readFbo);
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, readFbo);
+        gl4_glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                   colorTexture_, level);
+
+        const int levelH = std::max(1, height_ >> level);
+
+        // OpenGL's origin is bottom-left; flip Y using this level's own height (never the
+        // window's) so the caller gets top-left-origin game coordinates, matching
+        // OpenGL4GraphicsBackend::ReadBackbuffer's own convention.
+        const int glY = levelH - y - h;
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        auto* pixels = static_cast<uint8_t*>(data);
+        glReadPixels(x, glY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+        const int rowBytes = w * 4;
+        std::vector<uint8_t> tmp(rowBytes);
+        for (int row = 0; row < h / 2; ++row)
+        {
+            uint8_t* a = pixels + static_cast<std::size_t>(row) * rowBytes;
+            uint8_t* b = pixels + static_cast<std::size_t>(h - 1 - row) * rowBytes;
+            std::memcpy(tmp.data(), a, rowBytes);
+            std::memcpy(a, b, rowBytes);
+            std::memcpy(b, tmp.data(), rowBytes);
+        }
+
+        gl4_glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+        gl4_glDeleteFramebuffers(1, &readFbo);
     }
 
     // ------------------------------------------------------------------------------------
@@ -702,13 +920,25 @@ void main()
     {
         if (pendingVertices_.empty()) return;
 
-        int physW = 0, physH = 0;
-        owner_->GetPhysicalSize(physW, physH);
+        // plan_opengl4.md GL4-14: size the viewport/ortho projection off the currently-bound
+        // RenderTarget2D when one is bound, not unconditionally off the window's physical size
+        // -- a SpriteBatch::Draw() into a bound RT smaller than the window would otherwise get a
+        // window-sized viewport, offsetting/clipping its own draws (same fix
+        // EasyGLGraphicsBackend::FlushBatch's own GetCurrentRenderTarget2DSize check applies).
         int logW = 0, logH = 0;
-        owner_->GetLogicalSize(logW, logH);
-        if (physW > 0 && physH > 0)
-            glViewport(0, 0, physW, physH);
-        if (logW <= 0 || logH <= 0) { logW = physW; logH = physH; }
+        if (owner_->GetCurrentRenderTarget2DSize(logW, logH) && logW > 0 && logH > 0)
+        {
+            glViewport(0, 0, logW, logH);
+        }
+        else
+        {
+            int physW = 0, physH = 0;
+            owner_->GetPhysicalSize(physW, physH);
+            owner_->GetLogicalSize(logW, logH);
+            if (physW > 0 && physH > 0)
+                glViewport(0, 0, physW, physH);
+            if (logW <= 0 || logH <= 0) { logW = physW; logH = physH; }
+        }
 
         const Matrix orthoM = Matrix::CreateOrthographicOffCenter(
             0.0f, static_cast<float>(logW), static_cast<float>(logH), 0.0f, -1.0f, 1.0f);
@@ -871,6 +1101,45 @@ void main()
     std::unique_ptr<ISpriteBatchBackend> OpenGL4GraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<OpenGL4SpriteBatchBackend>(*this);
+    }
+
+    std::unique_ptr<IRenderTargetBackend> OpenGL4GraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        // preserveContents (RenderTargetUsage::PreserveContents) has no effect on this backend --
+        // FBO contents are never implicitly discarded between GraphicsDevice::SetRenderTarget
+        // calls, matching EasyGLGraphicsBackend's own CreateRenderTarget2D (it accepts and
+        // likewise ignores the same parameter).
+        (void)preserveContents;
+        return std::make_unique<OpenGL4RenderTargetBackend>(w, h, depthFormat, mipMap, multiSampleCount);
+    }
+
+    void OpenGL4GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        // Regenerate the OLD target's mip chain (and resolve its MSAA, if any) before switching
+        // away from it -- mirrors EasyGLGraphicsBackend::SetRenderTarget2D's identical ordering.
+        if (currentRt2D_ && currentRt2D_ != rt)
+            currentRt2D_->UnbindAsRenderTarget();
+
+        currentRt2D_ = rt;
+        if (rt)
+        {
+            currentRtHeight_ = rt->GetHeight();
+            rt->BindAsRenderTarget();
+        }
+        else
+        {
+            currentRtHeight_ = 0;
+            gl4_glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+    }
+
+    bool OpenGL4GraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
+    {
+        if (!currentRt2D_) return false;
+        width = currentRt2D_->GetWidth();
+        height = currentRt2D_->GetHeight();
+        return true;
     }
 
     void OpenGL4GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
@@ -1210,10 +1479,19 @@ void main()
         // once at device creation) -- without a real override here the GL viewport is left at
         // whatever the driver's own initial default was, which 3D draws silently depend on
         // (unlike SpriteBatch's own FlushBatch, which sets glViewport() itself every flush).
-        // OpenGL's viewport origin is bottom-left; convert from top-left XNA coordinates,
-        // matching EasyGLGraphicsBackend::SetViewport's own fbH-based flip.
-        int physW = 0, fbH = 0;
-        GetPhysicalSize(physW, fbH);
+        // OpenGL's viewport origin is bottom-left; convert from top-left XNA coordinates. Use
+        // the bound render target's own height for the flip when one is bound (currentRtHeight_,
+        // plan_opengl4.md GL4-14); fall back to the window's physical height for the default
+        // framebuffer -- matches EasyGLGraphicsBackend::SetViewport's own currentRtHeight_-or-
+        // window-height pattern. Using the window's height unconditionally while an RT is bound
+        // would produce a viewport y-offset entirely outside the RT's pixel range whenever the
+        // RT is smaller than the window, discarding every fragment.
+        int fbH = currentRtHeight_;
+        if (fbH == 0)
+        {
+            int physW = 0;
+            GetPhysicalSize(physW, fbH);
+        }
         glViewport(x, fbH - y - h, w, h);
         glDepthRange(minDepth, maxDepth);
     }

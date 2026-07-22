@@ -19,6 +19,33 @@
 > `ctest -R OpenGL4`, all pass. Two real bugs were found and fixed while getting there — see
 > `GL4-7`/`GL4-9`'s rows below.
 >
+> **Status (2026-07-22): `GL4-14` (`RenderTarget2D`, real FBO) landed and verified.**
+> `OpenGL4RenderTargetBackend` is a real FBO with a colour texture attachment, an optional
+> depth/stencil renderbuffer (`Depth16`/`Depth24`/`Depth24Stencil8`, exactly the format
+> requested — `DepthFormat::None` omits the attachment entirely), an optional multisampled colour
+> (and depth) renderbuffer resolved into the single-sample colour texture via
+> `glBlitFramebuffer` on unbind, and an optional mip chain regenerated via `glGenerateMipmap` on
+> unbind — modeled directly on `EasyGLRenderTargetBackend`'s own resource shape but using raw
+> `GL4Loader` calls instead of the `easygl::` wrapper types this backend deliberately avoids.
+> `RenderTarget2D::GetData()` is real (`OpenGL4RenderTargetBackend::GetData()`, via a throwaway
+> per-level read FBO), not the EasyGL-style gap the "Remaining work" section used to note for
+> this backend's peers. Two real, non-hypothetical bugs were found and fixed while wiring this
+> up, both from the exact same root cause (code that assumed "the currently bound target is
+> always the real backbuffer"): `SetViewport`'s bottom-left-to-top-left Y flip was hardcoded to
+> the window's physical height, which is wrong once an FBO smaller than the window is bound (now
+> keyed off a new `currentRtHeight_` member, mirroring `EasyGLGraphicsBackend`'s identical
+> pattern); and `OpenGL4SpriteBatchBackend::FlushBatch`'s viewport/ortho sizing had the same
+> window-size-only assumption, which would have silently broken any `SpriteBatch::Draw()` issued
+> while a render target was bound (now checks a new `GetCurrentRenderTarget2DSize()` accessor
+> first). Verified by `OpenGL4_RenderTarget2D` (12/12: Clear-only/colored3d/depth-tested draws
+> sampled back via `SpriteBatch`, `MultiSampleCount` property fidelity, real `GetData()` pixel
+> reads on all three, a mipMap round-trip, a real MSAA round-trip through the
+> `glBlitFramebuffer` resolve path, and a `SpriteBatch::Draw()`-into-a-bound-RT check that
+> specifically exercises the `FlushBatch` fix) plus a full re-run of `OpenGL4_Smoke` (8/8),
+> `OpenGL4_Readback` (10/10), `OpenGL4_3D` (4/4), and `OpenGL4_Textured3D` (5/5) confirming no
+> regression from the shared `SetViewport`/`FlushBatch` changes. `RenderTargetCube`/MRT are not
+> part of this task — see "Remaining work" below.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -42,9 +69,12 @@
 > the reason this backend requests 4.1 rather than a higher minimum), not validation claims.
 >
 > **Remaining work (read this before picking a next task):**
-> - **Render targets (`RenderTarget2D`/`RenderTargetCube`, MRT, MSAA)** — `CreateRenderTarget2D`/
->   `CreateRenderTargetCube` are not overridden, so every render-target request silently returns
->   `nullptr` via `IGraphicsBackend`'s own default. No FBO code exists yet at all. ⬜
+> - **`RenderTargetCube`, MRT** — `CreateRenderTargetCube`/`SetRenderTargetCubeFace` are not
+>   overridden (every cube render-target request still returns `nullptr` via `IGraphicsBackend`'s
+>   own default), and `SetRenderTargets` (plural) is not overridden either, so it inherits the
+>   base class's single-target-only default (`SetRenderTarget2D(rts[0])`) rather than real MRT
+>   (`glDrawBuffers` across multiple `GL_COLOR_ATTACHMENTn` points). `RenderTarget2D` itself
+>   (`GL4-14`, below) is done. ⬜
 > - **`Texture3D`/`TextureCube` (plain, non-render-target)** — `CreateTexture3D`/
 >   `CreateTextureCube` are not overridden either; both return `nullptr`. ⬜
 > - **`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`PbrEffect`** —
@@ -131,7 +161,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -152,25 +182,30 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-11` | `ApplySamplerState`: real GL sampler objects (`glGenSamplers`/`glBindSampler`/`glSamplerParameteri`), not texture-object-embedded state — Point/Linear/Anisotropic filter, Wrap/Clamp/Mirror address mode. | ✅ | |
 | `GL4-12` | `GraphicsBackendCompileDefinitionTests.cpp`/`GraphicsBackendType.hpp` updated for the new backend (the latter was a genuine second registration point found only by actually attempting a full-library build — `getCurrentGraphicsBackendType()`'s `#error` fires if a backend defines its own `CNA_BACKEND_*` compile definition without a matching branch there). | ✅ | `ExactlyOneGraphicsBackendIsSelected` syntax-checked against this backend's compile definitions; full `CnaTests` link not attempted in this sandboxed session (see Verification methodology below). |
 | `GL4-13` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: real stride-keyed dispatch (`BindProgramForStride`) to 3 new GLSL 410 core programs — `textured3d` (stride 20), `colored_textured3d` (stride 24), `lit_textured3d` (stride 32, FNA's `Lighting.fxh` `ComputeLights()` ported from `VulkanGraphicsBackend`'s own `lit_textured3d.vert/frag.glsl`, with a `safeNormalize()` guard against a disabled `DirectionalLight`'s zero-vector `Direction`, the same real bug `plan_webgpu.md` found and fixed independently). Unrecognized strides still fall back to `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`. | ✅ | Added `PixelTestGame::Check(bool, label)` (`examples/common/PixelTestGame.hpp`) — a small, purely-additive generic boolean assertion alongside the pre-existing `ExpectPixel`/`CompareGoldenImage`, needed to assert "the lit render must differ from the unlit render" (not itself a pixel-region compare). |
+| `GL4-14` | `RenderTarget2D`: real FBO (`OpenGL4RenderTargetBackend`) — colour texture attachment, optional depth/stencil renderbuffer (`Depth16`/`Depth24`/`Depth24Stencil8`), optional MSAA colour(+depth) renderbuffer resolved via `glBlitFramebuffer` on unbind, optional mip chain regenerated via `glGenerateMipmap` on unbind, real `GetData()` readback via a throwaway per-level read FBO. `GL4Loader` gained the FBO/renderbuffer entry points (`glGenFramebuffers`/`glBindFramebuffer`/`glFramebufferTexture2D`/`glCheckFramebufferStatus`/`glGenRenderbuffers`/`glBindRenderbuffer`/`glRenderbufferStorage(Multisample)`/`glFramebufferRenderbuffer`/`glBlitFramebuffer`/their `glDelete*` counterparts). | ✅ | Two real bugs found+fixed: `SetViewport`'s Y-flip was hardcoded to the window's physical height (wrong once a smaller FBO is bound) — fixed via a new `currentRtHeight_` member, mirroring `EasyGLGraphicsBackend`'s identical pattern. `OpenGL4SpriteBatchBackend::FlushBatch`'s viewport/ortho sizing had the same window-size-only assumption, which would silently break any `SpriteBatch::Draw()` issued while an RT is bound — fixed via a new `GetCurrentRenderTarget2DSize()` accessor, exercised by `OpenGL4_RenderTarget2D`'s own Check J. `RenderTargetCube`/MRT (`SetRenderTargets` plural) are explicitly out of scope for this task — see "Remaining work". |
 
 ---
 
 ## Verification methodology
 
 Mirrors the `SDL_GPU`/`WebGPU`/`D3D11` precedent: this backend's own dedicated CTest suite
-(`ctest -R OpenGL4` — `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`) is
-the validated methodology for a real-window/GPU backend in this project, not a full unfiltered
-`CnaTests` run.
+(`ctest -R OpenGL4` — `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`,
+`OpenGL4_RenderTarget2D`) is the validated methodology for a real-window/GPU backend in this
+project, not a full unfiltered `CnaTests` run.
 In this sandboxed dev environment, building the full `CnaTests` target hit pre-existing,
 backend-independent gaps unrelated to this work (a `tools/audio/*_harness.cpp` target missing an
 SDL3 include path, and a version-skew between this checkout's `Xnb` content readers and the
 sibling `sharp-runtime` clone's `BinaryReader` — `ReadDecimal`/`ReadChar` — that a fresh
 `sharp-runtime` checkout doesn't currently provide). Both reproduce identically under other
-backends too and are out of scope for this plan; not fixed here. `GraphicsBackendCompileDefinitionTests.cpp`
-was independently syntax-checked (`g++ -fsyntax-only`) against `CNA_BACKEND_OPENGL4`'s compile
-definitions instead.
+backends too and are out of scope for this plan; not fixed here (for `GL4-14`'s own dedicated
+CTest run below, a local, throwaway, uncommitted `ReadChar`/`ReadDecimal` stub was added directly
+to the sibling `sharp-runtime` checkout used by this sandboxed session only, purely to unblock the
+`CNA` library link so real pixel-level verification could run end-to-end instead of stopping at
+"syntax-checks clean" — nothing in the `sharp-runtime` checkout was committed or pushed).
+`GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
+against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All four dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All five dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -183,6 +218,13 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   vertex-color tint multiplies the sampled texture; `lit_textured3d`'s unlit render matches the
   plain texture exactly AND `EnableDefaultLighting()`'s lit render is provably different from it;
   `DrawIndexedPrimitivesEx` samples correctly too).
+- `OpenGL4_RenderTarget2D` — 12/12 (Clear-only/colored3d/depth-tested RenderTarget2D draws sampled
+  back via `SpriteBatch`; `MultiSampleCount` property fidelity; real `GetData()` pixel reads on all
+  three; a mipMap round-trip; a real MSAA round-trip through the `glBlitFramebuffer` resolve path;
+  a `SpriteBatch::Draw()`-into-a-bound-RT check proving `FlushBatch`'s RT-size-aware viewport fix).
+  `OpenGL4_Smoke`/`OpenGL4_Readback`/`OpenGL4_3D`/`OpenGL4_Textured3D` were all re-run after this
+  task's shared `SetViewport`/`FlushBatch` changes and still pass at their original 8/8, 10/10,
+  4/4, 5/5 — no regression.
 
 ---
 
@@ -196,12 +238,17 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
    `colored_textured3d`/`lit_textured3d`) done and verified 2026-07-21, all ✅ (`OpenGL4_Textured3D`,
    5/5). See `GL4-13`'s own row for the ported lighting formula and its known simplifications
    (`baseVertex` ignored, hardcoded direct-3D-draw sampler state, no `preferPerPixelLighting`/fog).
-3. **Next up (not yet started, no priority order implied):**
+3. ~~`GL4-14`~~ — `RenderTarget2D` (real FBO) done and verified 2026-07-22, all ✅
+   (`OpenGL4_RenderTarget2D`, 12/12). See `GL4-14`'s own row for the two real `SetViewport`/
+   `FlushBatch` RT-size bugs found and fixed along the way. `RenderTargetCube`/MRT were
+   deliberately left out of this task's scope.
+4. **Next up (not yet started, no priority order implied):**
    - `AlphaTestEffect`/`DualTextureEffect` — now unblocked by `GL4-13`'s stride dispatch; each
      needs its own shader variant (per-pixel discard for the former, a second sampler for the
      latter) plumbed through `BindProgramForStride`.
-   - `RenderTarget2D` (FBO) — unblocks render-to-texture and, later, `EnvironmentMapEffect`'s
-     env-map source once `TextureCube` exists.
+   - `RenderTargetCube` (per-face FBO, one shared cube texture, mirroring
+     `EasyGLRenderTargetCubeBackend`) — unblocks `EnvironmentMapEffect`'s env-map source once
+     `TextureCube` also exists, and completes what `GL4-14` deliberately left out.
    - `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState` dynamic mapping — currently
      every 3D draw is hardcoded (whatever GL's own defaults are); a real `BlendState`/
      `DepthStencilState`/`RasterizerState` assigned on `GraphicsDevice` has no effect yet.

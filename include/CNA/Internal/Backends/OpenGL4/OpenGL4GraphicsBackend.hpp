@@ -79,6 +79,55 @@ namespace CNA::Internal::Backends::OpenGL4
         int height_ = 0;
     };
 
+    /**
+     * @brief `OpenGL4`-backed `RenderTarget2D`: a real FBO with a colour texture attachment,
+     * an optional depth/stencil renderbuffer, an optional multisampled colour renderbuffer
+     * resolved into the colour texture on unbind, and an optional mip chain regenerated from
+     * level 0 on unbind -- modeled directly on `EasyGLRenderTargetBackend`'s own resource shape
+     * (plan_opengl4.md GL4-14), using raw `GL4Loader` calls instead of the `easygl::` wrapper
+     * types this backend deliberately avoids depending on.
+     *
+     * Doubles as both the render target AND the texture later sampled from it (same object,
+     * same GL texture handle, via `ITextureBackend::BindGL()`) -- matches how `RenderTarget2D`'s
+     * C++ constructor stores this single backend instance as its own `Texture2D::backend_`.
+     */
+    class OpenGL4RenderTargetBackend final : public IRenderTargetBackend
+    {
+    public:
+        OpenGL4RenderTargetBackend(int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
+        ~OpenGL4RenderTargetBackend() override;
+
+        OpenGL4RenderTargetBackend(const OpenGL4RenderTargetBackend&) = delete;
+        OpenGL4RenderTargetBackend& operator=(const OpenGL4RenderTargetBackend&) = delete;
+
+        [[nodiscard]] int GetWidth() const override { return width_; }
+        [[nodiscard]] int GetHeight() const override { return height_; }
+        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+        void BindGL() const override;
+        void GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
+
+        void BindAsRenderTarget() override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] unsigned int GetColorGLHandle() const override { return colorTexture_; }
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+
+    private:
+        void CreateResources();
+        void DestroyResources();
+
+        unsigned int fbo_ = 0;
+        unsigned int resolveFbo_ = 0;              ///< MSAA only: blit destination (colour = colorTexture_).
+        unsigned int colorTexture_ = 0;
+        unsigned int depthRenderbuffer_ = 0;
+        unsigned int msaaColorRenderbuffer_ = 0;    ///< MSAA only: real draw target (fbo_'s own colour attachment).
+        int width_ = 0;
+        int height_ = 0;
+        int depthFormat_ = 0;                       ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
+        bool mipMap_ = false;
+        int levelCount_ = 1;
+        int multiSampleCount_ = 0;
+    };
+
     /** @brief `OpenGL4`-backed vertex buffer (VBO + its own VAO). */
     class OpenGL4VertexBufferBackend final : public IVertexBufferBackend
     {
@@ -254,12 +303,23 @@ namespace CNA::Internal::Backends::OpenGL4
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
+        /// plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D.
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
         /// NOXNA: physical window size, used by the SpriteBatch backend to size its ortho projection.
         NOXNA void GetPhysicalSize(int& width, int& height) const;
         /// NOXNA: logical (virtual) size, honoring FixedHeightDynamicWidth (mirrors EasyGL).
         NOXNA void GetLogicalSize(int& width, int& height) const;
         /// NOXNA: compiles (once) and returns the built-in textured-quad sprite program.
         NOXNA OpenGL4RawProgram& GetOrCreateSpriteProgram();
+        /// NOXNA: reports the currently-bound RenderTarget2D's size (mirrors
+        /// EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize). Returns false (leaving width/
+        /// height untouched) when no render target is currently bound.
+        NOXNA [[nodiscard]] bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
 
     private:
         void EnsureColored3DProgram();
@@ -283,6 +343,14 @@ namespace CNA::Internal::Backends::OpenGL4
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         int swapInterval_ = 1;
         bool depthWriteEnabled_ = true;
+
+        /// plan_opengl4.md GL4-14: currently-bound RenderTarget2D (nullptr = default back
+        /// buffer). currentRtHeight_ is the render target's own height when one is bound, 0
+        /// otherwise -- SetViewport's bottom-left-to-top-left Y flip is computed from this
+        /// instead of the window's physical height whenever a target is bound (mirrors
+        /// EasyGLGraphicsBackend::currentRtHeight_'s identical role).
+        IRenderTargetBackend* currentRt2D_ = nullptr;
+        int currentRtHeight_ = 0;
 
         OpenGL4RawProgram spriteProgram_;
         OpenGL4RawProgram colored3DProgram_;

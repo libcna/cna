@@ -56,6 +56,19 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     PFNGL4SAMPLERPARAMETERIPROC        gl4_glSamplerParameteri        = nullptr;
     PFNGL4SAMPLERPARAMETERFPROC        gl4_glSamplerParameterf        = nullptr;
 
+    PFNGL4GENFRAMEBUFFERSPROC             gl4_glGenFramebuffers             = nullptr;
+    PFNGL4BINDFRAMEBUFFERPROC             gl4_glBindFramebuffer             = nullptr;
+    PFNGL4DELETEFRAMEBUFFERSPROC          gl4_glDeleteFramebuffers          = nullptr;
+    PFNGL4FRAMEBUFFERTEXTURE2DPROC        gl4_glFramebufferTexture2D        = nullptr;
+    PFNGL4CHECKFRAMEBUFFERSTATUSPROC      gl4_glCheckFramebufferStatus      = nullptr;
+    PFNGL4GENRENDERBUFFERSPROC            gl4_glGenRenderbuffers            = nullptr;
+    PFNGL4BINDRENDERBUFFERPROC            gl4_glBindRenderbuffer            = nullptr;
+    PFNGL4DELETERENDERBUFFERSPROC         gl4_glDeleteRenderbuffers         = nullptr;
+    PFNGL4RENDERBUFFERSTORAGEPROC         gl4_glRenderbufferStorage         = nullptr;
+    PFNGL4RENDERBUFFERSTORAGEMULTISAMPLEPROC gl4_glRenderbufferStorageMultisample = nullptr;
+    PFNGL4FRAMEBUFFERRENDERBUFFERPROC     gl4_glFramebufferRenderbuffer     = nullptr;
+    PFNGL4BLITFRAMEBUFFERPROC             gl4_glBlitFramebuffer             = nullptr;
+
     namespace
     {
         template <typename Fn>
@@ -125,6 +138,19 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
         ok &= Resolve(getProcAddress, "glBindSampler", gl4_glBindSampler);
         ok &= Resolve(getProcAddress, "glSamplerParameteri", gl4_glSamplerParameteri);
         ok &= Resolve(getProcAddress, "glSamplerParameterf", gl4_glSamplerParameterf);
+
+        ok &= Resolve(getProcAddress, "glGenFramebuffers", gl4_glGenFramebuffers);
+        ok &= Resolve(getProcAddress, "glBindFramebuffer", gl4_glBindFramebuffer);
+        ok &= Resolve(getProcAddress, "glDeleteFramebuffers", gl4_glDeleteFramebuffers);
+        ok &= Resolve(getProcAddress, "glFramebufferTexture2D", gl4_glFramebufferTexture2D);
+        ok &= Resolve(getProcAddress, "glCheckFramebufferStatus", gl4_glCheckFramebufferStatus);
+        ok &= Resolve(getProcAddress, "glGenRenderbuffers", gl4_glGenRenderbuffers);
+        ok &= Resolve(getProcAddress, "glBindRenderbuffer", gl4_glBindRenderbuffer);
+        ok &= Resolve(getProcAddress, "glDeleteRenderbuffers", gl4_glDeleteRenderbuffers);
+        ok &= Resolve(getProcAddress, "glRenderbufferStorage", gl4_glRenderbufferStorage);
+        ok &= Resolve(getProcAddress, "glRenderbufferStorageMultisample", gl4_glRenderbufferStorageMultisample);
+        ok &= Resolve(getProcAddress, "glFramebufferRenderbuffer", gl4_glFramebufferRenderbuffer);
+        ok &= Resolve(getProcAddress, "glBlitFramebuffer", gl4_glBlitFramebuffer);
 
         return ok;
     }

@@ -43,4 +43,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_textured3d examples/opengl4_textured3d_test.cpp)
     cna_register_backend_test(NAME OpenGL4_Textured3D COMMAND cna_test_opengl4_textured3d
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D -- colour texture attachment, depth/
+    # stencil renderbuffer, MSAA renderbuffer resolved via glBlitFramebuffer on unbind, mip chain
+    # regenerated via glGenerateMipmap on unbind, and real RenderTarget2D::GetData() readback.
+    cna_opengl4_test(cna_test_opengl4_rendertarget2d examples/opengl4_rendertarget2d_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_RenderTarget2D COMMAND cna_test_opengl4_rendertarget2d
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

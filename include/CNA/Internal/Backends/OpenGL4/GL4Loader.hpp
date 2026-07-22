@@ -96,6 +96,48 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
 #ifndef GL_DEBUG_OUTPUT
 #define GL_DEBUG_OUTPUT 0x92E0
 #endif
+#ifndef GL_FRAMEBUFFER
+#define GL_FRAMEBUFFER 0x8D40
+#endif
+#ifndef GL_READ_FRAMEBUFFER
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#endif
+#ifndef GL_DRAW_FRAMEBUFFER
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#endif
+#ifndef GL_FRAMEBUFFER_BINDING
+#define GL_FRAMEBUFFER_BINDING 0x8CA6
+#endif
+#ifndef GL_RENDERBUFFER
+#define GL_RENDERBUFFER 0x8D41
+#endif
+#ifndef GL_COLOR_ATTACHMENT0
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#endif
+#ifndef GL_DEPTH_ATTACHMENT
+#define GL_DEPTH_ATTACHMENT 0x8D00
+#endif
+#ifndef GL_STENCIL_ATTACHMENT
+#define GL_STENCIL_ATTACHMENT 0x8D20
+#endif
+#ifndef GL_DEPTH_STENCIL_ATTACHMENT
+#define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
+#endif
+#ifndef GL_DEPTH_COMPONENT16
+#define GL_DEPTH_COMPONENT16 0x81A5
+#endif
+#ifndef GL_DEPTH_COMPONENT24
+#define GL_DEPTH_COMPONENT24 0x81A6
+#endif
+#ifndef GL_DEPTH24_STENCIL8
+#define GL_DEPTH24_STENCIL8 0x88F0
+#endif
+#ifndef GL_FRAMEBUFFER_COMPLETE
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#endif
+#ifndef GL_MAX_SAMPLES
+#define GL_MAX_SAMPLES 0x8D57
+#endif
 
     // ---- Function pointer types for the loaded subset (Khronos-standard PFN names) ----
     using PFNGL4GENBUFFERSPROC              = void (*)(GLsizei, GLuint*);
@@ -149,6 +191,20 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     using PFNGL4SAMPLERPARAMETERIPROC       = void (*)(GLuint, GLenum, GLint);
     using PFNGL4SAMPLERPARAMETERFPROC       = void (*)(GLuint, GLenum, GLfloat);
 
+    // plan_opengl4.md GL4-14: RenderTarget2D FBO support.
+    using PFNGL4GENFRAMEBUFFERSPROC             = void (*)(GLsizei, GLuint*);
+    using PFNGL4BINDFRAMEBUFFERPROC             = void (*)(GLenum, GLuint);
+    using PFNGL4DELETEFRAMEBUFFERSPROC          = void (*)(GLsizei, const GLuint*);
+    using PFNGL4FRAMEBUFFERTEXTURE2DPROC        = void (*)(GLenum, GLenum, GLenum, GLuint, GLint);
+    using PFNGL4CHECKFRAMEBUFFERSTATUSPROC      = GLenum (*)(GLenum);
+    using PFNGL4GENRENDERBUFFERSPROC            = void (*)(GLsizei, GLuint*);
+    using PFNGL4BINDRENDERBUFFERPROC            = void (*)(GLenum, GLuint);
+    using PFNGL4DELETERENDERBUFFERSPROC         = void (*)(GLsizei, const GLuint*);
+    using PFNGL4RENDERBUFFERSTORAGEPROC         = void (*)(GLenum, GLenum, GLsizei, GLsizei);
+    using PFNGL4RENDERBUFFERSTORAGEMULTISAMPLEPROC = void (*)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
+    using PFNGL4FRAMEBUFFERRENDERBUFFERPROC     = void (*)(GLenum, GLenum, GLenum, GLuint);
+    using PFNGL4BLITFRAMEBUFFERPROC             = void (*)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+
     // ---- Loaded function pointers ----
     extern PFNGL4GENBUFFERSPROC               gl4_glGenBuffers;
     extern PFNGL4BINDBUFFERPROC               gl4_glBindBuffer;
@@ -200,6 +256,19 @@ namespace CNA::Internal::Backends::OpenGL4::GL4
     extern PFNGL4BINDSAMPLERPROC              gl4_glBindSampler;
     extern PFNGL4SAMPLERPARAMETERIPROC        gl4_glSamplerParameteri;
     extern PFNGL4SAMPLERPARAMETERFPROC        gl4_glSamplerParameterf;
+
+    extern PFNGL4GENFRAMEBUFFERSPROC             gl4_glGenFramebuffers;
+    extern PFNGL4BINDFRAMEBUFFERPROC             gl4_glBindFramebuffer;
+    extern PFNGL4DELETEFRAMEBUFFERSPROC          gl4_glDeleteFramebuffers;
+    extern PFNGL4FRAMEBUFFERTEXTURE2DPROC        gl4_glFramebufferTexture2D;
+    extern PFNGL4CHECKFRAMEBUFFERSTATUSPROC      gl4_glCheckFramebufferStatus;
+    extern PFNGL4GENRENDERBUFFERSPROC            gl4_glGenRenderbuffers;
+    extern PFNGL4BINDRENDERBUFFERPROC            gl4_glBindRenderbuffer;
+    extern PFNGL4DELETERENDERBUFFERSPROC         gl4_glDeleteRenderbuffers;
+    extern PFNGL4RENDERBUFFERSTORAGEPROC         gl4_glRenderbufferStorage;
+    extern PFNGL4RENDERBUFFERSTORAGEMULTISAMPLEPROC gl4_glRenderbufferStorageMultisample;
+    extern PFNGL4FRAMEBUFFERRENDERBUFFERPROC     gl4_glFramebufferRenderbuffer;
+    extern PFNGL4BLITFRAMEBUFFERPROC             gl4_glBlitFramebuffer;
 
     /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
     /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this
