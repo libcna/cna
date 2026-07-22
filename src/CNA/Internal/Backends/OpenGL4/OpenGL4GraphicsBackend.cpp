@@ -115,17 +115,42 @@ void main()
 }
 )GLSL";
 
+        // plan_opengl4.md GL4-19: AlphaTestEffect's discard test and DualTextureEffect's second
+        // sampler are both folded into the SAME textured3d/colored_textured3d programs (not new
+        // stride cases) -- both effects reuse VertexPositionTexture/VertexPositionColorTexture
+        // unchanged (DualTextureEffect samples both textures with the SAME UV set in real XNA,
+        // no separate UV1 attribute). Ported from VulkanGraphicsBackend's alpha_test3d.frag.glsl
+        // (discard formula) and dual_texture3d.frag.glsl (the "tex1.rgb*=2.0; result=tex1*tex2"
+        // 2x-modulate blend). uAlphaTest defaults to {0,0,1,1} (GpuDrawParams' own documented
+        // "always pass, never discard" default), so this is a genuine no-op for every other
+        // effect's draws.
         const char* kTextured3DFragSrc = R"GLSL(
 #version 410 core
 in vec2 vUV;
 uniform sampler2D uTexture;
+uniform sampler2D uTexture2;
 uniform vec4 uDiffuseColor;
 uniform bool uTextureEnabled;
+uniform bool uDualTextureEnabled;
+uniform vec4 uAlphaTest;
 out vec4 fragColor;
 void main()
 {
     vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    fragColor = tex * uDiffuseColor;
+    if (uDualTextureEnabled)
+    {
+        vec4 tex2 = texture(uTexture2, vUV);
+        tex.rgb *= 2.0;
+        tex *= tex2;
+    }
+    vec4 result = tex * uDiffuseColor;
+
+    float alpha = result.a;
+    bool passTest = (uAlphaTest.y > 0.0) ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y) : (alpha < uAlphaTest.x);
+    float w = passTest ? uAlphaTest.z : uAlphaTest.w;
+    if (w < 0.0) discard;
+
+    fragColor = result;
 }
 )GLSL";
 
@@ -153,12 +178,28 @@ void main()
 in vec2 vUV;
 in vec4 vTint;
 uniform sampler2D uTexture;
+uniform sampler2D uTexture2;
 uniform bool uTextureEnabled;
+uniform bool uDualTextureEnabled;
+uniform vec4 uAlphaTest;
 out vec4 fragColor;
 void main()
 {
     vec4 tex = uTextureEnabled ? texture(uTexture, vUV) : vec4(1.0);
-    fragColor = tex * vTint;
+    if (uDualTextureEnabled)
+    {
+        vec4 tex2 = texture(uTexture2, vUV);
+        tex.rgb *= 2.0;
+        tex *= tex2;
+    }
+    vec4 result = tex * vTint;
+
+    float alpha = result.a;
+    bool passTest = (uAlphaTest.y > 0.0) ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y) : (alpha < uAlphaTest.x);
+    float w = passTest ? uAlphaTest.z : uAlphaTest.w;
+    if (w < 0.0) discard;
+
+    fragColor = result;
 }
 )GLSL";
 
@@ -1722,6 +1763,14 @@ void main()
             params.texture0->BindGL();
             ApplySamplerState(0, 0, 1, 1, 1); // Linear/Clamp -- matches this phase's SpriteBatch default.
         }
+        // plan_opengl4.md GL4-19: DualTextureEffect's second sampler.
+        const bool hasTexture1 = params.texture1 != nullptr;
+        if (hasTexture1)
+        {
+            gl4_glActiveTexture(GL_TEXTURE1);
+            params.texture1->BindGL();
+            ApplySamplerState(1, 0, 1, 1, 1); // Linear/Clamp -- matches texture0's own default.
+        }
 
         switch (strideInBytes)
         {
@@ -1738,6 +1787,13 @@ void main()
             if (texEnabledLoc >= 0) gl4_glUniform1i(texEnabledLoc, (params.textureEnabled && hasTexture0) ? 1 : 0);
             const int texLoc = textured3DProgram_.UniformLocation("uTexture");
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            const int tex2Loc = textured3DProgram_.UniformLocation("uTexture2");
+            if (tex2Loc >= 0) gl4_glUniform1i(tex2Loc, 1);
+            const int dualLoc = textured3DProgram_.UniformLocation("uDualTextureEnabled");
+            if (dualLoc >= 0) gl4_glUniform1i(dualLoc, (params.dualTexture && hasTexture1) ? 1 : 0);
+            const int alphaTestLoc = textured3DProgram_.UniformLocation("uAlphaTest");
+            if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
+                                                   params.alphaTest[2], params.alphaTest[3]);
             return true;
         }
         case 24: // VertexPositionColorTexture
@@ -1755,6 +1811,13 @@ void main()
             if (texEnabledLoc >= 0) gl4_glUniform1i(texEnabledLoc, (params.textureEnabled && hasTexture0) ? 1 : 0);
             const int texLoc = coloredTextured3DProgram_.UniformLocation("uTexture");
             if (texLoc >= 0) gl4_glUniform1i(texLoc, 0);
+            const int tex2Loc = coloredTextured3DProgram_.UniformLocation("uTexture2");
+            if (tex2Loc >= 0) gl4_glUniform1i(tex2Loc, 1);
+            const int dualLoc = coloredTextured3DProgram_.UniformLocation("uDualTextureEnabled");
+            if (dualLoc >= 0) gl4_glUniform1i(dualLoc, (params.dualTexture && hasTexture1) ? 1 : 0);
+            const int alphaTestLoc = coloredTextured3DProgram_.UniformLocation("uAlphaTest");
+            if (alphaTestLoc >= 0) gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
+                                                   params.alphaTest[2], params.alphaTest[3]);
             return true;
         }
         case 32: // VertexPositionNormalTexture

@@ -79,4 +79,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "OPENGL4")
     cna_opengl4_test(cna_test_opengl4_mipmap examples/opengl4_mipmap_test.cpp)
     cna_register_backend_test(NAME OpenGL4_Mipmap COMMAND cna_test_opengl4_mipmap
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_opengl4.md GL4-19: AlphaTestEffect + DualTextureEffect -- real GPU discard proof (alpha
+    # test against a reference value, swept across a representative CompareFunction subset) and the
+    # real XNA/D3D "2x-modulate" dual-texture blend (tex1*2 * tex2 * diffuseColor), both folded into
+    # the existing textured3d/colored_textured3d stride-20/24 shader programs (GL4-13) rather than
+    # new stride cases.
+    cna_opengl4_test(cna_test_opengl4_alphatest_dualtexture examples/opengl4_alphatest_dualtexture_test.cpp)
+    cna_register_backend_test(NAME OpenGL4_AlphaTestDualTexture COMMAND cna_test_opengl4_alphatest_dualtexture
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

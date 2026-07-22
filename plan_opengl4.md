@@ -138,6 +138,28 @@
 > `(0,255,0)` correction `GL4-16` already found once. Full re-run of the other 8 OpenGL4 CTest
 > suites confirms no regression.
 >
+> **Status (2026-07-22): `GL4-19` (`AlphaTestEffect` + `DualTextureEffect`) landed and verified.**
+> Both effects reuse `GL4-13`'s existing `textured3d` (stride 20)/`colored_textured3d` (stride 24)
+> programs — neither needed a new stride case, only new uniforms folded into the two existing
+> fragment shaders: `uAlphaTest` (a `vec4` — reference value/tolerance/pass-weight/fail-weight,
+> ported from `VulkanGraphicsBackend`'s own `alpha_test3d.frag.glsl` discard ternary) and
+> `uTexture2`/`uDualTextureEnabled` (a second sampler bound to texture unit 1 via
+> `BindProgramForStride`'s new `hasTexture1` block, mirroring the existing `hasTexture0` one). The
+> dual-texture blend is the real XNA/D3D `DualTextureEffect.fx` "2x-modulate" lightmap-style
+> formula — `tex1.rgb *= 2.0; result = tex1 * tex2 * diffuseColor` — cross-verified against both
+> `VulkanGraphicsBackend`'s `dual_texture3d.frag.glsl` and `EasyGLGraphicsBackend`'s own current
+> inline GLSL source (`EnsureDualTextured3DProgram()`) before writing any OpenGL4 code, not trusted
+> from a single source. Verified by the new `OpenGL4_AlphaTestDualTexture` CTest (8/8): a real GPU
+> discard proof swept across `CompareFunction::Always`/`Never`/`LessEqual`/`Equal`, and four
+> `DualTextureEffect` colour-combination checks proving `tex1`, `tex2`, and `diffuseColor` each
+> genuinely contribute (including a decisive yellow×cyan→green case that only passes if both
+> texture slots multiply simultaneously). The test's own first draft had one authoring mistake, not
+> a backend bug: a white/white check assumed `diffuseColor` would pass through unchanged, but the
+> real 2x-modulate formula makes `tex1(1.0)*2*tex2(1.0)=2.0`, which clamps to full brightness on
+> write and masks `diffuseColor`'s own value — fixed by using a mid-gray second texture so
+> `tex1*2*tex2~=1.0` (identity), letting `diffuseColor` pass through at its own intensity as
+> intended. Full re-run of the other 9 OpenGL4 CTest suites confirms no regression.
+>
 > **Deliberately independent of EasyGL/`easy-gl`.** EasyGL requests
 > `SDL_GL_CONTEXT_PROFILE_ES` (OpenGL ES 3.0 / WebGL2 — see `EasyGLGraphicsBackend`'s
 > constructor), not a real desktop OpenGL 4.x core profile: no geometry/tessellation shaders, no
@@ -237,7 +259,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | Main class | `CNA::Internal::Backends::OpenGL4::OpenGL4GraphicsBackend` |
 | GL loader | `CNA::Internal::Backends::OpenGL4::GL4` (`GL4Loader.hpp`/`.cpp`) |
 | Task prefix | `GL4-` |
-| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap` (`ctest -R OpenGL4`) |
+| CTest labels | `OpenGL4_Smoke`, `OpenGL4_Readback`, `OpenGL4_3D`, `OpenGL4_Textured3D`, `OpenGL4_RenderTarget2D`, `OpenGL4_RenderTargetCube_MRT`, `OpenGL4_RenderState`, `OpenGL4_MSAA`, `OpenGL4_Mipmap`, `OpenGL4_AlphaTestDualTexture` (`ctest -R OpenGL4`) |
 
 ---
 
@@ -263,6 +285,7 @@ This plan does **not** propose retiring any existing backend, least of all EasyG
 | `GL4-16` | Real dynamic `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`SetBlendFactor`/`SetScissorRect` — blend factors/equations (`glBlendFuncSeparate`/`glBlendEquationSeparate`), `glBlendColor`, real depth+stencil (incl. two-sided via `glStencilFuncSeparate`/`glStencilOpSeparate`/`glStencilMaskSeparate`), cull mode, scissor test, wireframe fill mode (`glPolygonMode`). `GL4Loader` gained the 3 two-sided-stencil GL-2.0 entry points, `GL_INCR_WRAP`/`GL_DECR_WRAP`. | ✅ | Since `GraphicsDevice` applies its own default `RasterizerState`/`BlendState`/`DepthStencilState` at construction (matching real XNA), turning cull mode on for real exposed that `opengl4_3d_test.cpp`/`opengl4_textured3d_test.cpp` (`GL4-9`/`GL4-13`) had never been exercised under real culling and used a quad winding XNA's actual default (`CullCounterClockwiseFace`) culls — fixed with an explicit `RasterizerState::CullNone` opt-out (the same established idiom `bgfx_basiceffect_texture_enabled_test.cpp` already uses for the identical reason, not new). The new test itself needed 2 of its own corrections: `BlendState::AlphaBlend` assumes premultiplied source colour (switched to `BlendState::NonPremultiplied` for a straight-alpha check), and this codebase's `Color::Green` is real XNA `(0,128,0)`, not `(0,255,0)` (`Lime`). |
 | `GL4-17` | Real backbuffer MSAA — a manually-managed multisample FBO (`msaaFbo_`/`msaaColorRbo_`/`msaaDepthRbo_`, real `GL_DEPTH24_STENCIL8` combined depth+stencil) resolved via `glBlitFramebuffer` before `Present()`/`ReadBackbuffer()`, mirroring `EasyGLGraphicsBackend`'s own `CreateMsaaBuffers`/`ResolveMsaa`/`BindDefaultFramebuffer` shape rather than an SDL_GL window pixel-format request. Fixed at backend-construction time; `ApplyMultiSampleCount` not overridden (same documented limitation `EasyGLGraphicsBackend` already has). `GetMultiSampleCount()` (top-level `IGraphicsBackend`) now reports the real `GL_MAX_SAMPLES`-clamped value. | ✅ | `GraphicsDeviceManager.PreferMultiSampling` set in a `Game` subclass's constructor never reaches the *first* backend construction at all (a documented, codebase-wide `GraphicsDevice` architectural constraint — the device member is unconditionally default-constructed with `MultiSampleCount=0` first) — verification used `GraphicsDevice::RecreateBackendForMultiSampleCount(8)` (the same NOXNA test-only escape hatch Vulkan's own pre-Task-902 MSAA tests used), not a design gap specific to this backend. |
 | `GL4-18` | Real `Texture2D` mip level support — `OpenGL4TextureBackend::UpdatePixelsLevel()` uploads real per-level data via `glTexImage2D` (level storage is never pre-allocated beyond level 0), `GL_TEXTURE_MAX_LEVEL` is clamped to the real requested level count at construction (matches `EasyGLTextureBackend`'s own Task-924 fix), and `FilterToGL`'s mapping table gained real `GL_*_MIPMAP_*` min-filter tokens for every `TextureFilter` `Mip*` variant. `Point`/`Linear` deliberately keep their non-mip-aware GL filters, matching `EasyGLGraphicsBackend`'s own identical, documented choice. | ✅ | The new test needed the same `Color::Green`-is-`(0,128,0)`-not-`(0,255,0)` correction `GL4-16` already found once. |
+| `GL4-19` | `AlphaTestEffect`/`DualTextureEffect` — both reuse `GL4-13`'s existing stride-20/24 programs via new uniforms only: `uAlphaTest` (`vec4` reference/tolerance/pass-weight/fail-weight discard ternary, ported from `VulkanGraphicsBackend`'s `alpha_test3d.frag.glsl`) and `uTexture2`/`uDualTextureEnabled` (a second sampler on texture unit 1, `BindProgramForStride`'s new `hasTexture1` block mirroring the existing `hasTexture0` one). Dual-texture blend is the real XNA/D3D `DualTextureEffect.fx` 2x-modulate formula (`tex1.rgb*=2.0; result=tex1*tex2*diffuseColor`), cross-verified against both `VulkanGraphicsBackend`'s `dual_texture3d.frag.glsl` and `EasyGLGraphicsBackend`'s current inline GLSL before implementation. | ✅ | The new test's first draft had one authoring mistake (not a backend bug): a white/white `DualTextureEffect` check assumed `diffuseColor` passes through unchanged, but `tex1(1.0)*2*tex2(1.0)=2.0` clamps to full brightness on write and masks `diffuseColor`'s own value — fixed with a mid-gray second texture so `tex1*2*tex2~=1.0` (identity). |
 
 ---
 
@@ -285,7 +308,7 @@ to the sibling `sharp-runtime` checkout used by this sandboxed session only, pur
 `GraphicsBackendCompileDefinitionTests.cpp` was independently syntax-checked (`g++ -fsyntax-only`)
 against `CNA_BACKEND_OPENGL4`'s compile definitions instead.
 
-All nine dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
+All ten dedicated tests were run for real, under Xvfb (`SDL_VIDEODRIVER=x11`), on this dev
 machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 
 - `OpenGL4_Smoke` — 8/8 (window/context lifecycle, VertexBuffer/IndexBuffer round-trip incl.
@@ -328,6 +351,11 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
   minification with a mip-aware filter, `Point` confirmed to still never mip-select, level 0
   still correct, and an ordinary single-level texture sampled with a mip-aware filter no longer
   solid black). Full re-run of the other 8 OpenGL4 CTest suites confirmed no regression.
+- `OpenGL4_AlphaTestDualTexture` — 8/8 (`AlphaTestEffect` GPU discard proof across
+  `CompareFunction::Always`/`Never`/`LessEqual`/`Equal`; `DualTextureEffect` proofs that `tex1`,
+  `tex2`, and `diffuseColor` each genuinely contribute, including a yellow×cyan→green case that
+  only passes if both texture slots multiply simultaneously). Full re-run of the other 9 OpenGL4
+  CTest suites confirmed no regression.
 
 ---
 
@@ -359,10 +387,10 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
 7. ~~`GL4-18`~~ — real `Texture2D` mip level support done and verified 2026-07-22, all ✅
    (`OpenGL4_Mipmap`, 4/4). See `GL4-18`'s own row for the `GL_TEXTURE_MAX_LEVEL`/`FilterToGL`
    fixes this required.
-8. **Next up (not yet started, no priority order implied):**
-   - `AlphaTestEffect`/`DualTextureEffect` — now unblocked by `GL4-13`'s stride dispatch; each
-     needs its own shader variant (per-pixel discard for the former, a second sampler for the
-     latter) plumbed through `BindProgramForStride`.
+8. ~~`GL4-19`~~ — `AlphaTestEffect`/`DualTextureEffect` done and verified 2026-07-22, all ✅
+   (`OpenGL4_AlphaTestDualTexture`, 8/8). See `GL4-19`'s own row for the reused-stride-program
+   approach and the dual-texture 2x-modulate formula cross-verified against two other backends.
+9. **Next up (not yet started, no priority order implied):**
    - `EnvironmentMapEffect` — now unblocked by `GL4-15`'s `RenderTargetCube` (its env-map source),
      but also needs plain `CreateTextureCube` (a non-render-target cube texture a game can load
      from disk) and its own shader variant.
