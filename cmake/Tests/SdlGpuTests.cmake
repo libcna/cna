@@ -176,4 +176,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_rt_blendfactor examples/sdlgpu_rendertarget_blendfactor_test.cpp)
     cna_register_backend_test(NAME SdlGpu_RenderTargetBlendFactor COMMAND cna_test_sdlgpu_rt_blendfactor
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-072: SpriteBatch clip space must be built from the active GraphicsDevice.Viewport
+    # (Viewport.Width/Height), not the full target -- the sprite2d viewportSize uniform was fed the
+    # full target dims while ApplyViewportForRef (GFX-064) mapped NDC into the sub-region, squishing
+    # the sprite. The per-QueuedDrawRef viewport must also drive the sprite NDC divide. SdlGpu does
+    # not implement GetBackBufferData, so this uses the RenderTarget2D-readback variant (GetData
+    # flushes the deferred sprite batch into the RT); it also covers the two-viewports-per-frame
+    # (per-QueuedDrawRef) and transformMatrix cases.
+    cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_custom_viewport examples/spritebatch_custom_viewport_rt_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_SpriteBatch_CustomViewport COMMAND cna_test_sdlgpu_spritebatch_custom_viewport
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

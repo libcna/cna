@@ -1739,6 +1739,27 @@ namespace CNA::Internal::Backends::SdlGpu
         if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f)
             return;
 
+        // REMED-GFX-072: when a custom sub-Viewport is active, XNA/FNA make SpriteBatch coordinates
+        // VIEWPORT-LOCAL -- sprite (0,0) is the viewport's top-left and the projection extent is
+        // Viewport.Width/Height (CreateOrthographicOffCenter(0, Viewport.Width, Viewport.Height, 0)).
+        // Bake the raw viewport-local pixel coordinates here (no presentation-mode letterbox offset/
+        // scale) and let IssueSpriteDraw divide by Viewport.W/H instead of the full target (see
+        // RenderQueuedDraws' Sprite case, which reads the same per-draw QueuedDrawRef viewport).
+        // Only a genuine sub-region (differs from the physical target extent) overrides -- the
+        // default full-target viewport keeps the existing letterbox/1:1 path byte-identical.
+        const int spritePhysW = currentRenderTarget_ != nullptr ? currentRenderTarget_->GetWidth()
+                                                                 : physicalWidth_;
+        const int spritePhysH = currentRenderTarget_ != nullptr ? currentRenderTarget_->GetHeight()
+                                                                 : physicalHeight_;
+        if (viewportSet_ && viewportW_ > 0 && viewportH_ > 0 &&
+            (viewportX_ != 0 || viewportY_ != 0 || viewportW_ != spritePhysW || viewportH_ != spritePhysH))
+        {
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = viewport.logicalWidth = 1.0f;   // ratio 1, offset 0 => px = points.X
+            viewport.height = viewport.logicalHeight = 1.0f;
+        }
+
         const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
         const float scaleY = static_cast<float>(destination.Height) / static_cast<float>(source.Height);
         const float left = -origin.X * scaleX;
@@ -3786,7 +3807,24 @@ namespace CNA::Internal::Backends::SdlGpu
                 {
                     const SpriteCommand& c = spriteCommands_[ref.index];
                     if (c.target == target)
-                        IssueSpriteDraw(pass, cmd, c, ref.index, viewportSize, colorFormat, sampleCount, colorTargetCount, boundPipeline);
+                    {
+                        // REMED-GFX-072: the sprite2d shader divides pixel positions by this size to
+                        // reach NDC. A custom sub-Viewport makes sprite coordinates viewport-local
+                        // (QueueSprite baked raw local coords for this ref), so divide by Viewport.W/H
+                        // instead of the full target -- the ApplyViewportForRef call above already
+                        // positions the [-1,1] result at Viewport.X/Y. Default viewport keeps the
+                        // full-target divisor (byte-identical for every existing sprite).
+                        float spriteVpSize[2] = { viewportSize[0], viewportSize[1] };
+                        if (ref.viewportSet && ref.viewportW > 0 && ref.viewportH > 0 &&
+                            (ref.viewportX != 0 || ref.viewportY != 0 ||
+                             ref.viewportW != static_cast<int>(viewportSize[0]) ||
+                             ref.viewportH != static_cast<int>(viewportSize[1])))
+                        {
+                            spriteVpSize[0] = static_cast<float>(ref.viewportW);
+                            spriteVpSize[1] = static_cast<float>(ref.viewportH);
+                        }
+                        IssueSpriteDraw(pass, cmd, c, ref.index, spriteVpSize, colorFormat, sampleCount, colorTargetCount, boundPipeline);
+                    }
                     break;
                 }
             }
