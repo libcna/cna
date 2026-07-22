@@ -200,8 +200,22 @@ namespace CNA::Internal::Backends::D3D12
                 "chain back buffer is unusable under this machine's Wine+vkd3d-proton dev loop, DX-100)");
         }
 
-        const int vpW = owner_->GetBoundColorWidthEXT();
-        const int vpH = owner_->GetBoundColorHeightEXT();
+        const int targetW = owner_->GetBoundColorWidthEXT();
+        const int targetH = owner_->GetBoundColorHeightEXT();
+
+        // REMED-GFX-072: the sprite2d ViewportSize projection basis (the pixel->NDC divisor) must be
+        // the ACTIVE GraphicsDevice.Viewport's width/height, not the full bound-target size. XNA/FNA
+        // build the SpriteBatch ortho from Viewport.Width/Height (CreateOrthographicOffCenter(0,
+        // Viewport.Width, Viewport.Height, 0)), so a custom sub-Viewport makes sprite coordinates
+        // VIEWPORT-LOCAL. This mirrors D3D11SpriteBatchBackend, which reads the live viewport size via
+        // RSGetViewports. GetEffectiveViewportEXT() (REMED-GFX-064) already returns the custom
+        // sub-region when a Viewport was set (else the full target), and it also drives the rasterizer
+        // viewport below (RSSetViewports) -- previously only the rasterizer honored it while the
+        // projection stayed full-target, squishing the sprite into the sub-region. The default
+        // full-target viewport keeps vpW/vpH == the target size, byte-identical to the prior behavior.
+        const D3D12_VIEWPORT effectiveViewport = owner_->GetEffectiveViewportEXT();
+        const int vpW = static_cast<int>(effectiveViewport.Width);
+        const int vpH = static_cast<int>(effectiveViewport.Height);
 
         auto rootSig = owner_->GetRootSignatureCacheEXT().GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/1, /*numSamplers=*/1);
         if (!rootSig)
@@ -255,12 +269,13 @@ namespace CNA::Internal::Backends::D3D12
         D3D12_CPU_DESCRIPTOR_HANDLE rtv = owner_->GetBoundColorRtvEXT();
         cmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
 
-        // REMED-GFX-064: honor a custom GraphicsDevice.Viewport for sprite draws too (the GPU
-        // viewport rectangle). vpW/vpH above still drive the sprite2d ViewportSize projection
-        // uniform (full target / virtual resolution); the GPU viewport rectangle is independent.
-        D3D12_VIEWPORT viewport = owner_->GetEffectiveViewportEXT();
-        D3D12_RECT scissor{0, 0, vpW, vpH};
-        cmdList->RSSetViewports(1, &viewport);
+        // REMED-GFX-064: honor a custom GraphicsDevice.Viewport for sprite draws (the GPU viewport
+        // rectangle). REMED-GFX-072: the SAME effective viewport now also drives the ViewportSize
+        // projection basis above, so sprite coordinates are viewport-relative. The scissor stays at
+        // the full bound target (sprites are clipped to the viewport by the NDC->viewport transform,
+        // matching D3D11's sprite path which sets no viewport-specific scissor).
+        D3D12_RECT scissor{0, 0, targetW, targetH};
+        cmdList->RSSetViewports(1, &effectiveViewport);
         cmdList->RSSetScissorRects(1, &scissor);
 
         cmdList->SetGraphicsRootSignature(rootSig.Get());
