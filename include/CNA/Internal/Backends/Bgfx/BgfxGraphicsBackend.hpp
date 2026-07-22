@@ -137,6 +137,13 @@ namespace CNA::Internal::Backends::Bgfx
     {
         virtual ~IBgfxSamplable() = default;
         virtual bgfx::TextureHandle GetBgfxTextureHandle() const = 0;
+        // REMED-GFX-067: true when the sampleable handle is a render target's color attachment
+        // (an FBO-backed texture). On originBottomLeft renderers (OpenGL/GLES/WebGL) a framebuffer
+        // attachment's texel memory is stored bottom-up, so sampling it with the ordinary top-down
+        // V convention yields a vertically-mirrored image — unlike an ordinary (SetData-uploaded)
+        // Texture2D, whose memory is top-down. The SpriteBatch sample path flips V for these
+        // sources when caps->originBottomLeft is set. Default false; only render targets override.
+        virtual bool IsRenderTargetColorSource() const { return false; }
     };
 
     // -------------------------------------------------------------------------
@@ -241,6 +248,8 @@ namespace CNA::Internal::Backends::Bgfx
         void BindGL() const override {}
         int GetMultiSampleCount() const override { return multiSampleCount; }
         bgfx::TextureHandle GetBgfxTextureHandle() const override { return colorTex; }
+        // REMED-GFX-067: this IS a render-target color attachment — see IBgfxSamplable.
+        bool IsRenderTargetColorSource() const override { return true; }
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
@@ -661,7 +670,10 @@ namespace CNA::Internal::Backends::Bgfx
         // dimensions rather than a concrete BgfxTextureBackend, so callers can supply either a
         // BgfxTextureBackend's or a BgfxRenderTargetBackend's real sampleable texture (via
         // IBgfxSamplable::GetBgfxTextureHandle()) without an unsafe cast between unrelated types.
-        void SubmitSprite(bgfx::TextureHandle textureHandle, int texWidth, int texHeight,
+        // REMED-GFX-067: sourceIsRenderTarget flips the sampled V on originBottomLeft renderers so
+        // a RenderTarget2D sampled back (its FBO memory is bottom-up on OpenGL) appears upright.
+        void SubmitSprite(bgfx::TextureHandle textureHandle, bool sourceIsRenderTarget,
+                          int texWidth, int texHeight,
                           const Rectangle& destinationRectangle,
                           const Rectangle& sourceRectangle,
                           const Color& color,

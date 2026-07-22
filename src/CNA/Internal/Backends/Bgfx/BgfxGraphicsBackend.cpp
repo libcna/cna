@@ -957,11 +957,18 @@ namespace CNA::Internal::Backends::Bgfx
         // type whenever texture was actually a render target.
         const auto* samplable = dynamic_cast<const IBgfxSamplable*>(&texture);
         bgfx::TextureHandle handle = BGFX_INVALID_HANDLE;
-        if (samplable) handle = samplable->GetBgfxTextureHandle();
+        bool sourceIsRenderTarget = false;
+        if (samplable)
+        {
+            handle = samplable->GetBgfxTextureHandle();
+            // REMED-GFX-067: a RenderTarget2D's FBO color memory is bottom-up on originBottomLeft
+            // renderers; SubmitSprite flips its sampled V so it reads back upright.
+            sourceIsRenderTarget = samplable->IsRenderTargetColorSource();
+        }
         // Task 750: apply this Begin()'s SamplerState to slot 0 right before each submit,
         // mirroring EasyGL's/Vulkan's identical FlushBatch()-time ApplySamplerState() call.
         graphicsBackend.ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
-        graphicsBackend.SubmitSprite(handle, texture.GetWidth(), texture.GetHeight(),
+        graphicsBackend.SubmitSprite(handle, sourceIsRenderTarget, texture.GetWidth(), texture.GetHeight(),
                                      destinationRectangle, sourceRectangle, color, rotation, origin, effects,
                                      layerDepth);
     }
@@ -1449,7 +1456,8 @@ namespace CNA::Internal::Backends::Bgfx
         return std::make_unique<BgfxSpriteBatchBackend>(*this);
     }
 
-    void BgfxGraphicsBackend::SubmitSprite(bgfx::TextureHandle textureHandle, int texWidth, int texHeight,
+    void BgfxGraphicsBackend::SubmitSprite(bgfx::TextureHandle textureHandle, bool sourceIsRenderTarget,
+                                           int texWidth, int texHeight,
                                            const Rectangle& destinationRectangle,
                                            const Rectangle& sourceRectangle,
                                            const Color& color,
@@ -1489,6 +1497,18 @@ namespace CNA::Internal::Backends::Bgfx
             std::swap(u1, u2);
         }
         if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0)
+        {
+            std::swap(v1, v2);
+        }
+
+        // REMED-GFX-067: on originBottomLeft renderers (OpenGL/GLES/WebGL) a render target's color
+        // attachment stores its texel memory bottom-up, so sampling it with the ordinary top-down V
+        // yields a vertically-mirrored image (an ordinary Texture2D is top-down and unaffected).
+        // Flip V for render-target sources so RenderTarget2D content blits back upright — matching
+        // every other backend's public XNA top-left orientation. Composes with FlipVertically above
+        // (two swaps cancel, preserving the user's requested flip). No-op on Vulkan/D3D/Metal
+        // (originBottomLeft == false), where the FBO memory is already top-down.
+        if (sourceIsRenderTarget && bgfx::getCaps()->originBottomLeft)
         {
             std::swap(v1, v2);
         }
