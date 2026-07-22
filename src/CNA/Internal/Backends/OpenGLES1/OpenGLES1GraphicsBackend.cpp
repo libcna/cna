@@ -601,6 +601,14 @@ namespace CNA::Internal::Backends::OpenGLES1
 
     OpenGLES1GraphicsBackend::~OpenGLES1GraphicsBackend()
     {
+        // Release the carrier texture while its context is still current; destroying the context
+        // would take it anyway, but leaving a live name behind makes leak tooling noisier.
+        if (whiteTexture_)
+        {
+            glDeleteTextures(1, &whiteTexture_);
+            whiteTexture_ = 0;
+        }
+
         IGraphicsBackend::UnregisterForWindow(window_);
         DestroyGLContext();
     }
@@ -752,6 +760,8 @@ namespace CNA::Internal::Backends::OpenGLES1
 
     void OpenGLES1GraphicsBackend::DebugSimulateContextLoss()
     {
+        // The name dies with the context; clearing it keeps "0 means none" true in between.
+        whiteTexture_ = 0;
         DestroyGLContext();
     }
 

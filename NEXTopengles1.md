@@ -40,7 +40,9 @@ comparisons (`cna_oracle_render_easygl` only).
 
 ### Validation status
 
-- `ctest -R OpenGLES1`: **7/7 pass**, 58 pixel-asserted checks.
+- `ctest -R OpenGLES1`: **7/7 pass**, 63 pixel-asserted checks.
+- **UBSan clean**: all 7 tests rebuilt with `-fsanitize=undefined` in `cmake-build-ubsan` and run —
+  63/63 checks pass, 0 runtime errors.
 - Parity corpus: **6/39 exact at tolerance 0**, vs **10/39** for EasyGL on the same corpus and
   machine. `dualtexture_quad` now matches EasyGL byte for byte (307/307). See
   `docs/opengles1-parity-report.md`; no row in that table is unexplained any more.
@@ -86,28 +88,34 @@ six.**
 
 ## Phase 3 progress (2026-07-22)
 
-Closed this session: `OPENGLES1-81`, `82`, `83`, `85` (partly), `86`, `87`, `88`, `89`.
+Closed this session: `OPENGLES1-81`, `82`, `83`, `84`, `85` (partly), `86`, `87`, `88`, `89`,
+`91`, `92`. **11 of 14 Phase-3 rows.**
 
 Still ⬜, in the order I would pick them up:
 
-1. `OPENGLES1-84` — `RenderTargetCube` + `SetRenderTargetCubeFace`. Both prerequisites already
-   work here (`GL_OES_framebuffer_object`, `GL_OES_texture_cube_map`); needs per-face colour
-   attachment. Biggest remaining win.
-2. `OPENGLES1-92` — per-vertex `Color` **and** `DiffuseColor` together. The deviation table calls
-   this impossible; it is not. Sketch: bind a 1×1 white texture and use `GL_COMBINE` with
-   `SRC0 = GL_PRIMARY_COLOR`, `SRC1 = GL_CONSTANT` (the diffuse tint). For the *textured* case the
-   tint needs a second stage on unit 1 — safe, because the dual-texture and env-map paths that
-   also use unit 1 are mutually exclusive branches. Medium risk: it touches the hot draw path.
-3. `OPENGLES1-90` — real `SetVertexDeclaration` instead of stride-based dispatch. Large.
-4. `OPENGLES1-91` — `SetContextRecoveryEnabled`. **Note the tension**: this backend now *depends*
-   on CPU shadows for context-loss restore (`OPENGLES1-11`/`80`), so honouring "recovery disabled"
-   means deliberately giving that up. Decide the tradeoff before implementing.
-5. `OPENGLES1-94` — `GL_OES_draw_texture` sprite fast path. Performance only; measure first.
+1. `OPENGLES1-90` — real `SetVertexDeclaration` instead of stride-based dispatch (16/20/24/28/32).
+   The largest remaining item and the most structural: it replaces a convention every draw path
+   depends on. `OPENGLES1-81` already showed the cost of the current scheme — a layout the corpus
+   uses did not even reach its own code path. Do this one with a clear head, not at the end of a
+   session.
+2. `OPENGLES1-94` — `GL_OES_draw_texture` sprite fast path. Performance only, and only valid for
+   unrotated screen-aligned sprites. **Measure before and after**; do not land it on the assumption
+   that it is faster.
 
 **Blocked, do not start without a human decision:** `OPENGLES1-93` (compressed texture upload)
 needs a shared `ImageData`/`Texture2D.cpp` change affecting every backend.
 
-## Two further defects found this session
+### Partial work worth knowing about
+
+- `OPENGLES1-85` is ✅ *partly*: render-target mip chains are generated and magnification filters
+  are now correct, but selecting `GL_*_MIPMAP_*` **minification** filters needs per-texture
+  knowledge of whether a chain exists — which means adding to the shared `ITextureBackend`. Left
+  undone deliberately.
+- `OPENGLES1-89` is implemented but **unreachable from the public API**: `Texture2D::GetData()`
+  answers plain textures from their CPU shadow and only asks the backend for render targets.
+  Making it reachable is a shared-`Texture2D.cpp` change.
+
+## Three further defects found this session
 
 7. `OPENGLES1-81` — `DualTextureEffect` ignored the second UV set entirely. Three compounding
    faults: the 28-byte dual-UV layout never passed the stride gate, both units used the same UV
@@ -116,6 +124,9 @@ needs a shared `ImageData`/`Texture2D.cpp` change affecting every backend.
    simply wrong and is corrected in the plan.
 8. `OPENGLES1-82` — `FogStart == FogEnd` divided by zero instead of fogging everything, which is
    what XNA specifies.
+9. `OPENGLES1-91` — `SetContextRecoveryEnabled(false)` **freed nothing**. `Texture2D` released its
+   own CPU copy, but `ShareCpuPixels` had given the backend shared ownership of the same buffer, so
+   the refcount kept it alive. The knob promised a memory saving it did not deliver.
 
 ## Claims in the docs that turned out to be wrong
 
