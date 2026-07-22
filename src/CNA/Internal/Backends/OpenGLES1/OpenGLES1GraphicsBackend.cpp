@@ -182,6 +182,63 @@ namespace CNA::Internal::Backends::OpenGLES1
         pixels_ = std::move(pixels);
     }
 
+    void OpenGLES1TextureBackend::GetData(int level, int x, int y, int w, int h,
+                                          void* data, int dataLength) const
+    {
+        if (level != 0 || !data || w <= 0 || h <= 0) return;
+        if (dataLength < w * h * 4) return;
+        auto* pixels = static_cast<uint8_t*>(data);
+
+        // Preferred route: attach this texture to a scratch framebuffer and read it back, so the
+        // caller sees what the GPU actually holds rather than what was last uploaded.
+        if (owner_ && owner_->HasFramebufferObjectsEXT() && texture_ != 0)
+        {
+            GLint previousFbo = 0;
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING_OES, &previousFbo);
+
+            GLuint scratch = 0;
+            owner_->GenFramebufferEXT(&scratch);
+            owner_->BindFramebufferEXT(scratch);
+            owner_->AttachTexture2DEXT(texture_);
+
+            if (owner_->IsFramebufferCompleteEXT())
+            {
+                const int flippedY = height_ - y - h;
+                glPixelStorei(GL_PACK_ALIGNMENT, 1);
+                glReadPixels(x, flippedY, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+                std::vector<uint8_t> row(static_cast<std::size_t>(w) * 4);
+                for (int top = 0, bottom = h - 1; top < bottom; ++top, --bottom)
+                {
+                    uint8_t* topRow = pixels + static_cast<std::size_t>(top) * w * 4;
+                    uint8_t* bottomRow = pixels + static_cast<std::size_t>(bottom) * w * 4;
+                    std::memcpy(row.data(), topRow, row.size());
+                    std::memcpy(topRow, bottomRow, row.size());
+                    std::memcpy(bottomRow, row.data(), row.size());
+                }
+
+                owner_->BindFramebufferEXT(static_cast<GLuint>(previousFbo));
+                owner_->DeleteFramebufferEXT(&scratch);
+                return;
+            }
+
+            owner_->BindFramebufferEXT(static_cast<GLuint>(previousFbo));
+            owner_->DeleteFramebufferEXT(&scratch);
+        }
+
+        // Fallback: the shared CPU copy. Correct for anything uploaded through SetData, which is
+        // every ordinary texture -- just not evidence of the GPU's own contents.
+        if (!pixels_ || pixels_->empty()) return;
+        if (pixels_->size() < static_cast<std::size_t>(width_) * height_ * 4) return;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t src = (static_cast<std::size_t>(y + row) * width_ + x) * 4;
+            if (src + static_cast<std::size_t>(w) * 4 > pixels_->size()) return;
+            std::memcpy(pixels + static_cast<std::size_t>(row) * w * 4, pixels_->data() + src,
+                        static_cast<std::size_t>(w) * 4);
+        }
+    }
+
     void OpenGLES1TextureBackend::RestoreAfterContextLoss()
     {
         // The old name belonged to the destroyed context; asking GL to delete it would be

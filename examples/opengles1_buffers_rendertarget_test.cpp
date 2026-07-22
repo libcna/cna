@@ -13,6 +13,10 @@
 // Check F -- ...and unbinding restores drawing to the backbuffer.
 // Check F2 -- a mipMap RenderTarget2D regenerates its chain on unbind (OPENGLES1-85): sampling it
 //   minified reads a blended mip level rather than a single point-sampled texel.
+// Check F3 -- Texture2D::GetData returns an ordinary texture's texels. NOTE: this deliberately
+//   does NOT exercise the backend's own GetData -- Texture2D answers from its CPU shadow and only
+//   asks the backend for render targets (OPENGLES1-89's row explains why). The check is kept
+//   because the row-major/channel-order contract is still worth pinning down.
 // Check G -- FillMode::WireFrame leaves the interior of a triangle unfilled...
 // Check H -- ...while still drawing its edges.
 //
@@ -35,6 +39,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -312,6 +317,29 @@ protected:
             // Level 0 must still hold the sharp split -- mip generation must not disturb it.
             check(colorNear(left, Color::Black) && colorNear(right, Color::White),
                   "RenderTarget2D(mipMap) -- level 0 still holds the rendered image after mip generation");
+        }
+
+        // ---- Check F3: reading an ordinary texture back ----------------------------------
+        {
+            // Distinct per-texel colours so a wrong row order, channel order or offset all show up.
+            Texture2D tex = Texture2D::CreateFromPixels(dev, 2, 2, std::vector<std::uint8_t>{
+                255, 0, 0, 255,      0, 255, 0, 255,
+                0, 0, 255, 255,      255, 255, 0, 255,
+            });
+
+            std::vector<Color> readBack(4, Color(0, 0, 0, 0));
+            tex.GetData(readBack.data(), 0, 4);
+
+            const bool ok = colorNear(readBack[0], Color::Red) &&
+                            colorNear(readBack[1], Color::Lime) &&
+                            colorNear(readBack[2], Color::Blue) &&
+                            colorNear(readBack[3], Color(255, 255, 0));
+            std::printf("       (Texture2D::GetData = %d,%d,%d / %d,%d,%d / %d,%d,%d / %d,%d,%d)\n",
+                        readBack[0].getRProperty(), readBack[0].getGProperty(), readBack[0].getBProperty(),
+                        readBack[1].getRProperty(), readBack[1].getGProperty(), readBack[1].getBProperty(),
+                        readBack[2].getRProperty(), readBack[2].getGProperty(), readBack[2].getBProperty(),
+                        readBack[3].getRProperty(), readBack[3].getGProperty(), readBack[3].getBProperty());
+            check(ok, "Texture2D::GetData returns the uploaded texels in row-major order (CPU shadow path)");
         }
 
         // ---- Checks G/H: wireframe emulation ---------------------------------------------

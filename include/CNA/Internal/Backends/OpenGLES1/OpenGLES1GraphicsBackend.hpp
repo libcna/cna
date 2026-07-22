@@ -55,6 +55,25 @@ namespace CNA::Internal::Backends::OpenGLES1
         void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
 
         /**
+         * @brief Reads raw RGBA8 pixels back out of this texture.
+         *
+         * ES 1.1 has no `glGetTexImage`, so the texture is read through a temporary framebuffer
+         * with it attached as the colour target -- the same route the render target uses. Falls
+         * back to the shared CPU copy when framebuffer objects are unavailable, and leaves `data`
+         * untouched when neither route works (the interface's own convention).
+         *
+         * @param level Mip level; only level 0 is stored by this backend.
+         * @param x Left edge of the sub-rectangle to read.
+         * @param y Top edge of the sub-rectangle, in top-left-origin coordinates.
+         * @param w Width of the sub-rectangle.
+         * @param h Height of the sub-rectangle.
+         * @param data Destination buffer receiving RGBA8 pixels.
+         * @param dataLength Size of that buffer in bytes.
+         */
+        void GetData(int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
+
+        /**
          * @brief Recreates this texture's GL object after the context it lived in was destroyed.
          *
          * The old GL name dies with the old context, so it is regenerated, its default sampler
@@ -493,6 +512,29 @@ namespace CNA::Internal::Backends::OpenGLES1
         /// NOXNA. True when glGenerateMipmapOES resolved, i.e. when render-target mip chains can be
         /// regenerated.
         [[nodiscard]] bool HasGenerateMipmapEXT() const { return glGenerateMipmapOES_ != nullptr; }
+
+        /// NOXNA. True when GL_OES_framebuffer_object is usable (see fboSupported_).
+        [[nodiscard]] bool HasFramebufferObjectsEXT() const { return fboSupported_; }
+
+        /** @brief Creates a framebuffer object. @param out Receives the new name. */
+        void GenFramebufferEXT(unsigned int* out) const { if (glGenFramebuffersOES_) glGenFramebuffersOES_(1, out); }
+        /** @brief Deletes a framebuffer object. @param name Name to delete, then zeroed. */
+        void DeleteFramebufferEXT(unsigned int* name) const { if (glDeleteFramebuffersOES_) glDeleteFramebuffersOES_(1, name); }
+        /** @brief Binds a framebuffer object. @param name Name to bind; 0 for the backbuffer. */
+        void BindFramebufferEXT(unsigned int name) const { if (glBindFramebufferOES_) glBindFramebufferOES_(GL_FRAMEBUFFER_OES, name); }
+        /** @brief Attaches a 2D texture as colour attachment 0. @param texture Texture name. */
+        void AttachTexture2DEXT(unsigned int texture) const
+        {
+            if (glFramebufferTexture2DOES_)
+                glFramebufferTexture2DOES_(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_TEXTURE_2D, texture, 0);
+        }
+        /** @brief Reports whether the bound framebuffer is complete. @return True when complete. */
+        [[nodiscard]] bool IsFramebufferCompleteEXT() const
+        {
+            return glCheckFramebufferStatusOES_
+                       ? glCheckFramebufferStatusOES_(GL_FRAMEBUFFER_OES) == GL_FRAMEBUFFER_COMPLETE_OES
+                       : false;
+        }
 
         /**
          * @brief Regenerates the bound texture's mip chain from level 0.
