@@ -241,24 +241,18 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanTextureBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
-        vkDeviceWaitIdle(owner_->device_);
-        VkDevice dev = owner_->device_;
-        if (descriptorSet_ != VK_NULL_HANDLE) {
-            vkFreeDescriptorSets(dev, owner_->descriptorPool_, 1, &descriptorSet_);
-            descriptorSet_ = VK_NULL_HANDLE;
-        }
-        if (imageView_ != VK_NULL_HANDLE) {
-            vkDestroyImageView(dev, imageView_, nullptr);
-            imageView_ = VK_NULL_HANDLE;
-        }
-        if (image_ != VK_NULL_HANDLE) {
-            vkDestroyImage(dev, image_, nullptr);
-            image_ = VK_NULL_HANDLE;
-        }
-        if (memory_ != VK_NULL_HANDLE) {
-            vkFreeMemory(dev, memory_, nullptr);
-            memory_ = VK_NULL_HANDLE;
-        }
+        // REMED-GFX-075: a deferred sprite/3D draw queued before this texture's destruction still
+        // borrows imageView_ (baked into a cached descriptor set) until the next Present/GetData
+        // record consumes it. Retire the handles instead of freeing them now (no device stall); the
+        // texSamplerDescSets_ cache entry is evicted immediately so a reused VkImageView handle can
+        // never hit a stale set. Frees happen once the consuming frame's fence has completed.
+        VulkanGraphicsBackend::RetiredResources r;
+        owner_->EvictSampledViewFromCaches(imageView_, r);
+        if (descriptorSet_ != VK_NULL_HANDLE) { r.descriptorSets.push_back(descriptorSet_); descriptorSet_ = VK_NULL_HANDLE; }
+        if (imageView_     != VK_NULL_HANDLE) { r.imageViews.push_back(imageView_);         imageView_     = VK_NULL_HANDLE; }
+        if (image_         != VK_NULL_HANDLE) { r.images.push_back(image_);                  image_         = VK_NULL_HANDLE; }
+        if (memory_        != VK_NULL_HANDLE) { r.memories.push_back(memory_);               memory_        = VK_NULL_HANDLE; }
+        owner_->RetireResources(std::move(r));
     }
 
     void VulkanTextureBackend::UpdatePixels(const uint8_t* rgba, int stride)
@@ -647,24 +641,29 @@ namespace CNA::Internal::Backends::Vulkan
     void VulkanRenderTargetBackend::ReleaseVulkanResources()
     {
         if (!owner_ || !owner_->device_) return;
-        vkDeviceWaitIdle(owner_->device_);
-        VkDevice dev = owner_->device_;
-        if (descriptorSet_ != VK_NULL_HANDLE) {
-            vkFreeDescriptorSets(dev, owner_->descriptorPool_, 1, &descriptorSet_);
-            descriptorSet_ = VK_NULL_HANDLE;
-        }
-        if (framebuffer_     != VK_NULL_HANDLE) { vkDestroyFramebuffer(dev, framebuffer_, nullptr);     framebuffer_     = VK_NULL_HANDLE; }
-        if (msaaFramebuffer_ != VK_NULL_HANDLE) { vkDestroyFramebuffer(dev, msaaFramebuffer_, nullptr); msaaFramebuffer_ = VK_NULL_HANDLE; }
-        if (colorView_   != VK_NULL_HANDLE)  { vkDestroyImageView(dev, colorView_, nullptr);       colorView_   = VK_NULL_HANDLE; }
-        if (colorSampleView_ != VK_NULL_HANDLE) { vkDestroyImageView(dev, colorSampleView_, nullptr); colorSampleView_ = VK_NULL_HANDLE; }
-        if (colorImage_  != VK_NULL_HANDLE)  { vkDestroyImage(dev, colorImage_, nullptr);          colorImage_  = VK_NULL_HANDLE; }
-        if (colorMemory_ != VK_NULL_HANDLE)  { vkFreeMemory(dev, colorMemory_, nullptr);           colorMemory_ = VK_NULL_HANDLE; }
-        if (msaaColorView_   != VK_NULL_HANDLE) { vkDestroyImageView(dev, msaaColorView_, nullptr); msaaColorView_   = VK_NULL_HANDLE; }
-        if (msaaColorImage_  != VK_NULL_HANDLE) { vkDestroyImage(dev, msaaColorImage_, nullptr);    msaaColorImage_  = VK_NULL_HANDLE; }
-        if (msaaColorMemory_ != VK_NULL_HANDLE) { vkFreeMemory(dev, msaaColorMemory_, nullptr);     msaaColorMemory_ = VK_NULL_HANDLE; }
-        if (depthView_   != VK_NULL_HANDLE)  { vkDestroyImageView(dev, depthView_, nullptr);       depthView_   = VK_NULL_HANDLE; }
-        if (depthImage_  != VK_NULL_HANDLE)  { vkDestroyImage(dev, depthImage_, nullptr);          depthImage_  = VK_NULL_HANDLE; }
-        if (depthMemory_ != VK_NULL_HANDLE)  { vkFreeMemory(dev, depthMemory_, nullptr);           depthMemory_ = VK_NULL_HANDLE; }
+        // REMED-GFX-075: a render target destroyed while it is still queued as a sampled SOURCE in
+        // another draw (its colorSampleView_ baked into that draw's descriptor set) must keep that
+        // view alive until the consuming record. Retire every handle (no device stall) and evict the
+        // sample-view cache entries; the frame-fence-gated free covers both the borrowed-but-not-yet
+        // recorded window and any in-flight GPU read. (Destination-queued work into THIS target was
+        // already dropped by ~VulkanRenderTargetBackend's PurgeDeferredWorkForTarget, GFX-074.)
+        VulkanGraphicsBackend::RetiredResources r;
+        owner_->EvictSampledViewFromCaches(colorSampleView_, r);
+        owner_->EvictSampledViewFromCaches(colorView_, r);
+        if (descriptorSet_   != VK_NULL_HANDLE) { r.descriptorSets.push_back(descriptorSet_); descriptorSet_   = VK_NULL_HANDLE; }
+        if (framebuffer_     != VK_NULL_HANDLE) { r.framebuffers.push_back(framebuffer_);     framebuffer_     = VK_NULL_HANDLE; }
+        if (msaaFramebuffer_ != VK_NULL_HANDLE) { r.framebuffers.push_back(msaaFramebuffer_); msaaFramebuffer_ = VK_NULL_HANDLE; }
+        if (colorView_       != VK_NULL_HANDLE) { r.imageViews.push_back(colorView_);         colorView_       = VK_NULL_HANDLE; }
+        if (colorSampleView_ != VK_NULL_HANDLE) { r.imageViews.push_back(colorSampleView_);   colorSampleView_ = VK_NULL_HANDLE; }
+        if (colorImage_      != VK_NULL_HANDLE) { r.images.push_back(colorImage_);            colorImage_      = VK_NULL_HANDLE; }
+        if (colorMemory_     != VK_NULL_HANDLE) { r.memories.push_back(colorMemory_);         colorMemory_     = VK_NULL_HANDLE; }
+        if (msaaColorView_   != VK_NULL_HANDLE) { r.imageViews.push_back(msaaColorView_);     msaaColorView_   = VK_NULL_HANDLE; }
+        if (msaaColorImage_  != VK_NULL_HANDLE) { r.images.push_back(msaaColorImage_);        msaaColorImage_  = VK_NULL_HANDLE; }
+        if (msaaColorMemory_ != VK_NULL_HANDLE) { r.memories.push_back(msaaColorMemory_);     msaaColorMemory_ = VK_NULL_HANDLE; }
+        if (depthView_       != VK_NULL_HANDLE) { r.imageViews.push_back(depthView_);         depthView_       = VK_NULL_HANDLE; }
+        if (depthImage_      != VK_NULL_HANDLE) { r.images.push_back(depthImage_);            depthImage_      = VK_NULL_HANDLE; }
+        if (depthMemory_     != VK_NULL_HANDLE) { r.memories.push_back(depthMemory_);         depthMemory_     = VK_NULL_HANDLE; }
+        owner_->RetireResources(std::move(r));
         appliedMultiSampleCount_ = 0;
     }
 
@@ -892,7 +891,17 @@ namespace CNA::Internal::Backends::Vulkan
             snapshot->vertices            = std::move(vertices_);
             snapshot->indices             = std::move(indices_);
             snapshot->draws               = std::move(draws_);
-            snapshot->customEffectBackend = customEffectBackend_;
+            // REMED-GFX-075: capture the custom effect's pipeline/layout/push-constants BY VALUE now,
+            // while it is guaranteed alive (Apply() just ran), so the deferred record never touches
+            // the effect wrapper -- it may be disposed before Present. The pipeline handle stays
+            // valid past this batch via the effect backend's retirement queue.
+            if (customEffectBackend_ && customEffectBackend_->GetPipeline() != VK_NULL_HANDLE) {
+                snapshot->hasCustomEffect = true;
+                snapshot->customPipeline  = customEffectBackend_->GetPipeline();
+                snapshot->customLayout    = customEffectBackend_->GetPipelineLayout();
+                std::memcpy(snapshot->customPushConst, customEffectBackend_->GetPushConst(),
+                            sizeof(snapshot->customPushConst));
+            }
             // REMED-GFX-013: capture the scissor active for this batch (see BatchSnapshot).
             snapshot->scissorEnabled = backend_->scissorEnabled_;
             snapshot->scissorX = backend_->scissorX_; snapshot->scissorY = backend_->scissorY_;
@@ -1248,6 +1257,11 @@ namespace CNA::Internal::Backends::Vulkan
         // Externally-owned textures.
         for (auto* tex : liveTextures_) { tex->ReleaseVulkanResources(); tex->DisconnectOwner(); }
         liveTextures_.clear();
+        // REMED-GFX-075: force-free every retirement bucket now (device already idle from Step 1) --
+        // including the handles the live-resource ReleaseVulkanResources() calls above just retired,
+        // and any retired MRT proxy -- BEFORE descriptorPool_ is destroyed below, since retired
+        // descriptor sets are freed from that pool.
+        ProcessRetiredResources(true);
         // MSAA color buffer.
         CleanupMsaaColorResources();
         // Depth buffer.
@@ -2393,11 +2407,16 @@ namespace CNA::Internal::Backends::Vulkan
     VulkanEffectBackend::~VulkanEffectBackend()
     {
         if (!owner_ || !owner_->device_) return;
-        vkDeviceWaitIdle(owner_->device_);
-        if (pipeline_       != VK_NULL_HANDLE) { vkDestroyPipeline(owner_->device_, pipeline_, nullptr);       pipeline_       = VK_NULL_HANDLE; }
-        if (pipelineLayout_ != VK_NULL_HANDLE) { vkDestroyPipelineLayout(owner_->device_, pipelineLayout_, nullptr); pipelineLayout_ = VK_NULL_HANDLE; }
-        if (fragModule_     != VK_NULL_HANDLE) { vkDestroyShaderModule(owner_->device_, fragModule_, nullptr);  fragModule_     = VK_NULL_HANDLE; }
-        if (vertModule_     != VK_NULL_HANDLE) { vkDestroyShaderModule(owner_->device_, vertModule_, nullptr);  vertModule_     = VK_NULL_HANDLE; }
+        // REMED-GFX-075: a SpriteBatch that used this effect snapshots its VkPipeline/VkPipelineLayout
+        // handles at End() (see BatchSnapshot), so a custom Effect disposed before the deferred
+        // record must keep those handles valid until the record consumes the batch. Retire them
+        // (frame-fence-gated) instead of destroying now; the snapshot never dereferences this wrapper.
+        VulkanGraphicsBackend::RetiredResources r;
+        if (pipeline_       != VK_NULL_HANDLE) { r.pipelines.push_back(pipeline_);            pipeline_       = VK_NULL_HANDLE; }
+        if (pipelineLayout_ != VK_NULL_HANDLE) { r.pipelineLayouts.push_back(pipelineLayout_); pipelineLayout_ = VK_NULL_HANDLE; }
+        if (fragModule_     != VK_NULL_HANDLE) { r.shaderModules.push_back(fragModule_);      fragModule_     = VK_NULL_HANDLE; }
+        if (vertModule_     != VK_NULL_HANDLE) { r.shaderModules.push_back(vertModule_);      vertModule_     = VK_NULL_HANDLE; }
+        owner_->RetireResources(std::move(r));
         if (owner_->activeCustomEffect_ == this) owner_->activeCustomEffect_ = nullptr;
     }
 
@@ -6454,11 +6473,13 @@ namespace CNA::Internal::Backends::Vulkan
                                                              : GetOrCreatePipeline2D(targetDepthFmt);
                 VkPipelineLayout activeLayout = pipelineLayout2D_;
                 const float*     customPC     = nullptr;
-                const auto*      ceb          = snapshot->customEffectBackend;
-                if (ceb && ceb->GetPipeline() != VK_NULL_HANDLE) {
-                    activePipe   = ceb->GetPipeline();
-                    activeLayout = ceb->GetPipelineLayout();
-                    customPC     = ceb->GetPushConst();
+                // REMED-GFX-075: read the effect's pipeline/layout/push-constants from the batch
+                // snapshot (captured by value at End()), never from the effect wrapper -- it may have
+                // been disposed since. The pipeline handle is kept alive by the effect's retirement.
+                if (snapshot->hasCustomEffect && snapshot->customPipeline != VK_NULL_HANDLE) {
+                    activePipe   = snapshot->customPipeline;
+                    activeLayout = snapshot->customLayout;
+                    customPC     = snapshot->customPushConst;
                 }
 
                 if (activePipe != lastBoundPipeline) {
@@ -7178,6 +7199,12 @@ namespace CNA::Internal::Backends::Vulkan
 
         vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
 
+        // REMED-GFX-075: the current frame slot's fence just signalled, so free any retired
+        // deferred-resource handles whose consuming frame is now provably complete (see
+        // ProcessRetiredResources). Ordinary destruction never stalls the device; the cost of the
+        // deferred free is paid here, once per frame, on already-idle handles.
+        ProcessRetiredResources(false);
+
         uint32_t imageIndex = 0;
         VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
             imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
@@ -7200,6 +7227,11 @@ namespace CNA::Internal::Backends::Vulkan
         si.signalSemaphoreCount = 1; si.pSignalSemaphores = signalSems;
         if (vkQueueSubmit(graphicsQueue_, 1, &si, inFlightFences_[currentFrame_]) != VK_SUCCESS)
             throw std::runtime_error("vkQueueSubmit failed");
+
+        // REMED-GFX-075: this Full record consumed every deferred entry; advance the retirement
+        // generation clock so resources retired during this frame's build are freed only after this
+        // submit's fence has completed (generation + MaxFramesInFlight later). See RetireResources.
+        ++frameGeneration_;
 
         if (deferSwap) {
             // Wait for render + readback copy to complete, but hold the image. The caller
@@ -7548,6 +7580,84 @@ namespace CNA::Internal::Backends::Vulkan
         d.blendFactorR = blendFactorR_; d.blendFactorG = blendFactorG_;
         d.blendFactorB = blendFactorB_; d.blendFactorA = blendFactorA_;
         pending3D_.push_back(std::move(d));
+    }
+
+    // REMED-GFX-075: see the header. Tag a bundle of retired Vulkan handles with the current
+    // frameGeneration_ and enqueue it; ProcessRetiredResources() frees it once the frame that
+    // consumes any deferred entry referencing it has certainly completed on the GPU.
+    void VulkanGraphicsBackend::RetireResources(RetiredResources&& r)
+    {
+        r.generation = frameGeneration_;
+        retiredResources_.push_back(std::move(r));
+    }
+
+    // REMED-GFX-075: evict every persistent per-(view,sampler) descriptor-set cache entry keyed on a
+    // dying sampled view, moving the cached VkDescriptorSet into `into` for frame-fence-gated free.
+    // Prevents a later resource that reuses the freed VkImageView handle value from being handed a
+    // stale descriptor set that still samples the destroyed image.
+    void VulkanGraphicsBackend::EvictSampledViewFromCaches(VkImageView view, RetiredResources& into)
+    {
+        if (view == VK_NULL_HANDLE) return;
+        for (auto it = texSamplerDescSets_.begin(); it != texSamplerDescSets_.end(); )
+        {
+            if (it->first.first == view) {
+                if (it->second != VK_NULL_HANDLE) into.descriptorSets.push_back(it->second);
+                it = texSamplerDescSets_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // REMED-GFX-075: free every retirement bucket whose consuming frame's fence has certainly
+    // completed. A bucket retired at generation G is (at most) referenced by the Full record at
+    // generation G+1; that record's fence is guaranteed signalled before generation G+1+MaxFrames
+    // InFlight begins (slot reuse waits it), so `generation + MaxFramesInFlight < frameGeneration_`
+    // is a safe, strictly-conservative free condition. `force` frees everything (teardown only,
+    // after a full device wait). Runs once per frame at SubmitFrame's fence-wait sync point.
+    void VulkanGraphicsBackend::ProcessRetiredResources(bool force)
+    {
+        if (device_ == VK_NULL_HANDLE) return;
+        auto freeBucket = [this](RetiredResources& r) {
+            for (VkDescriptorSet s : r.descriptorSets)
+                if (s != VK_NULL_HANDLE && descriptorPool_ != VK_NULL_HANDLE)
+                    vkFreeDescriptorSets(device_, descriptorPool_, 1, &s);
+            for (VkImageView v : r.imageViews)       if (v  != VK_NULL_HANDLE) vkDestroyImageView(device_, v, nullptr);
+            for (VkImage im : r.images)              if (im != VK_NULL_HANDLE) vkDestroyImage(device_, im, nullptr);
+            for (VkDeviceMemory m : r.memories)      if (m  != VK_NULL_HANDLE) vkFreeMemory(device_, m, nullptr);
+            for (VkFramebuffer fb : r.framebuffers)  if (fb != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, fb, nullptr);
+            for (VkPipeline p : r.pipelines)         if (p  != VK_NULL_HANDLE) vkDestroyPipeline(device_, p, nullptr);
+            for (VkPipelineLayout pl : r.pipelineLayouts) if (pl != VK_NULL_HANDLE) vkDestroyPipelineLayout(device_, pl, nullptr);
+            for (VkShaderModule sm : r.shaderModules) if (sm != VK_NULL_HANDLE) vkDestroyShaderModule(device_, sm, nullptr);
+            for (VkQueryPool qp : r.queryPools)      if (qp != VK_NULL_HANDLE) vkDestroyQueryPool(device_, qp, nullptr);
+        };
+        for (auto it = retiredResources_.begin(); it != retiredResources_.end(); )
+        {
+            if (force || it->generation + MaxFramesInFlight < frameGeneration_) {
+                freeBucket(*it);
+                it = retiredResources_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = retiredMrtProxies_.begin(); it != retiredMrtProxies_.end(); )
+        {
+            if (force || it->first + MaxFramesInFlight < frameGeneration_)
+                it = retiredMrtProxies_.erase(it);   // unique_ptr frees the proxy (device_ still valid)
+            else
+                ++it;
+        }
+    }
+
+    // REMED-GFX-075: null a dying OcclusionQuery out of every pending 3D draw (the draw survives;
+    // only the query correlation is dropped, whose result is unobservable once the query is disposed)
+    // and out of activeOcclusionQuery_, so RecordCommandBuffer never dereferences the freed wrapper.
+    void VulkanGraphicsBackend::PurgeDeferredQuery(VulkanOcclusionQueryBackend* q)
+    {
+        if (!q) return;
+        for (auto& d : pending3D_)
+            if (d.occlusionQuery == q) d.occlusionQuery = nullptr;
+        if (activeOcclusionQuery_ == q) activeOcclusionQuery_ = nullptr;
     }
 
     // REMED-GFX-074: see the header. Removes every deferred entry (sprite batch, 3D draw, bare
@@ -8409,19 +8519,30 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
     {
+        // REMED-GFX-075: the MRT proxy is a VulkanRTSource DESTINATION whose raw pointer is stored in
+        // the deferred queues (d.rt/batchRT). Retiring it to backbuffer or a new binding must NOT
+        // destroy the old proxy while its already-queued render work legitimately awaits Present --
+        // that would dangle the pointer RecordCommandBuffer dereferences (GetFramebuffer/GetRenderPass).
+        // Move it into the retirement queue so the object (and its framebuffer/depth image) outlive
+        // the frame that consumes those entries, instead of dropping the draws (they were issued).
+        auto retireMrtProxy = [this]() {
+            if (mrtProxy_)
+                retiredMrtProxies_.emplace_back(frameGeneration_, std::move(mrtProxy_));
+        };
         if (!rts || count <= 0) {
             currentRT_ = nullptr;
-            mrtProxy_.reset();
+            retireMrtProxy();
             return;
         }
         if (count == 1) {
-            mrtProxy_.reset();
+            retireMrtProxy();
             auto* vrt = static_cast<VulkanRenderTargetBackend*>(rts[0]);
             currentRT_ = vrt;
             vrt->BindAsRenderTarget();
             return;
         }
         // Build MRT proxy for N > 1.
+        retireMrtProxy();
         std::vector<VulkanRenderTargetBackend*> vRts(static_cast<size_t>(count));
         for (int i = 0; i < count; ++i)
             vRts[i] = static_cast<VulkanRenderTargetBackend*>(rts[i]);
@@ -8755,10 +8876,14 @@ namespace CNA::Internal::Backends::Vulkan
     VulkanTextureCubeBackend::~VulkanTextureCubeBackend()
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
-        VkDevice dev = owner_->device_;
-        if (imageView_ != VK_NULL_HANDLE) vkDestroyImageView(dev, imageView_, nullptr);
-        if (image_     != VK_NULL_HANDLE) vkDestroyImage(dev, image_, nullptr);
-        if (memory_    != VK_NULL_HANDLE) vkFreeMemory(dev, memory_, nullptr);
+        // REMED-GFX-075: a TextureCube sampled by a deferred draw (e.g. EnvironmentMapEffect) bakes
+        // its cube VkImageView into that draw's descriptor set; retire the handles so a cube
+        // destroyed before Present keeps the view alive until the record consumes the draw.
+        VulkanGraphicsBackend::RetiredResources r;
+        if (imageView_ != VK_NULL_HANDLE) { r.imageViews.push_back(imageView_); imageView_ = VK_NULL_HANDLE; }
+        if (image_     != VK_NULL_HANDLE) { r.images.push_back(image_);          image_     = VK_NULL_HANDLE; }
+        if (memory_    != VK_NULL_HANDLE) { r.memories.push_back(memory_);        memory_    = VK_NULL_HANDLE; }
+        owner_->RetireResources(std::move(r));
     }
 
     void VulkanTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
@@ -8901,8 +9026,20 @@ namespace CNA::Internal::Backends::Vulkan
 
     VulkanOcclusionQueryBackend::~VulkanOcclusionQueryBackend()
     {
-        if (owner_ && owner_->device_ != VK_NULL_HANDLE && pool_ != VK_NULL_HANDLE)
-            vkDestroyQueryPool(owner_->device_, pool_, nullptr);
+        if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
+        // REMED-GFX-075: pending 3D draws store a raw pointer to this query (read at record time to
+        // emit vkCmdBeginQuery/EndQuery). Detach it from every deferred entry first -- the draws are
+        // preserved, only the query wrapping is dropped (a disposed query's result is unobservable
+        // per XNA, so recording it is pointless) -- so RecordCommandBuffer never dereferences this
+        // freed wrapper. The VkQueryPool is retired (frame-fence-gated) in case an already-submitted
+        // frame still references it.
+        owner_->PurgeDeferredQuery(this);
+        if (pool_ != VK_NULL_HANDLE) {
+            VulkanGraphicsBackend::RetiredResources r;
+            r.queryPools.push_back(pool_);
+            pool_ = VK_NULL_HANDLE;
+            owner_->RetireResources(std::move(r));
+        }
     }
 
     void VulkanOcclusionQueryBackend::Begin()
@@ -9214,25 +9351,26 @@ namespace CNA::Internal::Backends::Vulkan
             }
         }
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
-        VkDevice dev = owner_->device_;
-        vkDeviceWaitIdle(dev);
+        // REMED-GFX-075: a RenderTargetCube used as a sampled SOURCE (its cubeView_ baked into a
+        // deferred draw's descriptor set) destroyed before Present must keep that view alive until
+        // the record consumes the draw. Retire all handles (frame-fence-gated free) rather than a
+        // device stall + immediate destroy.
+        VulkanGraphicsBackend::RetiredResources r;
         for (int i = 0; i < 6; ++i) {
-            if (framebuffers_[i] != VK_NULL_HANDLE)
-                vkDestroyFramebuffer(dev, framebuffers_[i], nullptr);
-            if (msaaFramebuffers_[i] != VK_NULL_HANDLE)
-                vkDestroyFramebuffer(dev, msaaFramebuffers_[i], nullptr);
-            if (faceViews_[i] != VK_NULL_HANDLE)
-                vkDestroyImageView(dev, faceViews_[i], nullptr);
+            if (framebuffers_[i]     != VK_NULL_HANDLE) { r.framebuffers.push_back(framebuffers_[i]);     framebuffers_[i]     = VK_NULL_HANDLE; }
+            if (msaaFramebuffers_[i] != VK_NULL_HANDLE) { r.framebuffers.push_back(msaaFramebuffers_[i]); msaaFramebuffers_[i] = VK_NULL_HANDLE; }
+            if (faceViews_[i]        != VK_NULL_HANDLE) { r.imageViews.push_back(faceViews_[i]);          faceViews_[i]        = VK_NULL_HANDLE; }
         }
-        if (cubeView_    != VK_NULL_HANDLE) vkDestroyImageView(dev, cubeView_, nullptr);
-        if (depthView_   != VK_NULL_HANDLE) vkDestroyImageView(dev, depthView_, nullptr);
-        if (depthImage_  != VK_NULL_HANDLE) vkDestroyImage(dev, depthImage_, nullptr);
-        if (depthMemory_ != VK_NULL_HANDLE) vkFreeMemory(dev, depthMemory_, nullptr);
-        if (msaaColorView_   != VK_NULL_HANDLE) vkDestroyImageView(dev, msaaColorView_, nullptr);
-        if (msaaColorImage_  != VK_NULL_HANDLE) vkDestroyImage(dev, msaaColorImage_, nullptr);
-        if (msaaColorMemory_ != VK_NULL_HANDLE) vkFreeMemory(dev, msaaColorMemory_, nullptr);
-        if (image_       != VK_NULL_HANDLE) vkDestroyImage(dev, image_, nullptr);
-        if (memory_      != VK_NULL_HANDLE) vkFreeMemory(dev, memory_, nullptr);
+        if (cubeView_    != VK_NULL_HANDLE) { r.imageViews.push_back(cubeView_);   cubeView_    = VK_NULL_HANDLE; }
+        if (depthView_   != VK_NULL_HANDLE) { r.imageViews.push_back(depthView_);  depthView_   = VK_NULL_HANDLE; }
+        if (depthImage_  != VK_NULL_HANDLE) { r.images.push_back(depthImage_);     depthImage_  = VK_NULL_HANDLE; }
+        if (depthMemory_ != VK_NULL_HANDLE) { r.memories.push_back(depthMemory_);  depthMemory_ = VK_NULL_HANDLE; }
+        if (msaaColorView_   != VK_NULL_HANDLE) { r.imageViews.push_back(msaaColorView_);  msaaColorView_   = VK_NULL_HANDLE; }
+        if (msaaColorImage_  != VK_NULL_HANDLE) { r.images.push_back(msaaColorImage_);     msaaColorImage_  = VK_NULL_HANDLE; }
+        if (msaaColorMemory_ != VK_NULL_HANDLE) { r.memories.push_back(msaaColorMemory_);  msaaColorMemory_ = VK_NULL_HANDLE; }
+        if (image_       != VK_NULL_HANDLE) { r.images.push_back(image_);          image_       = VK_NULL_HANDLE; }
+        if (memory_      != VK_NULL_HANDLE) { r.memories.push_back(memory_);        memory_      = VK_NULL_HANDLE; }
+        owner_->RetireResources(std::move(r));
     }
 
     void VulkanRenderTargetCubeBackend::BindAsRenderTargetFace(int face)

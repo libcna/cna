@@ -324,7 +324,15 @@ namespace CNA::Internal::Backends::Vulkan
             std::vector<Sprite2DVertex> vertices;
             std::vector<uint16_t>       indices;
             std::vector<DrawCall>       draws;
-            VulkanEffectBackend*        customEffectBackend = nullptr;
+            // REMED-GFX-075: a custom Effect is captured by VALUE (its VkPipeline/VkPipelineLayout
+            // handles + a copy of its 128-byte push-constant block) at End(), NOT by pointer, so a
+            // custom Effect disposed after SpriteBatch.End() but before the deferred record can no
+            // longer be dereferenced at Present time. The pipeline/layout handles themselves are
+            // kept alive past this batch's consumption by the effect backend's retirement queue.
+            bool                        hasCustomEffect = false;
+            VkPipeline                  customPipeline  = VK_NULL_HANDLE;
+            VkPipelineLayout            customLayout    = VK_NULL_HANDLE;
+            float                       customPushConst[32] = {};
             // REMED-GFX-013: scissor state captured at End() so a SpriteBatch filling a render
             // target is clipped correctly regardless of later frame-global scissor changes (e.g.
             // Task 338's ScissorRectangle reset on RT unbind). enabled==false or a zero-sized rect
@@ -1241,6 +1249,55 @@ namespace CNA::Internal::Backends::Vulkan
         // here (when a render target is bound) so `usedRTs` picks it up even with zero draws;
         // cleared alongside `activeBatches_`/`pending3D_` once per frame in `RecordCommandBuffer()`.
         std::vector<VulkanRTSource*> clearedRTs_;
+
+        // REMED-GFX-075: deferred-resource retirement queue -- the generic ownership mechanism that
+        // makes the whole-frame deferred renderer memory-safe against a SOURCE resource
+        // (Texture2D/TextureCube/RenderTarget2D-as-sampler/custom Effect/OcclusionQuery) destroyed
+        // after its draw was queued but before Present()/GetData records it. A resource's destructor
+        // no longer frees its Vulkan handles immediately; it hands them here, tagged with the current
+        // frameGeneration_. ProcessRetiredResources() frees a bucket only once MaxFramesInFlight
+        // generations have elapsed past the frame that consumed the entries referencing it -- i.e.
+        // after that frame's fence has certainly signalled -- covering BOTH the CPU record window
+        // (a deferred entry still borrows the handle) and the GPU execution window (submitted work
+        // still reads it), with no vkDeviceWaitIdle in the ordinary destruction path. This replaces
+        // the previous per-destroy device stall and subsumes it (a strictly wider safety window).
+        struct RetiredResources {
+            uint64_t                       generation = 0;
+            std::vector<VkImageView>       imageViews;
+            std::vector<VkImage>           images;
+            std::vector<VkDeviceMemory>    memories;
+            std::vector<VkFramebuffer>     framebuffers;
+            std::vector<VkPipeline>        pipelines;
+            std::vector<VkPipelineLayout>  pipelineLayouts;
+            std::vector<VkShaderModule>    shaderModules;
+            std::vector<VkQueryPool>       queryPools;
+            std::vector<VkDescriptorSet>   descriptorSets; // all allocated from descriptorPool_
+        };
+        std::vector<RetiredResources>                                    retiredResources_;
+        // MRT proxies are retired as whole objects (they are VulkanRTSource DESTINATIONS referenced
+        // by their pointer in the deferred queues): SetRenderTargets() replaces the live proxy while
+        // its queued render work legitimately remains, so the old proxy is kept alive here until the
+        // consuming frame drains, instead of being destroyed out from under those entries.
+        std::vector<std::pair<uint64_t, std::unique_ptr<VulkanMRTProxy>>> retiredMrtProxies_;
+        // Monotonic count of Full frame records submitted; the retirement generation clock.
+        uint64_t frameGeneration_ = 0;
+
+        // REMED-GFX-075: hand a bundle of Vulkan handles to the retirement queue (tags it with the
+        // current frameGeneration_). Called from every user-destroyable resource's destructor.
+        void RetireResources(RetiredResources&& r);
+        // REMED-GFX-075: drop every texSamplerDescSets_ entry keyed on `view` (a dying sampled
+        // texture/RT view), moving its cached VkDescriptorSet into `into` for retirement -- so a
+        // later resource that happens to reuse the freed VkImageView handle value can never collide
+        // with a stale cached descriptor set.
+        void EvictSampledViewFromCaches(VkImageView view, RetiredResources& into);
+        // REMED-GFX-075: free every retirement bucket whose consuming frame's fence has certainly
+        // completed (generation + MaxFramesInFlight < frameGeneration_); `force` frees all of them
+        // (used at teardown, after a full device wait). Run once per frame from SubmitFrame().
+        void ProcessRetiredResources(bool force);
+        // REMED-GFX-075: detach a dying OcclusionQuery from every pending 3D draw (nulls the borrowed
+        // pointer, keeping the draw) and from activeOcclusionQuery_, so RecordCommandBuffer never
+        // dereferences the freed query wrapper. The VkQueryPool itself is retired separately.
+        void PurgeDeferredQuery(VulkanOcclusionQueryBackend* q);
 
         // Cached vkCmdInsertDebugUtilsLabelEXT — loaded once after device creation, nullptr if unsupported.
         PFN_vkCmdInsertDebugUtilsLabelEXT pfnCmdInsertDebugLabel_ = nullptr;
