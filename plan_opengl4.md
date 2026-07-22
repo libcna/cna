@@ -602,6 +602,21 @@
 > - **Windows/macOS validation** — code paths only (see Platform scope above), not run on real
 >   hardware yet. Not reachable from this development environment (no Windows/macOS machine
 >   available) — not a pick-up candidate here either. ⬜ (environment-blocked)
+> - **Hardware instancing (`DrawInstancedPrimitivesEx`)** — newly discovered while auditing for
+>   further work after `GL4-32` closed out. `OpenGL4GraphicsBackend` doesn't override
+>   `DrawInstancedPrimitivesEx` at all (inherits the default, which unconditionally throws
+>   `std::runtime_error`), unlike `EasyGLGraphicsBackend`'s real `Task 1082` implementation
+>   (`glDrawElementsInstanced`-equivalent + a second per-instance attribute buffer bound at
+>   `glVertexAttribDivisor(location, 1)`). **Not a quick pick-up**, unlike every other gap closed
+>   this session: EasyGL's own instancing implementation binds the instance buffer's attributes
+>   generically, driven by `EasyGLVertexBufferBackend::GetDeclarationElements()` (a
+>   `VertexElement`/`VertexDeclaration`-derived per-attribute format/offset list). This backend's
+>   `OpenGL4VertexBufferBackend` has no equivalent generic declaration mechanism at all — only the
+>   fixed stride-keyed `ApplyLayout` switch/case this whole plan's own effect ports have used
+>   throughout (16/20/24/32/48/52/56/68). A real port would need a new generic
+>   `VertexElement`-to-GL-attribute mapper first, a materially larger and more architecturally
+>   invasive prerequisite than any single task landed so far on this branch — not attempted here.
+>   ⬜
 
 ---
 
@@ -905,5 +920,7 @@ machine's Mesa/llvmpipe GL 4.5 core-profile implementation:
     `GL4-30` — see `GL4-32`'s own row.
 
 See the "Remaining work" section in the status banner above for the full, non-prioritized list of
-what's still open (Windows/macOS validation, and the permanently-deferred context-loss recovery
-feature) — these are candidates for a fresh scoping pass, not blocking anything above.
+what's still open (Windows/macOS validation, hardware instancing — needs a new generic
+`VertexElement`-to-GL-attribute mapper first, a materially larger prerequisite than anything
+landed so far — and the permanently-deferred context-loss recovery feature) — these are
+candidates for a fresh scoping pass, not blocking anything above.
