@@ -517,6 +517,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_SpriteBatch_BlendState COMMAND cna_test_vulkan_spritebatch_blendstate
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-077: BlendState.ColorWriteChannels (per-attachment write mask) + MultiSampleMask
+        # (pSampleMask) via the extended pipeline cache key.
+        cna_vulkan_test(cna_test_vulkan_colorwritechannels
+                        examples/vulkan_colorwritechannels_test.cpp)
+        cna_register_backend_test(NAME Vulkan_ColorWriteChannels COMMAND cna_test_vulkan_colorwritechannels
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
         cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
                         examples/vulkan_spritebatch_multi_begin_end_test.cpp)
