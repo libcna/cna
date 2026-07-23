@@ -2428,6 +2428,8 @@ existing task.
 | REMED-GFX-059 | The SdlGpu backend emits a Vulkan validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw (confirmed via `VK_LAYER_KHRONOS_validation` under `SDL_GPU`). Confirmed **pre-existing** and independent of `REMED-GFX-006`: the existing `SdlGpu_Skinned` test emits it 6× against unchanged (pre-fix) shaders, and readback pixel values are correct throughout, so it is a render-pass/pipeline attachment-compatibility validation issue in `SdlGpuGraphicsBackend`, not a normal-transform or rendering-correctness defect | LOW-MEDIUM | P2 (SdlGpu-lane; validation-cleanliness, not a visible-output defect) | `REMED-GFX-006` SdlGpu slice (first `VK_LAYER_KHRONOS_validation` run of the new world-normal harness) | NOT STARTED — recorded, not fixed (out of GFX-006's normal-transform scope; SdlGpu-backend owner should reconcile the SDL_GPU render-pass/pipeline attachment description that 02684 flags) |
 | REMED-GFX-060 | Every effect-aware D3D9 draw site hardcoded the vertex/index offsets (`DrawPrimitive(…, 0 /*StartVertex*/)` and `DrawIndexedPrimitive(…, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount, 0 /*StartIndex*/, …)`), silently dropping the XNA `DrawPrimitives(vertexStart)` / `DrawIndexedPrimitives(baseVertex, startIndex)` offsets that `GraphicsDevice` threads through `GpuDrawParams`. Same defect class as `REMED-GFX-020` (D3D11/D3D12), spread across 15 sites in 4 files (`D3D9EffectDraw`/`D3D9PbrDraw`/`D3D9SkinnedVertexColorDraw`/`D3D9InstancedDraw`) | HIGH | P2 | `REMED-GFX-020` Phase-12 cross-backend draw-offset sweep | **DONE (2026-07-21, `aa23eed2`+`d2491a17`)** — fixed + runtime-verified on real DXVK 2.6.0 (new `D3D9_DrawOffset` 0/7→7/7, full D3D9 shard 20/20, D3D11 GFX-020 regression still 6/6). See detail section below. |
 | REMED-GFX-061 | The scalar `GpuDrawParams::fogStart`/`fogEnd` fields and the `IGraphicsBackend.hpp` (~`:454`) fog documentation ("D3D backends … keep using fogStart/fogEnd") are stale/vestigial for the D3D family after the GFX-005/010 view-space-fog campaign: D3D9 custom shaders compute view-space fog in-backend (`ComputeFogVectorEXT`) and D3D11/D3D12 D3DCommon stock effects bake the `fogVector` CPU-side, so the scalar object-space fields are consumed only by the few direct-`DrawPrimitivesEx` callers that set them (and by non-D3D backends that predate GFX-010). Not a rendering defect — a documentation/ABI-hygiene item | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | NOT STARTED — recorded, not fixed (a precise comment correction is not unquestionably safe and Phase 11 forbids redesigning the fog ABI in the offset tranche; recommended resolution: documentation cleanup + formally mark `fogStart`/`fogEnd` as retained accepted-and-ignored compat fields, not removal, since direct-backend callers still set them) |
+| REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | NOT STARTED — source-confirmed and recorded, not fixed (separate WebGPU-only **lit** material-composition defect, equivalent in class to GFX-008; GFX-088 made no production/shader changes). |
+| REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | NOT STARTED — recorded, not fixed (pre-existing Vulkan dynamic-state declaration/replay mismatch, unrelated to SkinnedEffect material semantics and not introduced by GFX-088). |
 
 #### REMED-BUILD-010 detail
 
@@ -5818,3 +5820,183 @@ from a DXVK9 limitation; GFX-088 is a source-level shader/semantics decision nee
 record + INDEX GFX-087/088/089). Recommended next GRAPHICS task per the index: **REMED-GFX-061**
 (fog-field ABI documentation cleanup) — do not begin. GFX-088/089 are the higher-value genuine-defect
 follow-ups spawned here.
+
+---
+
+### REMED-GFX-088 — SkinnedEffect “unlit” semantics — DONE (test-only; not a production defect)
+
+**Outcome / root-cause boundary.** The task's premise was false: XNA/FNA `SkinnedEffect` has no
+observable unlit rendering state. Its explicit `IEffectLights.LightingEnabled` getter always returns
+`true`, and assigning `false` throws `NotSupportedException`. CNA already implemented that contract
+and already forced `GpuDrawParams::lightingEnabled=true` in `SkinnedEffect::FillGpuDrawParams`.
+Consequently the GFX-087 D3D11 ×3 / D3D12 ×4 black results were not a shared shader defect,
+D3DCommon-only defect, or effect-state transport defect (class A/B/C/D). They were a fifth category:
+**direct-backend tests constructed a `GpuDrawParams` state tuple that the public effect cannot
+produce**. No production fix was appropriate.
+
+**Authoritative contract.** The primary oracle is FNA's current
+[`SkinnedEffect.cs`](https://raw.githubusercontent.com/FNA-XNA/FNA/master/src/Graphics/Effect/StockEffects/SkinnedEffect.cs):
+the explicit `IEffectLights.LightingEnabled` implementation returns `true` and throws
+`NotSupportedException` when set to `false`. Microsoft's archived
+[`SkinnedEffect` class page](https://learn.microsoft.com/en-us/previous-versions/windows/xna/ff434463(v=xnagamestudio.42))
+confirms that the XNA type implements `IEffectLights`; FNA supplies the executable compatibility
+contract. CNA's existing implementation at `SkinnedEffect.cpp:211-216` is the C++ equivalent.
+
+The Phase-2 questions therefore have an exact, non-BasicEffect answer:
+
+| Question for `LightingEnabled == false` | XNA/FNA result |
+|---|---|
+| RGB before fog | **Undefined / no draw** — the property assignment throws first |
+| Alpha | **Undefined / no draw** |
+| `EmissiveColor` contribution | Not evaluated |
+| `AmbientLightColor` contribution | Not evaluated |
+| Directional-light parameters | Not evaluated |
+| Texture modulation | Not evaluated |
+| Vertex colour | N/A in stock XNA/FNA SkinnedEffect; CNA's `NOXNA` extension is likewise never reached in a false-lighting state |
+| Fog | Not evaluated |
+
+This is materially different from `BasicEffect`: FNA BasicEffect genuinely supports
+`LightingEnabled=false` and has a BasicEffect-specific unlit material-preparation path. That path is
+not a valid implementation guide for SkinnedEffect. `EnvironmentMapEffect` shares SkinnedEffect's
+always-lit/false-throws contract; `DualTextureEffect` and `AlphaTestEffect` expose no lighting toggle.
+
+**The valid, always-lit material contract.** CNA's CPU upload already matches FNA:
+
+```text
+DiffuseShader.rgb = DiffuseColor * Alpha
+DiffuseShader.a   = Alpha
+EmissiveShader    = (EmissiveColor + AmbientLightColor * DiffuseColor) * Alpha
+```
+
+Each disabled directional light uploads zero diffuse and zero specular colours; its public direction
+is immaterial. The shared stock-shader composition is:
+
+```text
+lightSum = Σ_i LightDiffuse_i * max(0, dot(N, -LightDirection_i))
+baseRGB  = lightSum * DiffuseShader.rgb + EmissiveShader
+RGB      = baseRGB * Texture.rgb * optionalCnaVertexColor.rgb
+AlphaOut = DiffuseShader.a * Texture.a * optionalCnaVertexColor.a
+```
+
+The per-light Blinn-Phong specular term is then added under the stock effect's existing alpha rule,
+and fog is composed last as `lerp(FogColor, RGB, FogFactor)`. The new backend-neutral test uses exact
+binary fractions and locks a discriminating upload:
+`DiffuseShader=(0.25,0.125,0.375,0.5)`,
+`EmissiveShader=(0.125,0.1875,0.078125)`, all disabled-light diffuse/specular terms zero, texture
+identity preserved, and `lightingEnabled=true`.
+
+**Broken observed path (old smoke fixture) and corrected path.** Both smoke programs bypassed
+`SkinnedEffect` and default-constructed `GpuDrawParams`, then set `skinned=true`,
+`ambientColor=white`, and left `lightingEnabled=false`, `emissiveColor=zero`. Since GFX-008,
+SkinnedEffect shaders correctly consume the CPU-pre-folded `emissiveColor`; they do not refold the
+stale raw `ambientColor`. The always-lit shader therefore received:
+
+```text
+old invalid fixture: lightSum=0, EmissiveShader=0
+unchanged shader:    baseRGB = lightSum*DiffuseShader + EmissiveShader = 0
+```
+
+The test-only correction models a reachable public effect:
+
+```text
+corrected fixture: lightingEnabled=true, per-pixel permutation,
+                   all directional contributions=0, EmissiveShader=white
+unchanged shader:  baseRGB = 0*DiffuseShader + white = white
+final:             exact source texture colour
+```
+
+Thus there is **no shader-side “new formula”**: the old and new production shader formula are
+identical and correct. D3D12's fogged S5 fixture also lacked the GFX-005/GFX-010 view-space
+`fogVector[2]=2`; that stale test setup was corrected so its valid lit base colour is fogged, rather
+than relying on the vestigial scalar `fogStart`/`fogEnd`.
+
+**Test-first disposition.** The seven already-red exact-colour smoke assertions were the
+before-change reproducer. A production test that “fails before the shader fix” cannot truthfully be
+created because production already rejects the proposed state. Instead, commit `4fd54942` adds the
+backend-neutral public-interface contract test (including the interface dispatch path and
+true→attempted-false→true invariant) and the exact CPU upload test above. Commit `ba7724f0` corrects
+only the impossible D3D smoke fixtures. No expected colour, tolerance, or assertion was weakened.
+
+**Shader-family / backend scope.**
+
+| Backend / family | Lighting flag and current false path | Contract assessment |
+|---|---|---|
+| D3D11 + D3D12 / D3DCommon | Four skinned families (plain/vertex-colour × per-pixel/per-vertex) are always lit; public CPU always selects lit state | Correct; only raw impossible fixtures were affected |
+| D3D9 | Vendored XNA `SkinnedEffect.fx` has 18 always-lit permutations; CNA's coloured-skinned extension is also always lit | Correct |
+| Vulkan | Four corresponding skinned shader families, no unlit branch | Correct |
+| EasyGL / OpenGL-family | Four embedded skinned programs, always lit | Correct |
+| Bgfx | Generic raw backend path contains a `lightingEnabled` mix/fallback, but public SkinnedEffect always uploads `true` | False branch unreachable through the API; observable contract correct |
+| SDL GPU | Generic/coloured raw skinned fragments have a false branch, likewise unreachable through public SkinnedEffect | Observable contract correct |
+| WebGPU | Four embedded WGSL variants have no false branch | Contract-correct for GFX-088; separate **lit** formula divergence filed as GFX-090 |
+| Software | Supports skin deformation, texture and diffuse modulation, but deliberately omits lighting/fog/emissive in its v1 effect path | Partial support; full SkinnedEffect material semantics N/A, not fabricated |
+| Other diagnostic/fallback backends | No independent full stock-SkinnedEffect material implementation | N/A / wrapper bookkeeping only |
+
+**Runtime verification.**
+
+| Backend | Route | Result |
+|---|---|---|
+| Backend-neutral CPU/API | native `CnaTests`, `SkinnedEffectDefaultsTest.*` | **57/57 PASS**: defaults, both false-throw paths, exact pre-folded material, disabled lights, texture transport, bones, fog, properties, `EnableDefaultLighting()` |
+| D3D11 | Wine + **DXVK 2.6.0**, AMD Radeon 780M | Former failures **3/3 green**; full smoke **163/163**. GFX-006 world normal **4/4**, GFX-008 lighting conformance **9/9**, view-space fog **9/9** |
+| D3D12 | Wine + **vkd3d-proton 3.1.0**, established offscreen path | Former S1/S2/S4/S5 failures **4/4 green**; full smoke **220/220**, `RESULT: ALL PASS: 0 failure(s)`. BUILD-012 untouched |
+| D3D9 | Wine + DXVK9 2.6.0, AMD Radeon 780M | Shader dispatch **23/23**; skinned vertex-colour **5/5**; smoke **61/62**, with only the already-filed GFX-089 depth rejection failure |
+| Vulkan | debug + KHRONOS validation, Xvfb/llvmpipe | Canonical 14-test GFX-005/006/008/skinning/material batch green; lighting **9/9**, fog **3/3**, view fog **9/9**, normal **4/4**, vertex colour **4/4**. **Zero VUIDs in the canonical GFX-088 run** |
+| EasyGL | OpenGL ES 3.2 / Mesa | Targeted **19/19** CTests green, including lighting **9/9**, emissive/ambient **3/3**, fog **3/3**, view fog **9/9**, normals **8/8**, bones/vertex colour/defaults |
+| Bgfx OpenGL | bgfx OpenGL 2.1 | Targeted **14/14** green |
+| Bgfx Vulkan | real renderer selection confirmed (the Xvfb Vulkan request fell back to GL and was not counted) | Lighting **9/9**, fog **3/3**, world normal **8/8** |
+| SDL GPU | SDL_GPU→Vulkan | Targeted **7/7** green; only the separately tracked pre-existing GFX-059 `VUID-vkCmdDraw-renderPass-02684` noise appeared |
+| WebGPU | native wgpu | Skinned3D **9/9** + world normal **8/8** = **17/17**, no validation/error-scope output. WebGPU 3D fog remains an existing unsupported capability, so no fake fog parity test was added |
+| Software | native CPU rasterizer | Effects **5/5**, dual/env/skinned **4/4**; skinning geometry remains green, while full lighting/fog/emissive semantics are honestly N/A |
+
+An additional Vulkan reused-vertex-colour test passed all pixel assertions but emitted the
+pre-existing `VUID-vkCmdDraw-None-08608`: the generic draw replay sets blend constants after binding
+a pipeline that declares them static. This is unrelated to GFX-088 and is now GFX-091; it is not
+counted as validation-clean GFX-088 evidence. The SDL GPU 02684 messages remain GFX-059.
+
+**Material, fog, skinning, and state conclusions.**
+
+- **Texture:** the corrected D3D fixtures reproduce the exact `(77,88,99,255)` texture colour—no
+  missing/double multiply or channel swap. The texture pointer and `textureEnabled=true` are locked
+  by the CPU contract test.
+- **Emissive/ambient:** the exact pre-fold formula is locked independently; D3D11/Vulkan/EasyGL
+  GFX-008 coverage stays green. D3D9's coloured-skinned test still proves emissive is outside the
+  diffuse multiply. WebGPU's separate violation is GFX-090.
+- **Alpha:** the exact nontrivial `Alpha=0.5` upload is
+  `DiffuseShader.a=0.5`, with RGB and emissive each multiplied once; existing texture/vertex-colour
+  paths remain green. A false-lighting alpha result does not exist.
+- **Fog:** D3D11/D3D12 prove exact lit base colour with fog disabled and exact green FogColor at
+  FogEnd when enabled; Vulkan/EasyGL fog and view-space-fog regressions are green. Composition is
+  valid lit base → fog, never black → fog.
+- **Lighting enabled:** one- and three-directional-light, ambient/emissive, specular and
+  `PreferPerPixelLighting` coverage remain green. `EnableDefaultLighting()` still sets the FNA
+  ambient and all three directional defaults exactly.
+- **Skinning:** identity, translated, two-bone/weighted blend, combined transforms and
+  `WeightsPerVertex` coverage remain green. No bone matrix or palette code changed.
+- **Normals:** GFX-006 inverse-transpose/world-normal tests remain green on D3D11, Vulkan, EasyGL,
+  Bgfx and WebGPU. No normal code changed.
+- **A→B→A / deferred state:** an unlit A cannot be enqueued. The meaningful public sequence is
+  `true → set false (throws) → true`, now explicitly tested through `IEffectLights`; the failed
+  assignment does not mutate the effect. Consequently there is no false-state snapshot or
+  last-state-wins lifetime case to test, and no GFX-075 architecture was reopened.
+- **Defaults:** `LightingEnabled` remains `true`; Diffuse=One, Emissive/Ambient=Zero, Alpha=1,
+  DirectionalLight0 enabled and Light1/2 disabled remain covered. No default rendering changed.
+
+**Source-of-truth / generation / performance.** The complete shader survey found no GFX-088 shader
+edit to make. Generated artifact diff: **0 files, 0 families**; regeneration and a no-change baseline
+would add no evidence, so neither was performed. There is no new branch, draw, pass, allocation, or
+per-frame work. Production diff is zero.
+
+**Sibling inventory and new findings.** BasicEffect has a real, contract-correct unlit path;
+EnvironmentMapEffect is intentionally always lit/false-throws; DualTextureEffect and AlphaTestEffect
+do not expose lighting. No sibling standard effect has the same alleged missing-unlit-branch pattern.
+Two distinct findings were recorded and left untouched:
+
+- **REMED-GFX-090:** all four WebGPU SkinnedEffect WGSL variants re-multiply the already-pre-folded
+  emissive/ambient term by DiffuseColor in the **lit** path; existing white-diffuse tests are blind.
+- **REMED-GFX-091:** Vulkan dynamic blend-constant replay conflicts with a stock-effect pipeline's
+  static state and emits `VUID-vkCmdDraw-None-08608`.
+
+**Files / commits.** Production and `audit/` are untouched. Test commits:
+`4fd54942 test(Task REMED-GFX-088): lock SkinnedEffect always-lit contract` and
+`ba7724f0 test(Task REMED-GFX-088): correct impossible skinned smoke state`; this documentation
+record closes the task. Recommended next GRAPHICS task: **REMED-GFX-089**, the one remaining
+deterministic D3D smoke failure. It was not investigated or modified in this session.
