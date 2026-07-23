@@ -2431,7 +2431,7 @@ existing task.
 | REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | **DONE and VERIFIED — REAL PRODUCTION SHADER-SEMANTIC DEFECT.** All four handwritten embedded WGSL modules now use `lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz`; the shared CPU pre-fold remains unchanged. New sRGB-safe exact-path regression: **6/25 pre-fix → 27/27 post-fix**, covering all four modules, ambient, emissive, combined, directional, non-white texture, Alpha, vertex colour, A→B→A, and post-draw mutation. WebGPU targeted **3/3 CTests / 44/44 checks**, broader **10/10 / 70/70**, validation clean. D3D11 smoke **163/163**; GFX-006/008/010 and GFX-088 contract regressions green across the applicable backends. No generated shader artifacts; test `3c9a4d5f`, fix `ee0f44c9`. |
 | REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | **DONE and VERIFIED (KHRONOS validation loaded; Xvfb/llvmpipe + AMD Radeon 780M/RADV)** — real production validity defect. One normalized mapping-derived predicate now conditionally declares `VK_DYNAMIC_STATE_BLEND_CONSTANTS` and conditionally replays the captured value after pipeline bind. Per-draw/per-batch capture is preserved; factor/function state stays static and pipeline-keyed; RGBA stays dynamic and outside the key. Pre-fix minimal test: pixels 4/4 but CTest 0/1 on exact VUID; post-fix generic 3D 12/12, SpriteBatch 23/23, specialized SkinnedEffect 6/6, targeted shard 36/36, zero 08608, cache 8→8. Full Vulkan 156/158 with documented `DepthBias` plus a baseline-identical cube-MSAA failure; separate Texture3D `VUID-09600` spawned GFX-093 and cube-MSAA spawned GFX-094. test `ed2b7f74`, fix `368e011e`. |
 | REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
-| REMED-GFX-093 | Vulkan Texture3D nonzero-mip SetData/GetData copies the requested mip but transitions only mip 0 because the shared `TransitionImageLayout` barrier hardcodes `{baseMipLevel=0, levelCount=1}`. The sampled 3D view spans all mip levels and its descriptor claims `SHADER_READ_ONLY_OPTIMAL`; validation therefore reports mip 1/2 still in transfer layouts at draw. | LOW | P3 | REMED-GFX-091 full Vulkan validation sweep | NOT STARTED — isolated `Vulkan_Texture3D_Mip_RoundTrip` reproduces four `VUID-vkCmdDraw-None-09600` messages while every pixel assertion passes. Separate image-subresource-layout task; recorded only, not fixed. |
+| REMED-GFX-093 | Vulkan Texture3D nonzero-mip SetData/GetData copies the requested mip but transitioned only mip 0 because the shared `TransitionImageLayout` barrier hardcoded `{baseMipLevel=0, levelCount=1}`. Validation therefore found mip 1/2 still in `SHADER_READ_ONLY_OPTIMAL` while the copy commands declared `TRANSFER_DST_OPTIMAL`/`TRANSFER_SRC_OPTIMAL`. The original descriptor-at-draw interpretation was disproved: no draw/descriptor/view participates in Vulkan Texture3D. | LOW | P3 | REMED-GFX-091 full Vulkan validation sweep | **DONE and VERIFIED — REAL PRODUCTION VULKAN IMAGE-SUBRESOURCE-LAYOUT VALIDITY DEFECT.** A Texture3D-specific barrier now scopes each upload/readback cycle to `{baseMipLevel=level,levelCount=1,baseArrayLayer=0,layerCount=1}`, uses matched shader/transfer access and stages, and restores shader-read in one submission. New 8×8×8/NPOT/state-cycle regression **26/26**; texture shard **11/11**, targeted Vulkan **19/19**, full Vulkan **157/159** with only unchanged DepthBias/GFX-094 baselines; zero validation messages. Texture2D/Cube and GFX-074/075/076/077/091 green; zero shader/generated diff. test `db46bdd0`, fix `977c1a73`. |
 | REMED-GFX-094 | `Vulkan_RenderTargetCube_MsaaResolve` applies MSAA but samples black after drawing all six faces and unbinding the target. | LOW | P3 | REMED-GFX-091 full Vulkan regression sweep | NOT STARTED — reproduced on Xvfb/llvmpipe (4×) and real AMD Radeon 780M/RADV (8×). A clean build of pre-GFX-091 commit `67300e01` fails identically on AMD, so GFX-091 did not introduce it. Separate RT-cube/MSAA task; recorded only, not fixed. |
 
 #### REMED-BUILD-010 detail
@@ -6507,3 +6507,150 @@ No new findings. GFX-092, GFX-093, GFX-094, GFX-061, and the WebGPU SpriteBatch 
 counterpart remain untouched. Recommended next GRAPHICS task: **REMED-GFX-093**, because it is a
 confirmed Vulkan validation defect with a narrow subresource-layout root cause. Do not begin it as
 part of this record.
+
+---
+
+### REMED-GFX-093 — Vulkan Texture3D nonzero-mip image layouts — DONE (production fix)
+
+**Classification:** real production Vulkan image-subresource-layout validity defect. The visible
+Texture3D bytes happened to survive on llvmpipe, but the submitted copy commands did not satisfy
+Vulkan's required layout contract for nonzero mip levels.
+
+**Exact pre-fix evidence and correction to the initial report.** With
+`VK_LAYER_KHRONOS_validation` explicitly found, loaded, and inserted by the Vulkan loader, the
+existing `Vulkan_Texture3D_Mip_RoundTrip` test used one 4×4×4 `VK_IMAGE_TYPE_3D` image with three
+mip levels, one array layer, and `VK_FORMAT_R8G8B8A8_UNORM`. The transient handle in the captured
+run was `VkImage 0x460000000046`. It emitted exactly four
+`VUID-vkCmdDraw-None-09600` messages at `vkQueueSubmit`:
+
+| Operation | Exact subresource | Layout declared by copy | Actual layout tracked by validation |
+|---|---|---|---|
+| `vkCmdCopyBufferToImage` (`SetData`) | mip 1, array layer 0 | `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` | `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` |
+| `vkCmdCopyBufferToImage` (`SetData`) | mip 2, array layer 0 | `VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` | `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` |
+| `vkCmdCopyImageToBuffer` (`GetData`) | mip 1, array layer 0 | `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL` | `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` |
+| `vkCmdCopyImageToBuffer` (`GetData`) | mip 2, array layer 0 | `VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL` | `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL` |
+
+Despite the VUID's generic `vkCmdDraw` name and descriptor-oriented specification text, this
+reproducer records no draw. No `VkImageView`, descriptor binding, or
+`VkDescriptorImageInfo::imageLayout` participates in the failing operation. The Vulkan backend has
+no Texture3D sampling interface or sampler3D descriptor path (Task 863 added that feature only to
+EasyGL), so those requested fields are **not applicable**, not unknown. The earlier GFX-093 record
+had the direction reversed: the copied nonzero mips were not left in transfer layouts at a later
+descriptor access; they never left shader-read at all, while the copy command claimed a transfer
+layout.
+
+**Root cause and previous state model.** Construction transitions the complete mip chain once:
+
+```text
+all mips: UNDEFINED -> SHADER_READ_ONLY_OPTIMAL
+```
+
+There was no mutable whole-image, per-mip, or per-subresource layout variable. The intended implicit
+invariant was that every mip is shader-read outside a synchronous upload/readback operation.
+`SetData(level=N)` and `GetData(level=N)` correctly put `N` in `VkBufferImageCopy::mipLevel`, but
+called the shared `VulkanGraphicsBackend::TransitionImageLayout`; its range is hardcoded to
+`{baseMipLevel=0, levelCount=1, baseArrayLayer=0, layerCount=1}`. Thus only mip 0 was transitioned
+around a copy of mip N. A 3D image's z slices are the copy offset/depth extent, not array layers;
+the image correctly has one array layer.
+
+**New state model and exact fix.** The stable shader-read invariant remains, so no layout array,
+descriptor churn, or generic synchronization redesign was needed. A Texture3D-local command-buffer
+helper now records both barriers around the copy with the exact range:
+
+```text
+aspectMask=COLOR
+baseMipLevel=level, levelCount=1
+baseArrayLayer=0, layerCount=1
+```
+
+The complete selected-mip cycles are:
+
+```text
+SetData: SHADER_READ_ONLY -> TRANSFER_DST -> copy -> SHADER_READ_ONLY
+GetData: SHADER_READ_ONLY -> TRANSFER_SRC -> copy -> SHADER_READ_ONLY
+```
+
+| Transition | Access masks | Pipeline stages |
+|---|---|---|
+| shader-read → transfer-destination | shader read → transfer write | fragment shader → transfer |
+| transfer-destination → shader-read | transfer write → shader read | transfer → fragment shader |
+| shader-read → transfer-source | shader read → transfer read | fragment shader → transfer |
+| transfer-source → shader-read | transfer read → shader read | transfer → fragment shader |
+
+The pre-barrier, copy, and restore barrier now share one one-time command buffer/submission.
+Previously each operation made three synchronous submissions; the fix reduces that to one. It adds
+no `vkDeviceWaitIdle`, `GENERAL` layout, device-wide layout tracking, per-draw bookkeeping,
+descriptor invalidation, or pipeline-key change. The existing completion wait in
+`EndOneTimeCommands` still guarantees staging memory survives through the copy, after which it is
+destroyed. Texture3D is not a Vulkan deferred draw source, so no queued sampling lifetime contract
+is introduced.
+
+**Regression and data evidence.** The new `Vulkan_Texture3D_Mip_Layout` CTest makes the exact VUID
+test-fatal and checks 26 independent state/data properties:
+
+- an 8×8×8 `Color` volume with legal 8³, 4³, 2³, and 1³ mips;
+- forward 0→1→2→3 and mixed 2→0→1 upload orders with distinct voxel colours;
+- level-0 control, every nonzero mip, the terminal 1×1×1 mip, and unrelated-mip preservation;
+- repeated level-1 A→B update, `SetData→GetData→SetData`, and deterministic mip A→B→A readback;
+- two independent Texture3D resources in resource A→B→A order;
+- a one-mip 5×3×2 volume and repeated level-0 update;
+- the NPOT chain 7×5×3 → 3×2×1 → 1×1×1;
+- destroy immediately after a nonzero-mip upload/readback cycle.
+
+Before the production fix, all 26 byte/geometry checks happened to pass but CTest failed solely on
+the validation fail-regex. After the fix they are **26/26** and validation-clean. The original
+level-0 `Vulkan_Texture3D_Slices_RoundTrip` control remains green. The expanded test proves byte
+counts, row/slice interpretation, copy extents, overwrite behavior, and state restoration through
+readback. Vulkan Texture3D explicit-LOD sampling and A→B→A binding-slot tests are not runnable
+because sampler3D support is an existing unsupported backend feature; production shaders were not
+modified to fabricate it. `SurfaceFormat::Color` is the only Texture3D format this Vulkan backend
+implements, so there is no second practical format to smoke-test.
+
+**Runtime verification (Xvfb/llvmpipe, KHRONOS validation enabled).**
+
+| Gate | Result |
+|---|---|
+| New GFX-093 state-cycle regression | **1/1 CTest, 26/26 checks**, zero validation messages |
+| Focused Texture2D/3D/Cube/RT mip shard | **11/11 CTests**, zero validation messages |
+| Texture2D nonzero-mip upload/readback | `Vulkan_Texture2D_Mip_RoundTrip` PASS |
+| TextureCube faces/nonzero mips/readback | `Vulkan_TextureCube_Mip_RoundTrip` PASS |
+| GFX-074 deferred RT GetData/lifetime | **13/13** |
+| GFX-075 deferred source-resource lifetime | **8/8** |
+| GFX-076 descriptor cache identity/lifetime | **14/14** |
+| GFX-077 colour writes / multisample mask | **11/11** |
+| GFX-091 generic blend-factor draw | **1/1** |
+| GFX-091 render-target blend-factor/state/cache | **12/12** |
+| GFX-091 SpriteBatch blend state | **23/23** |
+| GFX-091 specialized SkinnedEffect reuse | **4/4** |
+| Full targeted Vulkan shard | **19/19 CTests**, zero VUIDs or validation errors |
+| Practical full `^Vulkan_` suite | **157/159**; zero VUIDs or validation errors |
+
+The full-suite count is the post-GFX-091 **156/158** baseline plus the new passing regression. Its
+only failures are unchanged and unrelated: `Vulkan_DepthBias` remains **3/4** on llvmpipe, and
+`Vulkan_RenderTargetCube_MsaaResolve` still applies 4× MSAA but samples black instead of blue
+(GFX-094). No GFX-093 `09600` remains, and the complete logs contain no new image-layout VUID or
+other validation message.
+
+**Sibling layout inventory.**
+
+| Resource | Observed layout discipline | GFX-093 action |
+|---|---|---|
+| Texture2D | full exposed chain initialized shader-read; level-0 and exact level-N upload barriers restore shader-read | none |
+| Texture3D | full chain initialized shader-read; now exact level-N upload/readback barriers restore shader-read | fixed |
+| TextureCube | full mips×6 layers initialized shader-read; exact `{mip,face}` upload/readback barriers | none |
+| RenderTarget2D | full sampled chain initialized shader-read; render pass touches mip 0 and mip generation barriers/restores each exact level | none |
+| RenderTargetCube | full sampled mips×6 faces initialized when mipped; render pass touches the selected face's mip 0 and generation barriers/restores exact `{mip,face}` | none |
+
+No sibling was found to record/assume a whole-image state while transitioning only a subset, so no
+new finding was allocated. GFX-094 remains separate and untouched.
+
+Behavioral production diff is one Vulkan backend implementation file; the Vulkan header has only a
+stale-comment correction. The remaining changes are the dedicated test/CMake registration and
+these remediation records. Shader and generated-artifact diff is **zero**; `audit/` is untouched.
+
+- `db46bdd0 test(Task REMED-GFX-093): reproduce Vulkan Texture3D mip layout mismatch`
+- `977c1a73 fix(Task REMED-GFX-093): correct Texture3D mip-level layout transitions`
+- `docs(remediation): record GFX-093 Vulkan Texture3D layout fix` (this record)
+
+No new findings. Recommended next GRAPHICS task: **REMED-GFX-094**, the already-isolated Vulkan
+RenderTargetCube MSAA black resolve/sample defect. Do not begin it as part of this record.
