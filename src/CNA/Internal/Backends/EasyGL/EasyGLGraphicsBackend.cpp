@@ -4302,7 +4302,13 @@ void main()
         device.set_clear_color(r, g, b, a);
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
+        // REMED-GFX-077: XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
+        const bool maskActive = (currentColorWriteMask_ != 15);
+        if (maskActive) device.set_color_mask(true, true, true, true);
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
+        if (maskActive)
+            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
+                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
     }
 
     void EasyGLGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
@@ -4313,7 +4319,14 @@ void main()
         device.set_clear_stencil(stencil);
         device.set_depth_mask(true);
         device.set_stencil_mask(0xFFFFFFFFu);
+        // REMED-GFX-077: XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
+        // (Clear(const Color&) routes here via ClearOptions Target|DepthBuffer|Stencil.)
+        const bool maskActive = (currentColorWriteMask_ != 15);
+        if (maskActive) device.set_color_mask(true, true, true, true);
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
+        if (maskActive)
+            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
+                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
     }
 
     void EasyGLGraphicsBackend::ClearDepth(float depth)

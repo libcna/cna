@@ -811,6 +811,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_BlendState_Opaque COMMAND cna_test_bgfx_blendstate_opaque
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-077: BlendState.ColorWriteChannels via the per-draw BGFX_STATE_WRITE_* bits (RT0).
+    cna_bgfx_test(cna_test_bgfx_colorwritechannels
+                  examples/bgfx_colorwritechannels_test.cpp)
+    cna_register_backend_test(NAME Bgfx_ColorWriteChannels COMMAND cna_test_bgfx_colorwritechannels
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_bgfx_test(cna_test_bgfx_blendstate_alphablend
                   examples/bgfx_blendstate_alphablend_test.cpp)
     cna_register_backend_test(NAME Bgfx_BlendState_AlphaBlend COMMAND cna_test_bgfx_blendstate_alphablend
