@@ -5536,3 +5536,123 @@ backend, self-contained; or **GFX-073**/**GFX-065**/**GFX-067** per the index.
 ### Recommended next GRAPHICS task
 
 **GFX-073** / **GFX-065** / **GFX-067** per the index (other open GRAPHICS root-cause tasks), or the new **GFX-077** (cross-backend `ColorWriteChannels`/`MultiSampleMask` plumbing) once an interface change is in scope. The WebGPU sprite-blend counterpart also merits its own task.
+
+---
+
+### REMED-GFX-077 — BlendState.ColorWriteChannels/1/2/3 + MultiSampleMask unplumbed cross-backend (IN PROGRESS — analysis recorded before first production edit, 2026-07-23)
+
+| Field | Value |
+|---|---|
+| Sev / Pri / Owner / Status | MEDIUM / P2 / GRAPHICS / **IN PROGRESS** (cross-backend interface migration) |
+| Root cause | `IGraphicsBackend::ApplyBlendState(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc)` carries **only the 6 blend factor/function ordinals**. `BlendState.ColorWriteChannels` / `ColorWriteChannels1` / `ColorWriteChannels2` / `ColorWriteChannels3` and `BlendState.MultiSampleMask` are read by `GraphicsDevice::setBlendStateProperty` but **never passed to the backend**, so every backend's pipeline/blend-object construction hardcodes an RGBA colour-write mask and an all-ones sample mask. Per-channel write masking and the coverage sample mask are silent no-ops on every one of the 14 backends. |
+
+**Phase 1 — current shared flow (traced).**
+`BlendState` (public XNA) → `GraphicsDevice::setBlendStateProperty(const BlendState&)` (`src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp:1672`) → `backend_->ApplyBlendState(6 ints)` (line 1676) → each backend stores/keys/applies → native pipeline/blend object → draw. `setBlendStateProperty` also atomically applies `BlendState.BlendFactor` via `setBlendFactorProperty` (GFX-069/070/071 dynamic constant). The 5 unplumbed public fields never leave `setBlendStateProperty`.
+
+Per-field transport table (BEFORE):
+
+| BlendState field | reaches backend? | where it dies |
+|---|---|---|
+| ColorSourceBlend | ✅ arg 1 | — |
+| AlphaSourceBlend | ✅ arg 2 | — |
+| ColorDestinationBlend | ✅ arg 3 | — |
+| AlphaDestinationBlend | ✅ arg 4 | — |
+| ColorBlendFunction | ✅ arg 5 | — |
+| AlphaBlendFunction | ✅ arg 6 | — |
+| BlendFactor | ✅ (separate `SetBlendFactor`, GFX-069/070) | — |
+| **ColorWriteChannels** | ❌ | dropped in `setBlendStateProperty` (no arg) |
+| **ColorWriteChannels1** | ❌ | dropped in `setBlendStateProperty` (no arg) |
+| **ColorWriteChannels2** | ❌ | dropped in `setBlendStateProperty` (no arg) |
+| **ColorWriteChannels3** | ❌ | dropped in `setBlendStateProperty` (no arg) |
+| **MultiSampleMask** | ❌ | dropped in `setBlendStateProperty` (no arg) |
+
+**Phase 2 — every implementor (14 buildable backends, all declare `ApplyBlendState(...) override`).** Vulkan, WebGPU, SdlGpu, D3D11, D3D12, D3D9, EasyGL, Bgfx, Software, SdlRenderer, Canvas, Dx3, Ascii (forwards to `inner_`), Headless (trace only). No `Stub` backend exists in this repo. Because all 14 use `override`, widening the base virtual signature is **compiler-forced** — no silent-overload trap (Phase 8 requirement satisfiable).
+
+**Phase 3 — exact XNA/FNA defaults (verified vs FNA `src/Graphics/States/BlendState.cs:222-227`).** `ColorWriteChannels = ColorWriteChannels1 = ColorWriteChannels2 = ColorWriteChannels3 = All`; `MultiSampleMask = -1` ("AKA 0xFFFFFFFF"). CNA `BlendState()` (`src/.../BlendState.cpp:18-23`) matches exactly (All ×4, `multiSampleMask_ = -1`). `MultiSampleMask` public type is `int` (signed; -1 == all 32 coverage bits set).
+
+**Phase 4 — ColorWriteChannels semantics.** `enum class ColorWriteChannels : int { None=0, Red=1, Green=2, Blue=4, Alpha=8, All=15 }` (bit0=R, bit1=G, bit2=B, bit3=A). **This XNA bit layout is byte-identical to the native colour-write masks of Vulkan (`VK_COLOR_COMPONENT_{R,G,B,A}_BIT` = 1/2/4/8), D3D9 (`D3DCOLORWRITEENABLE_*`), D3D11/D3D12 (`D3D1x_COLOR_WRITE_ENABLE_*`), WebGPU (`WGPUColorWriteMask_*` = 0x1/0x2/0x4/0x8), SDL_GPU (`SDL_GPU_COLORCOMPONENT_*` = 1<<0..1<<3) and bgfx (`BGFX_STATE_WRITE_{R,G,B,A}` = 0x1/0x2/0x4/0x8).** So for every mask-capable backend the raw XNA int is directly usable; only boolean backends (glColorMask, Software) need the `(cwc & bit)` extraction. Canonical helpers `ColorWriteHas{Red,Green,Blue,Alpha}(int)` are added to `IGraphicsBackend.hpp` to keep the XNA-enum-vs-native-mask distinction explicit.
+
+**Phase 5 — MRT slot mapping.** `ColorWriteChannels`→slot0, `ColorWriteChannels1`→slot1, `ColorWriteChannels2`→slot2, `ColorWriteChannels3`→slot3 (matches FNA). Transported as `int colorWriteChannels[4]`.
+
+**Phase 6 — MultiSampleMask semantics.** Bit i of the 32-bit mask enables coverage sample i; `-1`/`0xFFFFFFFF` = all samples (default, unchanged rendering); `0` = no samples written (nothing drawn); bits above the target's sample count are ignored; on a single-sample target only bit 0 is meaningful (bit0 clear ⇒ the single sample is discarded). Transported as `unsigned int multiSampleMask` (`static_cast<unsigned int>` of the signed public value; -1 → 0xFFFFFFFF, well-defined).
+
+**Phase 7 — chosen interface migration (minimum safe change).** Keep the 6 existing scalar blend params **unchanged** (every backend's working factor/function→native mapping is untouched) and **append one backend-neutral POD descriptor** carrying only the genuinely-new output-merger write state:
+```cpp
+namespace CNA::Internal::Backends {
+  struct BlendWriteState {
+    int          colorWriteChannels[4] = {15,15,15,15}; // raw XNA ColorWriteChannels per MRT slot 0..3
+    unsigned int multiSampleMask       = 0xFFFFFFFFu;   // XNA BlendState.MultiSampleMask
+  };
+}
+virtual void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) {}   // NO default arg
+```
+Rationale vs. an 11-scalar-param function: groups the 4 masks + sample mask (an array + a mask) into one semantically-cohesive struct, avoids a fragile positional 11-arg call, and — with no default value — the signature change forces every `override` to fail compilation until it makes an explicit decision (Phase 8). Rejected: a full BlendState descriptor (would needlessly rewrite 14 working blend-factor mappings); combining unrelated device state (out of scope). Public XNA `BlendState` API, effect shaders, SpriteBatch geometry, Viewport/Scissor and Bgfx GFX-065/084 view segmentation are **not** touched.
+
+**Phase 2/42 — backend native capability matrix (from vendored headers actually in this branch).**
+
+| Backend | RT0 ColorWrite | MRT indep (1/2/3) | MultiSampleMask | write-mask class | sample-mask class | native mechanism |
+|---|---|---|---|---|---|---|
+| Vulkan | ✅ exact | ✅ per-attachment | ✅ exact | static (pipeline key) | static (pipeline key, `pSampleMask`) | `VkPipelineColorBlendAttachmentState.colorWriteMask` (=XNA bits); `VkPipelineMultisampleStateCreateInfo.pSampleMask` |
+| D3D11 | ✅ exact | ✅ (`IndependentBlendEnable`+RT[0..3]) | ✅ exact | static (blend-object key) | **dynamic** (`OMSetBlendState` SampleMask arg) | `D3D11_RENDER_TARGET_BLEND_DESC.RenderTargetWriteMask` |
+| D3D12 | ✅ exact | RT0 only (draws single SV_Target) | ✅ exact | static (PSO key) | static (PSO key, `SampleMask`) | `D3D12_RENDER_TARGET_BLEND_DESC.RenderTargetWriteMask`; `PSO.SampleMask` |
+| D3D9 | ✅ exact | ✅ (`COLORWRITEENABLE1/2/3`, caps~4) | ✅ exact | dynamic render state | dynamic render state | `D3DRS_COLORWRITEENABLE[1/2/3]`, `D3DRS_MULTISAMPLEMASK` |
+| WebGPU | ✅ exact (3D keyed pipelines) | ➖ single-target only (MRT = WEBGPU-85/86/87) | ✅ exact (real `WGPUMultisampleState.mask`) | static (key) | static (key) | `WGPUColorTargetState.writeMask`; `WGPUMultisampleState.mask`. **Sprite path uses fixed pipelines → deferred to the WebGPU sprite-blend counterpart finding.** |
+| SdlGpu | ✅ exact | ➖ single-target common path (MRT custom-effect only) | ❌ **SDL 3.5.0 reserves `sample_mask`/`enable_mask` ("must be 0")** | static (key) | **UNSUPPORTED (new finding)** | `SDL_GPUColorTargetBlendState.color_write_mask`+`enable_color_write_mask` |
+| EasyGL | ✅ exact (`glColorMask`, ES2.0+) | ➖ needs `glColorMaski` (ES3.2+, cap-gated) | ➖ `glSampleMaski` (ES3.1+, cap-gated) | immediate GL state | immediate GL state | `Device::set_color_mask`; `Device::set_sample_mask` |
+| Bgfx | ✅ exact (`BGFX_STATE_WRITE_*`, global per-draw) | ❌ **global per-draw, no per-attachment (new finding)** | ❌ **no per-draw sample coverage mask (document)** | per-draw setState | — | `blendFlags_`/state word `BGFX_STATE_WRITE_{R,G,B,A}` |
+| Software | ✅ exact (CPU channel gate) | ➖ single active colour buffer (no MRT) | ✅ single-sample (bit 0) | CPU | CPU | `WriteColoredFragment`/`WriteShadedFragment` channel gate |
+| SdlRenderer | ❌ no channel-mask API | ❌ | ❌ | — | — | documented capability gap |
+| Canvas | ❌ Canvas2D composite-op only | ❌ | ❌ | — | — | documented capability gap |
+| Dx3 | ❌ DDraw/D3D3 preset-blit only | ❌ | ❌ | — | — | documented capability gap |
+| Ascii | inherits `inner_` | inherits | inherits | — | — | forwards write state to inner backend |
+| Headless | N/A (trace only) | N/A | N/A | — | — | records write state into trace payload |
+
+**Static vs dynamic decisions.** Colour-write mask is STATIC pipeline/blend-object state on every GPU backend except D3D9 (dynamic render state) and D3D11 (blend-object → still keyed on the object, but its *SampleMask* companion is a dynamic `OMSetBlendState` arg). MultiSampleMask is STATIC (Vulkan/D3D12/WebGPU pipeline key) except D3D11/D3D9 where it is a dynamic bind/render-state (NOT keyed). Both new fields default to All/0xFFFFFFFF, so the common default path contributes an invariant key delta ⇒ **no cache fragmentation and byte-identical default pipelines** (Phase 36).
+
+**New findings to be filed at closure:** (a) SdlGpu MultiSampleMask unsupportable on SDL 3.5.0 (reserved field); (b) Bgfx independent per-MRT ColorWriteChannels1/2/3 + MultiSampleMask not representable; (c) WebGPU SpriteBatch ColorWriteChannels blocked by the existing fixed-sprite-pipeline WebGPU counterpart finding. These are documented capability gaps, not silent no-ops.
+
+
+---
+
+### REMED-GFX-077 — RESULTS (DONE, 2026-07-23)
+
+**Old vs new shared transport.** Before: `ApplyBlendState(colorSrc, alphaSrc, colorDst, alphaDst, colorFunc, alphaFunc)` — 6 ints; `ColorWriteChannels/1/2/3` + `MultiSampleMask` dropped in `GraphicsDevice::setBlendStateProperty`. After: the same 6 ints **plus** `const BlendWriteState& writeState` (a POD: `int colorWriteChannels[4]` + `unsigned int multiSampleMask`), NO default argument → the signature change was compiler-forced across all 14 overrides (no silent-overload trap; every backend uses `override`). Public XNA `BlendState`, effect shaders, SpriteBatch geometry, Viewport/Scissor, and Bgfx GFX-065/084 view segmentation are untouched. Zero generated-shader diff.
+
+**Static vs dynamic decisions.** Colour-write mask: static pipeline/blend-object state on Vulkan (pipeline key), D3D11 (blend-object key), D3D12 (PSO key), SdlGpu/WebGPU (pipeline key), Bgfx (per-draw setState word); dynamic render state on D3D9; immediate GL state on EasyGL; CPU on Software. Sample mask: static on Vulkan/D3D12/WebGPU (in the key); **dynamic** on D3D11 (`OMSetBlendState` SampleMask arg — NOT keyed) and D3D9 (`D3DRS_MULTISAMPLEMASK`). BlendFactor stays dynamic and NOT keyed (GFX-069/070/071 unchanged). Both new fields default to All/0xFFFFFFFF → a fixed key contribution ⇒ no cache fragmentation and byte-identical default pipelines.
+
+**Cache-key changes.** Vulkan `PipelineKey` `pair<uint64,uint32>` → 4-field struct `{a,b,cw,sm}` (+ custom hash); `PackColorWriteBits` added; `FillBlendAttachmentState` gained a per-attachment index and now sets `colorWriteMask` (removing ~16 RGBA hardcodes, MRT loops indexed). D3D11 blend-object key +4 mask ints. D3D12 PSO key +`colorWriteMask`+`sampleMask`. SdlGpu `PipelineCacheKey` +`colorWriteMask`. WebGPU `Make3DPipelineKey` +`colorWriteMask`+`sampleMask` (12 keyed 3D sites; 2 fixed internal pipelines — sprite + mip-blit — left hardcoded and documented).
+
+**Final support matrix.**
+
+| Backend | RT0 ColorWrite | MRT indep (1/2/3) | MultiSampleMask | Runtime evidence | Limitations |
+|---|---|---|---|---|---|
+| Software | ✅ exact | ➖ N/A (single colour buffer) | ✅ single-sample bit 0 | **17/17** + UBSan clean (Xvfb :99) | no MRT / no true MSAA |
+| Vulkan | ✅ exact | ✅ per-attachment (indexed) | ✅ exact (`pSampleMask`) | **11/11**, validation 0 VUID, incl. MSAA mask=0 resolve | — |
+| EasyGL | ✅ exact (`glColorMask`) | ➖ needs `glColorMaski` ES3.2+ | ➖ `glSampleMaski` ES3.1+ | **7/7** (RGB) + blend presets 3/3 | independent MRT + sample mask deferred (gated) |
+| Bgfx | ✅ exact (`BGFX_STATE_WRITE_*`) | ❌ global per-draw → **GFX-085** | ❌ no per-draw mask → **GFX-085** | **6/6** (RGB), blend 8/8 | slots 1/2/3 collapse to slot 0 |
+| D3D11 | ✅ (RT0..3, IndependentBlendEnable) | ✅ | ✅ (dynamic OMSetBlendState arg) | compile-verified (Wine+DXVK deferred) | — |
+| D3D12 | ✅ | ➖ RT0 (draws single SV_Target) | ✅ (PSO key) | compile-verified (BUILD-012 windowed) | instanced-3d create-once PSO documented |
+| D3D9 | ✅ (`D3DRS_COLORWRITEENABLE`) | ✅ (`…1/2/3`, caps-gated) | ✅ (`D3DRS_MULTISAMPLEMASK`) | compile-verified (Wine+DXVK9 deferred) | independent masks need D3DPMISCCAPS_INDEPENDENTWRITEMASKS |
+| SdlGpu | ✅ (`color_write_mask`) | ➖ common single-target | ❌ SDL 3.5.0 reserved → **GFX-086** | compile-verified | sample mask non-functional in pinned SDL |
+| WebGPU | ✅ 3D keyed pipelines | ➖ single-target (WEBGPU-85..87) | ✅ (`WGPUMultisampleState.mask`) | compile-verified | sprite path fixed pipeline (existing counterpart) |
+| SdlRenderer | ❌ no channel-mask API | ❌ | ❌ | n/a | documented gap (2D SDL renderer) |
+| Canvas | ❌ Canvas2D composite-op only | ❌ | ❌ | n/a | documented gap |
+| Dx3 | ❌ DDraw/D3D3 preset blit | ❌ | ❌ | n/a | documented gap |
+| Ascii | inherits `inner_` | inherits | inherits | n/a | forwards write state to inner |
+| Headless | records into trace | n/a | n/a | n/a | no rendering (bookkeeping only) |
+
+**Build matrix (all compiled clean, `-j4`, ccache):** Software, EasyGL, Vulkan, Bgfx, SdlGpu, WebGPU (native cmake-build-* dirs); D3D9/D3D11/D3D12 (mingw cross); Headless (fresh config). Diagnostic backends (Ascii/Canvas/Dx3/SdlRenderer) are trivial signature+documented-ignore edits sharing the verified pattern; not separately configured this session.
+
+**Runtime matrix (this session, Xvfb :99 / llvmpipe):** Software 17/17 + UBSan; Vulkan 11/11 + KHRONOS validation (layer loaded, 0 VUID); EasyGL 7/7; Bgfx 6/6. Regressions: Software shard 13/13, Vulkan blend/RT/sprite/MRT/MSAA 41/41, GFX-071 SpriteBatch BlendState 17/17, EasyGL blend presets 3/3, Bgfx blend/RT 8/8. D3D9/D3D11/D3D12/SdlGpu/WebGPU runtime deferred to their established Wine/vkd3d/offscreen routes (not re-run this session — compile-verified only, stated honestly).
+
+**Bug found & fixed by the tests.** The EasyGL test exposed that `Clear(const Color&)` routes via `ClearOptions Target|DepthBuffer|Stencil` → `ClearColorDepthAndStencil` (and `ClearColorAndStencil`), which were not neutralising the active `glColorMask` — a Clear under a non-default `ColorWriteChannels` cleared only the enabled channels. All four EasyGL colour-clearing paths now force a full RGBA mask across `glClear` and restore it.
+
+**New findings filed:** GFX-085 (bgfx independent-MRT + sample mask), GFX-086 (SdlGpu sample mask reserved in SDL 3.5.0). Not expanded into emulation projects (would need shader/multi-pass work explicitly out of scope). WebGPU sprite `ColorWriteChannels` remains with the existing WebGPU sprite-BlendState counterpart finding.
+
+**Classification: DONE.** The interface migration is complete; `ColorWriteChannels` (RT0) and `MultiSampleMask` are now observable on every backend whose native API can express them, runtime-verified on the four backends runnable in this sandbox, compile-verified on the rest, and every unavoidable capability gap is documented with a follow-up ID — no silent no-op remains.
+
+**Commits:** `refactor` (interface + 14 backends), `test` Software (17/17), `test` Vulkan (11/11), `test` EasyGL+Bgfx + EasyGL Clear fix, `docs` (this record). Recommended next GRAPHICS task: **REMED-GFX-061** (per the index) or the WebGPU sprite-BlendState counterpart; the new GFX-085/086 are documented capability limitations, not near-term fixes.
+
