@@ -101,7 +101,8 @@ namespace CNA::Internal::Backends::Dx3
         // (Opaque only) and selects CompositeQuad's per-formula blend math.
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         // ---- 3D pipeline: NOT supported by DX3 (DirectDraw is 2D-only). ----
         // @note Status: STUB. Every entry point throws std::runtime_error (CreateOcclusionQuery

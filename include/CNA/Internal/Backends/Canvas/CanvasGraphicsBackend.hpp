@@ -78,7 +78,8 @@ namespace CNA::Internal::Backends::Canvas
         // combination -- Canvas2D has no generic blend-factor/equation model to fall back on.
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         // plan_canvas.md CANVAS-65: no Canvas2D target -- main canvas or off-screen -- ever has a
         // real depth/stencil buffer (same reasoning as IRenderTargetBackend::HasRealDepthBuffer's

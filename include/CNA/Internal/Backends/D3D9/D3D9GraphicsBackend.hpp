@@ -205,7 +205,8 @@ namespace CNA::Internal::Backends::D3D9
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                               int colorDstBlend, int alphaDstBlend,
-                              int colorBlendFunc, int alphaBlendFunc) override;
+                              int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void SetBlendFactor(float r, float g, float b, float a) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                      int depthFunc,

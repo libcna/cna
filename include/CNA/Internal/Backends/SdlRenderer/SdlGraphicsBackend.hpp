@@ -135,7 +135,8 @@ namespace CNA::Internal::Backends::SdlRenderer
         void SetScissorRect(int x, int y, int w, int h) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         SDL_BlendMode blendMode_ = SDL_BLENDMODE_BLEND;
 

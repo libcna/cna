@@ -682,8 +682,13 @@ namespace CNA::Internal::Backends::SdlRenderer
 
     void SdlGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                               int colorDstBlend, int alphaDstBlend,
-                                              int colorBlendFunc, int alphaBlendFunc)
+                                              int colorBlendFunc, int alphaBlendFunc,
+                                              const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: SDL_Renderer (2D) exposes only a blend mode via SDL_ComposeCustomBlendMode
+        // — there is NO per-channel colour-write-mask API and NO coverage-sample-mask API. Both
+        // BlendState.ColorWriteChannels* and BlendState.MultiSampleMask are therefore genuinely
+        // inexpressible on this backend (documented capability gap, not a silent drop).
         const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(
             ToSdlBlendFactor(colorSrcBlend), ToSdlBlendFactor(colorDstBlend),
             ToSdlBlendOperation(colorBlendFunc),

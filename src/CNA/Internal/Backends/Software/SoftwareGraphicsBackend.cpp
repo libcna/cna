@@ -445,21 +445,31 @@ namespace CNA::Internal::Backends::Software
         /// safety net for the line walk.
         inline void WriteColoredFragment(SoftwareFramebuffer& fb, bool depthTestEnabled,
                                          const RasterClipRect& clip, int x, int y,
-                                         float depth, float invW, float pr, float pg, float pb, float pa)
+                                         float depth, float invW, float pr, float pg, float pb, float pa,
+                                         int colorWriteMask, unsigned int multiSampleMask)
         {
             if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
+                return;
+            // REMED-GFX-077: Software is single-sample, so only MultiSampleMask bit 0 is meaningful.
+            // Bit 0 clear ⇒ the one sample is not covered ⇒ nothing is written (neither colour nor
+            // depth), matching XNA "no samples written". Default (0xFFFFFFFF) keeps bit 0 set.
+            if ((multiSampleMask & 1u) == 0u)
                 return;
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
             if (depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
                 return;
             const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
+            // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
+            // ColorWriteChannels controls only colour writes, never depth).
             fb.depthBuffer[pixelIndex] = depth;
             const std::size_t colorIndex = pixelIndex * 4;
-            fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
-            fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
-            fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
-            fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+            // REMED-GFX-077: gate each channel by BlendState.ColorWriteChannels — a masked-off channel
+            // keeps its existing destination byte (identity), the XNA semantic.
+            if (ColorWriteHasRed  (colorWriteMask)) fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
+            if (ColorWriteHasGreen(colorWriteMask)) fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
+            if (ColorWriteHasBlue (colorWriteMask)) fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
+            if (ColorWriteHasAlpha(colorWriteMask)) fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
         }
 
         /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
@@ -472,6 +482,7 @@ namespace CNA::Internal::Backends::Software
                                float depthBias, float slopeScaleDepthBias,
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                               int colorWriteMask, unsigned int multiSampleMask,
                                bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
@@ -497,7 +508,8 @@ namespace CNA::Internal::Backends::Software
                         if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                         WriteColoredFragment(fb, depthTestEnabled, clip, x, y, depth, invW,
                                              A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
-                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a));
+                                             A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
+                                             colorWriteMask, multiSampleMask);
                     });
                 };
                 if (edgeMask & kEdgeV0V1) drawEdge(v0, v1);
@@ -550,7 +562,8 @@ namespace CNA::Internal::Backends::Software
                                          lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
                                          lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
                                          lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
-                                         lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a);
+                                         lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a,
+                                         colorWriteMask, multiSampleMask);
                 }
             }
         }
@@ -739,6 +752,8 @@ namespace CNA::Internal::Backends::Software
             bool needUV;
             bool blendEnabled;
             bool depthTestEnabled;
+            int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
+            unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
         };
 
         /// REMED-GFX-082: writes one already-interpolated shaded fragment -- the whole texture/diffuse/
@@ -752,6 +767,10 @@ namespace CNA::Internal::Backends::Software
                                         float pwpx, float pwpy, float pwpz, float pnx, float pny, float pnz)
         {
             if (x < clip.minX || x > clip.maxX || y < clip.minY || y > clip.maxY)
+                return;
+            // REMED-GFX-077: single-sample MultiSampleMask — bit 0 clear discards the fragment
+            // entirely (no colour, no depth). Default 0xFFFFFFFF keeps bit 0 set.
+            if ((ctx.multiSampleMask & 1u) == 0u)
                 return;
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
@@ -833,15 +852,22 @@ namespace CNA::Internal::Backends::Software
                 b = b * (1.0f - blendFactor) + (envB * a) * blendFactor + ctx.params.envMapSpecular[2] * envA * a;
             }
 
+            // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
+            // ColorWriteChannels never gates depth — only the colour channels below).
             fb.depthBuffer[pixelIndex] = depth;
 
             const std::size_t colorIndex = pixelIndex * 4;
+            // REMED-GFX-077: final colour channels (opaque store or blended result). Each channel is
+            // gated by BlendState.ColorWriteChannels — a masked-off channel keeps its existing
+            // destination byte (identity), applied AFTER blending (Phase 10). The common All(15)
+            // path writes every channel exactly as before.
+            float outR, outG, outB, outA;
             if (!ctx.blendEnabled)
             {
-                fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
-                fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
-                fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
-                fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+                outR = std::clamp(r, 0.0f, 1.0f);
+                outG = std::clamp(g, 0.0f, 1.0f);
+                outB = std::clamp(b, 0.0f, 1.0f);
+                outA = std::clamp(a, 0.0f, 1.0f);
             }
             else
             {
@@ -854,11 +880,15 @@ namespace CNA::Internal::Backends::Software
                 const float dstB = fb.color[colorIndex + 2] / 255.0f;
                 const float dstA = fb.color[colorIndex + 3] / 255.0f;
                 const float invA = 1.0f - a;
-                fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r * a + dstR * invA, 0.0f, 1.0f) * 255.0f);
-                fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g * a + dstG * invA, 0.0f, 1.0f) * 255.0f);
-                fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b * a + dstB * invA, 0.0f, 1.0f) * 255.0f);
-                fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a + dstA * invA, 0.0f, 1.0f) * 255.0f);
+                outR = std::clamp(r * a + dstR * invA, 0.0f, 1.0f);
+                outG = std::clamp(g * a + dstG * invA, 0.0f, 1.0f);
+                outB = std::clamp(b * a + dstB * invA, 0.0f, 1.0f);
+                outA = std::clamp(a + dstA * invA, 0.0f, 1.0f);
             }
+            if (ColorWriteHasRed  (ctx.colorWriteMask)) fb.color[colorIndex + 0] = static_cast<std::uint8_t>(outR * 255.0f);
+            if (ColorWriteHasGreen(ctx.colorWriteMask)) fb.color[colorIndex + 1] = static_cast<std::uint8_t>(outG * 255.0f);
+            if (ColorWriteHasBlue (ctx.colorWriteMask)) fb.color[colorIndex + 2] = static_cast<std::uint8_t>(outB * 255.0f);
+            if (ColorWriteHasAlpha(ctx.colorWriteMask)) fb.color[colorIndex + 3] = static_cast<std::uint8_t>(outA * 255.0f);
         }
 
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
@@ -875,6 +905,7 @@ namespace CNA::Internal::Backends::Software
                                      int cullMode, float depthBias, float slopeScaleDepthBias,
                                      const GpuDrawParams& params, const RasterClipRect& clip,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
+                                     int colorWriteMask, unsigned int multiSampleMask,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
             const auto* texture0 = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
@@ -884,7 +915,7 @@ namespace CNA::Internal::Backends::Software
             const bool useEnvMap = params.envMapping && envMap != nullptr;
             const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
-                                    needUV, blendEnabled, depthTestEnabled};
+                                    needUV, blendEnabled, depthTestEnabled, colorWriteMask, multiSampleMask};
 
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1306,9 +1337,11 @@ namespace CNA::Internal::Backends::Software
         const float depthBias = owner_.GetDepthBias();
         const float slopeScaleDepthBias = owner_.GetSlopeScaleDepthBias();
         RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
-                                spriteParams, clip, rv0, rv1, rv2, wire, kEdgeAll);
+                                spriteParams, clip, rv0, rv1, rv2,
+                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(), wire, kEdgeAll);
         RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
-                                spriteParams, clip, rv2, rv3, rv0, wire, kEdgeAll);
+                                spriteParams, clip, rv2, rv3, rv0,
+                                owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(), wire, kEdgeAll);
     }
 
     // ---- SoftwareGraphicsBackend ----
@@ -1442,7 +1475,8 @@ namespace CNA::Internal::Backends::Software
     }
 
     void SoftwareGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
-                                                  int colorDstBlend, int alphaDstBlend, int, int)
+                                                  int colorDstBlend, int alphaDstBlend, int, int,
+                                                  const BlendWriteState& writeState)
     {
         // Blend::One=0, Blend::Zero=1 -> Opaque preset (src=One, dst=Zero), the only combination
         // v1 treats as "no blending" -- matches EasyGLGraphicsBackend::ApplyBlendState's own exact
@@ -1450,6 +1484,11 @@ namespace CNA::Internal::Backends::Software
         // any other combination is treated as the simplified AlphaBlend case).
         blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
                           alphaSrcBlend == 0 && alphaDstBlend == 1);
+        // REMED-GFX-077: Software has one active colour buffer (no MRT), so only slot-0's write mask
+        // applies; the CPU fragment writers (WriteColoredFragment/WriteShadedFragment) gate each
+        // channel by it. Single-sample ⇒ only MultiSampleMask bit 0 is meaningful.
+        colorWriteMask_  = writeState.colorWriteChannels[0];
+        multiSampleMask_ = writeState.multiSampleMask;
     }
 
     void SoftwareGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool, int, bool, int, int, int, int, int,
@@ -1658,10 +1697,10 @@ namespace CNA::Internal::Backends::Software
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], wire, mask0);
+                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                                  rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
+                                  rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1738,10 +1777,10 @@ namespace CNA::Internal::Backends::Software
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                              rv[0], rv[1], rv[2], wire, mask0);
+                              rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
-                                  rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
+                                  rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1822,11 +1861,11 @@ namespace CNA::Internal::Backends::Software
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
-                                    clip, rv[0], rv[1], rv[2], wire, mask0);
+                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
-                                        clip, rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
+                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 
@@ -1917,11 +1956,11 @@ namespace CNA::Internal::Backends::Software
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
-                                    clip, rv[0], rv[1], rv[2], wire, mask0);
+                                    clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
                 RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
-                                        clip, rv[0], rv[2], rv[3], wire, kEdgeV1V2 | kEdgeV2V0);
+                                        clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
 }

@@ -167,6 +167,10 @@ namespace CNA::Internal::Backends::SdlGpu
                 key = HashCombine(key, static_cast<std::size_t>(rs.blend.colorFunc));
                 key = HashCombine(key, static_cast<std::size_t>(rs.blend.alphaFunc));
             }
+            // REMED-GFX-077: the colour write mask is static pipeline state (applies to opaque
+            // draws too), so it participates in the key. The default All(15) is a fixed contribution
+            // ⇒ no cache fragmentation for the common case.
+            key = HashCombine(key, static_cast<std::size_t>(rs.colorWriteMask & 0xF));
             key = HashCombine(key, static_cast<std::size_t>(rs.cullMode));
             key = HashCombine(key, rs.wireframe ? 1u : 0u);
             key = HashCombine(key, rs.stencil.enable ? 1u : 0u);
@@ -206,6 +210,16 @@ namespace CNA::Internal::Backends::SdlGpu
                 out.src_alpha_blendfactor = ToBlendFactor(rs.blend.alphaSrc);
                 out.dst_alpha_blendfactor = ToBlendFactor(rs.blend.alphaDst);
                 out.alpha_blend_op        = ToBlendOp(rs.blend.alphaFunc);
+            }
+            // REMED-GFX-077: BlendState.ColorWriteChannels. XNA bits (R=1,G=2,B=4,A=8) are identical
+            // to SDL_GPU_COLORCOMPONENT_* (1<<0..1<<3). SDL writes all channels when
+            // enable_color_write_mask is false, so only enable it for a non-All mask (keeps the
+            // common default byte-identical to before).
+            const Uint8 mask = static_cast<Uint8>(rs.colorWriteMask & 0xF);
+            if (mask != 0xF)
+            {
+                out.enable_color_write_mask = true;
+                out.color_write_mask = mask;
             }
         }
 
@@ -1145,7 +1159,8 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,
-                                                int colorBlendFunc, int alphaBlendFunc)
+                                                int colorBlendFunc, int alphaBlendFunc,
+                                                const BlendWriteState& writeState)
     {
         // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending. Matches
         // VulkanGraphicsBackend::ApplyBlendState's own derivation exactly.
@@ -1157,6 +1172,12 @@ namespace CNA::Internal::Backends::SdlGpu
         blendParams_.alphaDst  = alphaDstBlend;
         blendParams_.colorFunc = colorBlendFunc;
         blendParams_.alphaFunc = alphaBlendFunc;
+        // REMED-GFX-077: BlendState.ColorWriteChannels (slot 0) is baked into the color target's
+        // SDL_GPUColorTargetBlendState (static → part of the pipeline cache key; see FillBlendState
+        // + PipelineCacheKey). BlendState.MultiSampleMask is NOT supported: SDL 3.5.0 documents
+        // SDL_GPUMultisampleState::sample_mask / enable_mask as "Reserved for future use, must be
+        // set to 0 / false" — a genuine backend capability gap (REMED-GFX-086), not a silent drop.
+        colorWriteMask_ = writeState.colorWriteChannels[0];
     }
 
     void SdlGpuGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
@@ -1358,6 +1379,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderStateSnapshot rs;
         rs.blendEnabled = blendEnabled_;
         rs.blend = blendParams_;
+        rs.colorWriteMask = colorWriteMask_; // REMED-GFX-077
         rs.cullMode = cullMode_;
         rs.wireframe = fillModeWireframe_;
         rs.stencil = stencilParams_;

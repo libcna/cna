@@ -1673,13 +1673,24 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         blendState_ = value;
         if (backend_)
+        {
+            // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
+            // alongside the six blend factor/function ordinals (previously dropped here entirely).
+            CNA::Internal::Backends::BlendWriteState writeState;
+            writeState.colorWriteChannels[0] = (int)value.getColorWriteChannelsProperty();
+            writeState.colorWriteChannels[1] = (int)value.getColorWriteChannels1Property();
+            writeState.colorWriteChannels[2] = (int)value.getColorWriteChannels2Property();
+            writeState.colorWriteChannels[3] = (int)value.getColorWriteChannels3Property();
+            writeState.multiSampleMask = static_cast<unsigned int>(value.getMultiSampleMaskProperty());
             backend_->ApplyBlendState(
                 (int)value.getColorSourceBlendProperty(),
                 (int)value.getAlphaSourceBlendProperty(),
                 (int)value.getColorDestinationBlendProperty(),
                 (int)value.getAlphaDestinationBlendProperty(),
                 (int)value.getColorBlendFunctionProperty(),
-                (int)value.getAlphaBlendFunctionProperty());
+                (int)value.getAlphaBlendFunctionProperty(),
+                writeState);
+        }
         // FNA applies BlendState.BlendFactor atomically as part of FNA3D_SetBlendState — the
         // state's own baked-in blend factor becomes the device's current one, the same way
         // GraphicsDevice.BlendFactor's own setter would.

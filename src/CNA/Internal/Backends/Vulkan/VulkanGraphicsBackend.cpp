@@ -2518,6 +2518,8 @@ namespace CNA::Internal::Backends::Vulkan
         cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
         cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
         cba.alphaBlendOp        = VK_BLEND_OP_ADD;
+        // REMED-GFX-077: custom-Effect pipeline with a fixed blend equation (not derived from the
+        // game's BlendState); keeps a full RGBA write mask.
         cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         VkPipelineColorBlendStateCreateInfo cbs{};
@@ -2639,8 +2641,9 @@ namespace CNA::Internal::Backends::Vulkan
     // REMED-GFX-071: forward-declared here because the 2D sprite pipelines (below) reuse the exact
     // same XNA->Vulkan blend translation + cache-key packing the 3D path defines further down.
     static uint32_t PackBlendBits(bool blend, const BlendKeyParams& bp);
+    static uint32_t PackColorWriteBits(const BlendKeyParams& bp); // REMED-GFX-077
     static void FillBlendAttachmentState(VkPipelineColorBlendAttachmentState& cba, bool blend,
-                                         const BlendKeyParams& bp);
+                                         const BlendKeyParams& bp, int attachmentIndex = 0); // REMED-GFX-077
     static uint64_t FoldDepthFormatIntoKey(uint64_t key, VkFormat depthFmt);
 
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2D(VkFormat depthFmt, bool blend,
@@ -2650,7 +2653,7 @@ namespace CNA::Internal::Backends::Vulkan
         // enums) -- the same PipelineKey shape the 3D caches use. The BlendFactor *value* is dynamic
         // state (GFX-070) and deliberately absent from the key, so it never fragments the cache.
         const PipelineKey key = { FoldDepthFormatIntoKey(blend ? 1ull : 0ull, depthFmt),
-                                  PackBlendBits(blend, bp) };
+                                  PackBlendBits(blend, bp), PackColorWriteBits(bp), bp.sampleMask };
         auto cached = pipelines2DByDepthFmt_.find(key);
         if (cached != pipelines2DByDepthFmt_.end()) return cached->second;
 
@@ -2705,16 +2708,20 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (only bit 0 is meaningful at 1 sample). Only set
+        // for a non-default mask; pointer valid until vkCreateGraphicsPipelines below.
+        const VkSampleMask cnaSampleMask_ = bp.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         // REMED-GFX-071: colour-attachment blend derived from the batch's BlendState via the same
         // FillBlendAttachmentState the 3D path uses (One canonical XNA->Vulkan mapping for both 2D
         // and 3D), replacing the pre-fix hardcoded SRC_ALPHA/ONE_MINUS_SRC_ALPHA that ignored the
-        // BlendState entirely. colorWriteMask stays RGBA -- ColorWriteChannels is not plumbed to any
-        // backend's ApplyBlendState yet (a separate cross-backend finding; see the progress log).
+        // BlendState entirely. REMED-GFX-077: the colour write mask (ColorWriteChannels slot 0) is
+        // now also derived, inside FillBlendAttachmentState (was hardcoded RGBA).
         VkPipelineColorBlendAttachmentState cba{};
+        // REMED-GFX-077: colour write mask (BlendState.ColorWriteChannels slot 0) is now set by
+        // FillBlendAttachmentState from bp.colorWrite[0], replacing the former hardcoded RGBA.
         FillBlendAttachmentState(cba, blend, bp);
-        cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                                  VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
@@ -2995,7 +3002,7 @@ namespace CNA::Internal::Backends::Vulkan
         // REMED-GFX-071: BlendState-keyed, same as the non-MSAA variant (separate map, so no MSAA
         // bit is needed in the key).
         const PipelineKey key = { FoldDepthFormatIntoKey(blend ? 1ull : 0ull, depthFmt),
-                                  PackBlendBits(blend, bp) };
+                                  PackBlendBits(blend, bp), PackColorWriteBits(bp), bp.sampleMask };
         auto cached = pipelines2DMsaaByDepthFmt_.find(key);
         if (cached != pipelines2DMsaaByDepthFmt_.end()) return cached->second;
 
@@ -3046,12 +3053,16 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = sampleCount_;
+        // REMED-GFX-077: BlendState.MultiSampleMask on the MSAA sprite pipeline. Only set for a
+        // non-default mask; pointer valid until vkCreateGraphicsPipelines below.
+        const VkSampleMask cnaSampleMask_ = bp.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         // REMED-GFX-071: BlendState-derived colour-attachment blend (see the non-MSAA variant).
         VkPipelineColorBlendAttachmentState cba{};
+        // REMED-GFX-077: colour write mask (BlendState.ColorWriteChannels slot 0) is now set by
+        // FillBlendAttachmentState from bp.colorWrite[0], replacing the former hardcoded RGBA.
         FillBlendAttachmentState(cba, blend, bp);
-        cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                                  VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
@@ -3197,13 +3208,25 @@ namespace CNA::Internal::Backends::Vulkan
              | (static_cast<uint32_t>(bp.alphaFunc & 0x7) << 19);
     }
 
+    // REMED-GFX-077: packs the four per-MRT-slot BlendState.ColorWriteChannels masks (4 bits each,
+    // bit0=R..bit3=A) into the pipeline cache key's `cw` field. Unlike PackBlendBits it is NOT gated
+    // on `blend`: a colour write mask applies to opaque (blend-disabled) draws too. The default
+    // (All ×4 = 0xFFFF in the low 16 bits) is a fixed contribution, so default draws don't fragment.
+    static uint32_t PackColorWriteBits(const BlendKeyParams& bp)
+    {
+        return (static_cast<uint32_t>(bp.colorWrite[0] & 0xF))
+             | (static_cast<uint32_t>(bp.colorWrite[1] & 0xF) << 4)
+             | (static_cast<uint32_t>(bp.colorWrite[2] & 0xF) << 8)
+             | (static_cast<uint32_t>(bp.colorWrite[3] & 0xF) << 12);
+    }
+
     // Task 868: fills a VkPipelineColorBlendAttachmentState's real blend factors/op from
     // BlendKeyParams -- shared by every 3D pipeline-creation function so the exact same
     // XNA->Vulkan mapping is used everywhere, mirroring FillDepthStencilState's own established
     // pattern. Previously every call site hardcoded BlendState.NonPremultiplied's own equation
     // here whenever blend was true, regardless of what was actually requested.
     static void FillBlendAttachmentState(VkPipelineColorBlendAttachmentState& cba, bool blend,
-                                          const BlendKeyParams& bp)
+                                          const BlendKeyParams& bp, int attachmentIndex)
     {
         cba.blendEnable = blend ? VK_TRUE : VK_FALSE;
         if (blend) {
@@ -3214,6 +3237,11 @@ namespace CNA::Internal::Backends::Vulkan
             cba.dstAlphaBlendFactor = ToVkBlendFactor(bp.alphaDst);
             cba.alphaBlendOp        = ToVkBlendOp(bp.alphaFunc);
         }
+        // REMED-GFX-077: per-attachment colour write mask (BlendState.ColorWriteChannels slot i for
+        // MRT attachment i; slots >3 clamp to 3). XNA bits (R=1,G=2,B=4,A=8) are identical to
+        // VK_COLOR_COMPONENT_*, so the raw value masked to 0xF is the VkColorComponentFlags directly.
+        cba.colorWriteMask = static_cast<VkColorComponentFlags>(
+            bp.colorWrite[attachmentIndex < 3 ? attachmentIndex : 3] & 0xF);
     }
 
     // Packs every DepthStencilKeyParams field into 29 bits, meant to be OR'd (after shifting past
@@ -3338,7 +3366,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (3D) failed");
         }
 
-        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelines3D_.find(key);
         if (it != pipelines3D_.end()) return it->second;
 
@@ -3393,6 +3421,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -3404,8 +3437,6 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 868: real per-BlendState mapping, replacing the previous hardcoded
         // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
         FillBlendAttachmentState(cba, blend, blendParams);
-        cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         // Replicate the same blend state across all MRT outputs.
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
             std::max(colorAttachmentCount, 1u), cba);
@@ -3795,7 +3826,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (AlphaTest3D) failed");
         }
 
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesAlphaTest3D_.find(key);
         if (it != pipelinesAlphaTest3D_.end()) return it->second;
 
@@ -3860,6 +3891,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -3869,12 +3905,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
             // Task 868: real per-BlendState mapping, replacing the previous hardcoded
             // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-            FillBlendAttachmentState(ba, blend, blendParams);
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
 
         VkPipelineColorBlendStateCreateInfo cbs{};
@@ -4047,7 +4081,7 @@ namespace CNA::Internal::Backends::Vulkan
         // DualTexture uses stride=20 (VertexPositionTexture) by default, or stride=24
         // (VertexPositionColorTexture, Task 889) when VertexColorEnabled needs a color attribute.
         const std::size_t dualStride = (stride == 24) ? 24 : 20;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(dualStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesDualTex3D_.find(key);
         if (it != pipelinesDualTex3D_.end()) return it->second;
 
@@ -4113,6 +4147,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -4122,12 +4161,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
             // Task 868: real per-BlendState mapping, replacing the previous hardcoded
             // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-            FillBlendAttachmentState(ba, blend, blendParams);
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4373,7 +4410,7 @@ namespace CNA::Internal::Backends::Vulkan
         EnsureEnvMapResources();
 
         constexpr std::size_t kEnvStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kEnvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesEnvMap3D_.find(key);
         if (it != pipelinesEnvMap3D_.end()) return it->second;
 
@@ -4421,6 +4458,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -4430,12 +4472,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
             // Task 868: real per-BlendState mapping, replacing the previous hardcoded
             // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-            FillBlendAttachmentState(ba, blend, blendParams);
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4603,7 +4643,7 @@ namespace CNA::Internal::Backends::Vulkan
         EnsureLitTexturedResources();
 
         constexpr std::size_t kLitStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesLitTextured3D_.find(key);
         if (it != pipelinesLitTextured3D_.end()) return it->second;
 
@@ -4651,6 +4691,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -4660,12 +4705,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
             // Task 868: real per-BlendState mapping, replacing the previous hardcoded
             // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-            FillBlendAttachmentState(ba, blend, blendParams);
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4722,7 +4765,7 @@ namespace CNA::Internal::Backends::Vulkan
         EnsureLitTexturedResources();
 
         constexpr std::size_t kLitStride = 32;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesLitTextured3DVertexLit_.find(key);
         if (it != pipelinesLitTextured3DVertexLit_.end()) return it->second;
 
@@ -4770,6 +4813,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -4779,10 +4827,8 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            FillBlendAttachmentState(ba, blend, blendParams);
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -4944,7 +4990,7 @@ namespace CNA::Internal::Backends::Vulkan
     {
         EnsureFogTex3DResources();
 
-        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(Make3DKey(topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesFogColored3D_.find(key);
         if (it != pipelinesFogColored3D_.end()) return it->second;
 
@@ -4991,6 +5037,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -5002,8 +5053,6 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 868: real per-BlendState mapping, replacing the previous hardcoded
         // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
         FillBlendAttachmentState(cba, blend, blendParams);
-        cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
             std::max(colorAttachmentCount, 1u), cba);
 
@@ -5061,7 +5110,7 @@ namespace CNA::Internal::Backends::Vulkan
     {
         EnsureFogTex3DResources();
 
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesFogTex3D_.find(key);
         if (it != pipelinesFogTex3D_.end()) return it->second;
 
@@ -5128,6 +5177,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -5139,8 +5193,6 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 868: real per-BlendState mapping, replacing the previous hardcoded
         // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
         FillBlendAttachmentState(cba, blend, blendParams);
-        cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                             VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
             std::max(colorAttachmentCount, 1u), cba);
 
@@ -5344,7 +5396,7 @@ namespace CNA::Internal::Backends::Vulkan
         // (locations 0-4 identical to stride 52; location 5 = aColor is new).
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesSkinned3D_.find(key);
         if (it != pipelinesSkinned3D_.end()) return it->second;
 
@@ -5403,6 +5455,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -5412,12 +5469,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
             // Task 868: real per-BlendState mapping, replacing the previous hardcoded
             // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-            FillBlendAttachmentState(ba, blend, blendParams);
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -5474,7 +5529,7 @@ namespace CNA::Internal::Backends::Vulkan
         // per-vertex-color shader/attribute-layout variant.
         const std::size_t skinnedStride = (stride == 56) ? 56 : 52;
         const bool colored = (skinnedStride == 56);
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(skinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesSkinned3DVertexLit_.find(key);
         if (it != pipelinesSkinned3DVertexLit_.end()) return it->second;
 
@@ -5533,6 +5588,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -5542,10 +5602,8 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            FillBlendAttachmentState(ba, blend, blendParams);
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -5716,7 +5774,7 @@ namespace CNA::Internal::Backends::Vulkan
         EnsurePbrResources();
 
         constexpr std::size_t kPbrStride = 48;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kPbrStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kPbrStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesPbr3D_.find(key);
         if (it != pipelinesPbr3D_.end()) return it->second;
 
@@ -5765,6 +5823,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -5774,10 +5837,8 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            FillBlendAttachmentState(ba, blend, blendParams);
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -5967,7 +6028,7 @@ namespace CNA::Internal::Backends::Vulkan
         EnsurePbrSkinnedResources();
 
         constexpr std::size_t kPbrSkinnedStride = 68;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kPbrSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kPbrSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesPbrSkinned3D_.find(key);
         if (it != pipelinesPbrSkinned3D_.end()) return it->second;
 
@@ -6018,6 +6079,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo ds{};
         ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -6027,10 +6093,8 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-            FillBlendAttachmentState(ba, blend, blendParams);
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -6087,7 +6151,7 @@ namespace CNA::Internal::Backends::Vulkan
                 throw std::runtime_error("vkCreatePipelineLayout (Ext3D/Instanced) failed");
         }
 
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(pvStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesInstanced3D_.find(key);
         if (it != pipelinesInstanced3D_.end()) return it->second;
 
@@ -6145,6 +6209,11 @@ namespace CNA::Internal::Backends::Vulkan
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
+        // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
+        // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
+        const VkSampleMask cnaSampleMask_ = blendParams.sampleMask;
+        if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         VkPipelineDepthStencilStateCreateInfo dss{};
         dss.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -6154,12 +6223,10 @@ namespace CNA::Internal::Backends::Vulkan
 
         const uint32_t nColor = std::max(colorAttachmentCount, 1u);
         std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
-        for (auto& ba : blendAttachments) {
-            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        for (size_t bi = 0; bi < blendAttachments.size(); ++bi) { auto& ba = blendAttachments[bi];
             // Task 868: real per-BlendState mapping, replacing the previous hardcoded
             // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-            FillBlendAttachmentState(ba, blend, blendParams);
+            FillBlendAttachmentState(ba, blend, blendParams, static_cast<int>(bi)); // REMED-GFX-077: per-MRT-slot write mask
         }
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -8495,7 +8562,8 @@ namespace CNA::Internal::Backends::Vulkan
 
     void VulkanGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
-                                                 int colorBlendFunc, int alphaBlendFunc)
+                                                 int colorBlendFunc, int alphaBlendFunc,
+                                                 const BlendWriteState& writeState)
     {
         // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → no blending
         blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
@@ -8510,6 +8578,16 @@ namespace CNA::Internal::Backends::Vulkan
         blendParams_.alphaDst  = alphaDstBlend;
         blendParams_.colorFunc = colorBlendFunc;
         blendParams_.alphaFunc = alphaBlendFunc;
+        // REMED-GFX-077: the four per-MRT-slot colour write masks + the coverage sample mask are
+        // static pipeline state — stored into blendParams_ and consumed by FillBlendAttachmentState
+        // (per-attachment colorWriteMask) + VkPipelineMultisampleStateCreateInfo::pSampleMask, and
+        // folded into the pipeline cache key (PackColorWriteBits + sampleMask). MRT slots 0..3 map
+        // to ColorWriteChannels/1/2/3.
+        blendParams_.colorWrite[0] = writeState.colorWriteChannels[0];
+        blendParams_.colorWrite[1] = writeState.colorWriteChannels[1];
+        blendParams_.colorWrite[2] = writeState.colorWriteChannels[2];
+        blendParams_.colorWrite[3] = writeState.colorWriteChannels[3];
+        blendParams_.sampleMask    = writeState.multiSampleMask;
     }
 
     void VulkanGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,

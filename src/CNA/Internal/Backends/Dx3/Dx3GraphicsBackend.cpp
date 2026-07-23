@@ -984,8 +984,13 @@ namespace CNA::Internal::Backends::Dx3
 
     void Dx3GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
-                                             int colorBlendFunc, int alphaBlendFunc)
+                                             int colorBlendFunc, int alphaBlendFunc,
+                                             const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: the DirectDraw/Direct3D-3-era Dx3 backend classifies blending into one of
+        // four preset modes for 2D blits and has no per-channel colour-write-mask or coverage
+        // sample-mask surface. BlendState.ColorWriteChannels* / MultiSampleMask are inexpressible
+        // (documented capability gap, not a silent drop).
         impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
                                                   colorBlendFunc, alphaBlendFunc);
     }

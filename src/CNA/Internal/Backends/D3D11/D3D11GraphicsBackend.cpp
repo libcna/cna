@@ -645,12 +645,20 @@ namespace CNA::Internal::Backends::D3D11
 
     void D3D11GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                int colorDstBlend, int alphaDstBlend,
-                                               int colorBlendFunc, int alphaBlendFunc)
+                                               int colorBlendFunc, int alphaBlendFunc,
+                                               const BlendWriteState& writeState)
     {
+        // REMED-GFX-077: the four per-RT colour write masks are part of the ID3D11BlendState object
+        // (static → cache key). The MultiSampleMask is NOT part of the object — it is the dynamic
+        // third argument to OMSetBlendState, applied at bind time (and re-applied verbatim by
+        // SetBlendFactor's re-bind), so it is captured on the backend rather than keyed.
+        currentSampleMask_ = writeState.multiSampleMask;
         currentBlendState_ = blendStateCache_.GetOrCreate(
             device_.Get(), colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
-            colorBlendFunc, alphaBlendFunc);
-        context_->OMSetBlendState(currentBlendState_.Get(), currentBlendFactor_, 0xFFFFFFFFu);
+            colorBlendFunc, alphaBlendFunc,
+            writeState.colorWriteChannels[0], writeState.colorWriteChannels[1],
+            writeState.colorWriteChannels[2], writeState.colorWriteChannels[3]);
+        context_->OMSetBlendState(currentBlendState_.Get(), currentBlendFactor_, currentSampleMask_);
     }
 
     void D3D11GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -714,7 +722,7 @@ namespace CNA::Internal::Backends::D3D11
         // with the new factor. If no blend state has been applied yet, there is nothing to
         // re-bind (the next ApplyBlendState() call will pick up currentBlendFactor_ itself).
         if (currentBlendState_)
-            context_->OMSetBlendState(currentBlendState_.Get(), currentBlendFactor_, 0xFFFFFFFFu);
+            context_->OMSetBlendState(currentBlendState_.Get(), currentBlendFactor_, currentSampleMask_);
     }
 
     void D3D11GraphicsBackend::SetReferenceStencil(int value)

@@ -33,6 +33,7 @@ namespace CNA::Internal::Backends::D3D12
                       desc.colorBlendFunc, desc.alphaBlendFunc,
                       desc.depthEnable, desc.depthWriteEnable, desc.depthFunc,
                       desc.cullMode, desc.fillMode,
+                      desc.colorWriteMask, desc.sampleMask,
                       static_cast<unsigned>(rtvFormat), static_cast<unsigned>(dsvFormat)};
         auto it = cache_.find(key);
         if (it != cache_.end())
@@ -61,7 +62,8 @@ namespace CNA::Internal::Backends::D3D12
         psoDesc.InputLayout = {inputElements, inputElementCount};
         psoDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
         psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        psoDesc.SampleMask = UINT_MAX;
+        // REMED-GFX-077: BlendState.MultiSampleMask (static PSO state → keyed above).
+        psoDesc.SampleMask = desc.sampleMask;
         psoDesc.SampleDesc.Count = 1;
         psoDesc.NodeMask = 0;
 
@@ -88,7 +90,8 @@ namespace CNA::Internal::Backends::D3D12
         rt0.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(desc.alphaBlendFunc));
         rt0.LogicOpEnable = FALSE;
         rt0.LogicOp = D3D12_LOGIC_OP_NOOP;
-        rt0.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        // REMED-GFX-077: BlendState.ColorWriteChannels slot 0 (bit-identical to D3D12_COLOR_WRITE_ENABLE_*).
+        rt0.RenderTargetWriteMask = static_cast<UINT8>(desc.colorWriteMask & 0xF);
 
         // Depth -- stencil deliberately left disabled/default, see this header's own file-level doc
         // comment for why that's an honest, documented gap rather than a silent omission.

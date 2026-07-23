@@ -265,7 +265,8 @@ namespace CNA::Internal::Backends::Software
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc, int stencilPass, int stencilFail,
                                     int stencilDepthFail, int stencilMask, int stencilWriteMask,
@@ -316,6 +317,13 @@ namespace CNA::Internal::Backends::Software
         /// SpriteBatch::Begin() applies its BlendState the same way any other draw does.
         [[nodiscard]] bool IsBlendEnabled() const { return blendEnabled_; }
         [[nodiscard]] bool IsDepthTestEnabled() const { return depthTestEnabled_; }
+        /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState (slot 0; Software has
+        /// one active colour buffer). Used by SoftwareSpriteBatchBackend so its quads honour the
+        /// per-channel write mask the same way any other draw does. 15 (All) = every channel.
+        [[nodiscard]] int GetColorWriteMask() const { return colorWriteMask_; }
+        /// REMED-GFX-077: the current BlendState.MultiSampleMask. Software is single-sample, so only
+        /// bit 0 is meaningful (bit 0 clear discards the fragment). 0xFFFFFFFF = all samples.
+        [[nodiscard]] unsigned int GetMultiSampleMask() const { return multiSampleMask_; }
         /// The raw CullMode ordinal from the most recent ApplyRasterizerState() call (SOFTWARE-81).
         /// Used by SoftwareSpriteBatchBackend so its quads are culled the same way real FNA's
         /// SpriteBatch is: FNA's own SpriteBatch defaults its RasterizerState to
@@ -377,6 +385,12 @@ namespace CNA::Internal::Backends::Software
         /// Opaque (false) vs. simplified AlphaBlend (true) -- design decision 7. Defaults to
         /// false, matching real XNA/FNA's own default GraphicsDevice.BlendState (Opaque).
         bool blendEnabled_ = false;
+        /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState, slot 0 (bit0=R,
+        /// bit1=G, bit2=B, bit3=A). Defaults to 15 (All), matching XNA's default BlendState.
+        int colorWriteMask_ = 15;
+        /// REMED-GFX-077: current BlendState.MultiSampleMask. Single-sample ⇒ only bit 0 matters.
+        /// Defaults to 0xFFFFFFFF (all samples), matching XNA's default (-1).
+        unsigned int multiSampleMask_ = 0xFFFFFFFFu;
         /// Raw CullMode ordinal (0=None, 1=CullClockwiseFace, 2=CullCounterClockwiseFace) from the
         /// most recent ApplyRasterizerState() call (SOFTWARE-81). Defaults to 2
         /// (CullCounterClockwiseFace), matching real XNA/FNA's own default

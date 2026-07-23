@@ -319,7 +319,8 @@ namespace CNA::Internal::Backends::WebGPU
                                                        const WebGPUGraphicsBackend::BlendKeyParams& bp,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias,
-                                                       std::uint64_t salt)
+                                                       std::uint64_t salt,
+                                                       int colorWriteMask, std::uint32_t sampleMask)
         {
             std::uint64_t key = static_cast<std::uint64_t>(topology);
             key = key * 31u + (depthTest ? 1u : 0u);
@@ -344,6 +345,9 @@ namespace CNA::Internal::Backends::WebGPU
             key = key * 1000003u + static_cast<std::uint64_t>(std::bit_cast<std::uint32_t>(depthBias));
             key = key * 1000003u + static_cast<std::uint64_t>(std::bit_cast<std::uint32_t>(slopeScaleDepthBias));
             key = key * 1000003u + salt;
+            // REMED-GFX-077: colour write mask + sample mask are static wgpu-native pipeline state.
+            key = key * 31u + static_cast<std::uint64_t>(colorWriteMask & 0xF);
+            key = key * 31u + static_cast<std::uint64_t>(sampleMask);
             return key;
         }
 
@@ -2303,7 +2307,11 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        // REMED-GFX-077: the SpriteBatch pipeline is a fixed, create-once object (it also ignores
+        // the BlendState's factors — the WebGPU sprite-BlendState counterpart finding). It is built
+        // at resource-init time with the default write mask; full per-Begin ColorWriteChannels for
+        // sprites is deferred to that same counterpart task. The keyed 3D pipelines below honour it.
+        target.writeMask = WGPUColorWriteMask_All; // fixed sprite pipeline
         WGPUFragmentState fragment{};
         fragment.module = spriteShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -2324,7 +2332,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max(); // REMED-GFX-077: fixed sprite pipeline (see above)
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -2458,7 +2466,7 @@ struct VertexOutput {
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
 
@@ -2478,7 +2486,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = coloredShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -2505,7 +2513,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -2689,7 +2697,7 @@ struct VertexOutput {
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
 
@@ -2709,7 +2717,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = texturedShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -2736,7 +2744,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -2771,7 +2779,7 @@ struct VertexOutput {
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
 
@@ -2794,7 +2802,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = coloredTexturedShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -2821,7 +2829,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -3118,7 +3126,7 @@ struct VertexOutput {
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
 
@@ -3141,7 +3149,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = litTexturedShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -3168,7 +3176,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -3202,7 +3210,7 @@ struct VertexOutput {
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
 
@@ -3225,7 +3233,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = litTexturedVertexLitShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -3252,7 +3260,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -3427,7 +3435,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride));
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_);
         auto& cache = (stride == 24) ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -3489,7 +3497,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = shaderModule;
         fragment.entryPoint = StringView("fs_main");
@@ -3516,7 +3524,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -3714,7 +3722,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride));
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_);
         auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -3761,7 +3769,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = shaderModule;
         fragment.entryPoint = StringView("fs_main");
@@ -3788,7 +3796,7 @@ struct VertexOutput {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -4024,7 +4032,7 @@ struct VertexOutput {
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
             return it->second;
 
@@ -4047,7 +4055,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = envMapShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -4068,7 +4076,7 @@ struct VertexOutput {
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -4330,7 +4338,7 @@ struct VertexOutput {
                                     static_cast<std::uint64_t>(instVbStride);
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, salt);
+                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_);
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
             return it->second;
 
@@ -4370,7 +4378,7 @@ struct VertexOutput {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = instancedShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -4391,7 +4399,7 @@ struct VertexOutput {
         FillWGPUBlendState(blendState, blendParams);
         target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -4577,7 +4585,9 @@ struct VSOut {
 
         WGPUColorTargetState target{};
         target.format = WGPUTextureFormat_RGBA8Unorm;
-        target.writeMask = WGPUColorWriteMask_All;
+        // REMED-GFX-077: internal mipmap-blit utility pipeline — not a game draw, so it is
+        // intentionally unaffected by the game's BlendState.ColorWriteChannels/MultiSampleMask.
+        target.writeMask = WGPUColorWriteMask_All; // internal mip-blit
         WGPUFragmentState fragment{};
         fragment.module = mipBlitShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -4597,7 +4607,7 @@ struct VSOut {
         // of this backend's own global sampleCount_ (unlike the swapchain/RenderTarget2D
         // pipelines, which must match sampleCount_ to stay render-pass compatible).
         pipeline.multisample.count = 1;
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max(); // REMED-GFX-077: internal mip-blit (see above)
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
         // No depthStencil: this is its own dedicated colour-only render pass, not sharing the
@@ -5023,7 +5033,8 @@ struct VSOut {
 
     void WebGPUGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,
-                                                int colorBlendFunc, int alphaBlendFunc)
+                                                int colorBlendFunc, int alphaBlendFunc,
+                                                const BlendWriteState& writeState)
     {
         // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending. Mirrors
         // VulkanGraphicsBackend::ApplyBlendState()'s identical derivation exactly.
@@ -5035,6 +5046,14 @@ struct VSOut {
         blendParams_.alphaDst  = alphaDstBlend;
         blendParams_.colorFunc = colorBlendFunc;
         blendParams_.alphaFunc = alphaBlendFunc;
+        // REMED-GFX-077: both are STATIC wgpu-native pipeline state, baked into the keyed 3D
+        // pipelines (WGPUColorTargetState.writeMask / WGPUMultisampleState.mask, folded into
+        // Make3DPipelineKey). wgpu-native's mask field is a real, functional sample coverage mask.
+        // D3D12 draws are single-target here, so only ColorWriteChannels slot 0 applies (MRT is the
+        // separate WEBGPU-85/86/87 follow-up). The fixed SpriteBatch pipeline does not honour it —
+        // deferred to the WebGPU sprite-BlendState counterpart finding (see CreateSpriteResources).
+        colorWriteMask_ = writeState.colorWriteChannels[0];
+        sampleMask_ = writeState.multiSampleMask;
     }
 
     void WebGPUGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -7234,7 +7253,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = pbrPipelines_.find(key); it != pbrPipelines_.end())
             return it->second;
 
@@ -7263,7 +7282,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = pbrShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -7290,7 +7309,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -8120,7 +8139,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         const bool hasVertexColor = (stride == 56);
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         auto& cache = preferVertexLit
             ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
             : (hasVertexColor ? skinnedColorPipelines_ : skinnedPipelines_);
@@ -8171,7 +8190,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = shaderModule;
         fragment.entryPoint = StringView("fs_main");
@@ -8198,7 +8217,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -8641,7 +8660,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     {
         const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = skinnedPbrPipelines_.find(key); it != skinnedPbrPipelines_.end())
             return it->second;
 
@@ -8674,7 +8693,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
 
         WGPUColorTargetState target{};
         target.format = surfaceFormat_;
-        target.writeMask = WGPUColorWriteMask_All;
+        target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = skinnedPbrShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -8701,7 +8720,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
         // before MSAA existed.
         pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.mask = CurrentSampleMask(); // REMED-GFX-077: BlendState.MultiSampleMask
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 

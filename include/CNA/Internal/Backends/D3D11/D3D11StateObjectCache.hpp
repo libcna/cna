@@ -19,10 +19,11 @@ namespace CNA::Internal::Backends::D3D11
     using Microsoft::WRL::ComPtr;
 
     /// Caches ID3D11BlendState objects keyed by the 6 raw XNA Blend/BlendFunction ordinals
-    /// ApplyBlendState() carries. IGraphicsBackend::ApplyBlendState has no per-render-target color
-    /// write mask parameter, so every cached state uses D3D11_COLOR_WRITE_ENABLE_ALL -- a
-    /// documented limitation of the existing interface, not something this cache can fix on its
-    /// own (matches D3D11SamplerCache's own documented AddressW-reuses-AddressV limitation, DX-44).
+    /// ApplyBlendState() carries PLUS the four per-render-target colour write masks
+    /// (BlendState.ColorWriteChannels/1/2/3, REMED-GFX-077). The write mask is part of the
+    /// ID3D11BlendState object (static), so it participates in the key; the multisample SampleMask
+    /// is NOT part of the object (it is a dynamic OMSetBlendState argument) and therefore stays out
+    /// of the key.
     class D3D11BlendStateCache
     {
     public:
@@ -32,16 +33,21 @@ namespace CNA::Internal::Backends::D3D11
         /// this project's own already-established VulkanGraphicsBackend::ApplyBlendState
         /// heuristic), enabled otherwise -- mathematically equivalent either way, but avoids
         /// paying the (tiny) blend-enabled cost for the common Opaque case.
+        /// @param cw0..cw3 Raw XNA ColorWriteChannels for render targets 0..3 (REMED-GFX-077). When
+        ///                 cw1==cw2==cw3==cw0 the blend uses a single RenderTarget[0] entry
+        ///                 (IndependentBlendEnable=FALSE); differing masks enable independent
+        ///                 per-target write masks across RenderTarget[0..3].
         ComPtr<ID3D11BlendState> GetOrCreate(ID3D11Device* device,
                                              int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
-                                             int colorBlendFunc, int alphaBlendFunc);
+                                             int colorBlendFunc, int alphaBlendFunc,
+                                             int cw0, int cw1, int cw2, int cw3);
 
         /// Number of distinct blend states created so far (NOXNA diagnostics).
         [[nodiscard]] std::size_t GetCacheSizeEXT() const { return cache_.size(); }
 
     private:
-        using Key = std::tuple<int, int, int, int, int, int>;
+        using Key = std::tuple<int, int, int, int, int, int, int, int, int, int>;
         std::map<Key, ComPtr<ID3D11BlendState>> cache_;
     };
 

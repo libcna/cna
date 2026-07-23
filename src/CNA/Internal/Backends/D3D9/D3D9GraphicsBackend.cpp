@@ -965,7 +965,8 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                int colorDstBlend, int alphaDstBlend,
-                                               int colorBlendFunc, int alphaBlendFunc)
+                                               int colorBlendFunc, int alphaBlendFunc,
+                                               const BlendWriteState& writeState)
     {
         device_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
         device_->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
@@ -975,6 +976,19 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetRenderState(D3DRS_SRCBLENDALPHA, BlendToD3D9(alphaSrcBlend));
         device_->SetRenderState(D3DRS_DESTBLENDALPHA, BlendToD3D9(alphaDstBlend));
         device_->SetRenderState(D3DRS_BLENDOPALPHA, BlendFunctionToD3D9(alphaBlendFunc));
+        // REMED-GFX-077: XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to
+        // D3DCOLORWRITEENABLE_*, so the raw value drops straight into D3DRS_COLORWRITEENABLE. These
+        // are dynamic render states (no state object → nothing to cache/key). Slot 0 is always
+        // supported; the independent per-RT masks (slots 1/2/3) need D3DPMISCCAPS_INDEPENDENTWRITEMASKS.
+        device_->SetRenderState(D3DRS_COLORWRITEENABLE, static_cast<DWORD>(writeState.colorWriteChannels[0] & 0xF));
+        if (caps_.PrimitiveMiscCaps & D3DPMISCCAPS_INDEPENDENTWRITEMASKS)
+        {
+            device_->SetRenderState(D3DRS_COLORWRITEENABLE1, static_cast<DWORD>(writeState.colorWriteChannels[1] & 0xF));
+            device_->SetRenderState(D3DRS_COLORWRITEENABLE2, static_cast<DWORD>(writeState.colorWriteChannels[2] & 0xF));
+            device_->SetRenderState(D3DRS_COLORWRITEENABLE3, static_cast<DWORD>(writeState.colorWriteChannels[3] & 0xF));
+        }
+        // BlendState.MultiSampleMask → D3DRS_MULTISAMPLEMASK (dynamic; only affects MSAA targets).
+        device_->SetRenderState(D3DRS_MULTISAMPLEMASK, static_cast<DWORD>(writeState.multiSampleMask));
     }
 
     void D3D9GraphicsBackend::SetBlendFactor(float r, float g, float b, float a)

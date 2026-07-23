@@ -524,7 +524,8 @@ namespace CNA::Internal::Backends::WebGPU
         // GetOrCreatePipeline*() below at pipeline-creation time -- wgpu-native bakes blend state
         // into the pipeline object, there is no dynamic override).
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         // WEBGPU-41/79: CullMode/FillMode -> WGPUPrimitiveState (storage-only; also baked into the
         // pipeline object). FillMode::WireFrame is stored but has no rendering effect -- wgpu-native
         // has no polygon-mode API at all (WEBGPU-115, a documented, accepted deviation, same as
@@ -845,6 +846,16 @@ namespace CNA::Internal::Backends::WebGPU
         // class) for which of these are baked into every 3D pipeline object vs. applied once per
         // render pass as genuine wgpu-native dynamic state.
         BlendKeyParams blendParams_{};
+        /// REMED-GFX-077: BlendState.ColorWriteChannels slot 0 (bit0=R..bit3=A) and MultiSampleMask.
+        /// Both are STATIC wgpu-native pipeline state (WGPUColorTargetState.writeMask /
+        /// WGPUMultisampleState.mask) and are folded into Make3DPipelineKey for the keyed 3D
+        /// pipelines. Defaults match XNA (All / 0xFFFFFFFF).
+        int colorWriteMask_ = 15;
+        std::uint32_t sampleMask_ = 0xFFFFFFFFu;
+        /// XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to WGPUColorWriteMask_*.
+        [[nodiscard]] WGPUColorWriteMask CurrentWriteMask() const
+        { return static_cast<WGPUColorWriteMask>(colorWriteMask_ & 0xF); }
+        [[nodiscard]] std::uint32_t CurrentSampleMask() const { return sampleMask_; }
         int cullMode_ = 0;                ///< XNA CullMode::None
         bool fillModeWireframe_ = false;  ///< XNA FillMode::WireFrame -- stored only, see WEBGPU-115
         bool scissorEnabled_ = false;

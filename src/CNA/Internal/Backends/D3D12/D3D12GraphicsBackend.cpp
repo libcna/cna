@@ -1236,7 +1236,8 @@ namespace CNA::Internal::Backends::D3D12
 
     void D3D12GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,
-                                                int colorBlendFunc, int alphaBlendFunc)
+                                                int colorBlendFunc, int alphaBlendFunc,
+                                                const BlendWriteState& writeState)
     {
         currentColorSrcBlend_ = colorSrcBlend;
         currentAlphaSrcBlend_ = alphaSrcBlend;
@@ -1244,6 +1245,11 @@ namespace CNA::Internal::Backends::D3D12
         currentAlphaDstBlend_ = alphaDstBlend;
         currentColorBlendFunc_ = colorBlendFunc;
         currentAlphaBlendFunc_ = alphaBlendFunc;
+        // REMED-GFX-077: both are STATIC PSO state, folded into the PSO cache key + desc at draw
+        // time (see the three psoDesc fill sites). D3D12 draws are single-target here, so only
+        // ColorWriteChannels slot 0 applies.
+        currentColorWriteMask_ = writeState.colorWriteChannels[0];
+        currentSampleMask_ = writeState.multiSampleMask;
     }
 
     void D3D12GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -1338,6 +1344,8 @@ namespace CNA::Internal::Backends::D3D12
         psoDesc.alphaDstBlend = currentAlphaDstBlend_;
         psoDesc.colorBlendFunc = currentColorBlendFunc_;
         psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
+        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
         psoDesc.depthEnable = currentDepthEnable_;
         psoDesc.depthWriteEnable = currentDepthWriteEnable_;
         psoDesc.depthFunc = currentDepthFunc_;
@@ -1437,6 +1445,8 @@ namespace CNA::Internal::Backends::D3D12
         psoDesc.alphaDstBlend = currentAlphaDstBlend_;
         psoDesc.colorBlendFunc = currentColorBlendFunc_;
         psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
+        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
         psoDesc.depthEnable = currentDepthEnable_;
         psoDesc.depthWriteEnable = currentDepthWriteEnable_;
         psoDesc.depthFunc = currentDepthFunc_;
@@ -1689,6 +1699,8 @@ namespace CNA::Internal::Backends::D3D12
         psoDesc.alphaDstBlend = currentAlphaDstBlend_;
         psoDesc.colorBlendFunc = currentColorBlendFunc_;
         psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.colorWriteMask = currentColorWriteMask_; // REMED-GFX-077 (static PSO state)
+        psoDesc.sampleMask = currentSampleMask_;         // REMED-GFX-077 (static PSO state)
         psoDesc.depthEnable = currentDepthEnable_;
         psoDesc.depthWriteEnable = currentDepthWriteEnable_;
         psoDesc.depthFunc = currentDepthFunc_;
@@ -2288,6 +2300,11 @@ namespace CNA::Internal::Backends::D3D12
         desc.InputLayout = {kElements, static_cast<UINT>(std::size(kElements))};
         desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
         desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        // REMED-GFX-077: this instanced-3d PSO is created ONCE and cached in instancedPso_ (it also
+        // hardcodes opaque BlendEnable=FALSE, ignoring the current BlendState entirely). Honouring a
+        // dynamic ColorWriteChannels/MultiSampleMask here would require keying it like the main PSO
+        // cache — a documented gap for the instanced fast path, consistent with its existing opaque
+        // hardcode, not a silent drop.
         desc.SampleMask = UINT_MAX;
         desc.SampleDesc.Count = 1;
         desc.NodeMask = 0;

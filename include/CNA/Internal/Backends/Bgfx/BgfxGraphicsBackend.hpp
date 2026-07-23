@@ -417,6 +417,11 @@ namespace CNA::Internal::Backends::Bgfx
         uint64_t blendFlags_  = BGFX_STATE_BLEND_ALPHA;
         uint64_t depthFlags_  = BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_WRITE_Z;
         uint64_t cullFlags_   = BGFX_STATE_CULL_CCW;
+        /// REMED-GFX-077: per-draw colour write mask (BlendState.ColorWriteChannels slot 0), OR'd
+        /// into every bgfx::setState word. bgfx colour write is a single global-per-draw mask, so
+        /// this replaces the former hardcoded BGFX_STATE_WRITE_RGB|BGFX_STATE_WRITE_A. Defaults to
+        /// all four channels (= XNA default ColorWriteChannels.All).
+        uint64_t colorWriteFlags_ = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A;
         // Task 766: FillMode::WireFrame (fillMode==1), set by ApplyRasterizerState. bgfx has no
         // native polygon-fill-mode toggle (unlike D3D9/Vulkan) -- emulated by re-expanding
         // triangle indices into a line list at draw time, mirroring EasyGL's DrawWireframe.
@@ -661,7 +666,8 @@ namespace CNA::Internal::Backends::Bgfx
         // Graphics state (stored; applied per-draw in SubmitSprite and future 3D draws)
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         // Task 923: alphaSrcBlend/alphaDstBlend/colorBlendFunc/alphaBlendFunc are now genuinely
         // honored (BGFX_STATE_BLEND_FUNC_SEPARATE/BGFX_STATE_BLEND_EQUATION_SEPARATE), not just
         // colorSrcBlend/colorDstBlend applied to both channels with an implicit Add equation.

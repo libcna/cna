@@ -503,7 +503,8 @@ namespace CNA::Internal::Backends::Headless
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc, int stencilPass, int stencilFail,
                                     int stencilDepthFail, int stencilMask, int stencilWriteMask,

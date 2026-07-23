@@ -1643,7 +1643,7 @@ namespace CNA::Internal::Backends::Bgfx
         // Task 768: gated on scissorEnabled_, not just a non-zero rect -- see that member's own
         // declaration comment for why the two must be tracked independently.
         ApplyScissorOverride();
-        bgfx::setState(BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_MSAA
+        bgfx::setState(colorWriteFlags_ | BGFX_STATE_MSAA
                        | blendFlags_ | depthFlags_ | cullFlags_, blendFactorPacked_);
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::submit(spriteViewId, spriteProgram);
@@ -1692,7 +1692,8 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                int colorDstBlend, int alphaDstBlend,
-                                               int colorBlendFunc, int alphaBlendFunc)
+                                               int colorBlendFunc, int alphaBlendFunc,
+                                               const BlendWriteState& writeState)
     {
         // Blend::One=0, Blend::Zero=1 → Opaque preset (all 4 factors): src=One, dst=Zero → no blend
         if (colorSrcBlend == 0 && colorDstBlend == 1 &&
@@ -1714,6 +1715,19 @@ namespace CNA::Internal::Backends::Bgfx
                               XnaBlendFunctionToBgfxEquation(colorBlendFunc),
                               XnaBlendFunctionToBgfxEquation(alphaBlendFunc));
         }
+        // REMED-GFX-077: BlendState.ColorWriteChannels (slot 0) → the per-draw BGFX_STATE_WRITE_*
+        // bits (bgfx colour write is a single global-per-draw mask; BGFX_STATE_WRITE_{R,G,B,A} =
+        // 0x1/0x2/0x4/0x8 = the XNA ColorWriteChannels bit layout). bgfx has NO per-attachment
+        // colour write, so independent MRT masks (ColorWriteChannels1/2/3) are not representable
+        // (documented capability gap → REMED-GFX-085), and bgfx has no per-draw sample-coverage
+        // mask, so BlendState.MultiSampleMask is not representable either (documented gap).
+        const int cw = writeState.colorWriteChannels[0];
+        uint64_t cwf = 0;
+        if (ColorWriteHasRed  (cw)) cwf |= BGFX_STATE_WRITE_R;
+        if (ColorWriteHasGreen(cw)) cwf |= BGFX_STATE_WRITE_G;
+        if (ColorWriteHasBlue (cw)) cwf |= BGFX_STATE_WRITE_B;
+        if (ColorWriteHasAlpha(cw)) cwf |= BGFX_STATE_WRITE_A;
+        colorWriteFlags_ = cwf;
     }
 
     static uint32_t XnaCompareFuncToBgfxStencilTest(int f)
@@ -2519,7 +2533,7 @@ namespace CNA::Internal::Backends::Bgfx
         if (useWireframe) bgfx::setIndexBuffer(&wireTib);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+        bgfx::setState((colorWriteFlags_
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
                        // here -- depthFlags_ (set by ApplyDepthStencilState from the real
                        // DepthBufferWriteEnable) already carries it when writes are actually
@@ -2565,7 +2579,7 @@ namespace CNA::Internal::Backends::Bgfx
         else              bgfx::setIndexBuffer(ib.handle);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        bgfx::setState((BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+        bgfx::setState((colorWriteFlags_
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
                        // here -- depthFlags_ (set by ApplyDepthStencilState from the real
                        // DepthBufferWriteEnable) already carries it when writes are actually
@@ -2615,7 +2629,7 @@ namespace CNA::Internal::Backends::Bgfx
         if (useWireframe) bgfx::setIndexBuffer(&wireTib);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+        const uint64_t state = (colorWriteFlags_
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
                        // here -- depthFlags_ (set by ApplyDepthStencilState from the real
                        // DepthBufferWriteEnable) already carries it when writes are actually
@@ -3032,7 +3046,7 @@ namespace CNA::Internal::Backends::Bgfx
         else              bgfx::setIndexBuffer(ib.handle);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+        const uint64_t state = (colorWriteFlags_
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
                        // here -- depthFlags_ (set by ApplyDepthStencilState from the real
                        // DepthBufferWriteEnable) already carries it when writes are actually
@@ -3452,7 +3466,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setInstanceDataBuffer(&idb);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
-        const uint64_t state = (BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+        const uint64_t state = (colorWriteFlags_
                        // Task 759: BGFX_STATE_WRITE_Z must NOT be unconditionally included
                        // here -- depthFlags_ (set by ApplyDepthStencilState from the real
                        // DepthBufferWriteEnable) already carries it when writes are actually

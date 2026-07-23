@@ -376,6 +376,12 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Device device;
         ::easygl::ResourceRegistry registry_;
 
+        /// REMED-GFX-077: the raw XNA ColorWriteChannels (slot 0; bit0=R..bit3=A) of the current
+        /// BlendState, applied via glColorMask in ApplyBlendState. Cached so Clear()/ClearColorAndDepth()
+        /// can temporarily force a full RGBA mask (XNA Clear ignores ColorWriteChannels, but glClear
+        /// respects glColorMask) and then restore it. Defaults to 15 (All).
+        int currentColorWriteMask_ = 15;
+
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         static constexpr int kMaxSamplerSlots = 16;
@@ -574,7 +580,8 @@ namespace CNA::Internal::Backends::EasyGL
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
                                     bool stencilEnable, int stencilFunc,
                                     int stencilPass, int stencilFail, int stencilDepthFail,

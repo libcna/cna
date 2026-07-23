@@ -139,7 +139,8 @@ namespace CNA::Internal::Backends::D3D12
         /// own D3DStateMapping tables are reused unchanged for the raw ordinal mapping).
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         /// DX-118: real, runtime-settable DepthStencilState -- depthEnable/depthWriteEnable/
         /// depthFunc feed the PSO cache key exactly like ApplyBlendState above. Stencil fields are
         /// deliberately NOT threaded through yet -- matches D3D12PipelineStateCache's own already-
@@ -710,6 +711,9 @@ namespace CNA::Internal::Backends::D3D12
         int currentAlphaDstBlend_ = 1;   // Blend::Zero
         int currentColorBlendFunc_ = 0;  // BlendFunction::Add
         int currentAlphaBlendFunc_ = 0;  // BlendFunction::Add
+        // REMED-GFX-077: BlendState output-merger write state, folded into the PSO cache key/desc.
+        int currentColorWriteMask_ = 15;              // ColorWriteChannels.All (bit0=R..bit3=A)
+        unsigned int currentSampleMask_ = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
         bool currentDepthEnable_ = false;
         bool currentDepthWriteEnable_ = false;
         int currentDepthFunc_ = 3;       // CompareFunction::LessEqual (real XNA ordinal)

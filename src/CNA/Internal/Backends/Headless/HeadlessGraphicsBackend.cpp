@@ -632,10 +632,19 @@ namespace CNA::Internal::Backends::Headless
         }
     }
 
-    void HeadlessGraphicsBackend::ApplyBlendState(int, int, int, int, int, int)
+    void HeadlessGraphicsBackend::ApplyBlendState(int, int, int, int, int, int,
+                                                  const BlendWriteState& writeState)
     {
         state_->stats.blendStateChangeCount++;
-        state_->RecordTrace("ApplyBlendState", "");
+        // REMED-GFX-077: Headless renders nothing, but it now records the write state into the
+        // trace payload so tests can assert the ColorWriteChannels/MultiSampleMask actually
+        // reached the backend (previously the trace string was empty).
+        char buf[96];
+        std::snprintf(buf, sizeof(buf), "cw=%d,%d,%d,%d msm=0x%08X",
+                      writeState.colorWriteChannels[0], writeState.colorWriteChannels[1],
+                      writeState.colorWriteChannels[2], writeState.colorWriteChannels[3],
+                      writeState.multiSampleMask);
+        state_->RecordTrace("ApplyBlendState", buf);
     }
 
     void HeadlessGraphicsBackend::ApplyDepthStencilState(bool, bool, int, bool, int, int, int, int, int, int, int,

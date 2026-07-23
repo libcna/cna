@@ -22,16 +22,27 @@ namespace CNA::Internal::Backends::D3D11
         ID3D11Device* device,
         int colorSrcBlend, int alphaSrcBlend,
         int colorDstBlend, int alphaDstBlend,
-        int colorBlendFunc, int alphaBlendFunc)
+        int colorBlendFunc, int alphaBlendFunc,
+        int cw0, int cw1, int cw2, int cw3)
     {
         const Key key{colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
-                       colorBlendFunc, alphaBlendFunc};
+                       colorBlendFunc, alphaBlendFunc, cw0, cw1, cw2, cw3};
         auto it = cache_.find(key);
         if (it != cache_.end()) return it->second;
 
+        // REMED-GFX-077: XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to
+        // D3D11_COLOR_WRITE_ENABLE_* (RED=1,GREEN=2,BLUE=4,ALPHA=8, ALL=15), so the raw ordinal
+        // masked to 0xF is the RenderTargetWriteMask directly. Independent per-target masks
+        // (ColorWriteChannels1/2/3) require IndependentBlendEnable + RenderTarget[1..3].
+        const UINT8 m0 = static_cast<UINT8>(cw0 & 0xF);
+        const UINT8 m1 = static_cast<UINT8>(cw1 & 0xF);
+        const UINT8 m2 = static_cast<UINT8>(cw2 & 0xF);
+        const UINT8 m3 = static_cast<UINT8>(cw3 & 0xF);
+        const bool independent = (m1 != m0 || m2 != m0 || m3 != m0);
+
         D3D11_BLEND_DESC desc{};
         desc.AlphaToCoverageEnable = FALSE;
-        desc.IndependentBlendEnable = FALSE;
+        desc.IndependentBlendEnable = independent ? TRUE : FALSE;
 
         // XNA Blend::One=0, Blend::Zero=1 -- BlendState.Opaque is SrcBlend=One/DestBlend=Zero on
         // both channels, i.e. a mathematical no-op. Matches this project's own already-established
@@ -39,17 +50,24 @@ namespace CNA::Internal::Backends::D3D11
         const bool isOpaque = colorSrcBlend == 0 && colorDstBlend == 1 &&
                               alphaSrcBlend == 0 && alphaDstBlend == 1;
 
-        D3D11_RENDER_TARGET_BLEND_DESC& rt = desc.RenderTarget[0];
-        rt.BlendEnable = isOpaque ? FALSE : TRUE;
-        rt.SrcBlend = D3DCommon::BlendToD3D11(colorSrcBlend);
-        rt.DestBlend = D3DCommon::BlendToD3D11(colorDstBlend);
-        rt.BlendOp = D3DCommon::BlendFunctionToD3D11(colorBlendFunc);
-        rt.SrcBlendAlpha = D3DCommon::BlendToD3D11(alphaSrcBlend);
-        rt.DestBlendAlpha = D3DCommon::BlendToD3D11(alphaDstBlend);
-        rt.BlendOpAlpha = D3DCommon::BlendFunctionToD3D11(alphaBlendFunc);
-        // IGraphicsBackend::ApplyBlendState carries no per-target color write mask -- documented
-        // interface limitation (this cache's own header comment), always write all 4 channels.
-        rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        D3D11_RENDER_TARGET_BLEND_DESC rtTemplate{};
+        rtTemplate.BlendEnable = isOpaque ? FALSE : TRUE;
+        rtTemplate.SrcBlend = D3DCommon::BlendToD3D11(colorSrcBlend);
+        rtTemplate.DestBlend = D3DCommon::BlendToD3D11(colorDstBlend);
+        rtTemplate.BlendOp = D3DCommon::BlendFunctionToD3D11(colorBlendFunc);
+        rtTemplate.SrcBlendAlpha = D3DCommon::BlendToD3D11(alphaSrcBlend);
+        rtTemplate.DestBlendAlpha = D3DCommon::BlendToD3D11(alphaDstBlend);
+        rtTemplate.BlendOpAlpha = D3DCommon::BlendFunctionToD3D11(alphaBlendFunc);
+
+        desc.RenderTarget[0] = rtTemplate;
+        desc.RenderTarget[0].RenderTargetWriteMask = m0;
+        if (independent)
+        {
+            // Each independent target needs its own full blend desc (same equation, own write mask).
+            desc.RenderTarget[1] = rtTemplate; desc.RenderTarget[1].RenderTargetWriteMask = m1;
+            desc.RenderTarget[2] = rtTemplate; desc.RenderTarget[2].RenderTargetWriteMask = m2;
+            desc.RenderTarget[3] = rtTemplate; desc.RenderTarget[3].RenderTargetWriteMask = m3;
+        }
 
         ComPtr<ID3D11BlendState> state;
         const HRESULT hr = device->CreateBlendState(&desc, state.GetAddressOf());

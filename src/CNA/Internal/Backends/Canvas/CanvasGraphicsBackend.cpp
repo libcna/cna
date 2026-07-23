@@ -299,8 +299,13 @@ namespace CNA::Internal::Backends::Canvas
 
     void CanvasGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
-                                                 int colorBlendFunc, int alphaBlendFunc)
+                                                 int colorBlendFunc, int alphaBlendFunc,
+                                                 const BlendWriteState& /*writeState*/)
     {
+        // REMED-GFX-077: HTML5 Canvas 2D exposes only globalCompositeOperation — there is no API
+        // to mask individual R/G/B/A channels and no coverage-sample-mask concept. Both
+        // BlendState.ColorWriteChannels* and BlendState.MultiSampleMask are inexpressible here
+        // (documented capability gap, not a silent drop).
         const CanvasCompositeOp op = BlendStateToCompositeOp(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
 #if defined(__EMSCRIPTEN__)

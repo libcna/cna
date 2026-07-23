@@ -39,6 +39,37 @@ namespace CNA::Internal::Backends
     using VertexElement = Microsoft::Xna::Framework::Graphics::VertexElement;
 
     /**
+     * @brief Backend-neutral BlendState output-merger write state (REMED-GFX-077).
+     *
+     * Carries the two BlendState fields that are NOT expressible through the six blend
+     * factor/function ordinals of ApplyBlendState: the four per-render-target colour write
+     * masks (`BlendState.ColorWriteChannels` / `ColorWriteChannels1` / `ColorWriteChannels2` /
+     * `ColorWriteChannels3`, MRT slots 0..3) and the coverage sample mask
+     * (`BlendState.MultiSampleMask`). Kept as a small POD appended to ApplyBlendState so every
+     * backend's existing factor/function→native mapping is untouched; only this genuinely-new
+     * output state is added. `colorWriteChannels[i]` holds the raw XNA `ColorWriteChannels` int
+     * (bit0=R, bit1=G, bit2=B, bit3=A; 15 = All) — a bit layout identical to the native colour
+     * masks of Vulkan/D3D9/D3D11/D3D12/WebGPU/SDL_GPU/bgfx, so the value is usable directly on
+     * mask-capable backends and via the ColorWriteHas* helpers on boolean backends.
+     */
+    struct BlendWriteState
+    {
+        /** @brief Raw XNA ColorWriteChannels int per MRT slot 0..3 (bit0=R,1=G,2=B,3=A; 15 = All). */
+        int          colorWriteChannels[4] = { 15, 15, 15, 15 };
+        /** @brief XNA BlendState.MultiSampleMask coverage bitmask (bit i enables sample i; 0xFFFFFFFF = all). */
+        unsigned int multiSampleMask       = 0xFFFFFFFFu;
+    };
+
+    /** @brief True if the XNA ColorWriteChannels int enables the red channel (bit 0). */
+    [[nodiscard]] constexpr bool ColorWriteHasRed  (int cwc) { return (cwc & 1) != 0; }
+    /** @brief True if the XNA ColorWriteChannels int enables the green channel (bit 1). */
+    [[nodiscard]] constexpr bool ColorWriteHasGreen(int cwc) { return (cwc & 2) != 0; }
+    /** @brief True if the XNA ColorWriteChannels int enables the blue channel (bit 2). */
+    [[nodiscard]] constexpr bool ColorWriteHasBlue (int cwc) { return (cwc & 4) != 0; }
+    /** @brief True if the XNA ColorWriteChannels int enables the alpha channel (bit 3). */
+    [[nodiscard]] constexpr bool ColorWriteHasAlpha(int cwc) { return (cwc & 8) != 0; }
+
+    /**
      * @brief Backend handle for a vertex buffer.
      *
      * Owned by `Microsoft::Xna::Framework::Graphics::VertexBuffer`. The
@@ -634,9 +665,17 @@ namespace CNA::Internal::Backends
         // ---- Graphics state ----
 
         /// Applies a BlendState to the backend. Default: no-op.
+        /// @param writeState REMED-GFX-077: the four per-MRT-slot colour write masks
+        ///                   (BlendState.ColorWriteChannels/1/2/3) and the coverage sample mask
+        ///                   (BlendState.MultiSampleMask). No default argument: the migration
+        ///                   deliberately forces every override to make an explicit decision
+        ///                   (honor exactly, honor with a documented capability restriction, or
+        ///                   intentionally not support with a documented reason) — never a silent
+        ///                   no-op.
         virtual void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                      int colorDstBlend, int alphaDstBlend,
-                                     int colorBlendFunc, int alphaBlendFunc) {}
+                                     int colorBlendFunc, int alphaBlendFunc,
+                                     const BlendWriteState& writeState) {}
 
         /// Applies a DepthStencilState to the backend. Default: no-op.
         virtual void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,

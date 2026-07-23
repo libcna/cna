@@ -78,6 +78,14 @@ namespace CNA::Internal::Backends::D3D12
         // Rasterizer (D3DStateMapping::CullModeToD3D11 / FillModeToD3D11 ordinals).
         int cullMode = 2;  // CullMode::CullCounterClockwiseFace (XNA's own RasterizerState.CullCounterClockwise default)
         int fillMode = 0;  // FillMode::Solid
+
+        // REMED-GFX-077: BlendState output-merger write state. Both are STATIC parts of the D3D12
+        // PSO (RenderTarget[0].RenderTargetWriteMask and D3D12_GRAPHICS_PIPELINE_STATE_DESC::
+        // SampleMask), so both participate in the PSO cache key. D3D12 draws are single-target here
+        // (no CNA shader emits >1 SV_Target), so only ColorWriteChannels slot 0 applies. XNA
+        // ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to D3D12_COLOR_WRITE_ENABLE_*.
+        int colorWriteMask = 15;             // ColorWriteChannels.All
+        unsigned int sampleMask = 0xFFFFFFFFu; // MultiSampleMask == -1 (all samples)
     };
 
     /// Caches ID3D12PipelineState (graphics) objects keyed by D3D12PipelineStateDesc's full field
@@ -111,6 +119,7 @@ namespace CNA::Internal::Backends::D3D12
                                int, int, int, int, int, int,
                                bool, bool, int,
                                int, int,
+                               int, unsigned,          // + colorWriteMask, sampleMask (REMED-GFX-077)
                                unsigned, unsigned>; // + rtvFormat, dsvFormat
         std::map<Key, ComPtr<ID3D12PipelineState>> cache_;
     };

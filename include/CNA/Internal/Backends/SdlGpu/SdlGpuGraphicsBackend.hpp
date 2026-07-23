@@ -668,6 +668,9 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             bool blendEnabled = false;
             BlendKeyParams blend;
+            // REMED-GFX-077: raw XNA ColorWriteChannels (slot 0; bit0=R..bit3=A). Baked into the
+            // SDL_GPUColorTargetBlendState (static → part of the pipeline cache key). 15 = All.
+            int colorWriteMask = 15;
             int cullMode = 0;   // XNA CullMode ordinal; 0 = None
             bool wireframe = false;
             StencilKeyParams stencil;
@@ -1051,7 +1054,8 @@ namespace CNA::Internal::Backends::SdlGpu
          */
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         /**
          * @brief Real `DepthStencilState` mapping (`SDLGPU-19`) -- `depthEnable`/`depthWriteEnable`/
          * `depthFunc` update the same fields `SetDepthTestEnabled`/`SetDepthWriteEnabled` already
@@ -1641,6 +1645,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // pre-baked/immutable, not a live pipeline-state-object mechanism. Captured into a
         // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
         BlendKeyParams blendParams_;
+        int colorWriteMask_ = 15;  ///< REMED-GFX-077: current BlendState.ColorWriteChannels (slot 0); 15 = All
         int cullMode_ = 2;         ///< XNA CullMode ordinal; 2 = CullCounterClockwiseFace (RasterizerState's real default)
         bool fillModeWireframe_ = false;
         StencilKeyParams stencilParams_;  ///< readMask/writeMask live here now, see StencilKeyParams's own doc comment

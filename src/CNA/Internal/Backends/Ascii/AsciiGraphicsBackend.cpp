@@ -196,9 +196,14 @@ namespace CNA::Internal::Backends::Ascii
     void AsciiGraphicsBackend::SetScissorRect(int x, int y, int w, int h) { inner_->SetScissorRect(x, y, w, h); }
     void AsciiGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,
-                                                int colorBlendFunc, int alphaBlendFunc)
+                                                int colorBlendFunc, int alphaBlendFunc,
+                                                const BlendWriteState& writeState)
     {
-        inner_->ApplyBlendState(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
+        // REMED-GFX-077: Ascii is a pure wrapper — it forwards the full write state to the inner
+        // backend, so ColorWriteChannels/MultiSampleMask support is exactly whatever the inner
+        // backend provides (e.g. Ascii-over-Software honours the per-channel mask exactly).
+        inner_->ApplyBlendState(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+                                colorBlendFunc, alphaBlendFunc, writeState);
     }
 
     bool AsciiGraphicsBackend::SupportsDepthStencil() const { return inner_->SupportsDepthStencil(); }

@@ -1589,7 +1589,15 @@ void main()
         // previously-set custom Viewport (Task 880) survives across Clear() instead of being
         // silently reset to full size as a side effect.
         device.set_clear_color(r, g, b, a);
+        // REMED-GFX-077: XNA Clear() clears all channels regardless of BlendState.ColorWriteChannels,
+        // but glClear respects glColorMask — so neutralise a non-default mask across the clear, then
+        // restore it. No-op fast path when the mask is the default All.
+        const bool maskActive = (currentColorWriteMask_ != 15);
+        if (maskActive) device.set_color_mask(true, true, true, true);
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
+        if (maskActive)
+            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
+                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
     }
 
     void EasyGLGraphicsBackend::Present()
@@ -1930,7 +1938,8 @@ void main()
 
     void EasyGLGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
-                                                 int colorBlendFunc, int alphaBlendFunc)
+                                                 int colorBlendFunc, int alphaBlendFunc,
+                                                 const BlendWriteState& writeState)
     {
         if (metagl::IsContextLost()) return;
         // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → effectively no blending
@@ -1946,6 +1955,19 @@ void main()
                 ToEasyGLBlendEquation(colorBlendFunc),
                 ToEasyGLBlendEquation(alphaBlendFunc));
         }
+        // REMED-GFX-077: BlendState.ColorWriteChannels (slot 0) → glColorMask (global device state,
+        // GL ES 2.0+). glColorMask is not per-attachment, so independent MRT masks
+        // (ColorWriteChannels1/2/3) would need the indexed glColorMaski (ES 3.2+) — deferred as a
+        // documented capability gap. The mask is cached so Clear() can neutralise it (below).
+        const int cw = writeState.colorWriteChannels[0];
+        currentColorWriteMask_ = cw;
+        device.set_color_mask(ColorWriteHasRed(cw), ColorWriteHasGreen(cw),
+                              ColorWriteHasBlue(cw), ColorWriteHasAlpha(cw));
+        // BlendState.MultiSampleMask: EasyGL could express a coverage mask via glSampleMaski
+        // (GL ES 3.1+, requires GL_SAMPLE_MASK enable). It is left at the all-ones default here —
+        // a non-default coverage mask on the GL/GLES profile is a documented capability gap, not
+        // silently dropped: the value reaches the backend and only the (rare) non-default path is
+        // unimplemented.
     }
 
     void EasyGLGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -4240,7 +4262,15 @@ void main()
         device.set_clear_color(r, g, b, a);
         device.set_clear_depth(depth);
         device.set_depth_mask(true);
+        // REMED-GFX-077: neutralise a non-default BlendState.ColorWriteChannels across the clear
+        // (XNA Clear ignores it, glClear respects glColorMask) — mirrors the set_depth_mask(true)
+        // override just above. No-op fast path when the mask is the default All.
+        const bool maskActive = (currentColorWriteMask_ != 15);
+        if (maskActive) device.set_color_mask(true, true, true, true);
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
+        if (maskActive)
+            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
+                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
     }
 
     // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active

@@ -281,6 +281,13 @@ namespace CNA::Internal::Backends::Vulkan
         int alphaDst  = 1; // Blend::Zero
         int colorFunc = 0; // BlendFunction::Add
         int alphaFunc = 0; // BlendFunction::Add
+        // REMED-GFX-077: BlendState.ColorWriteChannels per MRT slot 0..3 (bit0=R..bit3=A; the XNA
+        // bit layout is identical to VK_COLOR_COMPONENT_*) + BlendState.MultiSampleMask. Both are
+        // static Vulkan pipeline state, so both participate in the pipeline cache key. Defaults
+        // match XNA (All ×4, 0xFFFFFFFF). Applied via FillBlendAttachmentState (colorWrite) and
+        // VkPipelineMultisampleStateCreateInfo::pSampleMask (sampleMask).
+        int colorWrite[4] = {15, 15, 15, 15};
+        uint32_t sampleMask = 0xFFFFFFFFu;
     };
 
     // -------------------------------------------------------------------------
@@ -692,13 +699,29 @@ namespace CNA::Internal::Backends::Vulkan
     // ~bit 52 once a depth VkFormat is folded in via FoldDepthFormatIntoKey), so blend state gets
     // its own uint32_t half instead of being crammed into the same 64 bits. std::pair<uint64_t,
     // uint32_t> has correct default operator== (member-wise); only a hash functor is needed.
+    // REMED-GFX-077: the color-write mask (16 bits, 4×4 for MRT slots 0..3) and the 32-bit sample
+    // mask are static Vulkan pipeline state that must be keyed losslessly, but don't fit the former
+    // (uint64_t, uint32_t) budget. Extended to a 4-field key: `a`/`b` are the original depth-folded
+    // key and packed blend factors/functions; `cw` packs the four colour-write masks; `sm` is the
+    // sample mask. The default (cw=0x5555... no — All(15)×4 = 0xFFFF-low16, sm=0xFFFFFFFF) is a
+    // fixed contribution, so default draws still collapse to one pipeline (no cache fragmentation).
+    struct PipelineKey {
+        uint64_t a = 0;
+        uint32_t b = 0;
+        uint32_t cw = 0;
+        uint32_t sm = 0xFFFFFFFFu;
+        bool operator==(const PipelineKey&) const noexcept = default;
+    };
     struct PipelineKeyHash {
-        std::size_t operator()(const std::pair<uint64_t, uint32_t>& k) const noexcept
+        std::size_t operator()(const PipelineKey& k) const noexcept
         {
-            return std::hash<uint64_t>{}(k.first) ^ (std::hash<uint32_t>{}(k.second) * 0x9E3779B97F4A7C15ull);
+            std::size_t h = std::hash<uint64_t>{}(k.a);
+            h ^= std::hash<uint32_t>{}(k.b) * 0x9E3779B97F4A7C15ull;
+            h ^= (std::hash<uint32_t>{}(k.cw) + 0x165667B19E3779F9ull + (h << 6) + (h >> 2));
+            h ^= (std::hash<uint32_t>{}(k.sm) + 0x27D4EB2F165667C5ull + (h << 6) + (h >> 2));
+            return h;
         }
     };
-    using PipelineKey = std::pair<uint64_t, uint32_t>;
 
     struct DepthStencilKeyParams {
         int  depthFunc            = 3;      // CompareFunction::LessEqual (XNA DepthStencilState.Default)
@@ -769,7 +792,8 @@ namespace CNA::Internal::Backends::Vulkan
         // ---- Graphics state: IMPLEMENTED ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                     int depthFunc,
                                     bool stencilEnable, int stencilFunc,

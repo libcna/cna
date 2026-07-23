@@ -95,7 +95,8 @@ namespace CNA::Internal::Backends::Ascii
         void SetScissorRect(int x, int y, int w, int h) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                               int colorDstBlend, int alphaDstBlend,
-                              int colorBlendFunc, int alphaBlendFunc) override;
+                              int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
 
         /// No depth/stencil buffer on this backend either -- inherited from the same underlying
         /// 2D-only reality SDL_RENDERER already has (design decision 9's Phase G7 reuse).

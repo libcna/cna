@@ -116,7 +116,8 @@ namespace CNA::Internal::Backends::D3D11
         // ---- IGraphicsBackend: real (Phase DX7) ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
-                             int colorBlendFunc, int alphaBlendFunc) override;
+                             int colorBlendFunc, int alphaBlendFunc,
+                             const BlendWriteState& writeState) override;
         void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
                                     int depthFunc,
                                     bool stencilEnable, int stencilFunc,
@@ -273,6 +274,10 @@ namespace CNA::Internal::Backends::D3D11
         ComPtr<ID3D11BlendState> currentBlendState_;
         ComPtr<ID3D11DepthStencilState> currentDepthStencilState_;
         float currentBlendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        /// REMED-GFX-077: BlendState.MultiSampleMask — the dynamic SampleMask argument to
+        /// OMSetBlendState (not part of the ID3D11BlendState object, so not cached/keyed). Defaults
+        /// to 0xFFFFFFFF (all samples), matching XNA's default MultiSampleMask (-1).
+        UINT currentSampleMask_ = 0xFFFFFFFFu;
         int currentReferenceStencil_ = 0;
 
         // The full depth-stencil parameter set currently applied. Tracked field-by-field (not just
