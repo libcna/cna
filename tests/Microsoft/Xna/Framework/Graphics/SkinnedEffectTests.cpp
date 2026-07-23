@@ -12,17 +12,21 @@
 #include <stdexcept>
 #include <vector>
 
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
+using CNA::Internal::Backends::GpuDrawParams;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::DirectionalLight;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IEffectLights;
 using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -112,6 +116,73 @@ TEST_F(SkinnedEffectDefaultsTest, SetLightingEnabledTrueDoesNotThrow)
 {
     EXPECT_NO_THROW(fx.setLightingEnabledProperty(true));
     EXPECT_TRUE(fx.getLightingEnabledProperty());
+}
+
+// REMED-GFX-088: FNA implements SkinnedEffect's LightingEnabled member explicitly
+// through IEffectLights. Lock the contract at that same public-interface boundary:
+// unlike BasicEffect, SkinnedEffect has no observable unlit rendering state.
+TEST_F(SkinnedEffectDefaultsTest, LightingEnabledFalseThrowsThroughIEffectLights)
+{
+    IEffectLights& lights = fx;
+
+    EXPECT_TRUE(lights.getLightingEnabledProperty());
+    EXPECT_THROW(lights.setLightingEnabledProperty(false), std::runtime_error);
+    EXPECT_TRUE(lights.getLightingEnabledProperty());
+}
+
+// REMED-GFX-088: direct backend tests must use the state tuple that the public
+// SkinnedEffect can actually produce. FNA's always-lit material upload is:
+//   DiffuseShader  = DiffuseColor * Alpha
+//   EmissiveShader = (EmissiveColor + AmbientLightColor * DiffuseColor) * Alpha
+// Directional lights are separately enabled-gated. There is deliberately no
+// LightingEnabled=false / BasicEffect-style unlit material preparation here.
+TEST_F(SkinnedEffectDefaultsTest, FillGpuDrawParamsUsesAlwaysLitPrefoldedMaterialContract)
+{
+    Texture2D texture(gd, 1, 1);
+    fx.setTextureProperty(&texture);
+    fx.setDiffuseColorProperty(Vector3(0.5f, 0.25f, 0.75f));
+    fx.setEmissiveColorProperty(Vector3(0.125f, 0.25f, 0.0625f));
+    fx.setAmbientLightColorProperty(Vector3(0.25f, 0.5f, 0.125f));
+    fx.setAlphaProperty(0.5f);
+
+    // Give every light non-zero public colors, then disable it. The GPU-facing
+    // contribution must be zero while the always-lit permutation remains selected.
+    fx.DirectionalLight0.setDiffuseColorProperty(Vector3(0.75f, 0.5f, 0.25f));
+    fx.DirectionalLight0.setSpecularColorProperty(Vector3(0.25f, 0.5f, 0.75f));
+    fx.DirectionalLight0.setEnabledProperty(false);
+    fx.DirectionalLight1.setDiffuseColorProperty(Vector3(0.125f, 0.25f, 0.5f));
+    fx.DirectionalLight1.setSpecularColorProperty(Vector3(0.5f, 0.25f, 0.125f));
+    fx.DirectionalLight1.setEnabledProperty(false);
+    fx.DirectionalLight2.setDiffuseColorProperty(Vector3(0.375f, 0.625f, 0.875f));
+    fx.DirectionalLight2.setSpecularColorProperty(Vector3(0.875f, 0.625f, 0.375f));
+    fx.DirectionalLight2.setEnabledProperty(false);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+
+    EXPECT_TRUE(params.skinned);
+    EXPECT_TRUE(params.textureEnabled);
+    EXPECT_TRUE(params.lightingEnabled);
+    EXPECT_EQ(params.texture0, &texture.GetBackend());
+
+    EXPECT_FLOAT_EQ(params.diffuseColor[0], 0.25f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[1], 0.125f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[2], 0.375f);
+    EXPECT_FLOAT_EQ(params.diffuseColor[3], 0.5f);
+
+    EXPECT_FLOAT_EQ(params.emissiveColor[0], 0.125f);
+    EXPECT_FLOAT_EQ(params.emissiveColor[1], 0.1875f);
+    EXPECT_FLOAT_EQ(params.emissiveColor[2], 0.078125f);
+
+    for (int channel = 0; channel < 3; ++channel)
+    {
+        EXPECT_FLOAT_EQ(params.light0Diffuse[channel], 0.0f);
+        EXPECT_FLOAT_EQ(params.light1Diffuse[channel], 0.0f);
+        EXPECT_FLOAT_EQ(params.light2Diffuse[channel], 0.0f);
+        EXPECT_FLOAT_EQ(params.light0Specular[channel], 0.0f);
+        EXPECT_FLOAT_EQ(params.light1Specular[channel], 0.0f);
+        EXPECT_FLOAT_EQ(params.light2Specular[channel], 0.0f);
+    }
 }
 
 // -----------------------------------------------------------------------
