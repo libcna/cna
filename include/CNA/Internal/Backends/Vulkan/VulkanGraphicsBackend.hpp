@@ -101,9 +101,9 @@ namespace CNA::Internal::Backends::Vulkan
     private:
         // Task 925: transitions exactly ONE mip level's layout -- the shared
         // VulkanGraphicsBackend::TransitionImageLayout always barriers level 0 regardless of
-        // which level is being copied (the same imprecision VulkanTexture3DBackend::SetData
-        // already has, Task 864); UpdatePixelsLevel needs the real target level barriered
-        // instead, confirmed via live Vulkan validation-layer errors otherwise.
+        // which level is being copied. UpdatePixelsLevel needs the real target level barriered
+        // instead, confirmed via live Vulkan validation-layer errors otherwise. Texture3D's
+        // formerly identical mismatch was corrected by REMED-GFX-093.
         void TransitionLevelLayout(int level, VkImageLayout from, VkImageLayout to);
 
         int                 width_         = 0;

@@ -295,10 +295,10 @@ namespace CNA::Internal::Backends::Vulkan
     }
 
     // Task 925: transitions exactly ONE mip level's layout -- the shared TransitionImageLayout
-    // helper always barriers level 0 regardless of the level actually being copied (the same
-    // imprecision VulkanTexture3DBackend::SetData already has, Task 864 -- confirmed via live
-    // Vulkan validation-layer errors while building this test: reusing that helper for level>0
-    // barriers level 0 while vkCmdCopyBufferToImage targets the real level, a genuine mismatch).
+    // helper always barriers level 0 regardless of the level actually being copied. Reusing it
+    // for level>0 barriers mip 0 while vkCmdCopyBufferToImage targets the real level, a genuine
+    // mismatch confirmed by live Vulkan validation. Texture3D's formerly identical mismatch was
+    // corrected by REMED-GFX-093.
     void VulkanTextureBackend::TransitionLevelLayout(int level, VkImageLayout from, VkImageLayout to)
     {
         VkCommandBuffer cb = owner_->BeginOneTimeCommands();
@@ -8975,6 +8975,66 @@ namespace CNA::Internal::Backends::Vulkan
         if (memory_    != VK_NULL_HANDLE) vkFreeMemory(dev, memory_, nullptr);
     }
 
+    // REMED-GFX-093: Texture3D copies address one mip level of one 3D image array layer.  Depth
+    // slices are z coordinates inside that subresource, never VkImage array layers.  Construction
+    // puts every mip in SHADER_READ_ONLY_OPTIMAL and each synchronous SetData/GetData operation
+    // restores its selected mip to that invariant, so no mutable layout tracker is needed.
+    static void CmdTransitionTexture3DLevel(VkCommandBuffer cb, VkImage image, int level,
+                                             VkImageLayout from, VkImageLayout to)
+    {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout           = from;
+        barrier.newLayout           = to;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image               = image;
+        barrier.subresourceRange    = { VK_IMAGE_ASPECT_COLOR_BIT,
+                                        static_cast<uint32_t>(level), 1, 0, 1 };
+
+        VkPipelineStageFlags srcStage = 0;
+        VkPipelineStageFlags dstStage = 0;
+        if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+            to   == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (from == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+                 to   == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (from == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
+                 to   == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (from == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL &&
+                 to   == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else
+        {
+            throw std::runtime_error("Vulkan Texture3D: unsupported image layout transition");
+        }
+
+        vkCmdPipelineBarrier(cb, srcStage, dstStage, 0,
+                             0, nullptr, 0, nullptr, 1, &barrier);
+    }
+
     void VulkanTexture3DBackend::SetData(int level, int x, int y, int z,
                                           int w, int h, int depth,
                                           const void* data, int dataLength)
@@ -8991,10 +9051,12 @@ namespace CNA::Internal::Backends::Vulkan
             stagingBuf, stagingMem, &mapped);
         std::memcpy(mapped, data, static_cast<size_t>(dataLength));
 
-        owner_->TransitionImageLayout(image_,
+        // Keep both level-scoped barriers and the copy in one submission.  Besides making the
+        // exact transition history explicit, this reduces the old three queue-idle waits to one.
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        CmdTransitionTexture3DLevel(cb, image_, level,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
         VkBufferImageCopy region{};
         region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
         region.imageOffset      = { x, y, z };
@@ -9002,10 +9064,10 @@ namespace CNA::Internal::Backends::Vulkan
                                      static_cast<uint32_t>(depth) };
         vkCmdCopyBufferToImage(cb, stagingBuf, image_,
                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-        owner_->EndOneTimeCommands(cb);
 
-        owner_->TransitionImageLayout(image_,
+        CmdTransitionTexture3DLevel(cb, image_, level,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        owner_->EndOneTimeCommands(cb);
 
         vkDestroyBuffer(dev, stagingBuf, nullptr);
         vkFreeMemory(dev, stagingMem, nullptr);
@@ -9028,10 +9090,11 @@ namespace CNA::Internal::Backends::Vulkan
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             stagingBuf, stagingMem, &mapped);
 
-        owner_->TransitionImageLayout(image_,
+        // As in SetData, transition only the selected mip and restore it in the same submission.
+        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
+        CmdTransitionTexture3DLevel(cb, image_, level,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
-        VkCommandBuffer cb = owner_->BeginOneTimeCommands();
         VkBufferImageCopy region{};
         region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, static_cast<uint32_t>(level), 0, 1 };
         region.imageOffset      = { x, y, z };
@@ -9039,10 +9102,10 @@ namespace CNA::Internal::Backends::Vulkan
                                      static_cast<uint32_t>(depth) };
         vkCmdCopyImageToBuffer(cb, image_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                 stagingBuf, 1, &region);
-        owner_->EndOneTimeCommands(cb);
 
-        owner_->TransitionImageLayout(image_,
+        CmdTransitionTexture3DLevel(cb, image_, level,
             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        owner_->EndOneTimeCommands(cb);
 
         std::memcpy(data, mapped, static_cast<size_t>(dataLength));
 
