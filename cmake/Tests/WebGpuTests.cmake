@@ -129,6 +129,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_SkinnedEffect_WorldNormal COMMAND cna_test_webgpu_skinnedeffect_world_normal
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-090: all four SkinnedEffect WGSL modules must add the CPU-pre-folded
+    # EmissiveShader after directionalLightSum*DiffuseShader, without re-multiplying it by
+    # DiffuseColor/Alpha. Covers ambient-only, pure emissive, combined, directional, texture,
+    # Alpha, vertex colour, A->B->A, and post-draw effect mutation through an encoding-calibrated
+    # RenderTarget2D readback.
+    cna_webgpu_test(cna_test_webgpu_skinnedeffect_material examples/webgpu_skinnedeffect_material_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SkinnedEffect_Material COMMAND cna_test_webgpu_skinnedeffect_material
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-41/77/78/79/80/81/82/83: real BlendState/RasterizerState (cull mode, wireframe)/
     # scissor/viewport wiring -- previously ApplyBlendState/ApplyRasterizerState/SetScissorRect/
     # SetViewport had no override at all on this backend, silently falling back to
