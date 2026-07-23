@@ -126,4 +126,10 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_d3d11_ctest_command(_d3d11_spritebatch_custom_viewport_cmd cna_test_d3d11_spritebatch_custom_viewport)
     cna_register_backend_test(NAME D3D11_SpriteBatch_CustomViewport COMMAND ${_d3d11_spritebatch_custom_viewport_cmd}
         TIMEOUT 60 LABELS "D3D11")
+
+    # REMED-GFX-077 runtime verification for D3D11 lives inside cna_test_d3d11_smoke (Check GFX077):
+    # D3D11 has no public RenderTarget2D GPU-readback path (only the back buffer via
+    # GetBackBufferData / the backend's staging-copy), so ColorWriteChannels/MultiSampleMask are
+    # verified through the smoke test's established back-buffer draw+readback discipline (Check P),
+    # not the RT-readback Game harness the native SdlGpu/WebGPU backends use.
 endif()

@@ -143,7 +143,7 @@ protected:
         // Known-safe baseline, matching D3D11_Smoke's own Check P discipline: opaque blend, no
         // depth/stencil, no culling (so this basic check does not depend on D9-21's still-open
         // D3DCULL winding proof).
-        backend.ApplyBlendState(0, 0, 1, 1, 0, 0);
+        backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
         backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 

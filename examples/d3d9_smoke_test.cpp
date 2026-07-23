@@ -653,6 +653,77 @@ protected:
                   "D9-53: SetRenderTarget2D(nullptr) genuinely restores the back buffer -- Clear()+readback exact afterward");
         }
 
+        // ---- Check GFX077: REMED-GFX-077 runtime verification -- BlendState.ColorWriteChannels
+        // (RT0 -> D3DRS_COLORWRITEENABLE, a dynamic render state) against the real DXVK9 device. An
+        // opaque full-screen quad (blend disabled) is drawn into an off-screen render target so the
+        // ONLY thing that can preserve a destination channel is the colour write mask gating the
+        // write; the RT's own surface is read back via the same GetRenderTargetData() dance Check S
+        // uses (alpha-preserving). Differential model (masked-in channel == "All" baseline,
+        // masked-out == "None"/clear baseline). MultiSampleMask (D3DRS_MULTISAMPLEMASK) is NOT
+        // pixel-discriminated here: it only affects genuinely multisampled targets (a no-op on this
+        // single-sample RT), so it is compile-verified + render-state-set-verified only -- see the
+        // REMED-GFX-077 support matrix. ----
+        {
+            struct Px { uint8_t r, g, b, a; };
+            auto rt = backend.CreateRenderTarget2D(64, 64, static_cast<int>(DepthFormat::Depth24Stencil8),
+                                                   false, false, 0);
+            auto& d3d9Rt = static_cast<D3D9RenderTargetBackend&>(*rt);
+
+            struct VPC { float x, y, z; uint32_t color; };
+            // Full-NDC quad, flat source colour S=(200,100,50,220); packed R8G8B8A8 = 0xDC3264C8.
+            static const VPC kQuad[6] = {
+                {-1.0f,  1.0f, 0.0f, 0xDC3264C8u}, {-1.0f, -1.0f, 0.0f, 0xDC3264C8u},
+                { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, {-1.0f,  1.0f, 0.0f, 0xDC3264C8u},
+                { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, { 1.0f,  1.0f, 0.0f, 0xDC3264C8u},
+            };
+            auto vbCw = backend.CreateVertexBuffer(6);
+            vbCw->SetData(kQuad, 6, sizeof(VPC));
+            const Matrix Id = Matrix::getIdentityProperty();
+
+            auto renderMask = [&](int cwc) -> Px
+            {
+                CNA::Internal::Backends::BlendWriteState ws;
+                ws.colorWriteChannels[0] = cwc;
+                backend.SetRenderTarget2D(rt.get());
+                backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+                backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+                backend.ApplyBlendState(0, 0, 1, 1, 0, 0, ws);          // Opaque + mask
+                dev.Clear(Color(10, 20, 30, 40));                      // destination D
+                backend.DrawColoredPrimitives(*vbCw, Id, Id, Id, PrimitiveType::TriangleList, 2);
+                backend.SetRenderTarget2D(nullptr);
+                const auto p = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt.GetColorSurfaceEXT());
+                if (p.size() < static_cast<std::size_t>(64 * 64 * 4)) return Px{0, 0, 0, 0};
+                const std::size_t idx = (static_cast<std::size_t>(32) * 64 + 32) * 4;
+                return Px{p[idx], p[idx + 1], p[idx + 2], p[idx + 3]};
+            };
+            auto eqp = [](Px a, Px b) { return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a; };
+            auto masked = [](Px d, Px s, int bits)
+            {
+                return Px{static_cast<uint8_t>((bits & 1) ? s.r : d.r),
+                          static_cast<uint8_t>((bits & 2) ? s.g : d.g),
+                          static_cast<uint8_t>((bits & 4) ? s.b : d.b),
+                          static_cast<uint8_t>((bits & 8) ? s.a : d.a)};
+            };
+
+            const Px dcw = renderMask(0);    // None
+            const Px scw = renderMask(15);   // All
+            check(dcw.r != scw.r && dcw.g != scw.g && dcw.b != scw.b && dcw.a != scw.a,
+                  "GFX077-1 (D3D9): None(dst)/All(src) baselines discriminate all four channels");
+            check(eqp(renderMask(1), masked(dcw, scw, 1)),
+                  "GFX077-2 (D3D9): ColorWriteChannels.Red writes only R (D3DRS_COLORWRITEENABLE)");
+            check(eqp(renderMask(2), masked(dcw, scw, 2)),
+                  "GFX077-3 (D3D9): ColorWriteChannels.Green writes only G");
+            check(eqp(renderMask(4), masked(dcw, scw, 4)),
+                  "GFX077-4 (D3D9): ColorWriteChannels.Blue writes only B");
+            check(eqp(renderMask(8), masked(dcw, scw, 8)),
+                  "GFX077-5 (D3D9): ColorWriteChannels.Alpha writes only A");
+            check(eqp(renderMask(1 | 4), masked(dcw, scw, 1 | 4)),
+                  "GFX077-6 (D3D9): ColorWriteChannels.Red|Blue writes only R and B");
+            const Px a1 = renderMask(1), bG = renderMask(2), a2 = renderMask(1);
+            check(eqp(a1, masked(dcw, scw, 1)) && eqp(bG, masked(dcw, scw, 2)) && eqp(a2, masked(dcw, scw, 1)),
+                  "GFX077-7 (D3D9): A(Red)->B(Green)->A(Red) each applies its own D3DRS_COLORWRITEENABLE");
+        }
+
         // Check T (D9-53) -- D3D9RenderTargetCubeBackend: bind one face, Clear(), read back that
         // face's own surface, unbind, confirm the back buffer is restored again.
         {

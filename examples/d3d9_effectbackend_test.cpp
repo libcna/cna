@@ -115,7 +115,7 @@ protected:
         auto& backend = static_cast<D3D9GraphicsBackend&>(dev.GetBackend());
         IDirect3DDevice9* device = backend.GetDeviceEXT();
 
-        backend.ApplyBlendState(0, 0, 1, 1, 0, 0);
+        backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
         backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 

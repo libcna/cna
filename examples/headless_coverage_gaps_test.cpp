@@ -166,7 +166,7 @@ protected:
             {
                 backend.SetMode(HeadlessMode::Trace);
                 const std::size_t before = backend.TraceLog().size();
-                backend.ApplyBlendState(0, 0, 0, 0, 0, 0);
+                backend.ApplyBlendState(0, 0, 0, 0, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
                 backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
                 backend.ApplyRasterizerState(0, 0, false, 0.0f, 0.0f);
                 backend.ApplySamplerState(0, 0, 0, 0, 0);

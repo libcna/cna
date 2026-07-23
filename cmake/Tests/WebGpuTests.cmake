@@ -221,4 +221,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                     examples/spritebatch_custom_viewport_test.cpp)
     cna_register_backend_test(NAME WebGPU_SpriteBatch_CustomViewport COMMAND cna_test_webgpu_spritebatch_custom_viewport
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-077: BlendState.ColorWriteChannels (RT0) via WGPUColorTargetState.writeMask +
+    # BlendState.MultiSampleMask via WGPUMultisampleState.mask (both in Make3DPipelineKey). The 3D
+    # keyed pipeline path is used deliberately -- the fixed internal SpriteBatch pipeline does not
+    # consume ColorWriteChannels (WebGPU sprite-BlendState counterpart finding), so a SpriteBatch
+    # scene would not exercise this fix. MultiSampleMask IS compiled in (wgpu-native mask is real).
+    cna_webgpu_test(cna_test_webgpu_colorwritechannels examples/gfx077_colorwritechannels_3d_test.cpp)
+    target_compile_definitions(cna_test_webgpu_colorwritechannels PRIVATE GFX077_MULTISAMPLEMASK_SUPPORTED)
+    cna_register_backend_test(NAME WebGPU_ColorWriteChannels COMMAND cna_test_webgpu_colorwritechannels
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

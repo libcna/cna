@@ -194,4 +194,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_sdlgpu_test(cna_test_sdlgpu_spritebatch_begin_rasterizerstate examples/spritebatch_begin_rasterizerstate_scissor_test.cpp)
     cna_register_backend_test(NAME SdlGpu_SpriteBatch_BeginRasterizerState COMMAND cna_test_sdlgpu_spritebatch_begin_rasterizerstate
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # REMED-GFX-077: BlendState.ColorWriteChannels (RT0) via SDL_GPUColorTargetBlendState
+    # .color_write_mask (pipeline cache key). MultiSampleMask is NOT compiled in: SDL 3.5.0 reserves
+    # SDL_GPUMultisampleState::sample_mask as non-functional (REMED-GFX-086). Generic 3D path.
+    cna_sdlgpu_test(cna_test_sdlgpu_colorwritechannels examples/gfx077_colorwritechannels_3d_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_ColorWriteChannels COMMAND cna_test_sdlgpu_colorwritechannels
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

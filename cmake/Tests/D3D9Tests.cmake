@@ -56,6 +56,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_Draw COMMAND ${_d3d9_draw_cmd}
         TIMEOUT 60 LABELS "D3D9")
 
+    # REMED-GFX-077 runtime verification for D3D9 lives inside cna_test_d3d9_smoke (Check GFX077):
+    # ColorWriteChannels (-> D3DRS_COLORWRITEENABLE) + MultiSampleMask (-> D3DRS_MULTISAMPLEMASK) are
+    # verified through an off-screen D3D9RenderTargetBackend + GetData readback, alongside the smoke
+    # test's other real-device checks (D9-53), rather than the RT-readback Game harness the native
+    # SdlGpu/WebGPU backends use.
+
     # D9-82b: real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch (BasicEffect).
     cna_d3d9_test(cna_test_d3d9_drawex examples/d3d9_drawex_test.cpp)
     cna_d3d9_ctest_command(_d3d9_drawex_cmd cna_test_d3d9_drawex)

@@ -84,7 +84,10 @@ namespace CNA::Internal::Backends::Ascii
         // factors) before drawing, every time, independent of whatever the game's own BlendState is.
         inner_->ApplyBlendState(static_cast<int>(Blend::One), static_cast<int>(Blend::One),
                                 static_cast<int>(Blend::InverseSourceAlpha), static_cast<int>(Blend::InverseSourceAlpha),
-                                static_cast<int>(BlendFunction::Add), static_cast<int>(BlendFunction::Add));
+                                static_cast<int>(BlendFunction::Add), static_cast<int>(BlendFunction::Add),
+                                // REMED-GFX-077: the present blit writes all RGBA channels, all samples
+                                // (default write state) — the migration missed this internal forward call.
+                                BlendWriteState{});
 
         const Rectangle solidSrc(kAsciiSolidGlyphIndex * kAsciiGlyphWidth, 0, kAsciiGlyphWidth, kAsciiGlyphHeight);
 

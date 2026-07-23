@@ -842,15 +842,17 @@ protected:
             // BlendState: NonPremultiplied-style (SourceAlpha/InvSourceAlpha/Add on both channels)
             // -- deliberately not the Opaque combo, so BlendEnable ends up TRUE.
             auto& blendCache = backend.GetBlendStateCacheEXT();
-            auto blendA1 = blendCache.GetOrCreate(device, 4, 4, 5, 5, 0, 0);   // SourceAlpha/InvSourceAlpha/Add
-            auto blendA2 = blendCache.GetOrCreate(device, 4, 4, 5, 5, 0, 0);
-            auto blendB = blendCache.GetOrCreate(device, 0, 0, 1, 1, 0, 0);    // Opaque
+            // REMED-GFX-077: GetOrCreate gained cw0..cw3 (per-RT write masks); default All (15) here
+            // keeps this cache identity/distinctness check about the blend factors, as before.
+            auto blendA1 = blendCache.GetOrCreate(device, 4, 4, 5, 5, 0, 0, 15, 15, 15, 15);   // SourceAlpha/InvSourceAlpha/Add
+            auto blendA2 = blendCache.GetOrCreate(device, 4, 4, 5, 5, 0, 0, 15, 15, 15, 15);
+            auto blendB = blendCache.GetOrCreate(device, 0, 0, 1, 1, 0, 0, 15, 15, 15, 15);    // Opaque
             check(blendA1.Get() != nullptr && blendA1.Get() == blendA2.Get(),
                   "D3D11BlendStateCache: identical XNA blend params return the identical object");
             check(blendA1.Get() != blendB.Get(),
                   "D3D11BlendStateCache: different XNA blend params return a different object");
 
-            backend.ApplyBlendState(4, 4, 5, 5, 0, 0);
+            backend.ApplyBlendState(4, 4, 5, 5, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
             ID3D11BlendState* boundBlend = nullptr;
             float boundBlendFactor[4] = {};
             UINT boundSampleMask = 0;
@@ -949,7 +951,7 @@ protected:
         // paths. State is reset to a known-safe baseline first (opaque blend, depth/stencil off,
         // no culling) so this check doesn't depend on whatever Check O happened to leave bound.
         {
-            backend.ApplyBlendState(0, 0, 1, 1, 0, 0);                        // Opaque
+            backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{}); // Opaque (REMED-GFX-077 default write state)
             backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
             backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
 
@@ -1012,6 +1014,84 @@ protected:
             check(beforeIdxIsBlue && afterIdxIsRed,
                   "D3D11GraphicsBackend::DrawIndexedColoredPrimitives(): real colored3d indexed draw "
                   "paints exact vertex color over the Clear() background at the same readback location");
+        }
+
+        // ---- Check GFX077: REMED-GFX-077 runtime verification -- BlendState.ColorWriteChannels
+        // (RT0 RenderTarget[0].RenderTargetWriteMask baked into the cached ID3D11BlendState, keyed)
+        // and BlendState.MultiSampleMask (the dynamic third arg of OMSetBlendState, captured not
+        // keyed), against the real DXVK device. An opaque full-screen quad (blend disabled) is drawn
+        // into an off-screen RGBA8 render target so the ONLY thing that can preserve a destination
+        // channel is the write mask gating the write; the RT's own texture is read back via the same
+        // staging-copy technique Check J uses (alpha-preserving, unlike the back buffer). Differential
+        // model (masked-in channel == "All" baseline, masked-out == "None"/clear baseline). The RT is
+        // single-sample, on which OMSetBlendState's SampleMask bit 0 gates the one coverage sample:
+        // SampleMask==0 must discard the quad (pixel stays the clear colour). ----
+        {
+            auto rt = backend.CreateRenderTarget2D(64, 64, 0 /*DepthFormat::None*/, false, false, 0);
+            auto* d3dRt = static_cast<D3D11RenderTargetBackend*>(rt.get());
+
+            backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+
+            struct VPC { float x, y, z; uint32_t color; };
+            // Full-NDC quad, flat source colour S=(200,100,50,220); packed R8G8B8A8 = 0xDC3264C8
+            // (A=220,B=50,G=100,R=200).
+            static const VPC kQuad[6] = {
+                {-1.0f,  1.0f, 0.0f, 0xDC3264C8u}, {-1.0f, -1.0f, 0.0f, 0xDC3264C8u},
+                { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, {-1.0f,  1.0f, 0.0f, 0xDC3264C8u},
+                { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, { 1.0f,  1.0f, 0.0f, 0xDC3264C8u},
+            };
+            auto vbCw = backend.CreateVertexBuffer(6);
+            vbCw->SetData(kQuad, 6, sizeof(VPC));
+            const Matrix Id = Matrix::getIdentityProperty();
+
+            auto renderMask = [&](int cwc, unsigned int sampleMask) -> std::array<uint8_t, 4>
+            {
+                CNA::Internal::Backends::BlendWriteState ws;
+                ws.colorWriteChannels[0] = cwc;
+                ws.multiSampleMask = sampleMask;
+                backend.SetRenderTarget2D(rt.get());
+                backend.ApplyBlendState(0, 0, 1, 1, 0, 0, ws);         // Opaque + mask
+                dev.Clear(Color(10, 20, 30, 40));                     // destination D
+                backend.DrawColoredPrimitives(*vbCw, Id, Id, Id, PrimitiveType::TriangleList, 2);
+                backend.SetRenderTarget2D(nullptr);
+                const auto px = ReadTexture2DRegion(device, context, d3dRt->GetSampleableTextureEXT(), 30, 30, 2, 2);
+                return {px[0], px[1], px[2], px[3]};
+            };
+            auto eqc = [](const std::array<uint8_t, 4>& a, const std::array<uint8_t, 4>& b)
+            { return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]; };
+            auto masked = [](const std::array<uint8_t, 4>& d, const std::array<uint8_t, 4>& s, int bits)
+            {
+                return std::array<uint8_t, 4>{
+                    static_cast<uint8_t>((bits & 1) ? s[0] : d[0]),
+                    static_cast<uint8_t>((bits & 2) ? s[1] : d[1]),
+                    static_cast<uint8_t>((bits & 4) ? s[2] : d[2]),
+                    static_cast<uint8_t>((bits & 8) ? s[3] : d[3])};
+            };
+
+            const std::array<uint8_t, 4> dcw = renderMask(0,  0xFFFFFFFFu);   // None
+            const std::array<uint8_t, 4> scw = renderMask(15, 0xFFFFFFFFu);   // All
+            check(dcw[0] != scw[0] && dcw[1] != scw[1] && dcw[2] != scw[2] && dcw[3] != scw[3],
+                  "GFX077-1 (D3D11): None(dst)/All(src) baselines discriminate all four channels");
+            check(eqc(renderMask(1, 0xFFFFFFFFu), masked(dcw, scw, 1)),
+                  "GFX077-2 (D3D11): ColorWriteChannels.Red writes only R (RenderTargetWriteMask)");
+            check(eqc(renderMask(2, 0xFFFFFFFFu), masked(dcw, scw, 2)),
+                  "GFX077-3 (D3D11): ColorWriteChannels.Green writes only G");
+            check(eqc(renderMask(4, 0xFFFFFFFFu), masked(dcw, scw, 4)),
+                  "GFX077-4 (D3D11): ColorWriteChannels.Blue writes only B");
+            check(eqc(renderMask(8, 0xFFFFFFFFu), masked(dcw, scw, 8)),
+                  "GFX077-5 (D3D11): ColorWriteChannels.Alpha writes only A");
+            check(eqc(renderMask(1 | 4, 0xFFFFFFFFu), masked(dcw, scw, 1 | 4)),
+                  "GFX077-6 (D3D11): ColorWriteChannels.Red|Blue writes only R and B");
+            const std::array<uint8_t, 4> a1 = renderMask(1, 0xFFFFFFFFu);
+            const std::array<uint8_t, 4> bG = renderMask(2, 0xFFFFFFFFu);
+            const std::array<uint8_t, 4> a2 = renderMask(1, 0xFFFFFFFFu);
+            check(eqc(a1, masked(dcw, scw, 1)) && eqc(bG, masked(dcw, scw, 2)) && eqc(a2, masked(dcw, scw, 1)),
+                  "GFX077-7 (D3D11): A(Red)->B(Green)->A(Red) each selects its own cached blend object");
+            check(eqc(renderMask(15, 0x00000000u), dcw),
+                  "GFX077-8 (D3D11): MultiSampleMask=0 discards the single coverage sample (stays clear)");
+            check(eqc(renderMask(15, 0xFFFFFFFFu), scw),
+                  "GFX077-9 (D3D11): MultiSampleMask=all renders normally (full coverage -> src)");
         }
 
         const Microsoft::Xna::Framework::Rectangle centerRegion28(28, 28, 4, 4);

@@ -3463,7 +3463,8 @@ int main()
 
         backend.ApplyBlendState(/*colorSrcBlend=One*/0, /*alphaSrcBlend=One*/0,
                                 /*colorDstBlend=One*/0, /*alphaDstBlend=One*/0,
-                                /*colorBlendFunc=Add*/0, /*alphaBlendFunc=Add*/0);
+                                /*colorBlendFunc=Add*/0, /*alphaBlendFunc=Add*/0,
+                                CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
         backend.DrawColoredPrimitives(vbRed50, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                       Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
         auto afterAdditive = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
@@ -3474,7 +3475,8 @@ int main()
 
         backend.ApplyBlendState(/*colorSrcBlend=One*/0, /*alphaSrcBlend=One*/0,
                                 /*colorDstBlend=Zero*/1, /*alphaDstBlend=Zero*/1,
-                                /*colorBlendFunc=Add*/0, /*alphaBlendFunc=Add*/0);
+                                /*colorBlendFunc=Add*/0, /*alphaBlendFunc=Add*/0,
+                                CNA::Internal::Backends::BlendWriteState{}); // REMED-GFX-077 default write state
         backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
         backend.DrawColoredPrimitives(vbRed100, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                       Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
@@ -3514,6 +3516,120 @@ int main()
         Check(regionIs(notCulled, 255, 0, 0, 255),
               "X5: real ApplyRasterizerState(CullMode::None) genuinely draws the same triangle -- "
               "same geometry, opposite outcome, purely from the RasterizerState change");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check GFX077: REMED-GFX-077 runtime verification -- BlendState.ColorWriteChannels (RT0
+    // RenderTarget[0].RenderTargetWriteMask, a STATIC part of the D3D12 PSO folded into the PSO
+    // cache key) and BlendState.MultiSampleMask (the PSO SampleMask, also in the key), off-screen
+    // through the real Wine+vkd3d-proton device. An opaque full-screen quad (Opaque blend, blend
+    // disabled) is drawn so the ONLY thing that can preserve a destination channel is the colour
+    // write mask gating the write. Differential model (masked-in channel == the "All" baseline,
+    // masked-out == the "None"/clear baseline) so it is invariant to any RT colour transform; the
+    // D3D12 RT here is linear R8G8B8A8_UNORM so it also happens to be byte-exact. The RT is single-
+    // sample, on which PSO SampleMask bit 0 gates the single coverage sample: SampleMask==0 must
+    // discard the quad (pixel stays the clear colour), the strongest simple MultiSampleMask probe
+    // available off-screen. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "GFX077-0: off-screen RGBA8 render target created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+        backend.ApplyRasterizerState(/*cullMode=None*/0, /*fillMode=Solid*/0, /*scissorTestEnable=*/false);
+
+        // Full-NDC quad, flat source colour S=(200,100,50,220). VertexPositionColor packs as
+        // 0xAABBGGRR: A=220(DC) B=50(32) G=100(64) R=200(C8) -> 0xDC3264C8.
+        struct VPC { float x, y, z; uint32_t color; };
+        static const VPC kQuad[6] = {
+            {-1.0f,  1.0f, 0.0f, 0xDC3264C8u}, {-1.0f, -1.0f, 0.0f, 0xDC3264C8u},
+            { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, {-1.0f,  1.0f, 0.0f, 0xDC3264C8u},
+            { 1.0f, -1.0f, 0.0f, 0xDC3264C8u}, { 1.0f,  1.0f, 0.0f, 0xDC3264C8u},
+        };
+        D3D12VertexBufferBackend vb(&backend, 6);
+        vb.SetData(kQuad, 6, sizeof(VPC));
+
+        auto centre = [&](const std::vector<uint8_t>& buf) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(32) * kRtWidth + 32) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        const Matrix I = Matrix::getIdentityProperty();
+        // Render the quad with a given RT0 write mask + sample mask over a fixed clear colour D.
+        auto renderMask = [&](int cwc, uint32_t sampleMask) -> std::array<uint8_t, 4>
+        {
+            CNA::Internal::Backends::BlendWriteState ws;
+            ws.colorWriteChannels[0] = cwc;
+            ws.multiSampleMask = sampleMask;
+            backend.ApplyBlendState(/*One*/0, 0, /*Zero*/1, 1, /*Add*/0, 0, ws); // Opaque + mask
+            backend.Clear(10.0f / 255.0f, 20.0f / 255.0f, 30.0f / 255.0f, 40.0f / 255.0f); // D
+            backend.DrawColoredPrimitives(vb, I, I, I, PrimitiveType::TriangleList, 2);
+            return centre(ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight));
+        };
+        auto eq = [](const std::array<uint8_t, 4>& a, const std::array<uint8_t, 4>& b)
+        { return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3]; };
+        auto masked = [](const std::array<uint8_t, 4>& dst, const std::array<uint8_t, 4>& src, int bits)
+        {
+            return std::array<uint8_t, 4>{
+                static_cast<uint8_t>((bits & 1) ? src[0] : dst[0]),
+                static_cast<uint8_t>((bits & 2) ? src[1] : dst[1]),
+                static_cast<uint8_t>((bits & 4) ? src[2] : dst[2]),
+                static_cast<uint8_t>((bits & 8) ? src[3] : dst[3])};
+        };
+
+        const std::array<uint8_t, 4> dst = renderMask(/*None*/0,  0xFFFFFFFFu);
+        const std::array<uint8_t, 4> src = renderMask(/*All*/15, 0xFFFFFFFFu);
+        Check(dst[0] != src[0] && dst[1] != src[1] && dst[2] != src[2] && dst[3] != src[3],
+              "GFX077-1: None(dst) and All(src) baselines discriminate all four channels");
+        Check(eq(renderMask(1, 0xFFFFFFFFu), masked(dst, src, 1)),
+              "GFX077-2: ColorWriteChannels.Red writes only R (RenderTargetWriteMask in PSO)");
+        Check(eq(renderMask(2, 0xFFFFFFFFu), masked(dst, src, 2)),
+              "GFX077-3: ColorWriteChannels.Green writes only G");
+        Check(eq(renderMask(4, 0xFFFFFFFFu), masked(dst, src, 4)),
+              "GFX077-4: ColorWriteChannels.Blue writes only B");
+        Check(eq(renderMask(8, 0xFFFFFFFFu), masked(dst, src, 8)),
+              "GFX077-5: ColorWriteChannels.Alpha writes only A");
+        Check(eq(renderMask(1 | 4, 0xFFFFFFFFu), masked(dst, src, 1 | 4)),
+              "GFX077-6: ColorWriteChannels.Red|Blue writes only R and B");
+
+        // A(Red)->B(Green)->A(Red): each draw selects its own keyed PSO (no stale write mask).
+        const std::array<uint8_t, 4> a1 = renderMask(1, 0xFFFFFFFFu);
+        const std::array<uint8_t, 4> bG = renderMask(2, 0xFFFFFFFFu);
+        const std::array<uint8_t, 4> a2 = renderMask(1, 0xFFFFFFFFu);
+        Check(eq(a1, masked(dst, src, 1)) && eq(bG, masked(dst, src, 2)) && eq(a2, masked(dst, src, 1)),
+              "GFX077-7: A(Red)->B(Green)->A(Red) each selects its own PSO (no stale/last-wins mask) "
+              "-- functional proof the PSO is keyed on colorWriteMask");
+
+        // MultiSampleMask on the single-sample RT: SampleMask bit 0 gates the one coverage sample.
+        const std::array<uint8_t, 4> sm0  = renderMask(15, 0x00000000u); // no coverage -> stays clear
+        const std::array<uint8_t, 4> smAll = renderMask(15, 0xFFFFFFFFu); // normal
+        Check(eq(sm0, dst),
+              "GFX077-9: MultiSampleMask=0 discards the single coverage sample (pixel stays clear D)");
+        Check(eq(smAll, src),
+              "GFX077-10: MultiSampleMask=all renders normally (full sample coverage -> src)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }
