@@ -722,6 +722,12 @@ protected:
             const Px a1 = renderMask(1), bG = renderMask(2), a2 = renderMask(1);
             check(eqp(a1, masked(dcw, scw, 1)) && eqp(bG, masked(dcw, scw, 2)) && eqp(a2, masked(dcw, scw, 1)),
                   "GFX077-7 (D3D9): A(Red)->B(Green)->A(Red) each applies its own D3DRS_COLORWRITEENABLE");
+
+            // REMED-GFX-087: D3DRS_COLORWRITEENABLE is sticky device state and the loop above leaves
+            // it on the last mask applied (Red only). Restore the All-channels default so later
+            // direct-DrawPrimitivesEx checks (the SetDepthTestEnabled block) don't silently inherit a
+            // partial write mask (which zeroed G/B and made their exact-colour assertions fail).
+            backend.ApplyBlendState(0, 0, 1, 1, 0, 0, CNA::Internal::Backends::BlendWriteState{});
         }
 
         // Check T (D9-53) -- D3D9RenderTargetCubeBackend: bind one face, Clear(), read back that

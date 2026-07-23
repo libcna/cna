@@ -1194,6 +1194,7 @@ int main()
         ctp.fogEnabled = false;
         ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
         ctp.fogStart = 0.0f; ctp.fogEnd = 0.5f;
+        ctp.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix; the D3D12 smoke was never migrated to the GFX-005/010 fogVector ABI)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
@@ -1228,6 +1229,7 @@ int main()
         tp.fogEnabled = false;
         tp.fogColor[0] = 0.0f; tp.fogColor[1] = 1.0f; tp.fogColor[2] = 0.0f;
         tp.fogStart = 0.0f; tp.fogEnd = 0.5f;
+        tp.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
@@ -1368,6 +1370,7 @@ int main()
         litFogP.fogEnabled = false;
         litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
         litFogP.fogStart = 0.0f; litFogP.fogEnd = 0.5f;
+        litFogP.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
@@ -1845,6 +1848,10 @@ int main()
               "color unblended (plan_dx.md DX-137)");
 
         atp.fogEnabled = true;
+        // REMED-GFX-087: alpha_test3d gates fog solely on a non-zero FogVector (its
+        // D3DAlphaTestConstants dropped the scalar fogEnabled flag), so set the vector ONLY on the
+        // fogEnabled=true draw -- mirrors the REMED-GFX-055 D3D11 handling.
+        atp.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
@@ -2049,6 +2056,7 @@ int main()
         dp.fogEnabled = false;
         dp.fogColor[0] = 0.0f; dp.fogColor[1] = 1.0f; dp.fogColor[2] = 0.0f;
         dp.fogStart = 0.0f; dp.fogEnd = 0.5f;
+        dp.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbDualFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dp);
@@ -3054,6 +3062,7 @@ int main()
         ep.fogEnabled = false;
         ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
         ep.fogStart = 0.0f; ep.fogEnd = 0.5f;
+        ep.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
@@ -3255,6 +3264,7 @@ int main()
         fogOff.fogColor[0] = 0.0f; fogOff.fogColor[1] = 1.0f; fogOff.fogColor[2] = 0.0f;
         fogOff.fogStart = 0.0f;
         fogOff.fogEnd = 0.5f;
+        fogOff.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix); copied into fogOn below
 
         backend.Clear(0.039f, 0.039f, 0.039f, 1.0f);
         backend.DrawPrimitivesEx(vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),

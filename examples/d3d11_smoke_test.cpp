@@ -2695,6 +2695,15 @@ protected:
         // when it's not (pure vertex color) -- an exact, unambiguous discrimination, not "some
         // blend happened".
         {
+            // REMED-GFX-087: the SpriteBatch checks above (Y/Y2/Y3/Y4/Z/AA) each call Begin(), which
+            // since REMED-GFX-081 applies (and, per FNA/XNA semantics, LEAVES) RasterizerState =
+            // CullCounterClockwise on the device. The direct backend.DrawPrimitivesEx() 3D checks
+            // from here down draw oversized full-screen quads that are back-facing under
+            // CullCounterClockwise, so -- like the D3D9 smoke's own SetDepthTestEnabled block already
+            // does explicitly -- they must re-establish CullNone first, otherwise every one of them
+            // is silently culled to nothing (reads back the Clear() colour). A real game never hits
+            // this: its 3D draws set RasterizerState through the effect/GraphicsDevice layer.
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
             struct VPCz { float x, y, z; uint32_t color; };
             const uint32_t kRed = 0xFF0000FFu; // A=255,B=0,G=0,R=255 (R8G8B8A8 byte order)
             static const VPCz kTriFog[3] = {
