@@ -62,8 +62,17 @@ int main()
           "Blend::InverseSourceAlpha -> D3DBLEND_INVSRCALPHA");
     check(BlendFunctionToD3D9(static_cast<int>(BlendFunction::ReverseSubtract)) == D3DBLENDOP_REVSUBTRACT,
           "BlendFunction::ReverseSubtract -> D3DBLENDOP_REVSUBTRACT");
+    // REMED-GFX-089: lock the four comparison modes used by the focused live-depth controls.
+    // In particular, XNA ordinal 0 is Always -> D3DCMP_ALWAYS (numeric value 8), not a
+    // Less/LessEqual default; the old smoke fixture left this sticky state active.
+    check(CompareFunctionToD3D9(static_cast<int>(CompareFunction::Always)) == D3DCMP_ALWAYS,
+          "CompareFunction::Always -> D3DCMP_ALWAYS");
+    check(CompareFunctionToD3D9(static_cast<int>(CompareFunction::Less)) == D3DCMP_LESS,
+          "CompareFunction::Less -> D3DCMP_LESS");
     check(CompareFunctionToD3D9(static_cast<int>(CompareFunction::LessEqual)) == D3DCMP_LESSEQUAL,
           "CompareFunction::LessEqual -> D3DCMP_LESSEQUAL");
+    check(CompareFunctionToD3D9(static_cast<int>(CompareFunction::Greater)) == D3DCMP_GREATER,
+          "CompareFunction::Greater -> D3DCMP_GREATER");
     check(CullModeToD3D9(static_cast<int>(CullMode::None)) == D3DCULL_NONE,
           "CullMode::None -> D3DCULL_NONE");
     check(CullModeToD3D9(static_cast<int>(CullMode::CullClockwiseFace)) == D3DCULL_CW,

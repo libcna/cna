@@ -116,6 +116,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
@@ -2950,6 +2951,12 @@ protected:
                 dev.GetBackBufferData(&probe, &px, 0, 1);
                 return px;
             };
+
+            // REMED-GFX-089 sibling-oracle hygiene: establish the complete reachable XNA state
+            // instead of relying on whichever DepthFunc an earlier direct-backend fixture left.
+            // Exercise false->true so SetDepthTestEnabled(true) still has observable work to do.
+            dev.setDepthStencilStateProperty(DepthStencilState::Default);
+            backend.SetDepthTestEnabled(false);
 
             // Depth test ON: the far green quad must be REJECTED by the nearer red one already there.
             backend.SetDepthWriteEnabled(true);

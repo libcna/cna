@@ -89,9 +89,13 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
@@ -1036,17 +1040,13 @@ protected:
                   "D9-63: an out-of-range sampler slot is silently ignored (does not throw), matching D3D11's own bound-check precedent");
         }
 
-        // Check Z (D9-64) -- real bug fix, found while wiring up D9-64's reused EasyGL state
-        // CTests: GraphicsDevice::SetDepthTestEnabled()/SetDepthWriteEnabled() were silent-throw
-        // stubs on D3D9 (D9-11's original skeleton, never wired up by D9-61/D9-82's own
-        // ApplyDepthStencilState()-only path) -- a game calling dev.SetDepthTestEnabled(false)
-        // (real, public NOXNA API that easygl_blendstate_opaque_test.cpp/EasyGL itself both use)
-        // got a crash instead of a real depth-test toggle. Now a direct SetRenderState(D3DRS_ZENABLE/
-        // ZWRITEENABLE) call each, mirroring D3D11's own identical 2026-07-14 fix (D3D9 needs no
-        // cached-state-object rebuild since D3D9 render states are independently settable). Proven
-        // by the depth test's real effect on rasterization, not by inspection: the same near/far
-        // draw order is issued twice, differing ONLY in whether SetDepthTestEnabled() was called --
-        // a no-op cannot pass both.
+        // Check Z (D9-64 / REMED-GFX-089) -- the helper setters change exactly one field of the
+        // CURRENT depth state. The old fixture did not establish that current state: GFX077's
+        // direct-backend renderMask() left ZFUNC=D3DCMP_ALWAYS, then this block changed only
+        // ZENABLE/ZWRITEENABLE and incorrectly expected DepthStencilState.Default behavior. That
+        // made the far draw pass correctly under Always and was a test-harness defect, not a
+        // production depth defect. Establish the reachable public XNA state first, then prove the
+        // NOXNA helper's A(disabled)->B(enabled)->A transition while preserving LessEqual.
         {
             struct VPCd { float x, y, z; uint32_t color; };
             const uint32_t kRedD = 0xFF0000FFu;   // R=255
@@ -1068,14 +1068,15 @@ protected:
             const Microsoft::Xna::Framework::Rectangle probe(30, 30, 1, 1);
             const Matrix& I = Matrix::getIdentityProperty();
 
-            // These quads' winding is back-facing under CNA's real default RasterizerState
-            // (CullCounterClockwiseFace) -- needs CullNone, same finding as every other oversized
-            // full-screen-quad test in this project (e.g. easygl_depthstencilstate_stencil_enable_
-            // test.cpp's own "Task 896" comment).
-            backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+            // Establish every non-depth input through reachable public state too: opaque/all
+            // channel writes and CullNone. The flat vertex-colour shader uses no texture, fog,
+            // lighting, or blending.
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
             auto drawNearThenFar = [&]() {
-                dev.Clear(Color(10, 10, 10, 255)); // clears depth to 1.0 too
+                dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                          Color(10, 10, 10, 255), 1.0f, 0);
                 backend.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
                 backend.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
                 Color px(0, 0, 0, 0);
@@ -1083,25 +1084,241 @@ protected:
                 return px;
             };
 
-            // Depth test ON: the far green quad must be REJECTED by the nearer red one already there.
-            backend.SetDepthWriteEnabled(true);
-            backend.SetDepthTestEnabled(true);
-            const Color withDepth = drawNearThenFar();
-            check(withDepth.getRProperty() == 255 && withDepth.getGProperty() == 0,
-                  "D3D9GraphicsBackend::SetDepthTestEnabled(true): a FARTHER quad drawn after a nearer "
-                  "one is genuinely REJECTED (red survives) -- proves the call really enables the depth "
-                  "test, instead of throwing/being a no-op");
+            auto drawSingle = [&](const auto& vb, float clearDepth) {
+                dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                          Color(10, 10, 10, 255), clearDepth, 0);
+                backend.DrawPrimitivesEx(vb, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&probe, &px, 0, 1);
+                return px;
+            };
+            auto isRed = [](const Color& px) {
+                return px.getRProperty() == 255 && px.getGProperty() == 0 &&
+                       px.getBProperty() == 0 && px.getAProperty() == 255;
+            };
+            auto isGreen = [](const Color& px) {
+                return px.getRProperty() == 0 && px.getGProperty() == 255 &&
+                       px.getBProperty() == 0 && px.getAProperty() == 255;
+            };
+            auto isClear = [](const Color& px) {
+                return px.getRProperty() == 10 && px.getGProperty() == 10 &&
+                       px.getBProperty() == 10 && px.getAProperty() == 255;
+            };
 
-            // Depth test OFF: the same far green quad must now overwrite the red one (painter's order).
+            // Small reachable compare-function controls. In particular, Always reproduces the
+            // old green result legitimately; Less/Greater prove the enum/native mapping is not an
+            // ordinal-assumption accident.
+            DepthStencilState alwaysState;
+            alwaysState.setDepthBufferFunctionProperty(CompareFunction::Always);
+            dev.setDepthStencilStateProperty(alwaysState);
+            const Color alwaysFar = drawSingle(*vbFar, 0.1f);
+
+            DepthStencilState lessState;
+            lessState.setDepthBufferFunctionProperty(CompareFunction::Less);
+            dev.setDepthStencilStateProperty(lessState);
+            const Color lessNear = drawSingle(*vbNear, 0.5f);
+            const Color lessFar = drawSingle(*vbFar, 0.5f);
+
+            DepthStencilState greaterState;
+            greaterState.setDepthBufferFunctionProperty(CompareFunction::Greater);
+            dev.setDepthStencilStateProperty(greaterState);
+            const Color greaterFar = drawSingle(*vbFar, 0.5f);
+            const Color greaterNear = drawSingle(*vbNear, 0.5f);
+
+            // Authoritative public contract:
+            // DepthBufferEnable=true, DepthBufferWriteEnable=true, Function=LessEqual.
+            dev.setDepthStencilStateProperty(DepthStencilState::Default);
             backend.SetDepthTestEnabled(false);
+            backend.SetDepthTestEnabled(true);
+            backend.SetDepthWriteEnabled(true);
+
+            DWORD zEnable = 0, zWrite = 0, zFunc = 0;
+            const HRESULT getZEnableHr =
+                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZENABLE, &zEnable);
+            const HRESULT getZWriteHr =
+                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZWRITEENABLE, &zWrite);
+            const HRESULT getZFuncHr =
+                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZFUNC, &zFunc);
+
+            ComPtr<IDirect3DSurface9> activeDepth;
+            const HRESULT getDepthHr =
+                backend.GetDeviceEXT()->GetDepthStencilSurface(activeDepth.GetAddressOf());
+            D3DSURFACE_DESC depthDesc{};
+            const HRESULT getDepthDescHr =
+                activeDepth ? activeDepth->GetDesc(&depthDesc) : E_POINTER;
+            ComPtr<IDirect3DSurface9> activeColor;
+            const HRESULT getColorHr =
+                backend.GetDeviceEXT()->GetRenderTarget(0, activeColor.GetAddressOf());
+            D3DSURFACE_DESC colorDesc{};
+            const HRESULT getColorDescHr =
+                activeColor ? activeColor->GetDesc(&colorDesc) : E_POINTER;
+            D3DVIEWPORT9 activeViewport{};
+            const HRESULT getViewportHr = backend.GetDeviceEXT()->GetViewport(&activeViewport);
+
+            const Color withDepth = drawNearThenFar();
+            const Color clearFarPass = drawSingle(*vbNear, 0.9f);
+            const Color clearNearReject = drawSingle(*vbNear, 0.1f);
+
+            // Depth write OFF: both fragments compare against the untouched clear depth=1, so the
+            // far/green second draw wins. Re-enable writes before the depth-test-off control.
+            backend.SetDepthWriteEnabled(false);
+            const Color withoutWrite = drawNearThenFar();
+            backend.SetDepthWriteEnabled(true);
+
+            // Depth test OFF: painter's order wins. Then restore A and prove it is byte-identical
+            // to the first A (state A -> B -> A within one frame).
+            backend.SetDepthTestEnabled(false);
+            DWORD zEnableOff = D3DZB_TRUE;
+            const HRESULT getZEnableOffHr =
+                backend.GetDeviceEXT()->GetRenderState(D3DRS_ZENABLE, &zEnableOff);
             const Color withoutDepth = drawNearThenFar();
-            check(withoutDepth.getGProperty() == 255 && withoutDepth.getRProperty() == 0,
+            backend.SetDepthTestEnabled(true);
+            const Color restoredDepth = drawNearThenFar();
+
+            // Backbuffer-vs-offscreen discriminator. Bind a single-sample 64x64 D24S8 target,
+            // introspect the actually-bound depth surface, run the same near/far sequence, then
+            // read its color surface directly (no SpriteBatch sampling/readback dependency).
+            auto offscreen =
+                backend.CreateRenderTarget2D(64, 64, static_cast<int>(DepthFormat::Depth24Stencil8));
+            auto& offscreenD3D9 = static_cast<D3D9RenderTargetBackend&>(*offscreen);
+            backend.SetRenderTarget2D(offscreen.get());
+            dev.setDepthStencilStateProperty(DepthStencilState::Default);
+            dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer,
+                      Color(10, 10, 10, 255), 1.0f, 0);
+            backend.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
+            backend.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
+
+            ComPtr<IDirect3DSurface9> offscreenBoundDepth;
+            const HRESULT getOffscreenDepthHr =
+                backend.GetDeviceEXT()->GetDepthStencilSurface(
+                    offscreenBoundDepth.GetAddressOf());
+            D3DSURFACE_DESC offscreenDepthDesc{};
+            const HRESULT getOffscreenDepthDescHr =
+                offscreenBoundDepth
+                    ? offscreenBoundDepth->GetDesc(&offscreenDepthDesc)
+                    : E_POINTER;
+            D3DSURFACE_DESC offscreenColorDesc{};
+            const HRESULT getOffscreenColorDescHr =
+                offscreenD3D9.GetActiveColorSurfaceEXT()->GetDesc(&offscreenColorDesc);
+            D3DVIEWPORT9 offscreenViewport{};
+            const HRESULT getOffscreenViewportHr =
+                backend.GetDeviceEXT()->GetViewport(&offscreenViewport);
+
+            backend.SetRenderTarget2D(nullptr);
+            const auto offscreenPixels = ReadRenderTargetSurfaceD3D9(
+                backend.GetDeviceEXT(), offscreenD3D9.GetColorSurfaceEXT());
+            Color offscreenPixel(0, 0, 0, 0);
+            if (offscreenPixels.size() == static_cast<std::size_t>(64 * 64 * 4))
+            {
+                const std::size_t offscreenIndex =
+                    (static_cast<std::size_t>(32) * 64 + 32) * 4;
+                offscreenPixel = Color(
+                    offscreenPixels[offscreenIndex + 0],
+                    offscreenPixels[offscreenIndex + 1],
+                    offscreenPixels[offscreenIndex + 2],
+                    offscreenPixels[offscreenIndex + 3]);
+            }
+            // Direct backend binds do not update GraphicsDevice's public Viewport bookkeeping;
+            // restore its still-current backbuffer viewport explicitly for clean test hygiene.
+            const Viewport& publicViewport = dev.getViewportProperty();
+            backend.SetViewport(
+                publicViewport.getXProperty(), publicViewport.getYProperty(),
+                publicViewport.getWidthProperty(), publicViewport.getHeightProperty(),
+                publicViewport.getMinDepthProperty(), publicViewport.getMaxDepthProperty());
+
+            const bool stateOk =
+                SUCCEEDED(getZEnableHr) && SUCCEEDED(getZWriteHr) && SUCCEEDED(getZFuncHr) &&
+                zEnable == D3DZB_TRUE && zWrite == TRUE && zFunc == D3DCMP_LESSEQUAL &&
+                SUCCEEDED(getZEnableOffHr) && zEnableOff == D3DZB_FALSE;
+            const bool surfaceOk =
+                SUCCEEDED(getDepthHr) && SUCCEEDED(getDepthDescHr) &&
+                SUCCEEDED(getColorHr) && SUCCEEDED(getColorDescHr) &&
+                activeDepth && activeColor &&
+                depthDesc.Format == D3DFMT_D24S8 &&
+                depthDesc.Width == colorDesc.Width && depthDesc.Height == colorDesc.Height &&
+                depthDesc.MultiSampleType == colorDesc.MultiSampleType &&
+                depthDesc.MultiSampleQuality == colorDesc.MultiSampleQuality;
+            const bool viewportOk =
+                SUCCEEDED(getViewportHr) &&
+                activeViewport.X == 0 && activeViewport.Y == 0 &&
+                activeViewport.Width == colorDesc.Width &&
+                activeViewport.Height == colorDesc.Height &&
+                activeViewport.MinZ == 0.0f && activeViewport.MaxZ == 1.0f;
+            const DWORD requiredCmpCaps =
+                D3DPCMPCAPS_ALWAYS | D3DPCMPCAPS_LESS |
+                D3DPCMPCAPS_LESSEQUAL | D3DPCMPCAPS_GREATER;
+            const bool capsOk =
+                (backend.GetCapsEXT().RasterCaps & D3DPRASTERCAPS_ZTEST) != 0 &&
+                (backend.GetCapsEXT().ZCmpCaps & requiredCmpCaps) == requiredCmpCaps;
+            const bool compareControlsOk =
+                isGreen(alwaysFar) &&
+                isRed(lessNear) && isClear(lessFar) &&
+                isGreen(greaterFar) && isClear(greaterNear);
+            const bool clearOk = isRed(clearFarPass) && isClear(clearNearReject);
+            const bool offscreenOk =
+                SUCCEEDED(getOffscreenDepthHr) &&
+                SUCCEEDED(getOffscreenDepthDescHr) &&
+                SUCCEEDED(getOffscreenColorDescHr) &&
+                SUCCEEDED(getOffscreenViewportHr) &&
+                offscreenBoundDepth.Get() ==
+                    offscreenD3D9.GetDepthStencilSurfaceEXT() &&
+                offscreenDepthDesc.Format == D3DFMT_D24S8 &&
+                offscreenDepthDesc.Width == 64 && offscreenDepthDesc.Height == 64 &&
+                offscreenDepthDesc.Width == offscreenColorDesc.Width &&
+                offscreenDepthDesc.Height == offscreenColorDesc.Height &&
+                offscreenDepthDesc.MultiSampleType ==
+                    offscreenColorDesc.MultiSampleType &&
+                offscreenDepthDesc.MultiSampleQuality ==
+                    offscreenColorDesc.MultiSampleQuality &&
+                offscreenViewport.X == 0 && offscreenViewport.Y == 0 &&
+                offscreenViewport.Width == 64 && offscreenViewport.Height == 64 &&
+                offscreenViewport.MinZ == 0.0f && offscreenViewport.MaxZ == 1.0f &&
+                isRed(offscreenPixel);
+
+            std::printf(
+                "[GFX089] state ZENABLE=%lu ZWRITE=%lu ZFUNC=%lu; "
+                "depth=D24S8 %lux%lu msaa=%d/q%lu; color=%lux%lu msaa=%d/q%lu; "
+                "viewport=%lu,%lu %lux%lu %.1f..%.1f; "
+                "pixels always=%d/%d less=%d/%d greater=%d/%d default=%d/%d "
+                "writeOff=%d/%d depthOff=%d/%d restored=%d/%d offscreen=%d/%d\n",
+                static_cast<unsigned long>(zEnable),
+                static_cast<unsigned long>(zWrite),
+                static_cast<unsigned long>(zFunc),
+                static_cast<unsigned long>(depthDesc.Width),
+                static_cast<unsigned long>(depthDesc.Height),
+                static_cast<int>(depthDesc.MultiSampleType),
+                static_cast<unsigned long>(depthDesc.MultiSampleQuality),
+                static_cast<unsigned long>(colorDesc.Width),
+                static_cast<unsigned long>(colorDesc.Height),
+                static_cast<int>(colorDesc.MultiSampleType),
+                static_cast<unsigned long>(colorDesc.MultiSampleQuality),
+                static_cast<unsigned long>(activeViewport.X),
+                static_cast<unsigned long>(activeViewport.Y),
+                static_cast<unsigned long>(activeViewport.Width),
+                static_cast<unsigned long>(activeViewport.Height),
+                activeViewport.MinZ, activeViewport.MaxZ,
+                alwaysFar.getRProperty(), alwaysFar.getGProperty(),
+                lessNear.getRProperty(), lessNear.getGProperty(),
+                greaterFar.getRProperty(), greaterFar.getGProperty(),
+                withDepth.getRProperty(), withDepth.getGProperty(),
+                withoutWrite.getRProperty(), withoutWrite.getGProperty(),
+                withoutDepth.getRProperty(), withoutDepth.getGProperty(),
+                restoredDepth.getRProperty(), restoredDepth.getGProperty(),
+                offscreenPixel.getRProperty(), offscreenPixel.getGProperty());
+
+            check(stateOk && surfaceOk && viewportOk && capsOk && compareControlsOk && clearOk &&
+                  offscreenOk &&
+                  isRed(withDepth) && isGreen(withoutWrite) && isRed(restoredDepth),
+                  "REMED-GFX-089: reachable DepthStencilState.Default maps to ZENABLE=TRUE, "
+                  "ZWRITEENABLE=TRUE, ZFUNC=LESSEQUAL on a compatible bound D24S8 surface; near "
+                  "red rejects far green on both backbuffer and offscreen RT, depth clear values "
+                  "gate draws, write-off differs, and A->B->A restores identical depth behavior");
+            check(isGreen(withoutDepth),
                   "D3D9GraphicsBackend::SetDepthTestEnabled(false): the SAME farther quad now genuinely "
                   "OVERWRITES the nearer one (green wins) -- only the SetDepthTestEnabled() call differs "
                   "between the two, so a no-op implementation cannot pass both checks");
 
-            backend.SetDepthTestEnabled(false);
-            backend.SetDepthWriteEnabled(false);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
         }
 
         std::printf("=== %d/%d PASS (main Game checks) ===\n", passCount, totalCount);

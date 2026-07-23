@@ -31,6 +31,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_register_backend_test(NAME D3D11_Smoke COMMAND ${_d3d11_smoke_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-089 sibling oracle: the same backend-neutral public
+    # GraphicsDevice/DepthStencilState A(Default)->B(DepthRead)->C(None)->A contract as D3D9.
+    cna_d3d11_test(cna_test_d3d11_depth_contract examples/graphicsdevice_depth_contract_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_depth_contract_cmd cna_test_d3d11_depth_contract)
+    cna_register_backend_test(NAME D3D11_GraphicsDevice_DepthContract
+        COMMAND ${_d3d11_depth_contract_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # Phase DX3: pure-function checks for D3DCommon's format/state/vertex-layout mapping tables --
     # no device/window/GPU needed.
     cna_d3d11_test(cna_test_d3d11_common examples/d3d11_common_test.cpp)

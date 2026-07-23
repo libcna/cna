@@ -49,6 +49,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_Smoke COMMAND ${_d3d9_smoke_cmd}
         TIMEOUT 60 LABELS "D3D9")
 
+    # REMED-GFX-089: backend-neutral public GraphicsDevice/DepthStencilState contract.
+    # A(Default)->B(DepthRead)->C(None)->A on the backbuffer, using only BasicEffect and the
+    # normal public draw API. The smoke test independently covers the offscreen native surface.
+    cna_d3d9_test(cna_test_d3d9_depth_contract examples/graphicsdevice_depth_contract_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_depth_contract_cmd cna_test_d3d9_depth_contract)
+    cna_register_backend_test(NAME D3D9_GraphicsDevice_DepthContract
+        COMMAND ${_d3d9_depth_contract_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
     # D9-82: this backend's first real 3D triangle -- DrawColoredPrimitives/
     # DrawIndexedColoredPrimitives through the real public Game/GraphicsDeviceManager API.
     cna_d3d9_test(cna_test_d3d9_draw examples/d3d9_draw_test.cpp)

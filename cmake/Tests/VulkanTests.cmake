@@ -251,6 +251,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_GraphicsDevice_ClearDepth COMMAND cna_test_vulkan_graphicsdevice_clear_depth
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-089: backend-neutral public GraphicsDevice/DepthStencilState
+        # A(Default)->B(DepthRead)->C(None)->A near/far contract, shared with D3D9/D3D11/Software.
+        cna_vulkan_test(cna_test_vulkan_depth_contract
+                        examples/graphicsdevice_depth_contract_test.cpp)
+        cna_register_backend_test(NAME Vulkan_GraphicsDevice_DepthContract
+            COMMAND cna_test_vulkan_depth_contract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
         # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
         # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
