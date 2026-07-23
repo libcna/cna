@@ -2430,6 +2430,7 @@ existing task.
 | REMED-GFX-061 | The scalar `GpuDrawParams::fogStart`/`fogEnd` fields and the `IGraphicsBackend.hpp` (~`:454`) fog documentation ("D3D backends … keep using fogStart/fogEnd") are stale/vestigial for the D3D family after the GFX-005/010 view-space-fog campaign: D3D9 custom shaders compute view-space fog in-backend (`ComputeFogVectorEXT`) and D3D11/D3D12 D3DCommon stock effects bake the `fogVector` CPU-side, so the scalar object-space fields are consumed only by the few direct-`DrawPrimitivesEx` callers that set them (and by non-D3D backends that predate GFX-010). Not a rendering defect — a documentation/ABI-hygiene item | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | NOT STARTED — recorded, not fixed (a precise comment correction is not unquestionably safe and Phase 11 forbids redesigning the fog ABI in the offset tranche; recommended resolution: documentation cleanup + formally mark `fogStart`/`fogEnd` as retained accepted-and-ignored compat fields, not removal, since direct-backend callers still set them) |
 | REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | NOT STARTED — source-confirmed and recorded, not fixed (separate WebGPU-only **lit** material-composition defect, equivalent in class to GFX-008; GFX-088 made no production/shader changes). |
 | REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | NOT STARTED — recorded, not fixed (pre-existing Vulkan dynamic-state declaration/replay mismatch, unrelated to SkinnedEffect material semantics and not introduced by GFX-088). |
+| REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
 
 #### REMED-BUILD-010 detail
 
@@ -6000,3 +6001,182 @@ Two distinct findings were recorded and left untouched:
 `ba7724f0 test(Task REMED-GFX-088): correct impossible skinned smoke state`; this documentation
 record closes the task. Recommended next GRAPHICS task: **REMED-GFX-089**, the one remaining
 deterministic D3D smoke failure. It was not investigated or modified in this session.
+
+---
+
+### REMED-GFX-089 — D3D9 farther-fragment depth rejection — DONE (test-harness defect; no production defect)
+
+**Final classification: C — D3D9 smoke-helper/test setup defect.** CNA's public D3D9
+`DepthStencilState` path is correct, the required depth surfaces exist and are compatible, and the
+same state works through both DXVK9's D3D9 API and CNA's normal `GraphicsDevice` API. This is not a
+production depth-state mapping defect, a render-target/depth-surface binding defect, or a DXVK9/RADV
+capability defect.
+
+**Exact root cause.** The GFX-077 smoke block's `renderMask()` helper directly called:
+
+```text
+ApplyDepthStencilState(depthEnable=false, depthWrite=false, depthFunc=0, ...)
+```
+
+`CompareFunction` ordinal 0 is `Always`, and CNA correctly maps it to native
+`D3DCMP_ALWAYS` (numeric 8). D3D9 render state is sticky, so the subsequent depth fixture began with:
+
+```text
+before helper: ZENABLE=FALSE, ZWRITEENABLE=FALSE, ZFUNC=D3DCMP_ALWAYS
+after helper:  ZENABLE=TRUE,  ZWRITEENABLE=TRUE,  ZFUNC=D3DCMP_ALWAYS
+```
+
+The fixture called `SetDepthTestEnabled(true)` and `SetDepthWriteEnabled(true)`, but those helper
+methods deliberately change only `D3DRS_ZENABLE` and `D3DRS_ZWRITEENABLE`; neither promises to
+replace the complete current depth state or reset `ZFUNC`. Far-green at z=.8 therefore passed the
+still-active `Always` comparison after near-red at z=.2. The observed green pixel was correct for
+the native state the test actually requested. This tuple is representable by a custom
+`DepthStencilState`; the defect was the fixture's false assumption that toggling two individual
+fields implied the three-field `DepthStencilState.Default` preset.
+
+A focused live native control on the same device, target, depth surface, shader, vertices, clear,
+and draw order changed only `D3DRS_ZFUNC` from `D3DCMP_ALWAYS` to `D3DCMP_LESSEQUAL`; the pixel
+changed from far-green to near-red. That excludes DXVK9's comparison implementation and the draw
+geometry as causes.
+
+**Authoritative public contract and application timing.** `DepthStencilState::Default` is:
+
+```text
+DepthBufferEnable      = true
+DepthBufferWriteEnable = true
+DepthBufferFunction    = CompareFunction::LessEqual
+```
+
+`GraphicsDevice::setDepthStencilStateProperty` copies the state and immediately calls
+`IGraphicsBackend::ApplyDepthStencilState` with every field; there is no deferred D3D9 cache that
+can miss the following draw. D3D9's existing implementation immediately sets:
+
+```text
+D3DRS_ZENABLE      = D3DZB_TRUE
+D3DRS_ZWRITEENABLE = TRUE
+D3DRS_ZFUNC        = D3DCMP_LESSEQUAL
+```
+
+The enum mapping uses an explicit switch, not ordinal/native-enum identity. The focused mapping
+test now locks `Always`, `Less`, `LessEqual`, and `Greater`.
+
+**Exact isolated sequence.** Inspection corrected one premise from the intake: the original failing
+Check Z was on the resized **swap-chain backbuffer**, not an offscreen target. Offscreen behavior was
+then tested independently.
+
+| Input | Backbuffer case |
+|---|---|
+| Target / colour format | swap-chain backbuffer / `D3DFMT_A8R8G8B8` |
+| Size | 96×80 |
+| Depth surface | present and bound, `D3DFMT_D24S8`, 96×80 |
+| Multisampling | none, quality 0 on colour and depth |
+| Viewport | x=0, y=0, 96×80, MinZ=0, MaxZ=1 |
+| Clear | exact (10,10,10,255), depth 1.0, target + Z-buffer flags |
+| Geometry | near red z=.2 first; far green z=.8 second; W=1 |
+| Depth transform | identity W/V/P: post-divide .2/.8; viewport mapping remains .2/.8 |
+| State | public Opaque / all colour channels / CullNone / `DepthStencilState.Default` |
+| Shader | flat vertex colour; no texture, fog, lighting, or alpha blend |
+| Expected / observed | exact near red / exact near red |
+
+The final smoke reads the native device immediately after public state application:
+`ZENABLE=1`, `ZWRITEENABLE=1`, `ZFUNC=4` (`D3DCMP_LESSEQUAL`). The device advertises
+`D3DPRASTERCAPS_ZTEST` and the required `Always`, `Less`, `LessEqual`, and `Greater` Z-comparison
+caps.
+
+**Depth surface, target switching, and clear.**
+
+- The backbuffer's bound depth surface exists and reports D24S8, 96×80, single-sample/q0, exactly
+  matching the active 96×80 single-sample/q0 colour target.
+- A newly created offscreen target has a distinct, target-owned D24S8 surface, 64×64,
+  single-sample/q0. `GetDepthStencilSurface()` returns that exact object while the target is bound;
+  its colour/depth dimensions and multisample mode/quality match. Its viewport is 0,0 64×64,
+  MinZ=0, MaxZ=1.
+- The offscreen near-red→far-green sequence also returns exact near-red through direct colour-surface
+  readback. Unbinding restores the cached backbuffer depth surface.
+- `CreateDepthStencilSurface` checks its HRESULT and succeeded. The clear path requests
+  `D3DCLEAR_ZBUFFER` when the active presentation/target has depth, passes the caller's depth value,
+  checks the `Clear` HRESULT, and succeeded against the active surface.
+- Clear-depth controls are discriminating: clearing to .9 lets a z=.2 red fragment draw; clearing
+  to .1 rejects that identical fragment and leaves the exact clear colour.
+
+DXVK9 reports the D3D9 D24S8 resource through its Vulkan implementation as
+`VK_FORMAT_D32_SFLOAT_S8_UINT`; this is a translation-layer implementation detail. The observable
+D3D9 resource format remains D24S8 and all compatibility/bind/draw controls succeed.
+
+**D3D9 vs D3D11 sibling trace.**
+
+| State/operation | D3D9 native setting | D3D11 native setting |
+|---|---|---|
+| DepthBufferEnable | `D3DRS_ZENABLE=D3DZB_TRUE` | state-object `DepthEnable=TRUE` |
+| DepthBufferWriteEnable | `D3DRS_ZWRITEENABLE=TRUE` | `DepthWriteMask=ALL` |
+| DepthBufferFunction | `D3DRS_ZFUNC=D3DCMP_LESSEQUAL` | `DepthFunc=D3D11_COMPARISON_LESS_EQUAL` |
+| Depth clear | `Clear(...,D3DCLEAR_ZBUFFER,...,1.0,...)` | `ClearDepthStencilView(...,D3D11_CLEAR_DEPTH,1.0,...)` |
+| Backbuffer depth resource | cached/bound D24S8 surface | current backbuffer DSV |
+| Offscreen bind | `SetRenderTarget` + target `SetDepthStencilSurface` | `OMSetRenderTargets` + target DSV |
+| Target unbind | restore backbuffer + cached default depth surface | restore backbuffer RTV + default DSV |
+| Viewport depth range | `D3DVIEWPORT9.MinZ=0, MaxZ=1` | `D3D11_VIEWPORT.MinDepth=0, MaxDepth=1` |
+
+The D3D11 helper rebuilds a complete tracked depth-stencil state object, and intervening public/
+SpriteBatch state had left its function at LessEqual, so the old sibling happened to pass. It now
+also establishes public `DepthStencilState.Default` explicitly before its false→true helper toggle,
+making the oracle independent of preceding fixture order. D3D12's existing offscreen Y0–Y4 control
+already applies a complete LessEqual/write-enabled state and passes near/far, reversed order, and
+depth-disabled cases.
+
+**Behavioral matrix and state restoration.**
+
+| Case | State | Exact result |
+|---|---|---|
+| A | test ON, write ON, LessEqual | near red survives far green |
+| B | test ON, write OFF, LessEqual | far green wins because near wrote no depth |
+| C | test OFF | far green wins by painter's order |
+| A again | restored Default | near red again, byte-identical to first A |
+| Always control | far .8 vs clear .1 | green passes |
+| Less controls | near .2 / far .8 vs clear .5 | red passes / far leaves clear |
+| Greater controls | far .8 / near .2 vs clear .5 | green passes / near leaves clear |
+
+The two saved final D3D9 smoke logs are byte-for-byte identical
+(`c5cde3c144ddeed97636b2fecf2bd2e2f79ac54c01fbcd9a8eb44802713eb2e1`);
+all three final repetitions reported the same native state/pixels and **62/62**.
+
+**Public regression.** `examples/graphicsdevice_depth_contract_test.cpp` uses only
+`GraphicsDevice`, `DepthStencilState`, `BasicEffect`, `DrawUserPrimitives`, and backbuffer readback.
+It runs the A(Default)→B(DepthRead)→C(None)→A sequence at 64×64 with D24S8, Opaque, CullNone,
+identity transforms, and exact red/green pixels. Results:
+
+| Backend | Result |
+|---|---|
+| D3D9 / Wine + DXVK9 2.6.0 / AMD Radeon 780M (RADV 25.0.7) | **4/4** |
+| D3D11 / Wine + DXVK 2.6.0 / same GPU | **4/4**; sibling smoke **163/163** |
+| Vulkan / real AMD Radeon 780M, KHRONOS validation enabled | **4/4**, zero validation messages/VUIDs |
+| Software | **3/3 supported contract checks** (Default, None, restored Default); DepthRead recorded but skipped because GFX-083 already documents Software v1's fixed-LessEqual/write-on-pass boundary |
+
+Software's full **14/14** shard remains green, including GFX-079 custom viewport
+MinDepth/MaxDepth. The D3D12 offscreen Y0–Y4 depth sanity is green and its full smoke reports
+`RESULT: ALL PASS: 0 failure(s)`.
+
+**D3D9 regressions.** `D3D9_Common` is **32/32**. The complete D3D9 CTest shard is **21/21**,
+including the full smoke **62/62**, public depth contract, GFX-060 draw offsets, BlendState,
+GFX-077 colour-write/multisample-mask restoration, RenderTarget/SpriteBatch, stencil, culling,
+shader dispatch **23/23**, and reachable GFX-088 skinned vertex-colour **5/5**. No assertion or colour
+tolerance was weakened.
+
+**HRESULT audit / new finding.** `CreateDepthStencilSurface` and every relevant depth-clear call
+already check HRESULTs. However, D3D9 currently discards HRESULTs from `SetRenderState` (including
+Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface
+acquisition/restoration calls. Those calls demonstrably succeeded here—the native readbacks,
+bound-object identity, descriptors, and exact pixels cannot otherwise agree—so they do not explain
+GFX-089. The separate reliability gap is recorded, without modification, as **REMED-GFX-092**.
+
+**Changes and scope.** Commit
+`af4a915c test(Task REMED-GFX-089): correct D3D9 smoke depth-state setup`:
+
+- establishes complete reachable state in the D3D9/D3D11 direct smoke fixtures;
+- strengthens D3D9 Check Z with native state, caps, depth-surface, RT compatibility, clear-depth,
+  write/test toggle, compare-function, and A→B→A evidence;
+- extends the pure D3D9 comparison mapping test;
+- adds/registers the shared public depth contract on D3D9, D3D11, Vulkan, and Software.
+
+Production, shaders, generated artifacts, and `audit/` have zero diff. GFX-090, GFX-091, GFX-061,
+and the WebGPU SpriteBatch BlendState counterpart were not begun. Recommended next GRAPHICS task:
+**REMED-GFX-090**. Do not begin it as part of this record.
