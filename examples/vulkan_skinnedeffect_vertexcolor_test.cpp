@@ -25,6 +25,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -92,7 +93,8 @@ class VulkanSkinnedEffectVertexColorTest : public Game
     }
 
     Color renderWith(GraphicsDevice& dev, Texture2D& tex, bool vertexColorEnabled,
-                      std::uint8_t vr, std::uint8_t vg, std::uint8_t vb, std::uint8_t va)
+                      std::uint8_t vr, std::uint8_t vg, std::uint8_t vb, std::uint8_t va,
+                      const BlendState& blendState)
     {
         SkinnedEffect fx(dev);
         fx.setTextureProperty(&tex);
@@ -132,7 +134,7 @@ class VulkanSkinnedEffectVertexColorTest : public Game
         Color got(0, 0, 0, 0);
         for (int i = 0; i < 20; ++i) {
             dev.Clear(Color(0, 0, 0, 255));
-            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setBlendStateProperty(blendState);
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             dev.SetVertexBuffer(&vb2);
             fx.Apply();
@@ -158,14 +160,16 @@ protected:
 
         // (a) VertexColorEnabled=false: per-vertex (200,100,50) must be ignored entirely.
         //   FragColor.rgb = litRGB*tex.rgb = (0.4,0.3,0.2) -> round(*255) = (102,77,51)
-        const Color a = renderWith(dev, whiteTex, false, 200, 100, 50, 255);
+        const Color a = renderWith(dev, whiteTex, false, 200, 100, 50, 255,
+                                   BlendState::Opaque);
         check(matches(a, Color(102, 77, 51, 255)),
               "(a) VertexColorEnabled=false: vertex color ignored, litRGB*tex only", a, "(102,77,51)");
 
         // (b) VertexColorEnabled=true, distinctive vertex color (200,100,50,255):
         //   FragColor.rgb = litRGB*tex.rgb*vc.rgb = (0.4,0.3,0.2)*(200,100,50)/255
         //                  = (0.313725, 0.117647, 0.039216) -> round(*255) = (80,30,10)
-        const Color b = renderWith(dev, whiteTex, true, 200, 100, 50, 255);
+        const Color b = renderWith(dev, whiteTex, true, 200, 100, 50, 255,
+                                   BlendState::Opaque);
         check(matches(b, Color(80, 30, 10, 255)),
               "(b) VertexColorEnabled=true: pixel == litRGB*tex*VertexColor (component-wise)", b, "(80,30,10)");
         check(!matches(b, a), "(b) differs from (a) -- VertexColorEnabled genuinely gates the multiply",
@@ -174,9 +178,29 @@ protected:
         // (c) VertexColorEnabled=true, pure black vertex color: must zero the FINAL combined
         // output exactly, independent of the lighting math (mirrors
         // easygl_skinnedeffect_vertexcolor_test.cpp's own black-vertex-color technique).
-        const Color c = renderWith(dev, whiteTex, true, 0, 0, 0, 255);
+        const Color c = renderWith(dev, whiteTex, true, 0, 0, 0, 255,
+                                   BlendState::Opaque);
         check(matches(c, Color(0, 0, 0, 255), 6),
               "(c) VertexColorEnabled=true, black vertex color: pixel == (0,0,0)", c, "(0,0,0)");
+
+        // REMED-GFX-091: the SkinnedEffect pipeline family that exposed VUID 08608 must also
+        // declare/replay the dynamic value when its STATIC equation genuinely uses it.
+        BlendState constant;
+        constant.setColorSourceBlendProperty(Blend::BlendFactor);
+        constant.setColorDestinationBlendProperty(Blend::Zero);
+        constant.setAlphaSourceBlendProperty(Blend::One);
+        constant.setAlphaDestinationBlendProperty(Blend::Zero);
+        constant.setBlendFactorProperty(Color(64, 128, 192, 255));
+        // Base lit output is (102,77,51); component-wise constant multiply ~= (26,39,38).
+        const Color d = renderWith(dev, whiteTex, false, 200, 100, 50, 255, constant);
+        check(matches(d, Color(26, 39, 38, 255)),
+              "(d) SkinnedEffect BlendFactor: litRGB*constant", d, "~(26,39,38)");
+
+        constant.setColorSourceBlendProperty(Blend::InverseBlendFactor);
+        // (102,77,51) * (191,127,63) / 255 ~= (76,38,13).
+        const Color e = renderWith(dev, whiteTex, false, 200, 100, 50, 255, constant);
+        check(matches(e, Color(76, 38, 13, 255)),
+              "(e) SkinnedEffect InverseBlendFactor: litRGB*(1-constant)", e, "~(76,38,13)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();

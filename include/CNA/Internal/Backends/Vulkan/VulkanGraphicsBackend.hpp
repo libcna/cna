@@ -375,8 +375,8 @@ namespace CNA::Internal::Backends::Vulkan
             // SpriteBatch filling a render target uses the constant active for this batch, not the
             // frame-global value the backend applied once per frame at backbuffer-pass begin.
             // Defaults to (1,1,1,1) = XNA Color::White so a batch that predates any SetBlendFactor
-            // uses the correct XNA default. Only meaningful for BlendFactor/InverseBlendFactor
-            // factors, but replayed unconditionally per batch (inert otherwise), like viewport/scissor.
+            // uses the correct XNA default. Replayed only when the batch's normalized blend
+            // equation uses BlendFactor/InverseBlendFactor (REMED-GFX-091).
             float                       blendFactorR = 1.0f, blendFactorG = 1.0f,
                                         blendFactorB = 1.0f, blendFactorA = 1.0f;
             // REMED-GFX-071: the batch's full BlendState -- blendEnable + the six per-channel
@@ -780,6 +780,19 @@ namespace CNA::Internal::Backends::Vulkan
         // cascading invalidation of live render targets is tracked separately as a follow-up.
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
         [[nodiscard]] int GetMultiSampleCount() const override;
+        // REMED-GFX-091 test diagnostic: total graphics-pipeline cache entries. BlendFactor's
+        // RGBA value is dynamic and must never increase this count; only static state does.
+        [[nodiscard]] std::size_t GetGraphicsPipelineCacheEntryCountEXT() const noexcept
+        {
+            return pipelines2DByDepthFmt_.size() + pipelines2DMsaaByDepthFmt_.size()
+                + pipelines3D_.size() + pipelinesAlphaTest3D_.size()
+                + pipelinesDualTex3D_.size() + pipelinesEnvMap3D_.size()
+                + pipelinesLitTextured3D_.size() + pipelinesLitTextured3DVertexLit_.size()
+                + pipelinesFogColored3D_.size() + pipelinesFogTex3D_.size()
+                + pipelinesSkinned3D_.size() + pipelinesSkinned3DVertexLit_.size()
+                + pipelinesPbr3D_.size() + pipelinesPbrSkinned3D_.size()
+                + pipelinesInstanced3D_.size();
+        }
 
         SDL_Window*  GetWindowInternal()   const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
@@ -1280,8 +1293,9 @@ namespace CNA::Internal::Backends::Vulkan
             // (PushPending3DDraw), so each queued draw replays the constant that was active when it
             // was issued. Pre-fix, RT passes never set the blend constant at all, and multiple
             // BlendFactor values in one frame collapsed to the single record-time read (last-wins).
-            // Defaults to (1,1,1,1) = XNA Color::White. Replayed per draw via vkCmdSetBlendConstants
-            // (VK_DYNAMIC_STATE_BLEND_CONSTANTS), unconditionally (inert for non-constant factors).
+            // Defaults to (1,1,1,1) = XNA Color::White. Replayed per draw via
+            // vkCmdSetBlendConstants only when the normalized blend equation uses
+            // BlendFactor/InverseBlendFactor (VK_DYNAMIC_STATE_BLEND_CONSTANTS, REMED-GFX-091).
             float                   blendFactorR = 1.0f, blendFactorG = 1.0f,
                                     blendFactorB = 1.0f, blendFactorA = 1.0f;
         };

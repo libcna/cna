@@ -6,6 +6,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <iostream>
 #include <limits>
@@ -2526,13 +2527,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
 
+        // This fixed custom-Effect pipeline uses SRC_ALPHA/ONE_MINUS_SRC_ALPHA; no factor in its
+        // static equation consumes a blend constant.
         VkDynamicState dynStates[] = {
             VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
         };
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
 
         VkPipelineDepthStencilStateCreateInfo dsInfo{};
         dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2640,6 +2642,35 @@ namespace CNA::Internal::Backends::Vulkan
 
     // REMED-GFX-071: forward-declared here because the 2D sprite pipelines (below) reuse the exact
     // same XNA->Vulkan blend translation + cache-key packing the 3D path defines further down.
+    static VkBlendFactor ToVkBlendFactor(int xnaBlend);
+    static bool UsesBlendConstants(bool blend, const BlendKeyParams& bp)
+    {
+        if (!blend) return false;
+        const auto isConstant = [](VkBlendFactor factor) {
+            return factor == VK_BLEND_FACTOR_CONSTANT_COLOR
+                || factor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR
+                || factor == VK_BLEND_FACTOR_CONSTANT_ALPHA
+                || factor == VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+        };
+        // Derive this from the canonical XNA -> Vulkan mapping used by pipeline creation. This
+        // single predicate controls both VK_DYNAMIC_STATE_BLEND_CONSTANTS declaration and command
+        // replay, so the two sides cannot disagree as new Blend values are mapped.
+        return isConstant(ToVkBlendFactor(bp.colorSrc))
+            || isConstant(ToVkBlendFactor(bp.colorDst))
+            || isConstant(ToVkBlendFactor(bp.alphaSrc))
+            || isConstant(ToVkBlendFactor(bp.alphaDst));
+    }
+    template<std::size_t N>
+    static uint32_t AppendBlendConstantsDynamicState(
+        VkDynamicState (&states)[N], uint32_t count, bool blend, const BlendKeyParams& bp)
+    {
+        if (UsesBlendConstants(blend, bp)) {
+            assert(count < N);
+            states[count++] = VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+        }
+        return count;
+    }
+
     static uint32_t PackBlendBits(bool blend, const BlendKeyParams& bp);
     static uint32_t PackColorWriteBits(const BlendKeyParams& bp); // REMED-GFX-077
     static void FillBlendAttachmentState(VkPipelineColorBlendAttachmentState& cba, bool blend,
@@ -2726,16 +2757,17 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
 
-        // Dynamic viewport/scissor/blend-constants so resize and state changes
-        // don't require pipeline recreation.
-        VkDynamicState dynStates[] = {
+        // Blend factors/functions are static pipeline state. Only the RGBA constant value is
+        // dynamic, and only when this pipeline's normalized equation actually consumes it.
+        VkDynamicState dynStates[3] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
-            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
         };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 2, blend, bp);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         // Push constant: vec2 viewportSize (8 bytes) for NDC conversion
         VkPushConstantRange pcRange{};
@@ -3067,12 +3099,14 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = 1; cbs.pAttachments = &cba;
 
-        VkDynamicState dynStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+        VkDynamicState dynStates[3] = {
+            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
         };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 2, blend, bp);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 3; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         if (pipelineLayout2D_ == VK_NULL_HANDLE) {
             VkPushConstantRange pcRange{};
@@ -3450,18 +3484,19 @@ namespace CNA::Internal::Backends::Vulkan
         // set per-draw via vkCmdSetStencilReference/CompareMask/WriteMask (see draw3DFor) --
         // not baked into the pipeline, so DepthStencilState.ReferenceStencil/StencilMask/
         // StencilWriteMask changes never need a new pipeline variant.
-        VkDynamicState dynStates[] = {
+        VkDynamicState dynStates[7] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
-            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
             VK_DYNAMIC_STATE_DEPTH_BIAS,
             VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
             VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
             VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 7; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -3916,14 +3951,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.attachmentCount = nColor;
         cbs.pAttachments    = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         // Task 911: render pass selected per the target's own real depth format -- see
         // PickRTPipelineRenderPass().
@@ -4170,14 +4207,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         // Task 911: render pass selected per the target's own real depth format -- see
         // PickRTPipelineRenderPass().
@@ -4481,14 +4520,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         // Task 911: render pass selected per the target's own real depth format -- see
         // PickRTPipelineRenderPass().
@@ -4714,14 +4755,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         // Task 911: render pass selected per the target's own real depth format -- see
         // PickRTPipelineRenderPass().
@@ -4834,14 +4877,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
 
@@ -5061,18 +5106,19 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.attachmentCount = static_cast<uint32_t>(cbaVec.size());
         cbs.pAttachments    = cbaVec.data();
 
-        VkDynamicState dynStates[] = {
+        VkDynamicState dynStates[7] = {
             VK_DYNAMIC_STATE_VIEWPORT,
             VK_DYNAMIC_STATE_SCISSOR,
-            VK_DYNAMIC_STATE_BLEND_CONSTANTS,
             VK_DYNAMIC_STATE_DEPTH_BIAS,
             VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
             VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
             VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 7; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -5201,15 +5247,17 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.attachmentCount = static_cast<uint32_t>(cbaVec.size());
         cbs.pAttachments    = cbaVec.data();
 
-        VkDynamicState dynStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
+        VkDynamicState dynStates[7] = {
+            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
             VK_DYNAMIC_STATE_DEPTH_BIAS,
             VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK, VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
             VK_DYNAMIC_STATE_STENCIL_REFERENCE,
         };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 7; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         VkGraphicsPipelineCreateInfo pci{};
         pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -5478,14 +5526,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         // Task 911: render pass selected per the target's own real depth format -- see
         // PickRTPipelineRenderPass().
@@ -5609,14 +5659,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
 
@@ -5844,14 +5896,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
 
@@ -6100,14 +6154,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         VkRenderPass rp = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
 
@@ -6232,14 +6288,16 @@ namespace CNA::Internal::Backends::Vulkan
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
 
-        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
-                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
-                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkDynamicState dynStates[7] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                        VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                        VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                        VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        const uint32_t dynStateCount =
+            AppendBlendConstantsDynamicState(dynStates, 6, blend, blendParams);
         VkPipelineDynamicStateCreateInfo dyn{};
         dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+        dyn.dynamicStateCount = dynStateCount; dyn.pDynamicStates = dynStates;
 
         // Task 911: render pass selected per the target's own real depth format -- see
         // PickRTPipelineRenderPass().
@@ -6667,15 +6725,16 @@ namespace CNA::Internal::Backends::Vulkan
                                                      snapshot->viewportMinDepth,
                                                      snapshot->viewportMaxDepth, fbW, fbH);
                     vkCmdSetViewport(cb, 0, 1, &bvp);
-                    // REMED-GFX-070: apply this batch's captured blend constant (GraphicsDevice.
-                    // BlendFactor). Direct R/G/B/A -> VkBlendConstants[4], no swap/premultiply/sRGB
-                    // (a numeric pipeline factor, not a framebuffer color). Set unconditionally: the
-                    // constant is inert for pipelines whose blend factors don't reference
-                    // CONSTANT_COLOR, and issuing it also satisfies VK_DYNAMIC_STATE_BLEND_CONSTANTS
-                    // for every blend-enabled RT-pass draw (pre-fix VUID-vkCmdDraw-None-07835).
-                    const float bbc[4] = { snapshot->blendFactorR, snapshot->blendFactorG,
-                                           snapshot->blendFactorB, snapshot->blendFactorA };
-                    vkCmdSetBlendConstants(cb, bbc);
+                    // REMED-GFX-070/GFX-091: replay the batch's captured RGBA value only when the
+                    // selected built-in pipeline's static blend equation consumes it. Custom
+                    // Effect pipelines use their own fixed SRC_ALPHA equation. UsesBlendConstants
+                    // is also the pipeline dynamic-state declaration predicate.
+                    if (!snapshot->hasCustomEffect
+                        && UsesBlendConstants(snapshot->blendEnabled, snapshot->blendParams)) {
+                        const float bbc[4] = { snapshot->blendFactorR, snapshot->blendFactorG,
+                                               snapshot->blendFactorB, snapshot->blendFactorA };
+                        vkCmdSetBlendConstants(cb, bbc);
+                    }
                 }
 
                 for (const auto& d : draws) {
@@ -6782,15 +6841,6 @@ namespace CNA::Internal::Backends::Vulkan
                                                      draw.viewportMinDepth, draw.viewportMaxDepth,
                                                      fbW, fbH);
                     vkCmdSetViewport(cb, 0, 1, &dvp);
-                    // REMED-GFX-070: apply this draw's captured blend constant (GraphicsDevice.
-                    // BlendFactor). Direct R/G/B/A -> VkBlendConstants[4], no swap/premultiply/sRGB.
-                    // Set unconditionally (inert for non-constant factors) so a custom BlendFactor
-                    // set while a render target was bound is honored in the RT pass, not just the
-                    // backbuffer, and every blend-enabled RT draw satisfies its declared
-                    // VK_DYNAMIC_STATE_BLEND_CONSTANTS (pre-fix VUID-vkCmdDraw-None-07835).
-                    const float dbc[4] = { draw.blendFactorR, draw.blendFactorG,
-                                           draw.blendFactorB, draw.blendFactorA };
-                    vkCmdSetBlendConstants(cb, dbc);
                 }
 
                 const uint32_t nColor = targetRT ? targetRT->GetColorAttachmentCount() : 1u;
@@ -6874,6 +6924,15 @@ namespace CNA::Internal::Backends::Vulkan
                 if (pipe != lastPipe) {
                     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
                     lastPipe = pipe;
+                }
+                // REMED-GFX-070/GFX-091: blend factors/functions are static and already selected
+                // by `pipe`; only a constant-dependent equation declares the RGBA value dynamic.
+                // Bind first, then replay this draw's by-value snapshot. Emitting this command for
+                // an ordinary static pipeline is invalid (VUID-vkCmdDraw-None-08608).
+                if (UsesBlendConstants(draw.blend, draw.blendParams)) {
+                    const float dbc[4] = { draw.blendFactorR, draw.blendFactorG,
+                                           draw.blendFactorB, draw.blendFactorA };
+                    vkCmdSetBlendConstants(cb, dbc);
                 }
                 // All 3D pipelines declare VK_DYNAMIC_STATE_DEPTH_BIAS, so the dynamic
                 // depth bias must be set before each draw. Zero values = no bias.
@@ -7202,15 +7261,6 @@ namespace CNA::Internal::Backends::Vulkan
                 sc = { {scissorX_, scissorY_}, {scissorW_, scissorH_} };
             vkCmdSetScissor(cb, 0, 1, &sc);
         }
-        {
-            // REMED-GFX-070: backbuffer pass-begin default blend constant (mirrors the pass-begin
-            // viewport/scissor defaults above). Now redundant — drawSpritesFor/draw3DFor replay each
-            // draw/batch's captured constant per draw — but kept so a pass that only clears (no
-            // draws) still has a defined blend constant, and so the default matches pre-fix behavior.
-            float bc[4] = { blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_ };
-            vkCmdSetBlendConstants(cb, bc);
-        }
-
         const float vpW2D = (virtualWidth_  > 0) ? static_cast<float>(virtualWidth_)
                                                   : static_cast<float>(swapchainExtent_.width);
         const float vpH2D = (virtualHeight_ > 0) ? static_cast<float>(virtualHeight_)

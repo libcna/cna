@@ -76,12 +76,15 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
 
 #include <cstdio>
+#include <cstddef>
 #include <memory>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
+using CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend;
 
 static constexpr int kBBW = 64;   // backbuffer width
 static constexpr int kBBH = 64;   // backbuffer height (!= RT height, to catch dimension leaks)
@@ -239,6 +242,23 @@ class VulkanRenderTargetBlendFactorTest : public Game
         unbindAndBlit(dev);
     }
 
+    void renderCacheStress(GraphicsDevice& dev)
+    {
+        beginRT(dev);
+        dev.setBlendStateProperty(makeBlend(Blend::BlendFactor, Blend::Zero,
+                                            Blend::One, Blend::Zero, Color::Red));
+        for (int i = 0; i < 64; ++i)
+        {
+            const Color factor = (i % 3 == 0) ? Color(0, 255, 0, 255)
+                               : (i % 3 == 1) ? Color(0, 0, 255, 255)
+                                              : Color(255, 0, 0, 255);
+            dev.setBlendFactorProperty(factor);
+            drawQuad(dev, -1.f, 1.f, Color::White);
+        }
+        // i=63 selects GREEN, which must be the observable final dynamic value.
+        unbindAndBlit(dev);
+    }
+
 protected:
     void Initialize() override
     {
@@ -352,6 +372,22 @@ protected:
             check(isRed(l),  "pipeline P1 constant-dependent", l, "RED");
             check(isBlue(m), "pipeline P2 ordinary Opaque", m, "BLUE");
             check(isRed(r),  "pipeline P3 reused constant-dependent", r, "RED");
+            ++frame_;
+            return;
+        }
+
+        if (frame_ == 6)
+        {
+            auto& backend = static_cast<VulkanGraphicsBackend&>(dev.GetBackend());
+            const std::size_t before = backend.GetGraphicsPipelineCacheEntryCountEXT();
+            renderCacheStress(dev);
+            const Color c = readAt(dev, cx, cy);
+            const std::size_t after = backend.GetGraphicsPipelineCacheEntryCountEXT();
+            check(isGreen(c), "64-draw BlendFactor cache stress final pixel", c, "GREEN");
+            const bool stable = before == after;
+            std::printf("[%s] BlendFactor RGBA cache cardinality: before=%zu after=%zu\n",
+                        stable ? "PASS" : "FAIL", before, after);
+            if (stable) ++pass_; else ++fail_;
             std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
             Exit();
         }
