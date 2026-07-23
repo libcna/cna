@@ -2429,8 +2429,10 @@ existing task.
 | REMED-GFX-060 | Every effect-aware D3D9 draw site hardcoded the vertex/index offsets (`DrawPrimitive(…, 0 /*StartVertex*/)` and `DrawIndexedPrimitive(…, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount, 0 /*StartIndex*/, …)`), silently dropping the XNA `DrawPrimitives(vertexStart)` / `DrawIndexedPrimitives(baseVertex, startIndex)` offsets that `GraphicsDevice` threads through `GpuDrawParams`. Same defect class as `REMED-GFX-020` (D3D11/D3D12), spread across 15 sites in 4 files (`D3D9EffectDraw`/`D3D9PbrDraw`/`D3D9SkinnedVertexColorDraw`/`D3D9InstancedDraw`) | HIGH | P2 | `REMED-GFX-020` Phase-12 cross-backend draw-offset sweep | **DONE (2026-07-21, `aa23eed2`+`d2491a17`)** — fixed + runtime-verified on real DXVK 2.6.0 (new `D3D9_DrawOffset` 0/7→7/7, full D3D9 shard 20/20, D3D11 GFX-020 regression still 6/6). See detail section below. |
 | REMED-GFX-061 | The scalar `GpuDrawParams::fogStart`/`fogEnd` fields and the `IGraphicsBackend.hpp` (~`:454`) fog documentation ("D3D backends … keep using fogStart/fogEnd") are stale/vestigial for the D3D family after the GFX-005/010 view-space-fog campaign: D3D9 custom shaders compute view-space fog in-backend (`ComputeFogVectorEXT`) and D3D11/D3D12 D3DCommon stock effects bake the `fogVector` CPU-side, so the scalar object-space fields are consumed only by the few direct-`DrawPrimitivesEx` callers that set them (and by non-D3D backends that predate GFX-010). Not a rendering defect — a documentation/ABI-hygiene item | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | NOT STARTED — recorded, not fixed (a precise comment correction is not unquestionably safe and Phase 11 forbids redesigning the fog ABI in the offset tranche; recommended resolution: documentation cleanup + formally mark `fogStart`/`fogEnd` as retained accepted-and-ignored compat fields, not removal, since direct-backend callers still set them) |
 | REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | NOT STARTED — source-confirmed and recorded, not fixed (separate WebGPU-only **lit** material-composition defect, equivalent in class to GFX-008; GFX-088 made no production/shader changes). |
-| REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | NOT STARTED — recorded, not fixed (pre-existing Vulkan dynamic-state declaration/replay mismatch, unrelated to SkinnedEffect material semantics and not introduced by GFX-088). |
+| REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | **DONE and VERIFIED (KHRONOS validation loaded; Xvfb/llvmpipe + AMD Radeon 780M/RADV)** — real production validity defect. One normalized mapping-derived predicate now conditionally declares `VK_DYNAMIC_STATE_BLEND_CONSTANTS` and conditionally replays the captured value after pipeline bind. Per-draw/per-batch capture is preserved; factor/function state stays static and pipeline-keyed; RGBA stays dynamic and outside the key. Pre-fix minimal test: pixels 4/4 but CTest 0/1 on exact VUID; post-fix generic 3D 12/12, SpriteBatch 23/23, specialized SkinnedEffect 6/6, targeted shard 36/36, zero 08608, cache 8→8. Full Vulkan 156/158 with documented `DepthBias` plus a baseline-identical cube-MSAA failure; separate Texture3D `VUID-09600` spawned GFX-093 and cube-MSAA spawned GFX-094. test `ed2b7f74`, fix `368e011e`. |
 | REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
+| REMED-GFX-093 | Vulkan Texture3D nonzero-mip SetData/GetData copies the requested mip but transitions only mip 0 because the shared `TransitionImageLayout` barrier hardcodes `{baseMipLevel=0, levelCount=1}`. The sampled 3D view spans all mip levels and its descriptor claims `SHADER_READ_ONLY_OPTIMAL`; validation therefore reports mip 1/2 still in transfer layouts at draw. | LOW | P3 | REMED-GFX-091 full Vulkan validation sweep | NOT STARTED — isolated `Vulkan_Texture3D_Mip_RoundTrip` reproduces four `VUID-vkCmdDraw-None-09600` messages while every pixel assertion passes. Separate image-subresource-layout task; recorded only, not fixed. |
+| REMED-GFX-094 | `Vulkan_RenderTargetCube_MsaaResolve` applies MSAA but samples black after drawing all six faces and unbinding the target. | LOW | P3 | REMED-GFX-091 full Vulkan regression sweep | NOT STARTED — reproduced on Xvfb/llvmpipe (4×) and real AMD Radeon 780M/RADV (8×). A clean build of pre-GFX-091 commit `67300e01` fails identically on AMD, so GFX-091 did not introduce it. Separate RT-cube/MSAA task; recorded only, not fixed. |
 
 #### REMED-BUILD-010 detail
 
@@ -6179,4 +6181,178 @@ GFX-089. The separate reliability gap is recorded, without modification, as **RE
 
 Production, shaders, generated artifacts, and `audit/` have zero diff. GFX-090, GFX-091, GFX-061,
 and the WebGPU SpriteBatch BlendState counterpart were not begun. Recommended next GRAPHICS task:
+**REMED-GFX-090**. Do not begin it as part of this record.
+
+---
+
+### REMED-GFX-091 — Vulkan blend-constant replay validity — DONE (production fix)
+
+**Final classification: REAL PRODUCTION VULKAN VALIDITY DEFECT.** GFX-070's by-value
+`GraphicsDevice.BlendFactor` capture was correct and remains required, but its command replay and
+pipeline declarations disagreed. Pixel output happened to remain correct on the observed drivers;
+the recorded command stream was nevertheless invalid Vulkan. This was not a test-harness defect,
+and no XNA/CNA public state was fabricated by the reproducer.
+
+**Exact Vulkan rule and pre-fix sequence.** For
+[`VUID-vkCmdDraw-None-08608`](https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdDraw-None-08608),
+if a graphics pipeline is bound, no dynamic-state setter may have been called since that bind for a
+state which that pipeline specifies statically. The minimal existing reproducer is
+`Vulkan_SkinnedEffect_VertexColor_Reused`, which records two draws through the same specialized
+SkinnedEffect pipeline:
+
+```text
+draw 1: vkCmdSetBlendConstants(captured value)
+        vkCmdBindPipeline(P; blend constants static)
+        vkCmdDraw                           // valid: bind came after the setter
+
+draw 2: P is reused, so lastPipe == P and no bind occurs
+        vkCmdSetBlendConstants(captured value)
+        vkCmdDraw                           // invalid: setter occurred since P was bound
+```
+
+KHRONOS validation reported that exact command/pipeline mismatch. The four pixel assertions passed,
+but the new exact CTest `FAIL_REGULAR_EXPRESSION` made the pre-fix run fail **0/1** on
+`VUID-vkCmdDraw-None-08608`. This keeps validation authoritative instead of treating process exit 0
+or visually-correct pixels as sufficient.
+
+**Static versus dynamic XNA/Vulkan state.** `BlendState`'s enable, source/destination factors, colour
+and alpha operations, attachment write masks, and multisample mask are graphics-pipeline state.
+They remain normalized into `BlendKeyParams` and pipeline-keyed (`PackBlendBits`,
+`PackColorWriteBits`, `sampleMask`). The four-component blend-constant VALUE is the only dynamic
+piece. It remains captured by value in `Pending3DDraw` / `BatchSnapshot` and deliberately does not
+enter any pipeline cache key.
+
+The complete CNA `Blend` mapping is One, Zero, SourceColor, InverseSourceColor, SourceAlpha,
+InverseSourceAlpha, DestinationColor, InverseDestinationColor, DestinationAlpha,
+InverseDestinationAlpha, BlendFactor, InverseBlendFactor, and SourceAlphaSaturation. Only:
+
+```text
+BlendFactor        -> VK_BLEND_FACTOR_CONSTANT_COLOR
+InverseBlendFactor -> VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR
+```
+
+consume `VkPipelineColorBlendStateCreateInfo::blendConstants`. The same mapping is used for colour
+and alpha source/destination fields; colour consumes RGB and an alpha equation consumes the
+constant's A component. Tests cover source, destination, colour, alpha, BlendFactor, and
+InverseBlendFactor. CNA's authoritative default `GraphicsDevice.BlendFactor` remains
+`Color::White` = (1,1,1,1), and is captured like any other value.
+
+**Pipeline-family inventory before the fix.**
+
+| Pipeline family | Configurable BlendState | Pre-fix blend-constant declaration | Pre-fix validity |
+|---|---:|---|---|
+| SpriteBatch 2D / 2D MSAA | yes | dynamic unconditionally | valid but over-declared/replayed |
+| generic 3D (BasicEffect/raw) | yes | dynamic unconditionally | valid but over-declared/replayed |
+| FogColored3D / FogTex3D | yes | dynamic unconditionally | valid but over-declared/replayed |
+| AlphaTest3D | yes | **static** | invalid when reused after replay |
+| DualTex3D | yes | **static** | invalid when reused after replay |
+| EnvMap3D | yes | **static** | invalid when reused after replay |
+| LitTextured3D / vertex-lit variant | yes | **static** | invalid when reused after replay |
+| Skinned3D / vertex-lit variant | yes | **static** | invalid when reused after replay |
+| Pbr3D / PbrSkinned3D | yes | **static** | invalid when reused after replay |
+| Instanced3D | yes | **static** | invalid when reused after replay |
+| custom SpriteBatch Effect | fixed SRC_ALPHA / ONE_MINUS_SRC_ALPHA equation | dynamic unconditionally | valid but unnecessary |
+
+Thus ten specialized 3D families were directly exposed to 08608; the SkinnedEffect case was simply
+the first pipeline-reuse sequence on which validation observed it. Every one of the 16 Vulkan
+graphics-pipeline creation sites was inspected, including backbuffer/RT, MRT, depth-format, and MSAA
+variants.
+
+**Chosen architecture: conditional declaration plus conditional replay.** A new
+`UsesBlendConstants(bool, BlendKeyParams)` derives its answer from the canonical
+`ToVkBlendFactor` mapping. `AppendBlendConstantsDynamicState` uses it while every configurable
+pipeline is created; the draw/batch replay uses the same predicate. The final order is:
+
+```text
+select/bind the keyed graphics pipeline
+if its normalized equation consumes a constant:
+    vkCmdSetBlendConstants(captured-per-draw-or-batch RGBA)
+set/bind the remaining dynamic state and resources
+draw
+```
+
+The fixed custom-Effect pipeline never consumes a constant, so it declares only viewport/scissor
+and skips blend-constant replay. The unconditional frame/pass-begin setter was removed. A debug
+assert guards dynamic-state array capacity, while the shared predicate structurally prevents
+pipeline declaration and replay from diverging.
+
+Declaring blend constants dynamic on every pipeline (design A) would also make an unconditional
+setter legal, but would retain unnecessary dynamic state and commands on Opaque, AlphaBlend,
+NonPremultiplied, Additive, and the fixed custom pipeline. The selected design B expresses the
+actual static equation, emits one setter only for draws that use it, and requires no new
+command-state cache. Correctness stays simple: repeated required values may emit a redundant setter,
+but there is no allocation, pipeline-per-RGBA value, hidden flush, command-buffer split,
+`vkDeviceWaitIdle`, or per-draw pointer lifetime.
+
+**Pixel and pipeline-cache verification.**
+
+| Coverage | Result |
+|---|---|
+| Generic 3D / RenderTarget2D | **12/12**: BlendFactor + inverse, source + destination, alpha A, A(red)→B(green)→A(red), constant P1→Opaque P2→same constant P1, 64-draw stress |
+| SpriteBatch | **23/23**: Opaque, AlphaBlend, NonPremultiplied, Additive, custom factor/function/separate alpha, BlendFactor, inverse, A→B→A, constant→Opaque→constant |
+| Specialized SkinnedEffect | **6/6**: existing vertex-colour contract plus BlendFactor `(26,38,38)` and inverse `(76,38,13)` |
+| Minimal reused-pipeline test | **4/4**, zero 08608 after fix |
+| Pipeline cache | exactly **8 before → 8 after** 64 changing RGBA values; no value-key fragmentation |
+
+The same generic **12/12**, SpriteBatch **23/23**, and reused-pipeline **4/4** tests also pass on the
+real AMD Radeon 780M (`RADV PHOENIX`); the broad validation run used Xvfb/llvmpipe. Loader diagnostics
+explicitly showed `libVkLayer_khronos_validation.so` loaded and the KHRONOS validation layer
+inserted, so absence of 08608 is not inferred from process status.
+
+**Transitions and integration.** The generic test renders the constant-dependent sequence into an
+asymmetric RenderTarget2D, switches back to the backbuffer, and performs an ordinary Opaque
+SpriteBatch blit; both the RT contents and post-switch pipeline are correct. The existing
+backbuffer-only `Vulkan_BlendState_BlendFactor` also passes. `Vulkan_RenderTarget_GetDataLifetime`
+**13/13** includes 3D→2D interleaving in one deferred flush; target A/B switching and
+destroy-before-Present remain correct. The targeted shard also passed custom SPIR-V Effect,
+EnvironmentMap, AlphaTest, DualTexture, BasicEffect, PBR, SkinnedPBR, instanced, MRT, and MSAA
+families. MRT mixed-format reachability is **2/2**; 4× MSAA readback is **2/2** and the BasicEffect
+textured-MSAA and RenderTarget2D-resolve variants pass.
+
+**Required regressions and validation.**
+
+| Gate | Result |
+|---|---|
+| GFX-070 per-draw generic BlendFactor | **12/12** |
+| GFX-071 SpriteBatch BlendState | **23/23** |
+| GFX-077 colour writes + MultiSampleMask | **11/11** |
+| GFX-074 RT lifetime/GetData | **13/13** |
+| GFX-075 deferred source lifetime | **8/8** |
+| GFX-076 descriptor-cache identity | **14/14** |
+| GFX-062 viewport / GFX-013 scissor | RT viewport **18/18**, scissor **4/4** |
+| GFX-072 SpriteBatch viewport | backbuffer **10/10**, switch **6/6**, RT **8/8** |
+| GFX-089 public Vulkan depth contract | **4/4** |
+| Broad targeted Vulkan shard | **36/36 CTests**, zero validation messages/VUIDs |
+
+The practical full `^Vulkan_` suite is **156/158**. Both pixel failures are independent of GFX-091:
+
+- `Vulkan_DepthBias` remains the documented llvmpipe constant-bias baseline (**3/4**).
+- `Vulkan_RenderTargetCube_MsaaResolve` applies 4× on llvmpipe and 8× on AMD/RADV but samples black.
+  A clean isolated build of pre-GFX-091 commit `67300e01` fails identically on AMD/RADV, proving no
+  blend-constant regression; this is new **REMED-GFX-094**, not fixed here.
+
+A complete post-fix log search finds **zero** `VUID-vkCmdDraw-None-08608`. The full suite does expose
+four unrelated `VUID-vkCmdDraw-None-09600` messages in `Vulkan_Texture3D_Mip_RoundTrip`: Texture3D
+SetData/GetData copies nonzero mip levels while the shared layout helper transitions only mip 0.
+This is separately recorded as **REMED-GFX-093** and was not modified. The GFX-091-targeted
+validation shard itself is entirely clean.
+
+**Sibling dynamic-state inventory.** Vulkan records `vkCmdSetViewport`, `vkCmdSetScissor`,
+`vkCmdSetBlendConstants`, `vkCmdSetDepthBias`, and the stencil compare-mask/write-mask/reference
+setters. Every pipeline declares viewport/scissor; all 3D pipelines declare depth bias and the three
+stencil states; blend constants now use the shared conditional rule above. There is no line-width
+setter. No second dynamic-command/static-pipeline mismatch was found.
+
+**Changes, generated artifacts, and commits.** Production changes are confined to
+`VulkanGraphicsBackend.{hpp,cpp}`. Regression changes are confined to the Vulkan CTest registration
+and the existing RenderTarget BlendFactor, SpriteBatch BlendState, and SkinnedEffect vertex-colour
+tests. Shader and generated-artifact diff is **zero**; `audit/` is untouched.
+
+- `ed2b7f74 test(Task REMED-GFX-091): reproduce Vulkan blend-constant validation failure`
+- `368e011e fix(Task REMED-GFX-091): make blend-constant replay pipeline-valid`
+- `docs(remediation): record GFX-091 Vulkan validation fix` (this record)
+
+New findings: **REMED-GFX-093** (Texture3D nonzero-mip layout/VUID) and **REMED-GFX-094**
+(RenderTargetCube MSAA black resolve/sample), both recorded only. GFX-090, GFX-092, GFX-061, and the
+WebGPU SpriteBatch BlendState counterpart remain untouched. Recommended next GRAPHICS task:
 **REMED-GFX-090**. Do not begin it as part of this record.
