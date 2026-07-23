@@ -2417,11 +2417,17 @@ int main()
         GpuDrawParams sp;
         sp.texture0 = &tex;
         sp.textureEnabled = true;
+        // REMED-GFX-088: mirror a public SkinnedEffect configured for per-pixel lighting.
+        // LightingEnabled is always true (setting false throws), and AmbientLightColor=white
+        // is CPU-pre-folded into emissiveColor as (Emissive + Ambient*Diffuse)*Alpha.
+        sp.lightingEnabled = true;
+        sp.preferPerPixelLighting = true;
         sp.skinned = true;
         sp.boneCount = 1;
         sp.weightsPerVertex = 1;
         Matrix::getIdentityProperty().ToColumnMajor(sp.boneTransforms);
-        sp.ambientColor[0] = 1.0f; sp.ambientColor[1] = 1.0f; sp.ambientColor[2] = 1.0f;
+        sp.emissiveColor[0] = 1.0f; sp.emissiveColor[1] = 1.0f; sp.emissiveColor[2] = 1.0f;
+        sp.light0Diffuse[0] = 0.0f; sp.light0Diffuse[1] = 0.0f; sp.light0Diffuse[2] = 0.0f;
         sp.specularColor[0] = 0.0f; sp.specularColor[1] = 0.0f; sp.specularColor[2] = 0.0f;
         sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
 
@@ -2491,17 +2497,21 @@ int main()
         GpuDrawParams skinFogP;
         skinFogP.texture0 = &tex;
         skinFogP.textureEnabled = true;
+        skinFogP.lightingEnabled = true;
+        skinFogP.preferPerPixelLighting = true;
         skinFogP.skinned = true;
         skinFogP.boneCount = 1;
         skinFogP.weightsPerVertex = 1;
         Matrix::getIdentityProperty().ToColumnMajor(skinFogP.boneTransforms);
-        skinFogP.ambientColor[0] = 1.0f; skinFogP.ambientColor[1] = 1.0f; skinFogP.ambientColor[2] = 1.0f;
+        skinFogP.emissiveColor[0] = 1.0f; skinFogP.emissiveColor[1] = 1.0f; skinFogP.emissiveColor[2] = 1.0f;
+        skinFogP.light0Diffuse[0] = 0.0f; skinFogP.light0Diffuse[1] = 0.0f; skinFogP.light0Diffuse[2] = 0.0f;
         skinFogP.specularColor[0] = 0.0f; skinFogP.specularColor[1] = 0.0f; skinFogP.specularColor[2] = 0.0f;
         skinFogP.eyePositionWorld[0] = 0.0f; skinFogP.eyePositionWorld[1] = 0.0f; skinFogP.eyePositionWorld[2] = -10.0f;
 
         skinFogP.fogEnabled = false;
         skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
         skinFogP.fogStart = 0.0f; skinFogP.fogEnd = 0.5f;
+        skinFogP.fogVector[2] = 2.0f;  // REMED-GFX-005/010: view-space fog vector
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
@@ -2583,6 +2593,8 @@ int main()
         GpuDrawParams baseQP;
         baseQP.texture0 = &whiteTexQQ;
         baseQP.textureEnabled = true;
+        baseQP.lightingEnabled = true;
+        baseQP.preferPerPixelLighting = true;
         baseQP.skinned = true;
         baseQP.boneCount = 1;
         baseQP.weightsPerVertex = 1;
@@ -2693,6 +2705,8 @@ int main()
         GpuDrawParams rp;
         rp.texture0 = &whiteTexRR;
         rp.textureEnabled = true;
+        rp.lightingEnabled = true;
+        rp.preferPerPixelLighting = true;
         rp.skinned = true;
         rp.boneCount = 1;
         rp.weightsPerVertex = 1;

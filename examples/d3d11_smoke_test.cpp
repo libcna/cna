@@ -1946,10 +1946,13 @@ protected:
 
         // Check V (DX-67): skinned3d. A single identity bone (BoneBlock genuinely populated from
         // GpuDrawParams::boneTransforms, not left zero-initialized -- an all-zero bone matrix would
-        // degenerate the transform and fail this check) combined with ambient=white and
-        // specular=zeroed (light0's own diffuse contribution is already zero by construction: the
-        // vertex normal (0,0,1) is perpendicular to the default light0Dir (0,-1,0)) leaves
-        // outColor == the exact sampled texture color.
+        // degenerate the transform and fail this check) combined with the exact GPU-facing material
+        // state SkinnedEffect emits for AmbientLightColor=white, DiffuseColor=white, Alpha=1 and all
+        // directional lights disabled leaves outColor == the exact sampled texture color.
+        // REMED-GFX-088: SkinnedEffect cannot disable LightingEnabled (FNA throws on false); its CPU
+        // path always selects a lit permutation and pre-folds (Emissive + Ambient*Diffuse)*Alpha
+        // into emissiveColor. PreferPerPixelLighting=true keeps this check on skinned3d.frag while
+        // representing a state the public effect can genuinely produce.
         {
             struct VPNTS { float x, y, z; float nx, ny, nz; float u, v;
                           float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
@@ -1974,11 +1977,14 @@ protected:
             GpuDrawParams sp;
             sp.texture0 = tex.get();
             sp.textureEnabled = true;
+            sp.lightingEnabled = true;
+            sp.preferPerPixelLighting = true;
             sp.skinned = true;
             sp.boneCount = 1;
             sp.weightsPerVertex = 1;
             Matrix::getIdentityProperty().ToColumnMajor(sp.boneTransforms);
-            sp.ambientColor[0] = 1.0f; sp.ambientColor[1] = 1.0f; sp.ambientColor[2] = 1.0f;
+            sp.emissiveColor[0] = 1.0f; sp.emissiveColor[1] = 1.0f; sp.emissiveColor[2] = 1.0f;
+            sp.light0Diffuse[0] = 0.0f; sp.light0Diffuse[1] = 0.0f; sp.light0Diffuse[2] = 0.0f;
             sp.specularColor[0] = 0.0f; sp.specularColor[1] = 0.0f; sp.specularColor[2] = 0.0f;
             sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
 
@@ -2074,11 +2080,14 @@ protected:
                 GpuDrawParams skinFogP;
                 skinFogP.texture0 = tex.get();
                 skinFogP.textureEnabled = true;
+                skinFogP.lightingEnabled = true;
+                skinFogP.preferPerPixelLighting = true;
                 skinFogP.skinned = true;
                 skinFogP.boneCount = 1;
                 skinFogP.weightsPerVertex = 1;
                 Matrix::getIdentityProperty().ToColumnMajor(skinFogP.boneTransforms);
-                skinFogP.ambientColor[0] = 1.0f; skinFogP.ambientColor[1] = 1.0f; skinFogP.ambientColor[2] = 1.0f;
+                skinFogP.emissiveColor[0] = 1.0f; skinFogP.emissiveColor[1] = 1.0f; skinFogP.emissiveColor[2] = 1.0f;
+                skinFogP.light0Diffuse[0] = 0.0f; skinFogP.light0Diffuse[1] = 0.0f; skinFogP.light0Diffuse[2] = 0.0f;
                 skinFogP.specularColor[0] = 0.0f; skinFogP.specularColor[1] = 0.0f; skinFogP.specularColor[2] = 0.0f;
                 skinFogP.eyePositionWorld[0] = 0.0f; skinFogP.eyePositionWorld[1] = 0.0f; skinFogP.eyePositionWorld[2] = -10.0f;
 
@@ -2122,6 +2131,8 @@ protected:
                 GpuDrawParams baseQP;
                 baseQP.texture0 = whiteTexQQ.get();
                 baseQP.textureEnabled = true;
+                baseQP.lightingEnabled = true;
+                baseQP.preferPerPixelLighting = true;
                 baseQP.skinned = true;
                 baseQP.boneCount = 1;
                 baseQP.weightsPerVertex = 1;
@@ -3163,6 +3174,8 @@ protected:
             GpuDrawParams rp;
             rp.texture0 = whiteTexRR.get();
             rp.textureEnabled = true;
+            rp.lightingEnabled = true;
+            rp.preferPerPixelLighting = true;
             rp.skinned = true;
             rp.boneCount = 1;
             rp.weightsPerVertex = 1;
@@ -3722,7 +3735,8 @@ protected:
                                 + 1 /* DX-153 RenderTargetCube mip non-face-0 */
                                 + 2 /* DX-155 Model root-bone-index flexibility */
                                 + 3 /* Task 1106 BasicEffect PreferPerPixelLighting */
-                                + 3 /* Task 1107 SkinnedEffect PreferPerPixelLighting */;
+                                + 3 /* Task 1107 SkinnedEffect PreferPerPixelLighting */
+                                + 9 /* REMED-GFX-077 ColorWriteChannels/MultiSampleMask */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
