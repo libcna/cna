@@ -1032,6 +1032,10 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                         examples/easygl_skinnedeffect_vertexcolor_test.cpp)
         cna_register_backend_test(NAME Vulkan_SkinnedEffect_VertexColor_Reused COMMAND cna_test_vulkan_skinnedeffect_vertexcolor_reused
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        # REMED-GFX-091: this two-draw reused-pipeline case is the minimal validation reproducer.
+        # Pixel output alone stays correct, so make the exact Vulkan validity failure test-fatal.
+        set_tests_properties(Vulkan_SkinnedEffect_VertexColor_Reused PROPERTIES
+            FAIL_REGULAR_EXPRESSION "VUID-vkCmdDraw-None-08608")
 
         # Vulkan-native counterparts (this backend's own established Game-subclass/check()
         # pattern, e.g. vulkan_basiceffect_specular_test.cpp/vulkan_skinnedeffect_specular_test.cpp)

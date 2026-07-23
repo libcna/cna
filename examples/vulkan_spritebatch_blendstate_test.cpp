@@ -32,6 +32,8 @@
 //   BlendFactor       : white * C,  C = (64,192,128)                     -> ( 64,192,128, 255)
 //   InverseBlendFactor: white * (1-C)                                    -> (191, 63,127, 255)
 //   Multi (one frame) : A=AlphaBlend, B=Opaque, C=Additive, 3 regions    -> per-region as above
+//   Constant A→B→A    : RED, GREEN, RED captured across three batches
+//   Pipeline P1→P2→P1: constant RED, ordinary Opaque BLUE, constant RED
 //
 // Pre-fix the hardcoded pipeline reads (130,80,110,128) for EVERY colored scene and white
 // (255,255,255,255) for the constant-factor scenes, so all checks fail except NonPremultiplied's
@@ -105,6 +107,19 @@ class VulkanSpriteBatchBlendStateTest : public Game
         SpriteBatch sb(dev);
         SamplerState point = SamplerState::PointClamp;
         sb.Begin(SpriteSortMode::Deferred, blend, &point, nullptr, nullptr);
+        sb.Draw(whiteTex_, dest, Rectangle(0, 0, 1, 1), tint);
+        sb.End();
+    }
+
+    // Override GraphicsDevice.BlendFactor after Begin() applies the BlendState and before End()
+    // snapshots the batch. This isolates per-batch value capture from static BlendState identity.
+    void DrawSpriteWithFactor(GraphicsDevice& dev, const Rectangle& dest, const Color& tint,
+                              const BlendState& blend, const Color& factor)
+    {
+        SpriteBatch sb(dev);
+        SamplerState point = SamplerState::PointClamp;
+        sb.Begin(SpriteSortMode::Deferred, blend, &point, nullptr, nullptr);
+        dev.setBlendFactorProperty(factor);
         sb.Draw(whiteTex_, dest, Rectangle(0, 0, 1, 1), tint);
         sb.End();
     }
@@ -296,6 +311,53 @@ protected:
             dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
             const Color c = At(ReadRt(), full.X + full.Width / 2, full.Y + full.Height / 2);
             checkRGB(c, 160, 140, 200, tol, "S11 BlendState destroyed before Present (by-value capture)");
+        }
+
+        // Scene 12 -- mandatory GFX-091 A→B→A: one static constant-factor BlendState, three
+        // different captured dynamic values across three batches in the same RT pass.
+        {
+            BlendState constant;
+            constant.setColorSourceBlendProperty(Blend::BlendFactor);
+            constant.setColorDestinationBlendProperty(Blend::Zero);
+            constant.setAlphaSourceBlendProperty(Blend::One);
+            constant.setAlphaDestinationBlendProperty(Blend::Zero);
+            const Rectangle rA(4, 8, 16, 48), rB(24, 8, 16, 48), rA2(44, 8, 16, 48);
+            dev.SetRenderTarget(rt_.get());
+            dev.Clear(Color::Black);
+            DrawSpriteWithFactor(dev, rA,  Color::White, constant, Color(255, 0, 0, 255));
+            DrawSpriteWithFactor(dev, rB,  Color::White, constant, Color(0, 255, 0, 255));
+            DrawSpriteWithFactor(dev, rA2, Color::White, constant, Color(255, 0, 0, 255));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const std::vector<Color> pix = ReadRt();
+            checkRGB(At(pix, rA.X + rA.Width / 2, 32), 255, 0, 0, tol,
+                     "S12 constant A (RED)");
+            checkRGB(At(pix, rB.X + rB.Width / 2, 32), 0, 255, 0, tol,
+                     "S12 constant B (GREEN)");
+            checkRGB(At(pix, rA2.X + rA2.Width / 2, 32), 255, 0, 0, tol,
+                     "S12 constant A2 (RED)");
+        }
+
+        // Scene 13 -- dynamic/static/dynamic pipeline transition in one command buffer.
+        {
+            BlendState constant;
+            constant.setColorSourceBlendProperty(Blend::BlendFactor);
+            constant.setColorDestinationBlendProperty(Blend::Zero);
+            constant.setAlphaSourceBlendProperty(Blend::One);
+            constant.setAlphaDestinationBlendProperty(Blend::Zero);
+            const Rectangle p1(4, 8, 16, 48), p2(24, 8, 16, 48), p3(44, 8, 16, 48);
+            dev.SetRenderTarget(rt_.get());
+            dev.Clear(Color::Black);
+            DrawSpriteWithFactor(dev, p1, Color::White, constant, Color(255, 0, 0, 255));
+            DrawSprite(dev, p2, Color(0, 0, 255, 255), BlendState::Opaque);
+            DrawSpriteWithFactor(dev, p3, Color::White, constant, Color(255, 0, 0, 255));
+            dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            const std::vector<Color> pix = ReadRt();
+            checkRGB(At(pix, p1.X + p1.Width / 2, 32), 255, 0, 0, tol,
+                     "S13 P1 constant-dependent");
+            checkRGB(At(pix, p2.X + p2.Width / 2, 32), 0, 0, 255, tol,
+                     "S13 P2 ordinary Opaque");
+            checkRGB(At(pix, p3.X + p3.Width / 2, 32), 255, 0, 0, tol,
+                     "S13 P3 reused constant-dependent");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, totalCount_);

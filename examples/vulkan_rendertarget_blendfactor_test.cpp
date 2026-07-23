@@ -42,24 +42,22 @@
 //     Expected center ~= (153,153,153). A stale/white constant.a=255 would give ~255; a zero
 //     constant.a=0 would give ~0.
 //
-//   Frame 4 — three BlendFactors in ONE render-target pass (the per-draw-capture crux): within one
+//   Frame 4 — A→B→A BlendFactors in ONE render-target pass (the per-draw-capture crux): within one
 //     RT pass, using ONE BlendState instance, draw three white quads into three disjoint horizontal
-//     regions, changing ONLY GraphicsDevice.BlendFactor between them (RED, GREEN, BLUE constants).
+//     regions, changing ONLY GraphicsDevice.BlendFactor between them (RED, GREEN, RED constants).
 //     Each region must show the constant active WHEN THAT draw was enqueued. The pre-fix backend
 //     never sets blend constants in an RT pass at all (all three regions share one undefined/stale
-//     constant); a "read the frame-global factor once at record time" fix would paint all three BLUE
+//     constant); a "read the frame-global factor once at record time" fix would paint all three RED
 //     (last-wins). Only genuine per-draw capture passes. This also proves the constant is dynamic
 //     state, NOT a pipeline-cache key (one BlendState instance, one pipeline, three constants).
 //
-// SpriteBatch note: the fix ALSO captures the blend constant per batch (BatchSnapshot, replayed via
-// vkCmdSetBlendConstants in drawSpritesFor), so every SpriteBatch draw sets a defined blend constant.
-// But a SpriteBatch *constant-blend* pixel case is NOT included here because it is not observable on
-// Vulkan today: the 2D sprite pipeline (GetOrCreatePipeline2D) hardcodes SRC_ALPHA/ONE_MINUS_SRC_ALPHA
-// and never selects VK_BLEND_FACTOR_CONSTANT_COLOR — it ignores the SpriteBatch BlendState entirely
-// (a separate, broader pre-existing defect: SpriteBatch cannot do BlendFactor/Additive/NonPremultiplied
-// on Vulkan). That is tracked as REMED-GFX-071; when it is fixed, the per-batch capture wired here
-// makes SpriteBatch BlendFactor correct with no further change. The per-batch set is still exercised
-// (for validation-cleanliness / no-regression) by every existing Vulkan SpriteBatch test.
+//   Frame 5 — constant-dependent → ordinary Opaque → the SAME constant-dependent pipeline. This
+//     is GFX-091's static/dynamic pipeline-transition discriminator: the ordinary pipeline must
+//     not receive a blend-constant command unless it declares that state dynamic, while the final
+//     constant draw must still replay its captured RED value.
+//
+// SpriteBatch is covered separately by vulkan_spritebatch_blendstate_test.cpp (GFX-071/GFX-091):
+// BlendFactor, InverseBlendFactor, A→B→A capture, and constant→ordinary→constant transitions.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -213,7 +211,7 @@ class VulkanRenderTargetBlendFactorTest : public Game
         unbindAndBlit(dev);
     }
 
-    void renderThreeFactors(GraphicsDevice& dev)
+    void renderThreeFactorsABA(GraphicsDevice& dev)
     {
         beginRT(dev);
         // ONE BlendState instance; the set below already pushes RED. Change ONLY BlendFactor after.
@@ -222,8 +220,22 @@ class VulkanRenderTargetBlendFactorTest : public Game
         drawQuad(dev, -1.f, -1.f / 3.f, Color(255, 255, 255, 255));   // RED constant
         dev.setBlendFactorProperty(Color(0, 255, 0, 255));
         drawQuad(dev, -1.f / 3.f, 1.f / 3.f, Color(255, 255, 255, 255)); // GREEN constant
-        dev.setBlendFactorProperty(Color(0, 0, 255, 255));
-        drawQuad(dev, 1.f / 3.f, 1.f, Color(255, 255, 255, 255));     // BLUE constant
+        dev.setBlendFactorProperty(Color(255, 0, 0, 255));
+        drawQuad(dev, 1.f / 3.f, 1.f, Color(255, 255, 255, 255));     // RED constant again
+        unbindAndBlit(dev);
+    }
+
+    void renderPipelineTransition(GraphicsDevice& dev)
+    {
+        beginRT(dev);
+        BlendState constant = makeBlend(Blend::BlendFactor, Blend::Zero,
+                                        Blend::One, Blend::Zero, Color(255, 0, 0, 255));
+        dev.setBlendStateProperty(constant);
+        drawQuad(dev, -1.f, -1.f / 3.f, Color::White);                // P1: constant RED
+        dev.setBlendStateProperty(BlendState::Opaque);
+        drawQuad(dev, -1.f / 3.f, 1.f / 3.f, Color(0, 0, 255, 255));  // P2: ordinary BLUE
+        dev.setBlendStateProperty(constant);
+        drawQuad(dev, 1.f / 3.f, 1.f, Color::White);                  // P3: same P1, RED
         unbindAndBlit(dev);
     }
 
@@ -309,20 +321,37 @@ protected:
 
         if (frame_ == 4)
         {
-            // State-timing crux: ONE BlendState, three constants, three disjoint regions.
+            // State-timing crux: ONE BlendState, A→B→A constants, three disjoint regions.
             Color l(0,0,0,0), m(0,0,0,0), r(0,0,0,0);
             for (int i = 0; i < 20; ++i)
             {
-                renderThreeFactors(dev);
+                renderThreeFactorsABA(dev);
                 l = readAt(dev, 10, 24);
                 m = readAt(dev, 32, 24);
                 r = readAt(dev, 53, 24);
-                if (isRed(l) && isGreen(m) && isBlue(r)) break;
+                if (isRed(l) && isGreen(m) && isRed(r)) break;
             }
-            check(isRed(l),   "3-BlendFactor: left  (10,24)", l, "RED");
-            check(isGreen(m), "3-BlendFactor: mid   (32,24)", m, "GREEN");
-            check(isBlue(r),  "3-BlendFactor: right (53,24)", r, "BLUE");
+            check(isRed(l),   "A->B->A BlendFactor: left A  (10,24)", l, "RED");
+            check(isGreen(m), "A->B->A BlendFactor: mid B   (32,24)", m, "GREEN");
+            check(isRed(r),   "A->B->A BlendFactor: right A (53,24)", r, "RED");
+            ++frame_;
+            return;
+        }
 
+        if (frame_ == 5)
+        {
+            Color l(0,0,0,0), m(0,0,0,0), r(0,0,0,0);
+            for (int i = 0; i < 20; ++i)
+            {
+                renderPipelineTransition(dev);
+                l = readAt(dev, 10, 24);
+                m = readAt(dev, 32, 24);
+                r = readAt(dev, 53, 24);
+                if (isRed(l) && isBlue(m) && isRed(r)) break;
+            }
+            check(isRed(l),  "pipeline P1 constant-dependent", l, "RED");
+            check(isBlue(m), "pipeline P2 ordinary Opaque", m, "BLUE");
+            check(isRed(r),  "pipeline P3 reused constant-dependent", r, "RED");
             std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
             Exit();
         }
