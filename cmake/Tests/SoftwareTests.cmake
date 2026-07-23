@@ -39,6 +39,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-077: BlendState.ColorWriteChannels (per-channel colour write mask) + MultiSampleMask
+    # must be honored now that both are plumbed through IGraphicsBackend::ApplyBlendState.
+    cna_software_test(cna_test_software_colorwritechannels examples/software_colorwritechannels_test.cpp)
+    cna_register_backend_test(NAME Software_ColorWriteChannels COMMAND cna_test_software_colorwritechannels
+        TIMEOUT 30 LABELS "Software")
+
     # REMED-GFX-073: SpriteBatch must honor a custom GraphicsDevice.Viewport (viewport-local
     # coordinates, Viewport.X/Y placement, Width/Height extent, viewport clipping) -- the Software
     # counterpart of the GFX-072 GPU-backend SpriteBatch viewport campaign.
