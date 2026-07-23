@@ -5688,3 +5688,133 @@ The generic-3D harness deliberately drives the keyed 3D pipeline (`DrawPrimitive
 
 **Gate commits:** `test`(extend runtime coverage: new generic-3D harness + native ctests + D3D9/11/12 smoke `Check GFX077` + migration-completeness fixes incl. the Ascii production call), `docs`(this record). No other production change.
 
+
+---
+
+### REMED-GFX-087 — Triage of the 27 D3D9/11/12 smoke exact-colour failures from the post-GFX-077 gate — DONE (test-only, 19/27 resolved; 8 spawned as GFX-088/089)
+
+**Origin.** The REMED-GFX-077 runtime-verification gate recorded pre-existing D3D smoke failures
+(D3D9 ×2, D3D11 ×14, D3D12 ×11) and recommended a separate triage. Those smoke EXEs had not *run*
+since GFX-055 (D3D11 154/154, 2026-07-21) because they stopped compiling until the gate widened
+their `ApplyBlendState` call sites — so the gate was their first execution across GFX-081 (SpriteBatch
+RasterizerState, 07-22) and GFX-008 (D3DCommon skinned ambient/emissive). This is that triage.
+
+**Environment (Phase 3/8/19).** All runs on the real **AMD Radeon 780M (RADV PHOENIX)** GPU — NOT
+llvmpipe. D3D11 → DXVK **2.6.0**, D3D9 → DXVK9 2.6.0, D3D12 → **vkd3d-proton 3.1.0**, each confirmed
+via its own version banner (`radeon_icd.json` forced; the same real-GPU stack GFX-055/GFX-020 used for
+154/154). "This sandbox is llvmpipe" is inaccurate for these tests: vkd3d/DXVK auto-select the AMD
+adapter on `DISPLAY=:0`. The task premise that the failures might be an llvmpipe/translation-precision
+artifact is **disproved** — see the deltas below.
+
+**Determinism (Phase 1).** Bit-stable. D3D12 instrumented dumps hashed identically across 3 runs;
+D3D9 across 2; every remaining failure is a deterministic consequence of device/shader state, never
+nondeterministic and never a floating-point boundary flicker.
+
+**Per-channel deltas (Phase 1/9) — none is a ±LSB precision failure:**
+
+| Group | Backend | Example check | got | expected | nature |
+|---|---|---|---|---|---|
+| A fog | D3D12 | N5 textured3d fog@FogEnd | (11,22,33) | (0,255,0) | **exact fogEnabled=false colour** (fog fully inert), not ±LSB |
+| A fog | D3D12 | O4 lit fog / Q4 dual / U4 env / N3c coltex / V2 colored3d | unfogged colour | fog green | same: `fogVector=0` |
+| B cull | D3D11 | colored3d/depth/lit-EE/skinned-spec | Clear() colour (10,10,10)/(0,0,0) | draw colour | **nothing drawn** (culled), not ±LSB |
+| C mask | D3D9 | depth near-red then far-green | afterNear (255,**10,10**) | (255,0,0) | **red-only colour-write** (G/B = stale clear) |
+| D skin | D3D11/12 | skinned3d unlit texture | (0,0,0) | (77,88,99) | **shader unlit path = black** (→ GFX-088) |
+| E depth | D3D9 | SetDepthTestEnabled(true) | far green wins | near red survives | **depth test not rejecting** (→ GFX-089) |
+
+**Group A — D3D12 fog ×7 (N3c, N5, O4, P4, Q4, U4, V2) = TEST NOT MIGRATED.** GFX-005/010 moved
+D3DCommon fog from the scalar `fogStart`/`fogEnd` to FNA's baked view-space **`fogVector`** (shader:
+`FogFactor = fogEnabled ? 1 - saturate(dot(float4(pos,1), FogStartEnd)) : 1`, then
+`lerp(FogColor, colour, FogFactor)`; `FogStartEnd` carries the vector). GFX-055 fixed the **D3D11**
+smoke by supplying `fogVector.z = 1/fogEnd = 2` in its 8 direct-`DrawPrimitivesEx` fog checks — but the
+**D3D12** smoke was never migrated (`grep fogVector` = **0** in d3d12 vs **11** in d3d11). So its
+fog-on checks kept `fogVector={0,0,0,0}` → `dot=0` → `keep=1` → fog fully inert → got the exact
+fogEnabled=false colour. **Class 2 (test), not production, not environment.**
+
+**Group B — D3D11 3D ×11 (colored3d AC, NPOT, occlusion, both depth-test, lit_textured3d EE×4,
+skinned-specular RR) = SpriteBatch CULL-STATE LEAK from GFX-081.** Correlating every probe with its
+verdict showed a contiguous block: all direct `backend.DrawPrimitivesEx` 3D draws that run *after* the
+SpriteBatch checks (Y/Y2/Y3/Y4/Z/AA) read back the **Clear() colour** (the "should-be-black" negative
+controls even *falsely pass*), while Model::Draw later recovers. Cause: **REMED-GFX-081** (`801306f4`,
+2026-07-22 — the day *after* GFX-055's 154/154) made shared `SpriteBatch::Begin` apply
+`rasterizerState ?? RasterizerState::CullCounterClockwise` via `setRasterizerStateProperty` and, per
+FNA/XNA semantics, LEAVE it after `End()`. The 3D checks' oversized full-screen quads are back-facing
+under CullCounterClockwise (the D3D9 depth check's own comment already notes this and sets `CullNone`
+explicitly), and `DrawPrimitivesExImpl` sets **no** cull (there is no `GpuDrawParams` cull field), so
+they inherit the leftover CCW and are culled to nothing. **Proven by bisection:** skipping the resize
+(Check AB) → no change; skipping the custom-effect (Check AA) → no change; inserting one
+`dev.setRasterizerStateProperty(RasterizerState::CullNone)` before the block → **149→160 PASS** (all 11
+recovered). GFX-077's `9b227906` touches only blend/colour-write — **zero** resize/RTV/viewport/cull
+code — so it is conclusively not the cause. **Class 2 (test relies on implicit device state a real
+game sets via the effect layer), not production.**
+
+**Group C — D3D9 ×1 colour-write leak = the GFX-077 gate's OWN test block.** Per-draw dumps:
+`afterNear=(255,10,10)` (red quad wrote only R; G,B stayed at the clear (10,10,10)),
+`withDepth/withoutDepth=(0,10,10)` (green quad wrote only R=0). Cause: the **`Check GFX077`** block the
+GFX-077 gate added to `d3d9_smoke` sweeps `ColorWriteChannels` masks via `ApplyBlendState`, ends on the
+**Red** mask (GFX077-7 "A(Red)→B(Green)→A(Red)"), and never restores `D3DRS_COLORWRITEENABLE` (a sticky
+render state) to All. The later `SetDepthTestEnabled` depth check does a bare `DrawPrimitivesEx` and
+inherits Red-only. **Proven:** a mask reset before the depth check → `afterNear=(255,0,0)` and the
+fog-off half passes (60→61). **Class 2 (test hygiene in the GFX-077 gate's own additions), not a
+production colour-write defect** — the D3D9 production path applies exactly `colorWriteChannels[0] & 0xF`
+(default 15/All).
+
+**Group D — skinned3d unlit = BLACK (D3D11 ×3 + D3D12 ×4) → spawned REMED-GFX-088.** These checks
+expect the raw texture (e.g. (77,88,99)) with `lightingEnabled=false`, `diffuseColor` defaulting to
+(1,1,1). `skinned3d.frag` has **no unlit branch**: `outColor = (lightSum·DiffuseColor + EmissiveColor)·tex`;
+with lighting off `lightSum=0` and the ambient·diffuse REMED-GFX-008 pre-folds into `EmissiveColor` is
+not folded when lighting is disabled → `litRGB=0` → black. Confirmed **NOT** DX-111/descriptor-zero and
+**NOT** environment: the skinned *lighting* checks (QQ/EE/RR) pass on both DXVK and vkd3d, so the t0
+texture descriptor samples correctly; `textured3d` (which outputs `tex·Tint`) passes. Backend-independent
+shader-semantics/test-expectation question — filed as **GFX-088**, not fixed here (a separate defect;
+possibly a GFX-008 side effect since it post-dates GFX-055).
+
+**Group E — D3D9 depth test does not reject (×1) → spawned REMED-GFX-089.** After the Group-C mask fix,
+1 D3D9 fail remains: with depth test+write ON, the far quad (z=0.8) still overwrites the near quad
+(z=0.2). The identical D3D11 check passes (after the Group-B cull fix), so the geometry/intent are
+sound; only D3D9 fails to reject. Candidate real D3D9 depth-state defect (Z-buffer not attached to the
+swap-chain backbuffer / `D3DRS_ZFUNC`/`ZWRITEENABLE` ineffective) vs a DXVK9 limitation — filed as
+**GFX-089**, needs a focused D3D9 depth investigation and ideally a real-Windows confirm.
+
+**Oracle cross-check (Phase 4).** Group B is proven a state artifact by the in-binary CullNone
+experiment (no oracle needed — the same shader/geometry renders correctly once cull is reset). Group D
+is proven backend-independent by the shader source itself (litRGB=0 path) plus the passing skinned
+lighting checks on *both* D3D translation layers — it is not a DXVK-vs-vkd3d divergence. Group A/C are
+test-setup, reproduced deterministically. No case is the "D3D translation layer is the numeric outlier"
+scenario the task hypothesised.
+
+**GFX-077 regression boundary (Phase 17) — GFX-077 is conclusively NOT the production cause.** Default
+`BlendWriteState` = `colorWriteChannels={15,15,15,15}` (All) + `multiSampleMask=0xFFFFFFFF`
+(behaviour-preserving); the D3D11/D3D12/D3D9 backends apply exactly `cw & 0xF` per RT; `9b227906`
+changes no fog/lighting/depth/cull/RTV code. The single GFX-077-attributable issue is a **test-hygiene**
+gap: its own `Check GFX077` block in the D3D9 smoke leaves a partial colour-write mask (Group C, now
+fixed). GFX-077 stays DONE; not reopened.
+
+**Fixes applied (test-only, Phase 14 Class 2; no production change).**
+- `examples/d3d12_smoke_test.cpp`: set `fogVector[2] = 2.0f` on the 7 non-skinned fog checks (shared
+  struct for the fogEnabled-gated variants; **only** on the fogEnabled=true draw for alpha_test3d,
+  whose fog is gated purely by a non-zero FogVector). Mirrors GFX-055. **230→237** (skinned S1/S2/S4/S5
+  remain → GFX-088).
+- `examples/d3d11_smoke_test.cpp`: one `dev.setRasterizerStateProperty(RasterizerState::CullNone)` at
+  the head of the first post-SpriteBatch 3D block (persists through the contiguous 3D checks; the next
+  SpriteBatch is DrawString, after them). **149→160** (skinned DX-67/DX-135/DX-137 remain → GFX-088).
+- `examples/d3d9_smoke_test.cpp`: restore the All-channels write mask
+  (`ApplyBlendState(...,BlendWriteState{})`) at the end of `Check GFX077`. **60→61** (SetDepthTestEnabled
+  remains → GFX-089).
+
+**Regression control.** PASS counts rose on all three (never fell) — the fixes only *add* explicit
+state establishment; nothing that previously passed regressed. All three EXEs build clean in the normal
+mingw/`cmake-build-d3d{9,11,12}-mingw` config (Phase 18 — no hidden TU gap).
+
+**Final classification (Phase 14): MIXED, resolved to TEST (19/27) + two spawned genuine-defect
+candidates (8/27).** No exact-colour tolerance was weakened (Phase 5/15) — every assertion stays exact;
+the fixes correct test *state setup*, they do not relax comparisons. Remaining hardware-only
+uncertainty: GFX-089 (D3D9 depth) would benefit from a real-Windows confirm to separate a CNA D3D9 bug
+from a DXVK9 limitation; GFX-088 is a source-level shader/semantics decision needing no hardware.
+
+**Totals.** D3D9 2 → 1 (mask leak fixed; depth → GFX-089). D3D11 14 → 3 (cull leak ×11 fixed; skinned
+×3 → GFX-088). D3D12 11 → 4 (fog ×7 fixed; skinned ×4 → GFX-088).
+
+**Commits:** `test(Task REMED-GFX-087)` (D3D9/11/12 smoke state-setup fixes), `docs(remediation)` (this
+record + INDEX GFX-087/088/089). Recommended next GRAPHICS task per the index: **REMED-GFX-061**
+(fog-field ABI documentation cleanup) — do not begin. GFX-088/089 are the higher-value genuine-defect
+follow-ups spawned here.
