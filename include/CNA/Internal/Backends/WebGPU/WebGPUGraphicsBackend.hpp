@@ -1481,11 +1481,10 @@ namespace CNA::Internal::Backends::WebGPU
         // other backend's own established "two skinned shader variants" convention) plus
         // SkinnedEffect.VertexColorEnabled (stride-56 vertex colour on skinned meshes). Ported
         // from EasyGLGraphicsBackend::EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram()'s GLSL
-        // shaders line-for-line, including their exact formula shape -- SkinnedEffect's own
-        // emissiveColor pre-folds AmbientLightColor*DiffuseColor on the CPU side
-        // (SkinnedEffect::FillGpuDrawParams) and is THEN multiplied again by DiffuseColor in the
-        // shader (litRGB=(emissive+lightSum)*diffuseColor), unlike BasicEffect's lit_textured3d.wgsl
-        // (lit=lightSum*diffuseColor+emissive, emissive NOT re-multiplied) -- and the vertex-colour
+        // shaders line-for-line. SkinnedEffect::FillGpuDrawParams pre-folds
+        // (EmissiveColor + AmbientLightColor*DiffuseColor)*Alpha into emissiveColor, so every
+        // variant consumes it with FNA's `lightSum*diffuseColor + emissiveColor` formula; the
+        // already-folded emissive term is not re-multiplied by DiffuseColor or Alpha. The vertex-colour
         // gate multiplies the FINAL combined diffuse+specular output (applied AFTER the specular
         // add, not just to the diffuse term -- a real ordering bug was once found and fixed in the
         // EasyGL reference, replicated here to avoid the same trap). Bone-palette skinning matches

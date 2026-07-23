@@ -7595,13 +7595,12 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         // Ported from EasyGLGraphicsBackend::EnsureSkinnedProgram()'s GLSL shader line-for-line:
         // bone-palette skinning (Task 895's weightsPerVertex 1/2/4 convention -- only the first N
         // weight/index pairs are summed), then Blinn-Phong lighting identical in shape to
-        // lit_textured3d.wgsl's own per-pixel-lit shader, EXCEPT SkinnedEffect has no separate
-        // AmbientLightColor uniform: SkinnedEffect::FillGpuDrawParams() pre-folds
-        // AmbientLightColor*DiffuseColor into emissiveColor on the CPU side, and this shader
-        // multiplies that combined value by DiffuseColor AGAIN (litRGB=(emissive+lightSum)*diffuse),
-        // matching the EasyGL reference exactly (not a bug to "fix" here -- replicating it is what
-        // makes this backend's rendered output consistent with every other backend for the same
-        // scene). No fog/alpha-test (SkinnedEffect never sets GpuDrawParams::alphaTest away from
+        // lit_textured3d.wgsl's own per-pixel-lit shader. SkinnedEffect has no separate
+        // AmbientLightColor uniform because SkinnedEffect::FillGpuDrawParams() already pre-folds
+        // (EmissiveColor + AmbientLightColor*DiffuseColor)*Alpha into emissiveColor. FNA's shader
+        // therefore adds that prepared term after `lightSum*diffuseColor`; it must not multiply
+        // emissiveColor by DiffuseColor or Alpha again. No fog/alpha-test
+        // (SkinnedEffect never sets GpuDrawParams::alphaTest away from
         // its always-pass default; fog is deferred uniformly across every WebGPU 3D shader so far).
         static constexpr char shaderSource[] = R"WGSL(
 struct Uniforms {
@@ -7701,7 +7700,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    let litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    let litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
@@ -7830,7 +7829,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    let litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    let litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
@@ -7949,7 +7948,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    output.litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    output.litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
@@ -8068,7 +8067,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
     let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
                   + ndotl2 * lp.light2Diffuse.xyz;
-    output.litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    output.litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
     let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
     let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
