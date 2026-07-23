@@ -2428,7 +2428,7 @@ existing task.
 | REMED-GFX-059 | The SdlGpu backend emits a Vulkan validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw (confirmed via `VK_LAYER_KHRONOS_validation` under `SDL_GPU`). Confirmed **pre-existing** and independent of `REMED-GFX-006`: the existing `SdlGpu_Skinned` test emits it 6× against unchanged (pre-fix) shaders, and readback pixel values are correct throughout, so it is a render-pass/pipeline attachment-compatibility validation issue in `SdlGpuGraphicsBackend`, not a normal-transform or rendering-correctness defect | LOW-MEDIUM | P2 (SdlGpu-lane; validation-cleanliness, not a visible-output defect) | `REMED-GFX-006` SdlGpu slice (first `VK_LAYER_KHRONOS_validation` run of the new world-normal harness) | NOT STARTED — recorded, not fixed (out of GFX-006's normal-transform scope; SdlGpu-backend owner should reconcile the SDL_GPU render-pass/pipeline attachment description that 02684 flags) |
 | REMED-GFX-060 | Every effect-aware D3D9 draw site hardcoded the vertex/index offsets (`DrawPrimitive(…, 0 /*StartVertex*/)` and `DrawIndexedPrimitive(…, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount, 0 /*StartIndex*/, …)`), silently dropping the XNA `DrawPrimitives(vertexStart)` / `DrawIndexedPrimitives(baseVertex, startIndex)` offsets that `GraphicsDevice` threads through `GpuDrawParams`. Same defect class as `REMED-GFX-020` (D3D11/D3D12), spread across 15 sites in 4 files (`D3D9EffectDraw`/`D3D9PbrDraw`/`D3D9SkinnedVertexColorDraw`/`D3D9InstancedDraw`) | HIGH | P2 | `REMED-GFX-020` Phase-12 cross-backend draw-offset sweep | **DONE (2026-07-21, `aa23eed2`+`d2491a17`)** — fixed + runtime-verified on real DXVK 2.6.0 (new `D3D9_DrawOffset` 0/7→7/7, full D3D9 shard 20/20, D3D11 GFX-020 regression still 6/6). See detail section below. |
 | REMED-GFX-061 | The scalar `GpuDrawParams::fogStart`/`fogEnd` fields and the `IGraphicsBackend.hpp` (~`:454`) fog documentation ("D3D backends … keep using fogStart/fogEnd") are stale/vestigial for the D3D family after the GFX-005/010 view-space-fog campaign: D3D9 custom shaders compute view-space fog in-backend (`ComputeFogVectorEXT`) and D3D11/D3D12 D3DCommon stock effects bake the `fogVector` CPU-side, so the scalar object-space fields are consumed only by the few direct-`DrawPrimitivesEx` callers that set them (and by non-D3D backends that predate GFX-010). Not a rendering defect — a documentation/ABI-hygiene item | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | NOT STARTED — recorded, not fixed (a precise comment correction is not unquestionably safe and Phase 11 forbids redesigning the fog ABI in the offset tranche; recommended resolution: documentation cleanup + formally mark `fogStart`/`fogEnd` as retained accepted-and-ignored compat fields, not removal, since direct-backend callers still set them) |
-| REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | NOT STARTED — source-confirmed and recorded, not fixed (separate WebGPU-only **lit** material-composition defect, equivalent in class to GFX-008; GFX-088 made no production/shader changes). |
+| REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | **DONE and VERIFIED — REAL PRODUCTION SHADER-SEMANTIC DEFECT.** All four handwritten embedded WGSL modules now use `lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz`; the shared CPU pre-fold remains unchanged. New sRGB-safe exact-path regression: **6/25 pre-fix → 27/27 post-fix**, covering all four modules, ambient, emissive, combined, directional, non-white texture, Alpha, vertex colour, A→B→A, and post-draw mutation. WebGPU targeted **3/3 CTests / 44/44 checks**, broader **10/10 / 70/70**, validation clean. D3D11 smoke **163/163**; GFX-006/008/010 and GFX-088 contract regressions green across the applicable backends. No generated shader artifacts; test `3c9a4d5f`, fix `ee0f44c9`. |
 | REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | **DONE and VERIFIED (KHRONOS validation loaded; Xvfb/llvmpipe + AMD Radeon 780M/RADV)** — real production validity defect. One normalized mapping-derived predicate now conditionally declares `VK_DYNAMIC_STATE_BLEND_CONSTANTS` and conditionally replays the captured value after pipeline bind. Per-draw/per-batch capture is preserved; factor/function state stays static and pipeline-keyed; RGBA stays dynamic and outside the key. Pre-fix minimal test: pixels 4/4 but CTest 0/1 on exact VUID; post-fix generic 3D 12/12, SpriteBatch 23/23, specialized SkinnedEffect 6/6, targeted shard 36/36, zero 08608, cache 8→8. Full Vulkan 156/158 with documented `DepthBias` plus a baseline-identical cube-MSAA failure; separate Texture3D `VUID-09600` spawned GFX-093 and cube-MSAA spawned GFX-094. test `ed2b7f74`, fix `368e011e`. |
 | REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
 | REMED-GFX-093 | Vulkan Texture3D nonzero-mip SetData/GetData copies the requested mip but transitions only mip 0 because the shared `TransitionImageLayout` barrier hardcodes `{baseMipLevel=0, levelCount=1}`. The sampled 3D view spans all mip levels and its descriptor claims `SHADER_READ_ONLY_OPTIMAL`; validation therefore reports mip 1/2 still in transfer layouts at draw. | LOW | P3 | REMED-GFX-091 full Vulkan validation sweep | NOT STARTED — isolated `Vulkan_Texture3D_Mip_RoundTrip` reproduces four `VUID-vkCmdDraw-None-09600` messages while every pixel assertion passes. Separate image-subresource-layout task; recorded only, not fixed. |
@@ -6356,3 +6356,154 @@ New findings: **REMED-GFX-093** (Texture3D nonzero-mip layout/VUID) and **REMED-
 (RenderTargetCube MSAA black resolve/sample), both recorded only. GFX-090, GFX-092, GFX-061, and the
 WebGPU SpriteBatch BlendState counterpart remain untouched. Recommended next GRAPHICS task:
 **REMED-GFX-090**. Do not begin it as part of this record.
+
+---
+
+### REMED-GFX-090 — WebGPU SkinnedEffect material composition — DONE (production fix)
+
+**Final classification: REAL PRODUCTION SHADER-SEMANTIC DEFECT.** WebGPU consumed the
+CPU-pre-folded SkinnedEffect emissive/ambient value as though it were an unprocessed material input.
+All four reachable SkinnedEffect shader modules therefore produced incorrect RGB for any non-white
+DiffuseColor combined with AmbientLightColor or EmissiveColor. This was not a colour-tolerance,
+target-transfer, test-harness, public-API, or impossible-state issue.
+
+**Authoritative always-lit CPU contract.** GFX-088's result is reconfirmed by
+`SkinnedEffect::FillGpuDrawParams` and the 57 public/default/upload contract tests:
+
+```text
+DiffuseShader.rgb = DiffuseColor * Alpha
+DiffuseShader.a   = Alpha
+EmissiveShader    = (EmissiveColor + AmbientLightColor * DiffuseColor) * Alpha
+
+baseRGB  = directionalLightSum * DiffuseShader.rgb + EmissiveShader
+RGB      = baseRGB * texture.rgb * optionalVertexColor.rgb
+AlphaOut = Alpha * texture.a * optionalVertexColor.a
+```
+
+SkinnedEffect remains always lit: `LightingEnabled` returns true and assigning false throws
+`NotSupportedException`. No CPU state, public API, backend interface, or uniform layout changed.
+
+**CPU-to-GPU value trace.**
+
+| Value | Public property source | CPU-transformed value | WebGPU field/upload | WGSL use |
+|---|---|---|---|---|
+| Diffuse + Alpha | `DiffuseColor`, `Alpha` | `(DiffuseColor * Alpha, Alpha)` | `GpuDrawParams::diffuseColor` → `FillExtUniforms[16..19]` → `Uniforms.diffuseColor` | multiplies only `lightSum`; `.a` is output Alpha |
+| Ambient + emissive | `AmbientLightColor`, `EmissiveColor`, `DiffuseColor`, `Alpha` | `(EmissiveColor + AmbientLightColor * DiffuseColor) * Alpha` | `GpuDrawParams::emissiveColor` → `FillLitLightUniforms[16..18]` → `LitLightParams.emissiveColor.xyz` | added exactly once after directional diffuse |
+| Directional light 0 | `DirectionalLight0` direction/diffuse/specular/enabled | enabled light colours/direction, zeroed when disabled | primary uniform slots `24..30` | per-pixel or per-vertex `ComputeLight`, accumulated into `lightSum` |
+| Directional lights 1/2 | `DirectionalLight1/2` | same enable/disable normalization | lit-light uniform buffer | accumulated into `lightSum` |
+| Texture | `Texture` | retained texture resource | queued draw/bind group | `textureSample`; multiplies completed material RGB and output A |
+| Vertex colour extension | `VertexColorEnabled` + vertex attribute | enable gate captured by value; RGBA attribute unchanged | primary `.w` gate; stride 56 selects colour module | multiplies completed RGB; A multiplies `diffuseColor.a * texture.a` |
+
+The texture resource, all uniform bytes, the vertex-colour permutation, and material values are
+captured into the queued draw. Changing the effect after queuing a draw cannot rewrite that draw.
+
+**Four affected WebGPU variants.** They are handwritten WGSL string literals in
+`WebGPUGraphicsBackend::CreateSkinnedResources`, compiled by wgpu-native at runtime; there is no
+shader generator, template, or generated output to regenerate.
+
+| Variant/module | Texture | Vertex colour | Fog | Lighting | Entry points and formula site |
+|---|---:|---:|---:|---|---|
+| `shaderSource` / per-pixel plain (stride 52) | yes | no | no permutation | always lit, per-pixel | `vs_main`; `fs_main` computes `lightSum` and `litRGB` |
+| `colorShaderSource` / per-pixel colour (stride 56) | yes | yes | no permutation | always lit, per-pixel | `vs_main`; `fs_main` computes `lightSum`, `litRGB`, then colour |
+| `vertexLitShaderSource` / per-vertex plain (stride 52) | yes | no | no permutation | always lit, per-vertex | `vs_main` computes `lightSum` and `litRGB`; `fs_main` samples texture |
+| `vertexLitColorShaderSource` / per-vertex colour (stride 56) | yes | yes | no permutation | always lit, per-vertex | `vs_main` computes `lightSum` and `litRGB`; `fs_main` samples and colours |
+
+WebGPU currently has no non-environment-map 3D fog upload/use and consequently no SkinnedEffect fog
+permutation. That is the pre-existing WebGPU capability boundary already recorded by GFX-088, not a
+GFX-090 regression or a newly discovered defect. GFX-090 did not fabricate a fog path or change fog
+math; GFX-010 fog composition was instead regression-tested on every applicable oracle backend.
+
+**Exact root cause and minimal fix.** Before the fix all four modules used:
+
+```wgsl
+let litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+// vertex-lit modules assigned the identical expression to output.litRGB
+```
+
+Because `lp.emissiveColor` was already pre-folded, this expanded the ambient term to
+`Ambient * Diffuse * Diffuse * Alpha * Alpha` and pure emissive to
+`Emissive * Diffuse * Alpha * Alpha`. The directional term happened to remain correct. All four
+sites now use:
+
+```wgsl
+let litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
+// vertex-lit modules assign the identical expression to output.litRGB
+```
+
+This matches D3DCommon, Vulkan, EasyGL, Bgfx, and SDL GPU, each of which was source-inspected for the
+same directional-diffuse-plus-prefolded-emissive separation. The change removes/reorders one
+multiplication: no branch, uniform, allocation, texture lookup, draw, render pass, or pipeline was
+added.
+
+**Discriminating pre-fix and post-fix pixels.** The new public regression uses
+DiffuseColor `(0.25, 0.5, 0.75)`, independently controlled ambient/emissive/directional values, an
+RGBA texture `(128,64,192,160)`, Alpha `0.5`/`0.75`, and vertex colour `(128,192,64,128)`.
+RenderTarget2D mirrored the selected WebGPU sRGB attachment: the linear-0.5 probe stored byte 187.
+Each assertion therefore compares with a white-Diffuse calibration draw through the identical
+shader, texture, vertex colour, target, and encoding. This proves the linear material algebra
+without treating sRGB bytes as linear values or using a broad tolerance.
+
+| Case | Pre-fix observed | Correct/post-fix observed | Result |
+|---|---:|---:|---|
+| Ambient only | `(50,71,75,255)` | `(99,99,86,255)` | correct on all four modules |
+| Pure emissive | `(99,99,86,255)` | `(187,137,99,255)` | correct on all four modules |
+| Ambient + emissive | `(61,110,155,255)` | `(120,152,176,255)` | correct on all four modules |
+| Directional diffuse | `(99,99,198,255)` | `(99,99,198,255)` | remained correct on all four modules |
+| Combined + non-white texture | `(43,56,136,160)` | `(87,79,155,160)` | texture multiplies the completed material |
+| Pure emissive + Alpha .5 + texture | RGB `(34,22,36)` | RGB `(99,50,61)` | Alpha is folded into RGB exactly once |
+| Same Alpha case, output A | `80` | `80` | `.5 * 160`, unchanged |
+| Combined + Alpha .75 + texture + vertex RGBA | RGB `(19,35,53)` | RGB `(53,60,71)` | both colour modules correct |
+| Same vertex-colour cases, output A | `60` | `60` | `.75 * 160 * 128/255`, unchanged |
+
+The initial committed regression produced **6/25 PASS** before the production edit: all 12
+ambient/emissive/combined checks failed across the four modules, while all four directional
+controls passed; texture, RGB Alpha, vertex-colour RGB, and the contract-valued A→B→A assertions
+also discriminated the bug. The final strengthened regression is **27/27 PASS**.
+
+**Deferred state and pipeline cache.** One-frame A→B→A is exactly
+`(99,99,86) → (187,137,99) → (99,99,86)`. Mutating and applying the effect after its draw was queued
+leaves that earlier pixel at material A. The four existing pipeline caches remain selected solely
+by shader/vertex permutation plus `Make3DPipelineKey`'s topology, depth, blend, cull, wireframe,
+depth-bias, colour-write, and sample-mask state. No material value entered a key and the pipeline
+selection code is byte-unchanged, so identical permutations have unchanged cardinality.
+
+**Runtime verification.**
+
+| Gate | Result |
+|---|---|
+| New WebGPU material contract | **27/27**; all four WGSL modules |
+| WebGPU targeted (`Skinned3D`, GFX-006 world-normal, GFX-090 material) | **3/3 CTests, 44/44 checks** |
+| WebGPU representative broader shard | **10/10 CTests, 70/70 checks**: BasicEffect, environment map, SkinnedPBR, GraphicsState, RT/SpriteBatch RT, GFX-077 colour writes, textured/lit 3D |
+| WebGPU validation/error logging | **clean**, zero wgpu validation errors |
+| GFX-088 public/API/CPU-upload contract | **57/57** |
+| D3D11 oracle | smoke **163/163**; GFX-006 **4/4**, GFX-008 **9/9**, GFX-010 **9/9** |
+| Vulkan oracle + KHRONOS validation | GFX-006 **4/4**, skinned fog **3/3**, GFX-010 **9/9**, GFX-008 **9/9**, vertex colour **6/6** plus reuse **4/4**; zero VUIDs |
+| EasyGL oracle | GFX-006 **8/8**, skinned fog **3/3**, GFX-010 **9/9**, GFX-008 **9/9**, vertex colour **4/4** |
+| Bgfx sanity | GFX-006 **8/8**, skinned fog **3/3**, GFX-010 **9/9**, GFX-008 **9/9**, vertex colour **4/4** |
+| SDL GPU sanity | skinned **3/3**, GFX-006 **4/4**, skinned fog **11/11**, GFX-010 **9/9**, vertex colour **2/2** |
+
+SDL GPU continues to emit its separately documented pre-existing
+`VUID-vkCmdDraw-renderPass-02684` (GFX-059); its pixels pass and GFX-090 did not modify that backend.
+The Vulkan oracle itself is validation-clean. GFX-093 and GFX-094 were not run or modified as part
+of this remediation.
+
+**Sibling-effect and artifact audit.** Repository-wide structural search found the bad expression
+only at the four live WebGPU SkinnedEffect sites. WebGPU BasicEffect already separates
+`lightSum*diffuse + emissive`; EnvironmentMapEffect has its own correct, distinct material/environment
+composition after GFX-007; D3D9/D3DCommon/Vulkan/EasyGL/Bgfx/SDL GPU SkinnedEffect sources are
+correct. Historical EasyGL comments are not live shaders. DualTextureEffect and AlphaTestEffect do
+not share this lighting contract. No sibling production change and no new REMED finding was
+warranted.
+
+The shader diff is exactly the four handwritten WebGPU SkinnedEffect formula sites plus their local
+comments in `WebGPUGraphicsBackend.{hpp,cpp}`. Generated-artifact diff is **zero**; `audit/` is
+untouched.
+
+- `3c9a4d5f test(Task REMED-GFX-090): reproduce WebGPU skinned material multiply`
+- `ee0f44c9 fix(Task REMED-GFX-090): correct WebGPU skinned material composition`
+- `docs(remediation): record GFX-090 WebGPU material fix` (this record)
+
+No new findings. GFX-092, GFX-093, GFX-094, GFX-061, and the WebGPU SpriteBatch BlendState
+counterpart remain untouched. Recommended next GRAPHICS task: **REMED-GFX-093**, because it is a
+confirmed Vulkan validation defect with a narrow subresource-layout root cause. Do not begin it as
+part of this record.
