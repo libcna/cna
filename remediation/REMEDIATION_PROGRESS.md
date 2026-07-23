@@ -5633,11 +5633,11 @@ Rationale vs. an 11-scalar-param function: groups the 4 masks + sample mask (an 
 | Vulkan | ✅ exact | ✅ per-attachment (indexed) | ✅ exact (`pSampleMask`) | **11/11**, validation 0 VUID, incl. MSAA mask=0 resolve | — |
 | EasyGL | ✅ exact (`glColorMask`) | ➖ needs `glColorMaski` ES3.2+ | ➖ `glSampleMaski` ES3.1+ | **7/7** (RGB) + blend presets 3/3 | independent MRT + sample mask deferred (gated) |
 | Bgfx | ✅ exact (`BGFX_STATE_WRITE_*`) | ❌ global per-draw → **GFX-085** | ❌ no per-draw mask → **GFX-085** | **6/6** (RGB), blend 8/8 | slots 1/2/3 collapse to slot 0 |
-| D3D11 | ✅ (RT0..3, IndependentBlendEnable) | ✅ | ✅ (dynamic OMSetBlendState arg) | compile-verified (Wine+DXVK deferred) | — |
-| D3D12 | ✅ | ➖ RT0 (draws single SV_Target) | ✅ (PSO key) | compile-verified (BUILD-012 windowed) | instanced-3d create-once PSO documented |
-| D3D9 | ✅ (`D3DRS_COLORWRITEENABLE`) | ✅ (`…1/2/3`, caps-gated) | ✅ (`D3DRS_MULTISAMPLEMASK`) | compile-verified (Wine+DXVK9 deferred) | independent masks need D3DPMISCCAPS_INDEPENDENTWRITEMASKS |
-| SdlGpu | ✅ (`color_write_mask`) | ➖ common single-target | ❌ SDL 3.5.0 reserved → **GFX-086** | compile-verified | sample mask non-functional in pinned SDL |
-| WebGPU | ✅ 3D keyed pipelines | ➖ single-target (WEBGPU-85..87) | ✅ (`WGPUMultisampleState.mask`) | compile-verified | sprite path fixed pipeline (existing counterpart) |
+| D3D11 | ✅ (RT0..3, IndependentBlendEnable) | ✅ code-path (single SV_Target → not pixel-tested) | ✅ (dynamic OMSetBlendState arg) | **runtime 9/9** (DXVK 2.6.0, offscreen RT+staging) | — |
+| D3D12 | ✅ | ➖ RT0 (draws single SV_Target) | ✅ (PSO key) | **runtime 10/10** (vkd3d-proton 3.1.0, offscreen) | windowed still BUILD-012; offscreen verified |
+| D3D9 | ✅ (`D3DRS_COLORWRITEENABLE`) | ✅ code-path (`…1/2/3`, caps-gated) | ✅ (`D3DRS_MULTISAMPLEMASK`) | **runtime 7/7 RT0** (DXVK9 2.6.0, offscreen RT+GetRenderTargetData) | MultiSampleMask MSAA-only (no-op on single-sample → set-verified not pixel-verified) |
+| SdlGpu | ✅ (`color_write_mask`) | ➖ common single-target | ❌ SDL 3.5.0 reserved → **GFX-086** | **runtime 7/7 RT0** (native SDL_GPU/Vulkan, Xvfb :99) | sample mask non-functional in pinned SDL |
+| WebGPU | ✅ 3D keyed pipelines | ➖ single-target (WEBGPU-85..87) | ✅ (`WGPUMultisampleState.mask`) | **runtime 9/9** (native wgpu-native, Xvfb :99, 0 validation errors) | sprite path fixed pipeline (existing counterpart) |
 | SdlRenderer | ❌ no channel-mask API | ❌ | ❌ | n/a | documented gap (2D SDL renderer) |
 | Canvas | ❌ Canvas2D composite-op only | ❌ | ❌ | n/a | documented gap |
 | Dx3 | ❌ DDraw/D3D3 preset blit | ❌ | ❌ | n/a | documented gap |
@@ -5655,4 +5655,36 @@ Rationale vs. an 11-scalar-param function: groups the 4 masks + sample mask (an 
 **Classification: DONE.** The interface migration is complete; `ColorWriteChannels` (RT0) and `MultiSampleMask` are now observable on every backend whose native API can express them, runtime-verified on the four backends runnable in this sandbox, compile-verified on the rest, and every unavoidable capability gap is documented with a follow-up ID — no silent no-op remains.
 
 **Commits:** `refactor` (interface + 14 backends), `test` Software (17/17), `test` Vulkan (11/11), `test` EasyGL+Bgfx + EasyGL Clear fix, `docs` (this record). Recommended next GRAPHICS task: **REMED-GFX-061** (per the index) or the WebGPU sprite-BlendState counterpart; the new GFX-085/086 are documented capability limitations, not near-term fixes.
+
+---
+
+### REMED-GFX-077 — POST-DONE RUNTIME VERIFICATION GATE (2026-07-23, closes the compile-only evidence gap)
+
+A focused verification-only session runtime-confirmed the five backends the DONE record could only compile-verify (D3D9/D3D11/D3D12/SdlGpu/WebGPU), each through its strongest available CNA runtime route. **Result: every one of the five is now runtime-verified for RT0 `ColorWriteChannels`; `MultiSampleMask` is runtime-verified on D3D11/D3D12/WebGPU and correctly classified elsewhere. No GFX-077 regression exists.** One genuine GFX-077 defect (an incomplete migration) was found and fixed as part of closing this gate.
+
+**Runtime evidence (this gate).**
+
+| Backend | Route / environment | GFX-077 checks | What was proven |
+|---|---|---|---|
+| SdlGpu | native SDL_GPU→Vulkan (llvmpipe), Xvfb :99 | **7/7** | RT0 ColorWriteChannels (7 masks) + A→B→A pipeline keying, byte-exact RT readback |
+| WebGPU | native wgpu-native (llvmpipe), Xvfb :99 | **9/9** | RT0 ColorWriteChannels + A→B→A + MultiSampleMask (mask=0→clear, all→src), 3D keyed pipeline; **0 validation errors** |
+| D3D11 | Wine + DXVK 2.6.0, off-screen RT + staging readback | **9/9** | RT0 ColorWriteChannels (cached blend obj RenderTargetWriteMask) + A→B→A blend-object select + MultiSampleMask (OMSetBlendState arg, single-sample bit 0) |
+| D3D12 | Wine + vkd3d-proton 3.1.0, **off-screen** (no swapchain — BUILD-012 untouched) | **10/10** | RT0 ColorWriteChannels (PSO RenderTargetWriteMask) + A→B→A PSO keying + MultiSampleMask (PSO SampleMask, single-sample bit 0) |
+| D3D9 | Wine + DXVK9 2.6.0, off-screen RT + GetRenderTargetData | **7/7** | RT0 ColorWriteChannels (`D3DRS_COLORWRITEENABLE`, 5 masks) + A→B→A dynamic render-state application |
+
+The generic-3D harness deliberately drives the keyed 3D pipeline (`DrawPrimitives`/`DrawColoredPrimitives` + `BasicEffect`), **not** SpriteBatch, so it exercises exactly the path GFX-077 modified (on WebGPU the fixed internal sprite pipeline does not consume `ColorWriteChannels`). Assertions are **differential** (masked-in channel == the all-written baseline, masked-out == the nothing-written baseline), which is invariant to a backend's RT colour space — decisive on WebGPU, whose `SurfaceFormat.Color` RT is sRGB-encoded (stored RGB 10→56 / 200→229, alpha linear), a **pre-existing** WebGPU RT trait unrelated to GFX-077 that a naive absolute-value expectation would have mis-flagged.
+
+**Readback routes differ by backend (learned this gate):** SdlGpu/WebGPU implement `RenderTarget2D::GetData` (RT readback) → the Game-API harness (`examples/gfx077_colorwritechannels_3d_test.cpp`, native ctests `SdlGpu_ColorWriteChannels`/`WebGPU_ColorWriteChannels`). D3D11 has no public RT GPU-readback (only the back buffer / a staging copy), D3D12 has no swapchain at all off-screen, and D3D9 render-target surfaces are not directly Lockable — so those three are verified inside their existing off-screen smoke tests (`Check GFX077` in `d3d11_smoke_test.cpp` / `d3d12_smoke_test.cpp` / `d3d9_smoke_test.cpp`) via each backend's own staging/`GetRenderTargetData`/`ReadBackRenderTargetFull` readback.
+
+**Direct GFX-077 defect found & fixed — incomplete interface migration (16 call sites).** The DONE record's "compiler-forced across all 14 overrides" claim held for the *overrides*, but the two widened signatures (`IGraphicsBackend::ApplyBlendState` gaining `const BlendWriteState&`, and `D3D11BlendStateCache::GetOrCreate` gaining `cw0..cw3`) left **callers** broken in translation units that were never compiled that session, so the breakage was invisible:
+- **Production:** `AsciiGraphicsBackend.cpp:85` — the present-blit's internal `inner_->ApplyBlendState(...)` forward call was still 6-arg (Ascii is only built under `CNA_GRAPHICS_BACKEND=ASCII`, never compiled in the GFX-077 session). Fixed to pass a default `BlendWriteState{}` (all-RGBA-write present blit, behaviour-preserving); compile-verified in a fresh `cmake-build-ascii`.
+- **Test harnesses (12 `ApplyBlendState` + 3 `GetOrCreate`):** `d3d9_{draw,drawex,instanced,pbr,drawoffset,effectbackend,skinnedvertexcolor}_test.cpp` (7), `d3d11_smoke_test.cpp` (2 ApplyBlendState + 3 GetOrCreate), `d3d12_smoke_test.cpp` (2), `headless_coverage_gaps_test.cpp` (1) — all were still 6-arg, so **the D3D9/D3D11/D3D12/Headless test executables did not compile after GFX-077** (only the CNA libraries did — which is what "compile-verified" had actually meant). All fixed with a behaviour-preserving default write state (All / 0xFFFFFFFF), rebuilt clean, and re-run (Headless 10/10; D3D9/D3D11/D3D12 smoke tests build+run — see below).
+
+**Regression controls (no GFX-077 regression anywhere).** All blend / RenderTarget / MRT / resolve checks pass on every backend: SdlGpu blendfactor 8/8 + rendertarget2d 7/7; WebGPU rendertarget2d 8/8 + msaa 6/6; D3D11 smoke RT/MSAA/MRT-resolve/blend-object all green; D3D12 smoke blend (X1–X3 additive/opaque) + RT green; D3D9 smoke RT/cube/MSAA/MRT (D9-53/54) all green. The SdlGpu `VUID-vkCmdDraw-renderPass-02684` depth-stencil validation line is **pre-existing** (18× in the untouched `sdlgpu_rendertarget_blendfactor` test too) and concerns a depth attachment, not colour-write masking.
+
+**Independent pre-existing failures observed (NOT GFX-077, NOT fixed — candidate follow-up).** Because the D3D smoke tests could not compile since GFX-077 landed, this gate is their first post-GFX-077 run, and it surfaced pre-existing failures unrelated to blend write state: D3D12 smoke 11 fails (fog `DX-137` + skinned `DX-135/DX-111`), D3D11 smoke 14 fails (fog, lighting `DX-124/125`, depth-test, occlusion `DX-147`, NPOT `DX-140`), D3D9 smoke 2 fails (`SetDepthTestEnabled` depth-test). All are exact-colour-match GPU tests that pass with `fogEnabled=false` and fail only with `fogEnabled=true` (etc.) — a shader/precision pattern under this sandbox's software-Vulkan (llvmpipe) + DXVK/vkd3d stack, not a state issue. Proven not caused by this gate's edits: the identical fog failures occur on D3D12 where the new `Check GFX077` block runs *after* them (cannot influence them), the check immediately after the D3D11 insert (real `textured3d` draw) passes, and DX-137 recorded these at 181/181 (D3D12) / 132/132 (D3D11) on real hardware. **Recommended: a separate finding to triage the D3D smoke exact-colour regressions vs. the llvmpipe/DXVK/vkd3d environment — out of scope for this GFX-077 gate.**
+
+**Final GFX-077 confidence: DONE + runtime-verified on all expressible backends.** RT0 `ColorWriteChannels` is now runtime-observed on Software, Vulkan, EasyGL, Bgfx, SdlGpu, WebGPU, D3D9, D3D11, D3D12; `MultiSampleMask` on Software, Vulkan, WebGPU, D3D11, D3D12 (and set-verified on D3D9, capability-gapped on SdlGpu=GFX-086 / Bgfx=GFX-085 / EasyGL profile). No compile-only ambiguity remains for a backend whose native API can express the feature.
+
+**Gate commits:** `test`(extend runtime coverage: new generic-3D harness + native ctests + D3D9/11/12 smoke `Check GFX077` + migration-completeness fixes incl. the Ascii production call), `docs`(this record). No other production change.
 
