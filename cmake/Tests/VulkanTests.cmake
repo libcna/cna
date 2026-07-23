@@ -439,6 +439,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_Texture3D_Mip_RoundTrip COMMAND cna_test_vulkan_texture3d_mip
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-093: level-scoped SetData/GetData state cycles.  Pixel/data checks alone pass
+        # on the defective implementation, so make the exact copy-layout validation failure fatal.
+        cna_vulkan_test(cna_test_vulkan_texture3d_mip_layout
+                        examples/vulkan_texture3d_mip_layout_test.cpp)
+        cna_register_backend_test(NAME Vulkan_Texture3D_Mip_Layout COMMAND cna_test_vulkan_texture3d_mip_layout
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        set_tests_properties(Vulkan_Texture3D_Mip_Layout PROPERTIES
+            FAIL_REGULAR_EXPRESSION "VUID-vkCmdDraw-None-09600")
+
         # Task 864: TextureCube mip-level allocation is now real on Vulkan -- shared with EasyGL's
         # registration of the same backend-agnostic file (Task 276).
         cna_vulkan_test(cna_test_vulkan_texturecube_mip
