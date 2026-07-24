@@ -47,6 +47,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube_plural_binding
+                    examples/rendertargetcube_plural_binding_test.cpp)
+    target_compile_definitions(cna_test_sdlgpu_rendertargetcube_plural_binding
+        PRIVATE CNA_GFX096_CUBE_GETDATA=1 CNA_GFX096_FORCE_CUBE_DEPTH=1)
+    cna_register_backend_test(NAME SdlGpu_RenderTargetCube_PluralBinding
+        COMMAND cna_test_sdlgpu_rendertargetcube_plural_binding
+        TIMEOUT 60 LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
     cna_sdlgpu_test(cna_test_sdlgpu_mrt examples/sdlgpu_mrt_test.cpp)
     cna_register_backend_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt

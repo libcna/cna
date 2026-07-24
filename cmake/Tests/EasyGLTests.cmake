@@ -692,6 +692,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_RenderTargetCube_SampleAfterUnbind COMMAND cna_test_easygl_rendertargetcube_sample
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
+        cna_easygl_test(cna_test_easygl_rendertargetcube_plural_binding
+                        examples/rendertargetcube_plural_binding_test.cpp)
+        cna_register_backend_test(NAME EasyGL_RenderTargetCube_PluralBinding
+            COMMAND cna_test_easygl_rendertargetcube_plural_binding
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 877: RenderTargetCube honors its exact requested DepthFormat (None vs Depth24Stencil8)
         cna_easygl_test(cna_test_easygl_rendertargetcube_depthformat
                         examples/easygl_rendertargetcube_depthformat_test.cpp)

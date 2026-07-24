@@ -200,6 +200,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_RenderTargetCube COMMAND cna_test_webgpu_rendertargetcube
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
+    cna_webgpu_test(cna_test_webgpu_rendertargetcube_plural_binding
+                    examples/rendertargetcube_plural_binding_test.cpp)
+    target_compile_definitions(cna_test_webgpu_rendertargetcube_plural_binding
+        PRIVATE CNA_GFX096_CUBE_GETDATA=1 CNA_GFX096_EXPECT_SRGB_ENCODED=1)
+    cna_register_backend_test(NAME WebGPU_RenderTargetCube_PluralBinding
+        COMMAND cna_test_webgpu_rendertargetcube_plural_binding
+        TIMEOUT 60 LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-019: SpriteBatch drawn INTO an off-screen RenderTarget2D of a different size than
     # the backbuffer must map its destination rectangle in the render target's OWN pixel space, not
     # the backbuffer's (QueueSprite() previously divided clip-space by physicalWidth_/physicalHeight_

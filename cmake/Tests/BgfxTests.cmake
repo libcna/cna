@@ -286,6 +286,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_RenderTargetCube_SampleAfterUnbind COMMAND cna_test_bgfx_render_target_cube_sample
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-096: backend-neutral singular/plural cube-face binding parity.
+    cna_bgfx_test(cna_test_bgfx_rendertargetcube_plural_binding
+                  examples/rendertargetcube_plural_binding_test.cpp)
+    target_compile_definitions(cna_test_bgfx_rendertargetcube_plural_binding
+        PRIVATE CNA_GFX096_STAGED_SINGLE_FACE=1)
+    cna_register_backend_test(NAME Bgfx_RenderTargetCube_PluralBinding
+        COMMAND cna_test_bgfx_rendertargetcube_plural_binding
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
     cna_bgfx_test(cna_test_bgfx_basiceffect_vertexcolor_disabled
                   examples/bgfx_basiceffect_vertexcolor_disabled_test.cpp)
