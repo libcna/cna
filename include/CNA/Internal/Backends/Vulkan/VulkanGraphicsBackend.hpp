@@ -2,6 +2,7 @@
 
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include <vulkan/vulkan.h>
+#include <algorithm>
 #include <array>
 #include <map>
 #include <unordered_map>
@@ -30,11 +31,9 @@ namespace CNA::Internal::Backends::Vulkan
         virtual int           GetWidth()                   const = 0;
         virtual int           GetHeight()                  const = 0;
         virtual uint32_t      GetColorAttachmentCount()    const = 0;
-        /// True if this RT source's actual bound framebuffer/render pass this frame is the
-        /// 3-attachment MSAA variant (MSAA color + resolve + MSAA depth) rather than the plain
-        /// single-sample one. Default false; overridden by VulkanRenderTargetBackend when it
-        /// actually engaged MSAA (Task 878/879 — see the "piggyback on the backend's own
-        /// sampleCount_" scope decision in plan_graphics.md).
+        /// True if this source's actual framebuffer/render pass uses multisample color
+        /// attachments plus single-sample resolves. Default false; overridden by the concrete
+        /// single-target, cube-face, and MRT sources when MSAA is genuinely engaged.
         virtual bool          WantsMsaa()                   const { return false; }
         /// Task 911: this RT's own real depth VkFormat (VK_FORMAT_UNDEFINED = no depth
         /// attachment at all, DepthFormat::None). Default VK_FORMAT_UNDEFINED; overridden by
@@ -233,6 +232,8 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanEffectBackend (Task 119 — SPIR-V custom Effect for Vulkan)
     // -------------------------------------------------------------------------
 
+    struct BlendKeyParams;
+
     class VulkanEffectBackend : public IEffectBackend
     {
     public:
@@ -254,7 +255,11 @@ namespace CNA::Internal::Backends::Vulkan
         void SetUniformFloat(const char* name, float value) override;
         void SetUniformInt(const char* name, int value) override;
 
-        VkPipeline       GetPipeline()       const { return pipeline_;       }
+        VkPipeline GetOrCreatePipeline(uint32_t colorAttachmentCount,
+                                       VkSampleCountFlagBits sampleCount,
+                                       VkFormat depthFormat,
+                                       bool blend,
+                                       const BlendKeyParams& blendParams);
         VkPipelineLayout GetPipelineLayout() const { return pipelineLayout_; }
         // Returns pointer to 128-byte push-constant staging area (floats 2..31 = user uniforms).
         const float*     GetPushConst()      const { return pushConst_;      }
@@ -264,7 +269,32 @@ namespace CNA::Internal::Backends::Vulkan
         VkShaderModule   vertModule_     = VK_NULL_HANDLE;
         VkShaderModule   fragModule_     = VK_NULL_HANDLE;
         VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-        VkPipeline       pipeline_       = VK_NULL_HANDLE;
+        struct PipelineVariantKey
+        {
+            uint32_t colorAttachmentCount = 1;
+            uint32_t sampleCount = 1;
+            int32_t depthFormat = 0;
+            bool blend = false;
+            uint32_t blendBits = 0;
+            uint32_t colorWriteBits = 0;
+            uint32_t sampleMask = 0xFFFFFFFFu;
+            bool operator==(const PipelineVariantKey&) const noexcept = default;
+        };
+        struct PipelineVariantKeyHash
+        {
+            std::size_t operator()(const PipelineVariantKey& key) const noexcept
+            {
+                std::size_t h = std::hash<uint32_t>{}(key.colorAttachmentCount);
+                h ^= std::hash<uint32_t>{}(key.sampleCount) + (h << 6) + (h >> 2);
+                h ^= std::hash<int32_t>{}(key.depthFormat) + (h << 6) + (h >> 2);
+                h ^= std::hash<bool>{}(key.blend) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.blendBits) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.colorWriteBits) + (h << 6) + (h >> 2);
+                h ^= std::hash<uint32_t>{}(key.sampleMask) + (h << 6) + (h >> 2);
+                return h;
+            }
+        };
+        std::unordered_map<PipelineVariantKey, VkPipeline, PipelineVariantKeyHash> pipelines_;
         std::string      compileError_;
         // Push-constant staging: 32 floats = 128 bytes.
         // GLSL std140 layout (push_constant block) requires mat4 alignment=16, so
@@ -678,9 +708,12 @@ namespace CNA::Internal::Backends::Vulkan
         int           GetWidth()                const override { return width_; }
         int           GetHeight()               const override { return height_; }
         uint32_t      GetColorAttachmentCount() const override { return colorCount_; }
-        // Task 911: MRT stays out of Task 911's scope -- always the device-wide depthFormat_
-        // (this proxy owns its own dedicated depth image in that format; see the constructor).
-        VkFormat      GetDepthFormat()           const override;
+        bool          WantsMsaa()               const override
+        {
+            return colorSampleCount_ > VK_SAMPLE_COUNT_1_BIT;
+        }
+        // XNA/FNA shares binding 0's depth attachment across the active MRT set.
+        VkFormat      GetDepthFormat()           const override { return depthFormat_; }
 
         // REMED-GFX-095 read-only structural diagnostics. Keeping the actual framebuffer
         // vector makes each live attachment/view association directly testable; Vulkan has
@@ -711,6 +744,16 @@ namespace CNA::Internal::Backends::Vulkan
         {
             return index < resolveAttachments_.size() ? resolveAttachments_[index] : VK_NULL_HANDLE;
         }
+        [[nodiscard]] VkSampleCountFlagBits GetDepthSampleCountEXT() const
+        {
+            return depthView_ != VK_NULL_HANDLE ? colorSampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        }
+        [[nodiscard]] bool ContainsResolveTargetEXT(
+            const VulkanRenderTargetBackend& target) const
+        {
+            return std::find(resolveTargetViews_.begin(), resolveTargetViews_.end(),
+                             target.GetResolveColorViewEXT()) != resolveTargetViews_.end();
+        }
 
     private:
         VulkanGraphicsBackend* owner_       = nullptr;
@@ -723,13 +766,10 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VkImageView> colorAttachments_;
         std::vector<VkImageView> resolveAttachments_;
         std::vector<VkImageView> framebufferAttachments_;
-        // Task 911: MRT's own dedicated depth image, always in the device-wide depthFormat_ --
-        // NOT borrowed from any bound RenderTarget2D's own depthView_, since an individual RT can
-        // now genuinely have no depth buffer at all (DepthFormat::None) or a distinct real
-        // format, either of which would be wrong (or simply absent) for this shared MRT pass.
-        VkImage                depthImage_  = VK_NULL_HANDLE;
-        VkDeviceMemory         depthMemory_ = VK_NULL_HANDLE;
-        VkImageView            depthView_   = VK_NULL_HANDLE;
+        std::vector<VkImageView> resolveTargetViews_;
+        VkFormat                depthFormat_ = VK_FORMAT_UNDEFINED;
+        // Borrowed from binding 0. Render-target retirement keeps it alive until frame completion.
+        VkImageView             depthView_ = VK_NULL_HANDLE;
     };
 
     // Task 870: bundles every DepthStencilState field that -- unlike stencil reference/compare
@@ -1016,6 +1056,7 @@ namespace CNA::Internal::Backends::Vulkan
         std::map<std::pair<VkImageView,VkSampler>, VkDescriptorSet>  texSamplerDescSets_;
         bool anisotropySupported_ = false;
         float maxSamplerAnisotropy_ = 1.f;
+        bool independentBlendSupported_ = false;
 
         // REMED-GFX-076: a cached effect descriptor set together with the sampled VkImageViews it
         // was written against. The seven per-frame effect descriptor caches below key on a *hash* of
@@ -1214,13 +1255,13 @@ namespace CNA::Internal::Backends::Vulkan
         std::vector<VulkanIndexBufferBackend*>   liveIndexBuffers_;
         std::vector<VulkanRenderTargetBackend*>  liveRenderTargets_;
 
-        // --- MRT proxy (owned here; valid for one SetRenderTargets call) ---
+        // --- MRT proxy (one active binding; old bindings retire through the frame fence) ---
         std::unique_ptr<VulkanMRTProxy>          mrtProxy_;
         VkSampleCountFlagBits lastMrtPipelineSampleCountEXT_ = VK_SAMPLE_COUNT_1_BIT;
         uint32_t              lastMrtPipelineColorCountEXT_ = 0;
 
-        // --- MRT render pass cache (keyed by color attachment count) ---
-        std::unordered_map<uint32_t, VkRenderPass> mrtRenderPasses_;
+        // --- MRT render pass cache (target count + samples + shared depth format) ---
+        std::unordered_map<uint64_t, VkRenderPass> mrtRenderPasses_;
 
         // --- Per-frame 3D dynamic geometry buffers ---
         // Vertex/index data is copied to CPU at draw time, then uploaded here after fence wait.
@@ -1568,7 +1609,8 @@ namespace CNA::Internal::Backends::Vulkan
         // REMED-GFX-071: also parameterized by the batch's BlendState (blend enable + per-channel
         // factors/functions) so SpriteBatch.Begin()'s BlendState drives the colour-attachment blend
         // equation via FillBlendAttachmentState, instead of a hardcoded alpha-blend.
-        VkPipeline GetOrCreatePipeline2D(VkFormat depthFmt, bool blend, const BlendKeyParams& bp);
+        VkPipeline GetOrCreatePipeline2D(VkFormat depthFmt, uint32_t colorAttachmentCount,
+                                         bool blend, const BlendKeyParams& bp);
         VkFormat   FindDepthFormat() const;
         void       CreateDepthResources();
         void       CleanupDepthResources();
@@ -1722,18 +1764,18 @@ namespace CNA::Internal::Backends::Vulkan
         void CreateRenderPassMsaa();
         // Task 911: MSAA counterpart to GetOrCreatePipeline2D(), same depth-format-keyed caching.
         // REMED-GFX-071: also BlendState-parameterized, see GetOrCreatePipeline2D().
-        VkPipeline GetOrCreatePipeline2DMsaa(VkFormat depthFmt, bool blend, const BlendKeyParams& bp);
+        VkPipeline GetOrCreatePipeline2DMsaa(VkFormat depthFmt, uint32_t colorAttachmentCount,
+                                             bool blend, const BlendKeyParams& bp);
 
         void CreateSpriteBuffers();
         void CreateFrame3DBuffers();
         void EnsureFrame3DBuffers();
-        VkRenderPass GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount);
-        // Task 911: the single render-pass-selection decision shared by every 3D pipeline
-        // creation function (GetOrCreatePipeline3D et al.) -- MRT keeps its own dedicated,
-        // device-wide-depthFormat_ render pass (out of Task 911's scope); a single-target draw
-        // reuses the backbuffer's own renderPass_/renderPassMsaa_ when the target's real depth
-        // format matches depthFormat_ (the common case, keeping existing pipelines/cache hits
-        // valid), otherwise falls back to a render pass keyed by the target's own depth format.
+        VkRenderPass GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount,
+                                              VkSampleCountFlagBits sampleCount,
+                                              VkFormat depthFormat);
+        // The render-pass-selection decision shared by every 2D/custom/3D pipeline. MRT uses a
+        // pass keyed by color count, sample count, and binding 0's depth format; single-target
+        // draws reuse compatible backbuffer passes or a depth-format-keyed RT pass.
         VkRenderPass PickRTPipelineRenderPass(uint32_t colorAttachmentCount, bool msaa,
                                                VkFormat targetDepthFmt);
 

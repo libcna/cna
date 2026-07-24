@@ -297,11 +297,24 @@ class VulkanMrtMsaaTest final : public Game
 
         auto one0 = MakeTarget(0);
         auto one1 = MakeTarget(0);
+        auto& device = getGraphicsDeviceProperty();
+        device.SetRenderTargets(Bindings({one0.get(), one1.get()}));
+        const VulkanMRTProxy* oneProxy = Backend().GetCurrentMRTProxyEXT();
+        const bool oneStructure = oneProxy
+            && oneProxy->GetColorSampleCountEXT() == VK_SAMPLE_COUNT_1_BIT
+            && oneProxy->GetResolveAttachmentCountEXT() == 0
+            && oneProxy->GetFramebufferAttachmentCountEXT() == 2
+            && oneProxy->GetColorAttachmentViewEXT(0)
+                == BackendOf(*one0).GetResolveColorViewEXT()
+            && oneProxy->GetColorAttachmentViewEXT(1)
+                == BackendOf(*one1).GetResolveColorViewEXT();
+        device.SetRenderTargets({});
         QueueMrtDraw(Bindings({one0.get(), one1.get()}), effect, all, kSource);
         const Color non0 = ReadCenter(*one0);
         const Color non1 = ReadCenter(*one1);
-        Check(Matches(non0, kSource) && Matches(non1, want1),
-              "non-MSAA MRT remains correct: " + Describe(non0) + " / " + Describe(non1));
+        Check(oneStructure && Matches(non0, kSource) && Matches(non1, want1),
+              "non-MSAA MRT keeps direct [texture0,texture1] framebuffer wiring: "
+              + Describe(non0) + " / " + Describe(non1));
     }
 
     void RunFourTargetColorWriteCase(ShaderEffect& effect)
@@ -344,7 +357,10 @@ class VulkanMrtMsaaTest final : public Game
         const bool structure = proxy
             && SampleCount(proxy->GetColorSampleCountEXT()) == appliedSamples
             && proxy->GetDepthFormat() != VK_FORMAT_UNDEFINED
-            && proxy->GetFramebufferAttachmentCountEXT() == 5;
+            && SampleCount(proxy->GetDepthSampleCountEXT()) == appliedSamples
+            && proxy->GetFramebufferAttachmentCountEXT() == 5
+            && proxy->GetFramebufferAttachmentViewEXT(4)
+                == BackendOf(*rt0).GetDepthView();
         device.SetRenderTargets({});
         QueueMrtDraw(Bindings({rt0.get(), rt1.get()}),
                      effect, BlendState::Opaque, kSource);
@@ -469,6 +485,15 @@ class VulkanMrtMsaaTest final : public Game
         }
         device.SetRenderTargets({});
         Check(extentRejected, "incompatible MRT dimensions are rejected deterministically");
+
+        bool duplicateRejected = false;
+        try {
+            device.SetRenderTargets(Bindings({full.get(), full.get()}));
+        } catch (const std::runtime_error&) {
+            duplicateRejected = true;
+        }
+        device.SetRenderTargets({});
+        Check(duplicateRejected, "duplicate MRT target subresources are rejected deterministically");
     }
 
 protected:

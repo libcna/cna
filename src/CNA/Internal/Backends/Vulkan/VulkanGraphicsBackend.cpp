@@ -878,6 +878,24 @@ namespace CNA::Internal::Backends::Vulkan
         FlushTexture();
         active_ = false;
 
+        VkPipeline preparedCustomPipeline = VK_NULL_HANDLE;
+        if (customEffectBackend_) {
+            const uint32_t colorAttachmentCount =
+                activeRT_ ? activeRT_->GetColorAttachmentCount() : 1u;
+            const bool wantsMsaa = activeRT_
+                ? activeRT_->WantsMsaa()
+                : backend_->sampleCount_ > VK_SAMPLE_COUNT_1_BIT;
+            const VkSampleCountFlagBits samples = wantsMsaa
+                ? backend_->sampleCount_
+                : VK_SAMPLE_COUNT_1_BIT;
+            const VkFormat depthFormat = activeRT_
+                ? activeRT_->GetDepthFormat()
+                : backend_->depthFormat_;
+            preparedCustomPipeline = customEffectBackend_->GetOrCreatePipeline(
+                colorAttachmentCount, samples, depthFormat,
+                backend_->blendEnabled_, backend_->blendParams_);
+        }
+
         // Task 664 fix: move this cycle's geometry into its own independent, frame-lifetime
         // snapshot pushed onto backend_->activeBatches_ NOW (at End(), not Begin()), so a 2nd
         // Begin()/Draw()/End() cycle on this same object later in the same frame starts from
@@ -896,9 +914,9 @@ namespace CNA::Internal::Backends::Vulkan
             // while it is guaranteed alive (Apply() just ran), so the deferred record never touches
             // the effect wrapper -- it may be disposed before Present. The pipeline handle stays
             // valid past this batch via the effect backend's retirement queue.
-            if (customEffectBackend_ && customEffectBackend_->GetPipeline() != VK_NULL_HANDLE) {
+            if (customEffectBackend_ && preparedCustomPipeline != VK_NULL_HANDLE) {
                 snapshot->hasCustomEffect = true;
-                snapshot->customPipeline  = customEffectBackend_->GetPipeline();
+                snapshot->customPipeline  = preparedCustomPipeline;
                 snapshot->customLayout    = customEffectBackend_->GetPipelineLayout();
                 std::memcpy(snapshot->customPushConst, customEffectBackend_->GetPushConst(),
                             sizeof(snapshot->customPushConst));
@@ -1233,11 +1251,10 @@ namespace CNA::Internal::Backends::Vulkan
         // Step 1: wait for all in-flight GPU work to complete.
         vkDeviceWaitIdle(device_);
 
-        // Step 1b: destroy the MRT proxy (if any) while device_ is still valid -- mrtProxy_'s own
-        // destructor guards on owner_->device_ != VK_NULL_HANDLE, so it must run before Step 8
-        // destroys the device, not via automatic member destruction after this body returns
-        // (which runs too late and would leak its framebuffer/depth image/view/memory, Task 911).
+        // Step 1b: destroy every MRT framebuffer before releasing the render-target views it
+        // borrows. The device is idle, so both current and frame-retired proxies are safe now.
         mrtProxy_.reset();
+        retiredMrtProxies_.clear();
 
         // Step 2: destroy buffers and memory.
         // Externally-owned render targets, vertex/index buffers (C++ objects may outlive this destructor).
@@ -1625,6 +1642,10 @@ namespace CNA::Internal::Backends::Vulkan
             vkGetPhysicalDeviceProperties(physicalDevice_, &props);
             maxSamplerAnisotropy_ = props.limits.maxSamplerAnisotropy;
         }
+        if (supported.independentBlend) {
+            feat.independentBlend = VK_TRUE;
+            independentBlendSupported_ = true;
+        }
         VkDeviceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         ci.queueCreateInfoCount = static_cast<uint32_t>(qis.size());
@@ -1658,6 +1679,8 @@ namespace CNA::Internal::Backends::Vulkan
                               ? ("supported, max " + std::to_string(static_cast<int>(maxSamplerAnisotropy_)) + "x")
                               : std::string("NOT supported on this device"))
                       << "; wireframe fill mode: " << (fillModeNonSolidSupported_ ? "supported" : "NOT supported")
+                      << "; independent MRT blend/write state: "
+                      << (independentBlendSupported_ ? "supported" : "NOT supported")
                       << "; SurfaceFormat: Color only (Task 176)" << std::endl;
         }
     }
@@ -2042,94 +2065,130 @@ namespace CNA::Internal::Backends::Vulkan
         return rp;
     }
 
-    VkRenderPass VulkanGraphicsBackend::GetOrCreateMRTRenderPass(uint32_t colorAttachmentCount)
+    VkRenderPass VulkanGraphicsBackend::GetOrCreateMRTRenderPass(
+        uint32_t colorAttachmentCount, VkSampleCountFlagBits sampleCount,
+        VkFormat depthFormat)
     {
-        auto it = mrtRenderPasses_.find(colorAttachmentCount);
+        const bool msaa = sampleCount > VK_SAMPLE_COUNT_1_BIT;
+        const bool hasDepth = depthFormat != VK_FORMAT_UNDEFINED;
+        const uint64_t key = static_cast<uint64_t>(colorAttachmentCount)
+            | (static_cast<uint64_t>(sampleCount) << 8)
+            | (static_cast<uint64_t>(static_cast<uint32_t>(depthFormat)) << 16);
+        auto it = mrtRenderPasses_.find(key);
         if (it != mrtRenderPasses_.end()) return it->second;
 
-        // N color attachments (all swapchainFormat_) + 1 depth.
-        std::vector<VkAttachmentDescription> atts(colorAttachmentCount + 1);
+        // REMED-GFX-095:
+        //   MSAA [source0..sourceN-1, resolve0..resolveN-1, optional depth]
+        //   1x   [color0..colorN-1, optional depth]
+        // Parallel vectors keep colorRefs[i] and resolveRefs[i] paired explicitly.
+        const uint32_t resolveBase = colorAttachmentCount;
+        const uint32_t depthIndex = msaa
+            ? colorAttachmentCount * 2
+            : colorAttachmentCount;
+        const uint32_t attachmentCount = depthIndex + (hasDepth ? 1u : 0u);
+        std::vector<VkAttachmentDescription> atts(attachmentCount);
         for (uint32_t i = 0; i < colorAttachmentCount; ++i) {
-            atts[i].format         = swapchainFormat_;
-            atts[i].samples        = VK_SAMPLE_COUNT_1_BIT;
-            atts[i].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            atts[i].storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
-            atts[i].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-            atts[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            atts[i].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-            atts[i].finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            auto& color = atts[i];
+            color.format         = swapchainFormat_;
+            color.samples        = sampleCount;
+            color.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            color.storeOp        = msaa ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                        : VK_ATTACHMENT_STORE_OP_STORE;
+            color.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            color.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            color.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+            color.finalLayout    = msaa ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+                                        : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            if (msaa) {
+                auto& resolve = atts[resolveBase + i];
+                resolve.format         = swapchainFormat_;
+                resolve.samples        = VK_SAMPLE_COUNT_1_BIT;
+                resolve.loadOp         = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+                resolve.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+                resolve.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+                resolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+                resolve.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+                resolve.finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
         }
-        auto& depth = atts[colorAttachmentCount];
-        depth.format         = depthFormat_;
-        depth.samples        = VK_SAMPLE_COUNT_1_BIT;
-        depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depth.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depth.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-        depth.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        if (hasDepth) {
+            auto& depth = atts[depthIndex];
+            depth.format         = depthFormat;
+            depth.samples        = sampleCount;
+            depth.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth.storeOp        = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depth.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depth.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+            depth.finalLayout    = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        }
 
         std::vector<VkAttachmentReference> colorRefs(colorAttachmentCount);
-        for (uint32_t i = 0; i < colorAttachmentCount; ++i)
+        std::vector<VkAttachmentReference> resolveRefs;
+        if (msaa) resolveRefs.resize(colorAttachmentCount);
+        for (uint32_t i = 0; i < colorAttachmentCount; ++i) {
             colorRefs[i] = { i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-        VkAttachmentReference depthRef{ colorAttachmentCount, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+            if (msaa)
+                resolveRefs[i] = { resolveBase + i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        }
+        VkAttachmentReference depthRef{
+            depthIndex, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        };
 
         VkSubpassDescription sub{};
         sub.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
         sub.colorAttachmentCount    = colorAttachmentCount;
         sub.pColorAttachments       = colorRefs.data();
-        sub.pDepthStencilAttachment = &depthRef;
+        sub.pResolveAttachments     = msaa ? resolveRefs.data() : nullptr;
+        sub.pDepthStencilAttachment = hasDepth ? &depthRef : nullptr;
 
-        VkSubpassDependency deps2[2]{};
-        // Entry: wait for texture reads before writing.
-        deps2[0].srcSubpass    = VK_SUBPASS_EXTERNAL;
-        deps2[0].dstSubpass    = 0;
-        deps2[0].srcStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        deps2[0].dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                 VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        deps2[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        deps2[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-        deps2[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-        // Exit: make color writes visible to the fragment shader in the next pass.
-        deps2[1].srcSubpass    = 0;
-        deps2[1].dstSubpass    = VK_SUBPASS_EXTERNAL;
-        deps2[1].srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        deps2[1].dstStageMask  = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        deps2[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        deps2[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        deps2[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        VkSubpassDependency deps[2]{};
+        deps[0].srcSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[0].dstSubpass      = 0;
+        deps[0].srcStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT;
+        deps[0].dstStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        deps[0].srcAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+        deps[0].dstAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        deps[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        deps[1].srcSubpass      = 0;
+        deps[1].dstSubpass      = VK_SUBPASS_EXTERNAL;
+        deps[1].srcStageMask    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        deps[1].dstStageMask    = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT;
+        deps[1].srcAccessMask   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        deps[1].dstAccessMask   = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT;
+        deps[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         VkRenderPassCreateInfo ci{};
         ci.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        ci.attachmentCount = static_cast<uint32_t>(atts.size());
+        ci.attachmentCount = attachmentCount;
         ci.pAttachments    = atts.data();
-        ci.subpassCount    = 1; ci.pSubpasses    = &sub;
-        ci.dependencyCount = 2; ci.pDependencies = deps2;
+        ci.subpassCount    = 1;
+        ci.pSubpasses      = &sub;
+        ci.dependencyCount = 2;
+        ci.pDependencies   = deps;
 
         VkRenderPass rp = VK_NULL_HANDLE;
         if (vkCreateRenderPass(device_, &ci, nullptr, &rp) != VK_SUCCESS)
             throw std::runtime_error("vkCreateRenderPass (MRT) failed");
-
-        mrtRenderPasses_[colorAttachmentCount] = rp;
+        mrtRenderPasses_[key] = rp;
         return rp;
     }
 
-    // Task 911: shared render-pass-selection decision for every 3D pipeline creation function.
-    // MRT stays out of Task 911's scope (always the device-wide depthFormat_, via
-    // GetOrCreateMRTRenderPass -- XNA/FNA's own semantics for "which bound target's depth format
-    // wins in a multi-target draw" are inherently ambiguous). For a single-target draw, reuse the
-    // backbuffer's own renderPass_/renderPassMsaa_ whenever the target's real depth format matches
-    // depthFormat_ -- the overwhelmingly common case (a backbuffer draw, or a RenderTarget2D/
-    // RenderTargetCube constructed with the default DepthFormat) -- since they are already
-    // guaranteed render-pass-compatible; this keeps pipeline reuse/cache-hit behavior identical to
-    // before this task for that common case. Only a target with a genuinely different depth
-    // format (Task 911's whole point) falls back to a render pass keyed by its own format.
+    // Shared render-pass selection for every 2D/custom/3D pipeline. MRT is keyed by color count,
+    // sample count, and binding 0's real depth format. Single-target draws reuse the compatible
+    // backbuffer pass or fall back to a depth-format-keyed RT pass.
     VkRenderPass VulkanGraphicsBackend::PickRTPipelineRenderPass(uint32_t colorAttachmentCount, bool msaa,
                                                                   VkFormat targetDepthFmt)
     {
         if (colorAttachmentCount > 1)
-            return GetOrCreateMRTRenderPass(colorAttachmentCount);
+            return GetOrCreateMRTRenderPass(
+                colorAttachmentCount,
+                msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT,
+                targetDepthFmt);
         if (targetDepthFmt == depthFormat_)
             return (msaa && renderPassMsaa_) ? renderPassMsaa_ : renderPass_;
         return msaa ? GetOrCreateRTRenderPassMsaa(targetDepthFmt)
@@ -2420,7 +2479,9 @@ namespace CNA::Internal::Backends::Vulkan
         // record must keep those handles valid until the record consumes the batch. Retire them
         // (frame-fence-gated) instead of destroying now; the snapshot never dereferences this wrapper.
         VulkanGraphicsBackend::RetiredResources r;
-        if (pipeline_       != VK_NULL_HANDLE) { r.pipelines.push_back(pipeline_);            pipeline_       = VK_NULL_HANDLE; }
+        for (auto& [key, pipeline] : pipelines_)
+            if (pipeline != VK_NULL_HANDLE) r.pipelines.push_back(pipeline);
+        pipelines_.clear();
         if (pipelineLayout_ != VK_NULL_HANDLE) { r.pipelineLayouts.push_back(pipelineLayout_); pipelineLayout_ = VK_NULL_HANDLE; }
         if (fragModule_     != VK_NULL_HANDLE) { r.shaderModules.push_back(fragModule_);      fragModule_     = VK_NULL_HANDLE; }
         if (vertModule_     != VK_NULL_HANDLE) { r.shaderModules.push_back(vertModule_);      vertModule_     = VK_NULL_HANDLE; }
@@ -2431,9 +2492,10 @@ namespace CNA::Internal::Backends::Vulkan
     // vertSpv and fragSpv contain raw SPIR-V bytecode (must be 4-byte aligned size).
     // Push-constant contract (128 bytes, vert+frag stages):
     //   [0..7]    = vec2 vpSize  — set automatically by the sprite-batch runtime
-    //   [8..71]   = mat4 uMatrix — SetUniformMat4(any name, ...)
-    //   [72..87]  = vec4 uColor  — SetUniformVec4/Vec3/Vec2(any name, ...)
-    //   [88..119] = 8 floats     — SetUniformFloat / SetUniformInt (slots 0–7)
+    //   [8..15]   = std140 alignment padding
+    //   [16..79]  = mat4 uMatrix — SetUniformMat4(any name, ...)
+    //   [80..95]  = vec4 uColor  — SetUniformVec4/Vec3/Vec2(any name, ...)
+    //   [96..127] = 8 floats     — SetUniformFloat / SetUniformInt (slots 0–7)
     bool VulkanEffectBackend::CompileProgram(const std::string& vertSpv, const std::string& fragSpv)
     {
         compileError_.clear();
@@ -2470,101 +2532,15 @@ namespace CNA::Internal::Backends::Vulkan
             compileError_ = "Failed to create pipeline layout"; return false;
         }
 
-        VkPipelineShaderStageCreateInfo stages[2]{};
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;   stages[0].module = vertModule_; stages[0].pName = "main";
-        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; stages[1].module = fragModule_; stages[1].pName = "main";
-
-        // Same vertex input as Sprite2DVertex: x,y | u,v | r,g,b,a (32 bytes)
-        VkVertexInputBindingDescription bind{ 0, sizeof(Sprite2DVertex), VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[3]{};
-        attrs[0] = { 0, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(Sprite2DVertex, x) };
-        attrs[1] = { 1, 0, VK_FORMAT_R32G32_SFLOAT,       offsetof(Sprite2DVertex, u) };
-        attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Sprite2DVertex, r) };
-
-        VkPipelineVertexInputStateCreateInfo vis{};
-        vis.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vis.vertexBindingDescriptionCount = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
-
-        VkPipelineInputAssemblyStateCreateInfo ias{};
-        ias.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        ias.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-        VkViewport vport{ 0, 0, (float)owner_->swapchainExtent_.width,
-                          (float)owner_->swapchainExtent_.height, 0, 1 };
-        VkRect2D sci{ {0,0}, owner_->swapchainExtent_ };
-        VkPipelineViewportStateCreateInfo vpState{};
-        vpState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        vpState.viewportCount = 1; vpState.pViewports = &vport;
-        vpState.scissorCount  = 1; vpState.pScissors  = &sci;
-
-        VkPipelineRasterizationStateCreateInfo rs{};
-        rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rs.polygonMode = VK_POLYGON_MODE_FILL;
-        rs.cullMode    = VK_CULL_MODE_NONE;
-        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
-        rs.lineWidth   = 1.f;
-
-        VkPipelineMultisampleStateCreateInfo ms{};
-        ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-        VkPipelineColorBlendAttachmentState cba{};
-        cba.blendEnable         = VK_TRUE;
-        cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        cba.colorBlendOp        = VK_BLEND_OP_ADD;
-        cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        cba.alphaBlendOp        = VK_BLEND_OP_ADD;
-        // REMED-GFX-077: custom-Effect pipeline with a fixed blend equation (not derived from the
-        // game's BlendState); keeps a full RGBA write mask.
-        cba.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                                  VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        VkPipelineColorBlendStateCreateInfo cbs{};
-        cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        cbs.attachmentCount = 1; cbs.pAttachments = &cba;
-
-        // This fixed custom-Effect pipeline uses SRC_ALPHA/ONE_MINUS_SRC_ALPHA; no factor in its
-        // static equation consumes a blend constant.
-        VkDynamicState dynStates[] = {
-            VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-        };
-        VkPipelineDynamicStateCreateInfo dyn{};
-        dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dyn.dynamicStateCount = 2; dyn.pDynamicStates = dynStates;
-
-        VkPipelineDepthStencilStateCreateInfo dsInfo{};
-        dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        dsInfo.depthTestEnable  = VK_FALSE;
-        dsInfo.depthWriteEnable = VK_FALSE;
-
-        VkGraphicsPipelineCreateInfo pci{};
-        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pci.stageCount          = 2; pci.pStages = stages;
-        pci.pVertexInputState   = &vis;
-        pci.pInputAssemblyState = &ias;
-        pci.pViewportState      = &vpState;
-        pci.pRasterizationState = &rs;
-        pci.pMultisampleState   = &ms;
-        pci.pDepthStencilState  = &dsInfo;
-        pci.pColorBlendState    = &cbs;
-        pci.pDynamicState       = &dyn;
-        pci.layout              = pipelineLayout_;
-        pci.renderPass          = owner_->renderPass_;
-        pci.subpass             = 0;
-
-        if (vkCreateGraphicsPipelines(owner_->device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipeline_) != VK_SUCCESS) {
-            compileError_ = "Failed to create graphics pipeline"; return false;
-        }
+        // REMED-GFX-095: a ShaderEffect pipeline is render-pass state, not shader-module
+        // state. Defer creation until SpriteBatch.End(), where the actual color count,
+        // sample count, depth format, BlendState, write masks, and sample mask are known.
         return true;
     }
 
     void VulkanEffectBackend::Bind()
     {
-        if (pipeline_ != VK_NULL_HANDLE)
+        if (IsValid())
             owner_->activeCustomEffect_ = this;
     }
 
@@ -2574,7 +2550,13 @@ namespace CNA::Internal::Backends::Vulkan
             owner_->activeCustomEffect_ = nullptr;
     }
 
-    bool VulkanEffectBackend::IsValid() const { return pipeline_ != VK_NULL_HANDLE; }
+    bool VulkanEffectBackend::IsValid() const
+    {
+        return vertModule_ != VK_NULL_HANDLE
+            && fragModule_ != VK_NULL_HANDLE
+            && pipelineLayout_ != VK_NULL_HANDLE
+            && compileError_.empty();
+    }
 
     std::string VulkanEffectBackend::GetCompileError() const { return compileError_; }
 
@@ -2677,13 +2659,17 @@ namespace CNA::Internal::Backends::Vulkan
                                          const BlendKeyParams& bp, int attachmentIndex = 0); // REMED-GFX-077
     static uint64_t FoldDepthFormatIntoKey(uint64_t key, VkFormat depthFmt);
 
-    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2D(VkFormat depthFmt, bool blend,
-                                                            const BlendKeyParams& bp)
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2D(
+        VkFormat depthFmt, uint32_t colorAttachmentCount, bool blend,
+        const BlendKeyParams& bp)
     {
         // REMED-GFX-071: key by (depth format folded + blend-enable bit, packed blend factor/func
         // enums) -- the same PipelineKey shape the 3D caches use. The BlendFactor *value* is dynamic
         // state (GFX-070) and deliberately absent from the key, so it never fragments the cache.
-        const PipelineKey key = { FoldDepthFormatIntoKey(blend ? 1ull : 0ull, depthFmt),
+        const uint64_t countBits =
+            (static_cast<uint64_t>(std::max(1u, colorAttachmentCount) - 1u) << 1);
+        const PipelineKey key = {
+                                  FoldDepthFormatIntoKey((blend ? 1ull : 0ull) | countBits, depthFmt),
                                   PackBlendBits(blend, bp), PackColorWriteBits(bp), bp.sampleMask };
         auto cached = pipelines2DByDepthFmt_.find(key);
         if (cached != pipelines2DByDepthFmt_.end()) return cached->second;
@@ -2749,13 +2735,15 @@ namespace CNA::Internal::Backends::Vulkan
         // and 3D), replacing the pre-fix hardcoded SRC_ALPHA/ONE_MINUS_SRC_ALPHA that ignored the
         // BlendState entirely. REMED-GFX-077: the colour write mask (ColorWriteChannels slot 0) is
         // now also derived, inside FillBlendAttachmentState (was hardcoded RGBA).
-        VkPipelineColorBlendAttachmentState cba{};
-        // REMED-GFX-077: colour write mask (BlendState.ColorWriteChannels slot 0) is now set by
-        // FillBlendAttachmentState from bp.colorWrite[0], replacing the former hardcoded RGBA.
-        FillBlendAttachmentState(cba, blend, bp);
+        std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments(
+            std::max(1u, colorAttachmentCount));
+        for (uint32_t i = 0; i < colorBlendAttachments.size(); ++i)
+            FillBlendAttachmentState(colorBlendAttachments[i], blend, bp,
+                                     static_cast<int>(i));
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        cbs.attachmentCount = 1; cbs.pAttachments = &cba;
+        cbs.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
+        cbs.pAttachments = colorBlendAttachments.data();
 
         // Blend factors/functions are static pipeline state. Only the RGBA constant value is
         // dynamic, and only when this pipeline's normalized equation actually consumes it.
@@ -2802,7 +2790,8 @@ namespace CNA::Internal::Backends::Vulkan
         pci.pDynamicState       = &dyn;
         pci.layout              = pipelineLayout2D_;
         // Task 911: render pass selected per the target's own real depth format.
-        pci.renderPass          = PickRTPipelineRenderPass(1, false, depthFmt);
+        pci.renderPass          = PickRTPipelineRenderPass(
+            colorAttachmentCount, false, depthFmt);
         pci.subpass             = 0;
 
         VkPipeline pipe = VK_NULL_HANDLE;
@@ -3028,12 +3017,16 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("vkCreateRenderPass (MSAA) failed");
     }
 
-    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2DMsaa(VkFormat depthFmt, bool blend,
-                                                               const BlendKeyParams& bp)
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipeline2DMsaa(
+        VkFormat depthFmt, uint32_t colorAttachmentCount, bool blend,
+        const BlendKeyParams& bp)
     {
         // REMED-GFX-071: BlendState-keyed, same as the non-MSAA variant (separate map, so no MSAA
         // bit is needed in the key).
-        const PipelineKey key = { FoldDepthFormatIntoKey(blend ? 1ull : 0ull, depthFmt),
+        const uint64_t countBits =
+            (static_cast<uint64_t>(std::max(1u, colorAttachmentCount) - 1u) << 1);
+        const PipelineKey key = {
+                                  FoldDepthFormatIntoKey((blend ? 1ull : 0ull) | countBits, depthFmt),
                                   PackBlendBits(blend, bp), PackColorWriteBits(bp), bp.sampleMask };
         auto cached = pipelines2DMsaaByDepthFmt_.find(key);
         if (cached != pipelines2DMsaaByDepthFmt_.end()) return cached->second;
@@ -3091,13 +3084,15 @@ namespace CNA::Internal::Backends::Vulkan
         if (cnaSampleMask_ != 0xFFFFFFFFu) ms.pSampleMask = &cnaSampleMask_;
 
         // REMED-GFX-071: BlendState-derived colour-attachment blend (see the non-MSAA variant).
-        VkPipelineColorBlendAttachmentState cba{};
-        // REMED-GFX-077: colour write mask (BlendState.ColorWriteChannels slot 0) is now set by
-        // FillBlendAttachmentState from bp.colorWrite[0], replacing the former hardcoded RGBA.
-        FillBlendAttachmentState(cba, blend, bp);
+        std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments(
+            std::max(1u, colorAttachmentCount));
+        for (uint32_t i = 0; i < colorBlendAttachments.size(); ++i)
+            FillBlendAttachmentState(colorBlendAttachments[i], blend, bp,
+                                     static_cast<int>(i));
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        cbs.attachmentCount = 1; cbs.pAttachments = &cba;
+        cbs.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
+        cbs.pAttachments = colorBlendAttachments.data();
 
         VkDynamicState dynStates[3] = {
             VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
@@ -3138,7 +3133,8 @@ namespace CNA::Internal::Backends::Vulkan
         pci.pDynamicState       = &dyn;
         pci.layout              = pipelineLayout2D_;
         // Task 911: render pass selected per the target's own real depth format.
-        pci.renderPass          = PickRTPipelineRenderPass(1, true, depthFmt);
+        pci.renderPass          = PickRTPipelineRenderPass(
+            colorAttachmentCount, true, depthFmt);
         pci.subpass             = 0;
 
         VkPipeline pipe = VK_NULL_HANDLE;
@@ -3276,6 +3272,131 @@ namespace CNA::Internal::Backends::Vulkan
         // VK_COLOR_COMPONENT_*, so the raw value masked to 0xF is the VkColorComponentFlags directly.
         cba.colorWriteMask = static_cast<VkColorComponentFlags>(
             bp.colorWrite[attachmentIndex < 3 ? attachmentIndex : 3] & 0xF);
+    }
+
+    VkPipeline VulkanEffectBackend::GetOrCreatePipeline(
+        uint32_t colorAttachmentCount, VkSampleCountFlagBits sampleCount,
+        VkFormat depthFormat, bool blend, const BlendKeyParams& blendParams)
+    {
+        colorAttachmentCount = std::max(1u, colorAttachmentCount);
+        const PipelineVariantKey key{
+            colorAttachmentCount,
+            static_cast<uint32_t>(sampleCount),
+            static_cast<int32_t>(depthFormat),
+            blend,
+            PackBlendBits(blend, blendParams),
+            PackColorWriteBits(blendParams),
+            blendParams.sampleMask,
+        };
+        auto cached = pipelines_.find(key);
+        if (cached != pipelines_.end()) return cached->second;
+        if (!IsValid()) return VK_NULL_HANDLE;
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = vertModule_;
+        stages[0].pName  = "main";
+        stages[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = fragModule_;
+        stages[1].pName  = "main";
+
+        VkVertexInputBindingDescription binding{
+            0, sizeof(Sprite2DVertex), VK_VERTEX_INPUT_RATE_VERTEX
+        };
+        VkVertexInputAttributeDescription attributes[3]{};
+        attributes[0] = {
+            0, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Sprite2DVertex, x)
+        };
+        attributes[1] = {
+            1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(Sprite2DVertex, u)
+        };
+        attributes[2] = {
+            2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Sprite2DVertex, r)
+        };
+        VkPipelineVertexInputStateCreateInfo vertexInput{};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInput.vertexBindingDescriptionCount = 1;
+        vertexInput.pVertexBindingDescriptions = &binding;
+        vertexInput.vertexAttributeDescriptionCount = 3;
+        vertexInput.pVertexAttributeDescriptions = attributes;
+
+        VkPipelineInputAssemblyStateCreateInfo assembly{};
+        assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+        VkPipelineViewportStateCreateInfo viewport{};
+        viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewport.viewportCount = 1;
+        viewport.scissorCount = 1;
+
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer.cullMode = VK_CULL_MODE_NONE;
+        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.lineWidth = 1.0f;
+
+        VkPipelineMultisampleStateCreateInfo multisample{};
+        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisample.rasterizationSamples = sampleCount;
+        const VkSampleMask sampleMask = blendParams.sampleMask;
+        if (sampleMask != 0xFFFFFFFFu)
+            multisample.pSampleMask = &sampleMask;
+
+        std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(
+            colorAttachmentCount);
+        for (uint32_t i = 0; i < colorAttachmentCount; ++i)
+            FillBlendAttachmentState(
+                blendAttachments[i], blend, blendParams, static_cast<int>(i));
+        VkPipelineColorBlendStateCreateInfo colorBlend{};
+        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlend.attachmentCount = colorAttachmentCount;
+        colorBlend.pAttachments = blendAttachments.data();
+
+        VkDynamicState dynamicStates[3] = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR,
+        };
+        const uint32_t dynamicStateCount = AppendBlendConstantsDynamicState(
+            dynamicStates, 2, blend, blendParams);
+        VkPipelineDynamicStateCreateInfo dynamic{};
+        dynamic.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamic.dynamicStateCount = dynamicStateCount;
+        dynamic.pDynamicStates = dynamicStates;
+
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
+
+        VkGraphicsPipelineCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        createInfo.stageCount = 2;
+        createInfo.pStages = stages;
+        createInfo.pVertexInputState = &vertexInput;
+        createInfo.pInputAssemblyState = &assembly;
+        createInfo.pViewportState = &viewport;
+        createInfo.pRasterizationState = &rasterizer;
+        createInfo.pMultisampleState = &multisample;
+        createInfo.pDepthStencilState = &depthStencil;
+        createInfo.pColorBlendState = &colorBlend;
+        createInfo.pDynamicState = &dynamic;
+        createInfo.layout = pipelineLayout_;
+        createInfo.renderPass = owner_->PickRTPipelineRenderPass(
+            colorAttachmentCount, sampleCount > VK_SAMPLE_COUNT_1_BIT, depthFormat);
+        createInfo.subpass = 0;
+
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        if (vkCreateGraphicsPipelines(
+                owner_->device_, VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline)
+            != VK_SUCCESS) {
+            throw std::runtime_error(
+                "vkCreateGraphicsPipelines (custom Effect MRT variant) failed");
+        }
+        pipelines_[key] = pipeline;
+        return pipeline;
     }
 
     // Packs every DepthStencilKeyParams field into 29 bits, meant to be OR'd (after shifting past
@@ -3454,7 +3575,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -3467,13 +3588,11 @@ namespace CNA::Internal::Backends::Vulkan
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
         FillDepthStencilState(ds, dsParams);
 
-        VkPipelineColorBlendAttachmentState cba{};
-        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
-        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-        FillBlendAttachmentState(cba, blend, blendParams);
-        // Replicate the same blend state across all MRT outputs.
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
-            std::max(colorAttachmentCount, 1u), cba);
+            std::max(colorAttachmentCount, 1u));
+        for (uint32_t i = 0; i < cbaVec.size(); ++i)
+            FillBlendAttachmentState(
+                cbaVec[i], blend, blendParams, static_cast<int>(i));
 
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -3925,7 +4044,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -4183,7 +4302,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -4496,7 +4615,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -4731,7 +4850,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -4855,7 +4974,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -5081,7 +5200,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -5094,12 +5213,11 @@ namespace CNA::Internal::Backends::Vulkan
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
         FillDepthStencilState(ds, dsParams);
 
-        VkPipelineColorBlendAttachmentState cba{};
-        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
-        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-        FillBlendAttachmentState(cba, blend, blendParams);
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
-            std::max(colorAttachmentCount, 1u), cba);
+            std::max(colorAttachmentCount, 1u));
+        for (uint32_t i = 0; i < cbaVec.size(); ++i)
+            FillBlendAttachmentState(
+                cbaVec[i], blend, blendParams, static_cast<int>(i));
 
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -5222,7 +5340,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -5235,12 +5353,11 @@ namespace CNA::Internal::Backends::Vulkan
         ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
         FillDepthStencilState(ds, dsParams);
 
-        VkPipelineColorBlendAttachmentState cba{};
-        // Task 868: real per-BlendState mapping, replacing the previous hardcoded
-        // BlendState.NonPremultiplied-equivalent equation applied whenever blend was true.
-        FillBlendAttachmentState(cba, blend, blendParams);
         std::vector<VkPipelineColorBlendAttachmentState> cbaVec(
-            std::max(colorAttachmentCount, 1u), cba);
+            std::max(colorAttachmentCount, 1u));
+        for (uint32_t i = 0; i < cbaVec.size(); ++i)
+            FillBlendAttachmentState(
+                cbaVec[i], blend, blendParams, static_cast<int>(i));
 
         VkPipelineColorBlendStateCreateInfo cbs{};
         cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -5502,7 +5619,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -5637,7 +5754,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -5874,7 +5991,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -6132,7 +6249,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -6264,7 +6381,7 @@ namespace CNA::Internal::Backends::Vulkan
 
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+        ms.rasterizationSamples = msaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
         // REMED-GFX-077: BlendState.MultiSampleMask (static pipeline state; the pointer is valid
         // until vkCreateGraphicsPipelines below). Only set for a non-default mask, so the common
         // case stays byte-identical (pSampleMask==nullptr == Vulkan's all-ones default).
@@ -6648,9 +6765,15 @@ namespace CNA::Internal::Backends::Vulkan
                 // REMED-GFX-071: select the 2D pipeline whose colour-attachment blend equation
                 // matches this batch's captured BlendState (defaults to Opaque for a batch that
                 // predates any BlendState, but SpriteBatch.Begin always applies one).
+                const uint32_t colorAttachmentCount =
+                    targetRT ? targetRT->GetColorAttachmentCount() : 1u;
                 VkPipeline       activePipe   = useMsaaPipe
-                    ? GetOrCreatePipeline2DMsaa(targetDepthFmt, snapshot->blendEnabled, snapshot->blendParams)
-                    : GetOrCreatePipeline2D(targetDepthFmt, snapshot->blendEnabled, snapshot->blendParams);
+                    ? GetOrCreatePipeline2DMsaa(
+                        targetDepthFmt, colorAttachmentCount,
+                        snapshot->blendEnabled, snapshot->blendParams)
+                    : GetOrCreatePipeline2D(
+                        targetDepthFmt, colorAttachmentCount,
+                        snapshot->blendEnabled, snapshot->blendParams);
                 VkPipelineLayout activeLayout = pipelineLayout2D_;
                 const float*     customPC     = nullptr;
                 // REMED-GFX-075: read the effect's pipeline/layout/push-constants from the batch
@@ -6699,7 +6822,8 @@ namespace CNA::Internal::Backends::Vulkan
                 }
                 float vpSize[2] = { projW, projH };
                 if (customPC) {
-                    // Push 128-byte block: vpSize at [0..7], user uniforms at [8..127].
+                    // Push 128-byte block: vpSize at [0..7], std140 padding at [8..15],
+                    // and user uniforms at [16..127].
                     float fullPC[32];
                     std::memcpy(fullPC,     vpSize,      8);
                     std::memcpy(fullPC + 2, customPC + 2, 120);
@@ -6731,11 +6855,9 @@ namespace CNA::Internal::Backends::Vulkan
                                                      snapshot->viewportMaxDepth, fbW, fbH);
                     vkCmdSetViewport(cb, 0, 1, &bvp);
                     // REMED-GFX-070/GFX-091: replay the batch's captured RGBA value only when the
-                    // selected built-in pipeline's static blend equation consumes it. Custom
-                    // Effect pipelines use their own fixed SRC_ALPHA equation. UsesBlendConstants
-                    // is also the pipeline dynamic-state declaration predicate.
-                    if (!snapshot->hasCustomEffect
-                        && UsesBlendConstants(snapshot->blendEnabled, snapshot->blendParams)) {
+                    // selected pipeline's static blend equation consumes it. Custom Effect
+                    // variants use the same BlendState translation and declaration predicate.
+                    if (UsesBlendConstants(snapshot->blendEnabled, snapshot->blendParams)) {
                         const float bbc[4] = { snapshot->blendFactorR, snapshot->blendFactorG,
                                                snapshot->blendFactorB, snapshot->blendFactorA };
                         vkCmdSetBlendConstants(cb, bbc);
@@ -7168,19 +7290,20 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto* rt : usedRTs) {
             const uint32_t nColor = rt->GetColorAttachmentCount();
             const bool rtMsaa = rt->WantsMsaa();
-            // MSAA RT render pass: att0=MSAA color, att1=resolve (unused clear value, DONT_CARE
-            // loadOp), att2=depth — 3 clear values, mirroring Phase 2's hasMsaa handling below.
-            // Non-MSAA: nColor color attachments + 1 depth, as before (Task 878/879).
-            std::vector<VkClearValue> rtCv(rtMsaa ? 3u : (nColor + 1));
-            if (rtMsaa) {
-                rtCv[0].color        = { { clearR_, clearG_, clearB_, clearA_ } };
-                rtCv[1].color        = {};
-                rtCv[2].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
-            } else {
-                for (uint32_t ci = 0; ci < nColor; ++ci)
-                    rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
-                rtCv[nColor].depthStencil = { clearDepth_, static_cast<uint32_t>(clearStencil_) };
-            }
+            const bool hasDepth = rt->GetDepthFormat() != VK_FORMAT_UNDEFINED;
+            // REMED-GFX-095: attachment order mirrors the render pass exactly:
+            // [N color sources, optional N resolves, optional depth].
+            const uint32_t depthIndex = rtMsaa ? nColor * 2 : nColor;
+            std::vector<VkClearValue> rtCv(depthIndex + (hasDepth ? 1u : 0u));
+            for (uint32_t ci = 0; ci < nColor; ++ci)
+                rtCv[ci].color = { { clearR_, clearG_, clearB_, clearA_ } };
+            if (rtMsaa)
+                for (uint32_t ri = nColor; ri < nColor * 2; ++ri)
+                    rtCv[ri].color = {};
+            if (hasDepth)
+                rtCv[depthIndex].depthStencil = {
+                    clearDepth_, static_cast<uint32_t>(clearStencil_)
+                };
             VkRenderPassBeginInfo rtRp{};
             rtRp.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
             rtRp.renderPass      = rt->GetRenderPass();
@@ -7880,6 +8003,15 @@ namespace CNA::Internal::Backends::Vulkan
             for (VkShaderModule sm : r.shaderModules) if (sm != VK_NULL_HANDLE) vkDestroyShaderModule(device_, sm, nullptr);
             for (VkQueryPool qp : r.queryPools)      if (qp != VK_NULL_HANDLE) vkDestroyQueryPool(device_, qp, nullptr);
         };
+        // GFX-095 MRT framebuffers borrow their targets' attachment views. Destroy an eligible
+        // proxy before the same-generation resource bucket can free those views.
+        for (auto it = retiredMrtProxies_.begin(); it != retiredMrtProxies_.end(); )
+        {
+            if (force || it->first + MaxFramesInFlight < frameGeneration_)
+                it = retiredMrtProxies_.erase(it);   // unique_ptr frees the proxy (device_ still valid)
+            else
+                ++it;
+        }
         for (auto it = retiredResources_.begin(); it != retiredResources_.end(); )
         {
             if (force || it->generation + MaxFramesInFlight < frameGeneration_) {
@@ -7888,13 +8020,6 @@ namespace CNA::Internal::Backends::Vulkan
             } else {
                 ++it;
             }
-        }
-        for (auto it = retiredMrtProxies_.begin(); it != retiredMrtProxies_.end(); )
-        {
-            if (force || it->first + MaxFramesInFlight < frameGeneration_)
-                it = retiredMrtProxies_.erase(it);   // unique_ptr frees the proxy (device_ still valid)
-            else
-                ++it;
         }
     }
 
@@ -7934,31 +8059,53 @@ namespace CNA::Internal::Backends::Vulkan
     {
         if (!initialized_ || !rt || device_ == VK_NULL_HANDLE) return;
 
-        bool pending = false;
-        for (const auto& p : activeBatches_) if (p.second == rt) { pending = true; break; }
-        if (!pending) for (const auto& d : pending3D_) if (d.rt == rt) { pending = true; break; }
-        if (!pending) for (auto* r : clearedRTs_)      if (r == rt)    { pending = true; break; }
-        if (!pending) return;
+        auto hasPending = [this](VulkanRTSource* source) {
+            for (const auto& p : activeBatches_) if (p.second == source) return true;
+            for (const auto& d : pending3D_)     if (d.rt == source) return true;
+            for (auto* cleared : clearedRTs_)    if (cleared == source) return true;
+            return false;
+        };
+
+        // An MRT draw is queued against its frame-lifetime proxy, not against either
+        // RenderTarget2D pointer. Resolve-view identity safely maps GetData(target) back to
+        // every pending proxy that writes that target; the target's retirement keeps the
+        // view handle alive, so it cannot be recycled while the proxy is still pending.
+        std::vector<VulkanRTSource*> sources;
+        if (hasPending(rt)) sources.push_back(rt);
+        if (auto* concrete = dynamic_cast<VulkanRenderTargetBackend*>(rt)) {
+            for (auto& retired : retiredMrtProxies_) {
+                VulkanMRTProxy* proxy = retired.second.get();
+                if (proxy && proxy->ContainsResolveTargetEXT(*concrete) && hasPending(proxy))
+                    sources.push_back(proxy);
+            }
+            if (mrtProxy_ && mrtProxy_->ContainsResolveTargetEXT(*concrete)
+                && hasPending(mrtProxy_.get())) {
+                sources.push_back(mrtProxy_.get());
+            }
+        }
+        if (sources.empty()) return;
 
         vkDeviceWaitIdle(device_);
 
-        VkCommandBufferAllocateInfo ai{};
-        ai.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool        = commandPool_;
-        ai.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        ai.commandBufferCount = 1;
-        VkCommandBuffer cb = VK_NULL_HANDLE;
-        if (vkAllocateCommandBuffers(device_, &ai, &cb) != VK_SUCCESS) return;
+        for (VulkanRTSource* source : sources) {
+            VkCommandBufferAllocateInfo ai{};
+            ai.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            ai.commandPool        = commandPool_;
+            ai.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            ai.commandBufferCount = 1;
+            VkCommandBuffer cb = VK_NULL_HANDLE;
+            if (vkAllocateCommandBuffers(device_, &ai, &cb) != VK_SUCCESS) return;
 
-        RecordCommandBuffer(cb, 0, RecordMode::RenderTargetsOnly, rt);
+            RecordCommandBuffer(cb, 0, RecordMode::RenderTargetsOnly, source);
 
-        VkSubmitInfo si{};
-        si.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        si.commandBufferCount = 1;
-        si.pCommandBuffers    = &cb;
-        vkQueueSubmit(graphicsQueue_, 1, &si, VK_NULL_HANDLE);
-        vkQueueWaitIdle(graphicsQueue_);
-        vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
+            VkSubmitInfo si{};
+            si.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            si.commandBufferCount = 1;
+            si.pCommandBuffers    = &cb;
+            vkQueueSubmit(graphicsQueue_, 1, &si, VK_NULL_HANDLE);
+            vkQueueWaitIdle(graphicsQueue_);
+            vkFreeCommandBuffers(device_, commandPool_, 1, &cb);
+        }
     }
 
     void VulkanGraphicsBackend::SetStringMarkerEXT(const char* marker)
@@ -8783,8 +8930,9 @@ namespace CNA::Internal::Backends::Vulkan
         // the deferred queues (d.rt/batchRT). Retiring it to backbuffer or a new binding must NOT
         // destroy the old proxy while its already-queued render work legitimately awaits Present --
         // that would dangle the pointer RecordCommandBuffer dereferences (GetFramebuffer/GetRenderPass).
-        // Move it into the retirement queue so the object (and its framebuffer/depth image) outlive
-        // the frame that consumes those entries, instead of dropping the draws (they were issued).
+        // Move it into the retirement queue so the object and its framebuffer outlive the frame
+        // that consumes those entries, instead of dropping the draws (they were issued). Its
+        // borrowed target views are retained by the same frame-generation mechanism.
         auto retireMrtProxy = [this]() {
             if (mrtProxy_)
                 retiredMrtProxies_.emplace_back(frameGeneration_, std::move(mrtProxy_));
@@ -8819,60 +8967,64 @@ namespace CNA::Internal::Backends::Vulkan
         if (!owner || !rts || count == 0) return;
         VkDevice dev = owner->device_;
 
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(owner->physicalDevice_, &properties);
+        if (count > 4 || count > properties.limits.maxColorAttachments)
+            throw std::runtime_error("VulkanMRTProxy: render-target count exceeds supported MRT limit");
+        if (!owner->independentBlendSupported_)
+            throw std::runtime_error(
+                "Vulkan MRT requires independentBlend for CNA per-target render state");
+        for (uint32_t i = 0; i < count; ++i)
+            if (!rts[i])
+                throw std::runtime_error("VulkanMRTProxy: null render target");
+
         width_  = rts[0]->GetWidth();
         height_ = rts[0]->GetHeight();
+        colorSampleCount_ = rts[0]->GetColorSampleCountEXT();
+        depthFormat_ = rts[0]->GetDepthFormat();
+        depthView_ = rts[0]->GetDepthView();
+        for (uint32_t i = 1; i < count; ++i) {
+            if (rts[i]->GetWidth() != width_ || rts[i]->GetHeight() != height_)
+                throw std::runtime_error(
+                    "Vulkan MRT targets must have matching dimensions");
+            if (rts[i]->GetColorSampleCountEXT() != colorSampleCount_)
+                throw std::runtime_error(
+                    "Vulkan MRT targets must have matching applied sample counts");
+            for (uint32_t previous = 0; previous < i; ++previous)
+                if (rts[i]->GetResolveColorViewEXT()
+                    == rts[previous]->GetResolveColorViewEXT()) {
+                    throw std::runtime_error(
+                        "Vulkan MRT cannot bind the same target subresource more than once");
+                }
+        }
 
-        renderPass_ = owner->GetOrCreateMRTRenderPass(count);
+        renderPass_ = owner->GetOrCreateMRTRenderPass(
+            count, colorSampleCount_, depthFormat_);
 
-        // Task 911: this proxy owns its own dedicated depth image in the device-wide
-        // depthFormat_, sized to rts[0]'s width/height -- NOT borrowed from any bound RT's own
-        // depthView_ (previously always valid because every RT unconditionally got a real
-        // depthFormat_-shaped depth buffer; now a RenderTarget2D can genuinely have no depth
-        // buffer at all for DepthFormat::None, or a distinct real format, either of which would
-        // leave GetOrCreateMRTRenderPass's depth attachment reference dangling/mismatched).
-        VkImageCreateInfo depthInfo{};
-        depthInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        depthInfo.imageType     = VK_IMAGE_TYPE_2D;
-        depthInfo.format        = owner_->depthFormat_;
-        depthInfo.extent        = { static_cast<uint32_t>(width_), static_cast<uint32_t>(height_), 1 };
-        depthInfo.mipLevels     = 1;
-        depthInfo.arrayLayers   = 1;
-        depthInfo.samples       = VK_SAMPLE_COUNT_1_BIT;
-        depthInfo.tiling        = VK_IMAGE_TILING_OPTIMAL;
-        depthInfo.usage         = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        depthInfo.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
-        depthInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        if (vkCreateImage(dev, &depthInfo, nullptr, &depthImage_) != VK_SUCCESS)
-            throw std::runtime_error("VulkanMRTProxy: vkCreateImage (depth) failed");
-
-        VkMemoryRequirements depthReq;
-        vkGetImageMemoryRequirements(dev, depthImage_, &depthReq);
-        VkMemoryAllocateInfo depthAlloc{};
-        depthAlloc.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        depthAlloc.allocationSize  = depthReq.size;
-        depthAlloc.memoryTypeIndex = owner_->FindMemoryType(depthReq.memoryTypeBits,
-                                                             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-        if (vkAllocateMemory(dev, &depthAlloc, nullptr, &depthMemory_) != VK_SUCCESS)
-            throw std::runtime_error("VulkanMRTProxy: vkAllocateMemory (depth) failed");
-        vkBindImageMemory(dev, depthImage_, depthMemory_, 0);
-
-        VkImageViewCreateInfo depthViewInfo{};
-        depthViewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        depthViewInfo.image    = depthImage_;
-        depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        depthViewInfo.format   = owner_->depthFormat_;
-        depthViewInfo.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
-        if (vkCreateImageView(dev, &depthViewInfo, nullptr, &depthView_) != VK_SUCCESS)
-            throw std::runtime_error("VulkanMRTProxy: vkCreateImageView (depth) failed");
-
-        // Build attachment view array: [colorView0, colorView1, ..., this proxy's own depthView_].
-        // REMED-GFX-095's regression retains this exact creation-time vector for read-only
-        // diagnostics because Vulkan cannot query it back from VkFramebuffer.
+        // REMED-GFX-095: each target keeps ownership of both resources. MRT only selects
+        // the already-existing transient MSAA view as color i and the texture view as
+        // resolve i. Non-MSAA continues to bind the texture views directly.
         colorAttachments_.reserve(count);
-        for (uint32_t i = 0; i < count; ++i)
-            colorAttachments_.push_back(rts[i]->GetColorView());
+        resolveTargetViews_.reserve(count);
+        if (WantsMsaa()) resolveAttachments_.reserve(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            const VkImageView resolve = rts[i]->GetResolveColorViewEXT();
+            const VkImageView color = WantsMsaa()
+                ? rts[i]->GetMsaaColorViewEXT()
+                : resolve;
+            if (color == VK_NULL_HANDLE || resolve == VK_NULL_HANDLE)
+                throw std::runtime_error("VulkanMRTProxy: target attachment view is missing");
+            colorAttachments_.push_back(color);
+            resolveTargetViews_.push_back(resolve);
+            if (WantsMsaa()) resolveAttachments_.push_back(resolve);
+        }
+
         framebufferAttachments_ = colorAttachments_;
-        framebufferAttachments_.push_back(depthView_);
+        framebufferAttachments_.insert(framebufferAttachments_.end(),
+                                       resolveAttachments_.begin(),
+                                       resolveAttachments_.end());
+        if (depthView_ != VK_NULL_HANDLE)
+            framebufferAttachments_.push_back(depthView_);
 
         VkFramebufferCreateInfo fbInfo{};
         fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -8886,19 +9038,11 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("VulkanMRTProxy: vkCreateFramebuffer failed");
     }
 
-    VkFormat VulkanMRTProxy::GetDepthFormat() const
-    {
-        return owner_ ? owner_->depthFormat_ : VK_FORMAT_UNDEFINED;
-    }
-
     VulkanMRTProxy::~VulkanMRTProxy()
     {
         if (!owner_ || owner_->device_ == VK_NULL_HANDLE) return;
         VkDevice dev = owner_->device_;
         if (framebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(dev, framebuffer_, nullptr);
-        if (depthView_   != VK_NULL_HANDLE) vkDestroyImageView(dev, depthView_, nullptr);
-        if (depthImage_  != VK_NULL_HANDLE) vkDestroyImage(dev, depthImage_, nullptr);
-        if (depthMemory_ != VK_NULL_HANDLE) vkFreeMemory(dev, depthMemory_, nullptr);
     }
 
     // --- VulkanTexture3DBackend ---
