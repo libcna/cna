@@ -7056,3 +7056,220 @@ New finding: **REMED-GFX-096**, cube-face bindings are dropped by the shared plu
 GFX-061, GFX-092, the WebGPU SpriteBatch BlendState counterpart, and Vulkan DepthBias were not
 begun. Recommended next GRAPHICS task remains **REMED-GFX-061** per the established queue; do not
 begin it as part of this record.
+
+---
+
+### REMED-GFX-096 — plural RenderTargetCube face bindings — DONE (production fix)
+
+**Classification:** **D — REAL PRODUCTION CROSS-BACKEND DEFECT; multiple related omissions.**
+The public binding retained the target and face, but CNA's public-to-backend normalization discarded
+both for cube targets, and the shared plural backend interface was not expressive enough to restore
+them. This combined classifications A and B from the investigation rubric; it was not a
+Vulkan-only omission and the unsupported-contract hypothesis was disproven.
+
+**Authoritative public contract.** CNA's `RenderTargetBinding` stores a `Texture*`, an integer
+array slice, and a `CubeMapFace`. The 2D constructor selects an array slice; current CNA render
+targets expose only slice 0. The cube constructor selects exactly one of the six faces. There is no
+mip-level field, and the renderable subresource is level 0. A default binding is null, with slice 0
+and the otherwise-inert default face `PositiveX`; it is not valid inside a nonempty target set.
+The C++ type defines no public equality operator. Public identity is observable through its three
+properties; internal duplicate identity is target object + target kind + slice/face.
+
+FNA provides the compatibility discriminator. Its typed 2D/cube constructors retain the cube face,
+its singular cube overload constructs a binding and delegates to `SetRenderTargets`, and its native
+`FNA3D_RenderTargetBinding` carries an explicit 2D/cube tag, cube face, dimensions, applied sample
+count, destination texture, and optional multisample source. FNA3D's D3D11, OpenGL, and SDL GPU
+drivers use that face in their plural attachment paths. Thus constructor expressiveness is real
+API state, not an unsupported placeholder.
+
+| Public combination | Contract and final CNA behavior |
+|---|---|
+| one cube face | valid; singular and plural paths are equivalent |
+| cube face + matching 2D target | valid where the backend supports cube MRT; Vulkan implements it |
+| two faces from distinct cubes | valid where supported; Vulkan implements it |
+| same cube, two different faces | distinct valid subresources at 1×; Vulkan implements it |
+| same cube, same face twice | invalid duplicate subresource; rejected before backend construction |
+| mismatched dimensions or applied sample counts | invalid; rejected deterministically |
+| same cube, two faces with MSAA | public state is distinct, but CNA Vulkan has one transient MSAA source per cube object; explicitly rejected instead of aliasing |
+| nonzero 2D array slice, null/default binding, or plain texture | unsupported/invalid in current CNA; rejected deterministically |
+
+The target count remains 0–4. Zero restores the backbuffer. Binding 0 owns the shared extent,
+viewport/scissor reset, depth attachment, and `RenderTargetUsage`. A cube face contributes
+`Size × Size` dimensions. Matching is based on the backend-applied sample count, as established by
+GFX-095, so two requests clamped to the same real count are compatible.
+
+**Exact pre-fix information loss.**
+
+| Stage | target type retained? | face retained? | layer retained? | pre-fix representation |
+|---|---:|---:|---:|---|
+| `RenderTargetBinding(cube, NegativeZ)` | yes | yes | logically 5 | public `Texture*` + `CubeMapFace` |
+| `GraphicsDevice::SetRenderTargets` entry | yes | yes | logically 5 | copied public binding |
+| old normalization | **no** | **no** | **no** | unconditional `dynamic_cast<RenderTarget2D*>`, yielding null for the cube |
+| old `IGraphicsBackend` handoff | no | no | no | `IRenderTargetBackend* const*` |
+| Vulkan plural entry | no | no | no | null slot; the GFX-095 validation dereferenced/rejected it before any face view could be selected |
+
+The committed minimal public reproducer selected `NegativeZ`, rendered a distinctive color, unbound,
+and sampled all six faces. Against the parent implementation it segfaulted in the plural handoff;
+the singular overload remained correct. This proved a production defect before the fix.
+
+**New shared representation and compiler-forced migration.** `IGraphicsBackend::SetRenderTargets`
+now accepts an ordered array of `RenderTargetBindingDescriptor`. Each descriptor has an explicit
+2D/cube-face kind, the correctly typed backend resource, array slice or cube face, width, height,
+and applied sample count. `IsSameSubresource` compares kind and resource plus slice/face, so the
+same cube's `+X` and `-X` are distinct while two `+X` bindings are duplicates. Slot alignment is
+contained in one structure rather than parallel arrays.
+
+The old pure virtual method was replaced outright: there is no default argument, fallback overload,
+or adapter capable of discarding cube state. All fourteen implementations were therefore migrated
+explicitly. `GraphicsDevice` validates public targets and creates descriptors before the backend
+call; it stores the original public bindings for `GetRenderTargets`. The singular cube overload now
+builds one binding and delegates to the plural method, making face selection, usage, viewport,
+scissor, resolve, and state handling the same code path.
+
+Post-fix trace for the canonical `NegativeZ` case:
+
+| Stage | target type retained? | face retained? | layer retained? | representation |
+|---|---:|---:|---:|---|
+| public construction | yes | `NegativeZ` | 5 | public binding |
+| public validation/normalization | yes | `NegativeZ` | 5 | cube-face descriptor |
+| shared backend call | yes | `NegativeZ` | 5 | ordered descriptor array |
+| Vulkan normalization | yes | `NegativeZ` | 5 | cube backend + `GetFaceResolveView(NegativeZ)` |
+| framebuffer | yes | exact face view | 5 | 2D, one mip, base layer 5, one layer |
+| shader sampling after unbind | cube sampling identity | all six faces | all six | ordinary six-layer cube sampling view |
+
+**Vulkan attachment behavior.** At 1×, a cube slot contributes its selected per-face 2D view
+directly as the color attachment. For MSAA it contributes the cube's transient multisample source
+and the selected face view as its paired single-sample resolve:
+
+| Example | Ordered framebuffer views |
+|---|---|
+| 1× cube `-Z` + 2D | `[cube.faceViews[5], rt2D.colorView]` |
+| 4× cube `-Z` + 2D | `[cube.msaaView, rt2D.msaaView, cube.faceViews[5], rt2D.colorView]` |
+| 4× cube A `+Y` + cube B `-Z` | `[cubeA.msaaView, cubeB.msaaView, cubeA.faceViews[2], cubeB.faceViews[5]]` |
+
+Every face attachment is a 2D view with `baseMipLevel=0`, `levelCount=1`,
+`baseArrayLayer=face`, and `layerCount=1`. The six-layer cube sampling view is never used as a
+framebuffer attachment or substituted into descriptor identity. The GFX-095 render-pass model is
+unchanged: its cache identity remains target count, formats/capabilities, sample count, depth
+format, and resolve presence. Face and object identity live in the framebuffer's exact ordered
+view vector, so `Cube A +X` cannot reuse the framebuffer for `Cube A -X`, while compatible faces
+can reuse the render pass.
+
+Binding 0 supplies its real depth view/format/sample count even when it is a cube face. Cube-face
+selection is independent of depth identity. For two different MSAA cubes, each source and resolve
+is independent. The same cube cannot safely supply two simultaneous MSAA slots because its current
+architecture owns only one shared transient color source; CNA throws a project-level error before
+framebuffer creation rather than binding one source twice or resolving both slots to face 0.
+
+No extra synchronization, Present, frame latency, queue/device idle, per-draw framebuffer creation,
+or descriptor rebuild was introduced. Descriptors are transient normalization values at target-bind
+boundaries; resource ownership remains in the public targets and Vulkan's existing deferred
+framebuffer/proxy retirement keeps attachment views alive. Sampling after unbind continues through
+the normal cube view. Production shaders and generated shader artifacts are unchanged; the Vulkan
+MRT test reuses GFX-095's test-only multi-output SPIR-V.
+
+**Runtime contract evidence.** Every producer explicitly establishes Opaque, DepthNone, and
+CullNone after effect/state application where required.
+
+| Case | Final result |
+|---|---|
+| minimal plural `NegativeZ` | only layer 5 changed |
+| singular vs plural | pixel-equivalent |
+| all six faces | `+X/-X/+Y/-Y/+Z/-Z` exactly map to layers `0/1/2/3/4/5` |
+| plural `+X → -X → +X` | `-X` retained its own value; final `+X` retained the final draw |
+| cube A `+X`, cube B `+X`, cube A `-Z` | both object and face identities retained |
+| duplicate cube A `+X` twice | deterministic duplicate-subresource rejection |
+| cube + 2D 1× | ordered views and distinct location-0/location-1 outputs correct |
+| cube A `+Y` + cube B `-Z` 1× | distinct outputs reach the exact two layers |
+| cube A `+X` + cube A `-X` 1× | valid distinct outputs reach both layers |
+| cube + 2D 4× | exact source/resolve ordering and selected face resolve |
+| two distinct cubes 4× | independent MSAA sources and exact `+Y`/`-Z` resolves |
+| same cube, two faces 4× | explicit capability rejection |
+| `MultiSampleMask=1` at llvmpipe 4× | genuine quarter-coverage resolve, not a 1× fallback |
+| sample/dimension mismatch | deterministic public/backend rejection |
+| slot-0 cube depth | exact cube depth owner, extent, and 4× count |
+| Preserve/Discard usage | singular/plural parity; all modes share the delegated path |
+| viewport/scissor | reset to the selected face extent, identical to singular |
+| producer → consumer | immediate same-submission EnvironmentMapEffect sampling sees the new face |
+| zero/one/many bindings | backbuffer restore, one 2D, one cube, valid MRT, and invalid null all correct |
+
+The dedicated Vulkan MRT test is **15/15**. It uses genuine two-output fragment code rather than
+clears to prove slot routing. Its 1× outputs are `(200,100,50,255)` and
+`(100,50,200,220)` for cube+2D; same-cube `+X/-X` and two-cube `+Y/-Z` also remain distinct.
+With the same cube bound as `+X/-X`, `ColorWriteChannels0=Red` and
+`ColorWriteChannels1=Blue` produce `(200,20,30,255)` and `(10,20,200,255)` on the exact two
+faces, proving write-mask/subresource alignment.
+At 4×, mask bit 0 resolves to `(58,40,35,255)` / `(32,28,72,85)`, providing structural MSAA
+proof. Render-pass handles remain face-independent while framebuffer handles/views change with the
+face.
+
+The backend-neutral public test is **14/14** on Vulkan, EasyGL, SDL_GPU, and WebGPU. SDL_GPU and
+WebGPU use their exact per-face cube readback; WebGPU expectations account for its established
+linear-to-sRGB storage conversion. Bgfx stages the singular producer, plural producer, and observer
+across frames and is **6/6**, including explicit rejection of cube+2D and two-face cube MRT.
+
+**Backend capability and migration inventory.**
+
+| Backend | Cube target | Plural 2D targets | Cube face through plural | Final multi-target behavior / verification |
+|---|---:|---:|---|---|
+| ASCII | no native cube | wrapper | not constructible | descriptor forwarding compiled; no reinterpretation |
+| Bgfx | yes | yes | one binding delegates exact face | cube in multi-target set explicitly rejected; **6/6 runtime** |
+| Canvas | no | no | not constructible | defensive explicit rejection; Emscripten compile |
+| D3D11 | yes | yes | one binding delegates exact face | cube MRT explicitly rejected; MinGW compile |
+| D3D12 | yes | yes | one binding delegates exact face | cube MRT explicitly rejected; MinGW compile |
+| D3D9 | yes | yes | one binding delegates exact face | cube MRT explicitly rejected; MinGW compile |
+| DX3 | no | no | not constructible | defensive explicit rejection; compile |
+| EasyGL | yes | yes | one binding delegates exact face | cube MRT explicitly rejected; **14/14 runtime** |
+| Headless | diagnostic cube | diagnostic plural | exact one-binding descriptor | cube MRT explicitly rejected; compile |
+| SDL_GPU | yes | yes | one binding delegates exact face | cube MRT explicitly rejected; **14/14 runtime** |
+| SDL_Renderer | no | no | not constructible | defensive explicit rejection; compile |
+| Software | no | one 2D only | not constructible | defensive explicit rejection; compile |
+| Vulkan | yes | yes | full selected-face support | valid cube MRT/MSAA implemented; **14/14 + 15/15 runtime** |
+| WebGPU | yes | no MRT | one binding delegates exact face | count >1 explicitly rejected; **14/14 runtime** |
+
+The practical compile matrix is **14/14**: ASCII, Bgfx, Canvas/Emscripten, D3D11/12/9 MinGW, DX3,
+EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan, and WebGPU. Every build used at most four
+parallel jobs.
+
+**Validation and regression gates.** Khronos validation was enabled for the Vulkan runs. The
+targeted and complete verbose logs contain zero `[Vulkan Validation]`, `VUID`, validation-error, or
+validation-warning lines. In particular there are no framebuffer layer-count, attachment/view,
+render-pass compatibility, resolve/sample-count, or image-layout messages.
+
+| Gate | Result |
+|---|---|
+| GFX-096 public parity | Vulkan/EasyGL/SDL_GPU/WebGPU **14/14** each; Bgfx **6/6** |
+| GFX-096 Vulkan cube MRT/MSAA | **15/15**, including cube-face `ColorWriteChannels0/1` alignment |
+| GFX-094 cube face/MSAA | **8/8** |
+| GFX-095 MRT/MSAA | **19/19**, including four write masks, sample mask, producer/consumer, and lifetime |
+| GFX-093 Texture3D mip layout | **26/26** |
+| GFX-074 target GetData/lifetime | **13/13** |
+| GFX-075 deferred source lifetime | **8/8** |
+| GFX-076 descriptor/cache identity | **14/14** |
+| GFX-077 ColorWriteChannels/MultiSampleMask | **11/11** |
+| GFX-091 RT BlendFactor / SpriteBatch BlendState / reused specialized pipeline | **12/12** / **23/23** / **4/4** |
+| viewport/scissor/depth representatives | all PASS; public depth contract **4/4** |
+| targeted validation-enabled Vulkan shard | **31/31 CTests** |
+| final full `^Vulkan_` suite | **161/162** in 40.98 s; sole failure is unchanged llvmpipe `Vulkan_DepthBias` **3/4** |
+
+The suite denominator rises from GFX-095's **159/160** by the two new Vulkan tests. No previously
+passing Vulkan test regressed, and the unrelated DepthBias pixel remains the same flat
+`DepthBias=-1e6` red-versus-expected-green baseline.
+
+**Scope, artifacts, commits, and new finding.** `audit/` is untouched. Production shader and
+generated-artifact diff is zero. No GFX-061, GFX-092, Vulkan DepthBias, or WebGPU SpriteBatch
+BlendState work was begun.
+
+- `aca62476 test(Task REMED-GFX-096): reproduce plural cube-face binding loss`
+- `b13a5445 fix(Task REMED-GFX-096): preserve cube subresources through render-target handoff`
+- `1c238069 test(Task REMED-GFX-096): cover backend capability and MRT combinations`
+- `docs(remediation): record GFX-096 verification` (this record)
+
+One separate finding was recorded as **REMED-GFX-097**: SDL_GPU drawing SpriteBatch into a
+depthless `RenderTargetCube` emits `VUID-vkCmdDraw-renderPass-02684` because the live render pass
+has no depth attachment while the bound pipeline's compatible pass references attachment 1.
+Cube-face pixels and singular/plural identity were correct. The final GFX-096 SDL_GPU fixture uses
+its supported depth-backed cube path and is clean; GFX-097 was not fixed here.
+
+Recommended next GRAPHICS task remains **REMED-GFX-061** per the established queue. Do not begin it
+as part of this remediation.
