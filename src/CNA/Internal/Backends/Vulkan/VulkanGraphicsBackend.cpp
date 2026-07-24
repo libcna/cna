@@ -6637,6 +6637,11 @@ namespace CNA::Internal::Backends::Vulkan
                 const bool targetWantsMsaa = (targetRT == nullptr) ? (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
                                                                     : targetRT->WantsMsaa();
                 const bool useMsaaPipe = targetWantsMsaa && (sampleCount_ > VK_SAMPLE_COUNT_1_BIT);
+                if (targetRT && targetRT->GetColorAttachmentCount() > 1) {
+                    lastMrtPipelineColorCountEXT_ = targetRT->GetColorAttachmentCount();
+                    lastMrtPipelineSampleCountEXT_ =
+                        useMsaaPipe ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+                }
                 // Task 911: this target's own real depth VkFormat -- see draw3DFor's identical
                 // targetDepthFmt computation for the full rationale.
                 const VkFormat targetDepthFmt = targetRT ? targetRT->GetDepthFormat() : depthFormat_;
@@ -6851,6 +6856,11 @@ namespace CNA::Internal::Backends::Vulkan
                 // scope decision in plan_graphics.md).
                 const bool drawMsaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) &&
                                       (targetRT == nullptr || targetRT->WantsMsaa());
+                if (targetRT && targetRT->GetColorAttachmentCount() > 1) {
+                    lastMrtPipelineColorCountEXT_ = targetRT->GetColorAttachmentCount();
+                    lastMrtPipelineSampleCountEXT_ =
+                        drawMsaa ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+                }
                 // Task 911: this target's own real depth VkFormat -- the backbuffer's
                 // device-wide depthFormat_ when drawing into the swapchain (no VulkanRTSource),
                 // else the specific RenderTarget2D/RenderTargetCube instance's own picked format
@@ -8856,17 +8866,19 @@ namespace CNA::Internal::Backends::Vulkan
             throw std::runtime_error("VulkanMRTProxy: vkCreateImageView (depth) failed");
 
         // Build attachment view array: [colorView0, colorView1, ..., this proxy's own depthView_].
-        std::vector<VkImageView> atts;
-        atts.reserve(count + 1);
+        // REMED-GFX-095's regression retains this exact creation-time vector for read-only
+        // diagnostics because Vulkan cannot query it back from VkFramebuffer.
+        colorAttachments_.reserve(count);
         for (uint32_t i = 0; i < count; ++i)
-            atts.push_back(rts[i]->GetColorView());
-        atts.push_back(depthView_);
+            colorAttachments_.push_back(rts[i]->GetColorView());
+        framebufferAttachments_ = colorAttachments_;
+        framebufferAttachments_.push_back(depthView_);
 
         VkFramebufferCreateInfo fbInfo{};
         fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass      = renderPass_;
-        fbInfo.attachmentCount = static_cast<uint32_t>(atts.size());
-        fbInfo.pAttachments    = atts.data();
+        fbInfo.attachmentCount = static_cast<uint32_t>(framebufferAttachments_.size());
+        fbInfo.pAttachments    = framebufferAttachments_.data();
         fbInfo.width           = static_cast<uint32_t>(width_);
         fbInfo.height          = static_cast<uint32_t>(height_);
         fbInfo.layers          = 1;

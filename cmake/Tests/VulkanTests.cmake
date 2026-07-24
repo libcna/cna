@@ -541,6 +541,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_ColorWriteChannels COMMAND cna_test_vulkan_colorwritechannels
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-095: real multi-output MRT + MSAA render-pass/framebuffer/pipeline/resolve
+        # correctness, including direct sample-count diagnostics and partial-sample-mask evidence.
+        cna_vulkan_test(cna_test_vulkan_mrt_msaa
+                        examples/vulkan_mrt_msaa_test.cpp)
+        cna_register_backend_test(NAME Vulkan_MRT_MsaaResolve COMMAND cna_test_vulkan_mrt_msaa
+            TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
         cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
                         examples/vulkan_spritebatch_multi_begin_end_test.cpp)

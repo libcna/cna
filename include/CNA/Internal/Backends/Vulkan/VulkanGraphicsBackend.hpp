@@ -159,6 +159,16 @@ namespace CNA::Internal::Backends::Vulkan
         int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
         VkDescriptorSet GetDescriptorSet()         const { return descriptorSet_; }
         VkImageView     GetColorView()             const { return colorView_; }
+        // REMED-GFX-095 test diagnostics: the texture/resolve view and the transient
+        // multisample view owned by this target. These are read-only backend-internal
+        // handles; sampling must always continue to use colorSampleView_ below.
+        VkImageView     GetResolveColorViewEXT()   const { return colorView_; }
+        VkImageView     GetMsaaColorViewEXT()      const { return msaaColorView_; }
+        VkSampleCountFlagBits GetColorSampleCountEXT() const
+        {
+            return static_cast<VkSampleCountFlagBits>(
+                appliedMultiSampleCount_ > 1 ? appliedMultiSampleCount_ : 1);
+        }
         VkImageView     GetDepthView()             const { return depthView_; }
         VkDescriptorSet GetVkDescriptorSet()       const override { return descriptorSet_; }
         // Task 878: the full-mip-range view, so mip filtering works when this RT is sampled as
@@ -672,6 +682,36 @@ namespace CNA::Internal::Backends::Vulkan
         // (this proxy owns its own dedicated depth image in that format; see the constructor).
         VkFormat      GetDepthFormat()           const override;
 
+        // REMED-GFX-095 read-only structural diagnostics. Keeping the actual framebuffer
+        // vector makes each live attachment/view association directly testable; Vulkan has
+        // no API for querying a VkFramebuffer's creation-time attachment list afterward.
+        [[nodiscard]] VkSampleCountFlagBits GetColorSampleCountEXT() const
+        {
+            return colorSampleCount_;
+        }
+        [[nodiscard]] uint32_t GetFramebufferAttachmentCountEXT() const
+        {
+            return static_cast<uint32_t>(framebufferAttachments_.size());
+        }
+        [[nodiscard]] VkImageView GetFramebufferAttachmentViewEXT(uint32_t index) const
+        {
+            return index < framebufferAttachments_.size()
+                ? framebufferAttachments_[index]
+                : VK_NULL_HANDLE;
+        }
+        [[nodiscard]] uint32_t GetResolveAttachmentCountEXT() const
+        {
+            return static_cast<uint32_t>(resolveAttachments_.size());
+        }
+        [[nodiscard]] VkImageView GetColorAttachmentViewEXT(uint32_t index) const
+        {
+            return index < colorAttachments_.size() ? colorAttachments_[index] : VK_NULL_HANDLE;
+        }
+        [[nodiscard]] VkImageView GetResolveAttachmentViewEXT(uint32_t index) const
+        {
+            return index < resolveAttachments_.size() ? resolveAttachments_[index] : VK_NULL_HANDLE;
+        }
+
     private:
         VulkanGraphicsBackend* owner_       = nullptr;
         VkRenderPass           renderPass_  = VK_NULL_HANDLE;
@@ -679,6 +719,10 @@ namespace CNA::Internal::Backends::Vulkan
         int                    width_       = 0;
         int                    height_      = 0;
         uint32_t               colorCount_  = 0;
+        VkSampleCountFlagBits  colorSampleCount_ = VK_SAMPLE_COUNT_1_BIT;
+        std::vector<VkImageView> colorAttachments_;
+        std::vector<VkImageView> resolveAttachments_;
+        std::vector<VkImageView> framebufferAttachments_;
         // Task 911: MRT's own dedicated depth image, always in the device-wide depthFormat_ --
         // NOT borrowed from any bound RenderTarget2D's own depthView_, since an individual RT can
         // now genuinely have no depth buffer at all (DepthFormat::None) or a distinct real
@@ -792,6 +836,20 @@ namespace CNA::Internal::Backends::Vulkan
                 + pipelinesSkinned3D_.size() + pipelinesSkinned3DVertexLit_.size()
                 + pipelinesPbr3D_.size() + pipelinesPbrSkinned3D_.size()
                 + pipelinesInstanced3D_.size();
+        }
+        // REMED-GFX-095: live MRT construction/pipeline diagnostics used by the dedicated
+        // regression to distinguish a requested multisample target from a silent 1x pass.
+        [[nodiscard]] const VulkanMRTProxy* GetCurrentMRTProxyEXT() const noexcept
+        {
+            return mrtProxy_.get();
+        }
+        [[nodiscard]] VkSampleCountFlagBits GetLastMRTPipelineSampleCountEXT() const noexcept
+        {
+            return lastMrtPipelineSampleCountEXT_;
+        }
+        [[nodiscard]] uint32_t GetLastMRTPipelineColorCountEXT() const noexcept
+        {
+            return lastMrtPipelineColorCountEXT_;
         }
 
         SDL_Window*  GetWindowInternal()   const override { return window_; }
@@ -1158,6 +1216,8 @@ namespace CNA::Internal::Backends::Vulkan
 
         // --- MRT proxy (owned here; valid for one SetRenderTargets call) ---
         std::unique_ptr<VulkanMRTProxy>          mrtProxy_;
+        VkSampleCountFlagBits lastMrtPipelineSampleCountEXT_ = VK_SAMPLE_COUNT_1_BIT;
+        uint32_t              lastMrtPipelineColorCountEXT_ = 0;
 
         // --- MRT render pass cache (keyed by color attachment count) ---
         std::unordered_map<uint32_t, VkRenderPass> mrtRenderPasses_;
