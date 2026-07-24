@@ -1,48 +1,20 @@
 // SPDX-License-Identifier: MS-PL
-// Task 903: verify RenderTargetCube MSAA support on Vulkan (split out of Task 878/879, which
-// only covered RenderTarget2D).
+// REMED-GFX-094: prove Vulkan RenderTargetCube MSAA resolve semantics.
 //
-// Two checks:
-//   1. GetMultiSampleCount() property fidelity: a RenderTargetCube constructed with
-//      preferredMultiSampleCount=0 must report 0; one constructed with 8 (while the backend
-//      itself has real backbuffer MSAA engaged, see below) must report a real, nonzero,
-//      device-clamped value -- proving the request actually reached the backend instead of being
-//      silently dropped (as it was before this task: VulkanRenderTargetCubeBackend never
-//      overrode GetMultiSampleCount() at all, so it always returned the IRenderTargetCubeBackend
-//      base class's default of 0 regardless of what was requested).
-//   2. No corruption/crash: fill all 6 faces of the MSAA-enabled cube with solid blue (a real
-//      draw call per face, not Clear()-only -- see Task 875's finding), unbind, and sample the
-//      centre back via EnvironmentMapEffect (Task 334/907's established, proven-reliable
-//      technique). Must read back blue, not black/garbage/corrupted.
+// The original Task 903 fixture set RasterizerState::CullNone before filling the
+// cube with six SpriteBatch passes.  SpriteBatch::Begin() deliberately applies
+// its XNA default RasterizerState::CullCounterClockwise, so the later
+// EnvironmentMapEffect observer inherited that state and culled its CCW quad.
+// The resulting backbuffer clear was misclassified as a black cube resolve.
 //
-// **Deliberately does NOT attempt a genuine sub-pixel anti-aliasing differential test** (the
-// diagonal-edge methodology `{vulkan,bgfx}_rendertarget2d_msaa_test.cpp` use for RenderTarget2D).
-// Task 907's own mip-chain test already discovered and documented why: EnvironmentMapEffect's
-// reflection-vector sampling of a flat, fixed-normal quad has no equivalent of "shrink the
-// destination rectangle to force a specific LOD/UV point" the way direct 2D texture sampling
-// does, and an attempt at an asymmetric per-face split was found non-discriminating (git-stash
-// reverting the fix still passed identically). Independently re-confirmed while investigating
-// this exact task: with World=View=Projection=Identity and a per-vertex normal fixed at
-// (0,0,1), the actual reflection direction reduces to normalize(vertexPosition.xy, 0) -- it has
-// a zero Z component almost everywhere on the quad (only the exact, numerically-degenerate
-// centre vertex could ever reach a +-Z face at all), meaning this technique overwhelmingly
-// samples the cube's four side faces, not the one face a diagonal-split test would need to
-// sweep across. This is why every existing test using this technique (Task 148/334/907) fills
-// ALL SIX faces identically and only ever checks the exact centre pixel -- it cannot
-// discriminate between different faces' content, only confirm real (non-garbage) content came
-// back from *some* face. This test's scope is therefore: property fidelity (the real, provable
-// bug this task's title describes) + a no-corruption sanity check, matching Task 907's own
-// "confirms the mechanism doesn't corrupt or crash" scope decision for the identical class of
-// verification limitation.
-//
-// Vulkan-specific scaffolding requirement (mirrors vulkan_rendertarget2d_msaa_test.cpp exactly):
-// per-RT MSAA piggybacks on the backend's own already-picked sampleCount_, which only becomes >1
-// when the game requested backbuffer multisampling BEFORE the backend was constructed --
-// GraphicsDeviceManager.PreferMultiSampling doesn't actually reach the Vulkan backend at all
-// (Task 902 finding), so this test uses the same narrow NOXNA test-only
-// GraphicsDevice::RecreateBackendForMultiSampleCount() hook Task 878/879 added to unblock this.
-//
-// Exit code 0 = all checks PASS, 1 = any FAILs.
+// This regression applies all observer state after the producer SpriteBatch
+// passes, then proves:
+//   * requested cube sample counts are reported honestly;
+//   * all six non-MSAA and device-applied-MSAA faces retain distinct colors;
+//   * the resolved MSAA cube is sampleable in the same submission in which it
+//     was produced;
+//   * face A -> face B -> face A preserves B and leaves A's final draw;
+//   * two cube targets with the same face index do not alias.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -54,48 +26,229 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
+#include <array>
+#include <cmath>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
-static constexpr int kCubeSize = 32;
+namespace
+{
+    constexpr int kCubeSize = 32;
+    constexpr float kInvSqrt2 = 0.7071067811865475f;
 
-class VulkanRenderTargetCubeMsaaTest : public Game
+    const std::array<CubeMapFace, 6> kFaces = {
+        CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+        CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+        CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
+    };
+
+    const std::array<const char*, 6> kFaceNames = {
+        "+X", "-X", "+Y", "-Y", "+Z", "-Z",
+    };
+
+    const std::array<Color, 6> kFaceColors = {
+        Color(255,   0,   0, 255), // +X red
+        Color(  0, 255,   0, 255), // -X green
+        Color(  0,   0, 255, 255), // +Y blue
+        Color(255, 255,   0, 255), // -Y yellow
+        Color(255,   0, 255, 255), // +Z magenta
+        Color(  0, 255, 255, 255), // -Z cyan
+    };
+    const Color kObserverClear(17, 19, 23, 255);
+
+    // At the sampled point the identity-view quad has incident direction +X.
+    // These normals reflect +X into +X,-X,+Y,-Y,+Z,-Z respectively.
+    const std::array<Vector3, 6> kFaceNormals = {
+        Vector3(0.0f,       1.0f,        0.0f),
+        Vector3(1.0f,       0.0f,        0.0f),
+        Vector3(kInvSqrt2, -kInvSqrt2,   0.0f),
+        Vector3(kInvSqrt2,  kInvSqrt2,   0.0f),
+        Vector3(kInvSqrt2,  0.0f,       -kInvSqrt2),
+        Vector3(kInvSqrt2,  0.0f,        kInvSqrt2),
+    };
+
+    bool ColorMatches(const Color& got, const Color& want, int tolerance = 16)
+    {
+        return std::abs(got.getRProperty() - want.getRProperty()) <= tolerance &&
+               std::abs(got.getGProperty() - want.getGProperty()) <= tolerance &&
+               std::abs(got.getBProperty() - want.getBProperty()) <= tolerance &&
+               std::abs(got.getAProperty() - want.getAProperty()) <= tolerance;
+    }
+}
+
+class VulkanRenderTargetCubeMsaaTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
-    std::unique_ptr<SpriteBatch>           sb_;
-    std::unique_ptr<Texture2D>             whiteTex_;
-    std::unique_ptr<Texture2D>             blueTex_;
-    bool done_   = false;
-    int  result_ = 1;
+    std::unique_ptr<SpriteBatch> sb_;
+    std::unique_ptr<Texture2D> whiteTexture_;
+    std::array<std::unique_ptr<Texture2D>, 6> faceTextures_;
+    int pass_ = 0;
+    int fail_ = 0;
+    bool done_ = false;
+
+    void Check(bool ok, const std::string& description)
+    {
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", description.c_str());
+        ok ? ++pass_ : ++fail_;
+    }
+
+    void DrawSolidFace(GraphicsDevice& device, RenderTargetCube& cube,
+                       int faceIndex, int colorIndex)
+    {
+        device.SetRenderTarget(&cube, kFaces[faceIndex]);
+        sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        sb_->Draw(*faceTextures_[colorIndex],
+                  Rectangle(0, 0, kCubeSize, kCubeSize),
+                  Rectangle(0, 0, 1, 1),
+                  Color::White);
+        sb_->End();
+    }
+
+    void FillAllFaces(GraphicsDevice& device, RenderTargetCube& cube)
+    {
+        for (int i = 0; i < 6; ++i)
+            DrawSolidFace(device, cube, i, i);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    }
+
+    std::vector<Color> SampleFaces(GraphicsDevice& device, RenderTargetCube& cube,
+                                   const std::vector<int>& faceIndices,
+                                   int backbufferWidth, int backbufferHeight,
+                                   const Color& backbufferClear)
+    {
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        device.Clear(backbufferClear);
+
+        EnvironmentMapEffect effect(device);
+        effect.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
+        effect.setEmissiveColorProperty(Vector3(0.0f, 0.0f, 0.0f));
+        effect.setEnvironmentMapAmountProperty(1.0f);
+        effect.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
+        effect.setFresnelFactorProperty(0.0f);
+        effect.setTextureProperty(whiteTexture_.get());
+        effect.setEnvironmentMapProperty(&cube);
+        effect.setWorldProperty(Matrix::getIdentityProperty());
+        effect.setViewProperty(Matrix::getIdentityProperty());
+        effect.setProjectionProperty(Matrix::getIdentityProperty());
+        effect.Apply();
+
+        // This ordering is the GFX-094 regression: every preceding SpriteBatch::Begin()
+        // applies CullCounterClockwise.  The observer must establish its own reachable
+        // GraphicsDevice state after those producer passes and before it queues the draw.
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+        struct Probe
+        {
+            int x;
+            int y;
+        };
+        std::vector<Probe> probes;
+        probes.reserve(faceIndices.size());
+
+        const int columns = 3;
+        const int rows = static_cast<int>((faceIndices.size() + columns - 1) / columns);
+        for (std::size_t i = 0; i < faceIndices.size(); ++i)
+        {
+            const int column = static_cast<int>(i) % columns;
+            const int row = static_cast<int>(i) / columns;
+            const int x0 = column * backbufferWidth / columns;
+            const int x1 = (column + 1) * backbufferWidth / columns;
+            const int y0 = row * backbufferHeight / rows;
+            const int y1 = (row + 1) * backbufferHeight / rows;
+            device.setViewportProperty(Viewport(x0, y0, x1 - x0, y1 - y0));
+
+            const Vector3 normal = kFaceNormals[faceIndices[i]];
+            const VertexPositionNormalTexture quad[6] = {
+                { Vector3(-1.0f,  1.0f, 0.0f), normal, Vector2(0.0f, 1.0f) },
+                { Vector3(-1.0f, -1.0f, 0.0f), normal, Vector2(0.0f, 0.0f) },
+                { Vector3( 1.0f, -1.0f, 0.0f), normal, Vector2(1.0f, 0.0f) },
+                { Vector3(-1.0f,  1.0f, 0.0f), normal, Vector2(0.0f, 1.0f) },
+                { Vector3( 1.0f, -1.0f, 0.0f), normal, Vector2(1.0f, 0.0f) },
+                { Vector3( 1.0f,  1.0f, 0.0f), normal, Vector2(1.0f, 1.0f) },
+            };
+            device.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+            probes.push_back({ x0 + 3 * (x1 - x0) / 4, y0 + (y1 - y0) / 2 });
+        }
+
+        device.setViewportProperty(Viewport(0, 0, backbufferWidth, backbufferHeight));
+        const Rectangle full(0, 0, backbufferWidth, backbufferHeight);
+        std::vector<Color> pixels(
+            static_cast<std::size_t>(backbufferWidth) * backbufferHeight,
+            Color(0, 0, 0, 0));
+        device.GetBackBufferData(&full, pixels.data(), 0, static_cast<int>(pixels.size()));
+
+        std::vector<Color> sampled;
+        sampled.reserve(probes.size());
+        for (const Probe& probe : probes)
+            sampled.push_back(pixels[static_cast<std::size_t>(probe.y) * backbufferWidth + probe.x]);
+        return sampled;
+    }
+
+    bool CheckSamples(const std::vector<Color>& got,
+                      const std::vector<int>& faceIndices,
+                      const std::vector<Color>& expected,
+                      const char* label)
+    {
+        bool all = got.size() == expected.size();
+        for (std::size_t i = 0; i < got.size() && i < expected.size(); ++i)
+        {
+            const bool ok = ColorMatches(got[i], expected[i]);
+            all = all && ok;
+            std::printf("  %s %s sample=(%d,%d,%d,%d) expected=(%d,%d,%d,%d)\n",
+                        label, kFaceNames[faceIndices[i]],
+                        got[i].getRProperty(), got[i].getGProperty(),
+                        got[i].getBProperty(), got[i].getAProperty(),
+                        expected[i].getRProperty(), expected[i].getGProperty(),
+                        expected[i].getBProperty(), expected[i].getAProperty());
+        }
+        return all;
+    }
 
 protected:
     void Initialize() override
     {
         Game::Initialize();
         auto& device = getGraphicsDeviceProperty();
-        // See this file's header comment: force real backbuffer MSAA directly, before any GPU
-        // resources exist, since GraphicsDeviceManager.PreferMultiSampling never reaches Vulkan.
+
+        // Task 878/879's narrow test hook is required because per-target MSAA
+        // currently uses the backend's already-selected sample count.
         device.RecreateBackendForMultiSampleCount(8);
 
         sb_ = std::make_unique<SpriteBatch>(device);
-        const std::vector<uint8_t> white = { 255, 255, 255, 255 };
-        whiteTex_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, white));
-        const std::vector<uint8_t> blue = { 0, 0, 255, 255 };
-        blueTex_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, blue));
+        whiteTexture_ = std::make_unique<Texture2D>(
+            Texture2D::CreateFromPixels(device, 1, 1, {255, 255, 255, 255}));
+        for (int i = 0; i < 6; ++i)
+        {
+            const Color& c = kFaceColors[i];
+            faceTextures_[i] = std::make_unique<Texture2D>(
+                Texture2D::CreateFromPixels(
+                    device, 1, 1,
+                    { static_cast<uint8_t>(c.getRProperty()),
+                      static_cast<uint8_t>(c.getGProperty()),
+                      static_cast<uint8_t>(c.getBProperty()),
+                      static_cast<uint8_t>(c.getAProperty()) }));
+        }
     }
 
     void Draw(const GameTime&) override
@@ -104,85 +257,103 @@ protected:
         done_ = true;
 
         auto& device = getGraphicsDeviceProperty();
-        const auto& vp = device.getViewportProperty();
-        const int W = vp.getWidthProperty();
-        const int H = vp.getHeightProperty();
+        const int backbufferWidth = device.getViewportProperty().getWidthProperty();
+        const int backbufferHeight = device.getViewportProperty().getHeightProperty();
+        const std::vector<int> allFaces = {0, 1, 2, 3, 4, 5};
+        const std::vector<Color> allColors(kFaceColors.begin(), kFaceColors.end());
 
-        device.SetDepthTestEnabled(false);
-        device.setBlendStateProperty(BlendState::Opaque);
-        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        RenderTargetCube clearOnly(
+            device, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 8,
+            RenderTargetUsage::DiscardContents);
+        // Initialize/submit every layer once because a sampled cube view covers all
+        // six layers even when the shader direction reaches only one of them.
+        FillAllFaces(device, clearOnly);
+        (void) SampleFaces(device, clearOnly, allFaces,
+                           backbufferWidth, backbufferHeight, kObserverClear);
 
-        // --- Check 1: MultiSampleCount=0 must report 0 ---
-        RenderTargetCube rtcNoMsaa(device, kCubeSize, /*mipMap=*/false, SurfaceFormat::Color,
-                                   DepthFormat::None, /*preferredMultiSampleCount=*/0,
-                                   RenderTargetUsage::DiscardContents);
-        const int noMsaaApplied = rtcNoMsaa.getMultiSampleCountProperty();
-        const bool noMsaaOk = (noMsaaApplied == 0);
-        std::printf("[%s] MultiSampleCount request 0 -> applied %d (expected 0)\n",
-                    noMsaaOk ? "PASS" : "FAIL", noMsaaApplied);
+        device.SetRenderTarget(&clearOnly, CubeMapFace::PositiveZ);
+        const Color clearMarker(255, 64, 32, 255);
+        device.Clear(clearMarker);
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        const auto clearSample = SampleFaces(
+            device, clearOnly, {4}, backbufferWidth, backbufferHeight, clearMarker);
+        Check(clearSample.size() == 1 && ColorMatches(clearSample[0], clearMarker),
+              "MSAA cube clear-only resolve: +Z samples as (255,64,32,255)");
 
-        // --- Check 2: MultiSampleCount=8 must report a real, nonzero applied value ---
-        RenderTargetCube rtcMsaa(device, kCubeSize, /*mipMap=*/false, SurfaceFormat::Color,
-                                 DepthFormat::None, /*preferredMultiSampleCount=*/8,
-                                 RenderTargetUsage::DiscardContents);
-        const int msaaApplied = rtcMsaa.getMultiSampleCountProperty();
-        const bool msaaPropertyOk = (msaaApplied > 1);
-        std::printf("[%s] MultiSampleCount request 8 -> applied %d (expected >1)\n",
-                    msaaPropertyOk ? "PASS" : "FAIL", msaaApplied);
+        RenderTargetCube drawOverClear(
+            device, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 8,
+            RenderTargetUsage::DiscardContents);
+        FillAllFaces(device, drawOverClear);
+        device.SetRenderTarget(&drawOverClear, CubeMapFace::PositiveY);
+        device.Clear(Color::Red);
+        sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
+        sb_->Draw(*faceTextures_[1], Rectangle(0, 0, kCubeSize, kCubeSize),
+                  Rectangle(0, 0, 1, 1), Color::White);
+        sb_->End();
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        const auto drawSample = SampleFaces(
+            device, drawOverClear, {2}, backbufferWidth, backbufferHeight, Color::Red);
+        Check(drawSample.size() == 1 && ColorMatches(drawSample[0], kFaceColors[1]),
+              "MSAA cube draw-over-red-clear resolve: +Y samples as green");
 
-        // --- Check 3: rendering into the MSAA cube doesn't corrupt/crash ---
-        const CubeMapFace faces[6] = {
-            CubeMapFace::PositiveX, CubeMapFace::NegativeX,
-            CubeMapFace::PositiveY, CubeMapFace::NegativeY,
-            CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
-        };
-        for (CubeMapFace face : faces)
-        {
-            device.SetRenderTarget(&rtcMsaa, face);
-            sb_->Begin();
-            sb_->Draw(*blueTex_,
-                      Rectangle(0, 0, kCubeSize, kCubeSize),
-                      Rectangle(0, 0, 1, 1),
-                      Color::White);
-            sb_->End();
-        }
+        RenderTargetCube cube1x(
+            device, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+            RenderTargetUsage::DiscardContents);
+        RenderTargetCube cubeMsaa(
+            device, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 8,
+            RenderTargetUsage::DiscardContents);
+        Check(cube1x.getMultiSampleCountProperty() == 0,
+              "MultiSampleCount request 0 reports 0");
+        const int appliedSampleCount = cubeMsaa.getMultiSampleCountProperty();
+        Check(appliedSampleCount > 1,
+              "MultiSampleCount request 8 applies a supported multisample count");
+
+        FillAllFaces(device, cube1x);
+        FillAllFaces(device, cubeMsaa);
+
+        const auto samplesMsaa = SampleFaces(
+            device, cubeMsaa, allFaces, backbufferWidth, backbufferHeight, kObserverClear);
+        const std::string msaaLabel = std::to_string(appliedSampleCount) + "x";
+        Check(CheckSamples(samplesMsaa, allFaces, allColors, msaaLabel.c_str()),
+              "MSAA cube resolves and samples all six distinct faces in the producer submission");
+
+        const auto samples1x = SampleFaces(
+            device, cube1x, allFaces, backbufferWidth, backbufferHeight, kObserverClear);
+        Check(CheckSamples(samples1x, allFaces, allColors, "1x"),
+              "non-MSAA cube samples all six distinct faces");
+
+        RenderTargetCube cubeA(
+            device, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 8,
+            RenderTargetUsage::DiscardContents);
+        RenderTargetCube cubeB(
+            device, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 8,
+            RenderTargetUsage::DiscardContents);
+
+        // A cube descriptor covers all six layers.  Initialize every layer before
+        // sampling either stress cube so the fixture itself remains Vulkan-valid.
+        FillAllFaces(device, cubeA);
+        FillAllFaces(device, cubeB);
+        DrawSolidFace(device, cubeA, 0, 0); // cube A +X = red
+        DrawSolidFace(device, cubeA, 1, 1); // cube A -X = green
+        DrawSolidFace(device, cubeB, 0, 5); // cube B +X = cyan
+        DrawSolidFace(device, cubeA, 0, 4); // cube A +X = magenta (final A)
         device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
 
-        device.Clear(Color(0, 0, 0, 255));
-        EnvironmentMapEffect fx(device);
-        fx.setDiffuseColorProperty(Vector3(1.0f, 1.0f, 1.0f));
-        fx.setEmissiveColorProperty(Vector3(0.0f, 0.0f, 0.0f));
-        fx.setEnvironmentMapAmountProperty(1.0f);
-        fx.setEnvironmentMapSpecularProperty(Vector3(0.0f, 0.0f, 0.0f));
-        fx.setTextureProperty(whiteTex_.get());
-        fx.setEnvironmentMapProperty(&rtcMsaa);
-        fx.setWorldProperty(Matrix::getIdentityProperty());
-        fx.setViewProperty(Matrix::getIdentityProperty());
-        fx.setProjectionProperty(Matrix::getIdentityProperty());
-        fx.Apply();
+        const std::vector<int> plusMinusX = {0, 1};
+        const std::vector<Color> expectedA = {kFaceColors[4], kFaceColors[1]};
+        const auto samplesA = SampleFaces(
+            device, cubeA, plusMinusX, backbufferWidth, backbufferHeight, kObserverClear);
+        Check(CheckSamples(samplesA, plusMinusX, expectedA, "A->B->A"),
+              "face +X -> -X -> +X keeps -X green and final +X magenta");
 
-        const Vector3 n(0.0f, 0.0f, 1.0f);
-        const VertexPositionNormalTexture verts[6] = {
-            { Vector3(-1.0f,  1.0f, 0.0f), n, Vector2(0.0f, 1.0f) },
-            { Vector3(-1.0f, -1.0f, 0.0f), n, Vector2(0.0f, 0.0f) },
-            { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
-            { Vector3(-1.0f,  1.0f, 0.0f), n, Vector2(0.0f, 1.0f) },
-            { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
-            { Vector3( 1.0f,  1.0f, 0.0f), n, Vector2(1.0f, 1.0f) },
-        };
-        device.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+        const std::vector<int> plusX = {0};
+        const std::vector<Color> expectedB = {kFaceColors[5]};
+        const auto samplesB = SampleFaces(
+            device, cubeB, plusX, backbufferWidth, backbufferHeight, kObserverClear);
+        Check(CheckSamples(samplesB, plusX, expectedB, "cube B"),
+              "multiple cubes keep independent +X resolve destinations");
 
-        const Rectangle centReg(W / 2, H / 2, 1, 1);
-        Color centPx(0, 0, 0, 0);
-        device.GetBackBufferData(&centReg, &centPx, 0, 1);
-        const bool renderOk = (centPx.getRProperty() <= 50  &&
-                               centPx.getGProperty() <= 50  &&
-                               centPx.getBProperty() >= 200);
-        std::printf("[%s] MSAA cube sample after unbind: centre=(%d,%d,%d) (expected blue)\n",
-                    renderOk ? "PASS" : "FAIL",
-                    centPx.getRProperty(), centPx.getGProperty(), centPx.getBProperty());
-
-        result_ = (noMsaaOk && msaaPropertyOk && renderOk) ? 0 : 1;
+        std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();
     }
 
@@ -194,12 +365,12 @@ public:
         gdm_->setPreferredBackBufferHeightProperty(240);
     }
 
-    int getResult() const { return result_; }
+    int Result() const { return fail_ == 0 ? 0 : 1; }
 };
 
 int main()
 {
     VulkanRenderTargetCubeMsaaTest game;
     game.Run();
-    return game.getResult();
+    return game.Result();
 }
