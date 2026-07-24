@@ -2432,7 +2432,8 @@ existing task.
 | REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | **DONE and VERIFIED (KHRONOS validation loaded; Xvfb/llvmpipe + AMD Radeon 780M/RADV)** — real production validity defect. One normalized mapping-derived predicate now conditionally declares `VK_DYNAMIC_STATE_BLEND_CONSTANTS` and conditionally replays the captured value after pipeline bind. Per-draw/per-batch capture is preserved; factor/function state stays static and pipeline-keyed; RGBA stays dynamic and outside the key. Pre-fix minimal test: pixels 4/4 but CTest 0/1 on exact VUID; post-fix generic 3D 12/12, SpriteBatch 23/23, specialized SkinnedEffect 6/6, targeted shard 36/36, zero 08608, cache 8→8. Full Vulkan 156/158 with documented `DepthBias` plus a baseline-identical cube-MSAA failure; separate Texture3D `VUID-09600` spawned GFX-093 and cube-MSAA spawned GFX-094. test `ed2b7f74`, fix `368e011e`. |
 | REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
 | REMED-GFX-093 | Vulkan Texture3D nonzero-mip SetData/GetData copies the requested mip but transitioned only mip 0 because the shared `TransitionImageLayout` barrier hardcoded `{baseMipLevel=0, levelCount=1}`. Validation therefore found mip 1/2 still in `SHADER_READ_ONLY_OPTIMAL` while the copy commands declared `TRANSFER_DST_OPTIMAL`/`TRANSFER_SRC_OPTIMAL`. The original descriptor-at-draw interpretation was disproved: no draw/descriptor/view participates in Vulkan Texture3D. | LOW | P3 | REMED-GFX-091 full Vulkan validation sweep | **DONE and VERIFIED — REAL PRODUCTION VULKAN IMAGE-SUBRESOURCE-LAYOUT VALIDITY DEFECT.** A Texture3D-specific barrier now scopes each upload/readback cycle to `{baseMipLevel=level,levelCount=1,baseArrayLayer=0,layerCount=1}`, uses matched shader/transfer access and stages, and restores shader-read in one submission. New 8×8×8/NPOT/state-cycle regression **26/26**; texture shard **11/11**, targeted Vulkan **19/19**, full Vulkan **157/159** with only unchanged DepthBias/GFX-094 baselines; zero validation messages. Texture2D/Cube and GFX-074/075/076/077/091 green; zero shader/generated diff. test `db46bdd0`, fix `977c1a73`. |
-| REMED-GFX-094 | `Vulkan_RenderTargetCube_MsaaResolve` applies MSAA but samples black after drawing all six faces and unbinding the target. | LOW | P3 | REMED-GFX-091 full Vulkan regression sweep | NOT STARTED — reproduced on Xvfb/llvmpipe (4×) and real AMD Radeon 780M/RADV (8×). A clean build of pre-GFX-091 commit `67300e01` fails identically on AMD, so GFX-091 did not introduce it. Separate RT-cube/MSAA task; recorded only, not fixed. |
+| REMED-GFX-094 | `Vulkan_RenderTargetCube_MsaaResolve` applied MSAA but the original EnvironmentMapEffect observer read its untouched black backbuffer clear after its CCW quad was culled by the `CullCounterClockwise` state correctly left by the preceding default SpriteBatch producers. Direct selected-face diagnostics proved the resolve image already held the expected colour. | LOW | P3 | REMED-GFX-091 full Vulkan regression sweep | **DONE and VERIFIED — TEST-HARNESS DEFECT / NO PRODUCTION DEFECT.** Test-only state correction applies Opaque/DepthNone/CullNone after all producer SpriteBatch passes and expands the regression to clear-only, draw-over-clear, 1×/MSAA all-six-face, same-submission producer→consumer, A→B→A, and multiple-cube coverage: **8/8** on llvmpipe 4× and Radeon 780M/RADV 8×. Targeted Vulkan **25/25**, full Vulkan **158/159** with only documented DepthBias, zero validation. Production/shader/generated diff zero. test `71b633f1`. |
+| REMED-GFX-095 | Vulkan MRT binding silently bypasses the bound RenderTarget2D objects' MSAA images/resolves: `VulkanMRTProxy` keeps base `WantsMsaa()==false`, uses a sample-1 MRT render pass/depth image, and attaches each target's single-sample `GetColorView()` instead of its multisample view plus resolve destination. | LOW | P3 | REMED-GFX-094 sibling MSAA inventory | NOT STARTED — source-proven separate capability defect; single-target RenderTarget2D/RenderTargetCube MSAA paths are correct. Recorded only, not fixed. |
 
 #### REMED-BUILD-010 detail
 
@@ -6654,3 +6655,200 @@ these remediation records. Shader and generated-artifact diff is **zero**; `audi
 
 No new findings. Recommended next GRAPHICS task: **REMED-GFX-094**, the already-isolated Vulkan
 RenderTargetCube MSAA black resolve/sample defect. Do not begin it as part of this record.
+
+---
+
+### REMED-GFX-094 — Vulkan RenderTargetCube MSAA resolve/sample — DONE (test-only)
+
+**Classification:** **F — TEST-HARNESS DEFECT / NO PRODUCTION DEFECT.** Vulkan's
+RenderTargetCube MSAA render-pass resolve, selected-face identity, layouts, and producer-to-consumer
+ordering were correct before this task and remain byte-identical.
+
+**Exact root cause.** The original Task 903 fixture applied `RasterizerState::CullNone` once, before
+filling six faces through six default `SpriteBatch::Begin()` calls. The established XNA/FNA and CNA
+SpriteBatch contract is that a Begin with no explicit rasterizer state applies
+`RasterizerState::CullCounterClockwise` and leaves that public GraphicsDevice state after End. The
+later EnvironmentMapEffect observer did not establish its own rasterizer state. Its known
+counter-clockwise full-screen quad was therefore completely culled, so backbuffer readback saw the
+black `Clear`, not a sample from the cube. This is the same test-state-hygiene class previously
+demonstrated by GFX-081/GFX-087, not a resolve failure.
+
+The correction is test-only: after the producer SpriteBatch passes and `EnvironmentMapEffect::Apply`,
+the observer now explicitly establishes the reachable public state
+`BlendState::Opaque`, `DepthStencilState::None`, and `RasterizerState::CullNone`, then sets a
+full panel viewport before each draw. Production Vulkan source, render-pass descriptions, image
+views, synchronization, and caches have **zero diff**.
+
+**Pre-fix reproduction and discriminators.** The original black result was deterministic on
+Xvfb/llvmpipe with 4× MSAA and on the real Radeon 780M/RADV path. A clean pre-GFX-091 build at
+`67300e01` behaved identically, already excluding GFX-091/GFX-093 regression. Temporary diagnostic
+instrumentation, removed before commit, copied the exact selected layer of the single-sample
+resolve image after submission:
+
+| Probe with the old observer state | Resolve-layer result | Observer/backbuffer result | Meaning |
+|---|---:|---:|---|
+| non-MSAA +X draw | exact blue `(0,0,255,255)` | black/clear | cube face was correct; observer did not draw |
+| 4× MSAA +X draw | exact blue `(0,0,255,255)` | black/clear | MSAA resolve destination was correct before the test fix |
+| 4× MSAA +Z clear only | exact `(255,64,32,255)` | observer clear | clear resolved into the selected layer |
+| 4×, red clear + green full-face draw | exact green `(0,255,0,255)` | observer clear | draw reached the multisample attachment and resolved |
+| uploaded ordinary TextureCube | not a render target/resolve | observer clear | failure was independent of all resolve machinery |
+
+The transient MSAA image is intentionally not transfer-readable. The exact clear and draw colours
+in its render-pass resolve destination prove that the multisample attachment held the correct
+source samples before resolve; the ordinary TextureCube and 1× controls prove that the old black
+result came from culling the consumer.
+
+**Public RenderTargetCube contract.** A selected face becomes available for sampling when it is
+unbound with `SetRenderTarget(nullptr)` or another target is selected. CNA may defer physical
+recording, but it must retain target and face identity by value, end the producer pass, resolve that
+face, and place a same-frame consumer after it in command-buffer order. No Present, extra frame,
+`vkDeviceWaitIdle`, `queueWaitIdle`, or `GENERAL` layout is required. The expanded public regression
+queues cube producers, unbinds, immediately samples through EnvironmentMapEffect, and obtains the
+new colour in the **same submission**.
+
+`RenderTargetCube` inherits the public `TextureCube::GetData` signature, but
+`VulkanRenderTargetCubeBackend` does not override `ITextureCubeBackend::GetData` and therefore uses
+that interface's documented default no-op; it is not a functional Vulkan render-target readback
+path (the broader cross-backend no-op capability pattern was already documented by GFX-074).
+Treating its zero-filled result as resolve evidence would create another false diagnosis. The
+temporary selected-face backend diagnostic instead read the resolve image directly and agreed
+exactly with corrected public cube sampling; it and every diagnostic production hook were then
+removed.
+
+**Physical image and face architecture.**
+
+| State | RenderTarget2D MSAA sibling | RenderTargetCube MSAA |
+|---|---|---|
+| multisample image | one transient, single-mip, single-layer `VK_IMAGE_TYPE_2D` image | one transient, single-mip, single-layer `VK_IMAGE_TYPE_2D` image shared serially by the six face passes |
+| multisample view | 2D, mip 0, layer 0, count 1 | `msaaColorView_`: 2D, mip 0, layer 0, count 1 |
+| resolve image | `colorImage_`, single-sample 2D image | `image_`, one single-sample cube-compatible 2D image with six array layers and the requested mip chain |
+| resolve attachment view | `colorView_`, 2D mip 0/layer 0/count 1 | `faceViews_[face]`, 2D mip 0, base layer=`face`, layer count 1 |
+| sampling view | full mip-range 2D view | `cubeView_`, `VK_IMAGE_VIEW_TYPE_CUBE`, all mips, base layer 0, layer count 6 |
+| later sampled image | `colorImage_` | `image_`, through `cubeView_` |
+
+Both colour images use CNA `SurfaceFormat::Color` and the same Vulkan colour format selected by the
+backend. The MSAA image has `TRANSIENT_ATTACHMENT|COLOR_ATTACHMENT` usage and may be discarded
+after resolve. The resolve cube has `COLOR_ATTACHMENT|SAMPLED|TRANSFER_SRC|TRANSFER_DST` usage and
+is not transient.
+
+`CubeMapFace` is declared in the same order Vulkan cube arrays require, and every producer,
+attachment view, mip transition, diagnostic read, and reflection-vector sampling probe was checked
+against this mapping:
+
+| XNA/CNA face | Vulkan array layer | regression colour |
+|---|---:|---|
+| PositiveX | 0 | red |
+| NegativeX | 1 | green |
+| PositiveY | 2 | blue |
+| NegativeY | 3 | yellow |
+| PositiveZ | 4 | magenta |
+| NegativeZ | 5 | cyan |
+
+**Render-pass and framebuffer wiring (pre-fix and post-fix).** There is no corrected Vulkan wiring:
+the following exact wiring was already correct and is unchanged.
+
+| Attachment | Description/reference | Framebuffer view |
+|---|---|---|
+| 0 — MSAA colour | device-selected sample count; load `CLEAR`; store `DONT_CARE`; initial `UNDEFINED`; final `COLOR_ATTACHMENT_OPTIMAL`; colour reference 0 | `msaaColorView_` |
+| 1 — resolve colour | sample count 1; load `DONT_CARE`; store `STORE`; initial `UNDEFINED`; final `SHADER_READ_ONLY_OPTIMAL`; resolve reference 1 | `faceViews_[selectedFace]` |
+| 2 — optional depth | same MSAA sample count; transient depth semantics; depth reference 2 | `depthView_` |
+
+With `DepthFormat::None`, the framebuffer array is exactly
+`{msaaColorView_, faceViews_[selectedFace]}`; with depth it is
+`{msaaColorView_, faceViews_[selectedFace], depthView_}`. The resolve mechanism is the subpass's
+`pResolveAttachments`, not `vkCmdResolveImage` or a later copy. The render-pass exit dependency
+orders colour-attachment writes before fragment-shader/transfer reads, while the resolve
+attachment's final layout makes the selected face shader-readable on pass end.
+
+For mip 0, the per-face 2D attachment view constrains the implicit render-pass transition to exactly
+one array layer. Existing mip generation uses exact `{mip,face}` barrier ranges and was not changed.
+The MSAA source remains attachment-optimal/discardable; the resolved selected face returns to
+shader-read. No layer-0-only explicit barrier, all-six-face transition, or Texture3D-style helper
+participates.
+
+Each face owns a distinct `FaceProxy` and framebuffer whose resolve view embeds that face's layer.
+Deferred draws capture the active proxy/target and viewport/scissor/draw state by value. Render-pass
+compatibility may be cached across faces because the descriptions are identical; framebuffer
+identity is per cube object and per face. The A→B→A and two-cube tests below prove there is no
+last-face-wins, layer-0 alias, stale framebuffer, or target-identity loss. Images, views, and
+framebuffers remain owned by their RenderTargetCube through deferred submission and then use the
+existing frame-fence retirement model.
+
+**Final public regression evidence.** The rewritten
+`Vulkan_RenderTargetCube_MsaaResolve` remains public-API-only and uses Opaque, ColorWrite All,
+default all-ones multisample mask, DepthNone, CullNone, full controlled viewports, mip 0, and
+`SurfaceFormat::Color`.
+
+| Case | Result on llvmpipe (applied 4×) | Result on Radeon 780M/RADV (applied 8×) |
+|---|---:|---:|
+| requested count 0 / requested count 8 | reports 0 / reports supported 4 | reports 0 / reports supported 8 |
+| clear-only +Z `(255,64,32,255)` | exact sample | exact sample |
+| red clear + green draw on +Y | green sample | green sample |
+| all six MSAA faces | red, green, blue, yellow, magenta, cyan | same six colours |
+| all six non-MSAA faces | same six colours | same six colours |
+| +X=A → -X=B → +X=C | +X magenta, -X green | +X magenta, -X green |
+| Cube1 +X → Cube2 +X → Cube1 +X | independent magenta/cyan destinations | independent magenta/cyan destinations |
+| same-submission producer → consumer | current resolved colours | current resolved colours |
+| total | **8/8** | **8/8** |
+
+This also covers backbuffer→cube→backbuffer and cube-face→cube-face→cube-face pass boundaries.
+EnvironmentMapEffect is the consumer used for every face probe, with reflection normals chosen to
+address each intended face rather than assuming the old centre direction. The independent existing
+`Vulkan_EnvironmentMapEffect_Readback` sanity remains exact red. The 1× six-face control establishes
+ordinary face selection/sampling/lifetime; the passing 4×/8× cases establish the identical public
+contract after render-pass resolve. A supported 2× sample count was not exposed by the selected
+backend setup, and no count was hardcoded into the assertion.
+
+**Validation and regression gates.** A loader audit explicitly logged loading
+`libVkLayer_khronos_validation.so` and inserting `VK_LAYER_KHRONOS_validation` at both instance and
+device scope. The targeted and full logs contain zero VUIDs or other validation messages.
+
+| Gate | Final result |
+|---|---|
+| GFX-094 public regression | **8/8** llvmpipe 4×; **8/8** Radeon 780M/RADV 8× |
+| RenderTarget2D MSAA sibling | **2/2** |
+| depth-backed RenderTargetCube smoke | `Vulkan_RenderTargetCube_PerFace` PASS; six `Depth24` face passes |
+| GFX-074 deferred target GetData/lifetime | **13/13** |
+| GFX-075 generic source-resource lifetime | **8/8** |
+| GFX-076 descriptor-cache identity/lifetime | **14/14** |
+| GFX-077 ColorWriteChannels/MultiSampleMask/MSAA | **11/11** |
+| GFX-091 generic render-target blend factor | **12/12** |
+| GFX-091 SpriteBatch blend state | **23/23** |
+| GFX-091 specialized SkinnedEffect reuse | **4/4** |
+| GFX-093 Texture3D mip layout | **26/26** |
+| viewport/scissor | RT scissor **9/9**; RT viewport **18/18**; Sprite viewport **10/10**, switch **6/6**, RT **8/8** |
+| GFX-089 public depth contract | **4/4** |
+| EnvironmentMap/cube sampling sanity | PASS, exact red |
+| targeted Vulkan shard | **25/25 CTests**, zero validation |
+| final full `^Vulkan_` suite | **158/159** in 200.55 s, zero validation; sole failure is documented llvmpipe `Vulkan_DepthBias` **3/4** |
+
+The full suite therefore advances from **157/159 to 158/159** by correcting the false-negative
+fixture, without modifying the unrelated DepthBias baseline.
+
+**Sibling MSAA inventory and new finding.**
+
+| Path | Inventory result | Action |
+|---|---|---|
+| single RenderTarget2D + MSAA | same correct MSAA-colour + single-sample resolve architecture | none |
+| RenderTargetCube + MSAA | correct shared transient source + per-face resolve views/framebuffers | GFX-094 fixture closed |
+| single-target depth + MSAA | sample count matches colour; transient/discarded; no unsupported depth resolve | none |
+| MRT + MSAA | MRT proxy selects sample-1 render pass/depth and target resolve views, bypassing each target's MSAA image | new **REMED-GFX-095**, not fixed |
+
+GFX-095 is separable: `VulkanMRTProxy` inherits the base `WantsMsaa()==false`,
+`GetOrCreateMRTRenderPass` declares single-sample attachments with no resolve references, its depth
+image is sample 1, and its framebuffer uses each target's `GetColorView()`. It therefore silently
+renders single-sample when individually multisampled RenderTarget2D objects are bound as MRT. No
+cube face/layer/cache identity defect was found, and GFX-095 was recorded without changing
+production.
+
+**Scope, artifacts, and commits.** The permanent diff is the strengthened
+`examples/vulkan_rendertargetcube_msaa_test.cpp` plus these remediation records. Production,
+shaders, generated artifacts, and `audit/` have zero diff. No `GENERAL`, global wait, forced
+Present, per-draw resolve, extra frame, view recreation, or synchronization redesign was added.
+
+- `71b633f1 test(Task REMED-GFX-094): correct cube MSAA regression state`
+- `docs(remediation): classify GFX-094 as test-harness defect` (this record)
+
+New finding: **REMED-GFX-095**, recorded only. GFX-092, GFX-061, the WebGPU SpriteBatch BlendState
+counterpart, and DepthBias were not begun. Recommended next GRAPHICS task remains
+**REMED-GFX-061** per the established queue; do not begin it as part of this record.
