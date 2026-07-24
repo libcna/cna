@@ -1466,6 +1466,23 @@ namespace CNA::Internal::Backends::Software
             currentRenderTarget_->BindAsRenderTarget();
     }
 
+    void SoftwareGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (!renderTargets || count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (count > 1)
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend does not support multiple simultaneous render targets.");
+        if (renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+    }
+
     std::unique_ptr<IEffectBackend> SoftwareGraphicsBackend::CreateEffectBackend(const std::string& vertSrc,
                                                                                 const std::string& fragSrc)
     {

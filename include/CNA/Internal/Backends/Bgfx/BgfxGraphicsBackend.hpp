@@ -654,7 +654,8 @@ namespace CNA::Internal::Backends::Bgfx
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
         // Task 907 finding: the shared IGraphicsBackend::SetRenderTargetCubeFace default only
         // calls BindAsRenderTargetFace -- it never updates currentRtWidth_/currentRtHeight_ (the

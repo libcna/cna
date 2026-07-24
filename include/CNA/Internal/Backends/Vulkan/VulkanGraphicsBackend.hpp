@@ -632,6 +632,20 @@ namespace CNA::Internal::Backends::Vulkan
         /// Task 903: real applied MSAA sample count (0 if MSAA wasn't engaged), mirroring
         /// VulkanRenderTargetBackend::GetMultiSampleCount()'s identical Task 878/879 pattern.
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
+        [[nodiscard]] VkImageView GetFaceResolveViewEXT(int face) const
+        {
+            return face >= 0 && face < 6
+                ? faceViews_[static_cast<std::size_t>(face)]
+                : VK_NULL_HANDLE;
+        }
+        [[nodiscard]] VkImageView GetMsaaColorViewEXT() const { return msaaColorView_; }
+        [[nodiscard]] VkImageView GetDepthViewEXT() const { return depthView_; }
+        [[nodiscard]] VkFormat GetDepthFormatEXT() const { return depthVkFormat_; }
+        [[nodiscard]] VkSampleCountFlagBits GetColorSampleCountEXT() const
+        {
+            return static_cast<VkSampleCountFlagBits>(
+                appliedMultiSampleCount_ > 1 ? appliedMultiSampleCount_ : 1);
+        }
 
         // IVulkanCubeSamplable — returns a VK_IMAGE_VIEW_TYPE_CUBE view over all 6 faces.
         [[nodiscard]] VkImageView GetVkCubeImageView() const override { return cubeView_; }
@@ -700,7 +714,8 @@ namespace CNA::Internal::Backends::Vulkan
     {
     public:
         VulkanMRTProxy(VulkanGraphicsBackend* owner,
-                       VulkanRenderTargetBackend* const* rts, uint32_t count);
+                       const RenderTargetBindingDescriptor* renderTargets,
+                       uint32_t count);
         ~VulkanMRTProxy() override;
 
         VkFramebuffer GetFramebuffer()          const override { return framebuffer_; }
@@ -929,7 +944,8 @@ namespace CNA::Internal::Backends::Vulkan
         std::unique_ptr<ITexture3DBackend>  CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat, bool mipMap = false, int multiSampleCount = 0) override;
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
 
         // ---- Extended 3D draws (textured + lit) ----
         void DrawPrimitivesEx(const IVertexBufferBackend&,

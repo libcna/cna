@@ -568,7 +568,8 @@ namespace CNA::Internal::Backends::EasyGL
                                                              const std::string& fragSrc) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 

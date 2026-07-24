@@ -92,7 +92,8 @@ namespace CNA::Internal::Backends::Dx3
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         // DX3-27: DirectDraw has no multi-render-target concept -- throws for count > 1, same
         // conclusion SDL_RENDERER (Task 709) and CANVAS (CANVAS-26) already reached.
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
 
         // ---- IGraphicsBackend: real (Phase X4/X5) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;

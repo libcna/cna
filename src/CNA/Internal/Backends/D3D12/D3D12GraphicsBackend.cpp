@@ -951,7 +951,8 @@ namespace CNA::Internal::Backends::D3D12
                                                                multiSampleCount);
     }
 
-    void D3D12GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void D3D12GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DX-144: same currentCustomRT_ unbind SetRenderTarget2D() does -- a single-target mipMap
         // render target bound via SetRenderTarget2D() and then switched straight to an MRT set
@@ -963,25 +964,39 @@ namespace CNA::Internal::Backends::D3D12
             currentCustomRT_->UnbindAsRenderTarget();
             currentCustomRT_ = nullptr;
         }
-        if (count <= 0 || rts == nullptr)
+        if (count <= 0 || renderTargets == nullptr)
         {
             SetRenderTarget2D(nullptr);
             return;
         }
+        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
+        {
+            SetRenderTargetCubeFace(
+                renderTargets[0].GetRenderTargetCube(),
+                renderTargets[0].GetCubeFace());
+            return;
+        }
+        for (int i = 0; i < count; ++i)
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "D3D12GraphicsBackend::SetRenderTargets: cube faces in a multi-target "
+                    "set are not implemented by this CNA backend.");
 
         ID3D12Resource* resources[8];
         D3D12_CPU_DESCRIPTOR_HANDLE rtvs[8];
         const int n = std::min(count, 8);
         for (int i = 0; i < n; ++i)
         {
-            auto* rt = dynamic_cast<D3D12RenderTargetBackend*>(rts[i]);
+            auto* rt = dynamic_cast<D3D12RenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
             if (!rt)
                 throw std::runtime_error("D3D12GraphicsBackend::SetRenderTargets: target is not a real D3D12RenderTargetBackend");
             resources[i] = rt->GetColorResourceEXT();
             rtvs[i] = rt->GetRtvEXT();
         }
         BindOffscreenColorTargetsEXT(resources, rtvs, n, DXGI_FORMAT_R8G8B8A8_UNORM,
-                                     rts[0]->GetWidth(), rts[0]->GetHeight());
+                                     renderTargets[0].GetWidth(),
+                                     renderTargets[0].GetHeight());
     }
 
     void D3D12GraphicsBackend::Clear(float r, float g, float b, float a)

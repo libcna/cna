@@ -8924,7 +8924,8 @@ namespace CNA::Internal::Backends::Vulkan
         return std::make_unique<VulkanRenderTargetCubeBackend>(this, size, depthFormat, mipMap, multiSampleCount);
     }
 
-    void VulkanGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void VulkanGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // REMED-GFX-075: the MRT proxy is a VulkanRTSource DESTINATION whose raw pointer is stored in
         // the deferred queues (d.rt/batchRT). Retiring it to backbuffer or a new binding must NOT
@@ -8937,34 +8938,46 @@ namespace CNA::Internal::Backends::Vulkan
             if (mrtProxy_)
                 retiredMrtProxies_.emplace_back(frameGeneration_, std::move(mrtProxy_));
         };
-        if (!rts || count <= 0) {
+        if (!renderTargets || count <= 0) {
             currentRT_ = nullptr;
             retireMrtProxy();
             return;
         }
         if (count == 1) {
             retireMrtProxy();
-            auto* vrt = static_cast<VulkanRenderTargetBackend*>(rts[0]);
-            currentRT_ = vrt;
-            vrt->BindAsRenderTarget();
+            if (renderTargets[0].IsRenderTargetCubeFace()) {
+                auto* cube = dynamic_cast<VulkanRenderTargetCubeBackend*>(
+                    renderTargets[0].GetRenderTargetCube());
+                if (!cube)
+                    throw std::runtime_error(
+                        "Vulkan SetRenderTargets: cube target is not a Vulkan render target");
+                cube->BindAsRenderTargetFace(renderTargets[0].GetCubeFace());
+            } else {
+                auto* vrt = dynamic_cast<VulkanRenderTargetBackend*>(
+                    renderTargets[0].GetRenderTarget2D());
+                if (!vrt)
+                    throw std::runtime_error(
+                        "Vulkan SetRenderTargets: 2D target is not a Vulkan render target");
+                currentRT_ = vrt;
+                vrt->BindAsRenderTarget();
+            }
             return;
         }
         // Build MRT proxy for N > 1.
         retireMrtProxy();
-        std::vector<VulkanRenderTargetBackend*> vRts(static_cast<size_t>(count));
-        for (int i = 0; i < count; ++i)
-            vRts[i] = static_cast<VulkanRenderTargetBackend*>(rts[i]);
-        mrtProxy_ = std::make_unique<VulkanMRTProxy>(this, vRts.data(), static_cast<uint32_t>(count));
+        mrtProxy_ = std::make_unique<VulkanMRTProxy>(
+            this, renderTargets, static_cast<uint32_t>(count));
         currentRT_ = mrtProxy_.get();
     }
 
     // --- VulkanMRTProxy ---
 
     VulkanMRTProxy::VulkanMRTProxy(VulkanGraphicsBackend* owner,
-                                    VulkanRenderTargetBackend* const* rts, uint32_t count)
+                                    const RenderTargetBindingDescriptor* renderTargets,
+                                    uint32_t count)
         : owner_(owner), colorCount_(count)
     {
-        if (!owner || !rts || count == 0) return;
+        if (!owner || !renderTargets || count == 0) return;
         VkDevice dev = owner->device_;
 
         VkPhysicalDeviceProperties properties{};
@@ -8974,25 +8987,76 @@ namespace CNA::Internal::Backends::Vulkan
         if (!owner->independentBlendSupported_)
             throw std::runtime_error(
                 "Vulkan MRT requires independentBlend for CNA per-target render state");
-        for (uint32_t i = 0; i < count; ++i)
-            if (!rts[i])
-                throw std::runtime_error("VulkanMRTProxy: null render target");
 
-        width_  = rts[0]->GetWidth();
-        height_ = rts[0]->GetHeight();
-        colorSampleCount_ = rts[0]->GetColorSampleCountEXT();
-        depthFormat_ = rts[0]->GetDepthFormat();
-        depthView_ = rts[0]->GetDepthView();
-        for (uint32_t i = 1; i < count; ++i) {
-            if (rts[i]->GetWidth() != width_ || rts[i]->GetHeight() != height_)
+        struct Attachment
+        {
+            int width = 0;
+            int height = 0;
+            VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+            VkImageView resolveView = VK_NULL_HANDLE;
+            VkImageView msaaView = VK_NULL_HANDLE;
+            VkImageView depthView = VK_NULL_HANDLE;
+            VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+        };
+        auto normalize = [](const RenderTargetBindingDescriptor& binding) {
+            Attachment result;
+            result.width = binding.GetWidth();
+            result.height = binding.GetHeight();
+            if (binding.IsRenderTargetCubeFace()) {
+                auto* cube = dynamic_cast<VulkanRenderTargetCubeBackend*>(
+                    binding.GetRenderTargetCube());
+                if (!cube)
+                    throw std::runtime_error(
+                        "VulkanMRTProxy: cube target is not a Vulkan render target");
+                result.samples = cube->GetColorSampleCountEXT();
+                result.resolveView =
+                    cube->GetFaceResolveViewEXT(binding.GetCubeFace());
+                result.msaaView = cube->GetMsaaColorViewEXT();
+                result.depthView = cube->GetDepthViewEXT();
+                result.depthFormat = cube->GetDepthFormatEXT();
+            } else {
+                auto* rt2D = dynamic_cast<VulkanRenderTargetBackend*>(
+                    binding.GetRenderTarget2D());
+                if (!rt2D)
+                    throw std::runtime_error(
+                        "VulkanMRTProxy: 2D target is not a Vulkan render target");
+                result.samples = rt2D->GetColorSampleCountEXT();
+                result.resolveView = rt2D->GetResolveColorViewEXT();
+                result.msaaView = rt2D->GetMsaaColorViewEXT();
+                result.depthView = rt2D->GetDepthView();
+                result.depthFormat = rt2D->GetDepthFormat();
+            }
+            return result;
+        };
+
+        std::vector<Attachment> attachments;
+        attachments.reserve(count);
+        for (uint32_t i = 0; i < count; ++i)
+            attachments.push_back(normalize(renderTargets[i]));
+
+        width_  = attachments[0].width;
+        height_ = attachments[0].height;
+        colorSampleCount_ = attachments[0].samples;
+        depthFormat_ = attachments[0].depthFormat;
+        depthView_ = attachments[0].depthView;
+        for (uint32_t i = 0; i < count; ++i) {
+            if (attachments[i].resolveView == VK_NULL_HANDLE)
+                throw std::runtime_error(
+                    "VulkanMRTProxy: target resolve attachment view is missing");
+            if (attachments[i].samples > VK_SAMPLE_COUNT_1_BIT
+                && attachments[i].msaaView == VK_NULL_HANDLE)
+                throw std::runtime_error(
+                    "VulkanMRTProxy: multisample target source attachment view is missing");
+            if (i == 0) continue;
+            if (attachments[i].width != width_ || attachments[i].height != height_)
                 throw std::runtime_error(
                     "Vulkan MRT targets must have matching dimensions");
-            if (rts[i]->GetColorSampleCountEXT() != colorSampleCount_)
+            if (attachments[i].samples != colorSampleCount_)
                 throw std::runtime_error(
                     "Vulkan MRT targets must have matching applied sample counts");
             for (uint32_t previous = 0; previous < i; ++previous)
-                if (rts[i]->GetResolveColorViewEXT()
-                    == rts[previous]->GetResolveColorViewEXT()) {
+                if (attachments[i].resolveView
+                    == attachments[previous].resolveView) {
                     throw std::runtime_error(
                         "Vulkan MRT cannot bind the same target subresource more than once");
                 }
@@ -9008,12 +9072,18 @@ namespace CNA::Internal::Backends::Vulkan
         resolveTargetViews_.reserve(count);
         if (WantsMsaa()) resolveAttachments_.reserve(count);
         for (uint32_t i = 0; i < count; ++i) {
-            const VkImageView resolve = rts[i]->GetResolveColorViewEXT();
+            const VkImageView resolve = attachments[i].resolveView;
             const VkImageView color = WantsMsaa()
-                ? rts[i]->GetMsaaColorViewEXT()
+                ? attachments[i].msaaView
                 : resolve;
             if (color == VK_NULL_HANDLE || resolve == VK_NULL_HANDLE)
                 throw std::runtime_error("VulkanMRTProxy: target attachment view is missing");
+            if (WantsMsaa()
+                && std::find(colorAttachments_.begin(), colorAttachments_.end(), color)
+                    != colorAttachments_.end())
+                throw std::runtime_error(
+                    "Vulkan MRT cannot bind one multisample source subresource to more "
+                    "than one slot (same-cube multi-face MSAA is unsupported)");
             colorAttachments_.push_back(color);
             resolveTargetViews_.push_back(resolve);
             if (WantsMsaa()) resolveAttachments_.push_back(resolve);

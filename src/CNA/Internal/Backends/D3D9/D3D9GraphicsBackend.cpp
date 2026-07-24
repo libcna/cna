@@ -860,13 +860,26 @@ namespace CNA::Internal::Backends::D3D9
         d3d9CubeRt->BindAsRenderTargetFace(face);
     }
 
-    void D3D9GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void D3D9GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
-        if (!rts || count <= 0)
+        if (!renderTargets || count <= 0)
         {
             SetRenderTarget2D(nullptr);
             return;
         }
+        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
+        {
+            SetRenderTargetCubeFace(
+                renderTargets[0].GetRenderTargetCube(),
+                renderTargets[0].GetCubeFace());
+            return;
+        }
+        for (int i = 0; i < count; ++i)
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "D3D9GraphicsBackend::SetRenderTargets: cube faces in a multi-target "
+                    "set are not implemented by this CNA backend.");
 
         // design decision 13: over-request throws rather than silently degrading (see this
         // method's own header comment) -- NumSimultaneousRTs is a genuine D3DCAPS9 hardware limit
@@ -894,7 +907,8 @@ namespace CNA::Internal::Backends::D3D9
         {
             if (i < count)
             {
-                auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(rts[i]);
+                auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(
+                    renderTargets[i].GetRenderTarget2D());
                 d3d9Rt->EnsureReadyEXT();
                 device_->SetRenderTarget(static_cast<DWORD>(i), d3d9Rt->GetActiveColorSurfaceEXT());
             }
@@ -906,7 +920,8 @@ namespace CNA::Internal::Backends::D3D9
             }
         }
 
-        auto* first = static_cast<D3D9RenderTargetBackend*>(rts[0]);
+        auto* first = static_cast<D3D9RenderTargetBackend*>(
+            renderTargets[0].GetRenderTarget2D());
         device_->SetDepthStencilSurface(first->GetDepthStencilSurfaceEXT());
 
         D3DVIEWPORT9 vp{};

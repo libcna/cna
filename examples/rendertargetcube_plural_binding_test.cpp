@@ -91,10 +91,11 @@ class RenderTargetCubePluralBindingTest final : public Game
 {
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::unique_ptr<Texture2D> white_;
+    std::array<std::unique_ptr<Texture2D>, 7> solidTextures_;
     bool done_ = false;
     int result_ = 1;
 
-    void DrawFace(RenderTargetCube& cube, CubeMapFace face, const Color& color,
+    void DrawFace(RenderTargetCube& cube, CubeMapFace face, int colorIndex,
                   bool plural)
     {
         auto& device = getGraphicsDeviceProperty();
@@ -114,8 +115,9 @@ class RenderTargetCubePluralBindingTest final : public Game
         RasterizerState noCull = RasterizerState::CullNone;
         spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::Opaque, &point,
                             &noDepth, &noCull);
-        spriteBatch_->Draw(*white_, Rectangle(0, 0, kCubeSize, kCubeSize),
-                           Rectangle(0, 0, 1, 1), color);
+        spriteBatch_->Draw(*solidTextures_[colorIndex],
+                           Rectangle(0, 0, kCubeSize, kCubeSize),
+                           Rectangle(0, 0, 1, 1), Color::White);
         spriteBatch_->End();
     }
 
@@ -197,6 +199,19 @@ protected:
         spriteBatch_ = std::make_unique<SpriteBatch>(device);
         white_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(
             device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255}));
+        for (int i = 0; i < 7; ++i)
+        {
+            const Color& color = i == 6 ? kNegativeZMarker : kInitialColors[i];
+            solidTextures_[i] = std::make_unique<Texture2D>(
+                Texture2D::CreateFromPixels(
+                    device, 1, 1,
+                    std::vector<std::uint8_t>{
+                        static_cast<std::uint8_t>(color.getRProperty()),
+                        static_cast<std::uint8_t>(color.getGProperty()),
+                        static_cast<std::uint8_t>(color.getBProperty()),
+                        static_cast<std::uint8_t>(color.getAProperty()),
+                    }));
+        }
     }
 
     void Draw(const GameTime&) override
@@ -210,11 +225,11 @@ protected:
                               RenderTargetUsage::PreserveContents);
 
         for (int i = 0; i < 6; ++i)
-            DrawFace(cube, kFaces[i], kInitialColors[i], false);
+            DrawFace(cube, kFaces[i], i, false);
 
         // The minimal GFX-096 reproducer: one cube-face binding through the
         // plural API. No other render target participates.
-        DrawFace(cube, CubeMapFace::NegativeZ, kNegativeZMarker, true);
+        DrawFace(cube, CubeMapFace::NegativeZ, 6, true);
 
         const auto sampled = SampleFaces(cube);
         bool pass = true;

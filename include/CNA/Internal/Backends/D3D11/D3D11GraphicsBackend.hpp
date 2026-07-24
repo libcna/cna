@@ -105,7 +105,8 @@ namespace CNA::Internal::Backends::D3D11
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 

@@ -785,7 +785,8 @@ namespace CNA::Internal::Backends::Dx3
         }
     }
 
-    void Dx3GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void Dx3GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DX3-27: DirectDraw has no multi-render-target concept -- single active surface only.
         if (count > 1)
@@ -793,7 +794,11 @@ namespace CNA::Internal::Backends::Dx3
                 "DX3 (DirectDraw) does not support multiple simultaneous render targets (MRT): "
                 "requested " + std::to_string(count) + ", but IDirectDrawSurface supports exactly "
                 "one active render target at a time.");
-        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "DX3 (DirectDraw) does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(
+            count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     // ---- Phase X4: the CPU compositor / SpriteBatch draw path (design decision 5) ----

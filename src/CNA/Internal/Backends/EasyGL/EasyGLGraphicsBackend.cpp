@@ -1774,7 +1774,8 @@ void main()
         rt->BindAsRenderTargetFace(face);
     }
 
-    void EasyGLGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void EasyGLGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (count <= 0)
         {
@@ -1783,9 +1784,19 @@ void main()
         }
         if (count == 1)
         {
-            SetRenderTarget2D(rts[0]);
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(
+                    renderTargets[0].GetRenderTargetCube(),
+                    renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
+        for (int i = 0; i < count; ++i)
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "EasyGL SetRenderTargets: cube faces in a multi-target set are not "
+                    "implemented by this CNA backend.");
 
         // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed).
         // MRT + per-target mipmaps is not supported (Task 336) — MRT targets never get tracked
@@ -1809,7 +1820,8 @@ void main()
         const int n = count < kMaxMRT ? count : kMaxMRT;
         for (int i = 0; i < n; ++i)
         {
-            const auto* eglRT = static_cast<const EasyGLRenderTargetBackend*>(rts[i]);
+            const auto* eglRT = static_cast<const EasyGLRenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
             const auto colorAttach = static_cast<::metagl::ColorAttachment>(
                 static_cast<GLenum>(::metagl::ColorAttachment::Color0) + static_cast<GLenum>(i));
             mrtFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,

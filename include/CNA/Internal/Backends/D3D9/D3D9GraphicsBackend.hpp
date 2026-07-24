@@ -129,7 +129,8 @@ namespace CNA::Internal::Backends::D3D9
         /// 13's "same bit depth" requirement is always trivially satisfied -- nothing to actively
         /// enforce. No independent per-target blending exists either (ApplyBlendState() is a
         /// single global SetRenderState() sequence) -- also trivially satisfied.
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         /// D9-55: real D3D9OcclusionQueryBackend (`IDirect3DQuery9`, `D3DQUERYTYPE_OCCLUSION`).
         /// Gated on the device genuinely supporting the query type (`CreateQuery(type, nullptr)`,
         /// the official D3D9 support-probe idiom) -- returns nullptr (the `IGraphicsBackend`-wide

@@ -5979,6 +5979,26 @@ struct VSOut {
             currentRenderTarget_ = nullptr;
     }
 
+    void WebGPUGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (!renderTargets || count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (count > 1)
+            throw std::runtime_error(
+                "CNA WebGPU: multiple simultaneous render targets are not implemented "
+                "on this backend yet.");
+        if (renderTargets[0].IsRenderTargetCubeFace())
+            SetRenderTargetCubeFace(
+                renderTargets[0].GetRenderTargetCube(),
+                renderTargets[0].GetCubeFace());
+        else
+            SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+    }
+
     std::unique_ptr<ITextureCubeBackend> WebGPUGraphicsBackend::CreateTextureCube(
         int size, bool mipMap, int /*surfaceFormat*/)
     {

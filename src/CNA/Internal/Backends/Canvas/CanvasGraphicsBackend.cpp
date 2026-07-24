@@ -235,14 +235,19 @@ namespace CNA::Internal::Backends::Canvas
         }
     }
 
-    void CanvasGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void CanvasGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (count > 1)
             throw std::runtime_error(
                 "Canvas (HTML Canvas 2D) does not support multiple simultaneous render targets "
                 "(MRT): requested " + std::to_string(count) + ", but a CanvasRenderingContext2D "
                 "is inherently single-target.");
-        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "Canvas (HTML Canvas 2D) does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(
+            count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     void CanvasGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)

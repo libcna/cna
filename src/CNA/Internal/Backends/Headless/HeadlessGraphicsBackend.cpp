@@ -609,6 +609,25 @@ namespace CNA::Internal::Backends::Headless
         return std::make_unique<HeadlessRenderTargetCubeBackend>(state_, size, depthFormat, mipMap, multiSampleCount);
     }
 
+    void HeadlessGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
+    {
+        if (!renderTargets || count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+        if (count > 1)
+            throw std::runtime_error(
+                "HeadlessGraphicsBackend does not execute multiple simultaneous render targets.");
+        if (renderTargets[0].IsRenderTargetCubeFace())
+            SetRenderTargetCubeFace(
+                renderTargets[0].GetRenderTargetCube(),
+                renderTargets[0].GetCubeFace());
+        else
+            SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+    }
+
     std::unique_ptr<IEffectBackend> HeadlessGraphicsBackend::CreateEffectBackend(const std::string& vertSrc,
                                                                               const std::string& fragSrc)
     {

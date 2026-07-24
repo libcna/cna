@@ -603,14 +603,14 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] WGPUQueue Queue() const { return queue_; }
         [[nodiscard]] WGPUInstance Instance() const { return instance_; }
 
-        // WEBGPU-53/54: RenderTarget2D support (single-target only; MRT is WEBGPU-85/86/87, a
-        // separate, larger follow-up -- SetRenderTargets(...)'s IGraphicsBackend default already
-        // forwards a single-element call here unchanged, so no override is needed for that).
+        // WEBGPU-53/54: RenderTarget2D support (single-target only; MRT is WEBGPU-85/86/87).
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
 
         /// WEBGPU-56/74: minimal cube-map texture creation, sufficient for
         /// `EnvironmentMapEffect.EnvironmentMap` -- see `WebGPUTextureCubeBackend`'s own doc

@@ -805,7 +805,8 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
-    void BgfxGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void BgfxGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (bgfx::isValid(mrtFbo_)) { bgfx::destroy(mrtFbo_); mrtFbo_ = BGFX_INVALID_HANDLE; }
         if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
@@ -816,9 +817,19 @@ namespace CNA::Internal::Backends::Bgfx
         }
         if (count == 1)
         {
-            SetRenderTarget2D(rts[0]);
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(
+                    renderTargets[0].GetRenderTargetCube(),
+                    renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
+        for (int i = 0; i < count; ++i)
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "Bgfx SetRenderTargets: cube faces in a multi-target set are not "
+                    "implemented by this CNA backend.");
         // Multi-target: build a temporary framebuffer from the color textures. Task 910: MRT
         // gets its own freshly-allocated view id too (not the old hardcoded 1), so a 2nd,
         // different MRT setup bound later within the same un-advanced frame doesn't clobber
@@ -828,7 +839,8 @@ namespace CNA::Internal::Backends::Bgfx
         int n = count < kMaxAttachments ? count : kMaxAttachments;
         for (int i = 0; i < n; ++i)
         {
-            auto* bgfxRt = static_cast<BgfxRenderTargetBackend*>(rts[i]);
+            auto* bgfxRt = static_cast<BgfxRenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
             attachments[i].init(bgfxRt->colorTex);
         }
         mrtFbo_ = bgfx::createFrameBuffer(static_cast<uint8_t>(n), attachments);
@@ -836,8 +848,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setViewFrameBuffer(mrtViewId_, mrtFbo_);
         currentViewId_ = mrtViewId_;
         spriteViewId = mrtViewId_;
-        currentRtWidth_  = static_cast<uint16_t>(rts[0]->GetWidth());
-        currentRtHeight_ = static_cast<uint16_t>(rts[0]->GetHeight());
+        currentRtWidth_  = static_cast<uint16_t>(renderTargets[0].GetWidth());
+        currentRtHeight_ = static_cast<uint16_t>(renderTargets[0].GetHeight());
         // REMED-GFX-065: the MRT view is the base for its segment chain; a segment preserves the whole
         // multi-attachment framebuffer (mrtFbo_ carries every color attachment).
         ResetSegmentTarget(mrtViewId_, mrtFbo_);

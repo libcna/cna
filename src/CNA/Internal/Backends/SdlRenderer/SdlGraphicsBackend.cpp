@@ -763,14 +763,19 @@ namespace CNA::Internal::Backends::SdlRenderer
             SDL_SetRenderTarget(renderer, nullptr);
     }
 
-    void SdlGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void SdlGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (count > 1)
             throw std::runtime_error(
                 "SDL_Renderer does not support multiple simultaneous render targets (MRT): "
                 "requested " + std::to_string(count) + ", but this backend's 2D render pipeline "
                 "supports exactly one active render target at a time.");
-        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+        if (count > 0 && renderTargets[0].IsRenderTargetCubeFace())
+            throw std::runtime_error(
+                "SDL_Renderer does not support RenderTargetCube face bindings.");
+        SetRenderTarget2D(
+            count > 0 ? renderTargets[0].GetRenderTarget2D() : nullptr);
     }
 
     std::unique_ptr<ISpriteBatchBackend> SdlGraphicsBackend::CreateSpriteBatch()

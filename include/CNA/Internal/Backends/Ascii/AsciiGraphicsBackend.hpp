@@ -91,7 +91,8 @@ namespace CNA::Internal::Backends::Ascii
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         void SetScissorRect(int x, int y, int w, int h) override;
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                               int colorDstBlend, int alphaDstBlend,

@@ -47,6 +47,7 @@ namespace Microsoft::Xna::Framework::Graphics
 {
     using CNA::Internal::Backends::CreateGraphicsBackend;
     using CNA::Internal::Backends::GraphicsBackendCreateArgs;
+    using CNA::Internal::Backends::RenderTargetBindingDescriptor;
 
     namespace
     {
@@ -1876,22 +1877,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::SetRenderTarget(RenderTargetCube* renderTarget, CubeMapFace cubeMapFace)
     {
-        if (renderTarget && renderTarget->getIsDisposedProperty())
-            throw System::ObjectDisposedException(renderTarget->getNameProperty());
-        if (backend_)
-            backend_->SetRenderTargetCubeFace(
-                renderTarget ? renderTarget->GetRenderTargetCubeBackend() : nullptr,
-                static_cast<int>(cubeMapFace));
-
-        currentRenderTargets_.clear();
-        renderTargetBound_ = (renderTarget != nullptr);
-
-        if (renderTarget != nullptr)
-            ResetViewportAndScissorForRenderTarget(renderTarget->getWidthProperty(),
-                                                    renderTarget->getHeightProperty());
-        else
-            ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
-                                                    presentationParameters_.getBackBufferHeightProperty());
+        // FNA/XNA parity: the singular cube overload is only a convenience wrapper around the
+        // normalized binding path. Keeping one path guarantees identical face selection,
+        // viewport/scissor reset, RenderTargetUsage handling, resolve, and public state.
+        if (renderTarget == nullptr)
+        {
+            SetRenderTargets({});
+            return;
+        }
+        SetRenderTargets({RenderTargetBinding(
+            static_cast<Texture*>(renderTarget), cubeMapFace)});
     }
 
     void GraphicsDevice::SetRenderTargets(const std::vector<RenderTargetBinding>& renderTargets)
@@ -1919,51 +1914,115 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 #endif
 
-        // Task 717 finding: SetRenderTarget(RenderTarget2D*) (singular) already guards against a
-        // disposed target -- this plural overload didn't, letting a disposed RenderTarget2D reach
-        // GetRenderTargetBackend() below, which (before this same task's RenderTarget2D::Dispose
-        // fix) returned a dangling pointer -- a use-after-free crash instead of a clean exception.
-        for (const auto& binding : renderTargets)
-        {
-            auto* rt = dynamic_cast<RenderTarget2D*>(binding.getRenderTargetProperty());
-            if (rt && rt->getIsDisposedProperty())
-                throw System::ObjectDisposedException(rt->getNameProperty());
-        }
-
-        currentRenderTargets_ = renderTargets;
-        renderTargetBound_ = !renderTargets.empty();
         if (renderTargets.empty())
         {
             // Matches FNA: reset to the backbuffer's size when unbinding.
+            currentRenderTargets_.clear();
+            renderTargetBound_ = false;
             ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
                                                     presentationParameters_.getBackBufferHeightProperty());
             if (!backend_) return;
             backend_->SetRenderTargets(nullptr, 0);
             return;
         }
-        if (!backend_) return;
-        std::vector<CNA::Internal::Backends::IRenderTargetBackend*> backends;
-        backends.reserve(renderTargets.size());
-        for (const auto& binding : renderTargets)
-        {
-            auto* rt = dynamic_cast<RenderTarget2D*>(binding.getRenderTargetProperty());
-            backends.push_back(rt ? rt->GetRenderTargetBackend() : nullptr);
-        }
-        backend_->SetRenderTargets(backends.data(), static_cast<int>(backends.size()));
 
-        auto* first = dynamic_cast<RenderTarget2D*>(renderTargets[0].getRenderTargetProperty());
+        // REMED-GFX-096: normalize each public binding into one slot-aligned backend-neutral
+        // descriptor. The old vector<IRenderTargetBackend*> dynamic-cast every entry only to
+        // RenderTarget2D, turning every cube into nullptr and discarding its selected face.
+        std::vector<RenderTargetBindingDescriptor> descriptors;
+        descriptors.reserve(renderTargets.size());
+        std::vector<IRenderTarget*> publicTargets;
+        publicTargets.reserve(renderTargets.size());
+        for (std::size_t i = 0; i < renderTargets.size(); ++i)
+        {
+            const auto& binding = renderTargets[i];
+            Texture* texture = binding.getRenderTargetProperty();
+            if (!texture)
+                throw std::invalid_argument(
+                    "SetRenderTargets: binding " + std::to_string(i)
+                    + " has a null render target.");
+            if (texture->getIsDisposedProperty())
+                throw System::ObjectDisposedException(texture->getNameProperty());
+
+            if (auto* rt2D = dynamic_cast<RenderTarget2D*>(texture))
+            {
+                if (binding.getArraySliceProperty() != 0)
+                    throw System::NotSupportedException(
+                        "SetRenderTargets: RenderTarget2D array slices are not supported; "
+                        "arraySlice must be 0.");
+                auto* targetBackend = rt2D->GetRenderTargetBackend();
+                if (!targetBackend)
+                    throw System::NotSupportedException(
+                        "SetRenderTargets: this backend does not support RenderTarget2D.");
+                descriptors.push_back(RenderTargetBindingDescriptor::ForRenderTarget2D(
+                    targetBackend, 0, rt2D->getWidthProperty(), rt2D->getHeightProperty(),
+                    rt2D->getMultiSampleCountProperty()));
+                publicTargets.push_back(rt2D);
+            }
+            else if (auto* cube = dynamic_cast<RenderTargetCube*>(texture))
+            {
+                const int face = static_cast<int>(binding.getCubeMapFaceProperty());
+                if (face < static_cast<int>(CubeMapFace::PositiveX)
+                    || face > static_cast<int>(CubeMapFace::NegativeZ))
+                    throw System::ArgumentOutOfRangeException("cubeMapFace");
+                auto* targetBackend = cube->GetRenderTargetCubeBackend();
+                if (!targetBackend)
+                    throw System::NotSupportedException(
+                        "SetRenderTargets: this backend does not support RenderTargetCube.");
+                descriptors.push_back(
+                    RenderTargetBindingDescriptor::ForRenderTargetCubeFace(
+                        targetBackend, face, cube->getWidthProperty(),
+                        cube->getMultiSampleCountProperty()));
+                publicTargets.push_back(cube);
+            }
+            else
+            {
+                throw std::invalid_argument(
+                    "SetRenderTargets: binding " + std::to_string(i)
+                    + " must contain a RenderTarget2D or RenderTargetCube.");
+            }
+        }
+
+        // XNA/FNA/native MRT compatibility is subresource-based. Different faces of one cube are
+        // distinct and may be bound together; the identical face (or 2D slice) may not occupy two
+        // slots. Dimensions and real device-applied sample counts must agree.
+        for (std::size_t i = 1; i < descriptors.size(); ++i)
+        {
+            if (descriptors[i].GetWidth() != descriptors[0].GetWidth()
+                || descriptors[i].GetHeight() != descriptors[0].GetHeight())
+                throw std::runtime_error(
+                    "SetRenderTargets: render targets must have matching dimensions.");
+            if (descriptors[i].GetAppliedMultiSampleCount()
+                != descriptors[0].GetAppliedMultiSampleCount())
+                throw std::runtime_error(
+                    "SetRenderTargets: render targets must have matching applied sample counts.");
+            for (std::size_t previous = 0; previous < i; ++previous)
+                if (descriptors[i].IsSameSubresource(descriptors[previous]))
+                    throw std::runtime_error(
+                        "SetRenderTargets: the same render-target subresource cannot be bound "
+                        "to more than one slot.");
+        }
+
+        if (backend_)
+            backend_->SetRenderTargets(
+                descriptors.data(), static_cast<int>(descriptors.size()));
+
+        currentRenderTargets_ = renderTargets;
+        renderTargetBound_ = true;
+        IRenderTarget* first = publicTargets[0];
         // Matches FNA: Viewport/ScissorRectangle reset to the FIRST bound target's size.
-        if (first)
-            ResetViewportAndScissorForRenderTarget(first->getWidthProperty(), first->getHeightProperty());
-        if (first &&
-            first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
+        ResetViewportAndScissorForRenderTarget(
+            first->getWidthProperty(), first->getHeightProperty());
+        if (first->getRenderTargetUsageProperty() == RenderTargetUsage::DiscardContents)
         {
             // See SetRenderTarget(RenderTarget2D*)'s identical guard for the rationale.
             const bool depthFormatRequested =
                 first->getDepthStencilFormatProperty() != DepthFormat::None;
-            const auto* rtBackend = first->GetRenderTargetBackend();
-            const bool hasDepthBuffer =
-                rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+            const auto& firstDescriptor = descriptors[0];
+            const bool hasDepthBuffer = firstDescriptor.IsRenderTarget2D()
+                ? firstDescriptor.GetRenderTarget2D()->HasRealDepthBuffer(depthFormatRequested)
+                : firstDescriptor.GetRenderTargetCube()->HasRealDepthBuffer(
+                    depthFormatRequested);
             Clear(hasDepthBuffer ? (ClearOptions::Target | ClearOptions::DepthBuffer) : ClearOptions::Target,
                   Color(0, 0, 0, 255), 1.0f, 0);
         }

@@ -70,7 +70,8 @@ namespace CNA::Internal::Backends::Canvas
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         // plan_canvas.md CANVAS-26: a Canvas2D context is inherently single-target (same
         // conclusion SDL_RENDERER's Task 709 reached) -- throws for count > 1.
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         // plan_canvas.md CANVAS-40/41: maps the 4 standard BlendState presets to

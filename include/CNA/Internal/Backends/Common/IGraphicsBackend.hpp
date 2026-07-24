@@ -284,10 +284,116 @@ namespace CNA::Internal::Backends
         [[nodiscard]] virtual unsigned int GetGLHandle() const { return 0; }
         /// See IRenderTargetBackend::GetMultiSampleCount.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+        /// Cube equivalent of IRenderTargetBackend::HasRealDepthBuffer.
+        [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const
+        {
+            return depthFormatWasRequested;
+        }
 
         // ITextureCubeBackend — render targets do not support CPU-side SetData; no-op by default.
         void SetData(int /*face*/, int /*level*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
                      const void* /*data*/, int /*dataLength*/) override {}
+    };
+
+    /**
+     * @brief Backend-neutral description of one normalized render-target attachment.
+     *
+     * REMED-GFX-096 replaces the former plural handoff (`IRenderTargetBackend*[]`), which could
+     * express only RenderTarget2D and therefore discarded both RenderTargetCube type and face.
+     * This value keeps one slot's resource kind, concrete backend, selected subresource, extent,
+     * and applied sample count together so slot alignment cannot be lost through parallel arrays.
+     * `arraySlice` is retained for CNA's public binding shape; current CNA render targets expose
+     * no texture arrays, so GraphicsDevice accepts only slice 0.
+     */
+    class RenderTargetBindingDescriptor
+    {
+    public:
+        enum class Type
+        {
+            RenderTarget2D,
+            RenderTargetCubeFace,
+        };
+
+        static RenderTargetBindingDescriptor ForRenderTarget2D(
+            IRenderTargetBackend* target, int arraySlice, int width, int height,
+            int appliedMultiSampleCount)
+        {
+            return RenderTargetBindingDescriptor(
+                Type::RenderTarget2D, target, nullptr, arraySlice, 0,
+                width, height, appliedMultiSampleCount);
+        }
+
+        static RenderTargetBindingDescriptor ForRenderTargetCubeFace(
+            IRenderTargetCubeBackend* target, int face, int size,
+            int appliedMultiSampleCount)
+        {
+            return RenderTargetBindingDescriptor(
+                Type::RenderTargetCubeFace, nullptr, target, 0, face,
+                size, size, appliedMultiSampleCount);
+        }
+
+        [[nodiscard]] Type GetType() const { return type_; }
+        [[nodiscard]] bool IsRenderTarget2D() const
+        {
+            return type_ == Type::RenderTarget2D;
+        }
+        [[nodiscard]] bool IsRenderTargetCubeFace() const
+        {
+            return type_ == Type::RenderTargetCubeFace;
+        }
+        [[nodiscard]] IRenderTargetBackend* GetRenderTarget2D() const
+        {
+            return renderTarget2D_;
+        }
+        [[nodiscard]] IRenderTargetCubeBackend* GetRenderTargetCube() const
+        {
+            return renderTargetCube_;
+        }
+        [[nodiscard]] int GetArraySlice() const { return arraySlice_; }
+        [[nodiscard]] int GetCubeFace() const { return cubeFace_; }
+        [[nodiscard]] int GetWidth() const { return width_; }
+        [[nodiscard]] int GetHeight() const { return height_; }
+        [[nodiscard]] int GetAppliedMultiSampleCount() const
+        {
+            return appliedMultiSampleCount_;
+        }
+
+        [[nodiscard]] bool IsSameSubresource(
+            const RenderTargetBindingDescriptor& other) const
+        {
+            if (type_ != other.type_) return false;
+            if (IsRenderTarget2D())
+                return renderTarget2D_ == other.renderTarget2D_
+                    && arraySlice_ == other.arraySlice_;
+            return renderTargetCube_ == other.renderTargetCube_
+                && cubeFace_ == other.cubeFace_;
+        }
+
+    private:
+        RenderTargetBindingDescriptor(
+            Type type, IRenderTargetBackend* renderTarget2D,
+            IRenderTargetCubeBackend* renderTargetCube,
+            int arraySlice, int cubeFace, int width, int height,
+            int appliedMultiSampleCount)
+            : type_(type)
+            , renderTarget2D_(renderTarget2D)
+            , renderTargetCube_(renderTargetCube)
+            , arraySlice_(arraySlice)
+            , cubeFace_(cubeFace)
+            , width_(width)
+            , height_(height)
+            , appliedMultiSampleCount_(appliedMultiSampleCount)
+        {
+        }
+
+        Type type_;
+        IRenderTargetBackend* renderTarget2D_;
+        IRenderTargetCubeBackend* renderTargetCube_;
+        int arraySlice_;
+        int cubeFace_;
+        int width_;
+        int height_;
+        int appliedMultiSampleCount_;
     };
 
     /// Backend handle for a compiled shader program (vertex + fragment).
@@ -654,13 +760,12 @@ namespace CNA::Internal::Backends
             else SetRenderTarget2D(nullptr);
         }
 
-        /// Activates multiple render targets for MRT. Default: binds the first
-        /// target via SetRenderTarget2D; backends with MRT support should override.
+        /// Activates a normalized ordered render-target set. Every backend must explicitly
+        /// consume or reject cube-face descriptors; there is deliberately no compatibility
+        /// default that could flatten a cube to RenderTarget2D or face +X.
         /// Pass nullptr / count=0 to restore the default back buffer.
-        virtual void SetRenderTargets(IRenderTargetBackend* const* rts, int count)
-        {
-            SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
-        }
+        virtual void SetRenderTargets(
+            const RenderTargetBindingDescriptor* renderTargets, int count) = 0;
 
         // ---- Graphics state ----
 

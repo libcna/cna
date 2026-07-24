@@ -561,7 +561,8 @@ namespace CNA::Internal::Backends::D3D11
             this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount);
     }
 
-    void D3D11GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void D3D11GraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         // DX-143: finalize (MSAA resolve + mip regen) any PRIOR MRT set before doing anything else
         // -- handles MRT->MRT, MRT->single-target (via the currentCustomRT_ branch below not
@@ -572,7 +573,7 @@ namespace CNA::Internal::Backends::D3D11
             currentCustomRT_->UnbindAsRenderTarget();
             currentCustomRT_ = nullptr;
         }
-        if (!rts || count <= 0)
+        if (!renderTargets || count <= 0)
         {
             // Phase DX8 bugfix (found via DX-61's first real draw-call test): a prior MRT bind
             // (this same method, count>0 below) deliberately never sets currentCustomRT_ -- the
@@ -585,16 +586,30 @@ namespace CNA::Internal::Backends::D3D11
             RestoreBackBufferRenderTargetEXT();
             return;
         }
+        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
+        {
+            SetRenderTargetCubeFace(
+                renderTargets[0].GetRenderTargetCube(),
+                renderTargets[0].GetCubeFace());
+            return;
+        }
+        for (int i = 0; i < count; ++i)
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "D3D11GraphicsBackend::SetRenderTargets: cube faces in a multi-target "
+                    "set are not implemented by this CNA backend.");
 
         const int n = std::min(count, static_cast<int>(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT));
         ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
         for (int i = 0; i < n; ++i)
         {
-            auto* d3drt = rts[i] ? static_cast<D3D11RenderTargetBackend*>(rts[i]) : nullptr;
+            auto* d3drt = static_cast<D3D11RenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
             rtvs[i] = d3drt ? d3drt->GetRTVEXT() : nullptr;
         }
 
-        auto* first = rts[0] ? static_cast<D3D11RenderTargetBackend*>(rts[0]) : nullptr;
+        auto* first = static_cast<D3D11RenderTargetBackend*>(
+            renderTargets[0].GetRenderTarget2D());
         ID3D11DepthStencilView* dsv = first ? first->GetDSVEXT() : nullptr;
         const int w = first ? first->GetWidth() : width_;
         const int h = first ? first->GetHeight() : height_;
@@ -618,7 +633,8 @@ namespace CNA::Internal::Backends::D3D11
         // genuinely runs when this MRT set is replaced/unbound, not silently skipped).
         currentMRTCount_ = n;
         for (int i = 0; i < n; ++i)
-            currentMRTTargets_[i] = rts[i] ? static_cast<D3D11RenderTargetBackend*>(rts[i]) : nullptr;
+            currentMRTTargets_[i] = static_cast<D3D11RenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
     }
 
     void D3D11GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)

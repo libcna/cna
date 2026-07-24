@@ -1444,14 +1444,27 @@ namespace CNA::Internal::Backends::SdlGpu
         return std::make_unique<SdlGpuTextureCubeBackend>(*this, size, mipMap);
     }
 
-    void SdlGpuGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void SdlGpuGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         currentExtraMrtTargets_.clear();
-        if (count <= 0 || rts == nullptr)
+        if (count <= 0 || renderTargets == nullptr)
         {
             SetRenderTarget2D(nullptr);
             return;
         }
+        if (count == 1 && renderTargets[0].IsRenderTargetCubeFace())
+        {
+            SetRenderTargetCubeFace(
+                renderTargets[0].GetRenderTargetCube(),
+                renderTargets[0].GetCubeFace());
+            return;
+        }
+        for (int i = 0; i < count; ++i)
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw std::runtime_error(
+                    "SdlGpuGraphicsBackend::SetRenderTargets: cube faces in a multi-target "
+                    "set are not implemented by this CNA backend.");
 
         // Stock (single-output) draws remain single-target (rts[0] only) -- no stock shader family
         // in this codebase declares more than one fragment output, matching this project's
@@ -1459,11 +1472,13 @@ namespace CNA::Internal::Backends::SdlGpu
         // WHILE this binding is active genuinely renders into all `count` targets simultaneously,
         // in one real render pass (see RenderToTarget's own mrtSiblings-driven multi-attachment
         // build) -- extra targets are no longer just Clear()-only placeholders.
-        SetRenderTarget2D(rts[0]);  // also resets rts[0]'s own mrtSiblings/isMrtSibling, see there
-        auto* primary = static_cast<SdlGpuRenderTargetBackend*>(rts[0]);
+        SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        auto* primary = static_cast<SdlGpuRenderTargetBackend*>(
+            renderTargets[0].GetRenderTarget2D());
         for (int i = 1; i < count; ++i)
         {
-            auto* extra = static_cast<SdlGpuRenderTargetBackend*>(rts[i]);
+            auto* extra = static_cast<SdlGpuRenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
             extra->MarkUsedThisFrame();
             extra->State()->isMrtSibling = true;
             extra->State()->mrtSiblings.clear();  // an extra doesn't carry its own sibling list

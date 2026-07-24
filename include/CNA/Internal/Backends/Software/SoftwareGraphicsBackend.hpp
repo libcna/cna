@@ -257,6 +257,8 @@ namespace CNA::Internal::Backends::Software
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,

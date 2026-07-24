@@ -185,7 +185,8 @@ namespace CNA::Internal::Backends::Ascii
     {
         inner_->SetRenderTarget2D(rt != nullptr ? rt : gameTarget_.get());
     }
-    void AsciiGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    void AsciiGraphicsBackend::SetRenderTargets(
+        const RenderTargetBindingDescriptor* renderTargets, int count)
     {
         if (count == 0)
         {
@@ -193,7 +194,7 @@ namespace CNA::Internal::Backends::Ascii
         }
         else
         {
-            inner_->SetRenderTargets(rts, count);
+            inner_->SetRenderTargets(renderTargets, count);
         }
     }
     void AsciiGraphicsBackend::SetScissorRect(int x, int y, int w, int h) { inner_->SetScissorRect(x, y, w, h); }

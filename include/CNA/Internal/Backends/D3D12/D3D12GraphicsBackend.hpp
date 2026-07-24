@@ -110,7 +110,8 @@ namespace CNA::Internal::Backends::D3D12
         /// single-target (index 0) -- no CNA shader declares more than one SV_Target output; only
         /// Clear() genuinely clears every bound target independently, matching D3D11's own DX-46
         /// proof shape.
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

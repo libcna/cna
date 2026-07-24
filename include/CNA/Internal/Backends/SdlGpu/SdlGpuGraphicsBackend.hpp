@@ -1187,7 +1187,8 @@ namespace CNA::Internal::Backends::SdlGpu
          * shader in this codebase declares more than one fragment output, the same honest scope
          * boundary this project's D3D11/D3D12 MRT support already established.
          */
-        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
+                              int count) override;
 
         /** @brief Draws stride-16 (VertexPositionColor) primitives with a hardcoded white/vertex-color-enabled BasicEffect. */
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
