@@ -400,6 +400,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_RenderTargetCube_MsaaResolve COMMAND cna_test_vulkan_rendertargetcube_msaa
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # REMED-GFX-096: public singular/plural cube-face binding parity.
+        cna_vulkan_test(cna_test_vulkan_rendertargetcube_plural_binding
+                        examples/rendertargetcube_plural_binding_test.cpp)
+        cna_register_backend_test(NAME Vulkan_RenderTargetCube_PluralBinding
+            COMMAND cna_test_vulkan_rendertargetcube_plural_binding
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 148: RenderTarget2D full cycle — red quad into RT, blit to backbuffer
         cna_vulkan_test(cna_test_vulkan_rt2d
                         examples/vulkan_rt2d_test.cpp)
