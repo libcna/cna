@@ -2433,7 +2433,7 @@ existing task.
 | REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
 | REMED-GFX-093 | Vulkan Texture3D nonzero-mip SetData/GetData copies the requested mip but transitioned only mip 0 because the shared `TransitionImageLayout` barrier hardcoded `{baseMipLevel=0, levelCount=1}`. Validation therefore found mip 1/2 still in `SHADER_READ_ONLY_OPTIMAL` while the copy commands declared `TRANSFER_DST_OPTIMAL`/`TRANSFER_SRC_OPTIMAL`. The original descriptor-at-draw interpretation was disproved: no draw/descriptor/view participates in Vulkan Texture3D. | LOW | P3 | REMED-GFX-091 full Vulkan validation sweep | **DONE and VERIFIED — REAL PRODUCTION VULKAN IMAGE-SUBRESOURCE-LAYOUT VALIDITY DEFECT.** A Texture3D-specific barrier now scopes each upload/readback cycle to `{baseMipLevel=level,levelCount=1,baseArrayLayer=0,layerCount=1}`, uses matched shader/transfer access and stages, and restores shader-read in one submission. New 8×8×8/NPOT/state-cycle regression **26/26**; texture shard **11/11**, targeted Vulkan **19/19**, full Vulkan **157/159** with only unchanged DepthBias/GFX-094 baselines; zero validation messages. Texture2D/Cube and GFX-074/075/076/077/091 green; zero shader/generated diff. test `db46bdd0`, fix `977c1a73`. |
 | REMED-GFX-094 | `Vulkan_RenderTargetCube_MsaaResolve` applied MSAA but the original EnvironmentMapEffect observer read its untouched black backbuffer clear after its CCW quad was culled by the `CullCounterClockwise` state correctly left by the preceding default SpriteBatch producers. Direct selected-face diagnostics proved the resolve image already held the expected colour. | LOW | P3 | REMED-GFX-091 full Vulkan regression sweep | **DONE and VERIFIED — TEST-HARNESS DEFECT / NO PRODUCTION DEFECT.** Test-only state correction applies Opaque/DepthNone/CullNone after all producer SpriteBatch passes and expands the regression to clear-only, draw-over-clear, 1×/MSAA all-six-face, same-submission producer→consumer, A→B→A, and multiple-cube coverage: **8/8** on llvmpipe 4× and Radeon 780M/RADV 8×. Targeted Vulkan **25/25**, full Vulkan **158/159** with only documented DepthBias, zero validation. Production/shader/generated diff zero. test `71b633f1`. |
-| REMED-GFX-095 | Vulkan MRT binding silently bypasses the bound RenderTarget2D objects' MSAA images/resolves: `VulkanMRTProxy` keeps base `WantsMsaa()==false`, uses a sample-1 MRT render pass/depth image, and attaches each target's single-sample `GetColorView()` instead of its multisample view plus resolve destination. | LOW | P3 | REMED-GFX-094 sibling MSAA inventory | NOT STARTED — source-proven separate capability defect; single-target RenderTarget2D/RenderTargetCube MSAA paths are correct. Recorded only, not fixed. |
+| REMED-GFX-095 | Vulkan MRT binding silently bypassed the bound RenderTarget2D objects' MSAA images/resolves: `VulkanMRTProxy` kept base `WantsMsaa()==false`, used a sample-1 MRT render pass/depth image, attached each target's single-sample `GetColorView()`, and all MRT-capable pipelines were sample-1/incompatible with genuine multiple outputs. | LOW | P3 | REMED-GFX-094 sibling MSAA inventory | **DONE and VERIFIED — REAL PRODUCTION VULKAN BACKEND DEFECT.** Existing per-target MSAA views are now colour attachments, texture views are paired resolves, binding-0 depth matches the colour sample count, and 1–4-target 2D/custom/stock pipeline state matches the pass. New test **1/4→19/19** on llvmpipe 4× and Radeon/RADV 8×; targeted **38/38**, full Vulkan **159/160** (only DepthBias), zero validation. test `9cc8a421`, fix `d94b1332`. Spawned GFX-096. |
 
 #### REMED-BUILD-010 detail
 
@@ -6852,3 +6852,207 @@ Present, per-draw resolve, extra frame, view recreation, or synchronization rede
 New finding: **REMED-GFX-095**, recorded only. GFX-092, GFX-061, the WebGPU SpriteBatch BlendState
 counterpart, and DepthBias were not begun. Recommended next GRAPHICS task remains
 **REMED-GFX-061** per the established queue; do not begin it as part of this record.
+
+---
+
+### REMED-GFX-095 — Vulkan MRT + MSAA correctness — DONE (production fix)
+
+**Classification:** **E — REAL PRODUCTION VULKAN BACKEND DEFECT; multiple related omissions.**
+The original GFX-094 sibling-source hypothesis was correct. This was not another fixture defect:
+the public requested/applied sample count was multisampled, while the live MRT pass, framebuffer,
+and graphics pipeline were all genuinely single-sample.
+
+**Public CNA/XNA/FNA contract.** CNA and FNA expose at most four simultaneous render-target
+bindings. Simultaneously bound subresources must have matching dimensions and multisample counts;
+the same subresource cannot occupy two slots. The formats may differ in the XNA/D3D contract, but
+CNA currently exposes only `SurfaceFormat::Color` on Vulkan, so mixed active Vulkan formats are not
+reachable. One depth attachment is shared by the set; CNA follows the first binding for extent,
+viewport/scissor reset, `RenderTargetUsage`, and depth. The Vulkan boundary now rejects a count
+above CNA's four-target ceiling or `VkPhysicalDeviceLimits::maxColorAttachments`, null targets,
+different dimensions, different **applied** sample counts, duplicate target views, or lack of the
+`independentBlend` feature before creating a render pass/framebuffer. Comparing applied counts is
+intentional: two requests that clamp to the same real device count are compatible.
+
+The public `RenderTargetBinding(Texture*, CubeMapFace)` shape exists, but CNA's shared plural
+handoff currently extracts only `RenderTarget2D` backends and drops a cube binding to null.
+That separate, source-proven public/backend handoff gap is recorded as **REMED-GFX-096**. It was not
+fixed here and GFX-094's correct single-cube-face path was not reopened.
+
+**Exact pre-fix architecture and runtime proof.** Canonical case: two 32×32
+`RenderTarget2D`s request 8×; llvmpipe selects/applies 4× to each target. Each target already owned
+four relevant objects:
+
+| Target | Single-sample resolve texture | Single-sample view | Transient MSAA image | MSAA view |
+|---|---|---|---|---|
+| RT0 | `colorImage_` | `colorView_` / sampled `colorSampleView_` | `msaaColorImage_` | `msaaColorView_` |
+| RT1 | independent `colorImage_` | independent `colorView_` / `colorSampleView_` | independent `msaaColorImage_` | independent `msaaColorView_` |
+
+None of the two MSAA images/views participated in MRT before the fix:
+
+| Pre-fix framebuffer slot | Expected for requested/applied 4× | Actual pre-fix view | Actual samples |
+|---:|---|---|---:|
+| 0 | RT0 `msaaColorView_` | RT0 `colorView_` | 1 |
+| 1 | RT1 `msaaColorView_` | RT1 `colorView_` | 1 |
+| 2 | RT0 `colorView_` resolve | proxy-owned depth view | 1 |
+| 3 | RT1 `colorView_` resolve | absent | — |
+| 4 | optional shared depth | absent (the depth was incorrectly occupying slot 2) | — |
+
+The pre-fix render pass always had `N+1` descriptions: two sample-1 colour attachments plus a
+proxy-owned sample-1 depth attachment. `colorRefs={0,1}`, `depthRef=2`,
+`pResolveAttachments=nullptr`. Colours used `CLEAR/STORE`, `UNDEFINED`→`SHADER_READ_ONLY`; depth
+used `CLEAR/DONT_CARE`, `UNDEFINED`→`DEPTH_STENCIL_ATTACHMENT`. Every stock 3D pipeline explicitly
+forced sample 1 when `colorAttachmentCount>1`; built-in 2D and custom `ShaderEffect` pipelines were
+fixed to one sample/one colour output. Thus pre-fix behavior was validation-clean but semantically
+wrong.
+
+The committed regression was run against the parent implementation before the production fix:
+**1/4 passed**. Direct diagnostics reported requested 8, target-applied 4, proxy samples 1,
+framebuffer views 3, resolve references 0, and pipeline samples 1. The public full-coverage
+`MultiSampleMask=0x1` discriminator read `(255,255,255,255)` instead of the genuine 4× resolve's
+approximately `(64,64,64,255)`. This proves observable single-sample rendering rather than merely
+inferring it from source.
+
+**Corrected render-pass/framebuffer mapping.** The proxy owns no duplicate colour or depth image.
+It borrows each target's already-existing views and binding 0's real depth view:
+
+| Post-fix slot, two-target case | Framebuffer view | Description samples | Subpass role |
+|---:|---|---:|---|
+| 0 | RT0 `msaaColorView_` | selected N (4 llvmpipe / 8 RADV) | `colorAttachments[0]` |
+| 1 | RT1 `msaaColorView_` | selected N | `colorAttachments[1]` |
+| 2 | RT0 `colorView_` | 1 | `resolveAttachments[0]` |
+| 3 | RT1 `colorView_` | 1 | `resolveAttachments[1]` |
+| 4, when present | binding-0 `depthView_` | selected N | depth/stencil |
+
+For MSAA, source descriptions use `CLEAR/DONT_CARE`,
+`UNDEFINED`→`COLOR_ATTACHMENT_OPTIMAL`; resolves use `DONT_CARE/STORE`,
+`UNDEFINED`→`SHADER_READ_ONLY_OPTIMAL`; optional depth uses the same selected count and
+`CLEAR/DONT_CARE`. For 1× MRT, the framebuffer remains exactly
+`[RT0 colorView_, RT1 colorView_, ... optional depth]`, there are no resolve descriptions or
+references, and colour attachments remain `CLEAR/STORE` with shader-read final layout. Clear-value
+construction now follows this explicit `N sources + optional N resolves + optional depth` shape
+instead of the former hard-coded three values.
+
+The MRT render-pass cache key is target count + exact `VkSampleCountFlagBits` + binding-0 depth
+format. It does not key on target identity. Framebuffer identity is the proxy's exact ordered view
+vector and therefore distinguishes every target set and 1×/MSAA arrangement. CNA Vulkan currently
+has one reachable colour format, so omitting a redundant colour-format dimension is correct for
+the present capability boundary. `PickSampleCount` intersects the physical device's colour/depth
+framebuffer sample capabilities; unsupported requests clamp through CNA's established path and the
+real applied count is reported, never silently downgraded inside MRT.
+
+**Pipeline and state correction.** All fourteen stock 3D pipeline families now use the selected
+MSAA count for MRT rather than the former `colorAttachmentCount<=1` gate. Both built-in SpriteBatch
+pipeline families create `N` blend attachments and select the count-compatible MRT pass.
+`VulkanEffectBackend` now compiles shader modules/layout once and lazily caches compatible pipeline
+variants by colour count, exact sample count, depth format, blend equation, four write masks, and
+sample mask. The test's genuine location-0/1 and location-0/1/2/3 fragment outputs therefore use a
+pipeline whose `colorBlendState.attachmentCount`, render pass, and
+`rasterizationSamples` all match the active MRT.
+
+The Vulkan logical device now enables `independentBlend` when supported; without it CNA rejects
+MRT deterministically rather than silently collapsing `ColorWriteChannels1/2/3` onto slot 0.
+Three legacy stock pipeline families that had copied RT0's blend attachment state across every
+slot now explicitly build slot-indexed states. `MultiSampleMask` remains static pipeline state and
+the RGBA blend constant remains dynamic only when the chosen equation consumes it, preserving
+GFX-077/GFX-091 cache rules. The backend-global sample-count architecture still invalidates all
+stock MSAA pipeline caches when the backbuffer sample count changes; MRT 1× and current selected
+MSAA pipelines cannot share an incompatible object.
+
+**Layouts, sampling, and lifetime.** Each target's render/resolve views cover mip 0, base layer 0,
+one mip, one layer. The render pass leaves every resolve image shader-readable and its exit
+dependency orders colour writes before fragment/transfer reads. Sampling descriptors continue to
+reference each target's single-sample `colorSampleView_`; no descriptor points at a multisampled
+image, and the GFX-076 view-identity cache is unchanged.
+
+MRT framebuffers borrow target views. Old proxies remain frame-fence-retired as in GFX-075, and
+eligible proxy framebuffers are now destroyed before same-generation target-view retirement.
+Backend teardown similarly drops current/retired proxies before live render-target resources.
+MRT-aware `GetData` maps a concrete target back to pending proxies by resolve-view identity and
+flushes matching A→B→A producers in issue order. It uses GFX-074's existing synchronous readback
+wait path only; the ordinary render path adds no `vkDeviceWaitIdle`, `queueWaitIdle`, explicit
+resolve, frame latency, or per-draw render-pass/framebuffer recreation.
+
+**Final runtime evidence.** The fixture explicitly establishes Opaque/DepthNone/CullNone, point
+sampling, all four colour-write states, and each sample mask. Its test-only fragment modules really
+declare two/four output locations.
+
+| Case | llvmpipe | Radeon 780M/RADV |
+|---|---:|---:|
+| requested / target-applied / proxy / pipeline samples | 8 / 4 / 4 / 4 | 8 / 8 / 8 / 8 |
+| framebuffer views / resolve refs (2 targets, no depth) | 4 / 2 | 4 / 2 |
+| mask bit 0, full white | `(64,64,64,255)` (1/4) | `(32,32,32,255)` (1/8) |
+| RT0 / RT1 distinct outputs | `(200,100,50,220)` / `(100,50,200,220)` | same |
+| mask 0 after clear | both `(10,20,30,40)` | same |
+| partial mask resolved RT0 / RT1 | `(58,40,35,85)` / `(32,28,72,85)` | `(34,30,33,63)` / `(21,24,51,63)` |
+| total dedicated regression | **19/19** | **19/19** |
+
+The maximum tested count is four. With distinct masks, RT0 keeps only R from its output, RT1 only
+G, RT2 only B, and RT3 only A:
+`(200,20,30,40)`, `(10,50,30,40)`, `(10,20,100,40)`,
+`(10,20,30,220)`. The depth-backed case proves colour, depth, and pipeline share the selected
+sample count and that the framebuffer's final view is binding 0's depth view.
+
+The exact 1× shader/control retains direct two-view wiring and both distinct outputs. The same
+sample count also passes single RT→MRT→single RT. Same-submission MRT producer→backbuffer consumer
+matches immediate `GetData` for RT0/RT1; no extra Present/frame is used. MRT set A→B→A, two
+independent target sets, and destroying one unbound target while reading the survivor all preserve
+the expected resolved contents. Mixed applied sample counts, mismatched dimensions, and duplicate
+target subresources throw deterministically.
+
+**Validation, sanitizers, and regression gates.** Loader diagnostics explicitly show
+`libVkLayer_khronos_validation.so` loaded and `VK_LAYER_KHRONOS_validation` enabled by the
+application at instance/device scope on both llvmpipe and RADV. The complete verbose full-suite log
+contains zero `VUID`, validation error/warning, or `[Vulkan Validation]` lines, including attachment
+sample-count, framebuffer compatibility, resolve, layout, and pipeline multisample categories.
+
+| Gate | Result |
+|---|---|
+| GFX-095 dedicated test | **19/19** llvmpipe 4×; **19/19** Radeon/RADV 8× |
+| GFX-074 `Vulkan_RenderTarget_GetDataLifetime` | **13/13** |
+| GFX-075 `Vulkan_DeferredResourceLifetime` | **8/8** |
+| GFX-076 `Vulkan_EffectDescriptorCacheIdentity` | **14/14** |
+| GFX-077 `Vulkan_ColorWriteChannels` | **11/11**; new MRT combination included above |
+| GFX-091 generic RT BlendFactor / SpriteBatch BlendState | **12/12** / **23/23** |
+| GFX-093 `Vulkan_Texture3D_Mip_Layout` | **26/26** |
+| GFX-094 `Vulkan_RenderTargetCube_MsaaResolve` | **8/8** |
+| single `RenderTarget2D` MSAA | **2/2** |
+| public depth contract | **4/4**; all six depth/stencil-state CTests also pass |
+| viewport/scissor representatives | all pass |
+| targeted Vulkan shard | **38/38 CTests** |
+| full `^Vulkan_` suite | **159/160** in 172.54 s; only unchanged llvmpipe `Vulkan_DepthBias` **3/4** |
+| ASan GFX-095/074/075/076 shard | **4/4** with known external Vulkan/loader leak baseline suppressed; no invalid access |
+
+The first ASan run allowed LeakSanitizer and all four otherwise-passing executables exited nonzero
+on the already-documented external loader/driver baseline (368 bytes for the established tests;
+624 bytes when GFX-095 creates two Vulkan devices). Re-running with `detect_leaks=0` isolates the
+requested lifetime signal and is clean 4/4.
+
+**Sibling inventory, scope, and artifacts.**
+
+| Path | Result |
+|---|---|
+| MRT 1× | direct single-sample views, no resolve refs, pixels correct |
+| MRT MSAA | per-target MSAA sources + paired texture resolves; no sample downgrade |
+| MRT + depth | binding-0 depth, colour/depth/pipeline counts match |
+| MRT + ColorWriteChannels0–3 | independent slot mapping correct |
+| MRT + MultiSampleMask | 0/all/partial correct at 4× and 8× |
+| descriptor/sampling | single-sample resolve view retained; GFX-076 clean |
+| cube-face MRT | public handoff gap, new GFX-096; no GFX-094 change |
+
+The known cross-backend MRT mip-regeneration boundary and the already-documented
+PreserveContents+MSAA boundary were not broadened into GFX-095. No remaining tested RT2D MRT path
+silently downgrades its active sample count.
+
+Production shaders and generated shader artifacts have **zero diff**. The only shader artifact is
+the new test-only `vulkan_mrt_msaa_test_spv.hpp`, produced from a small Sprite2D-compatible vertex
+shader and genuine two-/four-output fragment shaders; no runtime shader compiler or production
+asset changed. `audit/` is untouched.
+
+- `9cc8a421 test(Task REMED-GFX-095): reproduce Vulkan MRT MSAA bypass`
+- `d94b1332 fix(Task REMED-GFX-095): route Vulkan MRT through multisampled resolves`
+- `docs(remediation): record GFX-095 verification` (this record)
+
+New finding: **REMED-GFX-096**, cube-face bindings are dropped by the shared plural-target handoff.
+GFX-061, GFX-092, the WebGPU SpriteBatch BlendState counterpart, and Vulkan DepthBias were not
+begun. Recommended next GRAPHICS task remains **REMED-GFX-061** per the established queue; do not
+begin it as part of this record.
