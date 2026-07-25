@@ -496,9 +496,11 @@ namespace CNA::Internal::Backends::WebGPU
             out[19] = p.fresnelEnabled ? 1.0f : 0.0f;
             out[20] = p.envMapSpecular[0]; out[21] = p.envMapSpecular[1]; out[22] = p.envMapSpecular[2];
             out[23] = p.fresnelFactor;
-            out[24] = p.fogColor[0]; out[25] = p.fogColor[1]; out[26] = p.fogColor[2];
-            out[27] = p.fogEnabled ? 1.0f : 0.0f;
-            out[28] = p.fogStart; out[29] = p.fogEnd; out[30] = 0.0f; out[31] = 0.0f;
+            // REMED-GFX-100: the CPU-prepared FNA view-space fog vector is the only fog
+            // representation uploaded here. `fogColor.w` remains explicit UBO padding.
+            out[24] = p.fogColor[0]; out[25] = p.fogColor[1]; out[26] = p.fogColor[2]; out[27] = 0.0f;
+            out[28] = p.fogVector[0]; out[29] = p.fogVector[1];
+            out[30] = p.fogVector[2]; out[31] = p.fogVector[3];
             out[32] = p.light1Dir[0]; out[33] = p.light1Dir[1]; out[34] = p.light1Dir[2]; out[35] = 0.0f;
             out[36] = p.light1Diffuse[0]; out[37] = p.light1Diffuse[1]; out[38] = p.light1Diffuse[2]; out[39] = 0.0f;
             out[40] = p.light2Dir[0]; out[41] = p.light2Dir[1]; out[42] = p.light2Dir[2]; out[43] = 0.0f;
@@ -3866,8 +3868,8 @@ struct EnvMapParams {
     light0Dir: vec4f,
     light0DiffuseFresnelEn: vec4f,
     envMapSpecFresnelF: vec4f,
-    fogColorEnabled: vec4f,
-    fogStartEnd: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
     light1Dir: vec4f,
     light1Diffuse: vec4f,
     light2Dir: vec4f,
@@ -3903,10 +3905,9 @@ struct VertexOutput {
     output.worldNormal = normalMatrix * input.normal;
     output.eyeDir = ep.eyePos.xyz - worldPos;
     output.uv = input.uv;
-    let fogEnabled = ep.fogColorEnabled.w;
-    let fogRange = max(ep.fogStartEnd.y - ep.fogStartEnd.x, 1e-6);
-    let fogRaw = clamp((ep.fogStartEnd.y - input.position.z) / fogRange, 0.0, 1.0);
-    output.fogFactor = select(1.0, fogRaw, fogEnabled > 0.5);
+    // REMED-GFX-100: FNA view-space fog. fogVector is prepared once by the public effect from
+    // World*View; all-zero disables fog and {0,0,0,1} gives the defined full-fog zero range.
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), ep.fogVector), 0.0, 1.0);
     return output;
 }
 
@@ -3937,7 +3938,7 @@ struct VertexOutput {
                              fresnelEnabled > 0.5);
     var rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor)
             + ep.envMapSpecFresnelF.xyz * envSample.a * combinedAlpha;
-    rgb = mix(ep.fogColorEnabled.xyz, rgb, input.fogFactor);
+    rgb = mix(ep.fogColor.xyz, rgb, input.fogFactor);
     return vec4f(rgb, combinedAlpha);
 }
 )WGSL";
