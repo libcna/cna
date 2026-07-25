@@ -2432,7 +2432,7 @@ existing task.
 | REMED-GFX-101 | D3D direct smoke fixtures had stale test infrastructure: MRT calls still passed raw backend-pointer arrays after GFX-096 migrated the interface to `RenderTargetBindingDescriptor`, and the D3D11 no-draw occlusion-query check used a fixed 100000-iteration tight spin that could expire before DXVK returned the result. | LOW | P3 | REMED-GFX-061 full practical D3D gate | **DONE (2026-07-25) — TEST-HARNESS DEFECT.** Fixtures now use the current descriptor interface and the D3D11 query check uses a bounded two-second steady-clock/yield wait. No production runtime behavior changed. Included in `ef213d6c`; D3D11 smoke is 164/164. |
 | REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | **DONE and VERIFIED — REAL PRODUCTION SHADER-SEMANTIC DEFECT.** All four handwritten embedded WGSL modules now use `lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz`; the shared CPU pre-fold remains unchanged. New sRGB-safe exact-path regression: **6/25 pre-fix → 27/27 post-fix**, covering all four modules, ambient, emissive, combined, directional, non-white texture, Alpha, vertex colour, A→B→A, and post-draw mutation. WebGPU targeted **3/3 CTests / 44/44 checks**, broader **10/10 / 70/70**, validation clean. D3D11 smoke **163/163**; GFX-006/008/010 and GFX-088 contract regressions green across the applicable backends. No generated shader artifacts; test `3c9a4d5f`, fix `ee0f44c9`. |
 | REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | **DONE and VERIFIED (KHRONOS validation loaded; Xvfb/llvmpipe + AMD Radeon 780M/RADV)** — real production validity defect. One normalized mapping-derived predicate now conditionally declares `VK_DYNAMIC_STATE_BLEND_CONSTANTS` and conditionally replays the captured value after pipeline bind. Per-draw/per-batch capture is preserved; factor/function state stays static and pipeline-keyed; RGBA stays dynamic and outside the key. Pre-fix minimal test: pixels 4/4 but CTest 0/1 on exact VUID; post-fix generic 3D 12/12, SpriteBatch 23/23, specialized SkinnedEffect 6/6, targeted shard 36/36, zero 08608, cache 8→8. Full Vulkan 156/158 with documented `DepthBias` plus a baseline-identical cube-MSAA failure; separate Texture3D `VUID-09600` spawned GFX-093 and cube-MSAA spawned GFX-094. test `ed2b7f74`, fix `368e011e`. |
-| REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
+| REMED-GFX-092 | D3D9 state/target/depth native calls formerly discarded HRESULTs: `SetRenderState`, `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`/`SetScissorRect`, and default-surface acquisition/restoration. A rejected call could silently retain stale or partially-applied GPU state. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | **DONE (2026-07-25) — REAL PRODUCTION CORRECTNESS/RELIABILITY DEFECT.** Scoped checked wrappers, per-category unsafe-state gating, transactional target/depth/viewport rollback, checked default-surface acquisition, and deterministic per-instance failure injection close the silent-continuation path. D3D9 HRESULT regression **7/7**, GFX-089 **4/4**, D3D9 smoke **62/62**, and GFX-060/GFX-061/state regressions pass on Wine/DXVK9. |
 | REMED-GFX-093 | Vulkan Texture3D nonzero-mip SetData/GetData copies the requested mip but transitioned only mip 0 because the shared `TransitionImageLayout` barrier hardcoded `{baseMipLevel=0, levelCount=1}`. Validation therefore found mip 1/2 still in `SHADER_READ_ONLY_OPTIMAL` while the copy commands declared `TRANSFER_DST_OPTIMAL`/`TRANSFER_SRC_OPTIMAL`. The original descriptor-at-draw interpretation was disproved: no draw/descriptor/view participates in Vulkan Texture3D. | LOW | P3 | REMED-GFX-091 full Vulkan validation sweep | **DONE and VERIFIED — REAL PRODUCTION VULKAN IMAGE-SUBRESOURCE-LAYOUT VALIDITY DEFECT.** A Texture3D-specific barrier now scopes each upload/readback cycle to `{baseMipLevel=level,levelCount=1,baseArrayLayer=0,layerCount=1}`, uses matched shader/transfer access and stages, and restores shader-read in one submission. New 8×8×8/NPOT/state-cycle regression **26/26**; texture shard **11/11**, targeted Vulkan **19/19**, full Vulkan **157/159** with only unchanged DepthBias/GFX-094 baselines; zero validation messages. Texture2D/Cube and GFX-074/075/076/077/091 green; zero shader/generated diff. test `db46bdd0`, fix `977c1a73`. |
 | REMED-GFX-094 | `Vulkan_RenderTargetCube_MsaaResolve` applied MSAA but the original EnvironmentMapEffect observer read its untouched black backbuffer clear after its CCW quad was culled by the `CullCounterClockwise` state correctly left by the preceding default SpriteBatch producers. Direct selected-face diagnostics proved the resolve image already held the expected colour. | LOW | P3 | REMED-GFX-091 full Vulkan regression sweep | **DONE and VERIFIED — TEST-HARNESS DEFECT / NO PRODUCTION DEFECT.** Test-only state correction applies Opaque/DepthNone/CullNone after all producer SpriteBatch passes and expands the regression to clear-only, draw-over-clear, 1×/MSAA all-six-face, same-submission producer→consumer, A→B→A, and multiple-cube coverage: **8/8** on llvmpipe 4× and Radeon 780M/RADV 8×. Targeted Vulkan **25/25**, full Vulkan **158/159** with only documented DepthBias, zero validation. Production/shader/generated diff zero. test `71b633f1`. |
 | REMED-GFX-095 | Vulkan MRT binding silently bypassed the bound RenderTarget2D objects' MSAA images/resolves: `VulkanMRTProxy` kept base `WantsMsaa()==false`, used a sample-1 MRT render pass/depth image, attached each target's single-sample `GetColorView()`, and all MRT-capable pipelines were sample-1/incompatible with genuine multiple outputs. | LOW | P3 | REMED-GFX-094 sibling MSAA inventory | **DONE and VERIFIED — REAL PRODUCTION VULKAN BACKEND DEFECT.** Existing per-target MSAA views are now colour attachments, texture views are paired resolves, binding-0 depth matches the colour sample count, and 1–4-target 2D/custom/stock pipeline state matches the pass. New test **1/4→19/19** on llvmpipe 4× and Radeon/RADV 8×; targeted **38/38**, full Vulkan **159/160** (only DepthBias), zero validation. test `9cc8a421`, fix `d94b1332`. Spawned GFX-096. |
@@ -8064,3 +8064,111 @@ audit/ remains untouched.
 - docs(remediation): record GFX-100 WebGPU fog verification (this record)
 
 Recommended next GRAPHICS task: **REMED-GFX-092** (recommendation only; not begun here).
+
+---
+
+## REMED-GFX-092 — D3D9 state/target/depth HRESULT handling (DONE 2026-07-25)
+
+**Classification: A — REAL PRODUCTION CORRECTNESS/RELIABILITY DEFECT.** GFX-089 correctly
+proved that every observed call succeeded in that Wine/DXVK9 run, so ignored HRESULTs did not cause
+its stale-fixture depth failure. It did not prove that an error was benign. A rejected state call
+leaves the old value (or a partially-applied sequence) active; a rejected colour/depth bind can
+leave the previous target pair active or leave only part of a requested pair installed. Before this
+fix CNA could cache/continue as though requested state B were active. Deterministic first-failure
+injection demonstrates the distinction and proves the post-fix stop/retry behavior.
+
+### Scoped inventory and classification
+
+| Call site / native method | Previously checked? | Failure class | Observable consequence before GFX-092 | Final handling |
+| --- | --- | --- | --- | --- |
+| Blend, depth/stencil, rasterizer, depth helper, blend-factor: `IDirect3DDevice9::SetRenderState` | No | `INVALIDCALL` is A/D; `DEVICELOST`/`DEVICENOTRESET` is B; OOM/driver error is C/unknown | Earlier calls can succeed, a later call can retain old state, and the following draw uses an unreported partial configuration | Checked at every scoped site; first failure throws. The affected category is unsafe until a complete successful state application finishes. |
+| RT2D/cube/MRT/backbuffer: `SetRenderTarget` | No | A/B/unknown | Old colour target can receive the draw; after some slots succeed a plural binding can be mixed | Checked target transaction captures the old tuple, restores it after failure where possible, and commits target bookkeeping only after full success. |
+| RT2D/cube/MRT/backbuffer: `SetDepthStencilSurface` | No | A/B/unknown | Old/null depth surface can remain with new colour, changing depth/stencil behavior | Same transaction and rollback as colour targets; failed rollback makes target state unsafe and blocks rendering. |
+| Target switch / public viewport: `SetViewport`; public scissor: `SetScissorRect` | Target-path viewport and scissor were unchecked; standalone viewport was checked without shared diagnostics | A/B/unknown | New target dimensions or scissor can be claimed while the native operation did not take effect | Checked with the same symbolic diagnostic; target viewport participates in rollback; public viewport/scissor caches commit after backend success. |
+| Default restoration/cache and transaction snapshots: `GetBackBuffer`, `GetRenderTarget`, `GetDepthStencilSurface` | Some no | A/B/E | Null/stale default depth or an unprovable previous binding could be used | Checked with null-output rejection; `D3DERR_NOTFOUND` is benign only for an unused MRT slot/no depth in a snapshot. COM `ComPtr` snapshots own and release every returned reference. |
+| RT2D/cube depth allocation: `CreateDepthStencilSurface` | Yes, but generic error/output contract | B/C/unknown | Allocation failure was reported, but output/resource context was less precise | Wrapper zeros the output before/after failure and reports method, symbolic HRESULT, and allocation context. |
+| `Clear` | Already checked | B/A/unknown | No newly discovered ignored result | Kept scoped and checked; render readiness now also rejects unsafe state before a clear. |
+
+`D3D_OK` is success. `D3DERR_INVALIDCALL` after CNA's validated state is a backend invariant or
+caller-validation failure (A/D) and produces one GPU error diagnostic plus a deterministic runtime
+error. `D3DERR_DEVICELOST` and `D3DERR_DEVICENOTRESET` are B, not generic fatal errors.
+`D3DERR_OUTOFVIDEOMEMORY` and `E_OUTOFMEMORY` are C and include `[resource allocation failure]`.
+All other failed results retain the numeric HRESULT plus `unknown HRESULT` classification rather
+than being silently collapsed.
+
+### Device loss, partial state, and target transaction
+
+The pre-existing D9-34 lifecycle remains authoritative. `Present()` marks a real
+`D3DERR_DEVICELOST` interval Lost and later `PollDeviceLost()` uses `TestCooperativeLevel()`;
+`D3DERR_DEVICENOTRESET` runs the existing Resetting → release default-pool resources/default depth
+reference → `Reset()` → restore viewport/default depth → Reset event path. A scoped lost/not-reset
+result now enters that same Lost callback/status and throws `DeviceLostException`; it neither logs
+repeated errors nor starts a parallel reset. Reset clears the Lost gate before the checked native
+restoration calls, then clients reapply their normal state.
+
+For a multi-call blend/depth/rasterizer application, first failure stops the sequence immediately.
+The backend has no optimistic requested-state cache: an instance-local unsafe-category bit prevents
+draw, SpriteBatch flush, effect/instanced draw, readback, or clear after a caught failure. Only a
+complete successful reapplication clears that bit. `GraphicsDevice` also delays BlendState,
+BlendFactor, DepthStencilState, ReferenceStencil, RasterizerState, Viewport, ScissorRectangle, and
+backbuffer render-target cache commits until their backend work succeeds.
+
+Each target switch snapshots all active colour slots, depth, and viewport only at the switch. It
+then writes all colour slots (explicitly nulling unused MRT slots), depth, then viewport. A later
+failure restores the full snapshot in that order and throws the original operation/HRESULT with
+`previous target/depth/viewport restored`; rollback failure preserves the original context, marks
+target state unsafe, and blocks rendering. Backend current-RT bookkeeping is committed only after
+the transaction. RT2D resolves outgoing MSAA colour before the switch without first unbinding it,
+so a failed next switch can restore the still-valid old pair. `Get*` snapshot references use
+`ComPtr`, so they are released on every path.
+
+### Reproduction and verification
+
+`D3D9_HResultHandling` uses a deliberately narrow, per-backend-instance, one-shot test hook in
+the checked wrapper—not a global mock or a destabilized driver. RAII always disarms it. The hook
+is consumed before precisely the selected operation and native-call counters prove valid retries
+again reach the real device. The real Wine/DXVK9 device creates every normal resource, performs
+all normal A/B transitions, and executes the success/retry paths.
+
+- **7/7** new checks: `SetRenderState(INVALIDCALL)` retains A, blocks clear, and succeeds on
+  A→failure→A; injected `DEVICELOST` and `DEVICENOTRESET` take the existing lost/reset route;
+  depth allocation `OUTOFVIDEOMEMORY` reports a symbolic error and a later allocation/bind works;
+  failed `SetRenderTarget` restores depth-backed A then retries B; failed
+  `SetDepthStencilSurface` restores depth-backed B then retries A and backbuffer.
+- Native normal paths: initial and restored backbuffer, depthless/depth-backed RT2D, target
+  A→B→backbuffer, viewport/scissor, blend, depth, rasterizer, MRT, MSAA RT2D, and cube faces all
+  succeed. The smoke includes the supported RenderTargetCube capability path; no separate cube
+  boundary applies.
+- GFX-089 public depth contract: **4/4 PASS**. GFX-060 D3D9 draw offsets, five GFX-061 D3D9 fog
+  tests, GFX-077 blend (opaque/alpha), stencil, and rasterizer-cull regressions all pass. The full
+  D3D9 smoke is **62/62 PASS**.
+- Runtime route: Wine with DXVK9 **2.6.0**, AMD Radeon 780M (RADV PHOENIX), RADV **25.0.7**;
+  llvmpipe was skipped. Wine EDID/display-metadata warnings are environment noise and every test
+  exits zero. Builds used at most four jobs.
+- The common `GraphicsDevice` cache change compiles in all fourteen selected backend-library
+  configurations: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3, EasyGL, Headless, SDL_GPU,
+  SDLRenderer, Software, Vulkan, and WebGPU.
+
+The success path adds one result branch to each existing scoped native call and does not add a
+native call on unchanged ordinary draws. State reuse remains unchanged. A target transition now
+does its bounded snapshot plus explicit unused-slot clears (and the same transaction on restore),
+but no `GetRenderTarget`/`GetDepthStencilSurface` occurs per draw, no wait/Present/reset is added,
+and no new frame latency is introduced.
+
+### Scope closure
+
+The compiler-forced scoped migration leaves direct calls for the listed methods only inside the
+wrapper implementations (plus the independently checked readback `GetBackBuffer`). The narrow
+sibling inventory found unchecked sampler/texture/buffer/shader/draw/resolve APIs, including the
+pre-existing `StretchRect` resolve result, but none is inseparable from this state/target/depth
+transaction. They were deliberately not changed and no new remediation finding was allocated.
+There are zero production shader or generated-artifact changes. `audit/` is untouched.
+
+**Commits:**
+
+- `a4bf69f8 test(Task REMED-GFX-092): cover D3D9 native HRESULT failures`
+- `916b75e7 fix(Task REMED-GFX-092): handle D3D9 state and target HRESULTs`
+- `docs(remediation): record GFX-092 D3D9 HRESULT closure` (this record)
+
+Recommended next GRAPHICS task: **REMED-GFX-012** (highest-priority actionable unclosed GRAPHICS
+finding in the current index; recommendation only, do not begin it here).
