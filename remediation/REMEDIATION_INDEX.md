@@ -79,7 +79,7 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 | `REMED-CORE-006` | `Game::UnloadContent()` dead hook | HIGH | CORE | COND |
 | `REMED-CORE-007` | `GraphicsDeviceManager` device-event forwarding gap | HIGH | CORE | COND |
 | `REMED-CONTENT-004` | Texture3D reader round-trip returns zeros | MEDIUM | CONTENT | YES |
-| `REMED-GFX-004` | `RenderTargetCube` missing `Dispose(bool)` (UAF risk) | MEDIUM | GRAPHICS | YES |
+| `REMED-GFX-004` | `RenderTargetCube::Dispose(bool)` parity and cached-backend UAF — resolved 2026-07-25 | MEDIUM | GRAPHICS | YES |
 | `REMED-GFX-005` | **Fog formula mirrored — Bgfx, Vulkan, all 15 D3DCommon shaders** | HIGH | GRAPHICS | NO |
 | `REMED-GFX-006` | **SkinnedEffect world-normal transform missing on every backend** | HIGH | GRAPHICS | NO |
 | `REMED-GFX-007` | EnvironmentMapEffect emissive re-multiply (5 groups) | HIGH | GRAPHICS | NO |
