@@ -342,8 +342,10 @@ TEST_F(SkinnedPbrEffectDefaultsTest, FillGpuDrawParamsCarriesFactorsFogAndBoneCo
     EXPECT_FLOAT_EQ(params.pbrMetallicFactor, 0.2f);
     EXPECT_FLOAT_EQ(params.pbrRoughnessFactor, 0.9f);
     EXPECT_TRUE(params.fogEnabled);
-    EXPECT_FLOAT_EQ(params.fogStart, 2.0f);
-    EXPECT_FLOAT_EQ(params.fogEnd, 8.0f);
+    EXPECT_FLOAT_EQ(params.fogVector[0], 0.0f);
+    EXPECT_FLOAT_EQ(params.fogVector[1], 0.0f);
+    EXPECT_FLOAT_EQ(params.fogVector[2], -1.0f / 6.0f);
+    EXPECT_FLOAT_EQ(params.fogVector[3], -1.0f / 3.0f);
     EXPECT_EQ(params.boneCount, SkinnedPbrEffect::MaxBones);
     EXPECT_EQ(params.weightsPerVertex, 2);
 }

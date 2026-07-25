@@ -1225,7 +1225,7 @@ namespace CNA::Internal::Backends::Vulkan
         // VertexPositionNormalTangentTextureSkinned). Same 5 samplers as descriptorSetLayoutPbr_
         // above, plus a dynamic bone-palette UBO (binding=5, same shape as
         // descriptorSetLayoutSkinned_'s own BoneBlock) and a PbrParams dynamic UBO at binding=6
-        // (WeightsPerVertex packed into its own fogStartEnd_weights.z field, mirroring
+        // (WeightsPerVertex packed alongside the fog vector, mirroring
         // skinned3d.vert.glsl's fog.eyePos_pad.w packing trick).
         VkDescriptorSetLayout descriptorSetLayoutPbrSkinned_ = VK_NULL_HANDLE;
         VkDescriptorPool      descriptorPoolPbrSkinned_      = VK_NULL_HANDLE;
@@ -1317,12 +1317,12 @@ namespace CNA::Internal::Backends::Vulkan
             // no-GpuDrawParams DrawColoredPrimitives()/DrawIndexedColoredPrimitives() path, which
             // still falls through to the original zero-descriptor-set colored3d pipeline.
             bool                    useFogTex3D       = false;
-            float                   fogTex3DUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogStartEnd
+            float                   fogTex3DUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogVector
             VkDescriptorSet         fogTex3DDescSet   = VK_NULL_HANDLE;
             bool                    useAlphaTest      = false; // true = AlphaTest3D pipeline
             bool                    useDualTexture    = false; // true = DualTex3D pipeline
             VkDescriptorSet         dualTexDescSet    = VK_NULL_HANDLE; // 2-sampler set
-            float                   dualTexFogUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899)
+            float                   dualTexFogUboData[8] = {}; // vec4 fogColorEnabled + vec4 fogVector (Task 899)
             bool                    useEnvMap         = false; // true = EnvMap3D pipeline
             float                   envMapPC[32]      = {};    // push consts: [0..15]=mvp, [16..31]=world
             // 12×vec4 = 192 bytes for env map UBO (8 original [0..31], see Task 899's own
@@ -1333,7 +1333,7 @@ namespace CNA::Internal::Backends::Vulkan
             bool                    useSkinned        = false; // true = Skinned3D pipeline
             std::vector<float>      boneMatrices;              // up to 72 mat4s = 1152 floats
             VkDescriptorSet         skinnedDescSet    = VK_NULL_HANDLE;
-            // vec4 fogColorEnabled + vec4 fogStartEnd (Task 899); [8..23] Task 893's
+            // vec4 fogColorEnabled + vec4 fogVector (Task 899); [8..23] Task 893's
             // DirectionalLight1/2 dir+diffuse; [24..59] Task 894's World (mat4, 16 floats),
             // eyePosition_pad, specularColor_specularPower, light0/1/2Specular_pad (4 more vec4);
             // [60..63] REMED-GFX-008's emissiveColor vec4 (pre-folded emissive+ambient*diffuse).
@@ -1345,8 +1345,7 @@ namespace CNA::Internal::Backends::Vulkan
             // PbrParams UBO layout (floats), matching pbr3d.vert/frag.glsl's and
             // pbr3d_skinned.vert/frag.glsl's own struct exactly: [0..15]=light1/2 dir+diffuse (4
             // vec4), [16..31]=world mat4, [32..35]=eyePos+metallicFactor, [36..39]=emissive+
-            // roughnessFactor, [40..43]=fogColor+fogEnabled, [44]=fogStart, [45]=fogEnd,
-            // [46]=weightsPerVertex (usePbrSkinned only, 0 otherwise), [47]=unused. 48 floats =
+            // roughnessFactor, [40..43]=fogColor+weightsPerVertex, [44..47]=fogVector. 48 floats =
             // 192 bytes, under kPbrUBOStride=256. usePbrSkinned also reuses boneMatrices above.
             float                   pbrUboData[48]    = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
@@ -1358,7 +1357,7 @@ namespace CNA::Internal::Backends::Vulkan
             // Layout (floats): [0..19]=light1/2 dir+diffuse+emissive (5 vec4, Task 897),
             // [20..35]=world mat4, [36..39]=eyePos, [40..51]=light0/1/2 specular (3 vec4),
             // [52..55]=specularColor+specularPower (Task 886/898), [56..59]=fogColor+fogEnabled,
-            // [60..63]=fogStart+fogEnd+unused (Task 888). 256 bytes total.
+            // [60..63]=fogVector. 256 bytes total.
             float                   litUboData[64]    = {};
             VkDescriptorSet         litTexturedDescSet = VK_NULL_HANDLE;
             int32_t                 baseVertex        = 0;     // vertexOffset for vkCmdDrawIndexed

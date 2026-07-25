@@ -576,12 +576,6 @@ namespace CNA::Internal::Backends
         bool  fogEnabled      = false;
         /// BasicEffect fog: RGB blend colour.
         float fogColor[3]     = {0, 0, 0};
-        /// Public stock-effect FogStart value. Retained in the shared draw ABI for scalar-fog
-        /// backends (currently WebGPU EnvironmentMapEffect); D3D9/D3D11/D3D12 do not consume it.
-        float fogStart        = 0.0f;
-        /// Public stock-effect FogEnd value. Retained for the same scalar-backend compatibility
-        /// role as fogStart; it is not a D3D shader constant.
-        float fogEnd          = 1.0f;
         /// REMED-GFX-010: FNA stock-effect fog vector (EffectHelpers.SetFogVector). Dotting this
         /// with the object-space (or, for SkinnedEffect, the post-skin) vertex position `float4(p,1)`
         /// yields FNA's `fogFactor = saturate(dot(pos, fogVector))` — a true *view-space* Z fog term,
@@ -591,8 +585,7 @@ namespace CNA::Internal::Backends
         /// All-zero when fog is disabled (dot→0→keep=1, a true no-op) and `{0,0,0,1}` for the
         /// degenerate `fogStart==fogEnd` case (dot→1→keep=0, fully fogged), matching FNA exactly.
         /// Populated by every fog-capable stock effect's FillGpuDrawParams(). This is the
-        /// authoritative representation for all D3D stock/custom effect paths and for every
-        /// backend migrated by REMED-GFX-010.
+        /// authoritative representation for every fog-capable stock-effect backend.
         float fogVector[4]    = {0, 0, 0, 0};
         bool textureEnabled      = false;
         bool vertexColorEnabled  = true;

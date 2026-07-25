@@ -575,8 +575,8 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle specularColorPower3DUnif_ = BGFX_INVALID_HANDLE;
         /// BasicEffect.VertexColorEnabled gate for the no-texture colored3D path (Task 364).
         bgfx::UniformHandle vertexColorEn3DUnif_ = BGFX_INVALID_HANDLE;
-        /// Task 888: fog color (xyz) and fog params (fogEnabled, fogStart, fogEnd), shared by
-        /// every 3D program that supports fog.
+        /// Fog color (xyz) and the CPU-prepared FNA fog vector, shared by every fog-capable 3D
+        /// program.
         bgfx::UniformHandle fogColorUnif_  = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle fogParamsUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle texColor3DSampler_  = BGFX_INVALID_HANDLE;

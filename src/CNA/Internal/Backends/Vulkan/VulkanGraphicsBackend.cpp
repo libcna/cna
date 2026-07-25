@@ -4203,7 +4203,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = dualTexFogUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogStartEnd
+        bufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogVector
 
         VkWriteDescriptorSet writes[3]{};
         for (uint32_t i = 0; i < 2; ++i) {
@@ -5124,7 +5124,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = fogTex3DUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogStartEnd
+        bufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogVector
 
         VkWriteDescriptorSet writes[2]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -5513,7 +5513,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo fogBufInfo{};
         fogBufInfo.buffer = skinnedFogUBO_[frameIdx];
         fogBufInfo.offset = 0;
-        // fogColorEnabled+fogStartEnd + light1/2 Dir/Diff (Task 893) + World/eyePos/specular (Task 894)
+        // fogColorEnabled+fogVector + light1/2 Dir/Diff (Task 893) + World/eyePos/specular (Task 894)
         // + emissiveColor vec4 (REMED-GFX-008) = 256 bytes; must cover offset 240 or the shader reads 0.
         fogBufInfo.range  = 256;
 

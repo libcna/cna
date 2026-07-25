@@ -399,9 +399,6 @@ namespace Microsoft::Xna::Framework::Graphics
         p.fogColor[0] = fogColor.X;
         p.fogColor[1] = fogColor.Y;
         p.fogColor[2] = fogColor.Z;
-        p.fogStart    = fogStart_;
-        p.fogEnd      = fogEnd_;
-
         // REMED-GFX-010: FNA EffectHelpers.SetFogVector — view-space Z fog. The shader dots this
         // vector with the POST-SKIN object-space position (FNA's Skin() mutates vin.Position, then
         // ComputeFogFactor(vin.Position)); the vector itself bakes only World*View, never the bones.

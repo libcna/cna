@@ -738,7 +738,7 @@ namespace CNA::Internal::Backends::SdlGpu
             Uint32 indexCount = 0;
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};  ///< mirrors VulkanGraphicsBackend::FillExtPushConst()'s 128-byte layout
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
@@ -761,7 +761,7 @@ namespace CNA::Internal::Backends::SdlGpu
             Uint32 indexCount = 0;
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -788,7 +788,7 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};
             std::array<float, 56> lightUniforms{};  ///< LitLightParams: 10 vec4 + 1 mat4 = 224 bytes
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -816,7 +816,7 @@ namespace CNA::Internal::Backends::SdlGpu
             Uint32 indexCount = 0;
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};  ///< [20..23]=alphaTest params, [24]=vertexColorEnabled (no lighting/ambient slots needed)
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -846,7 +846,7 @@ namespace CNA::Internal::Backends::SdlGpu
             Uint32 indexCount = 0;
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -883,7 +883,7 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 24> uniforms{};       ///< PC: mvp(16) + diffuseColor(4) + emissiveAmount(4)
             std::array<float, 48> envMapUniforms{}; ///< EnvMapParams: world(16) + 8 vec4 (32) = 48 floats
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -922,7 +922,7 @@ namespace CNA::Internal::Backends::SdlGpu
             std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
             std::array<float, 72 * 16> boneUniforms{}; ///< BoneBlock: 72 mat4 = 1152 floats (4608 bytes), uploaded as a storage buffer
             std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -960,7 +960,7 @@ namespace CNA::Internal::Backends::SdlGpu
             std::array<float, 4>  pbrParams{};          ///< PbrParams: metallicFactor, roughnessFactor, pad, pad
             bool skinned = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
-        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogStartEnd (32 bytes)
+        std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;

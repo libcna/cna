@@ -36,7 +36,7 @@ layout(set = 0, binding = 5) uniform BoneBlock {
 } bb;
 
 // Same field shapes as pbr3d.vert.glsl's PbrParams, plus WeightsPerVertex packed into
-// fogStartEnd_weights.z (mirrors skinned3d.vert.glsl's own fog.eyePos_pad.w packing trick).
+// fog-vector companion slot (mirrors skinned3d.vert.glsl's own fog.eyePos_pad.w packing trick).
 layout(set = 0, binding = 6) uniform PbrParams {
     vec4 light1Dir_pad;
     vec4 light1Diffuse_pad;
@@ -50,7 +50,7 @@ layout(set = 0, binding = 6) uniform PbrParams {
 } pbr;
 
 void main() {
-    float weightsPerVertex = pbr.fogColorEnabled.w; // REMED-GFX-010: relocated from fogStartEnd_weights.z
+    float weightsPerVertex = pbr.fogColorEnabled.w; // REMED-GFX-010: alongside the fog vector
     mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
     if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y;
     if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z
