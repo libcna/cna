@@ -48,13 +48,9 @@ namespace CNA::Internal::Backends::SdlGpu
      * @brief `SDL_gpu`-backed `Texture3D` (Phase `SDLGPU-9`, `SDLGPU-40`/`SDLGPU-41`).
      *
      * A single `SDL_GPU_TEXTURETYPE_3D` texture, `SAMPLER` usage only (never a render target).
-     * `SetData`/`GetData` both carry an explicit mip `level` straight through to
-     * `SDL_GPUTextureRegion.mip_level`, so authored per-level mip data (SDLGPU-41) needs no special
-     * handling beyond the region upload/download itself. When `mipMap` was requested at
-     * construction, a full level-0 `SetData` additionally triggers a real
-     * `SDL_GenerateMipmapsForGPUTexture` pass immediately afterward (the "generated case" — real
-     * XNA/FNA has no explicit "regenerate mips" call for `Texture3D`, so this is the natural
-     * trigger point).
+     * `mipMap` allocates the FNA-compatible authored mip chain; it does not request automatic mip
+     * generation. `SetData`/`GetData` carry the explicit mip `level` and the 3D z/depth region
+     * straight through to `SDL_GPUTextureRegion`, preserving exact texel data without a blit.
      */
     class SdlGpuTexture3DBackend final : public ITexture3DBackend
     {
@@ -73,10 +69,6 @@ namespace CNA::Internal::Backends::SdlGpu
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
         SDL_GPUTexture* texture_ = nullptr;
-        int width_ = 0;
-        int height_ = 0;
-        int depth_ = 0;
-        bool mipMap_ = false;
     };
 
     // Real architectural fix for a render-target-destroyed-before-flush use-after-free: this

@@ -4249,26 +4249,22 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SdlGpuTexture3DBackend::SdlGpuTexture3DBackend(SdlGpuGraphicsBackend& owner, int width, int height,
                                                     int depth, bool mipMap)
-        : owner_(&owner), width_(width), height_(height), depth_(depth), mipMap_(mipMap)
+        : owner_(&owner)
     {
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_3D;
         createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        // SDL_gpu's own debug validation requires COLOR_TARGET usage (in addition to SAMPLER) on
-        // any texture SDL_GenerateMipmapsForGPUTexture is called on ("GenerateMipmaps texture must
-        // be created with SAMPLER and COLOR_TARGET usage flags!") -- found 2026-07-16 once
-        // SDLGPU-6 wired debug_mode to a real CNA-side toggle for the first time (previously a
-        // silently-tolerated violation that produced a genuine hang under Vulkan validation, not
-        // just a warning). Only widened when mipMap is actually requested, matching this
-        // constructor's own minimal-usage convention for the common non-mipmap case.
-        createInfo.usage = mipMap_ ? (SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET)
-                                    : SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        // Plain XNA/FNA Texture3D mip levels are explicitly authored with SetData; construction
+        // never makes the resource a render target and a level-0 upload never regenerates the
+        // chain. Keeping COLOR_TARGET out also avoids asking SDL 3.5.0's Vulkan backend to build
+        // illegal 2D depth-plane render-target views for shrunken 3D mip depths (REMED-GFX-099).
+        createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
         createInfo.width = static_cast<Uint32>(width);
         createInfo.height = static_cast<Uint32>(height);
         createInfo.layer_count_or_depth = static_cast<Uint32>(depth);
         // Mirrors FNA's Texture3D constructor: LevelCount = mipMap ? CalculateMipLevels(width, height)
         // : 1 -- depth does not participate in the mip-level count.
-        createInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
+        createInfo.num_levels = mipMap ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
         createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
 
         texture_ = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
@@ -4337,14 +4333,6 @@ namespace CNA::Internal::Backends::SdlGpu
         // once a second sub-volume was written afterward).
         SDL_UploadToGPUTexture(copyPass, &source, &destination, false);
         SDL_EndGPUCopyPass(copyPass);
-
-        // "Generated case" (SDLGPU-41): a full level-0 upload with mips requested regenerates the
-        // whole chain immediately -- real XNA/FNA has no explicit "regenerate mips" call for
-        // Texture3D, so this is the natural trigger point. Per SDL_gpu.h, must run outside any pass.
-        const bool isFullLevel0Upload = level == 0 && x == 0 && y == 0 && z == 0 &&
-                                        w == width_ && h == height_ && depth == depth_;
-        if (mipMap_ && isFullLevel0Upload)
-            SDL_GenerateMipmapsForGPUTexture(cmd, texture_);
 
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
