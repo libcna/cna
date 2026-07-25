@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <optional>
 
@@ -12,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include "RecordingSpriteBatchBackend.hpp"
 
@@ -29,6 +32,7 @@ using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using CNA::Internal::Backends::DummyTextureBackend;
 using CNA::Internal::Backends::RecordingSpriteBatchBackend;
+using System::ArgumentOutOfRangeException;
 
 // -----------------------------------------------------------------------
 // SpriteSortMode — enum values (XNA 4.0 specifies the underlying integers)
@@ -786,6 +790,370 @@ namespace
         batch.End();
         return rec->drawCalls;
     }
+
+    SpriteFont makeUnitGlyphFontWithBackend(
+        const std::shared_ptr<CNA::Internal::Backends::ITextureBackend>& texBackend)
+    {
+        Texture2D atlas = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+        std::vector<Rectangle> glyphs   = { Rectangle(0, 0, 1, 1) };
+        std::vector<Rectangle> cropping = { Rectangle(0, 0, 1, 1) };
+        std::vector<SharpRuntime::charcs> chars = { u'A' };
+        std::vector<Microsoft::Xna::Framework::Vector3> kern =
+            { Microsoft::Xna::Framework::Vector3(0.0f, 1.0f, 0.0f) };
+        return SpriteFont(atlas, glyphs, cropping, chars, /*lineSpacing=*/1, /*spacing=*/0.0f,
+                          kern, std::nullopt);
+    }
+
+    template<typename TAction>
+    void expectNumericArgumentOutOfRange(const char* parameterName, TAction&& action)
+    {
+        try
+        {
+            action();
+            FAIL() << "Expected System::ArgumentOutOfRangeException for " << parameterName;
+        }
+        catch (const ArgumentOutOfRangeException& exception)
+        {
+            EXPECT_EQ(exception.getParamNameProperty(), parameterName);
+        }
+        catch (...)
+        {
+            FAIL() << "Expected System::ArgumentOutOfRangeException for " << parameterName;
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+// REMED-GFX-057: public floating-point inputs that feed SpriteBatch's integer
+// destination bridge must be rejected before any undefined float-to-int cast.
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncation)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+
+    const float positiveLimit =
+        std::nextafter(2147483648.0f, 0.0f);
+    const float negativeLimit = -2147483648.0f;
+    const float belowNegativeLimit =
+        std::nextafter(negativeLimit, -std::numeric_limits<float>::infinity());
+
+    batch.Begin();
+    expectNumericArgumentOutOfRange("x", [&] {
+        batch.Draw(texture, std::numeric_limits<float>::quiet_NaN(), 0.0f);
+    });
+    expectNumericArgumentOutOfRange("x", [&] {
+        batch.Draw(texture, std::numeric_limits<float>::infinity(), 0.0f);
+    });
+    expectNumericArgumentOutOfRange("y", [&] {
+        batch.Draw(texture, 0.0f, -std::numeric_limits<float>::infinity());
+    });
+    expectNumericArgumentOutOfRange("x", [&] {
+        batch.Draw(texture, std::numeric_limits<float>::max(), 0.0f);
+    });
+    expectNumericArgumentOutOfRange("x", [&] {
+        batch.Draw(texture, 2147483648.0f, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("y", [&] {
+        batch.Draw(texture, 0.0f, belowNegativeLimit);
+    });
+
+    batch.Draw(texture, positiveLimit, negativeLimit);
+    batch.Draw(texture, std::numeric_limits<float>::denorm_min(),
+               -std::numeric_limits<float>::denorm_min());
+    batch.Draw(texture, 12.75f, -9.75f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 3u);
+    EXPECT_EQ(rec->drawCalls[0].destinationRectangle,
+              Rectangle(2147483520, -2147483647 - 1, 16, 16));
+    EXPECT_EQ(rec->drawCalls[1].destinationRectangle, Rectangle(0, 0, 16, 16));
+    EXPECT_EQ(rec->drawCalls[2].destinationRectangle, Rectangle(12, -9, 16, 16));
+}
+
+TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoordinates)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+    const std::optional<Rectangle> source(Rectangle(2, 3, 8, 6));
+
+    batch.Begin();
+    expectNumericArgumentOutOfRange("position", [&] {
+        batch.Draw(texture,
+                   Vector2(std::numeric_limits<float>::quiet_NaN(), 0.0f),
+                   Color::White);
+    });
+    expectNumericArgumentOutOfRange("position", [&] {
+        batch.Draw(texture,
+                   Vector2(0.0f, std::numeric_limits<float>::infinity()),
+                   source, Color::White);
+    });
+    expectNumericArgumentOutOfRange("position", [&] {
+        batch.Draw(texture,
+                   Vector2(-std::numeric_limits<float>::infinity(), 0.0f),
+                   source, Color::White, 0.0f, Vector2::Zero, 1.0f,
+                   SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("position", [&] {
+        batch.Draw(texture,
+                   Vector2(0.0f, std::numeric_limits<float>::max()),
+                   source, Color::White, 0.0f, Vector2::Zero, Vector2::One,
+                   SpriteEffects::None, 0.0f);
+    });
+    batch.End();
+
+    EXPECT_TRUE(rec->drawCalls.empty());
+
+    // A rejected Draw leaves the Begin/End state balanced and reusable.
+    batch.Begin();
+    batch.Draw(texture, Vector2(1.75f, -2.75f), Color::White);
+    batch.Draw(texture, Vector2(3.75f, -4.75f), source, Color::White);
+    batch.Draw(texture, Vector2(5.75f, -6.75f), source, Color::White,
+               0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2(7.75f, -8.75f), source, Color::White,
+               0.0f, Vector2::Zero, Vector2::One, SpriteEffects::None, 0.0f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 4u);
+    EXPECT_EQ(rec->drawCalls[0].destinationRectangle, Rectangle(1, -2, 16, 16));
+    EXPECT_EQ(rec->drawCalls[1].destinationRectangle, Rectangle(3, -4, 8, 6));
+    EXPECT_EQ(rec->drawCalls[2].destinationRectangle, Rectangle(5, -6, 8, 6));
+    EXPECT_EQ(rec->drawCalls[3].destinationRectangle, Rectangle(7, -8, 8, 6));
+}
+
+TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepresentableValues)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithBackendForTests(16, 16, texBackend);
+    const std::optional<Rectangle> source(Rectangle(2, 3, 16, 16));
+
+    const float positiveDimensionLimit =
+        std::nextafter(2147483648.0f, 0.0f);
+    const float scalarPositiveLimit = positiveDimensionLimit / 16.0f;
+    const float scalarNegativeLimit = -2147483648.0f / 16.0f;
+    const float belowScalarNegativeLimit =
+        std::nextafter(scalarNegativeLimit, -std::numeric_limits<float>::infinity());
+
+    batch.Begin();
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.Draw(texture, Vector2::Zero, source, Color::White,
+                   0.0f, Vector2::Zero, std::numeric_limits<float>::quiet_NaN(),
+                   SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.Draw(texture, Vector2::Zero, source, Color::White,
+                   0.0f, Vector2::Zero, std::numeric_limits<float>::infinity(),
+                   SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.Draw(texture, Vector2::Zero, source, Color::White,
+                   0.0f, Vector2::Zero, -std::numeric_limits<float>::infinity(),
+                   SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.Draw(texture, Vector2::Zero, source, Color::White,
+                   0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
+                   SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.Draw(texture, Vector2::Zero, source, Color::White,
+                   0.0f, Vector2::Zero, Vector2(1.0f, std::numeric_limits<float>::quiet_NaN()),
+                   SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.Draw(texture, Vector2::Zero, source, Color::White,
+                   0.0f, Vector2::Zero,
+                   Vector2(std::numeric_limits<float>::infinity(), 1.0f),
+                   SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.Draw(texture, Vector2::Zero, source, Color::White,
+                   0.0f, Vector2::Zero, Vector2(1.0f, belowScalarNegativeLimit),
+                   SpriteEffects::None, 0.0f);
+    });
+
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, std::numeric_limits<float>::denorm_min(),
+               SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, scalarPositiveLimit,
+               SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, scalarNegativeLimit,
+               SpriteEffects::None, 0.0f);
+
+    const Color tint(1, 2, 3, 4);
+    const Vector2 origin(1.5f, 2.5f);
+    batch.Draw(texture, Vector2(10.75f, -20.75f), source, tint,
+               0.25f, origin, Vector2(-1.5f, 0.5f),
+               SpriteEffects::FlipHorizontally, 0.75f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 4u);
+    EXPECT_EQ(rec->drawCalls[0].destinationRectangle, Rectangle(0, 0, 0, 0));
+    EXPECT_EQ(rec->drawCalls[1].destinationRectangle,
+              Rectangle(0, 0, 2147483520, 2147483520));
+    EXPECT_EQ(rec->drawCalls[2].destinationRectangle,
+              Rectangle(0, 0, -2147483647 - 1, -2147483647 - 1));
+
+    const auto& ordinary = rec->drawCalls[3];
+    EXPECT_EQ(ordinary.destinationRectangle, Rectangle(10, -20, -24, 8));
+    EXPECT_EQ(ordinary.sourceRectangle, source.value());
+    EXPECT_EQ(ordinary.color, tint);
+    EXPECT_FLOAT_EQ(ordinary.rotation, 0.25f);
+    EXPECT_EQ(ordinary.origin, origin);
+    EXPECT_EQ(ordinary.effects, SpriteEffects::FlipHorizontally);
+    EXPECT_FLOAT_EQ(ordinary.layerDepth, 0.75f);
+}
+
+TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInputsAndRemainsReusable)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    SpriteFont font = makeUnitGlyphFontWithBackend(texBackend);
+    System::Text::StringBuilder builder;
+    builder.Append("A");
+
+    batch.Begin();
+    expectNumericArgumentOutOfRange("position", [&] {
+        batch.DrawString(font, std::string("A"),
+                         Vector2(std::numeric_limits<float>::quiet_NaN(), 0.0f),
+                         Color::White);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                         0.0f, Vector2::Zero, std::numeric_limits<float>::infinity(),
+                         SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                         0.0f, Vector2::Zero,
+                         Vector2(1.0f, -std::numeric_limits<float>::infinity()),
+                         SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("position", [&] {
+        batch.DrawString(font, builder,
+                         Vector2(0.0f, std::numeric_limits<float>::infinity()),
+                         Color::White);
+    });
+    expectNumericArgumentOutOfRange("rotation", [&] {
+        batch.DrawString(font, builder, Vector2::Zero, Color::White,
+                         std::numeric_limits<float>::quiet_NaN(), Vector2::Zero, 1.0f,
+                         SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("origin", [&] {
+        batch.DrawString(font, builder, Vector2::Zero, Color::White,
+                         0.0f, Vector2(std::numeric_limits<float>::infinity(), 0.0f),
+                         Vector2::One, SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("position", [&] {
+        batch.DrawString(font, std::string("A"),
+                         Vector2(std::numeric_limits<float>::max(), 0.0f),
+                         Color::White);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.DrawString(font, builder, Vector2::Zero, Color::White,
+                         0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
+                         SpriteEffects::None, 0.0f);
+    });
+    batch.End();
+
+    EXPECT_TRUE(rec->drawCalls.empty());
+
+    batch.Begin();
+    batch.DrawString(font, std::string("A"), Vector2(10.25f, -4.25f), Color::White);
+    batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, std::numeric_limits<float>::denorm_min(),
+                     SpriteEffects::None, 0.0f);
+    batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, Vector2(-1.5f, 0.5f),
+                     SpriteEffects::FlipHorizontally, 0.25f);
+    batch.DrawString(font, builder, Vector2(20.25f, 30.25f), Color::White);
+    batch.DrawString(font, builder, Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, 1.25f, SpriteEffects::None, 0.5f);
+    batch.DrawString(font, builder, Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, Vector2(1.25f, -1.5f),
+                     SpriteEffects::FlipVertically, 0.75f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 6u);
+    EXPECT_EQ(rec->drawCalls[0].destinationRectangle, Rectangle(10, -4, 1, 1));
+    EXPECT_EQ(rec->drawCalls[1].destinationRectangle, Rectangle(0, 0, 0, 0));
+    EXPECT_EQ(rec->drawCalls[2].destinationRectangle, Rectangle(0, 0, -2, 1));
+    EXPECT_EQ(rec->drawCalls[2].effects, SpriteEffects::FlipHorizontally);
+    EXPECT_FLOAT_EQ(rec->drawCalls[2].layerDepth, 0.25f);
+    EXPECT_EQ(rec->drawCalls[3].destinationRectangle, Rectangle(20, 30, 1, 1));
+    EXPECT_EQ(rec->drawCalls[4].destinationRectangle, Rectangle(0, 0, 1, 1));
+    EXPECT_FLOAT_EQ(rec->drawCalls[4].layerDepth, 0.5f);
+    EXPECT_EQ(rec->drawCalls[5].destinationRectangle, Rectangle(0, 0, 1, -2));
+    EXPECT_EQ(rec->drawCalls[5].effects, SpriteEffects::FlipVertically);
+    EXPECT_FLOAT_EQ(rec->drawCalls[5].layerDepth, 0.75f);
+}
+
+TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)
+{
+    auto backend = std::make_unique<RecordingSpriteBatchBackend>();
+    RecordingSpriteBatchBackend* rec = backend.get();
+    SpriteBatch batch(std::move(backend));
+
+    DummyTextureBackend texBackendRaw(16, 16);
+    auto texBackend = std::shared_ptr<CNA::Internal::Backends::ITextureBackend>(
+        &texBackendRaw, [](auto*) {});
+    SpriteFont font = makeUnitGlyphFontWithBackend(texBackend);
+
+    const float positiveLimit = std::nextafter(2147483648.0f, 0.0f);
+    const float negativeLimit = -2147483648.0f;
+    const float belowNegativeLimit =
+        std::nextafter(negativeLimit, -std::numeric_limits<float>::infinity());
+
+    batch.Begin();
+    batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, positiveLimit,
+                     SpriteEffects::None, 0.0f);
+    batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, negativeLimit,
+                     SpriteEffects::None, 0.0f);
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                         0.0f, Vector2::Zero, 2147483648.0f,
+                         SpriteEffects::None, 0.0f);
+    });
+    expectNumericArgumentOutOfRange("scale", [&] {
+        batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                         0.0f, Vector2::Zero, belowNegativeLimit,
+                         SpriteEffects::None, 0.0f);
+    });
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    EXPECT_EQ(rec->drawCalls[0].destinationRectangle,
+              Rectangle(0, 0, 2147483520, 2147483520));
+    EXPECT_EQ(rec->drawCalls[1].destinationRectangle,
+              Rectangle(0, 0, -2147483647 - 1, -2147483647 - 1));
 }
 
 TEST(SpriteBatchDrawStringSpriteEffectsTest, CombinedFlipMirrorsXLikeHorizontalAlone)
