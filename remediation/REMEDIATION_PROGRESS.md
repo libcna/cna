@@ -7522,3 +7522,258 @@ execution, so no D3D11 result is claimed. All builds used at most four CPU cores
 **Closure.**  Test `ba6f993e`, production fix `1ee7ea72`, and VUID-fatal CTest closure
 `aa99e02c`. No production shader/generated artifact changed. `audit/` is untouched. No GFX-099,
 GFX-061, GFX-092, WebGPU SpriteBatch blend work, or unrelated MRT capability expansion was begun.
+
+---
+
+### REMED-GFX-099 — SDL_GPU Texture3D image-view, copy/blit, and subresource validity — DONE (2026-07-25)
+
+**Classification and ownership:** **F — multiple related defects across CNA's selected operation,
+SDL_GPU's Vulkan implementation, and the old test contract.** CNA's actual upload/download regions
+were valid, but CNA had added an automatic-mipmap behavior that FNA, the public Texture3D contract,
+and every other CNA backend do not provide. That extension widened a plain Texture3D from
+`SAMPLER` to `SAMPLER | COLOR_TARGET` and called `SDL_GenerateMipmapsForGPUTexture` after every
+full level-0 upload. Valid SDL inputs then exposed two independent SDL Vulkan bugs: invalid
+per-mip 2D depth-plane views at texture creation and invalid per-base-depth-plane mip blits.
+The old six-check test additionally asserted the non-contractual automatic-generation behavior
+with a uniform pattern that could not prove depth-plane reduction. This is not a defect in CNA's
+public 3D transfer-region construction, byte-size calculation, or transfer-buffer lifetime.
+
+The correction is therefore both smaller and stronger than a temporary workaround: restore the
+FNA/cross-backend contract. `mipMap=true` allocates explicitly authored levels; it does not
+regenerate them from level 0. Plain Texture3D remains `SAMPLER`-only. Even if SDL later fixes its
+3D render-target views/generator, this CNA behavior must not be removed because it is the public
+contract, not a version-dependent avoidance.
+
+**Exact SDL build and controlled reproduction.** The linked runtime and matching vendored/install
+headers are SDL **3.5.0**, submodule commit
+`cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`
+(`release-3.4.0-685-gcbe3fbe9f`). Header byte comparisons for `SDL_gpu.h` and `SDL_version.h`
+match the prebuilt runtime install. The locally available `origin/main`
+`08b9c55393be5cb08fbec12ca431470faba3c8c9` is 492 commits newer and retains both relevant loops,
+so a narrow dependency update is not an available fix.
+
+A fresh `SdlGpu_Texture3D` process ran on SDL's Vulkan driver and llvmpipe with
+`VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation` and loader diagnostics. The loader explicitly
+inserted `VK_LAYER_KHRONOS_validation` at instance and device scope. Functional output remained
+the known **6/6**, while the complete log contained exactly **32 validation errors**, zero
+validation warnings, and zero GFX-097/GFX-098/GFX-059 `02684` messages:
+
+| Exact VUID | Count | Vulkan event/object | CNA/SDL operation | Affected mip/depth plane | Exact rule and role |
+|---|---:|---|---|---|---|
+| `VUID-VkImageViewCreateInfo-image-02724` | 6 | `vkCreateImageView`, each Texture3D `VkImage` | `SDL_CreateGPUTexture` creates color-target views | mip 1/2/3, plane 1, on each of two 8×8×2 objects | `baseArrayLayer=1` must be less than mip depth 1; primary view-range diagnostic |
+| `VUID-VkImageViewCreateInfo-subresourceRange-02725` | 6 | same six view creations | same | same | `baseArrayLayer 1 + layerCount 1` must be ≤ mip depth 1; companion fallout from the same invalid range |
+| `VUID-vkCmdBlitImage-dstOffset-00251` | 6 | `vkCmdBlitImage`, source and destination are the same 3D image | SDL automatic mip generation | destination mip 1/2/3, plane 1, twice | destination z `[1,2]` exceeds mip depth 1; primary destination diagnostic |
+| `VUID-vkCmdBlitImage-pRegions-00216` | 6 | same six blits | same | same | generic destination region exceeds image dimensions; cascading companion |
+| `VUID-vkCmdBlitImage-srcOffset-00246` | 4 | `vkCmdBlitImage`, same image | SDL automatic mip generation | source mip 1 and 2, plane 1, twice | source z `[1,2]` exceeds mip depth 1; primary source diagnostic |
+| `VUID-vkCmdBlitImage-pRegions-00215` | 4 | same four blits | same | same | generic source region exceeds image dimensions; cascading companion |
+
+The operation distribution is exact. Per generated chain, level 0→1 produces the two destination
+messages; 1→2 and 2→3 each produce two source plus two destination messages: **10 per object**,
+**20 for two objects**. Texture construction creates three invalid plane-1 views per object and
+each emits two rules: **6 per object**, **12 total**. `20 + 12 = 32`.
+
+**First invalid event and cascade boundary.** The earliest invalid API event is
+`vkCreateImageView` during construction of the first 8×8×2 mipmapped Texture3D, before any
+`SetData`, copy pass, submission, or readback. The first bad view is
+`VK_IMAGE_VIEW_TYPE_2D`, `baseMipLevel=1`, `levelCount=1`, `baseArrayLayer=1`,
+`layerCount=1`; mip 1 has depth 1, so only plane 0 exists. A temporary native SDL create-only
+reproducer using the same public create descriptor emitted exactly three 02724 plus three 02725
+messages and no blit messages. The committed public-CNA create-only discriminator likewise passed
+its property check but failed pre-fix because those VUIDs are CTest-fatal.
+
+The later blit messages are **not** consequences of the invalid image views:
+`vkCmdBlitImage` consumes the `VkImage`, not those render-target views. They come from a second SDL
+loop with the same base-depth-versus-mip-depth mistake. Within each bad view/blit, 02725 and the
+generic `pRegions` rules are secondary validation fallout from the more specific invalid base
+layer/z offsets.
+
+**Public CNA/FNA Texture3D contract.**
+
+- Construction exposes width, height, depth, `SurfaceFormat`, and `LevelCount`.
+  `mipMap=false` allocates one level; `mipMap=true` allocates
+  `CalculateMipLevels(width,height)`, matching FNA. Depth does not determine the number of levels,
+  but the valid depth extent at level N is `max(1, baseDepth >> N)`.
+- `SurfaceFormat::Color` is the canonical supported path here and maps to
+  `SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM`.
+- Whole-texture `SetData`/`GetData` address level 0. Start-index overloads and explicit
+  `level,left,top,right,bottom,front,back` subvolume overloads are reachable. CNA also exposes the
+  `SetDataPointerEXT` raw-byte extension. Partial subvolumes are therefore supported and tested;
+  no feature was added under GFX-099.
+- The shared layer rejects null data, non-positive element counts, negative start/level, malformed
+  boxes, and element counts smaller than the requested voxel count. It converts `Color` to/from
+  tightly packed RGBA8. Existing upper-level/upper-extent behavior was not broadened; every
+  GFX-099 request uses the published legal mip geometry.
+- SDL_GPU Texture3D sampling is not currently wired through CNA's Texture3D effect-binding path.
+  GFX-099 covers the implemented upload/readback surface only; unsupported sampling was neither
+  required nor added.
+- FNA's Texture3D constructor allocates levels and its SetData path writes the selected level; it
+  never automatically regenerates a plain Texture3D chain. Native Vulkan, EasyGL, WebGPU, and
+  Bgfx CNA backends follow the same authored-level model. The old SDL test's generated-mip
+  expectation was therefore a harness defect and has been replaced.
+
+**Canonical native object and pre-fix mismatch.** The smallest full 32-message case used two
+8×8×2, four-level Color textures:
+
+| Mip | Extent | RGBA8 bytes | Plane-1 status |
+|---:|---|---:|---|
+| 0 | 8×8×2 | 512 | valid |
+| 1 | 4×4×1 | 64 | invalid |
+| 2 | 2×2×1 | 16 | invalid |
+| 3 | 1×1×1 | 4 | invalid |
+
+Before the fix CNA supplied:
+`type=SDL_GPU_TEXTURETYPE_3D`, `format=R8G8B8A8_UNORM`,
+`usage=SAMPLER|COLOR_TARGET`, `width=8`, `height=8`,
+`layer_count_or_depth=2`, `num_levels=4`, `sample_count=1`.
+Those values obey the installed SDL public API. SDL created:
+`imageType=VK_IMAGE_TYPE_3D`, extent 8×8×2, `arrayLayers=1`, `mipLevels=4`,
+`samples=1`, `VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT`, and transfer-source,
+transfer-destination, sampled, and color-attachment usage.
+
+Depth slices of this image are not Vulkan array layers. SDL correctly created the full sampling
+view as `VK_IMAGE_VIEW_TYPE_3D`, mip 0/count 4, base array layer 0/count 1. For color-target usage,
+however, it allocated `baseDepth × numLevels` render-target view slots and created a
+`VK_IMAGE_VIEW_TYPE_2D` for every **base** depth plane at every mip. A 2D view of this specially
+flagged 3D image is not categorically illegal; its depth-plane range must fit the selected mip.
+Plane 1 fits mip 0 and fails mips 1–3.
+
+| Resource/path | Image type | View type/configuration | Depth handling | Legal? |
+|---|---|---|---|---|
+| full sampler view, before/after | 3D | 3D; all mips; base layer 0/count 1 | volume depth | yes |
+| old color-target mip 0 | 3D + 2D-compatible | 2D; mip 0; plane 0 or 1/count 1 | per-depth-plane view | yes |
+| old color-target mips 1–3, plane 0 | same | 2D; selected mip; plane 0/count 1 | sole remaining plane | yes |
+| old color-target mips 1–3, plane 1 | same | 2D; selected mip; plane 1/count 1 | base-depth index reused after shrink | **no** |
+| corrected plain Texture3D | 3D | only the legal 3D sampler view | no render-target view allocation | yes |
+
+The old generator similarly iterated `layerOrDepthIndex < base layer_count_or_depth` for every
+level. It always used `baseArrayLayer=0`, `layerCount=1` for the 3D image, correctly recognizing
+that depth is not an array layer, but encoded the loop index in source/destination z:
+
+| Blit | Source mip/layer/z | Destination mip/layer/z | Legal? |
+|---|---|---|---|
+| 0→1, plane 0 | mip 0, layer 0, z `[0,1]` | mip 1, layer 0, z `[0,1]` | yes |
+| 0→1, plane 1 | mip 0, layer 0, z `[1,2]` | mip 1, layer 0, z `[1,2]` | destination invalid |
+| 1→2, plane 1 | mip 1, layer 0, z `[1,2]` | mip 2, layer 0, z `[1,2]` | source and destination invalid |
+| 2→3, plane 1 | mip 2, layer 0, z `[1,2]` | mip 3, layer 0, z `[1,2]` | source and destination invalid |
+
+This was not a format-feature failure. On the active llvmpipe device,
+`VK_FORMAT_R8G8B8A8_UNORM` optimal tiling supports sampled image, color attachment/blend, transfer
+source/destination, blit source/destination, and linear filtering. The invalid property was
+subresource geometry.
+
+**Corrected operation architecture.** CNA now creates the same 3D image/extent/array-layer/mip
+structure with `SDL_GPU_TEXTUREUSAGE_SAMPLER` only. SDL's native image usage remains transfer
+source, transfer destination, and sampled; color attachment and the per-mip 2D render-target views
+are absent. CNA no longer calls the generator.
+
+SetData and GetData were already the correct exact-copy paths and remain unchanged:
+
+| Operation | SDL texture type | Mip | Layer / depth | Region | Transfer layout | Filter |
+|---|---|---:|---|---|---|---|
+| SetData | 3D | requested level | `layer=0`; `z`/`d` carry front/depth | exact `x,y,z,w,h,d` | offset 0, `pixels_per_row=w`, `rows_per_layer=h` | none |
+| GetData | 3D | requested level | `layer=0`; `z`/`d` carry front/depth | exact `x,y,z,w,h,d` | offset 0, `pixels_per_row=w`, `rows_per_layer=h` | none |
+
+SDL maps those calls directly to `vkCmdCopyBufferToImage` and `vkCmdCopyImageToBuffer` with
+`baseArrayLayer=0`, `layerCount=1`, image z/depth from CNA, and the selected mip. There is no 2D or
+3D readback intermediate, no texture-to-texture copy, no filtered blit, and therefore no byte
+alteration. SetData maps/copies/unmaps an upload buffer, records one copy pass, submits once, then
+uses SDL's documented “release as soon as safe” transfer-buffer release. GetData records one
+download copy pass, submits with one fence, waits that specific fence before mapping, then releases
+the fence and buffer. There is no Present, frame delay, extra per-depth-plane submission,
+`vkDeviceWaitIdle`, renderer-wide idle, or permanent intermediate.
+
+The canonical corrected contract is 4×4×4 with three mips:
+4×4×4/256 bytes, 2×2×2/32 bytes, and 1×1×1/4 bytes. The NPOT control is
+7×5×3/420 bytes, 3×2×1/24 bytes, and 1×1×1/4 bytes. Every depth slice is transferred once through
+one volume copy.
+
+**Dedicated and behavioral closure.** Both Texture3D CTests make all six original VUID patterns
+and any `Validation Error`/`Validation Warning` fatal.
+
+| Control | Result |
+|---|---|
+| create-only 8×8×2/four-level discriminator | pre-fix **1/1 functional but CTest FAIL**, 6 view errors; post-fix **1/1**, zero validation |
+| expanded public Texture3D contract | **30/30**, zero validation |
+| one-mip level-0 roundtrip | exact |
+| four-plane z0 red / z1 green / z2 blue / z3 yellow | exact order and bytes |
+| partial box x=1,y=1,z=1, size 2×2×2 | exact patch; every surrounding voxel unchanged; partial GetData exact |
+| canonical nonzero mips | level 0/1/2 exact at 4³/2³/1³ |
+| repeated same-mip upload A→read→B→read | B replaces A; unrelated levels persist |
+| SetData/GetData cycle 0→1→0 | all three reads exact |
+| mip order | forward 0→1→2 and reverse 2→0→1 exact |
+| NPOT 7×5×3 | all three mip geometries/byte patterns exact |
+| independent objects A→B→A | no descriptor/region state leakage |
+| destroy after nonzero transfer | clean |
+
+No cache, view cache, intermediate pool, or persistent resource was introduced. Repeated operations
+use one finite transfer buffer per call and release it through SDL's existing deferred-safe path;
+the repeated/state-cycle/object tests and ASan detect no accumulation-related invalid access.
+
+**Cross-backend and sibling regressions.**
+
+| Backend | Valid public Texture3D data tests | Result / boundary |
+|---|---|---|
+| SDL_GPU | create-only + full contract | **2/2 CTests, 31/31 checks**; upload/readback only; no CNA sampling path |
+| native Vulkan | slices, authored mips, GFX-093 state/layout, partial readback | **4/4 CTests, 141/141 checks**, zero Vulkan validation; sampling remains unsupported |
+| EasyGL | slices, authored mips, partial SetData/GetData | **4/4 CTests, 266/266 checks**; existing separate sampling capability unchanged |
+| WebGPU | full depth-plane volume, single voxel, nonzero mip | **1/1 CTest, 3/3 checks** |
+| Bgfx | slices, authored mips, partial readback | **3/3 CTests, 115/115 checks** |
+
+GFX-093's native Vulkan semantic oracle is specifically **26/26**, including level 0/nonzero mips,
+repeat/cycle/order, NPOT, two objects, and zero validation. SDL_GPU's ordinary Texture2D fixture is
+**3/3**, RenderTarget2D is **7/7** including three readbacks, plain TextureCube is **5/5** including
+faces/nonzero mip/repeated data, and RenderTargetCube is **7/7** including six faces, MSAA, and mip
+readback. The production edit is Texture3D-local; no shared transfer helper changed.
+
+The narrow SDL_GPU dimensionality inventory found no sibling defect:
+
+| Resource | SDL/native dimensionality | Layer/depth transfer or view rule | Result |
+|---|---|---|---|
+| Texture2D | 2D image / 2D view | layer 0, depth 1 | correct |
+| Texture3D | 3D image / 3D full view | layer 0; z/depth in region; authored mips | corrected and clean |
+| TextureCube | cube over 2D image layers / cube full view | six fixed array layers; `region.layer=face` | correct and clean |
+| RenderTarget2D | 2D image / 2D target view | layer 0 | correct and clean |
+| RenderTargetCube | cube image plus per-face 2D target views; single-layer 2D MSAA source | cube face is array layer, never 3D depth | correct and clean |
+
+No second invalid dimensionality/copy path was proven, so **no new REMED-GFX finding** was opened.
+
+**ASan and full-suite validation closure.** The ASan-instrumented SDL_GPU Texture3D shard passes
+both tests, **31/31 checks**, with `detect_leaks=0` only to exclude the already documented external
+Vulkan/driver leak baseline; there is no invalid access or sanitizer diagnostic. Ownership and
+intermediate architecture did not change.
+
+The practical SDL_GPU baseline was **35/35 CTests** with all 32 validation messages owned by
+GFX-099. Adding the create-only discriminator makes the final suite **36/36** in 73.61 seconds on
+isolated Xvfb, sequentially, with every build limited to four jobs. Loader diagnostics contain 72
+instance-insertion lines, 36 device-insertion lines, and 36 llvmpipe device selections, explicitly
+confirming validation for every test process. The complete 20,335-line/1,863,398-byte combined log
+has:
+
+| Complete-log search | Before | After |
+|---|---:|---:|
+| `VUID-` / `Validation Error` | 32 / 32 | **0 / 0** |
+| `Validation Warning` | 0 | **0** |
+| image view | validation family present | **0 raw matches** |
+| blit | validation family present | **0 raw matches** |
+| copy | no distinct validation family | **0 raw matches** |
+| layout | no distinct validation family | **0 raw matches** |
+| usage | no distinct validation family | **0 raw matches** |
+| format feature | no distinct validation family | **0 raw matches** |
+
+There are zero GFX-099 view/copy/blit messages, zero GFX-098/GFX-097/GFX-059 02684 messages, and
+zero new validation category. Functional checks, CTest success, and full-log validation cleanliness
+all agree.
+
+**Scope, artifacts, commits, and next task.** The production change removes one unnecessary usage
+flag and one unnecessary generator call; it adds no submission, wait, per-draw work, descriptor,
+cache entry, shader, or generated artifact. Production shader/generated-artifact diff is zero.
+`audit/` is untouched. GFX-061, GFX-092, WebGPU SpriteBatch BlendState, other SDL_GPU features,
+and public Texture3D expansion were not begun.
+
+- `adbb2711 test(Task REMED-GFX-099): reproduce SDL GPU Texture3D validation failures`
+- `6ae00c7a fix(Task REMED-GFX-099): keep Texture3D mip chains explicitly authored`
+- `9628ed15 test(Task REMED-GFX-099): cover mips depth planes and repeated roundtrips`
+- `docs(remediation): record GFX-099 validation closure` (this record)
+
+Recommended next GRAPHICS task remains **REMED-GFX-061** per the established queue. Do not begin it
+as part of GFX-099.

@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param width   Width in texels.
          * @param height  Height in texels.
          * @param depth   Depth (number of slices) in texels.
-         * @param mipMap  True to generate a full mipmap chain.
+         * @param mipMap  True to allocate a full mipmap chain for authored per-level data.
          * @param format  The desired surface format.
          */
         Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format);
