@@ -606,6 +606,28 @@ static Matrix MakeAsymmetric()
     );
 }
 
+// FNA/XNA stores SetValue(Matrix) in column-major effect memory.  This is
+// deliberately checked through the raw single-array view: SetValue/GetValueMatrix
+// round-trips alone cannot distinguish a correct implementation from one where
+// both methods are inverted.
+TEST(EffectParameterTest, SetValueMatrixUsesFnaColumnMajorStorage)
+{
+    auto p = MakeMatrix();
+    p.SetValue(MakeAsymmetric());
+
+    const auto raw = p.GetValueSingleArray(16);
+    const std::vector<float> expected = {
+         1.0f,  5.0f,  9.0f, 13.0f,
+         2.0f,  6.0f, 10.0f, 14.0f,
+         3.0f,  7.0f, 11.0f, 15.0f,
+         4.0f,  8.0f, 12.0f, 16.0f
+    };
+
+    ASSERT_EQ(raw.size(), expected.size());
+    for (std::size_t i = 0; i < raw.size(); ++i)
+        EXPECT_FLOAT_EQ(raw[i], expected[i]) << "raw effect value index " << i;
+}
+
 // Raw layout: SetValue stores row-major; SetValueTranspose stores column-major.
 // For the asymmetric matrix, floatData_[1] (second element) differs between the two.
 TEST(EffectParameterTest, SetValueTransposeRawLayoutDiffersFromSetValue)
@@ -703,4 +725,3 @@ TEST(EffectParameterTest, SetValueTransposeDoubleTransposeRoundTrip)
     EXPECT_NEAR(got.M34, m.M34, 1e-5f);
     EXPECT_NEAR(got.M43, m.M43, 1e-5f);
 }
-
