@@ -82,14 +82,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Uploads 16-bit index data to the buffer (replaces previous content).
-         * @param data  Pointer to the source index array.
+         *
+         * A zero @p count is a no-op and permits @p data to be null. A non-zero
+         * upload requires a non-null pointer and must fit the logical index capacity.
+         *
+         * @param data  Pointer to the source index array, or null when @p count is zero.
          * @param count Number of indices to upload.
          */
         void SetData(const std::uint16_t* data, int count);
 
         /**
          * @brief Uploads a slice of 16-bit index data to the buffer.
-         * @param data         Pointer to the source index array.
+         *
+         * A zero @p elementCount is a no-op and permits @p data to be null.
+         * The caller must provide a source range containing at least
+         * `startIndex + elementCount` elements for a non-empty upload.
+         *
+         * @param data         Pointer to the source index array, or null for an empty range.
          * @param startIndex   Index of the first element to read from @p data.
          * @param elementCount Number of indices to upload.
          */
@@ -112,14 +121,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Uploads 32-bit index data to the buffer (replaces previous content).
-         * @param data  Pointer to the source index array.
+         *
+         * A zero @p count is a no-op and permits @p data to be null. A non-zero
+         * upload requires a non-null pointer and must fit the logical index capacity.
+         *
+         * @param data  Pointer to the source index array, or null when @p count is zero.
          * @param count Number of indices to upload.
          */
         void SetData(const std::uint32_t* data, int count);
 
         /**
          * @brief Uploads a slice of 32-bit index data to the buffer.
-         * @param data         Pointer to the source index array.
+         *
+         * A zero @p elementCount is a no-op and permits @p data to be null.
+         * The caller must provide a source range containing at least
+         * `startIndex + elementCount` elements for a non-empty upload.
+         *
+         * @param data         Pointer to the source index array, or null for an empty range.
          * @param startIndex   Index of the first element to read from @p data.
          * @param elementCount Number of indices to upload.
          */
@@ -195,6 +213,17 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        void SetDataInternal(const void* data,
+                             int startIndex,
+                             int elementCount,
+                             IndexElementSize dataElementSize,
+                             SetDataOptions options,
+                             bool useOptions);
+        void GetDataInternal(void* data,
+                             int startIndex,
+                             int elementCount,
+                             IndexElementSize dataElementSize);
+
         std::unique_ptr<CNA::Internal::Backends::IIndexBufferBackend> backend_;
         IndexElementSize indexElementSize_{IndexElementSize::SixteenBits};
         BufferUsage bufferUsage_{BufferUsage::None};

@@ -1764,13 +1764,18 @@ namespace CNA::Internal::Backends::WebGPU
 
     void WebGPUIndexBufferBackend::Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit)
     {
-        if (data == nullptr || indexCount < 0 || dataIsThirtyTwoBit != thirtyTwoBit_)
+        if (indexCount < 0 || dataIsThirtyTwoBit != thirtyTwoBit_)
             throw std::invalid_argument("CNA WebGPU: invalid index buffer upload");
-        if (indexCapacity_ > 0 && indexCount > indexCapacity_)
+        if (indexCount == 0)
+            return;
+        if (data == nullptr)
+            throw std::invalid_argument("CNA WebGPU: invalid index buffer upload");
+        if (indexCount > indexCapacity_)
             throw std::out_of_range("CNA WebGPU: index buffer upload exceeds declared capacity");
 
         const std::size_t stride = thirtyTwoBit_ ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
-        const std::uint64_t required = Align4(static_cast<std::uint64_t>(indexCount) * stride);
+        const std::size_t logicalBytes = static_cast<std::size_t>(indexCount) * stride;
+        const std::uint64_t required = Align4(logicalBytes);
         if (buffer_ == nullptr || required > capacityBytes_)
         {
             if (buffer_ != nullptr)
@@ -1782,11 +1787,19 @@ namespace CNA::Internal::Backends::WebGPU
             buffer_ = wgpuDeviceCreateBuffer(owner_->Device(), &descriptor);
             capacityBytes_ = required;
         }
-        wgpuQueueWriteBuffer(owner_->Queue(), buffer_, 0, data, static_cast<std::size_t>(indexCount) * stride);
-        indexCount_ = indexCount;
 
         const auto* bytes = static_cast<const std::uint8_t*>(data);
-        shadowData_.assign(bytes, bytes + static_cast<std::size_t>(indexCount) * stride);
+        // queue.WriteBuffer requires a four-byte-aligned copy size. Reuse the shadow allocation
+        // that this deferred backend already needs, padding only the native write while keeping
+        // the public/logical byte count exact.
+        shadowData_.clear();
+        shadowData_.reserve(static_cast<std::size_t>(required));
+        shadowData_.insert(shadowData_.end(), bytes, bytes + logicalBytes);
+        shadowData_.resize(static_cast<std::size_t>(required), 0);
+        wgpuQueueWriteBuffer(owner_->Queue(), buffer_, 0, shadowData_.data(),
+                             static_cast<std::size_t>(required));
+        shadowData_.resize(logicalBytes);
+        indexCount_ = indexCount;
     }
 
     WebGPUSpriteBatchBackend::WebGPUSpriteBatchBackend(WebGPUGraphicsBackend& owner) : owner_(&owner) {}
