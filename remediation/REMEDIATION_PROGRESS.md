@@ -2415,9 +2415,9 @@ existing task.
 | REMED-CONTENT-009 | `Texture2DContentTypeReader.cpp:88-89`'s own `REMED-CONTENT-001` fix computes `input.CheckDecodedByteSize(static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4, "Texture2DReader")` — for `width`/`height` both near `INT32_MAX`, `width*height` (int64_t) reaches ≈4.6e18, still in-range, but the subsequent `* 4` overflows signed 64-bit (`int64_t` max ≈9.22e18): confirmed live by UBSan (`runtime error: signed integer overflow: 4611686014132420609 * 4 cannot be represented in type 'long int'`) on `Texture2DContentTypeReaderTest.AbsurdlyLargeDimensionsThrowContentLoadExceptionNotBadAlloc`. This directly contradicts the fix's own comment ("computed in int64_t so it can't itself silently wrap back into range"). The regression test still passes today only because the implementation-defined wraparound happens to still land outside the valid range — a different compiler/optimization level is not guaranteed to preserve that. **This is new code added by REMED-CONTENT-001 itself, not a pre-existing defect** — found only because this integration pass added UBSan coverage over Content/XNB that did not exist when CONTENT-001 landed | MEDIUM | P1 | Post-Wave-1 integration pass, Phase 5 (sanitizer regression) — `cmake-build-media-asan`, `Texture2DContentTypeReaderTest.*` under ASan+UBSan | **DONE** — fixed in Wave 2's CONTENT lane (commit `c5ed8dd1`). See "Wave 2 — CONTENT lane" below for full detail. |
 | REMED-GFX-052 | `Vulkan_SkinnedEffect_Fog` hangs reproducibly (CTest 30s `TIMEOUT`) on the Vulkan backend — confirmed not resource contention (reproduces identically on an idle system, load avg 0.46, 43°C) and not a display/environment artifact (reproduces identically via direct binary execution of `cna_test_vulkan_skinnedeffect_fog`, bypassing CTest entirely). Both runs hang with zero output past `[Vulkan] Backend initialised`. Distinct root cause from `REMED-GFX-005` (mirrored fog *formula*, a values defect) — this is a hang, not a wrong-value defect, and no existing remediation ID covers it | HIGH | P1 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — Vulkan full-suite ctest run | **UPDATED (Wave 3, 58a7d0bb):** the hang did **not** reproduce this session — the test now runs to completion and exits cleanly, but **renders black (0,0,0) in all three cases including the fog-OFF case**, i.e. the skinned quad's DirectionalLight0 lighting path produces no visible geometry. Confirmed **orthogonal to fog** (fog-OFF is black too) and **not caused by REMED-GFX-005** (the skinned control tests IdentityBones/Combined still pass 160,0,0 against the new fog-fixed shaders). Root cause is a skinned-lighting/draw defect specific to this test's `DirectionalLight0`-diffuse setup — to be resolved in the Vulkan skinned pass (REMED-GFX-006/-008), not GFX-005. Whether the earlier hang was a distinct llvmpipe pipeline-creation issue that the SPIR-V regen incidentally cleared is unconfirmed. **DONE (Wave 3, `c11c6ce4`):** root cause was neither lighting nor a hang but a **test bug** — `renderQuad()` never called `setRasterizerStateProperty(RasterizerState::CullNone)`, unlike every sibling `vulkan_basiceffect_*_fog`/`vulkan_skinnedeffect_multilight`/`_specular` test. The skinned quad's post-Y-flip winding is culled by the real default RasterizerState, so nothing rasterized and the center pixel read the black clear colour (proven by the full-fog case, which outputs pure FogColor independent of lighting, also being black). A stale in-file comment wrongly asserted CullNone was unnecessary. With the one-line CullNone added, the test passes **3/3** — which also completes REMED-GFX-005's Vulkan fog verification at **8/8** (this was the 8th fog test). |
 | REMED-GFX-053 | WebGPU rejects custom-GLSL `ShaderEffect` content: `CnjEffectTest.LoadsRealCnjFixture` and `CnjStockEffectTest.CustomGlslEffectStillWorks` both fail (`shaderEffect->IsEffectValid()` false, no crash). WebGPU consumes WGSL, not GLSL/SPIR-V; `plan_webgpu.md` separately leaves user-provided custom WGSL (`WEBGPU-76`) unimplemented. | MEDIUM | P2 (deferred) | Post-Wave-1 configuration matrix; source/plan reconciliation and direct rerun (2026-07-25) | **DEFERRED CAPABILITY/CONTRACT BOUNDARY, not a proven renderer defect.** Current WebGPU rerun remains 0/2 with clean `IsEffectValid()==false` failures. Decide whether the cross-backend `ShaderEffect` contract requires GLSL translation or a WebGPU-specific WGSL extension before implementation; Vulkan/Bgfx failures caused only by absent external GLSL tools are a separate environment issue. |
-| REMED-GFX-054 | Three `ContentManagerSkinnedModelTest` cases (`PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`, `TextureLoadsFromNestedButUnderRootManifestDirectory`, `TextureLoadsFromManifestOutsideContentRoot`) throw `"CNA WebGPU: invalid index buffer upload"` on the WebGPU backend. The fixtures' index streams are empty; the shared loader reaches `IndexBuffer::SetData(nullptr, 0)`, whose zero-byte copy is also the UBSan shape later recorded under the accidentally duplicated early GFX-055 ID, while WebGPU rejects a null upload before considering its zero length. | MEDIUM-HIGH | P2 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) plus source/duplicate-ID reconciliation (2026-07-25) | **OPEN — REAL EMPTY-DATA/API-VALIDITY DEFECT; canonical ID for the zero-index root cause.** Direct 2026-07-25 WebGPU rerun remains 0/3, all with the exact invalid-upload exception. No later change guards the zero-length shared call or makes WebGPU accept the empty upload. The early zero-index GFX-055 row below is superseded by this row; canonical GFX-055 is the completed D3D11 fog-fixture task. |
+| REMED-GFX-054 | Three `ContentManagerSkinnedModelTest` cases (`PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`, `TextureLoadsFromNestedButUnderRootManifestDirectory`, `TextureLoadsFromManifestOutsideContentRoot`) threw `"CNA WebGPU: invalid index buffer upload"` on empty index streams. Shared `IndexBuffer` overloads also formed empty-range pointers and called zero-length copy primitives, while non-null zero uploads reached WebGPU allocation/write/state mutation and logical-capacity-zero accepted nonzero data. | MEDIUM-HIGH | P2 | Post-Wave-1 integration pass, Phase 4; completed 2026-07-25 | **DONE — REAL SHARED C++ EMPTY-RANGE + WEBGPU API-VALIDITY DEFECT.** A single validated IndexBuffer source of truth returns on zero only after disposal, nonnegative/checked arithmetic, and element-width checks, but before pointer arithmetic, backend work, or copying. Null is legal exactly for an empty range; logical zero capacity remains zero/lazy-native and rejects real writes. WebGPU pads only real odd 16-bit native writes to four bytes. Dedicated WebGPU 13/13, eight-backend practical parity 12/12 each, sanitizer 12/12 each, targeted WebGPU 9/9, compile matrix 14/14. `fbbec8de`, `af0c6a87`, `d76a3291`; full closure below. The early zero-index GFX-055 row remains superseded; canonical GFX-055 is the completed D3D11 fog fixture. |
 | REMED-BUILD-013 | `StrictXnaApiSurfaceCheck_Compile_Run` and `CnaInputTests` CTest registrations are missing the Wine-runner wrapper macro every other cross-compiled D3D9/D3D11 test uses — confirmed identically on both backends (`StrictXnaApiSurfaceCheck_Compile_Run` fails "unable to find an interpreter"; `CnaInputTests` fails `wine: ... CnaTests.exe: c0000135`, downstream of the same `CnaTests_NOT_BUILT` placeholder fact). `StrictXnaApiSurfaceCheck_Compile_Run` is registered in `cmake/Harnesses.cmake` via a plain `add_test(COMMAND cna_strict_xna_api_check)`; `CnaInputTests` is registered in `cmake/UnitTests.cmake` with a hardcoded `COMMAND CnaTests`, unconditional on cross-compiling. A structural CTest-wiring gap, not a backend-specific code defect | LOW | P3 | Post-Wave-1 integration pass, Phase 4 (configuration matrix) — D3D9/D3D11 Wine ctest runs | **DONE** — root cause was more precise than originally recorded: `CnaInputTests`'s own registration needed **no fix at all** (CMake's built-in `CROSSCOMPILING_EMULATOR` target-command auto-injection already works for it); the true blocker was that `CnaTests.exe` never built at all under D3D9/D3D11 MinGW, for reasons unrelated to CTest wiring (see `REMED-BUILD-005` and this tranche's own `AudioTagParser`-adjacent findings below). Only `StrictXnaApiSurfaceCheck_Compile_Run` (a separate target, `cna_strict_xna_api_check`, never given `CnaTests`'s own `CROSSCOMPILING_EMULATOR`/MinGW-runtime treatment) needed a real fix. See "Wave 2 — BUILD_TEST_CI lane" below for the full chain and both backends' verification. |
-| REMED-GFX-055 | `IndexBuffer::SetData(unsigned short const*, int)` (`src/Microsoft/Xna/Framework/Graphics/IndexBuffer.cpp:61`) passes null source/destination pointers through a zero-length copy when a skinned-model part has no indices. This is the same empty-index root cause already represented by the earlier GFX-054 WebGPU failures. | MEDIUM | P2 | Wave 2 CONTENT sanitizer sweep; duplicate-ID reconciliation (2026-07-25) | **SUPERSEDED / DUPLICATE — use REMED-GFX-054 for this still-open finding.** This row accidentally reused GFX-055 before that ID was assigned to “D3D11 direct-backend fog checks orphaned by the view-space fog switch,” which is the canonical GFX-055 and is DONE in `0453dc1c`. The historical duplicate is retained here as evidence, not as a second open task. |
+| REMED-GFX-055 | `IndexBuffer::SetData(unsigned short const*, int)` (`src/Microsoft/Xna/Framework/Graphics/IndexBuffer.cpp:61`) passed null source/destination pointers through a zero-length copy when a skinned-model part had no indices. This is the same empty-index root cause represented by GFX-054's WebGPU failures. | MEDIUM | P2 | Wave 2 CONTENT sanitizer sweep; duplicate-ID reconciliation (2026-07-25) | **SUPERSEDED / DUPLICATE — resolved by completed REMED-GFX-054.** This row accidentally reused GFX-055 before that ID was assigned to “D3D11 direct-backend fog checks orphaned by the view-space fog switch,” which is the canonical GFX-055 and is DONE in `0453dc1c`. The historical duplicate is retained as evidence, not as a second task. |
 | REMED-NA-016 | `third_party/cgltf/cgltf.h:2250` (`cgltf_component_read_float`) performs a misaligned 4-byte-aligned `float` load — confirmed live under UBSan via `GltfToCnjToolTest.ResolvesSparseAccessorOverride` (`load of misaligned address ... which requires 4 byte alignment`) | LOW | — | Wave 2 CONTENT lane, `REMED-CONTENT-009`'s own broader Content/XNB ASan+UBSan sweep | **OUT OF SCOPE, not fixed.** Vendored third-party header (`third_party/cgltf/`), not CNA-authored — same disposition as `REMED-NA-011`'s external easy-gl sibling repo: report upstream / patch only if a real crash (not just a UBSan advisory finding) is ever observed on a target where unaligned loads actually fault, rather than patching a vendored file and diverging from upstream |
 | REMED-BUILD-014 | `EasyGL_GraphicsDeviceManager_Vsync`'s `SynchronizeWithVerticalRetrace=true` check (`SDL_GL_GetSwapInterval()` expected non-zero) fails under Xvfb `:99` + software/llvmpipe GL rendering (`SDL_GL_GetSwapInterval()=0` even after enabling vsync) — the mirror-image case of `REMED-BUILD-010`'s already-documented real-compositor-vs-Xvfb sensitivity: that finding is tests that only pass under Xvfb, not a real compositor; this is a test that (per its own pre-existing passing history under `DISPLAY=:0`) needs a *real* display/compositor and fails specifically under Xvfb, since a virtual framebuffer has no real vertical-retrace timing to synchronize to. Surfaced only because this session switched test execution from `DISPLAY=:0` to Xvfb `:99` mid-task, at the user's request, to stop disrupting their real desktop session — not caused by any code change in this session | LOW | P3 | Wave 2 CONTENT lane's own full-suite regression run (`cmake-build-debug`, `DISPLAY=:99`), unrelated to any CONTENT-lane code change | **DONE** — the test now probes the same real GL context directly with a raw `SDL_GL_SetSwapInterval(1)` call (bypassing CNA/GraphicsDeviceManager entirely) whenever CNA's own path reports interval 0; if even that can't make vsync stick, it's a genuine environment limitation and the test exits via this project's own `SKIP_RETURN_CODE 77` convention instead of failing. Verified: still 2/2 real PASS under the real `:0` display (proving the fix under test — GraphicsDevice::Reset()'s own SetSwapInterval forwarding — is not masked), and SKIPPED (not FAILED) under a fresh Xvfb instance, both via direct binary execution and via `ctest`. See "Wave 2 — BUILD_TEST_CI lane" below. |
 | REMED-GFX-056 | `HeadlessTextureCubeBackend::SetData`/`GetData` (`src/CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.cpp`) validate arguments and record a trace but never actually store or return pixel data — the identical "validates but never stores" shape confirmed and fixed for `HeadlessTexture3DBackend` under `REMED-CONTENT-004`, but a different file/backend-type. Confirmed via `Texture3DTextureCubeContentTypeReaderTest.TextureCubeReaderLoadsRealMonoGameFixtureEndToEnd` still failing on Headless after `REMED-CONTENT-004` landed (root-caused, not just observed: `HeadlessTextureBackend`, the 2D path, has a real `pixels_` member and genuinely stores data — Headless implements 2D texture storage for real but never implemented Cube storage) | MEDIUM | P2 | `REMED-CONTENT-004`'s own Headless full-suite verification run | NOT STARTED — recorded, not fixed (`ITextureCubeBackend` is GRAPHICS-owned, out of the CONTENT lane's scope; candidate fix mirrors `REMED-CONTENT-004`'s own: add `GraphicsCapability::TextureCube`, or extend a "real 2D storage but not Cube/3D" capability shape, and make `TextureCube`'s constructor fail cleanly on Headless the same way `Texture3D`'s now does) |
@@ -2446,6 +2446,7 @@ existing task.
 | REMED-GFX-098 | SDL_GPU MRT pipelines hardcoded one colour target and omitted active target count/state from cache identity. | LOW | P3 | REMED-GFX-097 validation sweep | **DONE — REAL PRODUCTION VALIDITY DEFECT.** Test `ba6f993e`, fix `1ee7ea72`, coverage `aa99e02c`, closure `cd9bc528`. |
 | REMED-GFX-099 | SDL_GPU Texture3D automatic mip generation created invalid per-mip views/blits; the FNA contract is explicitly authored mip levels. | LOW | P3 | REMED-GFX-097 validation sweep | **DONE — CONTRACT/IMPLEMENTATION/TEST DEFECT.** Test `adbb2711`, fix `6ae00c7a`, coverage `9628ed15`, closure `e658e946`. |
 | REMED-GFX-102 | WebGPU `SpriteBatch` selects only fixed opaque or fixed straight-alpha pipelines from the live blend-enabled bit. It does not capture/apply the requested factors/functions per batch, so `Additive`, `NonPremultiplied`, `BlendFactor`/inverse, separate colour/alpha equations, `ColorWriteChannels`, and `MultiSampleMask` are silently lost; state timing is also last-live-value rather than per-batch. | MEDIUM | P2 | Reconciles the repeatedly referenced but previously unnumbered “WebGPU SpriteBatch BlendState counterpart”; GFX-069/070/071/077 are DONE prerequisites | **OPEN — REAL PRODUCTION OBSERVABLE CORRECTNESS / SILENT STATE-LOSS DEFECT.** `CreateSpriteResources()` still builds two fixed pipelines and `RenderSprites()` chooses once from `blendEnabled_`. Existing `WebGPU_Clear_Readback` covers only the fixed partial-alpha path; the GFX-077 tests deliberately use 3D because sprites do not consume write/sample masks. No later work fixed or superseded it. |
+| REMED-GFX-103 | VertexBuffer's typed SetData overloads still form `data + startIndex`, pass an empty packed vector's `data()`, call zero-length `memcpy`, and dispatch the empty upload; WebGPU rejects a null vertex pointer before count and a non-null empty upload allocates/writes/mutates backend state. DynamicVertexBuffer shares the same implementation. | MEDIUM | P2 | REMED-GFX-054 narrow VertexBuffer sibling inventory | **OPEN — PROVEN INDEPENDENT SHARED/API-VALIDITY DEFECT; not fixed under GFX-054.** Reproduce and establish the public zero-capacity/zero-count VertexBuffer contract before changing it. |
 
 #### REMED-BUILD-010 detail
 
@@ -2516,13 +2517,11 @@ Both found on the WebGPU backend during Phase 4's configuration-matrix sweep. `R
 (`shaderEffect->IsEffectValid()` returns false, no crash) — these same two tests also fail on
 Vulkan/Bgfx in this sandbox, but there the cause is confirmed to be the absence of a `glslc`/
 `glslangValidator` toolchain (environment gap, not a code defect). WebGPU consumes WGSL, not
-GLSL/SPIR-V, so that explanation does not transfer; root cause unconfirmed. `REMED-GFX-054`: three
-`ContentManagerSkinnedModelTest` cases throw `"CNA WebGPU: invalid index buffer upload"`. Neither was
-triaged to a root cause or fixed (out of this verification-only pass's scope). Given `CLAUDE.md`'s own
-description of the WebGPU backend as experimental with a 2D/SpriteBatch/Texture2D baseline and
-explicitly not yet at shader/effect parity with the established backends, whoever triages these should
-decide whether they belong in the general GRAPHICS remediation lane or in `plan_webgpu.md`'s own
-WEBGPU-* task series.
+GLSL/SPIR-V, so that explanation does not transfer; root cause unconfirmed. Historical
+`REMED-GFX-054` evidence was three `ContentManagerSkinnedModelTest` cases throwing
+`"CNA WebGPU: invalid index buffer upload"`. GFX-054 was subsequently reproduced, classified as a
+shared C++ empty-range plus WebGPU API-validity defect, and completed on 2026-07-25; see its closure
+record below. GFX-053 remains a deferred capability/contract boundary.
 
 #### REMED-BUILD-013 detail (found during the post-Wave-1 integration pass)
 
@@ -8184,4 +8183,190 @@ Historical close-time recommendation: **REMED-GFX-012**. **Superseded by the 202
 GRAPHICS inventory checkpoint:** GFX-012 was already DONE in `21f6c4af` + `6985b2fe` and its
 `Vulkan_SpriteBatch_TransformMatrix` regression is 3/3. All earlier “recommended next” lines in
 individual closure reports are historical evidence, not a live queue. The current recommended next
-task is **REMED-GFX-004**, followed by **GFX-054**; do not begin either during this checkpoint.
+task is **REMED-GFX-040**; GFX-004 and GFX-054 are now DONE.
+
+---
+
+## REMED-GFX-054 — WebGPU zero-index upload and shared zero-length data handling (DONE 2026-07-25)
+
+**Classification: REAL MULTI-LAYER PRODUCTION DEFECT — shared C++ empty-range/API-contract
+handling plus WebGPU API-validity/state handling.** All three original failures had the same
+immediate cause: an empty model part called public `IndexBuffer::SetData(nullptr, 0)`, the shared
+layer dispatched it, and `WebGPUIndexBufferBackend::Upload` rejected null before considering the
+zero count. No wgpu-native operation was reached in those three cases. Separate adjacent failures
+were nevertheless real: the non-null zero path reached native allocation/write and mutated state,
+the shared layer formed empty-range pointers and passed possibly-null pointers to zero-length copy
+primitives, and a nonzero upload into logical capacity zero was admitted. The required one-index
+16-bit success regression also exposed an inseparable WebGPU four-byte write-alignment defect.
+
+### Exact pre-fix reproduction
+
+The unchanged original filter was **0/3**:
+
+1. `ContentManagerSkinnedModelTest.PartNameWithUnbalancedEmbeddedBraceParsesCorrectly`
+2. `ContentManagerSkinnedModelTest.TextureLoadsFromNestedButUnderRootManifestDirectory`
+3. `ContentManagerSkinnedModelTest.TextureLoadsFromManifestOutsideContentRoot`
+
+Each expected its skinned-model content operation to succeed. Each empty `.idx.bin` produced
+`numIndices == 0`, then `IndexBuffer(device, 0)`, then `SetData(idxBytes.data(), 0)`, where the empty
+vector supplied null on this runtime. Each body threw exactly
+`"CNA WebGPU: invalid index buffer upload"`. The native operation reached was none: the exception
+came from the WebGPU backend's initial null check before buffer creation or `wgpuQueueWriteBuffer`.
+This is a shared public-path defect manifested by WebGPU's stricter backend check, not three
+different content defects.
+
+The initial focused lifecycle test gave **1/4 checks** pre-fix:
+
+- null empty uploads on static and dynamic buffers threw;
+- a non-null empty upload allocated/mutated the backend, changed its uploaded count from four to
+  zero, cleared both shadows, and made later `GetData` fail;
+- nonzero data was accepted into a logical zero-capacity buffer;
+- a one-index 16-bit upload emitted the authoritative wgpu-native error
+  `Copy size 2 does not respect COPY_BUFFER_ALIGNMENT`.
+
+No test expectation was weakened.
+
+### Public contract and validation order
+
+CNA's established implementation contract, consistent with its empty-model-part representation and
+FNA's implementation behavior, permits `indexCount == 0`. The buffer's public logical capacity is
+exactly zero. Negative capacity and an invalid `IndexElementSize` are rejected. This deliberately
+does not invent a public one-index capacity to satisfy a backend.
+
+For both 16-bit and 32-bit static and dynamic index buffers, `elementCount == 0` is a successful
+no-op with either a null or non-null pointer. The shared source of truth validates, in order:
+
+1. disposed state;
+2. nonnegative `startIndex` and `elementCount`, with checked byte multiplication/offset;
+3. source element width matching the buffer;
+4. the empty return;
+5. non-null data and logical destination capacity for a real upload.
+
+Thus an empty operation cannot bypass disposal, negative-range, arithmetic, or width checks. Null is
+legal exactly for a zero count and otherwise deterministically throws `ArgumentNullException`.
+There is no IndexBuffer destination-offset SetData overload; every nonempty upload replaces from
+destination offset zero. The raw-pointer source overload has no source-length argument, so a
+nonnegative source `startIndex` cannot be compared with a caller allocation; for an empty range it
+is never used in pointer arithmetic. `GetData` can validate its owned shadow: zero at the exact
+logical end is legal, beyond the end is rejected, and null is legal only for an empty range.
+
+`DynamicIndexBuffer` uses these same shared overloads; its options path is not a separate
+implementation. Nonempty `Discard`/`NoOverwrite` still reaches the backend and now updates the same
+exact logical CPU shadow. A zero primitive/indexed draw is not a no-op in the existing public draw
+contract: it remains an `ArgumentOutOfRangeException` (`EasyGL_DrawRangeValidation` **9/9**).
+
+### Shared C++ and WebGPU correction
+
+Previously the slice overloads evaluated `data + startIndex`, zero-sized packed/shadow vectors could
+yield null from `data()`, and `memcpy`/range construction was still invoked with a byte count of
+zero. C/C++ copy APIs still require valid pointer arguments; a zero count does not make null pointer
+arguments portable. The new shared empty branch executes before all pointer arithmetic,
+`memcpy`/assign, backend dispatch, staging, or deferred capture. Normal byte-range checks use
+overflow-safe multiplication and subtraction rather than wrapping addition.
+
+The pinned wgpu-native C header is v29.0.1.1. A non-mapped WebGPU buffer descriptor is not required
+to have a nonzero size, and zero is four-byte aligned; CNA therefore does not claim a native
+zero-size prohibition. The actual relevant rules are:
+
+- the C `wgpuQueueWriteBuffer` data argument is non-null in the installed ABI;
+- its buffer offset and copy size must satisfy four-byte copy alignment;
+- the destination must have `COPY_DST`, and an index buffer also uses `INDEX`;
+- the copied range must fit the native allocation.
+
+Old zero-capacity construction was already lazy and created no WebGPU buffer. Old
+`SetData(nullptr, 0)` threw before native work. Old `SetData(nonNull, 0)` computed CNA's
+`Align4(0) == 4`, allocated a four-byte `INDEX|COPY_DST` buffer, issued an unnecessary zero-byte
+write, and reset backend/shadow state. The new representation keeps logical capacity zero and keeps
+the native handle absent for all empty operations. If a real 16-bit upload has an odd index count,
+only the native allocation/write is padded with zero bytes to four-byte alignment; backend/public
+index count and both logical shadows retain the exact unpadded byte count. The existing shadow
+allocation supplies the padded native write, with no additional submission or staging system.
+One 32-bit index is naturally four bytes.
+
+The public early return means a zero-count upload makes **zero backend calls**. The WebGPU backend
+also has a defensive direct zero-count return. A nonzero upload into logical capacity zero is
+rejected by both the shared check and the defensive backend capacity check; native padding can
+never expand public capacity.
+
+### Verification
+
+The final dedicated WebGPU run is **13/13**: the original 3/3 plus 10 focused tests, including nested
+native validation and out-of-memory error scopes. It covers zero-capacity construction, null and
+non-null empty uploads, offset zero/source exact-end empty ranges, logical-capacity rejection,
+disposed/repeated-dispose behavior, empty GetData boundaries, static/dynamic buffers, 16/32-bit
+indices, sliced/full/several/one-index real uploads, and exact shadow/backend counts. Native scopes
+reported `NoError`; the full output contained no validation error, uncaptured error, device loss,
+buffer error, shader failure, or pipeline failure.
+
+Focused sanitizers are clean:
+
+- Software UBSan, `halt_on_error=1`: **12/12**;
+- Vulkan ASan on AMD Radeon 780M/RADV, with only the established external-driver leak check
+  disabled: **12/12**.
+
+These runs include null and non-null zero count, zero-capacity construction, exact-end/beyond-end
+GetData boundaries, negative/width validation, disposal, and real uploads. There is no null-pointer
+arithmetic, invalid zero-length copy, out-of-bounds pointer formation, integer-overflow report, or
+invalid access.
+
+The same portable contract filter (the original three plus nine public tests) is **12/12** on:
+
+- Vulkan (AMD Radeon 780M/RADV);
+- EasyGL (OpenGL ES 3.2 Mesa);
+- SDL_GPU with its validation path enabled;
+- Bgfx (OpenGL; only its benign missing-RenderDoc notice);
+- Software;
+- Headless;
+- D3D9 and D3D11 through Wine/DXVK 2.6.0 on RADV.
+
+The representative existing disposal regression is **17/17** and confirms all static/dynamic
+vertex/index SetData overloads still reject use after disposal. Local-scope destruction in every
+focused case is clean. WebGPU `TextureCube_GetData` is **8/8**, `RenderTargetCube` is **12/12**, and
+the GFX-004 lifecycle result is unaffected.
+
+The targeted WebGPU rendering shard is **9/9 CTests**: index creation/indexed draw, RenderTarget2D
+readback, TextureCube readback, RenderTargetCube, SpriteBatch render targets, colour-write/MSAA
+state, Skinned3D, SkinnedEffect material, and EnvironmentMap fog. Together with the dedicated public
+run this is **22/22 test cases** for the focused GFX-054 handoff.
+
+The complete practical WebGPU label was also run verbosely: **30/31 CTests**. The sole failure is
+the unrelated existing `WebGPU_Clear_Readback` fixture at **8/10** because Wrap and Mirror sampler
+address assertions fail; the other eight checks in that fixture and all thirty other CTests pass.
+It reproduces identically on Xvfb and the real host display and is not on an index-buffer path. It
+was not root-caused or classified under this narrowly scoped task. Full-log inspection found only
+the Xvfb DRI3 presentation notice—zero validation, uncaptured, device-loss, buffer, shader,
+pipeline, panic, or VUID output.
+
+All fourteen backend-library configurations compile with at most four jobs: ASCII, Bgfx, Canvas,
+D3D9, D3D11, D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulkan, and WebGPU.
+No backend interface migration or compatibility default was needed.
+
+### Performance, sibling inventory, and scope
+
+Nonempty shared uploads gain only checked arithmetic/type/capacity branches and no allocation or
+submission. WebGPU's odd 16-bit upload reuses its already-required shadow storage and keeps one
+queue write. Empty uploads remove the backend call, staging/allocation, command encoding,
+submission, state mutation, and copy entirely.
+
+The narrow index-backend inventory finds no remaining public empty-index UB: every capable backend
+is protected by the shared early return, SDL_GPU's redundant direct guard remains harmless, and
+2D-only diagnostic backends continue to reject unsupported index-buffer construction explicitly.
+No texture SetData helper is shared with this change.
+
+The VertexBuffer sibling is independently defective and is allocated as **REMED-GFX-103**:
+typed slice overloads still form `data + startIndex`; empty packed vectors can supply null; the CPU
+shadow still calls zero-length `memcpy`; and WebGPU rejects null before count or performs
+allocation/write/state mutation for a non-null empty upload. DynamicVertexBuffer shares that path.
+It is not fixed or begun here. No other new GFX-054-adjacent finding was proven.
+
+There is no production shader change and no generated shader/artifact change. `audit/` is
+untouched.
+
+**Commits:**
+
+- `fbbec8de test(Task REMED-GFX-054): reproduce empty index upload failures`
+- `af0c6a87 fix(Task REMED-GFX-054): make empty index uploads safe and WebGPU-valid`
+- `d76a3291 test(Task REMED-GFX-054): cover empty ranges and cross-backend parity`
+- `docs(remediation): record GFX-054 verification` (this record)
+
+Recommended next GRAPHICS task: **REMED-GFX-040**. Recommendation only; not begun.
