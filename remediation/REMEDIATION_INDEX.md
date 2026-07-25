@@ -143,17 +143,17 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 | `REMED-GFX-102` | **WebGPU `SpriteBatch` ignores the full `BlendState` contract — OPEN.** Sprite rendering selects only fixed opaque or fixed straight-alpha pipelines from the live enabled bit; custom factors/functions, `Additive`, `NonPremultiplied`, `BlendFactor`, separate colour/alpha equations, `ColorWriteChannels`, and `MultiSampleMask` are not captured or applied per batch. This is the previously unnumbered “WebGPU SpriteBatch BlendState counterpart” referenced by GFX-071/GFX-077. Dependencies GFX-069, GFX-070, GFX-071, and GFX-077 are DONE. | MEDIUM | GRAPHICS | OPEN |
 | `REMED-GFX-103` | **VertexBuffer zero-element SetData/shared WebGPU parity — OPEN.** The narrow GFX-054 sibling inventory proves the independent VertexBuffer path still forms `data + startIndex`, passes `vector::data()` from an empty packed range, calls zero-length `memcpy`, and dispatches to WebGPU, whose vertex upload rejects null before count and otherwise allocates/writes/mutates state for an empty upload. DynamicVertexBuffer shares these overloads. GFX-054 deliberately fixes only IndexBuffer; reproduce and establish the VertexBuffer contract separately. | MEDIUM | GRAPHICS | OPEN |
 | `REMED-GFX-022` | `EffectParameter` Matrix semantics inverted | HIGH | GRAPHICS | COND |
-| `REMED-GFX-043` | `DrawUserPrimitives` declaration never reaches backend | HIGH | GRAPHICS | COND |
+| `REMED-GFX-043` | **`DrawUserPrimitives` explicit declaration transport — DONE.** `9bac3683` adds a same-stride reordered-layout public regression; `6718307e` makes the full declaration a required vertex-buffer-backend operation and dispatches it on all explicit DrawUser paths. | HIGH | GRAPHICS | DONE |
 | `REMED-NET-002` | `NetworkSessionProperties` unchecked iterator arithmetic | MEDIUM | NET | YES |
 | `REMED-MEDIA-002` | `MediaLibrary` object-graph SEGFAULT (6+ backends) | HIGH | MEDIA | YES |
 
 ### Current GRAPHICS recommendation (inventory checkpoint, 2026-07-25)
 
 No GRAPHICS remediation is in progress. Historical “recommended next” lines in individual closure
-reports are not a live queue. GFX-004, GFX-039, GFX-040, and GFX-054 are DONE; the current ranked
-queue begins **GFX-043**. GFX-012 is DONE, so the GFX-092 close-time recommendation of
-GFX-012 is superseded. GFX-085 and GFX-086 remain deferred capability boundaries, not production
-defects.
+reports are not a live queue. GFX-004, GFX-039, GFX-040, GFX-043, and GFX-054 are DONE; this
+closure intentionally makes no successor selection. GFX-012 is DONE, so the GFX-092 close-time
+recommendation of GFX-012 is superseded. GFX-085 and GFX-086 remain deferred capability
+boundaries, not production defects.
 
 ## P2 (44) and P3 (28)
 
