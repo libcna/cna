@@ -29,7 +29,7 @@
 //   prove correct bucket selection: swapping which shader answers which check would change the
 //   numeric result (light1's contribution is only visible in Check C).
 // Check E -- fog: same unlit+textured setup as Check A, but with fog forced to its fully-fogged
-//   (fogFactor=1) case via a specific fogStart/fogEnd/geometry-Z combination -- exact FogColor
+//   (fogFactor=1) case via the authoritative CPU-prepared fog vector -- exact FogColor
 //   readback (ApplyFog's lerp(color,FogColor*alpha,1) == FogColor*alpha).
 // Check F -- unsupported BasicEffect/DualTextureEffect/EnvironmentMapEffect flag/stride
 //   combinations (no matching CNA vertex layout) each throw a named error rather than silently
@@ -324,8 +324,7 @@ protected:
             params.texture0 = tex.get();
             params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
             params.fogEnabled = true;
-            params.fogStart = 1.0f;
-            params.fogEnd = 0.0f; // with world=view=Identity and geometry Z=0, this forces fogFactor=1 exactly.
+            params.fogVector[3] = 1.0f; // FogStart==FogEnd encoding: dot(position, vector)=1 exactly.
             const Color fogC(40, 80, 120, 255);
             params.fogColor[0] = fogC.getRProperty() / 255.0f;
             params.fogColor[1] = fogC.getGProperty() / 255.0f;

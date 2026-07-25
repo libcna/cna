@@ -170,6 +170,7 @@ using CNA::Internal::Backends::D3D12::D3D12RenderTargetCubeBackend;
 using CNA::Internal::Backends::D3D12::D3D12EffectBackend;
 using CNA::Internal::Backends::D3D12::D3D12Texture3DBackend;
 using CNA::Internal::Backends::IRenderTargetBackend;
+using CNA::Internal::Backends::RenderTargetBindingDescriptor;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Graphics::ImageData;
 using CNA::Internal::Backends::Matrix;
@@ -1193,8 +1194,6 @@ int main()
 
         ctp.fogEnabled = false;
         ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
-        ctp.fogStart = 0.0f; ctp.fogEnd = 0.5f;
-        ctp.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix; the D3D12 smoke was never migrated to the GFX-005/010 fogVector ABI)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
@@ -1204,6 +1203,7 @@ int main()
               "vertex*texture color unblended (plan_dx.md DX-137)");
 
         ctp.fogEnabled = true;
+        ctp.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
@@ -1228,8 +1228,6 @@ int main()
 
         tp.fogEnabled = false;
         tp.fogColor[0] = 0.0f; tp.fogColor[1] = 1.0f; tp.fogColor[2] = 0.0f;
-        tp.fogStart = 0.0f; tp.fogEnd = 0.5f;
-        tp.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
@@ -1239,6 +1237,7 @@ int main()
               "color unblended (plan_dx.md DX-137)");
 
         tp.fogEnabled = true;
+        tp.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
@@ -1369,8 +1368,6 @@ int main()
         GpuDrawParams litFogP = unlitP;
         litFogP.fogEnabled = false;
         litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
-        litFogP.fogStart = 0.0f; litFogP.fogEnd = 0.5f;
-        litFogP.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
@@ -1380,6 +1377,7 @@ int main()
               "color unblended (plan_dx.md DX-137)");
 
         litFogP.fogEnabled = true;
+        litFogP.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
@@ -1838,7 +1836,6 @@ int main()
 
         atp.fogEnabled = false;
         atp.fogColor[0] = 0.0f; atp.fogColor[1] = 1.0f; atp.fogColor[2] = 0.0f;
-        atp.fogStart = 0.0f; atp.fogEnd = 0.5f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
@@ -1848,9 +1845,7 @@ int main()
               "color unblended (plan_dx.md DX-137)");
 
         atp.fogEnabled = true;
-        // REMED-GFX-087: alpha_test3d gates fog solely on a non-zero FogVector (its
-        // D3DAlphaTestConstants dropped the scalar fogEnabled flag), so set the vector ONLY on the
-        // fogEnabled=true draw -- mirrors the REMED-GFX-055 D3D11 handling.
+        // All D3DCommon stock shaders use the same authoritative zero-vector disabled encoding.
         atp.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
@@ -2055,8 +2050,6 @@ int main()
 
         dp.fogEnabled = false;
         dp.fogColor[0] = 0.0f; dp.fogColor[1] = 1.0f; dp.fogColor[2] = 0.0f;
-        dp.fogStart = 0.0f; dp.fogEnd = 0.5f;
-        dp.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbDualFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dp);
@@ -2066,6 +2059,7 @@ int main()
               "combined-texture color unblended (plan_dx.md DX-137)");
 
         dp.fogEnabled = true;
+        dp.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbDualFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dp);
@@ -2510,8 +2504,6 @@ int main()
 
         skinFogP.fogEnabled = false;
         skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
-        skinFogP.fogStart = 0.0f; skinFogP.fogEnd = 0.5f;
-        skinFogP.fogVector[2] = 2.0f;  // REMED-GFX-005/010: view-space fog vector
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
@@ -2521,6 +2513,7 @@ int main()
               "single-bone-identity texture color unblended (plan_dx.md DX-137)");
 
         skinFogP.fogEnabled = true;
+        skinFogP.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
@@ -3075,8 +3068,6 @@ int main()
         ep.envMapAmount = 1.0f;
         ep.fogEnabled = false;
         ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
-        ep.fogStart = 0.0f; ep.fogEnd = 0.5f;
-        ep.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix)
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
@@ -3086,6 +3077,7 @@ int main()
               "cube-face color unblended (plan_dx.md DX-137)");
 
         ep.fogEnabled = true;
+        ep.fogVector[2] = 2.0f;
         backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
         backend.DrawPrimitivesEx(vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                  Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
@@ -3211,12 +3203,11 @@ int main()
     // ---- D3D11's own DX-81 audit found and fixed (d3d11_smoke_test.cpp Check AC) -- fog was wired ----
     // ---- into every applicable variant's constant buffer (colored3d's DrawPrimitivesEx bundle ----
     // ---- branch included) but never independently exercised by a dedicated on/off pixel test. ----
-    // ---- Same fixture as D3D11's own Check AC: colored3d.vert.hlsl's formula (fogFactor = ----
-    // ---- fogEnabled ? saturate((FogEnd-Z)/(FogEnd-FogStart)) : 1.0, then outColor.rgb = ----
-    // ---- lerp(FogColor, vertexColor, fogFactor)) is the exact same DXBC bytecode D3D11 draws ----
-    // ---- through -- a quad at object-space Z=0.5 with FogStart=0/FogEnd=0.5 lands fogFactor ----
-    // ---- exactly on 0 when fog is enabled (pure FogColor) vs 1 when it's not (pure vertex color), ----
-    // ---- an exact, unambiguous discrimination, not "some blend happened". ----
+    // ---- Same fixture as D3D11's own Check AC: colored3d.vert.hlsl uses the CPU-prepared ----
+    // ---- view-space FogVector and computes keep = 1-saturate(dot(float4(position,1),FogVector)); ----
+    // ---- the exact same DXBC bytecode is drawn by D3D11. A quad at Z=0.5 with vector.z=2 ----
+    // ---- therefore lands exactly on keep=0 when enabled (pure FogColor), while the zero vector ----
+    // ---- encodes disabled fog and keep=1 (pure vertex color): an exact discrimination. ----
     {
         constexpr int kRtWidth = 64;
         constexpr int kRtHeight = 64;
@@ -3276,9 +3267,6 @@ int main()
         fogOff.vertexColorEnabled = true;
         fogOff.fogEnabled = false;
         fogOff.fogColor[0] = 0.0f; fogOff.fogColor[1] = 1.0f; fogOff.fogColor[2] = 0.0f;
-        fogOff.fogStart = 0.0f;
-        fogOff.fogEnd = 0.5f;
-        fogOff.fogVector[2] = 2.0f;  // REMED-GFX-087: view-space fog vector (mirrors REMED-GFX-055 D3D11 fix); copied into fogOn below
 
         backend.Clear(0.039f, 0.039f, 0.039f, 1.0f);
         backend.DrawPrimitivesEx(vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
@@ -3290,6 +3278,7 @@ int main()
 
         GpuDrawParams fogOn = fogOff;
         fogOn.fogEnabled = true;
+        fogOn.fogVector[2] = 2.0f;
 
         backend.Clear(0.039f, 0.039f, 0.039f, 1.0f);
         backend.DrawPrimitivesEx(vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
@@ -3299,6 +3288,18 @@ int main()
               "V2: DrawPrimitivesEx() colored3d bundle, fogEnabled=true with Z at FogEnd genuinely "
               "blends all the way to the exact FogColor (fogFactor=0), distinctly different from "
               "the fogEnabled=false case above (plan_dx.md DX-69/DX-113)");
+
+        GpuDrawParams fogOffAgain = fogOn;
+        fogOffAgain.fogEnabled = false;
+        fogOffAgain.fogVector[0] = fogOffAgain.fogVector[1] =
+            fogOffAgain.fogVector[2] = fogOffAgain.fogVector[3] = 0.0f;
+        backend.Clear(0.039f, 0.039f, 0.039f, 1.0f);
+        backend.DrawPrimitivesEx(vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOffAgain);
+        auto afterFogOffAgain = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterFogOffAgain, 255, 0, 0, 255),
+              "V3: DrawPrimitivesEx() fog A(false)->B(true)->A(false) does not reuse stale "
+              "scalar or vector state (REMED-GFX-061)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }
@@ -3358,7 +3359,12 @@ int main()
         // ---- Clear() genuinely writes both -- same proof shape D3D11's own DX-46 established. ----
         auto rtA = backend.CreateRenderTarget2D(kRtWidth, kRtHeight, 0);
         auto rtB = backend.CreateRenderTarget2D(kRtWidth, kRtHeight, 0);
-        IRenderTargetBackend* mrtTargets[2] = {rtA.get(), rtB.get()};
+        const RenderTargetBindingDescriptor mrtTargets[2] = {
+            RenderTargetBindingDescriptor::ForRenderTarget2D(
+                rtA.get(), 0, kRtWidth, kRtHeight, rtA->GetMultiSampleCount()),
+            RenderTargetBindingDescriptor::ForRenderTarget2D(
+                rtB.get(), 0, kRtWidth, kRtHeight, rtB->GetMultiSampleCount()),
+        };
         backend.SetRenderTargets(mrtTargets, 2);
         Check(backend.HasBoundColorTargetEXT(), "W7: SetRenderTargets() binds the primary (index 0) target");
 

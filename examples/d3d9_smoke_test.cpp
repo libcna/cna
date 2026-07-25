@@ -119,6 +119,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Backends::D3D9;
 using CNA::Internal::Backends::ImageData;
 using CNA::Internal::Backends::IRenderTargetBackend;
+using CNA::Internal::Backends::RenderTargetBindingDescriptor;
 using CNA::Internal::Backends::GpuDrawParams;
 
 namespace
@@ -839,7 +840,12 @@ protected:
             {
                 auto rt0 = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
                 auto rt1 = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
-                IRenderTargetBackend* rts[2] = {rt0.get(), rt1.get()};
+                const RenderTargetBindingDescriptor rts[2] = {
+                    RenderTargetBindingDescriptor::ForRenderTarget2D(
+                        rt0.get(), 0, 8, 8, rt0->GetMultiSampleCount()),
+                    RenderTargetBindingDescriptor::ForRenderTarget2D(
+                        rt1.get(), 0, 8, 8, rt1->GetMultiSampleCount()),
+                };
                 backend.SetRenderTargets(rts, 2);
                 dev.Clear(ClearOptions::Target, Color(60, 70, 80, 255), 1.0f, 0);
 
@@ -881,16 +887,18 @@ protected:
                 // Over-request: build maxRTs+1 targets and confirm a real, named exception -- not a
                 // silent clamp to maxRTs (design decision 13's own point).
                 std::vector<std::unique_ptr<IRenderTargetBackend>> tooMany;
-                std::vector<IRenderTargetBackend*> tooManyPtrs;
+                std::vector<RenderTargetBindingDescriptor> tooManyBindings;
+                tooManyBindings.reserve(static_cast<std::size_t>(maxRTs + 1));
                 for (int i = 0; i < maxRTs + 1; ++i)
                 {
                     tooMany.push_back(backend.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::None)));
-                    tooManyPtrs.push_back(tooMany.back().get());
+                    tooManyBindings.push_back(RenderTargetBindingDescriptor::ForRenderTarget2D(
+                        tooMany.back().get(), 0, 4, 4, tooMany.back()->GetMultiSampleCount()));
                 }
                 bool threw = false;
                 try
                 {
-                    backend.SetRenderTargets(tooManyPtrs.data(), static_cast<int>(tooManyPtrs.size()));
+                    backend.SetRenderTargets(tooManyBindings.data(), static_cast<int>(tooManyBindings.size()));
                 }
                 catch (const std::runtime_error&)
                 {

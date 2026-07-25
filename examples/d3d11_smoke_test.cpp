@@ -129,10 +129,12 @@
 
 #include <SDL3/SDL.h>
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <thread>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -140,6 +142,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Backends::D3D11;
 using CNA::Internal::Backends::ImageData;
 using CNA::Internal::Backends::IRenderTargetBackend;
+using CNA::Internal::Backends::RenderTargetBindingDescriptor;
 using CNA::Internal::Backends::GpuDrawParams;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Backends::D3DCommon::CreateVertexShaderForVariant;
@@ -605,7 +608,12 @@ protected:
             oq->End();
             context->Flush();
             bool completed = false;
-            for (int i = 0; i < 100000 && !completed; ++i) completed = oq->IsComplete();
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            while (!completed && std::chrono::steady_clock::now() < deadline)
+            {
+                completed = oq->IsComplete();
+                if (!completed) std::this_thread::yield();
+            }
             check(oq != nullptr && completed,
                   "D3D11OcclusionQueryBackend: a real ID3D11Query completes and reports data");
             check(oq->PixelCount() == 0,
@@ -621,7 +629,10 @@ protected:
             auto rtB = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
             auto* d3dRtA = static_cast<D3D11RenderTargetBackend*>(rtA.get());
             auto* d3dRtB = static_cast<D3D11RenderTargetBackend*>(rtB.get());
-            IRenderTargetBackend* rts[2] = { rtA.get(), rtB.get() };
+            const RenderTargetBindingDescriptor rts[2] = {
+                RenderTargetBindingDescriptor::ForRenderTarget2D(rtA.get(), 0, 4, 4, rtA->GetMultiSampleCount()),
+                RenderTargetBindingDescriptor::ForRenderTarget2D(rtB.get(), 0, 4, 4, rtB->GetMultiSampleCount()),
+            };
             backend.SetRenderTargets(rts, 2);
             dev.Clear(Color(123, 45, 67, 255));
             backend.SetRenderTargets(nullptr, 0);
@@ -654,7 +665,10 @@ protected:
             auto rtMsaaB = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
             auto* d3dRtMsaaA = static_cast<D3D11RenderTargetBackend*>(rtMsaaA.get());
             auto* d3dRtMsaaB = static_cast<D3D11RenderTargetBackend*>(rtMsaaB.get());
-            IRenderTargetBackend* msaaRts[2] = { rtMsaaA.get(), rtMsaaB.get() };
+            const RenderTargetBindingDescriptor msaaRts[2] = {
+                RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaA.get(), 0, 8, 8, rtMsaaA->GetMultiSampleCount()),
+                RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaB.get(), 0, 8, 8, rtMsaaB->GetMultiSampleCount()),
+            };
             backend.SetRenderTargets(msaaRts, 2);
             dev.Clear(Color(200, 30, 40, 255));
             backend.SetRenderTargets(nullptr, 0);
@@ -681,7 +695,10 @@ protected:
             auto rtMsaaC = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
             auto rtMsaaD = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
             auto* d3dRtMsaaC = static_cast<D3D11RenderTargetBackend*>(rtMsaaC.get());
-            IRenderTargetBackend* msaaRts2[2] = { rtMsaaC.get(), rtMsaaD.get() };
+            const RenderTargetBindingDescriptor msaaRts2[2] = {
+                RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaC.get(), 0, 8, 8, rtMsaaC->GetMultiSampleCount()),
+                RenderTargetBindingDescriptor::ForRenderTarget2D(rtMsaaD.get(), 0, 8, 8, rtMsaaD->GetMultiSampleCount()),
+            };
             backend.SetRenderTargets(msaaRts2, 2);
             dev.Clear(Color(5, 6, 7, 255));
             auto rtPlain = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
@@ -1211,18 +1228,8 @@ protected:
                 const Microsoft::Xna::Framework::Rectangle colTexFogRegion(30, 30, 1, 1);
                 ctp.fogEnabled = false;
                 ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
-                ctp.fogStart = 0.0f; ctp.fogEnd = 0.5f;
-                // REMED-GFX-055: the REMED-GFX-005/010 D3D campaign switched D3DCommon fog to FNA's
-                // view-space fog vector (EffectHelpers.SetFogVector). Stock effects bake it into
-                // GpuDrawParams::fogVector; a direct-backend DrawPrimitivesEx caller (which bypasses
-                // that layer) must supply it too -- the scalar fogStart/fogEnd above are now
-                // accepted-but-ignored by D3DCommon. This fixture's geometry sits at eye-space Z=0.5
-                // (positive: D3D clips Z to [0,1], so the FNA negative-eyeZ vector cannot be used
-                // here), and the shader's keep = 1 - saturate(dot(float4(pos,1), fogVector)) reaches
-                // full fog (keep=0) at Z=fogEnd when fogVector.z = 1/fogEnd = 2. (These 8 direct-
-                // backend fog checks silently stopped fogging when the campaign landed; effect-driven
-                // fog was unaffected. See the sibling checks below for the same one-line vector.)
-                ctp.fogVector[2] = 2.0f;
+                // REMED-GFX-061: direct-backend fixtures obey the same reachable-state invariant
+                // as public stock effects: disabled fog is encoded by an all-zero vector.
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
@@ -1234,6 +1241,7 @@ protected:
                       "leaves the exact vertex*texture color unblended (plan_dx.md DX-137)");
 
                 ctp.fogEnabled = true;
+                ctp.fogVector[2] = 2.0f; // eye-space Z=0.5 -> dot=1 -> fully fogged
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
@@ -1263,8 +1271,6 @@ protected:
             const Microsoft::Xna::Framework::Rectangle texFogRegion(30, 30, 1, 1);
             tp.fogEnabled = false;
             tp.fogColor[0] = 0.0f; tp.fogColor[1] = 1.0f; tp.fogColor[2] = 0.0f;
-            tp.fogStart = 0.0f; tp.fogEnd = 0.5f;
-            tp.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
             dev.Clear(Color(10, 10, 10, 255));
             backend.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
@@ -1276,6 +1282,7 @@ protected:
                   "exact sampled texture color unblended (plan_dx.md DX-137)");
 
             tp.fogEnabled = true;
+            tp.fogVector[2] = 2.0f;
             dev.Clear(Color(10, 10, 10, 255));
             backend.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
@@ -1370,8 +1377,6 @@ protected:
                 const Microsoft::Xna::Framework::Rectangle litFogRegion(30, 30, 1, 1);
                 litFogP.fogEnabled = false;
                 litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
-                litFogP.fogStart = 0.0f; litFogP.fogEnd = 0.5f;
-                litFogP.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
@@ -1383,6 +1388,7 @@ protected:
                       "the exact unlit texture color unblended (plan_dx.md DX-137)");
 
                 litFogP.fogEnabled = true;
+                litFogP.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
@@ -1562,12 +1568,8 @@ protected:
                 const Microsoft::Xna::Framework::Rectangle atFogRegion(30, 30, 1, 1);
                 atp.fogEnabled = false;
                 atp.fogColor[0] = 0.0f; atp.fogColor[1] = 1.0f; atp.fogColor[2] = 0.0f;
-                atp.fogStart = 0.0f; atp.fogEnd = 0.5f;
-                // REMED-GFX-055: unlike the other stock shaders (whose fog is gated by a separate
-                // FogColorEnabled.w flag), alpha_test3d's D3DAlphaTestConstants dropped the scalar
-                // fogEnabled flag entirely -- its fog is gated solely by whether FogVector is
-                // non-zero. So the fog vector is set ONLY for the fogEnabled=true draw below; leaving
-                // it zero here is what keeps this fogEnabled=false case genuinely unfogged.
+                // Every D3DCommon stock shader now uses the same authoritative zero-vector
+                // disabled encoding that AlphaTestEffect already used.
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
@@ -1753,8 +1755,6 @@ protected:
                 const Microsoft::Xna::Framework::Rectangle dtFogRegion(30, 30, 1, 1);
                 dtp.fogEnabled = false;
                 dtp.fogColor[0] = 0.0f; dtp.fogColor[1] = 1.0f; dtp.fogColor[2] = 0.0f;
-                dtp.fogStart = 0.0f; dtp.fogEnd = 0.5f;
-                dtp.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
@@ -1766,6 +1766,7 @@ protected:
                       "the exact combined-texture color unblended (plan_dx.md DX-137)");
 
                 dtp.fogEnabled = true;
+                dtp.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
@@ -1872,8 +1873,6 @@ protected:
                 const Microsoft::Xna::Framework::Rectangle envFogRegion(30, 30, 1, 1);
                 ep.fogEnabled = false;
                 ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
-                ep.fogStart = 0.0f; ep.fogEnd = 0.5f;
-                ep.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
@@ -1885,6 +1884,7 @@ protected:
                       "exact reflected cube-face color unblended (plan_dx.md DX-137)");
 
                 ep.fogEnabled = true;
+                ep.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
@@ -2095,8 +2095,6 @@ protected:
                 const Microsoft::Xna::Framework::Rectangle skinFogRegion(30, 30, 1, 1);
                 skinFogP.fogEnabled = false;
                 skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
-                skinFogP.fogStart = 0.0f; skinFogP.fogEnd = 0.5f;
-                skinFogP.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
@@ -2108,6 +2106,7 @@ protected:
                       "exact single-bone-identity texture color unblended (plan_dx.md DX-137)");
 
                 skinFogP.fogEnabled = true;
+                skinFogP.fogVector[2] = 2.0f;
                 dev.Clear(Color(10, 10, 10, 255));
                 backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
@@ -2730,9 +2729,6 @@ protected:
             fogOff.vertexColorEnabled = true;
             fogOff.fogEnabled = false;
             fogOff.fogColor[0] = 0.0f; fogOff.fogColor[1] = 1.0f; fogOff.fogColor[2] = 0.0f;
-            fogOff.fogStart = 0.0f;
-            fogOff.fogEnd = 0.5f;
-            fogOff.fogVector[2] = 2.0f;  // REMED-GFX-055: view-space fog vector (see colored_textured3d DX-137 above)
 
             const Microsoft::Xna::Framework::Rectangle centerRegionFog(30, 30, 1, 1);
             dev.Clear(Color(10, 10, 10, 255));
@@ -2747,6 +2743,7 @@ protected:
 
             GpuDrawParams fogOn = fogOff;
             fogOn.fogEnabled = true;
+            fogOn.fogVector[2] = 2.0f;
 
             dev.Clear(Color(10, 10, 10, 255));
             backend.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
@@ -2758,6 +2755,20 @@ protected:
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): fogEnabled=true with Z at FogEnd "
                   "genuinely blends all the way to the exact FogColor (fogFactor=0), distinctly "
                   "different from the fogEnabled=false case above (plan_dx.md DX-69/DX-81)");
+
+            GpuDrawParams fogOffAgain = fogOn;
+            fogOffAgain.fogEnabled = false;
+            fogOffAgain.fogVector[0] = fogOffAgain.fogVector[1] =
+                fogOffAgain.fogVector[2] = fogOffAgain.fogVector[3] = 0.0f;
+            dev.Clear(Color(10, 10, 10, 255));
+            backend.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOffAgain);
+            Color fogOffAgainPixel(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFog, &fogOffAgainPixel, 0, 1);
+            check(fogOffAgainPixel.getRProperty() == 255 && fogOffAgainPixel.getGProperty() == 0 &&
+                  fogOffAgainPixel.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): fog A(false)->B(true)->A(false) "
+                  "does not reuse stale scalar or vector state (REMED-GFX-061)");
         }
 
         // plan_dx.md DX-140 (partial -- NPOT only): a genuinely non-power-of-two Texture2D (5x3),
@@ -3743,7 +3754,8 @@ protected:
                                 + 2 /* DX-155 Model root-bone-index flexibility */
                                 + 3 /* Task 1106 BasicEffect PreferPerPixelLighting */
                                 + 3 /* Task 1107 SkinnedEffect PreferPerPixelLighting */
-                                + 9 /* REMED-GFX-077 ColorWriteChannels/MultiSampleMask */;
+                                + 9 /* REMED-GFX-077 ColorWriteChannels/MultiSampleMask */
+                                + 1 /* REMED-GFX-061 fog false->true->false */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
