@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "System/ArgumentNullException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
@@ -29,6 +30,11 @@ TEST(RenderTargetBindingTest, DefaultCubeMapFacePositiveX)
 
 // --- Texture* constructor ---
 
+TEST(RenderTargetBindingTest, CtorTextureNullThrowsArgumentNullException)
+{
+    EXPECT_THROW(RenderTargetBinding(nullptr), System::ArgumentNullException);
+}
+
 TEST(RenderTargetBindingTest, CtorTextureStoresPointer)
 {
     // Use a non-null sentinel address without dereferencing
@@ -52,6 +58,13 @@ TEST(RenderTargetBindingTest, CtorTextureExplicitArraySlice)
 }
 
 // --- Cube face constructor ---
+
+TEST(RenderTargetBindingTest, CtorCubeMapFaceNullThrowsArgumentNullException)
+{
+    EXPECT_THROW(
+        RenderTargetBinding(nullptr, CubeMapFace::NegativeZ),
+        System::ArgumentNullException);
+}
 
 TEST(RenderTargetBindingTest, CtorCubeMapFace)
 {

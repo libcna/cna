@@ -2,9 +2,22 @@
 
 #include <gtest/gtest.h>
 #include <vector>
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
+
+class VertexBufferBindingValidationTest : public ::testing::Test
+{
+protected:
+    GraphicsDevice graphicsDevice;
+    VertexBuffer vertexBuffer{graphicsDevice, 16};
+};
 
 // --- Default constructor ---
 
@@ -28,39 +41,58 @@ TEST(VertexBufferBindingTest, DefaultConstructor_FrequencyZero)
 
 // --- Parameterized constructor ---
 
-TEST(VertexBufferBindingTest, OneArg_DefaultOffsetAndFrequency)
+TEST(VertexBufferBindingTest, OneArg_NullBufferThrowsArgumentNullException)
 {
-    VertexBufferBinding b(nullptr);
-    EXPECT_EQ(b.getVertexBufferProperty(), nullptr);
+    EXPECT_THROW(VertexBufferBinding(nullptr), System::ArgumentNullException);
+}
+
+TEST_F(VertexBufferBindingValidationTest, OneArg_DefaultOffsetAndFrequency)
+{
+    VertexBufferBinding b(&vertexBuffer);
+    EXPECT_EQ(b.getVertexBufferProperty(), &vertexBuffer);
     EXPECT_EQ(b.getVertexOffsetProperty(), 0);
     EXPECT_EQ(b.getInstanceFrequencyProperty(), 0);
 }
 
-TEST(VertexBufferBindingTest, TwoArg_FrequencyDefaultsToZero)
+TEST_F(VertexBufferBindingValidationTest, TwoArg_FrequencyDefaultsToZero)
 {
-    VertexBufferBinding b(nullptr, 8);
+    VertexBufferBinding b(&vertexBuffer, 8);
     EXPECT_EQ(b.getVertexOffsetProperty(), 8);
     EXPECT_EQ(b.getInstanceFrequencyProperty(), 0);
 }
 
-TEST(VertexBufferBindingTest, ThreeArg_AllValuesStored)
+TEST_F(VertexBufferBindingValidationTest, ThreeArg_AllValuesStored)
 {
-    VertexBufferBinding b(nullptr, 4, 1);
-    EXPECT_EQ(b.getVertexBufferProperty(), nullptr);
+    VertexBufferBinding b(&vertexBuffer, 4, 1);
+    EXPECT_EQ(b.getVertexBufferProperty(), &vertexBuffer);
     EXPECT_EQ(b.getVertexOffsetProperty(), 4);
     EXPECT_EQ(b.getInstanceFrequencyProperty(), 1);
 }
 
-TEST(VertexBufferBindingTest, ThreeArg_ZeroFrequencyMeansNonInstanced)
+TEST_F(VertexBufferBindingValidationTest, ThreeArg_ZeroFrequencyMeansNonInstanced)
 {
-    VertexBufferBinding b(nullptr, 0, 0);
+    VertexBufferBinding b(&vertexBuffer, 0, 0);
     EXPECT_EQ(b.getInstanceFrequencyProperty(), 0);
 }
 
-TEST(VertexBufferBindingTest, ThreeArg_NonZeroFrequencyMeansInstanced)
+TEST_F(VertexBufferBindingValidationTest, ThreeArg_NonZeroFrequencyMeansInstanced)
 {
-    VertexBufferBinding b(nullptr, 0, 2);
+    VertexBufferBinding b(&vertexBuffer, 0, 2);
     EXPECT_EQ(b.getInstanceFrequencyProperty(), 2);
+}
+
+TEST_F(VertexBufferBindingValidationTest, NegativeVertexOffsetThrowsArgumentOutOfRangeException)
+{
+    EXPECT_THROW(
+        VertexBufferBinding(&vertexBuffer, -1, 0),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST_F(VertexBufferBindingValidationTest, NegativeInstanceFrequencyThrowsArgumentOutOfRangeException)
+{
+    EXPECT_THROW(
+        VertexBufferBinding(&vertexBuffer, 0, -1),
+        System::ArgumentOutOfRangeException);
 }
 
 // --- GetVertexBuffers contract: returns a copy of the current binding list.
@@ -68,12 +100,12 @@ TEST(VertexBufferBindingTest, ThreeArg_NonZeroFrequencyMeansInstanced)
 //     by the copy-semantics of VertexBufferBinding tested here.  The vector
 //     round-trips without data loss.                                           ---
 
-TEST(VertexBufferBindingTest, VectorOfBindings_SizeAndContents)
+TEST_F(VertexBufferBindingValidationTest, VectorOfBindings_SizeAndContents)
 {
     std::vector<VertexBufferBinding> bindings = {
-        VertexBufferBinding(nullptr, 0, 0),
-        VertexBufferBinding(nullptr, 4, 1),
-        VertexBufferBinding(nullptr, 8, 2),
+        VertexBufferBinding(&vertexBuffer, 0, 0),
+        VertexBufferBinding(&vertexBuffer, 4, 1),
+        VertexBufferBinding(&vertexBuffer, 8, 2),
     };
     ASSERT_EQ(bindings.size(), 3u);
     EXPECT_EQ(bindings[0].getVertexOffsetProperty(),      0);
@@ -90,9 +122,9 @@ TEST(VertexBufferBindingTest, EmptyVector_DefaultStateForGetVertexBuffers)
     EXPECT_TRUE(bindings.empty());
 }
 
-TEST(VertexBufferBindingTest, CopiedBinding_PreservesValues)
+TEST_F(VertexBufferBindingValidationTest, CopiedBinding_PreservesValues)
 {
-    VertexBufferBinding original(nullptr, 12, 3);
+    VertexBufferBinding original(&vertexBuffer, 12, 3);
     VertexBufferBinding copy = original;
     EXPECT_EQ(copy.getVertexBufferProperty(),     original.getVertexBufferProperty());
     EXPECT_EQ(copy.getVertexOffsetProperty(),     original.getVertexOffsetProperty());

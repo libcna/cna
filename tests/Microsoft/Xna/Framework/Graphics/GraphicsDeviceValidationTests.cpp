@@ -7,18 +7,26 @@
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
+using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
 
 // =============================================================================
 // TextureCollection — index bounds
@@ -79,6 +87,45 @@ TEST(TextureCollectionValidationTest, LiveTexture_DoesNotThrowForDisposedCheck)
     TextureCollection col;
     Texture2D tex; // not disposed
     EXPECT_NO_THROW(col(0, &tex));
+}
+
+// =============================================================================
+// TextureCollection — active render targets cannot simultaneously be sampled
+// =============================================================================
+
+TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToPixelTextureSlot)
+{
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 4, 4);
+    gd.SetRenderTarget(&target);
+
+    EXPECT_THROW(
+        gd.getTexturesProperty()(0, &target),
+        System::InvalidOperationException);
+    EXPECT_EQ(gd.getTexturesProperty()[0], nullptr);
+}
+
+TEST(TextureCollectionValidationTest, ActiveRenderTargetCannotBindToVertexTextureSlot)
+{
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 4, 4);
+    gd.SetRenderTarget(&target);
+
+    EXPECT_THROW(
+        gd.getVertexTexturesProperty()(0, &target),
+        System::InvalidOperationException);
+    EXPECT_EQ(gd.getVertexTexturesProperty()[0], nullptr);
+}
+
+TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
+{
+    GraphicsDevice gd;
+    RenderTarget2D target(gd, 4, 4);
+    gd.SetRenderTarget(&target);
+    gd.SetRenderTarget(nullptr);
+
+    EXPECT_NO_THROW(gd.getTexturesProperty()(0, &target));
+    EXPECT_EQ(gd.getTexturesProperty()[0], static_cast<Texture2D*>(&target));
 }
 
 // =============================================================================
@@ -146,6 +193,46 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
 {
     GraphicsDevice gd;
     EXPECT_NO_THROW(gd.SetRenderTargets({}));
+}
+
+TEST(GraphicsDeviceValidationTest, SetRenderTargets_DefaultNullBindingThrows)
+{
+    GraphicsDevice gd;
+    EXPECT_THROW(
+        gd.SetRenderTargets({RenderTargetBinding()}),
+        std::invalid_argument);
+}
+
+// =============================================================================
+// GraphicsDevice.SetVertexBuffers — public binding validation and empty unbind
+// =============================================================================
+
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_DefaultNullBindingThrows)
+{
+    GraphicsDevice gd;
+    EXPECT_THROW(
+        gd.SetVertexBuffers({VertexBufferBinding()}),
+        System::ArgumentNullException);
+}
+
+TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
+{
+    GraphicsDevice gd;
+    VertexBuffer vertexBuffer(gd, 3);
+    gd.SetVertexBuffer(&vertexBuffer);
+    gd.SetVertexBuffers({});
+
+    try
+    {
+        gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        FAIL() << "DrawPrimitives unexpectedly accepted an empty vertex-buffer state";
+    }
+    catch (const std::runtime_error& ex)
+    {
+        EXPECT_NE(
+            std::string(ex.what()).find("no vertex buffer"),
+            std::string::npos);
+    }
 }
 
 // Regression test for a real reported crash (cna-template/missing.md): the single-argument

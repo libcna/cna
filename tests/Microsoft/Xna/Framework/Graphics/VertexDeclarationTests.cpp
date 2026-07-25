@@ -5,6 +5,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexElement;
@@ -26,6 +28,20 @@ TEST(VertexDeclarationTest, DefaultElementsEmpty)
 }
 
 // --- Initializer-list constructor ---
+
+TEST(VertexDeclarationTest, EmptyAutoStrideElementsThrowArgumentNullException)
+{
+    EXPECT_THROW(
+        VertexDeclaration(std::initializer_list<VertexElement>{}),
+        System::ArgumentNullException);
+}
+
+TEST(VertexDeclarationTest, EmptyExplicitStrideElementsThrowArgumentNullException)
+{
+    EXPECT_THROW(
+        VertexDeclaration(16, std::initializer_list<VertexElement>{}),
+        System::ArgumentNullException);
+}
 
 TEST(VertexDeclarationTest, InitListStride)
 {
@@ -80,6 +96,31 @@ TEST(VertexDeclarationTest, InitListFirstElementUsage)
 }
 
 // --- Vector constructor ---
+
+TEST(VertexDeclarationTest, EmptyVectorElementsThrowArgumentNullException)
+{
+    EXPECT_THROW(
+        VertexDeclaration(16, std::vector<VertexElement>{}),
+        System::ArgumentNullException);
+}
+
+TEST(VertexDeclarationTest, ZeroExplicitStrideThrowsArgumentOutOfRangeException)
+{
+    EXPECT_THROW(
+        VertexDeclaration(0, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        }),
+        System::ArgumentOutOfRangeException);
+}
+
+TEST(VertexDeclarationTest, NegativeExplicitStrideThrowsArgumentOutOfRangeException)
+{
+    EXPECT_THROW(
+        VertexDeclaration(-1, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        }),
+        System::ArgumentOutOfRangeException);
+}
 
 TEST(VertexDeclarationTest, VectorCtorStride)
 {
