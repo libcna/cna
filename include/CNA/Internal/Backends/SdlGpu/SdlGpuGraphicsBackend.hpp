@@ -1245,6 +1245,13 @@ namespace CNA::Internal::Backends::SdlGpu
          * `SDL_gpu`'s own validation layer, a release build does not. NOXNA.
          */
         NOXNA [[nodiscard]] bool IsDebugModeEnabledEXT() const { return debugModeEnabled_; }
+        /** @brief Number of cached stock SpriteBatch pipelines. Test-only compatibility/cache
+         * cardinality introspection for REMED-GFX-097; target object and cube-face identity must
+         * not increase this count. NOXNA. */
+        NOXNA [[nodiscard]] std::size_t GetSpritePipelineCacheSizeEXT() const
+        {
+            return spritePipelines_.size();
+        }
 
     private:
         struct LogicalViewport
