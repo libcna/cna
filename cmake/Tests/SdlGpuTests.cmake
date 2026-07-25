@@ -89,6 +89,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_Texture3D COMMAND cna_test_sdlgpu_texture3d
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-099: the first invalid event occurs while constructing a mipmapped Texture3D,
+    # before upload/readback. Keep the create-only discriminator separate from the larger data
+    # contract and make both the six exact original VUIDs and any new validation category fatal.
+    cna_sdlgpu_test(cna_test_sdlgpu_texture3d_validity
+                    examples/sdlgpu_texture3d_validity_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_Texture3D_Validity
+        COMMAND cna_test_sdlgpu_texture3d_validity
+        TIMEOUT 60 LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    set_tests_properties(SdlGpu_Texture3D_Validity PROPERTIES
+        FAIL_REGULAR_EXPRESSION
+            "VUID-(VkImageViewCreateInfo-image-02724|VkImageViewCreateInfo-subresourceRange-02725|vkCmdBlitImage-dstOffset-00251|vkCmdBlitImage-pRegions-00216|vkCmdBlitImage-srcOffset-00246|vkCmdBlitImage-pRegions-00215);Validation (Error|Warning)")
+
     # plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube.
     cna_sdlgpu_test(cna_test_sdlgpu_texturecube examples/sdlgpu_texturecube_test.cpp)
     cna_register_backend_test(NAME SdlGpu_TextureCube COMMAND cna_test_sdlgpu_texturecube
