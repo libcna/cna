@@ -15,6 +15,8 @@
 #include <d3d9.h>
 #include <wrl/client.h>
 
+#include <array>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
@@ -25,6 +27,24 @@ namespace CNA::Internal::Backends::D3D9
     class D3D9RenderTargetBackend;
     class D3D9RenderTargetCubeBackend;
     class D3D9ShaderCache;
+
+    /// Narrow operation list for REMED-GFX-092's checked D3D9 state/target/depth path.  This is
+    /// deliberately not a general D3D9 interception layer: it exists both to centralize the
+    /// release-build HRESULT policy and to give the D3D9 smoke shard deterministic, per-backend
+    /// fault injection without mocking IDirect3DDevice9.
+    enum class D3D9NativeOperationEXT : std::uint8_t
+    {
+        SetRenderState,
+        SetRenderTarget,
+        SetDepthStencilSurface,
+        CreateDepthStencilSurface,
+        GetRenderTarget,
+        GetDepthStencilSurface,
+        GetBackBuffer,
+        SetViewport,
+        SetScissorRect,
+        Count
+    };
 
     /**
      * D3D9 graphics backend (plan_dx9.md). Implements IGraphicsBackend on top of plain Direct3D 9
@@ -145,6 +165,20 @@ namespace CNA::Internal::Backends::D3D9
         /// SetRenderTarget2D(nullptr) and by a D3D9RenderTargetBackend/D3D9RenderTargetCubeBackend's
         /// own UnbindAsRenderTarget(). NOXNA (mirrors D3D11GraphicsBackend::RestoreBackBufferRenderTargetEXT()).
         void RestoreBackBufferRenderTargetEXT();
+        /// REMED-GFX-092: atomically switches all active D3D9 render-target slots, the depth
+        /// surface, and viewport.  A failed transition restores the captured native binding when
+        /// possible; if rollback cannot be proven, rendering is blocked until a later successful
+        /// target transition.  Used only by the D3D9 render-target implementations.
+        void BindRenderTargetSurfacesEXT(IDirect3DSurface9* const* colorSurfaces, int colorCount,
+                                         IDirect3DSurface9* depthStencilSurface,
+                                         int width, int height, const char* context);
+        /// REMED-GFX-092: checked creation wrapper used only for render-target depth surfaces.
+        /// It guarantees a failed call leaves the supplied output slot null and maps device-lost
+        /// results through this backend's established lost-device lifecycle.
+        void CreateDepthStencilSurfaceEXT(UINT width, UINT height, D3DFORMAT format,
+                                          D3DMULTISAMPLE_TYPE multiSample, DWORD quality,
+                                          BOOL discard, IDirect3DSurface9** surface,
+                                          const char* context);
 
         // ---- IGraphicsBackend: pure virtual, NotYetImplemented until later D3D9 tasks land ----
         void SetDepthTestEnabled(bool enabled) override;
@@ -265,6 +299,19 @@ namespace CNA::Internal::Backends::D3D9
         /// Exposes whether this backend currently considers its device lost (NOXNA, D9-34
         /// diagnostics/tests). Mirrors GraphicsDevice::GraphicsDeviceStatus at the backend level.
         [[nodiscard]] bool IsDeviceLostEXT() const { return deviceLost_; }
+        /// Throws when a preceding checked state/target operation left GPU state unproven.  This
+        /// keeps a caller that catches the original exception from drawing or clearing into stale
+        /// state; a complete successful application of the affected state category (or target
+        /// transition) makes rendering available again.
+        void EnsureRenderReadyEXT() const;
+
+        /// Test-only control surface for the narrow REMED-GFX-092 wrappers.  Injection is
+        /// instance-local, one-shot, and is consumed before the real native call, so it cannot
+        /// perturb other tests or a later backend instance.
+        void InjectNextNativeFailureEXT(D3D9NativeOperationEXT operation, HRESULT result);
+        void ClearNativeFailureInjectionEXT();
+        [[nodiscard]] bool HasNativeFailureInjectionEXT() const;
+        [[nodiscard]] std::uint64_t GetNativeCallCountEXT(D3D9NativeOperationEXT operation) const;
 
         /// D9-56: true when this device requires power-of-2 texture dimensions UNCONDITIONALLY
         /// (`D3DPTEXTURECAPS_POW2` set, `D3DPTEXTURECAPS_NONPOW2CONDITIONAL` NOT set) -- an NPOT
@@ -328,6 +375,28 @@ namespace CNA::Internal::Backends::D3D9
         /// currently lost -- called at the top of every rendering entry point (Clear/ClearX/
         /// ReadBackbuffer), matching real XNA's behavior of refusing to render to a lost device.
         void ThrowIfDeviceLost() const;
+        void MarkDeviceLostFromScopedFailureEXT();
+        [[noreturn]] void ThrowScopedFailureEXT(const char* operation, HRESULT hr,
+                                                const std::string& detail = {});
+        void SetRenderStateCheckedEXT(D3DRENDERSTATETYPE state, DWORD value,
+                                      unsigned int safetyBit, const char* context);
+        void SetViewportCheckedEXT(const D3DVIEWPORT9& viewport, unsigned int safetyBit,
+                                   const char* context);
+        void SetScissorRectCheckedEXT(const RECT& rect, unsigned int safetyBit,
+                                      const char* context);
+        [[nodiscard]] HRESULT InvokeSetRenderTargetEXT(DWORD slot, IDirect3DSurface9* surface);
+        [[nodiscard]] HRESULT InvokeSetDepthStencilSurfaceEXT(IDirect3DSurface9* surface);
+        [[nodiscard]] HRESULT InvokeGetRenderTargetEXT(DWORD slot, IDirect3DSurface9** surface);
+        [[nodiscard]] HRESULT InvokeGetDepthStencilSurfaceEXT(IDirect3DSurface9** surface);
+        [[nodiscard]] HRESULT InvokeGetBackBufferEXT(IDirect3DSurface9** surface);
+        [[nodiscard]] HRESULT InvokeSetViewportEXT(const D3DVIEWPORT9& viewport);
+        [[nodiscard]] HRESULT InvokeSetScissorRectEXT(const RECT& rect);
+        [[nodiscard]] HRESULT InvokeCreateDepthStencilSurfaceEXT(
+            UINT width, UINT height, D3DFORMAT format, D3DMULTISAMPLE_TYPE multiSample,
+            DWORD quality, BOOL discard, IDirect3DSurface9** surface);
+        [[nodiscard]] HRESULT TakeInjectedResultEXT(D3D9NativeOperationEXT operation);
+        void MarkStateUnsafeEXT(unsigned int safetyBit);
+        void MarkStateKnownEXT(unsigned int safetyBit);
         /// D9-53: re-queries and caches the device's own implicit default depth-stencil surface
         /// (defaultDepthStencilSurface_) -- must run immediately after device creation/Reset(),
         /// while it is still the currently-bound one (before any custom render target ever gets
@@ -475,6 +544,18 @@ namespace CNA::Internal::Backends::D3D9
         /// D9-34: true from the moment Present() (or DebugSimulateContextLoss()) first detects/
         /// simulates a lost device, until PerformResetRecovery() completes successfully.
         bool deviceLost_ = false;
+        /// REMED-GFX-092: per-category safety bits, not a cache of requested XNA state.  D3D9
+        /// still sends every native state call; these bits only prevent a caught native failure
+        /// from being followed by a draw/clear before the relevant complete application succeeds.
+        unsigned int unsafeRenderStateMask_ = 0;
+        struct NativeFailureInjectionEXT
+        {
+            bool active = false;
+            D3D9NativeOperationEXT operation = D3D9NativeOperationEXT::SetRenderState;
+            HRESULT result = D3D_OK;
+        } nativeFailureInjection_;
+        std::array<std::uint64_t, static_cast<std::size_t>(D3D9NativeOperationEXT::Count)>
+            nativeCallCounts_{};
         /// D9-40: every live D3DPOOL_DEFAULT resource (dynamic vertex/index buffers so far),
         /// raw/non-owning -- see RegisterDefaultPoolResourceEXT()'s own doc comment.
         std::vector<ID3D9DefaultPoolResourceEXT*> defaultPoolResources_;

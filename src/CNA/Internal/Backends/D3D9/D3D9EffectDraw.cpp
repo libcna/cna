@@ -520,7 +520,7 @@ namespace CNA::Internal::Backends::D3D9
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
 
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;

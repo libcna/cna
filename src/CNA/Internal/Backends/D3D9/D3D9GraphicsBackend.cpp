@@ -47,6 +47,38 @@ namespace CNA::Internal::Backends::D3D9
             return buf;
         }
 
+        const char* HResultName(HRESULT hr)
+        {
+            switch (hr)
+            {
+            case D3D_OK:                    return "D3D_OK";
+            case D3DERR_INVALIDCALL:        return "D3DERR_INVALIDCALL";
+            case D3DERR_DEVICELOST:         return "D3DERR_DEVICELOST";
+            case D3DERR_DEVICENOTRESET:     return "D3DERR_DEVICENOTRESET";
+            case D3DERR_OUTOFVIDEOMEMORY:   return "D3DERR_OUTOFVIDEOMEMORY";
+            case D3DERR_NOTFOUND:           return "D3DERR_NOTFOUND";
+            case E_OUTOFMEMORY:             return "E_OUTOFMEMORY";
+            default:                        return "unknown HRESULT";
+            }
+        }
+
+        std::string DescribeHr(HRESULT hr)
+        {
+            return std::string(HResultName(hr)) + " (" + FormatHr(hr) + ")";
+        }
+
+        constexpr unsigned int kUnsafeBlendState = 1u << 0;
+        constexpr unsigned int kUnsafeDepthState = 1u << 1;
+        constexpr unsigned int kUnsafeRasterizerState = 1u << 2;
+        constexpr unsigned int kUnsafeViewport = 1u << 3;
+        constexpr unsigned int kUnsafeScissor = 1u << 4;
+        constexpr unsigned int kUnsafeTargetBinding = 1u << 5;
+
+        constexpr std::size_t NativeOperationIndex(D3D9NativeOperationEXT operation)
+        {
+            return static_cast<std::size_t>(operation);
+        }
+
         /// D9-82: XNA's own PrimitiveType only ever needs these 4 D3DPRIMITIVETYPE values --
         /// unlike D3D11/Vulkan/D3D12's own per-backend VertexCountForPrimitives() precedent, D3D9's
         /// DrawPrimitive/DrawIndexedPrimitive already take a PrimitiveCount directly (not a raw
@@ -125,6 +157,200 @@ namespace CNA::Internal::Backends::D3D9
     }
 
     D3D9GraphicsBackend::~D3D9GraphicsBackend() = default;
+
+    void D3D9GraphicsBackend::EnsureRenderReadyEXT() const
+    {
+        ThrowIfDeviceLost();
+        if (unsafeRenderStateMask_ != 0)
+        {
+            throw std::runtime_error(
+                "D3D9 rendering is blocked because a prior checked state or target operation "
+                "failed; reapply the affected complete state or render target transition first");
+        }
+    }
+
+    void D3D9GraphicsBackend::InjectNextNativeFailureEXT(D3D9NativeOperationEXT operation,
+                                                          HRESULT result)
+    {
+        if (!FAILED(result))
+            throw std::invalid_argument("D3D9 native failure injection requires a failing HRESULT");
+        nativeFailureInjection_ = {true, operation, result};
+    }
+
+    void D3D9GraphicsBackend::ClearNativeFailureInjectionEXT()
+    {
+        nativeFailureInjection_.active = false;
+    }
+
+    bool D3D9GraphicsBackend::HasNativeFailureInjectionEXT() const
+    {
+        return nativeFailureInjection_.active;
+    }
+
+    std::uint64_t D3D9GraphicsBackend::GetNativeCallCountEXT(
+        D3D9NativeOperationEXT operation) const
+    {
+        return nativeCallCounts_[NativeOperationIndex(operation)];
+    }
+
+    HRESULT D3D9GraphicsBackend::TakeInjectedResultEXT(D3D9NativeOperationEXT operation)
+    {
+        if (!nativeFailureInjection_.active || nativeFailureInjection_.operation != operation)
+            return D3D_OK;
+
+        nativeFailureInjection_.active = false;
+        return nativeFailureInjection_.result;
+    }
+
+    void D3D9GraphicsBackend::MarkStateUnsafeEXT(unsigned int safetyBit)
+    {
+        unsafeRenderStateMask_ |= safetyBit;
+    }
+
+    void D3D9GraphicsBackend::MarkStateKnownEXT(unsigned int safetyBit)
+    {
+        unsafeRenderStateMask_ &= ~safetyBit;
+    }
+
+    void D3D9GraphicsBackend::MarkDeviceLostFromScopedFailureEXT()
+    {
+        if (deviceLost_) return;
+        deviceLost_ = true;
+        if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Lost);
+    }
+
+    [[noreturn]] void D3D9GraphicsBackend::ThrowScopedFailureEXT(
+        const char* operation, HRESULT hr, const std::string& detail)
+    {
+        std::string message = std::string("D3D9 ") + operation + " failed: " + DescribeHr(hr);
+        if (!detail.empty()) message += " (" + detail + ")";
+
+        // Device loss is not an internal rendering error.  Preserve the existing D9-34 lifecycle:
+        // transition once to Lost, let Present()/TestCooperativeLevel drive Reset, and reject work
+        // in the interval through the established DeviceLostException surface.
+        if (hr == D3DERR_DEVICELOST || hr == D3DERR_DEVICENOTRESET)
+        {
+            MarkDeviceLostFromScopedFailureEXT();
+            throw Microsoft::Xna::Framework::Graphics::DeviceLostException(message);
+        }
+
+        if (hr == D3DERR_OUTOFVIDEOMEMORY || hr == E_OUTOFMEMORY)
+            message += " [resource allocation failure]";
+
+        // One authoritative diagnostic at the native-operation boundary; callers receive the same
+        // message in the exception and deliberately do not log it again.
+        CNA::Logger::Error(message, CNA::LogCategory::GPU);
+        throw std::runtime_error(message);
+    }
+
+    void D3D9GraphicsBackend::SetRenderStateCheckedEXT(
+        D3DRENDERSTATETYPE state, DWORD value, unsigned int safetyBit, const char* context)
+    {
+        ThrowIfDeviceLost();
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::SetRenderState);
+        if (SUCCEEDED(hr))
+        {
+            ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::SetRenderState)];
+            hr = device_->SetRenderState(state, value);
+        }
+        if (FAILED(hr))
+        {
+            MarkStateUnsafeEXT(safetyBit);
+            ThrowScopedFailureEXT("IDirect3DDevice9::SetRenderState", hr, context);
+        }
+    }
+
+    void D3D9GraphicsBackend::SetViewportCheckedEXT(
+        const D3DVIEWPORT9& viewport, unsigned int safetyBit, const char* context)
+    {
+        ThrowIfDeviceLost();
+        const HRESULT hr = InvokeSetViewportEXT(viewport);
+        if (FAILED(hr))
+        {
+            MarkStateUnsafeEXT(safetyBit);
+            ThrowScopedFailureEXT("IDirect3DDevice9::SetViewport", hr, context);
+        }
+    }
+
+    void D3D9GraphicsBackend::SetScissorRectCheckedEXT(
+        const RECT& rect, unsigned int safetyBit, const char* context)
+    {
+        ThrowIfDeviceLost();
+        const HRESULT hr = InvokeSetScissorRectEXT(rect);
+        if (FAILED(hr))
+        {
+            MarkStateUnsafeEXT(safetyBit);
+            ThrowScopedFailureEXT("IDirect3DDevice9::SetScissorRect", hr, context);
+        }
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeSetRenderTargetEXT(DWORD slot, IDirect3DSurface9* surface)
+    {
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::SetRenderTarget);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::SetRenderTarget)];
+        return device_->SetRenderTarget(slot, surface);
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeSetDepthStencilSurfaceEXT(IDirect3DSurface9* surface)
+    {
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::SetDepthStencilSurface);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::SetDepthStencilSurface)];
+        return device_->SetDepthStencilSurface(surface);
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeGetRenderTargetEXT(DWORD slot, IDirect3DSurface9** surface)
+    {
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::GetRenderTarget);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::GetRenderTarget)];
+        return device_->GetRenderTarget(slot, surface);
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeGetDepthStencilSurfaceEXT(IDirect3DSurface9** surface)
+    {
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::GetDepthStencilSurface);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::GetDepthStencilSurface)];
+        return device_->GetDepthStencilSurface(surface);
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeGetBackBufferEXT(IDirect3DSurface9** surface)
+    {
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::GetBackBuffer);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::GetBackBuffer)];
+        return device_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, surface);
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeSetViewportEXT(const D3DVIEWPORT9& viewport)
+    {
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::SetViewport);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::SetViewport)];
+        return device_->SetViewport(&viewport);
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeSetScissorRectEXT(const RECT& rect)
+    {
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::SetScissorRect);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::SetScissorRect)];
+        return device_->SetScissorRect(&rect);
+    }
+
+    HRESULT D3D9GraphicsBackend::InvokeCreateDepthStencilSurfaceEXT(
+        UINT width, UINT height, D3DFORMAT format, D3DMULTISAMPLE_TYPE multiSample, DWORD quality,
+        BOOL discard, IDirect3DSurface9** surface)
+    {
+        if (surface) *surface = nullptr;
+        HRESULT hr = TakeInjectedResultEXT(D3D9NativeOperationEXT::CreateDepthStencilSurface);
+        if (FAILED(hr)) return hr;
+        ++nativeCallCounts_[NativeOperationIndex(D3D9NativeOperationEXT::CreateDepthStencilSurface)];
+        return device_->CreateDepthStencilSurface(width, height, format, multiSample, quality, discard,
+                                                   surface, nullptr);
+    }
 
     D3DPRESENT_PARAMETERS D3D9GraphicsBackend::BuildPresentParameters() const
     {
@@ -366,6 +592,10 @@ namespace CNA::Internal::Backends::D3D9
             return;
         }
 
+        // A successful Reset restores a usable native device.  Clear the Lost gate before the
+        // checked viewport/default-surface restoration calls; the public Reset event still fires
+        // only after those calls complete below.
+        deviceLost_ = false;
         SetViewport(0, 0, width_, height_, 0.0f, 1.0f);
         CacheDefaultDepthStencilSurfaceEXT();
         // Same reasoning as EnsureDeviceSize()'s identical line: Reset() always reverts to the back
@@ -373,8 +603,6 @@ namespace CNA::Internal::Backends::D3D9
         // just released above.
         currentCustomRT_ = nullptr;
         currentCustomCubeRT_ = nullptr;
-        deviceLost_ = false;
-
         if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Reset);
     }
 
@@ -416,7 +644,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::Clear(float r, float g, float b, float a)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_TARGET,
                                      D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f, 0);
         if (FAILED(hr))
@@ -447,7 +675,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
         HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth, 0);
@@ -457,7 +685,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearDepth(float depth)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         if (!HasDepthBuffer(depthStencilFormatOrdinal_)) return;
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, depth, 0);
         if (FAILED(hr))
@@ -466,7 +694,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearStencil(int stencil)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         if (!HasStencilBuffer(depthStencilFormatOrdinal_)) return;
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_STENCIL, 0, 1.0f,
                                      static_cast<DWORD>(stencil));
@@ -476,7 +704,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         if (!HasDepthBuffer(depthStencilFormatOrdinal_)) return;
         DWORD flags = D3DCLEAR_ZBUFFER;
         if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
@@ -487,7 +715,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
         HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f,
@@ -499,7 +727,7 @@ namespace CNA::Internal::Backends::D3D9
     void D3D9GraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a,
                                                          float depth, int stencil)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
         if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
@@ -511,7 +739,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
         if (w <= 0 || h <= 0) return;
 
         ComPtr<IDirect3DSurface9> backBuffer;
@@ -601,7 +829,8 @@ namespace CNA::Internal::Backends::D3D9
     // no field-tracking struct needed.
     void D3D9GraphicsBackend::SetDepthTestEnabled(bool enabled)
     {
-        device_->SetRenderState(D3DRS_ZENABLE, enabled ? D3DZB_TRUE : D3DZB_FALSE);
+        SetRenderStateCheckedEXT(D3DRS_ZENABLE, enabled ? D3DZB_TRUE : D3DZB_FALSE,
+                                 kUnsafeDepthState, "SetDepthTestEnabled(D3DRS_ZENABLE)");
     }
 
     // Deliberate no-op, matching D3D11's/D3D12's own identical choice: a bare "enable blending" has
@@ -612,7 +841,8 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::SetDepthWriteEnabled(bool enabled)
     {
-        device_->SetRenderState(D3DRS_ZWRITEENABLE, enabled ? TRUE : FALSE);
+        SetRenderStateCheckedEXT(D3DRS_ZWRITEENABLE, enabled ? TRUE : FALSE,
+                                 kUnsafeDepthState, "SetDepthWriteEnabled(D3DRS_ZWRITEENABLE)");
     }
 
     std::unique_ptr<IVertexBufferBackend> D3D9GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
@@ -655,7 +885,7 @@ namespace CNA::Internal::Backends::D3D9
                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                                      PrimitiveType primitive, int primitiveCount)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
 
         // D9-82: matches every other backend's own DrawColoredPrimitives scope (BasicEffect with
         // VertexColorEnabled=true, DiffuseColor=white, fog disabled, no texture/lighting). Other
@@ -711,7 +941,7 @@ namespace CNA::Internal::Backends::D3D9
                                                             const Matrix& world, const Matrix& view, const Matrix& projection,
                                                             PrimitiveType primitive, int primitiveCount)
     {
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
 
         // D9-82: indexed counterpart of DrawColoredPrimitives above -- same colored-only scope.
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
@@ -801,63 +1031,217 @@ namespace CNA::Internal::Backends::D3D9
     void D3D9GraphicsBackend::RestoreBackBufferRenderTargetEXT()
     {
         ComPtr<IDirect3DSurface9> backBuffer;
-        device_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, backBuffer.GetAddressOf());
-        device_->SetRenderTarget(0, backBuffer.Get());
-        device_->SetDepthStencilSurface(defaultDepthStencilSurface_.Get());
+        const HRESULT hr = InvokeGetBackBufferEXT(backBuffer.GetAddressOf());
+        if (FAILED(hr) || !backBuffer)
+        {
+            MarkStateUnsafeEXT(kUnsafeTargetBinding);
+            ThrowScopedFailureEXT("IDirect3DDevice9::GetBackBuffer",
+                                  FAILED(hr) ? hr : E_FAIL,
+                                  "restoring the default render target");
+        }
+
+        IDirect3DSurface9* color = backBuffer.Get();
+        BindRenderTargetSurfacesEXT(&color, 1, defaultDepthStencilSurface_.Get(),
+                                    width_, height_, "restoring the default render target");
     }
 
     void D3D9GraphicsBackend::CacheDefaultDepthStencilSurfaceEXT()
     {
         defaultDepthStencilSurface_.Reset();
-        if (HasDepthBuffer(depthStencilFormatOrdinal_))
+        if (!HasDepthBuffer(depthStencilFormatOrdinal_)) return;
+
+        const HRESULT hr = InvokeGetDepthStencilSurfaceEXT(
+            defaultDepthStencilSurface_.GetAddressOf());
+        if (FAILED(hr) || !defaultDepthStencilSurface_)
         {
-            device_->GetDepthStencilSurface(defaultDepthStencilSurface_.GetAddressOf());
+            ThrowScopedFailureEXT("IDirect3DDevice9::GetDepthStencilSurface",
+                                  FAILED(hr) ? hr : E_FAIL,
+                                  "caching the default depth-stencil surface");
         }
+    }
+
+    void D3D9GraphicsBackend::CreateDepthStencilSurfaceEXT(
+        UINT width, UINT height, D3DFORMAT format, D3DMULTISAMPLE_TYPE multiSample, DWORD quality,
+        BOOL discard, IDirect3DSurface9** surface, const char* context)
+    {
+        if (surface) *surface = nullptr;
+        const HRESULT hr = InvokeCreateDepthStencilSurfaceEXT(
+            width, height, format, multiSample, quality, discard, surface);
+        if (FAILED(hr) || !surface || !*surface)
+        {
+            if (surface) *surface = nullptr;
+            ThrowScopedFailureEXT("IDirect3DDevice9::CreateDepthStencilSurface",
+                                  FAILED(hr) ? hr : E_FAIL, context);
+        }
+    }
+
+    void D3D9GraphicsBackend::BindRenderTargetSurfacesEXT(
+        IDirect3DSurface9* const* colorSurfaces, int colorCount,
+        IDirect3DSurface9* depthStencilSurface, int width, int height, const char* context)
+    {
+        ThrowIfDeviceLost();
+        const int targetSlots = std::max(1, static_cast<int>(caps_.NumSimultaneousRTs));
+        if (!colorSurfaces || colorCount <= 0 || colorCount > targetSlots || !colorSurfaces[0])
+            throw std::invalid_argument("D3D9 render-target transition has invalid color surfaces");
+
+        struct BindingSnapshot
+        {
+            std::vector<ComPtr<IDirect3DSurface9>> colors;
+            ComPtr<IDirect3DSurface9> depth;
+            D3DVIEWPORT9 viewport{};
+        } previous;
+        previous.colors.resize(static_cast<std::size_t>(targetSlots));
+
+        HRESULT failure = D3D_OK;
+        const char* failedOperation = nullptr;
+        for (int slot = 0; slot < targetSlots; ++slot)
+        {
+            HRESULT hr = InvokeGetRenderTargetEXT(
+                static_cast<DWORD>(slot), previous.colors[static_cast<std::size_t>(slot)].GetAddressOf());
+            if (hr == D3DERR_NOTFOUND)
+            {
+                previous.colors[static_cast<std::size_t>(slot)].Reset();
+                continue;
+            }
+            if (FAILED(hr) || (slot == 0 && !previous.colors[0]))
+            {
+                failure = FAILED(hr) ? hr : E_FAIL;
+                failedOperation = "IDirect3DDevice9::GetRenderTarget";
+                break;
+            }
+        }
+        if (SUCCEEDED(failure))
+        {
+            HRESULT hr = InvokeGetDepthStencilSurfaceEXT(previous.depth.GetAddressOf());
+            if (hr == D3DERR_NOTFOUND)
+            {
+                previous.depth.Reset();
+            }
+            else if (FAILED(hr))
+            {
+                failure = hr;
+                failedOperation = "IDirect3DDevice9::GetDepthStencilSurface";
+            }
+        }
+        if (SUCCEEDED(failure))
+        {
+            const HRESULT hr = device_->GetViewport(&previous.viewport);
+            if (FAILED(hr))
+            {
+                failure = hr;
+                failedOperation = "IDirect3DDevice9::GetViewport";
+            }
+        }
+        if (FAILED(failure))
+        {
+            MarkStateUnsafeEXT(kUnsafeTargetBinding);
+            ThrowScopedFailureEXT(failedOperation, failure,
+                                  std::string(context) + "; could not snapshot the previous binding");
+        }
+
+        auto rollback = [&]()
+        {
+            bool restored = true;
+            // Mirror D3D9's normal binding order (color slots, then depth, then viewport).  The
+            // pre-transition pair remains valid while the color slots are restored, exactly as it
+            // did before this attempted switch.
+            for (int slot = 0; slot < targetSlots; ++slot)
+            {
+                if (FAILED(InvokeSetRenderTargetEXT(
+                        static_cast<DWORD>(slot), previous.colors[static_cast<std::size_t>(slot)].Get())))
+                    restored = false;
+            }
+            if (FAILED(InvokeSetDepthStencilSurfaceEXT(previous.depth.Get()))) restored = false;
+            if (FAILED(InvokeSetViewportEXT(previous.viewport))) restored = false;
+            return restored;
+        };
+
+        for (int slot = 0; slot < targetSlots; ++slot)
+        {
+            IDirect3DSurface9* surface = slot < colorCount ? colorSurfaces[slot] : nullptr;
+            failure = InvokeSetRenderTargetEXT(static_cast<DWORD>(slot), surface);
+            if (FAILED(failure))
+            {
+                const bool restored = rollback();
+                if (!restored) MarkStateUnsafeEXT(kUnsafeTargetBinding);
+                ThrowScopedFailureEXT("IDirect3DDevice9::SetRenderTarget", failure,
+                                      std::string(context) + (restored
+                                          ? "; previous target/depth/viewport restored"
+                                          : "; rollback failed; target binding is unsafe"));
+            }
+        }
+
+        failure = InvokeSetDepthStencilSurfaceEXT(depthStencilSurface);
+        if (FAILED(failure))
+        {
+            const bool restored = rollback();
+            if (!restored) MarkStateUnsafeEXT(kUnsafeTargetBinding);
+            ThrowScopedFailureEXT("IDirect3DDevice9::SetDepthStencilSurface", failure,
+                                  std::string(context) + (restored
+                                      ? "; previous target/depth/viewport restored"
+                                      : "; rollback failed; target binding is unsafe"));
+        }
+
+        D3DVIEWPORT9 viewport{};
+        viewport.X = 0;
+        viewport.Y = 0;
+        viewport.Width = static_cast<DWORD>(width);
+        viewport.Height = static_cast<DWORD>(height);
+        viewport.MinZ = 0.0f;
+        viewport.MaxZ = 1.0f;
+        failure = InvokeSetViewportEXT(viewport);
+        if (FAILED(failure))
+        {
+            const bool restored = rollback();
+            if (!restored) MarkStateUnsafeEXT(kUnsafeTargetBinding);
+            ThrowScopedFailureEXT("IDirect3DDevice9::SetViewport", failure,
+                                  std::string(context) + (restored
+                                      ? "; previous target/depth/viewport restored"
+                                      : "; rollback failed; target binding is unsafe"));
+        }
+
+        MarkStateKnownEXT(kUnsafeTargetBinding);
     }
 
     void D3D9GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
-        if (currentCustomCubeRT_)
-        {
-            currentCustomCubeRT_->UnbindAsRenderTarget();
-            currentCustomCubeRT_ = nullptr;
-        }
-        if (currentCustomRT_) currentCustomRT_->UnbindAsRenderTarget();
         if (!rt)
         {
-            currentCustomRT_ = nullptr;
-            // Unconditional, not just whatever UnbindAsRenderTarget() above already did -- an MRT
-            // bind (SetRenderTargets(), D9-54) never sets currentCustomRT_ (a single pointer can't
-            // represent N targets), so relying solely on that call would leave the device pointed
-            // at a stale MRT slot after SetRenderTargets(nullptr, 0) delegates here. Idempotent
-            // (harmless no-op) in the ordinary single-target-unbind case.
+            // Resolve before the checked transition, but do NOT restore first: the transaction
+            // snapshots the currently-bound pair so a failed back-buffer restore can put this pair
+            // back exactly instead of silently leaving an ambiguous half-switch.
+            if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
             RestoreBackBufferRenderTargetEXT();
+            currentCustomRT_ = nullptr;
+            currentCustomCubeRT_ = nullptr;
             return;
         }
         auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(rt);
-        currentCustomRT_ = d3d9Rt;
+        if (currentCustomRT_ && currentCustomRT_ != d3d9Rt)
+            currentCustomRT_->ResolveForTransitionEXT();
         d3d9Rt->BindAsRenderTarget();
+        // Commit backend bookkeeping only after the entire color/depth/viewport transition
+        // succeeds.  A throwing bind therefore leaves the previous native binding and pointer
+        // authoritative for retry A -> failure(B) -> A/B.
+        currentCustomRT_ = d3d9Rt;
+        currentCustomCubeRT_ = nullptr;
     }
 
     void D3D9GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
     {
-        if (currentCustomRT_)
-        {
-            currentCustomRT_->UnbindAsRenderTarget();
-            currentCustomRT_ = nullptr;
-        }
-        if (currentCustomCubeRT_) currentCustomCubeRT_->UnbindAsRenderTarget();
         if (!rt)
         {
-            currentCustomCubeRT_ = nullptr;
-            // Same reasoning as SetRenderTarget2D()'s identical line -- unconditional, not just
-            // whatever UnbindAsRenderTarget() above already did.
+            if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
             RestoreBackBufferRenderTargetEXT();
+            currentCustomRT_ = nullptr;
+            currentCustomCubeRT_ = nullptr;
             return;
         }
         auto* d3d9CubeRt = static_cast<D3D9RenderTargetCubeBackend*>(rt);
-        currentCustomCubeRT_ = d3d9CubeRt;
+        if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
         d3d9CubeRt->BindAsRenderTargetFace(face);
+        currentCustomCubeRT_ = d3d9CubeRt;
+        currentCustomRT_ = nullptr;
     }
 
     void D3D9GraphicsBackend::SetRenderTargets(
@@ -892,46 +1276,23 @@ namespace CNA::Internal::Backends::D3D9
                 std::to_string(caps_.NumSimultaneousRTs) + " (D3DCAPS9::NumSimultaneousRTs)");
         }
 
-        if (currentCustomCubeRT_)
+        std::vector<IDirect3DSurface9*> colorSurfaces;
+        colorSurfaces.reserve(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i)
         {
-            currentCustomCubeRT_->UnbindAsRenderTarget();
-            currentCustomCubeRT_ = nullptr;
-        }
-        if (currentCustomRT_)
-        {
-            currentCustomRT_->UnbindAsRenderTarget();
-            currentCustomRT_ = nullptr;
-        }
-
-        for (int i = 0; i < static_cast<int>(caps_.NumSimultaneousRTs); ++i)
-        {
-            if (i < count)
-            {
-                auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(
-                    renderTargets[i].GetRenderTarget2D());
-                d3d9Rt->EnsureReadyEXT();
-                device_->SetRenderTarget(static_cast<DWORD>(i), d3d9Rt->GetActiveColorSurfaceEXT());
-            }
-            else
-            {
-                // Real D3D9 requirement: unused render-target slots must be explicitly disabled,
-                // not left holding whatever surface a previous (larger) MRT bind left there.
-                device_->SetRenderTarget(static_cast<DWORD>(i), nullptr);
-            }
+            auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
+            d3d9Rt->EnsureReadyEXT();
+            colorSurfaces.push_back(d3d9Rt->GetActiveColorSurfaceEXT());
         }
 
         auto* first = static_cast<D3D9RenderTargetBackend*>(
             renderTargets[0].GetRenderTarget2D());
-        device_->SetDepthStencilSurface(first->GetDepthStencilSurfaceEXT());
-
-        D3DVIEWPORT9 vp{};
-        vp.X = 0;
-        vp.Y = 0;
-        vp.Width = static_cast<DWORD>(first->GetWidth());
-        vp.Height = static_cast<DWORD>(first->GetHeight());
-        vp.MinZ = 0.0f;
-        vp.MaxZ = 1.0f;
-        device_->SetViewport(&vp);
+        if (currentCustomRT_) currentCustomRT_->ResolveForTransitionEXT();
+        BindRenderTargetSurfacesEXT(colorSurfaces.data(), count, first->GetDepthStencilSurfaceEXT(),
+                                    first->GetWidth(), first->GetHeight(), "binding multiple render targets");
+        currentCustomRT_ = nullptr;
+        currentCustomCubeRT_ = nullptr;
 
         // MRT binds are NOT tracked in currentCustomRT_/currentCustomCubeRT_ (a single pointer
         // can't represent N targets, matches D3D11's own identical MRT-tracking gap) -- unbinding
@@ -983,32 +1344,51 @@ namespace CNA::Internal::Backends::D3D9
                                                int colorBlendFunc, int alphaBlendFunc,
                                                const BlendWriteState& writeState)
     {
-        device_->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-        device_->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
-        device_->SetRenderState(D3DRS_SRCBLEND, BlendToD3D9(colorSrcBlend));
-        device_->SetRenderState(D3DRS_DESTBLEND, BlendToD3D9(colorDstBlend));
-        device_->SetRenderState(D3DRS_BLENDOP, BlendFunctionToD3D9(colorBlendFunc));
-        device_->SetRenderState(D3DRS_SRCBLENDALPHA, BlendToD3D9(alphaSrcBlend));
-        device_->SetRenderState(D3DRS_DESTBLENDALPHA, BlendToD3D9(alphaDstBlend));
-        device_->SetRenderState(D3DRS_BLENDOPALPHA, BlendFunctionToD3D9(alphaBlendFunc));
+        SetRenderStateCheckedEXT(D3DRS_ALPHABLENDENABLE, TRUE, kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_ALPHABLENDENABLE)");
+        SetRenderStateCheckedEXT(D3DRS_SEPARATEALPHABLENDENABLE, TRUE, kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_SEPARATEALPHABLENDENABLE)");
+        SetRenderStateCheckedEXT(D3DRS_SRCBLEND, BlendToD3D9(colorSrcBlend), kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_SRCBLEND)");
+        SetRenderStateCheckedEXT(D3DRS_DESTBLEND, BlendToD3D9(colorDstBlend), kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_DESTBLEND)");
+        SetRenderStateCheckedEXT(D3DRS_BLENDOP, BlendFunctionToD3D9(colorBlendFunc), kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_BLENDOP)");
+        SetRenderStateCheckedEXT(D3DRS_SRCBLENDALPHA, BlendToD3D9(alphaSrcBlend), kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_SRCBLENDALPHA)");
+        SetRenderStateCheckedEXT(D3DRS_DESTBLENDALPHA, BlendToD3D9(alphaDstBlend), kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_DESTBLENDALPHA)");
+        SetRenderStateCheckedEXT(D3DRS_BLENDOPALPHA, BlendFunctionToD3D9(alphaBlendFunc), kUnsafeBlendState,
+                                 "ApplyBlendState(D3DRS_BLENDOPALPHA)");
         // REMED-GFX-077: XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to
         // D3DCOLORWRITEENABLE_*, so the raw value drops straight into D3DRS_COLORWRITEENABLE. These
         // are dynamic render states (no state object → nothing to cache/key). Slot 0 is always
         // supported; the independent per-RT masks (slots 1/2/3) need D3DPMISCCAPS_INDEPENDENTWRITEMASKS.
-        device_->SetRenderState(D3DRS_COLORWRITEENABLE, static_cast<DWORD>(writeState.colorWriteChannels[0] & 0xF));
+        SetRenderStateCheckedEXT(D3DRS_COLORWRITEENABLE,
+                                 static_cast<DWORD>(writeState.colorWriteChannels[0] & 0xF),
+                                 kUnsafeBlendState, "ApplyBlendState(D3DRS_COLORWRITEENABLE)");
         if (caps_.PrimitiveMiscCaps & D3DPMISCCAPS_INDEPENDENTWRITEMASKS)
         {
-            device_->SetRenderState(D3DRS_COLORWRITEENABLE1, static_cast<DWORD>(writeState.colorWriteChannels[1] & 0xF));
-            device_->SetRenderState(D3DRS_COLORWRITEENABLE2, static_cast<DWORD>(writeState.colorWriteChannels[2] & 0xF));
-            device_->SetRenderState(D3DRS_COLORWRITEENABLE3, static_cast<DWORD>(writeState.colorWriteChannels[3] & 0xF));
+            SetRenderStateCheckedEXT(D3DRS_COLORWRITEENABLE1,
+                                     static_cast<DWORD>(writeState.colorWriteChannels[1] & 0xF),
+                                     kUnsafeBlendState, "ApplyBlendState(D3DRS_COLORWRITEENABLE1)");
+            SetRenderStateCheckedEXT(D3DRS_COLORWRITEENABLE2,
+                                     static_cast<DWORD>(writeState.colorWriteChannels[2] & 0xF),
+                                     kUnsafeBlendState, "ApplyBlendState(D3DRS_COLORWRITEENABLE2)");
+            SetRenderStateCheckedEXT(D3DRS_COLORWRITEENABLE3,
+                                     static_cast<DWORD>(writeState.colorWriteChannels[3] & 0xF),
+                                     kUnsafeBlendState, "ApplyBlendState(D3DRS_COLORWRITEENABLE3)");
         }
         // BlendState.MultiSampleMask → D3DRS_MULTISAMPLEMASK (dynamic; only affects MSAA targets).
-        device_->SetRenderState(D3DRS_MULTISAMPLEMASK, static_cast<DWORD>(writeState.multiSampleMask));
+        SetRenderStateCheckedEXT(D3DRS_MULTISAMPLEMASK, static_cast<DWORD>(writeState.multiSampleMask),
+                                 kUnsafeBlendState, "ApplyBlendState(D3DRS_MULTISAMPLEMASK)");
+        MarkStateKnownEXT(kUnsafeBlendState);
     }
 
     void D3D9GraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
     {
-        device_->SetRenderState(D3DRS_BLENDFACTOR, D3DCOLOR_COLORVALUE(r, g, b, a));
+        SetRenderStateCheckedEXT(D3DRS_BLENDFACTOR, D3DCOLOR_COLORVALUE(r, g, b, a),
+                                 kUnsafeBlendState, "SetBlendFactor(D3DRS_BLENDFACTOR)");
     }
 
     void D3D9GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
@@ -1020,45 +1400,69 @@ namespace CNA::Internal::Backends::D3D9
                                                       int ccwStencilFunc, int ccwStencilPass,
                                                       int ccwStencilFail, int ccwStencilDepthFail)
     {
-        device_->SetRenderState(D3DRS_ZENABLE, depthEnable ? D3DZB_TRUE : D3DZB_FALSE);
-        device_->SetRenderState(D3DRS_ZWRITEENABLE, depthWriteEnable ? TRUE : FALSE);
-        device_->SetRenderState(D3DRS_ZFUNC, CompareFunctionToD3D9(depthFunc));
-
-        device_->SetRenderState(D3DRS_STENCILENABLE, stencilEnable ? TRUE : FALSE);
-        device_->SetRenderState(D3DRS_STENCILFUNC, CompareFunctionToD3D9(stencilFunc));
-        device_->SetRenderState(D3DRS_STENCILPASS, StencilOperationToD3D9(stencilPass));
-        device_->SetRenderState(D3DRS_STENCILFAIL, StencilOperationToD3D9(stencilFail));
-        device_->SetRenderState(D3DRS_STENCILZFAIL, StencilOperationToD3D9(stencilDepthFail));
-        device_->SetRenderState(D3DRS_STENCILMASK, static_cast<DWORD>(stencilMask));
-        device_->SetRenderState(D3DRS_STENCILWRITEMASK, static_cast<DWORD>(stencilWriteMask));
-        device_->SetRenderState(D3DRS_STENCILREF, static_cast<DWORD>(referenceStencil));
-
-        device_->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, twoSidedStencilMode ? TRUE : FALSE);
-        device_->SetRenderState(D3DRS_CCW_STENCILFUNC, CompareFunctionToD3D9(ccwStencilFunc));
-        device_->SetRenderState(D3DRS_CCW_STENCILPASS, StencilOperationToD3D9(ccwStencilPass));
-        device_->SetRenderState(D3DRS_CCW_STENCILFAIL, StencilOperationToD3D9(ccwStencilFail));
-        device_->SetRenderState(D3DRS_CCW_STENCILZFAIL, StencilOperationToD3D9(ccwStencilDepthFail));
+        SetRenderStateCheckedEXT(D3DRS_ZENABLE, depthEnable ? D3DZB_TRUE : D3DZB_FALSE,
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_ZENABLE)");
+        SetRenderStateCheckedEXT(D3DRS_ZWRITEENABLE, depthWriteEnable ? TRUE : FALSE,
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_ZWRITEENABLE)");
+        SetRenderStateCheckedEXT(D3DRS_ZFUNC, CompareFunctionToD3D9(depthFunc), kUnsafeDepthState,
+                                 "ApplyDepthStencilState(D3DRS_ZFUNC)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILENABLE, stencilEnable ? TRUE : FALSE,
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_STENCILENABLE)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILFUNC, CompareFunctionToD3D9(stencilFunc), kUnsafeDepthState,
+                                 "ApplyDepthStencilState(D3DRS_STENCILFUNC)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILPASS, StencilOperationToD3D9(stencilPass), kUnsafeDepthState,
+                                 "ApplyDepthStencilState(D3DRS_STENCILPASS)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILFAIL, StencilOperationToD3D9(stencilFail), kUnsafeDepthState,
+                                 "ApplyDepthStencilState(D3DRS_STENCILFAIL)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILZFAIL, StencilOperationToD3D9(stencilDepthFail), kUnsafeDepthState,
+                                 "ApplyDepthStencilState(D3DRS_STENCILZFAIL)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILMASK, static_cast<DWORD>(stencilMask), kUnsafeDepthState,
+                                 "ApplyDepthStencilState(D3DRS_STENCILMASK)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILWRITEMASK, static_cast<DWORD>(stencilWriteMask),
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_STENCILWRITEMASK)");
+        SetRenderStateCheckedEXT(D3DRS_STENCILREF, static_cast<DWORD>(referenceStencil), kUnsafeDepthState,
+                                 "ApplyDepthStencilState(D3DRS_STENCILREF)");
+        SetRenderStateCheckedEXT(D3DRS_TWOSIDEDSTENCILMODE, twoSidedStencilMode ? TRUE : FALSE,
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_TWOSIDEDSTENCILMODE)");
+        SetRenderStateCheckedEXT(D3DRS_CCW_STENCILFUNC, CompareFunctionToD3D9(ccwStencilFunc),
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_CCW_STENCILFUNC)");
+        SetRenderStateCheckedEXT(D3DRS_CCW_STENCILPASS, StencilOperationToD3D9(ccwStencilPass),
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_CCW_STENCILPASS)");
+        SetRenderStateCheckedEXT(D3DRS_CCW_STENCILFAIL, StencilOperationToD3D9(ccwStencilFail),
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_CCW_STENCILFAIL)");
+        SetRenderStateCheckedEXT(D3DRS_CCW_STENCILZFAIL, StencilOperationToD3D9(ccwStencilDepthFail),
+                                 kUnsafeDepthState, "ApplyDepthStencilState(D3DRS_CCW_STENCILZFAIL)");
+        MarkStateKnownEXT(kUnsafeDepthState);
     }
 
     void D3D9GraphicsBackend::SetReferenceStencil(int value)
     {
-        device_->SetRenderState(D3DRS_STENCILREF, static_cast<DWORD>(value));
+        SetRenderStateCheckedEXT(D3DRS_STENCILREF, static_cast<DWORD>(value), kUnsafeDepthState,
+                                 "SetReferenceStencil(D3DRS_STENCILREF)");
     }
 
     void D3D9GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
                                                     bool scissorTestEnable,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        device_->SetRenderState(D3DRS_CULLMODE, CullModeToD3D9(cullMode));
-        device_->SetRenderState(D3DRS_FILLMODE, FillModeToD3D9(fillMode));
-        device_->SetRenderState(D3DRS_SCISSORTESTENABLE, scissorTestEnable ? TRUE : FALSE);
+        SetRenderStateCheckedEXT(D3DRS_CULLMODE, CullModeToD3D9(cullMode), kUnsafeRasterizerState,
+                                 "ApplyRasterizerState(D3DRS_CULLMODE)");
+        SetRenderStateCheckedEXT(D3DRS_FILLMODE, FillModeToD3D9(fillMode), kUnsafeRasterizerState,
+                                 "ApplyRasterizerState(D3DRS_FILLMODE)");
+        SetRenderStateCheckedEXT(D3DRS_SCISSORTESTENABLE, scissorTestEnable ? TRUE : FALSE,
+                                 kUnsafeRasterizerState,
+                                 "ApplyRasterizerState(D3DRS_SCISSORTESTENABLE)");
         // D3D9's D3DRS_DEPTHBIAS/SLOPESCALEDEPTHBIAS are floats (unlike D3D11's INT DepthBias) --
         // XNA's own float DepthBias/SlopeScaleDepthBias (Task 767's "r"-scaled convention) map
         // through directly, with no unit conversion needed (D3D11 needed to round to an INT; D3D9
         // needs no such step since both are already float) -- SetRenderState() still takes a DWORD
         // parameter for these, so the float bits are reinterpreted, not numerically converted.
-        device_->SetRenderState(D3DRS_DEPTHBIAS, std::bit_cast<DWORD>(depthBias));
-        device_->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, std::bit_cast<DWORD>(slopeScaleDepthBias));
+        SetRenderStateCheckedEXT(D3DRS_DEPTHBIAS, std::bit_cast<DWORD>(depthBias),
+                                 kUnsafeRasterizerState, "ApplyRasterizerState(D3DRS_DEPTHBIAS)");
+        SetRenderStateCheckedEXT(D3DRS_SLOPESCALEDEPTHBIAS, std::bit_cast<DWORD>(slopeScaleDepthBias),
+                                 kUnsafeRasterizerState,
+                                 "ApplyRasterizerState(D3DRS_SLOPESCALEDEPTHBIAS)");
+        MarkStateKnownEXT(kUnsafeRasterizerState);
     }
 
     void D3D9GraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -1068,7 +1472,8 @@ namespace CNA::Internal::Backends::D3D9
         rect.top = y;
         rect.right = x + w;
         rect.bottom = y + h;
-        device_->SetScissorRect(&rect);
+        SetScissorRectCheckedEXT(rect, kUnsafeScissor, "SetScissorRect");
+        MarkStateKnownEXT(kUnsafeScissor);
     }
 
     void D3D9GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
@@ -1094,9 +1499,8 @@ namespace CNA::Internal::Backends::D3D9
         vp.Height = static_cast<DWORD>(std::max(0, h));
         vp.MinZ = minDepth;
         vp.MaxZ = maxDepth;
-        HRESULT hr = device_->SetViewport(&vp);
-        if (FAILED(hr))
-            throw std::runtime_error("D3D9 SetViewport failed, hr=" + FormatHr(hr));
+        SetViewportCheckedEXT(vp, kUnsafeViewport, "SetViewport");
+        MarkStateKnownEXT(kUnsafeViewport);
     }
 
     void D3D9GraphicsBackend::SetContextRecoveryEnabled(bool)

@@ -240,11 +240,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::setViewportProperty(const Viewport& value)
     {
-        viewport_ = value;
         if (backend_)
             backend_->SetViewport(value.getXProperty(), value.getYProperty(),
                                    value.getWidthProperty(), value.getHeightProperty(),
                                    value.getMinDepthProperty(), value.getMaxDepthProperty());
+        // Commit the public cache only after the native/backend operation succeeds.  In particular,
+        // D3D9's checked SetViewport path may reject a bad/lost device; retaining the old viewport
+        // prevents CNA from claiming the failed dimensions are active.
+        viewport_ = value;
     }
 
     const IndexBuffer* GraphicsDevice::getIndicesProperty() const
@@ -1672,7 +1675,6 @@ namespace Microsoft::Xna::Framework::Graphics
     const BlendState& GraphicsDevice::getBlendStateProperty() const { return blendState_; }
     void GraphicsDevice::setBlendStateProperty(const BlendState& value)
     {
-        blendState_ = value;
         if (backend_)
         {
             // REMED-GFX-077: the four per-MRT colour write masks + the coverage sample mask travel
@@ -1691,19 +1693,24 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)value.getColorBlendFunctionProperty(),
                 (int)value.getAlphaBlendFunctionProperty(),
                 writeState);
+            backend_->SetBlendFactor(
+                value.getBlendFactorProperty().getRProperty() / 255.0f,
+                value.getBlendFactorProperty().getGProperty() / 255.0f,
+                value.getBlendFactorProperty().getBProperty() / 255.0f,
+                value.getBlendFactorProperty().getAProperty() / 255.0f);
         }
-        // FNA applies BlendState.BlendFactor atomically as part of FNA3D_SetBlendState — the
-        // state's own baked-in blend factor becomes the device's current one, the same way
-        // GraphicsDevice.BlendFactor's own setter would.
-        setBlendFactorProperty(value.getBlendFactorProperty());
+        // Commit the public cache only after both native applications succeed: a failed D3D9
+        // render-state update can otherwise leave the old GPU state active.
+        blendState_ = value;
+        blendFactor_ = value.getBlendFactorProperty();
     }
 
     DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() { return depthStencilState_; }
     const DepthStencilState& GraphicsDevice::getDepthStencilStateProperty() const { return depthStencilState_; }
     void GraphicsDevice::setDepthStencilStateProperty(const DepthStencilState& value)
     {
-        depthStencilState_ = value;
         if (backend_)
+        {
             backend_->ApplyDepthStencilState(
                 value.getDepthBufferEnableProperty(),
                 value.getDepthBufferWriteEnableProperty(),
@@ -1721,17 +1728,18 @@ namespace Microsoft::Xna::Framework::Graphics
                 (int)value.getCounterClockwiseStencilPassProperty(),
                 (int)value.getCounterClockwiseStencilFailProperty(),
                 (int)value.getCounterClockwiseStencilDepthBufferFailProperty());
-        // FNA applies a DepthStencilState's own ReferenceStencil atomically as part of the whole
-        // native state struct, the same way BlendState's own BlendFactor is applied (Task 309) -
-        // keep GraphicsDevice.ReferenceStencil in sync with whatever state was just assigned.
-        setReferenceStencilProperty(value.getReferenceStencilProperty());
+            backend_->SetReferenceStencil(value.getReferenceStencilProperty());
+        }
+        // Commit only after both native operations succeed, so the public cache never describes a
+        // depth/stencil configuration that a failed backend update did not install.
+        depthStencilState_ = value;
+        referenceStencil_ = value.getReferenceStencilProperty();
     }
 
     RasterizerState& GraphicsDevice::getRasterizerStateProperty() { return rasterizerState_; }
     const RasterizerState& GraphicsDevice::getRasterizerStateProperty() const { return rasterizerState_; }
     void GraphicsDevice::setRasterizerStateProperty(const RasterizerState& value)
     {
-        rasterizerState_ = value;
         if (backend_)
             backend_->ApplyRasterizerState(
                 (int)value.getCullModeProperty(),
@@ -1739,14 +1747,15 @@ namespace Microsoft::Xna::Framework::Graphics
                 value.getScissorTestEnableProperty(),
                 value.getDepthBiasProperty(),
                 value.getSlopeScaleDepthBiasProperty());
+        rasterizerState_ = value;
     }
 
     Rectangle GraphicsDevice::getScissorRectangleProperty() const { return scissorRectangle_; }
     void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value)
     {
-        scissorRectangle_ = value;
         if (backend_)
             backend_->SetScissorRect(value.X, value.Y, value.Width, value.Height);
+        scissorRectangle_ = value;
     }
 
     Color GraphicsDevice::getBlendFactorProperty() const { return blendFactor_; }
@@ -1916,13 +1925,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (renderTargets.empty())
         {
-            // Matches FNA: reset to the backbuffer's size when unbinding.
+            if (backend_)
+                backend_->SetRenderTargets(nullptr, 0);
+            // The backend transition is checked/transactional on D3D9.  Do not claim the
+            // backbuffer or its dimensions until that native restoration actually succeeds.
             currentRenderTargets_.clear();
             renderTargetBound_ = false;
             ResetViewportAndScissorForRenderTarget(presentationParameters_.getBackBufferWidthProperty(),
                                                     presentationParameters_.getBackBufferHeightProperty());
-            if (!backend_) return;
-            backend_->SetRenderTargets(nullptr, 0);
             return;
         }
 

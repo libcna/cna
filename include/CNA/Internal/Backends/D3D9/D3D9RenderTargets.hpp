@@ -80,6 +80,11 @@ namespace CNA::Internal::Backends::D3D9
         /// surface before a device Reset(). Lazily recreated on the next BindAsRenderTarget() call.
         void ReleaseDefaultPoolResourceEXT() override;
 
+        /// REMED-GFX-092: resolves an outgoing MSAA target without changing the currently-bound
+        /// native target pair.  The owner uses this before its checked/rollback-capable target
+        /// transition, so a failed switch can restore the still-valid prior binding.
+        void ResolveForTransitionEXT();
+
         /// D9-54: recreates the D3DPOOL_DEFAULT resources if a prior device-lost recovery released
         /// them, without also binding this target -- an MRT bind (D3D9GraphicsBackend::
         /// SetRenderTargets()) needs each target's surfaces ready before it builds its own

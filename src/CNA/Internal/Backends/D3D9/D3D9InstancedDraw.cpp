@@ -81,7 +81,7 @@ namespace CNA::Internal::Backends::D3D9
             return;
         }
 
-        ThrowIfDeviceLost();
+        EnsureRenderReadyEXT();
 
         const auto& d3dVb     = static_cast<const D3D9VertexBufferBackend&>(vb);
         const auto& d3dIb     = static_cast<const D3D9IndexBufferBackend&>(ib);

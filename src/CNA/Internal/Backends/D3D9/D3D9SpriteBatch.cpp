@@ -190,6 +190,8 @@ namespace CNA::Internal::Backends::D3D9
     {
         if (pendingVertices_.empty()) return;
 
+        owner_->EnsureRenderReadyEXT();
+
         EnsureShadersEXT();
         EnsureVertexDeclarationEXT();
 

@@ -71,11 +71,10 @@ namespace CNA::Internal::Backends::D3D9
             const D3DFORMAT depthFmt = DepthFormatToD3D9(depthFormatOrdinal_);
             const D3DMULTISAMPLE_TYPE dsMsaa = appliedMultiSampleCount_ > 1
                 ? static_cast<D3DMULTISAMPLE_TYPE>(appliedMultiSampleCount_) : D3DMULTISAMPLE_NONE;
-            hr = device_->CreateDepthStencilSurface(
+            owner_->CreateDepthStencilSurfaceEXT(
                 static_cast<UINT>(width_), static_cast<UINT>(height_), depthFmt, dsMsaa, 0, TRUE,
-                depthStencilSurface_.ReleaseAndGetAddressOf(), nullptr);
-            if (FAILED(hr))
-                throw std::runtime_error("D3D9RenderTargetBackend: CreateDepthStencilSurface failed, hr=" + FormatHr(hr));
+                depthStencilSurface_.ReleaseAndGetAddressOf(),
+                "D3D9RenderTargetBackend depth allocation");
         }
     }
 
@@ -87,25 +86,22 @@ namespace CNA::Internal::Backends::D3D9
         // is binding it, not a SetData() call.
         if (!colorTexture_) Recreate();
 
-        device_->SetRenderTarget(0, (appliedMultiSampleCount_ > 1 ? msaaSurface_ : colorSurface_).Get());
-        device_->SetDepthStencilSurface(depthStencilSurface_.Get());
-
-        D3DVIEWPORT9 vp{};
-        vp.X = 0;
-        vp.Y = 0;
-        vp.Width = static_cast<DWORD>(width_);
-        vp.Height = static_cast<DWORD>(height_);
-        vp.MinZ = 0.0f;
-        vp.MaxZ = 1.0f;
-        device_->SetViewport(&vp);
+        IDirect3DSurface9* color = (appliedMultiSampleCount_ > 1 ? msaaSurface_ : colorSurface_).Get();
+        owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(), width_, height_,
+                                            "binding RenderTarget2D");
     }
 
-    void D3D9RenderTargetBackend::UnbindAsRenderTarget()
+    void D3D9RenderTargetBackend::ResolveForTransitionEXT()
     {
         if (appliedMultiSampleCount_ > 1 && msaaSurface_ && colorSurface_)
         {
             device_->StretchRect(msaaSurface_.Get(), nullptr, colorSurface_.Get(), nullptr, D3DTEXF_NONE);
         }
+    }
+
+    void D3D9RenderTargetBackend::UnbindAsRenderTarget()
+    {
+        ResolveForTransitionEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
@@ -148,11 +144,10 @@ namespace CNA::Internal::Backends::D3D9
         if (hasDepth_)
         {
             const D3DFORMAT depthFmt = DepthFormatToD3D9(depthFormatOrdinal_);
-            hr = device_->CreateDepthStencilSurface(
+            owner_->CreateDepthStencilSurfaceEXT(
                 static_cast<UINT>(size_), static_cast<UINT>(size_), depthFmt, D3DMULTISAMPLE_NONE, 0, TRUE,
-                depthStencilSurface_.ReleaseAndGetAddressOf(), nullptr);
-            if (FAILED(hr))
-                throw std::runtime_error("D3D9RenderTargetCubeBackend: CreateDepthStencilSurface failed, hr=" + FormatHr(hr));
+                depthStencilSurface_.ReleaseAndGetAddressOf(),
+                "D3D9RenderTargetCubeBackend depth allocation");
         }
     }
 
@@ -167,17 +162,9 @@ namespace CNA::Internal::Backends::D3D9
         if (FAILED(hr))
             throw std::runtime_error("D3D9RenderTargetCubeBackend::BindAsRenderTargetFace: GetCubeMapSurface failed, hr=" + FormatHr(hr));
 
-        device_->SetRenderTarget(0, faceSurface.Get());
-        device_->SetDepthStencilSurface(depthStencilSurface_.Get());
-
-        D3DVIEWPORT9 vp{};
-        vp.X = 0;
-        vp.Y = 0;
-        vp.Width = static_cast<DWORD>(size_);
-        vp.Height = static_cast<DWORD>(size_);
-        vp.MinZ = 0.0f;
-        vp.MaxZ = 1.0f;
-        device_->SetViewport(&vp);
+        IDirect3DSurface9* color = faceSurface.Get();
+        owner_->BindRenderTargetSurfacesEXT(&color, 1, depthStencilSurface_.Get(), size_, size_,
+                                            "binding RenderTargetCube face");
     }
 
     void D3D9RenderTargetCubeBackend::UnbindAsRenderTarget()
