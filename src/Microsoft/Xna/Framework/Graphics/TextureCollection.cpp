@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 #include <stdexcept>
@@ -9,7 +11,13 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     TextureCollection::TextureCollection()
+        : TextureCollection(nullptr)
+    {
+    }
+
+    TextureCollection::TextureCollection(GraphicsDevice* graphicsDevice)
         : textures_(MaxTextures, nullptr)
+        , graphicsDevice_(graphicsDevice)
     {
     }
 
@@ -31,6 +39,18 @@ namespace Microsoft::Xna::Framework::Graphics
         if (texture != nullptr && texture->getIsDisposedProperty())
         {
             throw System::ObjectDisposedException(texture->getNameProperty());
+        }
+        if (texture != nullptr && graphicsDevice_ != nullptr)
+        {
+            for (const auto& binding : graphicsDevice_->GetRenderTargets())
+            {
+                if (binding.getRenderTargetProperty() == texture)
+                {
+                    throw System::InvalidOperationException(
+                        "A texture that is currently bound as a render target cannot be "
+                        "bound for sampling.");
+                }
+            }
         }
         textures_[static_cast<std::size_t>(index)] = texture;
     }

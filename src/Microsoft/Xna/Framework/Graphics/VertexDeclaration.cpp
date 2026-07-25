@@ -2,6 +2,10 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
 #include <algorithm>
+#include <utility>
+
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -33,11 +37,38 @@ namespace Microsoft::Xna::Framework::Graphics
     VertexDeclaration::VertexDeclaration(std::initializer_list<VertexElement> elements)
         : elements_(elements)
     {
+        if (elements_.empty())
+            throw System::ArgumentNullException("elements");
+
         int maxEnd = 0;
         for (const auto& e : elements_) {
             int end = e.getOffsetProperty() + GetTypeSize(e.getVertexElementFormatProperty());
             maxEnd = std::max(maxEnd, end);
         }
         vertexStride_ = maxEnd;
+    }
+
+    VertexDeclaration::VertexDeclaration(
+        int vertexStride,
+        std::initializer_list<VertexElement> elements)
+        : vertexStride_(vertexStride)
+        , elements_(elements)
+    {
+        if (elements_.empty())
+            throw System::ArgumentNullException("elements");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+            vertexStride_, "vertexStride");
+    }
+
+    VertexDeclaration::VertexDeclaration(
+        int vertexStride,
+        std::vector<VertexElement> elements)
+        : vertexStride_(vertexStride)
+        , elements_(std::move(elements))
+    {
+        if (elements_.empty())
+            throw System::ArgumentNullException("elements");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(
+            vertexStride_, "vertexStride");
     }
 }

@@ -38,6 +38,7 @@
 #include <string>
 #include <vector>
 
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -161,7 +162,9 @@ namespace Microsoft::Xna::Framework::Graphics
           blendState_(BlendState::Opaque),
           depthStencilState_(DepthStencilState::Default),
           rasterizerState_(RasterizerState::CullCounterClockwise),
-          blendFactor_(Color::White)
+          blendFactor_(Color::White),
+          textures_(this),
+          vertexTextures_(this)
     {
 #ifdef __ANDROID__
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
@@ -2057,9 +2060,16 @@ namespace Microsoft::Xna::Framework::Graphics
                 std::to_string(vertexBuffers.size()),
                 "Max Vertex Buffers supported is " + std::to_string(kMaxVertexBufferBindings));
 
+        for (const auto& binding : vertexBuffers)
+        {
+            if (binding.getVertexBufferProperty() == nullptr)
+                throw System::ArgumentNullException("vertexBuffers");
+        }
+
         currentVertexBuffers_ = vertexBuffers;
-        if (!vertexBuffers.empty())
-            currentVertexBuffer_ = vertexBuffers[0].getVertexBufferProperty();
+        currentVertexBuffer_ = vertexBuffers.empty()
+            ? nullptr
+            : vertexBuffers[0].getVertexBufferProperty();
     }
 
     std::vector<VertexBufferBinding> GraphicsDevice::GetVertexBuffers() const

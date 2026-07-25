@@ -135,12 +135,9 @@ TEST(TextureCollectionValidationTest, RenderTargetCanBindForSamplingAfterUnbind)
 // SetRenderTargets's Array.Copy into the fixed-size renderTargetBindings array throws when
 // given more than 4 targets.
 //
-// Real RenderTarget2D instances are used throughout (not default-constructed
-// RenderTargetBinding, which -- unlike FNA's RenderTargetBinding, whose only constructors throw
-// ArgumentNullException on a null target -- wraps a null Texture* in CNA and crashes deeper in
-// SetRenderTargets, an unrelated, separately-tracked null-target robustness gap; a real game
-// can never actually construct a null-target RenderTargetBinding, so exercising that path here
-// would test an unreachable state instead of this task's actual cap-check behavior).
+// Real RenderTarget2D instances are used throughout so the cap tests reach only the fixed-size
+// binding limit. The explicit RenderTargetBinding constructors reject null, while a default
+// binding remains representable and is covered separately by the deterministic null-binding test.
 // =============================================================================
 
 TEST(GraphicsDeviceValidationTest, SetRenderTargets_FiveTargets_Throws)

@@ -5,6 +5,7 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    class GraphicsDevice;
     class Texture;
 
     /** @brief A collection of Texture objects, one per texture sampler slot. */
@@ -27,6 +28,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Binds a texture to the given sampler slot.
          * @param index   Sampler slot index (0 to MaxTextures-1).
          * @param texture Pointer to the texture to bind, or nullptr to unbind.
+         * @throws System::InvalidOperationException if @p texture is currently bound as a
+         *         render target on the owning GraphicsDevice.
          */
         void operator()(int index, Texture* texture);
 
@@ -41,6 +44,11 @@ namespace Microsoft::Xna::Framework::Graphics
         void RemoveDisposedTexture(const Texture* tex);
 
     private:
+        explicit TextureCollection(GraphicsDevice* graphicsDevice);
+
         std::vector<Texture*> textures_;
+        GraphicsDevice* graphicsDevice_ = nullptr;
+
+        friend class GraphicsDevice;
     };
 }

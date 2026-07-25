@@ -16,6 +16,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param vertexBuffer      The vertex buffer to bind.
          * @param vertexOffset      Offset in vertices from the start of the buffer.
          * @param instanceFrequency Number of instances to draw per element; 0 means no instancing.
+         * @throws System::ArgumentNullException if @p vertexBuffer is null.
+         * @throws System::ArgumentOutOfRangeException if @p vertexOffset or
+         *         @p instanceFrequency is negative.
          */
         explicit VertexBufferBinding(VertexBuffer* vertexBuffer,
                                      int vertexOffset      = 0,

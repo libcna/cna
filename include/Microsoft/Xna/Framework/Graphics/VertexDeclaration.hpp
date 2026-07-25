@@ -29,6 +29,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * across all elements, matching FNA's VertexDeclaration(params VertexElement[]).
          *
          * @param elements Initializer list of vertex attribute descriptors.
+         * @throws System::ArgumentNullException if @p elements is empty.
          */
         explicit VertexDeclaration(std::initializer_list<VertexElement> elements);
 
@@ -36,23 +37,21 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Constructs a VertexDeclaration with an explicit stride and element list.
          * @param vertexStride Size in bytes of one vertex.
          * @param elements     Initializer list of vertex attribute descriptors.
+         * @throws System::ArgumentNullException if @p elements is empty.
+         * @throws System::ArgumentOutOfRangeException if @p vertexStride is not positive.
          */
         VertexDeclaration(int vertexStride,
-                          std::initializer_list<VertexElement> elements)
-            : vertexStride_(vertexStride), elements_(elements)
-        {
-        }
+                          std::initializer_list<VertexElement> elements);
 
         /**
          * @brief Constructs a VertexDeclaration with an explicit stride and element vector.
          * @param vertexStride Size in bytes of one vertex.
          * @param elements     Vector of vertex attribute descriptors (moved).
+         * @throws System::ArgumentNullException if @p elements is empty.
+         * @throws System::ArgumentOutOfRangeException if @p vertexStride is not positive.
          */
         VertexDeclaration(int vertexStride,
-                          std::vector<VertexElement> elements)
-            : vertexStride_(vertexStride), elements_(std::move(elements))
-        {
-        }
+                          std::vector<VertexElement> elements);
 
         /**
          * @brief Returns the size in bytes of one vertex described by this declaration.

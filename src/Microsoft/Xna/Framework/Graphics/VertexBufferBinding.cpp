@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -10,6 +12,10 @@ namespace Microsoft::Xna::Framework::Graphics
         , vertexOffset_(vertexOffset)
         , instanceFrequency_(instanceFrequency)
     {
+        System::ArgumentNullException::ThrowIfNull(vertexBuffer, "vertexBuffer");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(vertexOffset, "vertexOffset");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(
+            instanceFrequency, "instanceFrequency");
     }
 
     VertexBuffer* VertexBufferBinding::getVertexBufferProperty() const { return vertexBuffer_; }

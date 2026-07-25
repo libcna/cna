@@ -17,12 +17,14 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Constructs a RenderTargetBinding for a 2D render target.
          * @param renderTarget The render target texture to bind.
          * @param arraySlice   Texture array slice index (default 0).
+         * @throws System::ArgumentNullException if @p renderTarget is null.
          */
         explicit RenderTargetBinding(Texture* renderTarget, int arraySlice = 0);
         /**
          * @brief Constructs a RenderTargetBinding for a specific cube map face.
          * @param renderTarget The cube render target texture to bind.
          * @param cubeMapFace  The cube face to render into.
+         * @throws System::ArgumentNullException if @p renderTarget is null.
          */
         RenderTargetBinding(Texture* renderTarget, CubeMapFace cubeMapFace);
 
