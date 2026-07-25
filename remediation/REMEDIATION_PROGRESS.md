@@ -2427,7 +2427,9 @@ existing task.
 | REMED-GFX-057 | `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`'s `DrawString`/`Draw` (`static_cast<intcs>(dw * scale)`/`static_cast<intcs>(dh * scale)` ~line 311, the `Vector2`-scale siblings ~line 329, and the glyph-width/height `std::lround(...)`-wrapped casts ~lines 514-515) share the identical unguarded-float-to-`intcs`-cast root cause `Color::Lerp`/`Color::Multiply` had before `REMED-CORE-004`: a NaN or extreme `scale`/`Vector2 scale` argument reaching `DrawString`/`Draw` is undefined behavior with no guard | MEDIUM | P2 (suggested — same defect class as `REMED-CORE-004`, UB not memory corruption; fold into whichever GRAPHICS batch next touches `SpriteBatch.cpp`) | `REMED-CORE-004`'s own "verify all constructors/operators touched by the same root cause" sweep, extended past `Color.cpp` to other unguarded-float-cast sites project-wide | NOT STARTED — recorded, not fixed (GRAPHICS-owned file, out of the CORE lane's scope) |
 | REMED-GFX-059 | The SdlGpu backend emits a Vulkan validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw (confirmed via `VK_LAYER_KHRONOS_validation` under `SDL_GPU`). Confirmed **pre-existing** and independent of `REMED-GFX-006`: the existing `SdlGpu_Skinned` test emits it 6× against unchanged (pre-fix) shaders, and readback pixel values are correct throughout, so it is a render-pass/pipeline attachment-compatibility validation issue in `SdlGpuGraphicsBackend`, not a normal-transform or rendering-correctness defect | LOW-MEDIUM | P2 (SdlGpu-lane; validation-cleanliness, not a visible-output defect) | `REMED-GFX-006` SdlGpu slice (first `VK_LAYER_KHRONOS_validation` run of the new world-normal harness) | **DONE via REMED-GFX-097** — the older broad reproducer and GFX-097 have the same exact depth-reference mismatch: the active depthless pass used `VK_ATTACHMENT_UNUSED`, while every stock/custom SDL_GPU pipeline was described with the backend-global supported depth format. GFX-097 threads the active pass's actual depth format/absence through every pipeline family and its cache key. Post-fix `SdlGpu_Skinned` is **3/3** with zero 02684; the former six messages are gone. The separate MRT color-slot 02684 found by GFX-097 is **GFX-098**, not residual GFX-059. |
 | REMED-GFX-060 | Every effect-aware D3D9 draw site hardcoded the vertex/index offsets (`DrawPrimitive(…, 0 /*StartVertex*/)` and `DrawIndexedPrimitive(…, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount, 0 /*StartIndex*/, …)`), silently dropping the XNA `DrawPrimitives(vertexStart)` / `DrawIndexedPrimitives(baseVertex, startIndex)` offsets that `GraphicsDevice` threads through `GpuDrawParams`. Same defect class as `REMED-GFX-020` (D3D11/D3D12), spread across 15 sites in 4 files (`D3D9EffectDraw`/`D3D9PbrDraw`/`D3D9SkinnedVertexColorDraw`/`D3D9InstancedDraw`) | HIGH | P2 | `REMED-GFX-020` Phase-12 cross-backend draw-offset sweep | **DONE (2026-07-21, `aa23eed2`+`d2491a17`)** — fixed + runtime-verified on real DXVK 2.6.0 (new `D3D9_DrawOffset` 0/7→7/7, full D3D9 shard 20/20, D3D11 GFX-020 regression still 6/6). See detail section below. |
-| REMED-GFX-061 | The scalar `GpuDrawParams::fogStart`/`fogEnd` fields and the `IGraphicsBackend.hpp` (~`:454`) fog documentation ("D3D backends … keep using fogStart/fogEnd") are stale/vestigial for the D3D family after the GFX-005/010 view-space-fog campaign: D3D9 custom shaders compute view-space fog in-backend (`ComputeFogVectorEXT`) and D3D11/D3D12 D3DCommon stock effects bake the `fogVector` CPU-side, so the scalar object-space fields are consumed only by the few direct-`DrawPrimitivesEx` callers that set them (and by non-D3D backends that predate GFX-010). Not a rendering defect — a documentation/ABI-hygiene item | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | NOT STARTED — recorded, not fixed (a precise comment correction is not unquestionably safe and Phase 11 forbids redesigning the fog ABI in the offset tranche; recommended resolution: documentation cleanup + formally mark `fogStart`/`fogEnd` as retained accepted-and-ignored compat fields, not removal, since direct-backend callers still set them) |
+| REMED-GFX-061 | The D3D stock-effect fog path retained three obsolete representations after GFX-005/GFX-010: D3D9 recomputed the authoritative CPU-prepared view-space vector from shared scalar endpoints; D3D11/D3D12 uploaded a redundant scalar enable in `FogColorEnabled.w`; and five shared D3D constant structures/HLSL blocks mislabeled the live vector as `FogStartEnd`. | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | **DONE and VERIFIED (2026-07-25) — MIXED DEFECT: REAL PRODUCTION DEAD/STALE STATE + TEST-HARNESS DEFECT, with no reachable pre-fix pixel defect.** D3D9 now uploads `GpuDrawParams::fogVector` directly; D3D11/D3D12 use that vector without the redundant enable write/gate; all register/cbuffer offsets and sizes are unchanged. Direct smoke fixtures now construct public-reachable fog tuples. Public family regressions, D3D9 62/62, D3D11 164/164, D3D12 242/242, and virtual-display Vulkan/EasyGL/Bgfx/SDL_GPU/WebGPU gates are green. The sole live scalar consumer is WebGPU EnvironmentMap and is separately recorded as GFX-100. Tests `3dbda315` + `ef213d6c`; refactor `b22c6667`. See the closure record below. |
+| REMED-GFX-100 | WebGPU EnvironmentMap is the sole live consumer of shared `GpuDrawParams::fogStart`/`fogEnd`: `FillEnvMapParams` uploads them to WGSL floats 28/29, and the vertex shader computes fog from raw object-space `input.position.z`. This disagrees with the authoritative CPU-prepared World×View fog-vector contract under non-identity transforms; the existing EnvironmentMap test disables fog. | MEDIUM | P2 | REMED-GFX-061 scalar-consumer inventory | NOT STARTED — recorded only. WebGPU-local production correctness task; do not fold it into D3D stale-state cleanup. Add a public non-identity World/View view-space discriminator and migrate the EnvironmentMap WGSL/upload to the authoritative fog vector without changing the public effect API. |
+| REMED-GFX-101 | D3D direct smoke fixtures had stale test infrastructure: MRT calls still passed raw backend-pointer arrays after GFX-096 migrated the interface to `RenderTargetBindingDescriptor`, and the D3D11 no-draw occlusion-query check used a fixed 100000-iteration tight spin that could expire before DXVK returned the result. | LOW | P3 | REMED-GFX-061 full practical D3D gate | **DONE (2026-07-25) — TEST-HARNESS DEFECT.** Fixtures now use the current descriptor interface and the D3D11 query check uses a bounded two-second steady-clock/yield wait. No production runtime behavior changed. Included in `ef213d6c`; D3D11 smoke is 164/164. |
 | REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | **DONE and VERIFIED — REAL PRODUCTION SHADER-SEMANTIC DEFECT.** All four handwritten embedded WGSL modules now use `lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz`; the shared CPU pre-fold remains unchanged. New sRGB-safe exact-path regression: **6/25 pre-fix → 27/27 post-fix**, covering all four modules, ambient, emissive, combined, directional, non-white texture, Alpha, vertex colour, A→B→A, and post-draw mutation. WebGPU targeted **3/3 CTests / 44/44 checks**, broader **10/10 / 70/70**, validation clean. D3D11 smoke **163/163**; GFX-006/008/010 and GFX-088 contract regressions green across the applicable backends. No generated shader artifacts; test `3c9a4d5f`, fix `ee0f44c9`. |
 | REMED-GFX-091 | The Vulkan validation layer reports `VUID-vkCmdDraw-None-08608` in `Vulkan_SkinnedEffect_VertexColor_Reused`: after a stock-effect render-target pipeline whose blend constants are static is bound, the generic 3D replay path calls `vkCmdSetBlendConstants`, so the next draw violates Vulkan's rule against setting a state dynamically when the bound pipeline specifies it statically. Pixel assertions pass. | LOW | P3 | REMED-GFX-088 Vulkan validation sweep | **DONE and VERIFIED (KHRONOS validation loaded; Xvfb/llvmpipe + AMD Radeon 780M/RADV)** — real production validity defect. One normalized mapping-derived predicate now conditionally declares `VK_DYNAMIC_STATE_BLEND_CONSTANTS` and conditionally replays the captured value after pipeline bind. Per-draw/per-batch capture is preserved; factor/function state stays static and pipeline-keyed; RGBA stays dynamic and outside the key. Pre-fix minimal test: pixels 4/4 but CTest 0/1 on exact VUID; post-fix generic 3D 12/12, SpriteBatch 23/23, specialized SkinnedEffect 6/6, targeted shard 36/36, zero 08608, cache 8→8. Full Vulkan 156/158 with documented `DepthBias` plus a baseline-identical cube-MSAA failure; separate Texture3D `VUID-09600` spawned GFX-093 and cube-MSAA spawned GFX-094. test `ed2b7f74`, fix `368e011e`. |
 | REMED-GFX-092 | D3D9 depth/render-target native calls discard HRESULTs: `SetRenderState` (including Z state), `SetRenderTarget`, `SetDepthStencilSurface`, `SetViewport`, and some default-surface acquisition/restoration paths. A failed state or incompatible depth bind could therefore remain silent. `CreateDepthStencilSurface` and depth `Clear` already check failures. | LOW | P3 | REMED-GFX-089 targeted HRESULT audit | NOT STARTED — recorded, not fixed (separate error-propagation hardening task; proven unrelated to GFX-089 because live state/surface introspection and backbuffer/offscreen pixels show every involved call succeeded in the failing environment). |
@@ -7777,3 +7779,163 @@ and public Texture3D expansion were not begun.
 
 Recommended next GRAPHICS task remains **REMED-GFX-061** per the established queue. Do not begin it
 as part of GFX-099.
+
+## REMED-GFX-061 — D3D stale fog scalar/vector closure (2026-07-25)
+
+**Status and classification: DONE — MIXED DEFECT: REAL PRODUCTION DEAD/STALE STATE DEFECT plus a
+TEST-HARNESS DEFECT, with no public-reachable pre-fix pixel defect.** The original record was
+directionally correct that the shared scalar endpoints were obsolete for D3D, but the complete
+CPU-to-bytecode trace found more than documentation debt: D3D9 still performed five redundant
+per-draw fog-vector reconstructions; D3D11/D3D12 wrote a duplicate scalar enable and 13 vertex
+shaders read it; five C++/HLSL structures gave the live vector a stale scalar name. Public effects
+always produced consistent `{disabled, zero vector}` or `{enabled, computed vector}` tuples, so the
+duplicate enable could not change a pixel through the public API. Direct smoke fixtures could and
+did construct impossible raw tuples; those fixtures now match the public upload path.
+
+### Authoritative public fog contract
+
+BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, and CNA's
+PbrEffect/SkinnedPbrEffect support fog. `FogStart` and `FogEnd` are view-space distances. With fog
+disabled the CPU uploads `{0,0,0,0}`, producing keep factor 1. With fog enabled and a nonzero range,
+for `worldView = World * View` and `s = 1 / (FogStart - FogEnd)`, the authoritative vector is:
+
+`{worldView.M13*s, worldView.M23*s, worldView.M33*s, (worldView.M43+FogStart)*s}`.
+
+When `FogStart == FogEnd`, the defined vector is `{0,0,0,1}`, producing full fog. The vertex shader
+computes and interpolates `keep = 1 - saturate(dot(float4(objectPosition, 1), FogVector))`; skinned
+effects use the post-skin object position. Projection is deliberately absent. The pixel shader
+first completes texture, vertex-colour, material, directional-light, ambient/emissive, skinning,
+normal, and environment-map composition, then applies
+`rgb = lerp(FogColor, composedRgb, keep)`. Alpha is preserved. AlphaTestEffect performs its discard
+before that final RGB blend. These semantics agree with the completed GFX-005/GFX-010
+view-space-fog architecture and were not replaced with the obsolete scalar formula.
+
+### Complete suspicious-field inventory
+
+| Field / work | D3D9 write | D3D11 write | D3D12 write | Shader read | Packing role | Observable effect | Final classification |
+|---|---|---|---|---|---|---|---|
+| `GpuDrawParams::fogStart`, `fogEnd` | Seven public effects write them; five stock draws formerly read them only through `ComputeFogVectorEXT` | Seven effects write; backend ignores | Seven effects write; backend ignores | No D3D shader reads them | Shared draw-parameter ABI only; no register/cbuffer bytes | D3D9 recomputation was byte-equivalent for reachable state; no pixel difference | Retained shared fields because WebGPU EnvironmentMap still consumes them; explicitly documented as D3D-ignored |
+| D3D9 `ComputeFogVectorEXT` + five calls | Rebuilt World×View vector in Basic, AlphaTest, DualTexture, EnvironmentMap, and Skinned stock draws | N/A | N/A | Result uploaded to the established fog-vector register | No layout role | Redundant per-draw CPU work only | Dead production work, removed |
+| `D3DFogConstants::{FogColorEnabled,FogStartEnd}` | N/A | Six stock upload families wrote both | Same six families wrote both | Colored/textured/dual shaders consumed the vector; enable was redundant | Offsets 0/16, size 32 | Names described an obsolete scalar model; bytes were live vector/padding | Renamed `FogColor`/`FogVector`; physical ABI unchanged |
+| `D3DLightingConstants::{FogColorEnabled,FogStartEnd}` | N/A | Lit Basic family | Same | Lit vertex/pixel variants | Offsets 224/240, size 256 | Same | Renamed; layout unchanged |
+| `D3DSkinnedExtraConstants::{FogColorEnabled,FogStartEnd}` | N/A | Skinned families | Same | Skinned vertex/pixel variants | Offsets 0/16, size 256 | Same | Renamed; layout unchanged |
+| `D3DEnvMapConstants::{FogColorEnabled,FogStartEnd}` | N/A | EnvironmentMap family | Same | EnvironmentMap vertex/pixel variants | Offsets 96/112, size 192 | Same | Renamed; layout unchanged |
+| `D3DPbrLightConstants::{FogColorEnabled,FogStartEnd}` | N/A | PBR families | Same | PBR vertex/pixel variants | Offsets 112/128, size 144 | Same | Renamed; layout unchanged |
+| `FogColorEnabled.w` and vertex enable gate | N/A | Six redundant scalar-enable stores | Six redundant scalar-enable stores | 13 D3DCommon vertex shaders gated an already-zero-or-live vector | `.w` is required 16-byte packing, not a semantic field | Impossible raw `false + nonzero vector` could differ; public effects cannot produce it | Twelve stores and 13 gates removed; `.w` retained and zeroed as explicit padding |
+
+The seven scalar write sites are BasicEffect, AlphaTestEffect, DualTextureEffect,
+EnvironmentMapEffect, SkinnedEffect, PbrEffect, and SkinnedPbrEffect. No D3D shader or generated
+D3D9 custom bytecode reads the scalar endpoints. The sole remaining production read is WebGPU
+EnvironmentMap, recorded separately as **REMED-GFX-100** rather than broadened into this task.
+
+### D3D9 / D3D11 / D3D12 comparison
+
+| Aspect | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|
+| CPU fog representation | Authoritative prepared `GpuDrawParams::fogVector`; `fogEnabled` remains only for permutation selection | Same vector | Same vector |
+| Native upload | Individual VS/PS constant registers | `UpdateSubresource`/D3D11 constant buffers | Upload-buffer/root-CBV path |
+| Register/buffer location | Basic c14; AlphaTest/Dual c5; EnvironmentMap c11; Skinned c14; CNA custom skinned/PBR c225 where applicable | Colored/textured b1; Dual b2; lit b1; EnvironmentMap b2; Skinned b2; PBR b1/b2; AlphaTest vector already in b0 at byte 96 | Same D3DCommon cbuffer ABI and DXBC as D3D11 |
+| Shader representation | Fog-enabled/disabled shader permutations; vector dot product in enabled variants | Vector dot product; no duplicate enable gate after fix | Same |
+| Disabled encoding | Disabled permutation plus zero vector | Zero vector | Zero vector |
+| Zero range | `{0,0,0,1}` = fully fogged | Same | Same |
+| Coordinate space | CPU World×View vector, projection excluded | Same | Same |
+| Removed stale state | Five scalar-to-vector reconstructions | Six enable stores and shared vertex gates | Six enable stores and shared vertex gates |
+| Practical runtime | DXVK9, 62/62 smoke | DXVK 2.6.0, 164/164 smoke | vkd3d-proton 3.1.0, 242/242 offscreen checks |
+
+D3D9 register indices, upload ranges, shader declarations, and generated bytecode tables did not
+move. D3D11/D3D12 exact offsets and structure sizes are protected by new static assertions. The
+semantic removal therefore did not become a physical packing change.
+
+### Regression design and results
+
+The shared canonical fixture uses valid public effect state, explicit Opaque/CullNone/DepthNone
+state, valid geometry and matrices, a nontrivial View, Projection, and translated World, non-default
+FogStart/FogEnd/FogColor, and a non-white base material/texture. Its expected factors are derived
+from known view-space depths, not from “fog changed the pixel.” It covers before start, at start,
+between, at end, after end, zero range, disabled→enabled→disabled on one instance, and transform
+A→B→A. The projection/view-space discriminator changes transforms so the obsolete object/clip-space
+model would produce different factors. Direct D3D smoke data now uses only reachable zero-vector
+disabled state and prepared-vector enabled state; it no longer asks production code to preserve an
+impossible raw tuple.
+
+| Family | Result | Composition protected |
+|---|---|---|
+| BasicEffect | 21/21 canonical checks plus lit/material regressions | Texture, vertex colour, directional/ambient/emissive, alpha |
+| SkinnedEffect | 3/3 family + canonical skinning case | Post-skin position, normal transform, always-lit material |
+| EnvironmentMapEffect | 3/3 | Texture/material/environment composition before final fog |
+| DualTextureEffect | 3/3 | Both texture layers and alpha before final fog |
+| AlphaTestEffect | 3/3 | Alpha discard precedes final RGB fog; alpha preserved |
+
+The enabled/disabled sequence is exact A→B→A, the transform mutation is exact A→B→A, and
+`FogStart == FogEnd` is fully fogged. The same effect instance is reused, proving no stale vector or
+scalar reuse. Deferred backends capture the prepared vector by value with the existing draw
+snapshot; changing an effect after a queued draw cannot retroactively alter that draw.
+
+### Source of truth and generated artifacts
+
+Production changes are confined to `IGraphicsBackend.hpp`,
+`D3DCommon/D3DConstantBuffers.hpp`, the D3D9/D3D11/D3D12 backend implementation files, and the 26
+affected handwritten D3DCommon HLSL sources. Tests/CMake registration changed only in the D3D9/11
+fog suites, shared effect-family fog fixtures, and D3D9/11/12 direct smoke fixtures. Public effect
+headers and APIs are byte-unchanged; `IGraphicsBackend` has no new method or signature.
+
+A no-change regeneration baseline passed before the HLSL edit. Post-change
+`scripts/verify_d3d_shaders_reproducible.sh` also passed with Wine 10.0, MinGW GCC 14, and bundled
+vkd3d-shader 1.14: all 34 D3DCommon arrays are byte-identical to fresh regeneration, and all six
+D3D9 custom arrays are unchanged. Exactly 26/34 D3DCommon arrays changed; the eight unrelated
+AlphaTest/Sprite/Instanced arrays did not. Each of 13 affected vertex arrays shrank by 112 bytes;
+each paired pixel array changed only four reflection/name bytes. The large
+`D3DCommon/shaders/hlsl_shaders.hpp` textual reflow is generator-reproducible. D3D9 generated
+artifacts have zero diff; no bytecode was patched manually.
+
+### Practical runtime matrix
+
+All builds used at most four CPU cores. After the request to use a virtual display, every remaining
+native graphical run used a fresh Xvfb display; Vulkan-based native runs forced Lavapipe where
+stated. Windows SDL3 under Wine cannot enumerate an Xvfb display in this repository
+(`SDL_InitSubSystem: No displays available`), so the complete D3D9/D3D11 graphical gates recorded
+below are the valid same-session runs made through Wine/DXVK on the real AMD GPU before that
+request. Their non-window common/layout tests were rerun under Xvfb. D3D12 is windowless and ran
+under Xvfb.
+
+| Backend/route | Fog/family result | Broader result | Device / validation |
+|---|---|---|---|
+| D3D9, Wine 10.0 + DXVK 2.6.0/DXVK9 | canonical 21/21; Alpha/Dual/Environment/Skinned each 3/3 | full D3D9 label shard 26/26; smoke 62/62; DrawEx 19/19; Xvfb common 32/32, dispatch 23/23, constant table 14/14 | Real AMD Radeon 780M, RADV 25.0.7; llvmpipe explicitly skipped |
+| D3D11, Wine 10.0 + DXVK 2.6.0 | canonical 21/21; four families each 3/3 | all 17 tests individually green; smoke 164/164; Xvfb common 23/23 | Real AMD Radeon 780M, RADV 25.0.7 |
+| D3D12, Wine 10.0 + vkd3d-proton 3.1.0 (`4232071c346c0a7`) | all fog variants, including false→true→false V1/V2/V3 | 242/242 windowless/offscreen checks, zero failures; existing BUILD-012 not encountered | Xvfb; real AMD Radeon 780M |
+| Vulkan | five families 3/3 each; canonical 21/21 | lighting 9/9; world normal 4/4; **49 checks** | Fresh Xvfb + Lavapipe; Khronos validation loaded; zero VUID/error/warning |
+| EasyGL | five families 3/3 each; canonical 9/9 | lighting 9/9; normal 8/8; **41 checks** | Fresh Xvfb, Mesa software GLES 3.2 |
+| Bgfx | Basic/lit Basic/Alpha/Dual/Environment/Skinned each 3/3; canonical 9/9 | lighting 9/9; normal 8/8; **44 checks** | Fresh Xvfb, software OpenGL 2.1 |
+| SDL_GPU | Basic 16; effects 16; Skinned/PBR 11; canonical 9 | normal 4; **56 checks** | Fresh Xvfb + Lavapipe, debug mode; zero VUID/error/warning |
+| WebGPU | Relevant effect/material oracle coverage 69 checks | lit 4, Alpha 4, Dual 4, Environment 4+4 emissive, PBR 5, Skinned 9, normal 8, material 27 | Fresh Xvfb, wgpu-native 29.0.1.1 Vulkan software path; EnvironmentMap fog parity awaits GFX-100 |
+
+Relevant GFX-005/GFX-010 fog, GFX-006 normal transformation, GFX-008 ambient/emissive,
+GFX-088 SkinnedEffect contract, GFX-090 WebGPU material, GFX-077 blend, GFX-081 rasterizer, and
+GFX-089 depth subsets are green on applicable backends. The D3D11 query's old fixed tight-spin was
+the only new gate failure; replacing that stale test mechanism with a bounded two-second
+steady-clock/yield wait, and migrating stale MRT fixture calls to GFX-096's descriptor interface,
+is separately classified and closed as **REMED-GFX-101**.
+
+### Performance, sibling inventory, and commits
+
+The refactor removes five D3D9 World×View matrix multiplications plus their scale/branch work per
+stock-effect draw, twelve D3D11/D3D12 scalar-enable stores, and the redundant comparison/select in
+13 vertex shaders. It adds no allocation, constant-buffer upload, shader permutation, pass, draw,
+pipeline-cache entry, runtime inversion, synchronization, or production wait. The two-second wait
+exists only in the D3D11 smoke test.
+
+The narrow adjacent-field inventory found no shader input read without initialization and no other
+D3D duplicate fog representation. Adjacent shared `specularEnabled` remains the pre-existing
+accepted shared field and is not a new GFX-061 defect. The only separate production finding is
+GFX-100; the only separate harness finding is completed GFX-101. No non-D3D production source was
+changed. Sanitizers were not required because physical structure size/offset and lifetime behavior
+did not change.
+
+- `3dbda315 test(Task REMED-GFX-061): lock D3D fog-vector upload contract`
+- `ef213d6c test(Task REMED-GFX-061): align direct D3D fog fixtures`
+- `b22c6667 refactor(Task REMED-GFX-061): remove stale D3D fog scalar state`
+- `docs(remediation): record GFX-061 stale-state closure` (this record)
+
+`git diff --check` passes, `audit/` is untouched, and the working tree is clean after the
+documentation commit. Recommended next GRAPHICS task is **REMED-GFX-100**, the proven WebGPU
+EnvironmentMap view-space fog discrepancy. Do not begin it as part of GFX-061.
