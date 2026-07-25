@@ -7451,3 +7451,74 @@ New findings:
 
 Recommended next GRAPHICS task is **REMED-GFX-098**, the closest remaining SDL_GPU
 pipeline/render-pass compatibility sibling. Do not begin it as part of GFX-097.
+
+---
+
+### REMED-GFX-098 — SDL_GPU MRT pipeline/render-pass color-attachment compatibility — DONE (2026-07-25)
+
+**Classification:** **F — real production SDL_GPU pipeline-compatibility defect with multiple
+related CNA omissions.**  The public `SdlGpu_MRT` state is valid: three 32×32 `SurfaceFormat::Color`
+targets, applied sample count 1, RT0's `Depth24Stencil8` attachment, `BlendState::Opaque`, full
+viewport/scissor, and the existing custom shader's two distinct fragment outputs.  It remained
+pixel-correct **5/5** before the fix, so correctness readback was not a validity oracle.
+
+**Exact pre-fix rule and evidence.**  A fresh detached pre-fix build run on the virtual X11 display
+with SDL_GPU debug mode emitted exactly **10** `VUID-vkCmdDraw-renderPass-02684` messages.  The
+complete messages identify the active pass's `pColorAttachments[1]` and `[2]` as attachment 1/2,
+while the pipeline render pass marks the corresponding references `VK_ATTACHMENT_UNUSED`.
+The first BasicEffect pipeline produced one slot-1 plus one slot-2 message; the cached pipeline
+used by subsequent frames produced four more such pairs.  Thus the violation occurs on first use
+and reuse.  Vulkan requires the current pass and the pipeline creation pass to have compatible
+corresponding attachment references: formats and sample counts must match, or both references must
+be `VK_ATTACHMENT_UNUSED`.  Here the active pass was 3 × `R8G8B8A8_UNORM`, sample 1, depth
+`D24_UNORM_S8_UINT`; the old bound stock pipeline described one `R8G8B8A8_UNORM` target, sample 1,
+the same depth format, and no color slots 1/2.
+
+**Fix.**  `RenderQueuedDraws` now compiler-forces the active color-target count through SpriteBatch
+and every stock 3D issue/create family (Colored, Textured, ColoredTextured, LitTextured, AlphaTest,
+DualTexture, EnvironmentMap, Skinned, PBR, and SkinnedPBR).  Each creation site builds exactly that
+many `SDL_GPUColorTargetDescription` entries.  The common cache key now includes the count and an
+ordered contribution for every active current-format slot, the applied sample count, GFX-097's
+actual depth format/presence, and each active slot's static write mask.  It is not keyed by target
+object, texture handle, cube face, or framebuffer.  The SDL_GPU implementation currently exposes
+one render-target color format (`R8G8B8A8_UNORM`), so every reachable slot format is explicitly
+the same; no format is inferred from a target object.  Custom effects already keyed count/depth/
+samples and now use the same fixed four-entry target-description storage.  No shader/generated
+artifact changed, no dummy attachment, wait, extra submission, or per-draw pipeline creation was
+introduced.
+
+**Validation and regression evidence.**  `SdlGpu_MRT` is registered with
+`FAIL_REGULAR_EXPRESSION VUID-vkCmdDraw-renderPass-02684`. Loader diagnostics confirmed
+`libVkLayer_khronos_validation.so` loaded and inserted at instance and device scope. The final
+corrected gate is **42/42** on isolated Xvfb `DISPLAY=:100`: one/two/three/four targets;
+one→three→one and reverse transitions; compatible alternate target objects; depthless and
+depth-backed three-target paths; requested/applied **4×** MSAA with resolve/readback; stock
+SpriteBatch; `ColorWriteChannels0–3`; and every cache-cardinality assertion. The final red-only
+stock-pipeline pixel expectation accounts for the target's magenta clear colour.
+
+**Cache identity discriminator.**  Starting from a cold SpriteBatch pipeline cache, the measured
+cardinality is exactly: cold **0**; one/two/three/four depthless 1× targets **1/2/3/4**; return to
+one **4**; return to three **4**; compatible alternate three-target objects **4**; three
+depth-backed targets **5**; return to depthless **5**; three targets with applied 4× MSAA **6**;
+return to 1× **6**; per-slot write masks **7**; return to the original masks **7**. Thus count,
+depth presence/format, applied samples, and active-slot masks create entries, while target object
+identity and A→B→A reuse do not.
+
+The final practical verbose SDL_GPU sweep is **35/35** in one isolated-display run. It contains
+zero `VUID-vkCmdDraw-renderPass-02684`, closing both GFX-098's colour-slot mismatch and the
+GFX-097/GFX-059 depth mismatch. All **32** validation messages occur only in
+`SdlGpu_Texture3D`: 6× `VUID-VkImageViewCreateInfo-image-02724`, 6×
+`VUID-VkImageViewCreateInfo-subresourceRange-02725`, 6×
+`VUID-vkCmdBlitImage-dstOffset-00251`, 6× `VUID-vkCmdBlitImage-pRegions-00216`, 4×
+`VUID-vkCmdBlitImage-srcOffset-00246`, and 4× `VUID-vkCmdBlitImage-pRegions-00215`. This is exactly
+the separately tracked GFX-099 family; no other validation family remains.
+
+The backend-neutral public render-target binding/MRT parity regression passes **14/14** on
+SDL_GPU, Vulkan, EasyGL, and WebGPU, plus the staged Bgfx contract **6/6**. D3D11 has no
+registration for that shared public cube/MRT harness; its optional existing Wine/DXVK smoke was
+not practical on the isolated Xvfb route because SDL reported no Wine displays before test
+execution, so no D3D11 result is claimed. All builds used at most four CPU cores.
+
+**Closure.**  Test `ba6f993e`, production fix `1ee7ea72`, and VUID-fatal CTest closure
+`aa99e02c`. No production shader/generated artifact changed. `audit/` is untouched. No GFX-099,
+GFX-061, GFX-092, WebGPU SpriteBatch blend work, or unrelated MRT capability expansion was begun.
