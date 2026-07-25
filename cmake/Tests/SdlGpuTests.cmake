@@ -98,7 +98,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
         COMMAND cna_test_sdlgpu_texture3d_validity
         TIMEOUT 60 LABELS "SdlGpu"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-    set_tests_properties(SdlGpu_Texture3D_Validity PROPERTIES
+    set_tests_properties(SdlGpu_Texture3D SdlGpu_Texture3D_Validity PROPERTIES
         FAIL_REGULAR_EXPRESSION
             "VUID-(VkImageViewCreateInfo-image-02724|VkImageViewCreateInfo-subresourceRange-02725|vkCmdBlitImage-dstOffset-00251|vkCmdBlitImage-pRegions-00216|vkCmdBlitImage-srcOffset-00246|vkCmdBlitImage-pRegions-00215);Validation (Error|Warning)")
 

@@ -1,148 +1,315 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-40/SDLGPU-41: Texture3D + mipmaps proof for the SDL_GPU graphics backend --
-// a single SDL_GPU_TEXTURETYPE_3D texture, SAMPLER usage only (never a render target), real
-// SetData/GetData via a transfer-buffer copy pass. Matches the byte-exact round-trip bar D3D12
-// already met (DX-122): a deliberately off-center sub-volume upload with a distinct color per Z
-// slice, round-tripped through SetData()+GetData() with EXACT byte equality.
+// REMED-GFX-099: SDL_GPU Texture3D transfer/subresource regression.
 //
-// Check A -- a 2x2x2 sub-volume uploaded at offset (1,1,0) within a 4x4x2 texture, with a
-//   different solid color per Z slice (red at z=0, green at z=1), reads back byte-exact --
-//   genuinely exercises the X/Y/Z offset math and per-slice pitch, not just a trivial (0,0,0) case.
-// Check B -- a full-volume upload/readback round-trips byte-exact.
-// Check C -- mipMap: a uniform-color full level-0 upload auto-generates level 1 (SDLGPU-41's
-//   "generated case"), which reads back the same color (a uniform source downsamples to itself).
-// Check D -- mipMap: explicit authored data written directly to level 1 (SDLGPU-41's "authored
-//   mip data" case) is NOT clobbered by the level-0 auto-generation that already ran -- reads back
-//   exactly what was explicitly uploaded to that level, AND level 0 itself still reads back its
-//   own original color afterward -- genuinely proves multiple sequential SetData() calls on the
-//   same texture accumulate (this is what caught a real bug: SDL_UploadToGPUTexture's cycle=true
-//   silently orphaned an earlier partial write onto an abandoned GPU resource once a second write
-//   followed it -- fixed by passing cycle=false, since Texture3D content is built up via multiple
-//   independent sub-volume/per-level SetData calls, unlike a single full-texture replace).
+// The public CNA/FNA contract is an explicitly authored mip chain: mipMap=true allocates levels,
+// while SetData chooses which level receives exact texels. Plain Texture3D does not implicitly
+// regenerate the chain from level 0. SDL_GPU sampling is not part of CNA's current Texture3D
+// backend; this test covers the implemented SetData/GetData contract only.
 //
-// Exit code 0 = all checks PASS, 1 = any FAILs.
+// The checks couple byte-exact content with validation-fatal CTest output. They cover:
+// - one-mip level 0 and four distinguishable depth planes;
+// - a nontrivial partial SetData/GetData box whose surrounding voxels remain unchanged;
+// - a canonical 4x4x4 three-level chain, including nonzero mips;
+// - repeated upload, SetData/GetData cycles, and forward/reverse mip order;
+// - two independent resources alternated A -> B -> A;
+// - a 7x5x3 NPOT chain (7x5x3 -> 3x2x1 -> 1x1x1);
+// - destruction after a nonzero-mip transfer.
+//
+// Exit code 0 = all checks PASS, 1 = any FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
-#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 
-#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
-
 #include "common/PixelTestGame.hpp"
 
 #include <cstdio>
+#include <memory>
+#include <string>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using namespace CNA::Internal::Backends::SdlGpu;
 
 namespace
 {
-    int passCount = 0;
-
-    void Check(bool ok, const char* label)
+    bool SameRgba(const Color& a, const Color& b)
     {
-        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
-        if (ok) ++passCount;
+        return a.getRProperty() == b.getRProperty()
+            && a.getGProperty() == b.getGProperty()
+            && a.getBProperty() == b.getBProperty()
+            && a.getAProperty() == b.getAProperty();
     }
 
-    std::vector<Color> SolidColors(int count, const Color& c)
+    std::size_t VoxelCount(int width, int height, int depth)
     {
-        return std::vector<Color>(static_cast<std::size_t>(count), c);
+        return static_cast<std::size_t>(width)
+            * static_cast<std::size_t>(height)
+            * static_cast<std::size_t>(depth);
     }
 
-    bool AllExact(const std::vector<Color>& got, const Color& expected)
+    std::size_t VoxelIndex(int x, int y, int z, int width, int height)
     {
-        for (const Color& c : got)
-            if (c.getRProperty() != expected.getRProperty() || c.getGProperty() != expected.getGProperty()
-                || c.getBProperty() != expected.getBProperty() || c.getAProperty() != expected.getAProperty())
-                return false;
-        return true;
+        return static_cast<std::size_t>(z * width * height + y * width + x);
+    }
+
+    std::vector<Color> Solid(int width, int height, int depth, const Color& color)
+    {
+        return std::vector<Color>(VoxelCount(width, height, depth), color);
+    }
+
+    std::vector<Color> DepthPlanePattern(
+        int width, int height, const std::vector<Color>& planeColors)
+    {
+        std::vector<Color> data(
+            static_cast<std::size_t>(width * height) * planeColors.size(),
+            Color(0, 0, 0, 0));
+        for (std::size_t z = 0; z < planeColors.size(); ++z)
+        {
+            for (int y = 0; y < height; ++y)
+            {
+                for (int x = 0; x < width; ++x)
+                    data[VoxelIndex(x, y, static_cast<int>(z), width, height)] = planeColors[z];
+            }
+        }
+        return data;
     }
 }
 
-class SdlGpuTexture3DTest : public Game
+class SdlGpuTexture3DTest final : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
+    int checkCount_ = 0;
+    int passCount_ = 0;
     int result_ = 1;
 
-protected:
-    void Draw(const GameTime&) override
+    void Check(bool ok, const std::string& label)
     {
-        static bool done = false;
-        if (done) return;
-        done = true;
+        ++checkCount_;
+        if (ok) ++passCount_;
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label.c_str());
+    }
 
-        auto& dev = getGraphicsDeviceProperty();
+    void Upload(Texture3D& texture, int level, int width, int height, int depth,
+                const std::vector<Color>& data)
+    {
+        texture.SetData(level, 0, 0, width, height, 0, depth,
+                        data.data(), 0, static_cast<int>(data.size()));
+    }
 
-        // Check A: byte-exact, off-center sub-volume round-trip with a distinct color per Z slice.
+    void CheckExact(Texture3D& texture, int level, int width, int height, int depth,
+                    const std::vector<Color>& expected, const std::string& label)
+    {
+        std::vector<Color> got(
+            VoxelCount(width, height, depth), Color(17, 19, 23, 29));
+        texture.GetData(level, 0, 0, width, height, 0, depth,
+                        got.data(), 0, static_cast<int>(got.size()));
+
+        std::size_t mismatch = got.size();
+        for (std::size_t i = 0; i < got.size(); ++i)
         {
-            Texture3D tex(dev, 4, 4, 2, false, SurfaceFormat::Color);
-            const auto redSlice = SolidColors(4, Color::Red);     // z=0, 2x2
-            const auto greenSlice = SolidColors(4, Color::Green); // z=1, 2x2
-            tex.SetData(0, /*left*/1, /*top*/1, /*right*/3, /*bottom*/3, /*front*/0, /*back*/1, redSlice.data(), 0, 4);
-            tex.SetData(0, /*left*/1, /*top*/1, /*right*/3, /*bottom*/3, /*front*/1, /*back*/2, greenSlice.data(), 0, 4);
+            if (!SameRgba(got[i], expected[i]))
+            {
+                mismatch = i;
+                break;
+            }
+        }
+        if (mismatch != got.size())
+        {
+            const auto& want = expected[mismatch];
+            const auto& actual = got[mismatch];
+            std::printf(
+                "       first mismatch at voxel %zu: want=(%d,%d,%d,%d) got=(%d,%d,%d,%d)\n",
+                mismatch,
+                want.getRProperty(), want.getGProperty(),
+                want.getBProperty(), want.getAProperty(),
+                actual.getRProperty(), actual.getGProperty(),
+                actual.getBProperty(), actual.getAProperty());
+        }
+        Check(mismatch == got.size(), label);
+    }
 
-            std::vector<Color> gotRed(4, Color(0, 0, 0, 0));
-            tex.GetData(0, 1, 1, 3, 3, 0, 1, gotRed.data(), 0, 4);
-            std::vector<Color> gotGreen(4, Color(0, 0, 0, 0));
-            tex.GetData(0, 1, 1, 3, 3, 1, 2, gotGreen.data(), 0, 4);
+protected:
+    void Initialize() override
+    {
+        Game::Initialize();
+        auto& device = getGraphicsDeviceProperty();
 
-            Check(AllExact(gotRed, Color::Red), "off-center 2x2 sub-volume at z=0 reads back byte-exact red");
-            Check(AllExact(gotGreen, Color::Green), "off-center 2x2 sub-volume at z=1 reads back byte-exact green");
+        const Color red    (255,   0,   0, 255);
+        const Color green  (  0, 255,   0, 255);
+        const Color blue   (  0,   0, 255, 255);
+        const Color yellow (255, 255,   0, 255);
+        const Color cyan   (  0, 255, 255, 255);
+        const Color magenta(255,   0, 255, 255);
+        const Color orange (255, 128,   0, 255);
+        const Color white  (255, 255, 255, 255);
+        const Color purple (128,  32, 192, 255);
+        const Color dark   (  7,  11,  13, 255);
+
+        // One-mip level-0 control and four distinguishable depth planes.
+        Texture3D single(device, 4, 4, 4, false, SurfaceFormat::Color);
+        Check(single.getWidthProperty() == 4
+              && single.getHeightProperty() == 4
+              && single.getDepthProperty() == 4
+              && single.getLevelCountProperty() == 1
+              && single.getFormatProperty() == SurfaceFormat::Color,
+              "one-mip 4x4x4 public properties");
+
+        const auto planes = DepthPlanePattern(4, 4, {red, green, blue, yellow});
+        single.SetData(planes.data(), static_cast<int>(planes.size()));
+        CheckExact(single, 0, 4, 4, 4, planes,
+                   "level 0 exact roundtrip preserves z0/z1/z2/z3 plane order");
+
+        const auto oneMipReplacement = Solid(4, 4, 4, cyan);
+        single.SetData(oneMipReplacement.data(), static_cast<int>(oneMipReplacement.size()));
+        CheckExact(single, 0, 4, 4, 4, oneMipReplacement,
+                   "one-mip repeated full-volume upload replaces prior data");
+
+        // Nontrivial partial box: x/y/z are all nonzero and every extent is smaller than the mip.
+        const auto base = Solid(4, 4, 4, dark);
+        single.SetData(base.data(), static_cast<int>(base.size()));
+        const auto patch = DepthPlanePattern(2, 2, {red, green});
+        single.SetData(0, 1, 1, 3, 3, 1, 3,
+                       patch.data(), 0, static_cast<int>(patch.size()));
+
+        auto expectedPatched = base;
+        for (int z = 0; z < 2; ++z)
+        {
+            for (int y = 0; y < 2; ++y)
+            {
+                for (int x = 0; x < 2; ++x)
+                {
+                    expectedPatched[VoxelIndex(x + 1, y + 1, z + 1, 4, 4)] =
+                        patch[VoxelIndex(x, y, z, 2, 2)];
+                }
+            }
+        }
+        CheckExact(single, 0, 4, 4, 4, expectedPatched,
+                   "partial SetData changes only the intended 2x2x2 box");
+
+        std::vector<Color> partialRead(patch.size(), Color(17, 19, 23, 29));
+        single.GetData(0, 1, 1, 3, 3, 1, 3,
+                       partialRead.data(), 0, static_cast<int>(partialRead.size()));
+        bool partialExact = partialRead.size() == patch.size();
+        for (std::size_t i = 0; partialExact && i < patch.size(); ++i)
+            partialExact = SameRgba(partialRead[i], patch[i]);
+        Check(partialExact, "partial GetData returns the exact 2x2x2 box");
+
+        // Canonical 4x4x4 authored chain: 4x4x4, 2x2x2, 1x1x1.
+        Texture3D primary(device, 4, 4, 4, true, SurfaceFormat::Color);
+        Check(primary.getWidthProperty() == 4
+              && primary.getHeightProperty() == 4
+              && primary.getDepthProperty() == 4
+              && primary.getLevelCountProperty() == 3,
+              "canonical 4x4x4 reports three authored mip levels");
+
+        const auto level0Red = Solid(4, 4, 4, red);
+        const auto level1Green = Solid(2, 2, 2, green);
+        const auto level2Blue = Solid(1, 1, 1, blue);
+        Upload(primary, 0, 4, 4, 4, level0Red);
+        Upload(primary, 1, 2, 2, 2, level1Green);
+        Upload(primary, 2, 1, 1, 1, level2Blue);
+        CheckExact(primary, 0, 4, 4, 4, level0Red,
+                   "forward 0->1->2: level 0 exact");
+        CheckExact(primary, 1, 2, 2, 2, level1Green,
+                   "forward 0->1->2: nonzero level 1 exact");
+        CheckExact(primary, 2, 1, 1, 1, level2Blue,
+                   "forward 0->1->2: terminal level 2 exact");
+
+        // Repeated upload of the same nonzero mip, with a readback between A and B.
+        const auto level1White = Solid(2, 2, 2, white);
+        Upload(primary, 1, 2, 2, 2, level1White);
+        CheckExact(primary, 1, 2, 2, 2, level1White,
+                   "repeated level-1 upload pattern A exact");
+        const auto level1Magenta = Solid(2, 2, 2, magenta);
+        Upload(primary, 1, 2, 2, 2, level1Magenta);
+        CheckExact(primary, 1, 2, 2, 2, level1Magenta,
+                   "repeated level-1 upload pattern B replaces A");
+        CheckExact(primary, 0, 4, 4, 4, level0Red,
+                   "repeated level-1 uploads preserve level 0");
+        CheckExact(primary, 2, 1, 1, 1, level2Blue,
+                   "repeated level-1 uploads preserve level 2");
+
+        // Required SetData/GetData cycle: level 0, level 1, then level 0 again.
+        const auto level0Orange = Solid(4, 4, 4, orange);
+        Upload(primary, 0, 4, 4, 4, level0Orange);
+        CheckExact(primary, 0, 4, 4, 4, level0Orange,
+                   "SetData/GetData cycle: level 0 first");
+        const auto level1Cyan = Solid(2, 2, 2, cyan);
+        Upload(primary, 1, 2, 2, 2, level1Cyan);
+        CheckExact(primary, 1, 2, 2, 2, level1Cyan,
+                   "SetData/GetData cycle: level 1");
+        const auto level0Purple = Solid(4, 4, 4, purple);
+        Upload(primary, 0, 4, 4, 4, level0Purple);
+        CheckExact(primary, 0, 4, 4, 4, level0Purple,
+                   "SetData/GetData cycle: level 0 again");
+
+        // Explicit 0 -> 1 -> 2 read order after interleaved writes.
+        CheckExact(primary, 0, 4, 4, 4, level0Purple,
+                   "mip read order 0->1->2: level 0");
+        CheckExact(primary, 1, 2, 2, 2, level1Cyan,
+                   "mip read order 0->1->2: level 1");
+        CheckExact(primary, 2, 1, 1, 1, level2Blue,
+                   "mip read order 0->1->2: level 2");
+
+        // Reverse/mixed writes on an independent resource: 2 -> 0 -> 1.
+        Texture3D secondary(device, 4, 4, 4, true, SurfaceFormat::Color);
+        const auto secondaryLevel2 = Solid(1, 1, 1, orange);
+        const auto secondaryLevel0 = Solid(4, 4, 4, yellow);
+        const auto secondaryLevel1 = Solid(2, 2, 2, white);
+        Upload(secondary, 2, 1, 1, 1, secondaryLevel2);
+        Upload(secondary, 0, 4, 4, 4, secondaryLevel0);
+        Upload(secondary, 1, 2, 2, 2, secondaryLevel1);
+        CheckExact(secondary, 2, 1, 1, 1, secondaryLevel2,
+                   "reverse write order 2->0->1 preserves level 2");
+        CheckExact(secondary, 0, 4, 4, 4, secondaryLevel0,
+                   "reverse write order 2->0->1 preserves level 0");
+        CheckExact(secondary, 1, 2, 2, 2, secondaryLevel1,
+                   "reverse write order 2->0->1 preserves level 1");
+
+        // Object A -> B -> A: no backend-global descriptor/region state may leak.
+        CheckExact(primary, 1, 2, 2, 2, level1Cyan,
+                   "resource A->B->A: A");
+        CheckExact(secondary, 1, 2, 2, 2, secondaryLevel1,
+                   "resource A->B->A: B");
+        CheckExact(primary, 1, 2, 2, 2, level1Cyan,
+                   "resource A->B->A: A again");
+
+        // NPOT chain: mip dimensions independently clamp to one.
+        Texture3D npot(device, 7, 5, 3, true, SurfaceFormat::Color);
+        Check(npot.getLevelCountProperty() == 3,
+              "NPOT 7x5x3 reports three authored mip levels");
+        const auto npotLevel0 = DepthPlanePattern(7, 5, {purple, orange, cyan});
+        const auto npotLevel1 = Solid(3, 2, 1, magenta);
+        const auto npotLevel2 = Solid(1, 1, 1, white);
+        Upload(npot, 0, 7, 5, 3, npotLevel0);
+        Upload(npot, 1, 3, 2, 1, npotLevel1);
+        Upload(npot, 2, 1, 1, 1, npotLevel2);
+        CheckExact(npot, 0, 7, 5, 3, npotLevel0,
+                   "NPOT level 0 preserves three depth planes");
+        CheckExact(npot, 1, 3, 2, 1, npotLevel1,
+                   "NPOT nonzero level 1 has 3x2x1 geometry");
+        CheckExact(npot, 2, 1, 1, 1, npotLevel2,
+                   "NPOT terminal level has 1x1x1 geometry");
+
+        // Transfer resources can be released with the texture immediately after a completed read.
+        {
+            Texture3D transient(device, 4, 4, 4, true, SurfaceFormat::Color);
+            const auto data = Solid(2, 2, 2, yellow);
+            Upload(transient, 1, 2, 2, 2, data);
+            CheckExact(transient, 1, 2, 2, 2, data,
+                       "destroy-after-nonzero-transfer control");
         }
 
-        // Check B: full-volume upload/readback round-trip.
-        {
-            Texture3D tex(dev, 4, 4, 2, false, SurfaceFormat::Color);
-            const auto full = SolidColors(4 * 4 * 2, Color::Blue);
-            tex.SetData(full.data(), static_cast<int>(full.size()));
-            std::vector<Color> got(full.size(), Color(0, 0, 0, 0));
-            tex.GetData(got.data(), static_cast<int>(got.size()));
-            Check(AllExact(got, Color::Blue), "full-volume upload/readback round-trips byte-exact");
-        }
-
-        // Check C: mipMap "generated case" -- a full level-0 upload of a uniform color
-        // auto-generates level 1, which reads back the same color.
-        {
-            Texture3D tex(dev, 8, 8, 2, true, SurfaceFormat::Color);
-            const auto full = SolidColors(8 * 8 * 2, Color::Orange);
-            tex.SetData(0, 0, 0, 8, 8, 0, 2, full.data(), 0, static_cast<int>(full.size()));
-
-            std::vector<Color> gotMip(4 * 4 * 1, Color(0, 0, 0, 0));
-            tex.GetData(1, 0, 0, 4, 4, 0, 1, gotMip.data(), 0, static_cast<int>(gotMip.size()));
-            Check(AllExact(gotMip, Color::Orange), "mipMap generated case: level 1 of a uniform-color upload reads back the same color");
-        }
-
-        // Check D: mipMap "authored mip data" case -- explicit data written directly to level 1
-        // is not clobbered by the level-0 auto-generation that already ran for this texture.
-        {
-            Texture3D tex(dev, 8, 8, 2, true, SurfaceFormat::Color);
-            const auto full = SolidColors(8 * 8 * 2, Color::Orange);
-            tex.SetData(0, 0, 0, 8, 8, 0, 2, full.data(), 0, static_cast<int>(full.size()));
-
-            const auto authoredMip = SolidColors(4 * 4 * 1, Color::Magenta);
-            tex.SetData(1, 0, 0, 4, 4, 0, 1, authoredMip.data(), 0, static_cast<int>(authoredMip.size()));
-
-            std::vector<Color> gotMip(4 * 4 * 1, Color(0, 0, 0, 0));
-            tex.GetData(1, 0, 0, 4, 4, 0, 1, gotMip.data(), 0, static_cast<int>(gotMip.size()));
-            Check(AllExact(gotMip, Color::Magenta), "mipMap authored data: explicit level-1 SetData wins over auto-generation");
-
-            // Genuinely proves cumulative (not cycled-away) writes: level 0 must still read back
-            // its original color after the later, separate level-1 SetData call.
-            std::vector<Color> gotLevel0(8 * 8 * 2, Color(0, 0, 0, 0));
-            tex.GetData(0, 0, 0, 8, 8, 0, 2, gotLevel0.data(), 0, static_cast<int>(gotLevel0.size()));
-            Check(AllExact(gotLevel0, Color::Orange), "level 0 remains intact after a later, separate level-1 SetData call");
-        }
-
-        std::printf("=== %d/6 PASS ===\n", passCount);
-        result_ = (passCount == 6) ? 0 : 1;
+        std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);
+        result_ = (passCount_ == checkCount_) ? 0 : 1;
         Exit();
     }
+
+    void Draw(const GameTime&) override {}
 
 public:
     SdlGpuTexture3DTest()
@@ -150,15 +317,10 @@ public:
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(64);
         gdm_->setPreferredBackBufferHeightProperty(64);
-        // GraphicsDeviceManager.SynchronizeWithVerticalRetrace defaults to true (the XNA
-        // default); this test's virtual/headless display has no real vblank signal, so leaving
-        // VSync on makes every frame wait roughly a second, blowing past this test's frame
-        // budget. Disabling it here -- before Game::DoInitialize()'s CreateDevice() call reads
-        // it -- is the correct, property-level way to request Immediate presentation.
         gdm_->setSynchronizeWithVerticalRetraceProperty(false);
     }
 
-    int getResult() const { return result_; }
+    int Result() const { return result_; }
 };
 
 int main()
@@ -168,5 +330,5 @@ int main()
 
     SdlGpuTexture3DTest game;
     game.Run();
-    return game.getResult();
+    return game.Result();
 }
