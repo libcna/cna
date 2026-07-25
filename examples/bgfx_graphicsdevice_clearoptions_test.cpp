@@ -63,6 +63,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <memory>
 #include <string>
@@ -195,6 +196,17 @@ namespace
             rectangle.X + rectangle.Width / 2,
             rectangle.Y + rectangle.Height / 2
         };
+    }
+
+    float ClipDepthForFramebufferDepth(float depth)
+    {
+        // These are the two explicit CTest routes for this Bgfx-only regression. Vulkan's
+        // homogeneous clip-depth range is [0,1]; OpenGL 2.1 maps clip [-1,1] to framebuffer
+        // [0,1]. Converting the probe positions lets the public depth test bracket the requested
+        // clear value to +/-0.01 instead of merely distinguishing it from a hardcoded 1.0.
+        const char* route = std::getenv("CNA_BGFX_RENDERER");
+        const bool homogeneousDepth = route != nullptr && std::string(route) == "VULKAN";
+        return homogeneousDepth ? depth : depth * 2.0f - 1.0f;
     }
 }
 
@@ -407,12 +419,16 @@ class BgfxGraphicsDeviceClearOptionsTest final : public Game
         device.setBlendStateProperty(BlendState::Opaque);
 
         // A depth written by the identity-projection draw is comparable against nearby identity
-        // depths on every route. A native clear value is already in framebuffer-depth space:
-        // Bgfx OpenGL maps identity clip Z to [0.5,1], while Bgfx Vulkan keeps [0,1]. Use 0 and
-        // 0.8 as renderer-independent pass/reject probes for our non-default clear values
-        // (0.59..0.73), which also distinguishes them from a broken hardcoded clear of 1.0.
-        const float passingDepth = depthCameFromClear ? 0.0f : expectedDepth - 0.01f;
-        const float rejectingDepth = depthCameFromClear ? 0.8f : expectedDepth + 0.01f;
+        // depths on every route. A native clear value is already in framebuffer-depth space, so
+        // convert the +/-0.01 framebuffer probes back to each route's clip-depth convention.
+        // This tightly verifies the caller's non-default value rather than only detecting the old
+        // hardcoded 1.0 clear.
+        const float passingDepth = depthCameFromClear
+            ? ClipDepthForFramebufferDepth(expectedDepth - 0.01f)
+            : expectedDepth - 0.01f;
+        const float rejectingDepth = depthCameFromClear
+            ? ClipDepthForFramebufferDepth(expectedDepth + 0.01f)
+            : expectedDepth + 0.01f;
         DrawRect(device, DepthPassRect(width, height), width, height,
                  passingDepth, kGreen);
         DrawRect(device, DepthRejectRect(width, height), width, height,
