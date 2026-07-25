@@ -2371,7 +2371,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-037 | P2 | NOT STARTED | | | |
 | REMED-GFX-038 | P2 | NOT STARTED | | | |
 | REMED-GFX-039 | P2 | NOT STARTED | | | |
-| REMED-GFX-040 | P2 | NOT STARTED | | | |
+| REMED-GFX-040 | P2 | **DONE and VERIFIED** | test `9fe60849`, fix `e211f062`, docs (this entry) | feature/audit | All four public Model-family integer indexers (`ModelBoneCollection`, `ModelMeshCollection`, `ModelMeshPartCollection`, and `ModelEffectCollection`) now reject negative and upper-bound indices with `System::ArgumentOutOfRangeException` naming `index` before any unsigned conversion. Six focused regressions cover empty/populated boundaries plus first/last identity, order, Count, bone/mesh ownership, mesh-part ownership, and effect association. Model usage 93/93, headless model loading 14/14, ASan 93/93, UBSan 93/93; all 14 backend libraries compile with `-j4`. |
 | REMED-GFX-041 | P2 | NOT STARTED | | | |
 | REMED-GFX-042 | P2 | NOT STARTED | | | |
 | REMED-GFX-043 | P1 | NOT STARTED | | | |
@@ -8183,7 +8183,7 @@ Historical close-time recommendation: **REMED-GFX-012**. **Superseded by the 202
 GRAPHICS inventory checkpoint:** GFX-012 was already DONE in `21f6c4af` + `6985b2fe` and its
 `Vulkan_SpriteBatch_TransformMatrix` regression is 3/3. All earlier “recommended next” lines in
 individual closure reports are historical evidence, not a live queue. The current recommended next
-task is **REMED-GFX-040**; GFX-004 and GFX-054 are now DONE.
+task is **REMED-GFX-039**; GFX-004, GFX-040, and GFX-054 are now DONE.
 
 ---
 
@@ -8370,3 +8370,62 @@ untouched.
 - `docs(remediation): record GFX-054 verification` (this record)
 
 Recommended next GRAPHICS task: **REMED-GFX-040**. Recommendation only; not begun.
+
+---
+
+## REMED-GFX-040 — Model collection integer index bounds
+
+**Status:** DONE and VERIFIED (2026-07-25)
+
+**Finding and contract**
+
+- `ModelBoneCollection::operator[](int)` and `ModelMeshCollection::operator[](int)` converted the
+  signed index before delegating to `std::vector::at()`. Invalid values happened to throw
+  `std::out_of_range`, not the CNA/FNA public exception.
+- `ModelMeshPartCollection::operator[](int)` and `ModelEffectCollection::operator[](int)` converted
+  the signed index and used unchecked `std::vector::operator[]`, allowing invalid public access and
+  undefined behavior.
+- CNA's already-correct `AchievementCollection` integer indexer establishes the public contract:
+  validate the signed value first, throw `System::ArgumentOutOfRangeException`, and name the
+  argument `"index"`.
+
+**Fix**
+
+- All four integer indexers now use `ThrowIfNegative(index, "index")` followed by
+  `ThrowIfGreaterThanOrEqual(index, Count, "index")` before converting to `std::size_t`.
+- Valid access still returns the original stored pointer. Storage, order, Count, collection
+  ownership, name lookup, iteration, and effect association behavior are unchanged.
+- Public API documentation now records the `System::ArgumentOutOfRangeException` contract.
+
+**Regression coverage**
+
+- Added six focused `ModelCollectionIndexTest` regressions covering every affected collection:
+  negative indices, `index == Count`, indices above Count, empty collections, and valid first/last
+  access.
+- Valid-path assertions preserve pointer identity and order, Count, child-bone parents, mesh parent
+  bones, mesh-part membership, and parent-mesh effect association.
+- Updated the two older empty-index expectations to the CNA exception type. String/name indexers
+  retain their existing behavior.
+- Pre-fix proof: the new suite reported the wrong exception type for bone/mesh access and terminated
+  with an invalid unchecked empty collection access (exit 139).
+
+**Verification**
+
+- Vulkan focused Model collection and representative Model usage tests: **93/93 passed**.
+- Headless XNB, CNJ, and runtime glTF Model loading tests: **14/14 passed**.
+- Vulkan AddressSanitizer focused Model tests (`detect_leaks=1`, `halt_on_error=1`):
+  **93/93 passed**.
+- Software UndefinedBehaviorSanitizer focused Model tests (`halt_on_error=1`,
+  `print_stacktrace=1`): **93/93 passed**.
+- All fourteen backend libraries compiled successfully with at most four jobs: ASCII, BGFX,
+  CANVAS, D3D11, D3D12, D3D9, EASYGL, DX3, HEADLESS, SDL_GPU, SDL_RENDERER, SOFTWARE, VULKAN, and
+  WEBGPU.
+- `git diff --check`: clean. `audit/`: untouched.
+
+**Commits**
+
+- `9fe60849 test(Task REMED-GFX-040): cover Model collection index bounds`
+- `e211f062 fix(Task REMED-GFX-040): validate Model collection indices`
+- `docs(remediation): record GFX-040 verification` (this record)
+
+Recommended next GRAPHICS task: **REMED-GFX-039**. Recommendation only; not begun.

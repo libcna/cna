@@ -150,8 +150,8 @@ into `REMED-CORE-012`. This is a real result about the codebase, not an omission
 ### Current GRAPHICS recommendation (inventory checkpoint, 2026-07-25)
 
 No GRAPHICS remediation is in progress. Historical “recommended next” lines in individual closure
-reports are not a live queue. GFX-004 and GFX-054 are DONE; the current ranked queue begins
-**GFX-040 → GFX-039 → GFX-043**. GFX-012 is DONE, so the GFX-092 close-time recommendation of
+reports are not a live queue. GFX-004, GFX-040, and GFX-054 are DONE; the current ranked queue begins
+**GFX-039 → GFX-043**. GFX-012 is DONE, so the GFX-092 close-time recommendation of
 GFX-012 is superseded. GFX-085 and GFX-086 remain deferred capability boundaries, not production
 defects.
 
