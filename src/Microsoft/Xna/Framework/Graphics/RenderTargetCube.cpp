@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/InvalidOperationException.hpp"
 
 #include <algorithm>
 
@@ -63,6 +64,20 @@ namespace Microsoft::Xna::Framework::Graphics
     IRenderTargetCubeBackend* RenderTargetCube::GetRenderTargetCubeBackend() const
     {
         return rtCubeBackend_;
+    }
+
+    void RenderTargetCube::Dispose(bool disposing)
+    {
+        if (!isDisposed_ && graphicsDevice_ != nullptr)
+        {
+            for (const auto& binding : graphicsDevice_->GetRenderTargets())
+            {
+                if (binding.getRenderTargetProperty() == this)
+                    throw System::InvalidOperationException("Disposing target that is still bound");
+            }
+        }
+        TextureCube::Dispose(disposing);
+        rtCubeBackend_ = nullptr;
     }
 
     const std::string& RenderTargetCube::GetTypeName() const

@@ -20,6 +20,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class RenderTargetCube : public TextureCube, public IRenderTarget
     {
     public:
+        using TextureCube::Dispose;
+
         /**
          * @brief Creates a RenderTargetCube with the given size, format, depth format, and usage.
          * @param device                    The graphics device to create the render target on.
@@ -39,6 +41,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Destructor. */
         NOXNA ~RenderTargetCube() override = default;
+
+        /**
+         * @brief Releases the cube render target after rejecting disposal while it is bound.
+         * @param disposing True when called from Dispose(); false from destructor.
+         */
+        void Dispose(bool disposing) override;
 
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
