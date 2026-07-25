@@ -162,14 +162,14 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] std::string GetValueString() const;
 
         /**
-         * @brief Gets the value of this parameter as a Matrix (column-major unpacking).
+         * @brief Gets the value as a Matrix by unpacking column-major effect storage.
          *
          * @return The Matrix value stored in this parameter.
          */
         [[nodiscard]] Matrix GetValueMatrix() const;
 
         /**
-         * @brief Gets the value of this parameter as a Matrix array (column-major unpacking).
+         * @brief Gets Matrix values by unpacking each column-major effect-storage element.
          *
          * @param count Number of matrices to retrieve.
          * @return Vector of Matrix values.
@@ -177,14 +177,14 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] std::vector<Matrix> GetValueMatrixArray(int count) const;
 
         /**
-         * @brief Gets the transposed value of this parameter as a Matrix.
+         * @brief Gets the transposed value by reading effect storage in row-major order.
          *
          * @return The transposed Matrix value stored in this parameter.
          */
         [[nodiscard]] Matrix GetValueMatrixTranspose() const;
 
         /**
-         * @brief Gets the transposed value of this parameter as a Matrix array.
+         * @brief Gets transposed values by reading each effect-storage element in row-major order.
          *
          * @param count Number of matrices to retrieve.
          * @return Vector of transposed Matrix values.
@@ -324,28 +324,28 @@ namespace Microsoft::Xna::Framework::Graphics
         void SetValue(const std::string& value);
 
         /**
-         * @brief Sets the value of this parameter from a Matrix (column-major packing).
+         * @brief Sets the value by packing the Matrix into column-major effect storage.
          *
          * @param value The Matrix to store.
          */
         void SetValue(const Matrix& value);
 
         /**
-         * @brief Sets the value of this parameter from a Matrix array (column-major packing).
+         * @brief Sets values by packing each Matrix into column-major effect storage.
          *
          * @param value The array of matrices to store.
          */
         void SetValue(const std::vector<Matrix>& value);
 
         /**
-         * @brief Sets the transposed value of this parameter from a Matrix.
+         * @brief Sets the transposed value using row-major effect storage.
          *
          * @param value The Matrix to transpose and store.
          */
         void SetValueTranspose(const Matrix& value);
 
         /**
-         * @brief Sets the transposed value of this parameter from a Matrix array.
+         * @brief Sets transposed values using row-major effect storage for each matrix.
          *
          * @param value The array of matrices to transpose and store.
          */

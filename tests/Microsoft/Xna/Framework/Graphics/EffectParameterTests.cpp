@@ -34,6 +34,37 @@ static EffectParameter MakeMatrix(const std::string& name = "mat")
                            EffectParameterType::Single);
 }
 
+// Fully asymmetric 4x4 matrices make every transpose-sensitive path observable.
+static Matrix MakeAsymmetric(float base = 0.0f)
+{
+    return Matrix(
+        base +  1.0f, base +  2.0f, base +  3.0f, base +  4.0f,
+        base +  5.0f, base +  6.0f, base +  7.0f, base +  8.0f,
+        base +  9.0f, base + 10.0f, base + 11.0f, base + 12.0f,
+        base + 13.0f, base + 14.0f, base + 15.0f, base + 16.0f
+    );
+}
+
+static void ExpectMatrixEqual(const Matrix& actual, const Matrix& expected)
+{
+    EXPECT_FLOAT_EQ(actual.M11, expected.M11);
+    EXPECT_FLOAT_EQ(actual.M12, expected.M12);
+    EXPECT_FLOAT_EQ(actual.M13, expected.M13);
+    EXPECT_FLOAT_EQ(actual.M14, expected.M14);
+    EXPECT_FLOAT_EQ(actual.M21, expected.M21);
+    EXPECT_FLOAT_EQ(actual.M22, expected.M22);
+    EXPECT_FLOAT_EQ(actual.M23, expected.M23);
+    EXPECT_FLOAT_EQ(actual.M24, expected.M24);
+    EXPECT_FLOAT_EQ(actual.M31, expected.M31);
+    EXPECT_FLOAT_EQ(actual.M32, expected.M32);
+    EXPECT_FLOAT_EQ(actual.M33, expected.M33);
+    EXPECT_FLOAT_EQ(actual.M34, expected.M34);
+    EXPECT_FLOAT_EQ(actual.M41, expected.M41);
+    EXPECT_FLOAT_EQ(actual.M42, expected.M42);
+    EXPECT_FLOAT_EQ(actual.M43, expected.M43);
+    EXPECT_FLOAT_EQ(actual.M44, expected.M44);
+}
+
 // Helper: build a vector3 parameter
 static EffectParameter MakeVec3(const std::string& name = "vec")
 {
@@ -185,27 +216,24 @@ TEST(EffectParameterTest, SetValueVector4RoundTrip)
 TEST(EffectParameterTest, SetValueMatrixRoundTrip)
 {
     auto p = MakeMatrix();
-    const Matrix m = Matrix::CreateTranslation(5.0f, 6.0f, 7.0f);
+    const Matrix m = MakeAsymmetric();
     p.SetValue(m);
-    const Matrix got = p.GetValueMatrix();
-    EXPECT_NEAR(got.M41, 5.0f, 1e-5f);
-    EXPECT_NEAR(got.M42, 6.0f, 1e-5f);
-    EXPECT_NEAR(got.M43, 7.0f, 1e-5f);
-    EXPECT_NEAR(got.M44, 1.0f, 1e-5f);
+    ExpectMatrixEqual(p.GetValueMatrix(), m);
 }
 
 TEST(EffectParameterTest, SetValueMatrixArrayRoundTrip)
 {
     auto p = MakeMatrix();
-    std::vector<Matrix> mats = {
-        Matrix::CreateTranslation(1, 0, 0),
-        Matrix::CreateTranslation(0, 2, 0),
+    const std::vector<Matrix> mats = {
+        MakeAsymmetric(),
+        MakeAsymmetric(100.0f),
+        MakeAsymmetric(-40.0f),
     };
     p.SetValue(mats);
-    auto got = p.GetValueMatrixArray(2);
-    ASSERT_EQ(got.size(), 2u);
-    EXPECT_NEAR(got[0].M41, 1.0f, 1e-5f);
-    EXPECT_NEAR(got[1].M42, 2.0f, 1e-5f);
+    const auto got = p.GetValueMatrixArray(3);
+    ASSERT_EQ(got.size(), mats.size());
+    for (std::size_t i = 0; i < mats.size(); ++i)
+        ExpectMatrixEqual(got[i], mats[i]);
 }
 
 // --- SetValueTranspose / GetValueMatrixTranspose ---
@@ -213,13 +241,9 @@ TEST(EffectParameterTest, SetValueMatrixArrayRoundTrip)
 TEST(EffectParameterTest, SetValueTransposeRoundTrip)
 {
     auto p = MakeMatrix();
-    const Matrix m = Matrix::CreateTranslation(1.0f, 2.0f, 3.0f);
+    const Matrix m = MakeAsymmetric();
     p.SetValueTranspose(m);
-    const Matrix transposed = p.GetValueMatrixTranspose();
-    // SetValueTranspose stores Transpose(m); GetValueMatrixTranspose returns Transpose again → m
-    EXPECT_NEAR(transposed.M41, 1.0f, 1e-5f);
-    EXPECT_NEAR(transposed.M42, 2.0f, 1e-5f);
-    EXPECT_NEAR(transposed.M43, 3.0f, 1e-5f);
+    ExpectMatrixEqual(p.GetValueMatrixTranspose(), m);
 }
 
 // --- GetValueQuaternion / SetValue(Quaternion) ---
@@ -359,16 +383,16 @@ TEST(EffectParameterTest, SetValueQuaternionArrayRoundTrip)
 TEST(EffectParameterTest, SetValueTransposeArrayRoundTrip)
 {
     auto p = MakeMatrix();
-    std::vector<Matrix> mats = {
-        Matrix::CreateTranslation(1.0f, 0.0f, 0.0f),
-        Matrix::CreateTranslation(0.0f, 2.0f, 0.0f),
+    const std::vector<Matrix> mats = {
+        MakeAsymmetric(),
+        MakeAsymmetric(100.0f),
+        MakeAsymmetric(-40.0f),
     };
     p.SetValueTranspose(mats);
-    // GetValueMatrixTransposeArray transposes stored values back → should match originals
-    auto got = p.GetValueMatrixTransposeArray(2);
-    ASSERT_EQ(got.size(), 2u);
-    EXPECT_NEAR(got[0].M41, 1.0f, 1e-5f);
-    EXPECT_NEAR(got[1].M42, 2.0f, 1e-5f);
+    const auto got = p.GetValueMatrixTransposeArray(3);
+    ASSERT_EQ(got.size(), mats.size());
+    for (std::size_t i = 0; i < mats.size(); ++i)
+        ExpectMatrixEqual(got[i], mats[i]);
 }
 
 // --- GetValueTexture2D / SetValue(Texture2D*) ---
@@ -583,28 +607,17 @@ TEST(EffectParameterTest, SetValueFloatArrayWithNaNDoesNotThrow)
     EXPECT_NEAR(got[2], 3.0f, 1e-5f);
 }
 
-// --- Task 187: SetValueTranspose edge cases ---
+// --- Task 187 / REMED-GFX-022: FNA/XNA matrix storage and transpose contract ---
 //
-// CNA stores SetValue(Matrix) in row-major order:
-//   floatData_ = {M11,M12,M13,M14, M21,M22,...}
-//
-// SetValueTranspose(m) is implemented as SetValue(Transpose(m)), so it stores
-// column-major order of m:
+// SetValue(Matrix) stores column-major effect data:
 //   floatData_ = {M11,M21,M31,M41, M12,M22,...}
 //
-// This matches FNA's semantic: SetValueTranspose uploads the matrix pre-transposed
-// so that the GPU shader (which transposes on read) sees the original m.
-
-// Helper: fully-asymmetric 4×4 matrix with all distinct elements.
-static Matrix MakeAsymmetric()
-{
-    return Matrix(
-         1.0f,  2.0f,  3.0f,  4.0f,
-         5.0f,  6.0f,  7.0f,  8.0f,
-         9.0f, 10.0f, 11.0f, 12.0f,
-        13.0f, 14.0f, 15.0f, 16.0f
-    );
-}
+// SetValueTranspose(Matrix) stores row-major effect data:
+//   floatData_ = {M11,M12,M13,M14, M21,M22,...}
+//
+// GetValueMatrix performs the inverse column-major unpack, while
+// GetValueMatrixTranspose reads the same data in row-major order.  This is the
+// native effect/shader storage convention used by FNA/XNA.
 
 // FNA/XNA stores SetValue(Matrix) in column-major effect memory.  This is
 // deliberately checked through the raw single-array view: SetValue/GetValueMatrix
@@ -628,7 +641,7 @@ TEST(EffectParameterTest, SetValueMatrixUsesFnaColumnMajorStorage)
         EXPECT_FLOAT_EQ(raw[i], expected[i]) << "raw effect value index " << i;
 }
 
-// Raw layout: SetValue stores row-major; SetValueTranspose stores column-major.
+// Raw layout: SetValue stores column-major; SetValueTranspose stores row-major.
 // For the asymmetric matrix, floatData_[1] (second element) differs between the two.
 TEST(EffectParameterTest, SetValueTransposeRawLayoutDiffersFromSetValue)
 {
@@ -636,18 +649,18 @@ TEST(EffectParameterTest, SetValueTransposeRawLayoutDiffersFromSetValue)
     const Matrix m = MakeAsymmetric();
 
     p.SetValue(m);
-    const auto rowMajor = p.GetValueSingleArray(16);  // {M11,M12,M13,M14,...}
+    const auto columnMajor = p.GetValueSingleArray(16); // {M11,M21,M31,M41,...}
 
     p.SetValueTranspose(m);
-    const auto colMajor = p.GetValueSingleArray(16);  // {M11,M21,M31,M41,...}
+    const auto rowMajor = p.GetValueSingleArray(16);    // {M11,M12,M13,M14,...}
 
-    // Element [1]: row-major has M12=2, column-major has M21=5.
-    EXPECT_NEAR(rowMajor[1], 2.0f, 1e-5f);   // M12
-    EXPECT_NEAR(colMajor[1], 5.0f, 1e-5f);   // M21
+    // Element [1]: column-major has M21=5, row-major has M12=2.
+    EXPECT_FLOAT_EQ(columnMajor[1], 5.0f); // M21
+    EXPECT_FLOAT_EQ(rowMajor[1], 2.0f);    // M12
 
-    // Element [4]: row-major has M21=5, column-major has M12=2.
-    EXPECT_NEAR(rowMajor[4], 5.0f, 1e-5f);   // M21
-    EXPECT_NEAR(colMajor[4], 2.0f, 1e-5f);   // M12
+    // Element [4]: column-major has M12=2, row-major has M21=5.
+    EXPECT_FLOAT_EQ(columnMajor[4], 2.0f); // M12
+    EXPECT_FLOAT_EQ(rowMajor[4], 5.0f);    // M21
 }
 
 // GetValueMatrix() after SetValueTranspose(m) returns Transpose(m), not m.
@@ -657,14 +670,7 @@ TEST(EffectParameterTest, SetValueTransposeGetValueMatrixReturnsTranspose)
     const Matrix m = MakeAsymmetric();
     p.SetValueTranspose(m);
 
-    const Matrix got = p.GetValueMatrix();
-    const Matrix expected = Matrix::Transpose(m);
-
-    // Spot-check off-diagonal elements to confirm transposition.
-    EXPECT_NEAR(got.M12, expected.M12, 1e-5f);  // expected.M12 = m.M21 = 5
-    EXPECT_NEAR(got.M21, expected.M21, 1e-5f);  // expected.M21 = m.M12 = 2
-    EXPECT_NEAR(got.M14, expected.M14, 1e-5f);  // expected.M14 = m.M41 = 13
-    EXPECT_NEAR(got.M41, expected.M41, 1e-5f);  // expected.M41 = m.M14 = 4
+    ExpectMatrixEqual(p.GetValueMatrix(), Matrix::Transpose(m));
 }
 
 // GetValueMatrix() after SetValue(m) returns m exactly.
@@ -674,11 +680,7 @@ TEST(EffectParameterTest, SetValueGetValueMatrixRoundTrip)
     const Matrix m = MakeAsymmetric();
     p.SetValue(m);
 
-    const Matrix got = p.GetValueMatrix();
-    EXPECT_NEAR(got.M12, m.M12, 1e-5f);
-    EXPECT_NEAR(got.M21, m.M21, 1e-5f);
-    EXPECT_NEAR(got.M14, m.M14, 1e-5f);
-    EXPECT_NEAR(got.M41, m.M41, 1e-5f);
+    ExpectMatrixEqual(p.GetValueMatrix(), m);
 }
 
 // GetValueMatrixTranspose() after SetValue(m) returns Transpose(m).
@@ -688,11 +690,7 @@ TEST(EffectParameterTest, SetValueGetValueMatrixTransposeReturnsTranspose)
     const Matrix m = MakeAsymmetric();
     p.SetValue(m);
 
-    const Matrix got = p.GetValueMatrixTranspose();
-    EXPECT_NEAR(got.M12, m.M21, 1e-5f);   // transpose swaps row/col indices
-    EXPECT_NEAR(got.M21, m.M12, 1e-5f);
-    EXPECT_NEAR(got.M14, m.M41, 1e-5f);
-    EXPECT_NEAR(got.M41, m.M14, 1e-5f);
+    ExpectMatrixEqual(p.GetValueMatrixTranspose(), Matrix::Transpose(m));
 }
 
 // SetValueTranspose(m) is equivalent to SetValue(Transpose(m)).
@@ -718,10 +716,49 @@ TEST(EffectParameterTest, SetValueTransposeDoubleTransposeRoundTrip)
     auto p = MakeMatrix();
     const Matrix m = MakeAsymmetric();
     p.SetValueTranspose(m);
-    const Matrix got = p.GetValueMatrixTranspose();
-    EXPECT_NEAR(got.M11, m.M11, 1e-5f);
-    EXPECT_NEAR(got.M12, m.M12, 1e-5f);
-    EXPECT_NEAR(got.M21, m.M21, 1e-5f);
-    EXPECT_NEAR(got.M34, m.M34, 1e-5f);
-    EXPECT_NEAR(got.M43, m.M43, 1e-5f);
+    ExpectMatrixEqual(p.GetValueMatrixTranspose(), m);
+}
+
+TEST(EffectParameterTest, MatrixArrayStorageAndAllPublicCombinationsMatchFna)
+{
+    auto p = MakeMatrix();
+    const std::vector<Matrix> matrices = {
+        MakeAsymmetric(),
+        MakeAsymmetric(100.0f),
+        MakeAsymmetric(-40.0f),
+    };
+
+    p.SetValue(matrices);
+    const auto rawColumnMajor = p.GetValueSingleArray(48);
+    ASSERT_EQ(rawColumnMajor.size(), 48u);
+    EXPECT_FLOAT_EQ(rawColumnMajor[1], matrices[0].M21);
+    EXPECT_FLOAT_EQ(rawColumnMajor[16 + 2], matrices[1].M31);
+    EXPECT_FLOAT_EQ(rawColumnMajor[32 + 3], matrices[2].M41);
+
+    const auto setGet = p.GetValueMatrixArray(3);
+    const auto setGetTranspose = p.GetValueMatrixTransposeArray(3);
+    ASSERT_EQ(setGet.size(), matrices.size());
+    ASSERT_EQ(setGetTranspose.size(), matrices.size());
+    for (std::size_t i = 0; i < matrices.size(); ++i)
+    {
+        ExpectMatrixEqual(setGet[i], matrices[i]);
+        ExpectMatrixEqual(setGetTranspose[i], Matrix::Transpose(matrices[i]));
+    }
+
+    p.SetValueTranspose(matrices);
+    const auto rawRowMajor = p.GetValueSingleArray(48);
+    ASSERT_EQ(rawRowMajor.size(), 48u);
+    EXPECT_FLOAT_EQ(rawRowMajor[1], matrices[0].M12);
+    EXPECT_FLOAT_EQ(rawRowMajor[16 + 2], matrices[1].M13);
+    EXPECT_FLOAT_EQ(rawRowMajor[32 + 3], matrices[2].M14);
+
+    const auto setTransposeGet = p.GetValueMatrixArray(3);
+    const auto setTransposeGetTranspose = p.GetValueMatrixTransposeArray(3);
+    ASSERT_EQ(setTransposeGet.size(), matrices.size());
+    ASSERT_EQ(setTransposeGetTranspose.size(), matrices.size());
+    for (std::size_t i = 0; i < matrices.size(); ++i)
+    {
+        ExpectMatrixEqual(setTransposeGet[i], Matrix::Transpose(matrices[i]));
+        ExpectMatrixEqual(setTransposeGetTranspose[i], matrices[i]);
+    }
 }

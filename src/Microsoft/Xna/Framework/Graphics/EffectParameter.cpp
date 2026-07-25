@@ -65,10 +65,10 @@ namespace Microsoft::Xna::Framework::Graphics
     Matrix EffectParameter::GetValueMatrix() const
     {
         if (floatData_.size() < 16) return Matrix::getIdentityProperty();
-        return Matrix(floatData_[0], floatData_[1], floatData_[2], floatData_[3],
-                      floatData_[4], floatData_[5], floatData_[6], floatData_[7],
-                      floatData_[8], floatData_[9], floatData_[10], floatData_[11],
-                      floatData_[12], floatData_[13], floatData_[14], floatData_[15]);
+        return Matrix(floatData_[0], floatData_[4], floatData_[8],  floatData_[12],
+                      floatData_[1], floatData_[5], floatData_[9],  floatData_[13],
+                      floatData_[2], floatData_[6], floatData_[10], floatData_[14],
+                      floatData_[3], floatData_[7], floatData_[11], floatData_[15]);
     }
     std::vector<Matrix> EffectParameter::GetValueMatrixArray(int count) const
     {
@@ -76,8 +76,10 @@ namespace Microsoft::Xna::Framework::Graphics
         for (int i = 0; i < count && (i + 1) * 16 <= (int)floatData_.size(); ++i)
         {
             const float* d = floatData_.data() + i * 16;
-            r.push_back(Matrix(d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7],
-                               d[8], d[9], d[10], d[11], d[12], d[13], d[14], d[15]));
+            r.push_back(Matrix(d[0], d[4], d[8],  d[12],
+                               d[1], d[5], d[9],  d[13],
+                               d[2], d[6], d[10], d[14],
+                               d[3], d[7], d[11], d[15]));
         }
         return r;
     }
@@ -166,10 +168,10 @@ namespace Microsoft::Xna::Framework::Graphics
     void EffectParameter::SetValue(const Matrix& m)
     {
         floatData_ = {
-            m.M11, m.M12, m.M13, m.M14,
-            m.M21, m.M22, m.M23, m.M24,
-            m.M31, m.M32, m.M33, m.M34,
-            m.M41, m.M42, m.M43, m.M44
+            m.M11, m.M21, m.M31, m.M41,
+            m.M12, m.M22, m.M32, m.M42,
+            m.M13, m.M23, m.M33, m.M43,
+            m.M14, m.M24, m.M34, m.M44
         };
     }
     void EffectParameter::SetValue(const std::vector<Matrix>& v)
@@ -178,10 +180,10 @@ namespace Microsoft::Xna::Framework::Graphics
         for (const auto& m : v)
         {
             floatData_.insert(floatData_.end(),
-                {m.M11, m.M12, m.M13, m.M14,
-                 m.M21, m.M22, m.M23, m.M24,
-                 m.M31, m.M32, m.M33, m.M34,
-                 m.M41, m.M42, m.M43, m.M44});
+                {m.M11, m.M21, m.M31, m.M41,
+                 m.M12, m.M22, m.M32, m.M42,
+                 m.M13, m.M23, m.M33, m.M43,
+                 m.M14, m.M24, m.M34, m.M44});
         }
     }
     void EffectParameter::SetValueTranspose(const Matrix& m) { SetValue(Matrix::Transpose(m)); }
