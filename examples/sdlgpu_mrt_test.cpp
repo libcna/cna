@@ -73,6 +73,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <array>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -126,6 +127,8 @@ void main() {
 layout(location = 0) in vec2 fragUV;
 layout(location = 0) out vec4 outColorA;
 layout(location = 1) out vec4 outColorB;
+layout(location = 2) out vec4 outColorC;
+layout(location = 3) out vec4 outColorD;
 layout(set = 2, binding = 0) uniform sampler2D uTexture;
 layout(set = 3, binding = 0) uniform PC {
     vec4 vpSize_pad;
@@ -136,8 +139,33 @@ layout(set = 3, binding = 0) uniform PC {
 void main() {
     outColorA = texture(uTexture, fragUV) * pc.color;
     outColorB = vec4(outColorA.g, outColorA.b, outColorA.r, outColorA.a);
+    outColorC = vec4(outColorA.b, outColorA.r, outColorA.g, outColorA.a);
+    outColorD = vec4(outColorA.r, outColorA.b, outColorA.g, outColorA.a);
 }
 )GLSL";
+
+    std::string BuildMrtFragSource(int targetCount)
+    {
+        std::string source = R"GLSL(#version 450
+layout(location = 0) in vec2 fragUV;
+)GLSL";
+        for (int i = 0; i < targetCount; ++i)
+            source += "layout(location = " + std::to_string(i) + ") out vec4 outColor" + char('A' + i) + ";\n";
+        source += R"GLSL(layout(set = 2, binding = 0) uniform sampler2D uTexture;
+layout(set = 3, binding = 0) uniform PC {
+    vec4 vpSize_pad;
+    mat4 matrix;
+    vec4 color;
+    vec4 slot0_pad;
+} pc;
+void main() {
+    outColorA = texture(uTexture, fragUV) * pc.color;
+)GLSL";
+        if (targetCount > 1) source += "    outColorB = vec4(outColorA.g, outColorA.b, outColorA.r, outColorA.a);\n";
+        if (targetCount > 2) source += "    outColorC = vec4(outColorA.b, outColorA.r, outColorA.g, outColorA.a);\n";
+        if (targetCount > 3) source += "    outColorD = vec4(outColorA.r, outColorA.b, outColorA.g, outColorA.a);\n";
+        return source + "}\n";
+    }
 }
 
 class SdlGpuMrtTest : public Game
@@ -152,8 +180,16 @@ class SdlGpuMrtTest : public Game
     // rt0 proof above, so the two don't entangle clear-state or draw-target bookkeeping.
     std::unique_ptr<RenderTarget2D> rtMrtA_;
     std::unique_ptr<RenderTarget2D> rtMrtB_;
+    std::unique_ptr<RenderTarget2D> rtMrtC_;
+    std::unique_ptr<RenderTarget2D> rtMrtD_;
+    std::unique_ptr<RenderTarget2D> rtMrtAltA_;
+    std::unique_ptr<RenderTarget2D> rtMrtAltB_;
+    std::unique_ptr<RenderTarget2D> rtMrtAltC_;
+    std::unique_ptr<RenderTarget2D> rtMrtMsaaA_;
+    std::unique_ptr<RenderTarget2D> rtMrtMsaaB_;
+    std::unique_ptr<RenderTarget2D> rtMrtMsaaC_;
     std::unique_ptr<Texture2D> whiteTex_;
-    std::unique_ptr<ShaderEffect> mrtEffect_;
+    std::array<std::unique_ptr<ShaderEffect>, 4> mrtEffects_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -164,38 +200,104 @@ class SdlGpuMrtTest : public Game
         if (ok) ++passCount_;
     }
 
-    // Check D/E: one SpriteBatch draw with a real 2-output custom ShaderEffect, while
-    // SetRenderTargets binds 2 fresh targets -- reads back both via GetData() to prove they
-    // genuinely received two DIFFERENT values from the SAME draw call.
-    void RunRealMrtCheck(GraphicsDevice& dev)
+    void RunMrtCountCheck(GraphicsDevice& dev, const std::array<RenderTarget2D*, 4>& targets,
+                          int count, const std::string& label, const BlendState& blend = BlendState::Opaque)
     {
-        std::vector<RenderTargetBinding> bindings{RenderTargetBinding(rtMrtA_.get()), RenderTargetBinding(rtMrtB_.get())};
+        std::vector<RenderTargetBinding> bindings;
+        for (int i = 0; i < count; ++i)
+            bindings.emplace_back(targets[i]);
         dev.SetRenderTargets(bindings);
-        dev.Clear(Color::Black);
+        dev.Clear(Color(0, 0, 0, 0));
 
-        mrtEffect_->SetUniformVec4("color", 0.2f, 0.4f, 0.8f, 1.0f);
+        // Canonical public depthless MRT state: do not let inherited device state manufacture a
+        // compatibility diagnosis. SpriteBatch receives the same state explicitly below.
+        DepthStencilState noDepth = DepthStencilState::None;
+        RasterizerState noCull = RasterizerState::CullNone;
+        dev.setBlendStateProperty(blend);
+        dev.setDepthStencilStateProperty(noDepth);
+        dev.setRasterizerStateProperty(noCull);
+        dev.setViewportProperty(Viewport(0, 0, kRTSize, kRTSize));
+        dev.setScissorRectangleProperty(Rectangle(0, 0, kRTSize, kRTSize));
+
+        ShaderEffect& effect = *mrtEffects_[count - 1];
+        effect.SetUniformVec4("color", 0.2f, 0.4f, 0.8f, 1.0f);
         SpriteBatch sb(dev);
-        sb.Begin(SpriteSortMode::Immediate, BlendState::Opaque, nullptr, nullptr, nullptr, mrtEffect_.get());
+        sb.Begin(SpriteSortMode::Immediate, blend, nullptr, &noDepth, &noCull, &effect);
         sb.Draw(*whiteTex_, Rectangle(0, 0, kRTSize, kRTSize), Rectangle(0, 0, 1, 1), Color::White);
         sb.End();
+        dev.SetRenderTargets(std::vector<RenderTargetBinding>{});
 
+        const std::array<Color, 4> expected{{Color(51, 102, 204, 255), Color(102, 204, 51, 255),
+                                              Color(204, 51, 102, 255), Color(51, 204, 102, 255)}};
+        const Rectangle centre(kRTSize / 2, kRTSize / 2, 1, 1);
+        bool allMatch = true;
+        for (int i = 0; i < count; ++i)
+        {
+            Color got(0, 0, 0, 0);
+            targets[i]->GetData(0, &centre, &got, 0, 1);
+            allMatch = allMatch && Matches(got, expected[i]);
+        }
+        Check(allMatch, "custom Effect MRT " + label + " writes each active output slot exactly");
+    }
+
+    std::size_t RunStockSpriteCacheStep(GraphicsDevice& dev, const std::array<RenderTarget2D*, 4>& targets,
+                                        int count, const BlendState& blend, const std::string& label)
+    {
+        std::vector<RenderTargetBinding> bindings;
+        for (int i = 0; i < count; ++i)
+            bindings.emplace_back(targets[i]);
+        dev.SetRenderTargets(bindings);
+        dev.Clear(Color::Magenta);
+        DepthStencilState noDepth = DepthStencilState::None;
+        RasterizerState noCull = RasterizerState::CullNone;
+        sb_->Begin(SpriteSortMode::Immediate, blend, nullptr, &noDepth, &noCull);
+        sb_->Draw(*whiteTex_, Rectangle(0, 0, kRTSize, kRTSize), Rectangle(0, 0, 1, 1), Color::White);
+        sb_->End();
         dev.SetRenderTargets(std::vector<RenderTargetBinding>{});
 
         const Rectangle centre(kRTSize / 2, kRTSize / 2, 1, 1);
-        Color gotA(0, 0, 0, 0), gotB(0, 0, 0, 0);
-        rtMrtA_->GetData(0, &centre, &gotA, 0, 1);
-        rtMrtB_->GetData(0, &centre, &gotB, 0, 1);
+        Color got0(0, 0, 0, 0);
+        targets[0]->GetData(0, &centre, &got0, 0, 1);
+        const bool allChannels = blend.getColorWriteChannelsProperty() == ColorWriteChannels::All;
+        Check(allChannels ? Matches(got0, Color::White)
+                          : got0.getRProperty() == 255,
+              "stock SpriteBatch " + label + " writes slot 0 correctly");
+        return static_cast<SdlGpuGraphicsBackend&>(dev.GetBackend()).GetSpritePipelineCacheSizeEXT();
+    }
 
-        const Color wantA(51, 102, 204, 255);   // white * (0.2,0.4,0.8,1.0)
-        const Color wantB(102, 204, 51, 255);   // channel-swapped (g,b,r,a) of wantA
-        Check(Matches(gotA, wantA),
-              "Check D: MRT target A got the custom shader's primary output, got=(" +
-              std::to_string(gotA.getRProperty()) + "," + std::to_string(gotA.getGProperty()) + "," +
-              std::to_string(gotA.getBProperty()) + ")");
-        Check(Matches(gotB, wantB) && !Matches(gotB, gotA, 15),
-              "Check E: MRT target B got a genuinely DIFFERENT second output from the SAME draw, got=(" +
-              std::to_string(gotB.getRProperty()) + "," + std::to_string(gotB.getGProperty()) + "," +
-              std::to_string(gotB.getBProperty()) + ")");
+    void RunMrtWriteMaskCheck(GraphicsDevice& dev)
+    {
+        const std::array<RenderTarget2D*, 4> targets{{rtMrtA_.get(), rtMrtB_.get(), rtMrtC_.get(), rtMrtD_.get()}};
+        BlendState masks = BlendState::Opaque;
+        masks.setColorWriteChannelsProperty(ColorWriteChannels::Red);
+        masks.setColorWriteChannels1Property(ColorWriteChannels::Green);
+        masks.setColorWriteChannels2Property(ColorWriteChannels::Blue);
+        masks.setColorWriteChannels3Property(ColorWriteChannels::Alpha);
+
+        std::vector<RenderTargetBinding> bindings;
+        for (RenderTarget2D* target : targets)
+            bindings.emplace_back(target);
+        dev.SetRenderTargets(bindings);
+        dev.Clear(Color(0, 0, 0, 0));
+        DepthStencilState noDepth = DepthStencilState::None;
+        RasterizerState noCull = RasterizerState::CullNone;
+        ShaderEffect& effect = *mrtEffects_[3];
+        effect.SetUniformVec4("color", 0.2f, 0.4f, 0.8f, 1.0f);
+        SpriteBatch sb(dev);
+        sb.Begin(SpriteSortMode::Immediate, masks, nullptr, &noDepth, &noCull, &effect);
+        sb.Draw(*whiteTex_, Rectangle(0, 0, kRTSize, kRTSize), Rectangle(0, 0, 1, 1), Color::White);
+        sb.End();
+        dev.SetRenderTargets(std::vector<RenderTargetBinding>{});
+
+        const Rectangle centre(kRTSize / 2, kRTSize / 2, 1, 1);
+        std::array<Color, 4> got{{Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, 0)}};
+        for (int i = 0; i < 4; ++i)
+            targets[i]->GetData(0, &centre, &got[i], 0, 1);
+        const bool exact = Matches(got[0], Color(51, 0, 0, 0)) && got[0].getAProperty() == 0
+                        && Matches(got[1], Color(0, 204, 0, 0)) && got[1].getAProperty() == 0
+                        && Matches(got[2], Color(0, 0, 102, 0)) && got[2].getAProperty() == 0
+                        && Matches(got[3], Color(0, 0, 0, 255)) && got[3].getAProperty() == 255;
+        Check(exact, "ColorWriteChannels0–3 apply to their corresponding four MRT slots");
     }
 
 protected:
@@ -214,10 +316,27 @@ protected:
                                                    DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
         rtMrtB_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                                    DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtMrtC_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                   DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtMrtD_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                   DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtMrtAltA_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                      DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtMrtAltB_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                      DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtMrtAltC_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                      DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtMrtMsaaA_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                       DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
+        rtMrtMsaaB_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                       DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
+        rtMrtMsaaC_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                       DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
 
         const std::vector<std::uint8_t> whitePixels = {255, 255, 255, 255};
         whiteTex_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(dev, 1, 1, whitePixels));
-        mrtEffect_ = std::make_unique<ShaderEffect>(dev, kMrtVertSrc, kMrtFragSrc);
+        for (int targetCount = 1; targetCount <= 4; ++targetCount)
+            mrtEffects_[targetCount - 1] = std::make_unique<ShaderEffect>(dev, kMrtVertSrc, BuildMrtFragSource(targetCount));
 
         const VertexPositionColor verts[6] = {
             { Vector3(-1.0f, -1.0f, 0.0f), Color::Green }, { Vector3(-1.0f, 1.0f, 0.0f), Color::Green }, { Vector3(1.0f, -1.0f, 0.0f), Color::Green },
@@ -295,8 +414,52 @@ protected:
                 dev.Clear(Color::CornflowerBlue);
                 Check(true, "ClearColorAndDepth on the MRT set + SetRenderTargets(nullptr,0) restore renders with no exception");
 
-                stage = "real 2-output MRT draw";
-                RunRealMrtCheck(dev);
+                stage = "custom Effect MRT count matrix";
+                const std::array<RenderTarget2D*, 4> primary{{rtMrtA_.get(), rtMrtB_.get(), rtMrtC_.get(), rtMrtD_.get()}};
+                const std::array<RenderTarget2D*, 4> alternate{{rtMrtAltA_.get(), rtMrtAltB_.get(), rtMrtAltC_.get(), nullptr}};
+                const std::array<RenderTarget2D*, 4> depthBacked{{rt0_.get(), rt1_.get(), rt2_.get(), nullptr}};
+                const std::array<RenderTarget2D*, 4> msaa{{rtMrtMsaaA_.get(), rtMrtMsaaB_.get(), nullptr, nullptr}};
+                RunMrtCountCheck(dev, primary, 1, "one-target control");
+                RunMrtCountCheck(dev, primary, 2, "two targets");
+                RunMrtCountCheck(dev, primary, 3, "three targets");
+                RunMrtCountCheck(dev, primary, 4, "four targets");
+                RunMrtCountCheck(dev, primary, 1, "A→B→A return to one target");
+                RunMrtCountCheck(dev, primary, 3, "one→three transition");
+                RunMrtCountCheck(dev, primary, 1, "three→one transition");
+                RunMrtCountCheck(dev, primary, 3, "three→one→three return");
+                RunMrtCountCheck(dev, alternate, 3, "identical alternate target objects");
+                RunMrtCountCheck(dev, depthBacked, 3, "depth-backed three targets");
+                RunMrtCountCheck(dev, msaa, 2, "two targets with requested/applied " +
+                                 std::to_string(rtMrtMsaaA_->getMultiSampleCountProperty()) + "x MSAA");
+                auto& backend = static_cast<SdlGpuGraphicsBackend&>(dev.GetBackend());
+                Check(backend.GetSpritePipelineCacheSizeEXT() == 0, "MRT SpriteBatch cache begins cold");
+                const std::array<RenderTarget2D*, 4> msaaThree{{rtMrtMsaaA_.get(), rtMrtMsaaB_.get(), rtMrtMsaaC_.get(), nullptr}};
+                const auto cacheStep = [&](const std::array<RenderTarget2D*, 4>& targets, int count,
+                                           const BlendState& blend, std::size_t expected, const std::string& label)
+                {
+                    const std::size_t before = backend.GetSpritePipelineCacheSizeEXT();
+                    const std::size_t after = RunStockSpriteCacheStep(dev, targets, count, blend, label);
+                    std::printf("[INFO] cache %s: %zu -> %zu\n", label.c_str(), before, after);
+                    Check(after == expected, "MRT cache " + label + " has the expected cardinality");
+                };
+                cacheStep(primary, 1, BlendState::Opaque, 1, "1 target depthless 1x (new count)");
+                cacheStep(primary, 2, BlendState::Opaque, 2, "2 targets depthless 1x (new count)");
+                cacheStep(primary, 3, BlendState::Opaque, 3, "3 targets depthless 1x (new count)");
+                cacheStep(primary, 4, BlendState::Opaque, 4, "4 targets depthless 1x (new count)");
+                cacheStep(primary, 1, BlendState::Opaque, 4, "return 1 target (reuse)");
+                cacheStep(primary, 3, BlendState::Opaque, 4, "return 3 targets (reuse)");
+                cacheStep(alternate, 3, BlendState::Opaque, 4, "alternate objects 3 targets (reuse)");
+                cacheStep(depthBacked, 3, BlendState::Opaque, 5, "3 targets depth-backed (new depth)");
+                cacheStep(primary, 3, BlendState::Opaque, 5, "return depthless 3 targets (reuse)");
+                cacheStep(msaaThree, 3, BlendState::Opaque, 6, "3 targets applied MSAA (new samples)");
+                cacheStep(primary, 3, BlendState::Opaque, 6, "return 1x 3 targets (reuse)");
+                BlendState masks = BlendState::Opaque;
+                masks.setColorWriteChannelsProperty(ColorWriteChannels::Red);
+                masks.setColorWriteChannels1Property(ColorWriteChannels::Green);
+                masks.setColorWriteChannels2Property(ColorWriteChannels::Blue);
+                cacheStep(primary, 3, masks, 7, "3 targets per-slot masks (new write state)");
+                cacheStep(primary, 3, BlendState::Opaque, 7, "return all write masks (reuse)");
+                RunMrtWriteMaskCheck(dev);
             }
             catch (const std::exception& e)
             {
@@ -324,8 +487,8 @@ protected:
 
         if (frame_ == kTotalFrames)
         {
-            std::printf("=== %d/5 PASS ===\n", passCount_);
-            result_ = (passCount_ == 5) ? 0 : 1;
+            std::printf("=== %d/42 PASS ===\n", passCount_);
+            result_ = (passCount_ == 42) ? 0 : 1;
             Exit();
         }
     }
