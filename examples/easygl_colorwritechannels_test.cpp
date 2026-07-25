@@ -4,13 +4,12 @@
 // IGraphicsBackend::ApplyBlendState. Previously EasyGL never called glColorMask -> the mask was a
 // silent no-op (always full RGBA).
 //
-// EasyGL's ColorWriteChannels support is RT0 (glColorMask is not per-attachment; independent MRT
-// masks would need glColorMaski, ES 3.2+, a documented follow-up). MultiSampleMask is likewise a
-// documented capability gap on the GL/GLES profile (glSampleMaski, ES 3.1+). This test therefore
-// covers the RGB per-channel write masks (the reliably-observable backbuffer channels); the alpha
-// write mask and the sample mask are proven on the Software and Vulkan backends (real RT alpha /
-// pSampleMask). Clear() must ignore the mask (glClear respects glColorMask, but XNA Clear does not)
-// -- exercised implicitly since every case clears to D under an active mask.
+// This test covers slot 0 on the backbuffer. REMED-GFX-016's EasyGL MRT regression separately
+// proves ColorWriteChannels0..3 through glColorMaski on profiles that expose indexed masks, while
+// lower profiles reject distinct per-slot masks rather than applying slot 0 globally. MultiSampleMask
+// remains a documented GL/GLES capability gap; the sample mask is proven on Software and Vulkan.
+// Clear() must ignore the mask (glClear respects color masks, but XNA Clear does not) -- exercised
+// implicitly since every case clears to D under an active mask.
 //
 // Exit code 0 = all PASS, 1 = any FAIL. Runs under Xvfb + llvmpipe.
 

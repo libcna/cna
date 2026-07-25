@@ -4,6 +4,7 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include <SDL3/SDL.h>
 #include <easygl/easygl.hpp>
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -56,15 +57,27 @@ namespace CNA::Internal::Backends::EasyGL
 
         void BindAsRenderTarget()   override;
         void UnbindAsRenderTarget() override;
+        void GetData(int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
+        {
+            return depthFormatWasRequested && depthFormat_ != 0;
+        }
 
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
 
     private:
+        friend class EasyGLGraphicsBackend;
+
         void CreateResources();
+        void AttachColorToMRT(
+            ::easygl::Framebuffer& framebuffer,
+            ::metagl::FramebufferAttachment attachment) const;
+        void AttachDepthToMRT(::easygl::Framebuffer& framebuffer) const;
 
         ::easygl::Framebuffer  fbo_;         ///< Render target FBO (color = colorTex_, or msaaColorRbo_ when MSAA).
         ::easygl::Framebuffer  resolveFbo_;  ///< MSAA only: blit destination (color = colorTex_).
@@ -376,11 +389,14 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Device device;
         ::easygl::ResourceRegistry registry_;
 
-        /// REMED-GFX-077: the raw XNA ColorWriteChannels (slot 0; bit0=R..bit3=A) of the current
-        /// BlendState, applied via glColorMask in ApplyBlendState. Cached so Clear()/ClearColorAndDepth()
-        /// can temporarily force a full RGBA mask (XNA Clear ignores ColorWriteChannels, but glClear
-        /// respects glColorMask) and then restore it. Defaults to 15 (All).
-        int currentColorWriteMask_ = 15;
+        /// Raw XNA ColorWriteChannels values for MRT slots 0..3 (bit0=R..bit3=A).
+        /// GLES 3.2 applies these with glColorMaski; Clear temporarily forces every active slot
+        /// to All because XNA/FNA Clear ignores BlendState write masks.
+        std::array<int, 4> currentColorWriteMasks_ = {15, 15, 15, 15};
+        bool supportsIndexedColorMasks_ = false;
+        void ApplyCurrentColorWriteMasks();
+        void ForceAllColorWriteMasks();
+        [[nodiscard]] bool HasRestrictedActiveColorWriteMask() const;
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
@@ -468,11 +484,16 @@ namespace CNA::Internal::Backends::EasyGL
         ::easygl::Texture default_flat_normal_texture_;      ///< PbrEffect NormalMap fallback (CNB-58)
         bool default_flat_normal_texture_ready_ = false;
 
-        // Temporary MRT FBO created by SetRenderTargets(count > 1)
+        // One reusable MRT FBO. Every bind replaces all ordered attachments; target identity is
+        // deliberately not part of any shader/pipeline cache.
         ::easygl::Framebuffer mrtFbo_;
-        bool mrtFboReady_ = false;
+        int maxMrtTargets_ = 1;
+        std::array<EasyGLRenderTargetBackend*, 4> currentMrtTargets_ = {};
+        int currentMrtCount_ = 0;
+        void FinalizeCurrentMRT();
 
-        // Height of the currently bound render target; 0 = default framebuffer.
+        // Extent of the currently bound single target or MRT set; 0 = default framebuffer.
+        int currentRtWidth_ = 0;
         int currentRtHeight_ = 0;
 
         // Tracks the currently-bound single RenderTarget2D/RenderTargetCube backend (nullptr

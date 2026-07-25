@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include <cstdint>
 #include <iostream>
 #include <span>
 
@@ -13,6 +14,7 @@
 #include <metagl/Capabilities.hpp>
 #include <metagl/Context.hpp>
 #include <metagl/ContextEvents.hpp>
+#include <metagl/EnumNames.hpp>
 #include <metagl/Functions.hpp>
 
 // Verbose 3D rendering trace. Define `CNA_DEBUG_RENDERING` (e.g. via
@@ -26,7 +28,9 @@
 #include <stdexcept>
 #include "System/InvalidOperationException.hpp"
 #include <algorithm>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <vector>
 #include <cmath>
 #include <cstring>
@@ -673,7 +677,7 @@ namespace CNA::Internal::Backends::EasyGL
             ::easygl::Framebuffer::blit(0, 0, width_, height_,
                                         0, 0, width_, height_,
                                         ::metagl::ClearBufferBit::Color,
-                                        ::metagl::BlitFilter::Linear);
+                                        ::metagl::BlitFilter::Nearest);
         }
         // Regenerate the mip chain from level 0's just-rendered (and possibly just-resolved)
         // content, matching FNA3D's OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...
@@ -684,6 +688,96 @@ namespace CNA::Internal::Backends::EasyGL
             colorTex_.generate_mipmap(::easygl::TextureTarget::Texture2D);
         }
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+    }
+
+    void EasyGLRenderTargetBackend::GetData(
+        int level, int x, int y, int w, int h, void* data, int dataLength) const
+    {
+        if (!data || level < 0 || w <= 0 || h <= 0
+            || static_cast<std::int64_t>(dataLength)
+                < static_cast<std::int64_t>(w) * h * 4)
+            throw std::invalid_argument(
+                "EasyGLRenderTargetBackend::GetData: invalid destination or range.");
+        if (level >= levelCount_)
+            throw std::out_of_range(
+                "EasyGLRenderTargetBackend::GetData: mip level out of bounds.");
+
+        const int levelWidth = std::max(1, width_ >> level);
+        const int levelHeight = std::max(1, height_ >> level);
+        if (x < 0 || y < 0 || x + w > levelWidth || y + h > levelHeight)
+            throw std::out_of_range(
+                "EasyGLRenderTargetBackend::GetData: rectangle out of bounds.");
+
+        ::easygl::Framebuffer mipFbo;
+        if (level == 0)
+        {
+            if (multiSampleCount_ > 0)
+                resolveFbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            else
+                fbo_.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+        }
+        else
+        {
+            mipFbo.create();
+            mipFbo.bind(::easygl::FramebufferTarget::ReadFramebuffer);
+            mipFbo.attach_texture_2d(
+                ::easygl::FramebufferTarget::ReadFramebuffer,
+                ::metagl::to_framebuffer_attachment(
+                    ::metagl::ColorAttachment::Color0),
+                ::easygl::TextureTarget::Texture2D, colorTex_, level);
+        }
+        ::metagl::glReadBuffer(
+            ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+        ::metagl::glReadPixels(
+            x, levelHeight - y - h, w, h,
+            ::metagl::PixelFormat::Rgba,
+            ::metagl::PixelType::UnsignedByte, data);
+
+        const int rowBytes = w * 4;
+        auto* pixels = static_cast<std::uint8_t*>(data);
+        std::vector<std::uint8_t> row(static_cast<std::size_t>(rowBytes));
+        for (int topRow = 0; topRow < h / 2; ++topRow)
+        {
+            auto* top = pixels + topRow * rowBytes;
+            auto* bottom = pixels + (h - 1 - topRow) * rowBytes;
+            std::copy(top, top + rowBytes, row.data());
+            std::copy(bottom, bottom + rowBytes, top);
+            std::copy(row.begin(), row.end(), bottom);
+        }
+        ::easygl::Framebuffer::unbind(
+            ::easygl::FramebufferTarget::ReadFramebuffer);
+    }
+
+    void EasyGLRenderTargetBackend::AttachColorToMRT(
+        ::easygl::Framebuffer& framebuffer,
+        ::metagl::FramebufferAttachment attachment) const
+    {
+        if (multiSampleCount_ > 0)
+        {
+            framebuffer.attach_renderbuffer(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, msaaColorRbo_);
+        }
+        else
+        {
+            framebuffer.attach_texture_2d(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, ::easygl::TextureTarget::Texture2D,
+                colorTex_, 0);
+        }
+    }
+
+    void EasyGLRenderTargetBackend::AttachDepthToMRT(
+        ::easygl::Framebuffer& framebuffer) const
+    {
+        ::metagl::InternalFormat ignoredFormat;
+        ::metagl::FramebufferAttachment attachment;
+        if (MapDepthFormat(depthFormat_, ignoredFormat, attachment))
+        {
+            framebuffer.attach_renderbuffer(
+                ::easygl::FramebufferTarget::Framebuffer,
+                attachment, depthRbo_);
+        }
     }
 
     void EasyGLRenderTargetBackend::BindGL() const
@@ -1338,13 +1432,33 @@ void main()
         // runtime-detected status here instead of a hardcoded claim.
         {
             GLint maxSamplesCap = 0;
+            GLint maxDrawBuffers = 1;
+            GLint maxColorAttachments = 1;
             metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
+            metagl::glGetIntegerv(
+                ::metagl::GetParameter::MaxDrawBuffers, &maxDrawBuffers);
+            metagl::glGetIntegerv(
+                ::metagl::GetParameter::MaxColorAttachments,
+                &maxColorAttachments);
+            maxMrtTargets_ = std::max(
+                1, std::min({4, static_cast<int>(maxDrawBuffers),
+                             static_cast<int>(maxColorAttachments)}));
+            const auto& capabilities = device.capabilities();
+            supportsIndexedColorMasks_ =
+                capabilities.is_opengles()
+                    ? capabilities.is_at_least(3, 2)
+                    : capabilities.is_at_least(3, 0);
             const bool hasAniso = metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
             GLfloat maxAnisoCap = 1.0f;
             if (hasAniso)
                 metagl::glGetFloatv(::metagl::GetParameter::MaxTextureMaxAnisotropy, &maxAnisoCap);
             std::cout << "CNA: EasyGL capabilities -- MSAA up to " << maxSamplesCap
-                      << "x; MRT up to 4 targets (FNA MAX_RENDERTARGET_BINDINGS); "
+                      << "x; MRT up to " << maxMrtTargets_
+                      << " targets (GL draw buffers=" << maxDrawBuffers
+                      << ", color attachments=" << maxColorAttachments
+                      << ", CNA/FNA cap=4); indexed color masks: "
+                      << (supportsIndexedColorMasks_ ? "supported" : "not supported")
+                      << "; "
                          "anisotropic filtering: "
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
@@ -1592,12 +1706,10 @@ void main()
         // REMED-GFX-077: XNA Clear() clears all channels regardless of BlendState.ColorWriteChannels,
         // but glClear respects glColorMask — so neutralise a non-default mask across the clear, then
         // restore it. No-op fast path when the mask is the default All.
-        const bool maskActive = (currentColorWriteMask_ != 15);
-        if (maskActive) device.set_color_mask(true, true, true, true);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
-        if (maskActive)
-            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
-                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
+        if (maskActive) ApplyCurrentColorWriteMasks();
     }
 
     void EasyGLGraphicsBackend::Present()
@@ -1650,9 +1762,9 @@ void main()
 
     bool EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
     {
-        if (!currentRt2D_) return false;
-        width  = currentRt2D_->GetWidth();
-        height = currentRt2D_->GetHeight();
+        if (!currentRt2D_ && currentMrtCount_ == 0) return false;
+        width = currentRtWidth_;
+        height = currentRtHeight_;
         return true;
     }
 
@@ -1743,7 +1855,7 @@ void main()
 
     void EasyGLGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
-        mrtFboReady_ = false;
+        FinalizeCurrentMRT();
         // Regenerate mips (if requested) for whatever single RT/cube-face was previously
         // active, before switching away from it — see UnbindAsRenderTarget's Task 336 comment.
         if (currentRt2D_ && currentRt2D_ != rt) currentRt2D_->UnbindAsRenderTarget();
@@ -1752,11 +1864,13 @@ void main()
         currentRt2D_   = rt;
         if (rt)
         {
+            currentRtWidth_ = rt->GetWidth();
             currentRtHeight_ = rt->GetHeight();
             rt->BindAsRenderTarget();
         }
         else
         {
+            currentRtWidth_ = 0;
             currentRtHeight_ = 0;
             BindDefaultFramebuffer();
         }
@@ -1765,13 +1879,48 @@ void main()
     void EasyGLGraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
     {
         if (!rt) { SetRenderTarget2D(nullptr); return; }
-        mrtFboReady_ = false;
+        FinalizeCurrentMRT();
         if (currentRt2D_) currentRt2D_->UnbindAsRenderTarget();
         if (currentRtCube_ && currentRtCube_ != rt) currentRtCube_->UnbindAsRenderTarget();
         currentRt2D_   = nullptr;
         currentRtCube_ = rt;
+        currentRtWidth_ = rt->GetSize();
         currentRtHeight_ = rt->GetSize();
         rt->BindAsRenderTargetFace(face);
+    }
+
+    void EasyGLGraphicsBackend::FinalizeCurrentMRT()
+    {
+        if (currentMrtCount_ <= 0) return;
+        const int count = currentMrtCount_;
+        currentMrtCount_ = 0;
+        currentRtWidth_ = 0;
+        currentRtHeight_ = 0;
+        for (int i = 0; i < count; ++i)
+        {
+            EasyGLRenderTargetBackend* target = currentMrtTargets_[i];
+            currentMrtTargets_[i] = nullptr;
+            if (target) target->UnbindAsRenderTarget();
+        }
+    }
+
+    namespace
+    {
+        std::string DrainNativeGlErrors()
+        {
+            std::ostringstream result;
+            for (int i = 0; i < 64; ++i)
+            {
+                const auto error = ::metagl::glGetError();
+                if (error == ::metagl::ErrorCode::NoError) break;
+                if (result.tellp() > 0) result << ", ";
+                result << ::metagl::to_string(error) << "(0x"
+                       << std::hex << std::uppercase
+                       << static_cast<unsigned int>(error)
+                       << std::dec << ")";
+            }
+            return result.str();
+        }
     }
 
     void EasyGLGraphicsBackend::SetRenderTargets(
@@ -1782,6 +1931,9 @@ void main()
             SetRenderTarget2D(nullptr);
             return;
         }
+        if (!renderTargets)
+            throw std::invalid_argument(
+                "EasyGL SetRenderTargets: nonzero count requires a binding array.");
         if (count == 1)
         {
             if (renderTargets[0].IsRenderTargetCubeFace())
@@ -1792,51 +1944,128 @@ void main()
                 SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
             return;
         }
+        if (count > maxMrtTargets_)
+            throw std::runtime_error(
+                "EasyGL SetRenderTargets: requested " + std::to_string(count)
+                + " targets, but the active GL profile supports "
+                + std::to_string(maxMrtTargets_) + ".");
+
+        std::array<EasyGLRenderTargetBackend*, 4> targets{};
         for (int i = 0; i < count; ++i)
+        {
             if (renderTargets[i].IsRenderTargetCubeFace())
                 throw std::runtime_error(
                     "EasyGL SetRenderTargets: cube faces in a multi-target set are not "
                     "implemented by this CNA backend.");
+            targets[i] = dynamic_cast<EasyGLRenderTargetBackend*>(
+                renderTargets[i].GetRenderTarget2D());
+            if (!targets[i])
+                throw std::runtime_error(
+                    "EasyGL SetRenderTargets: binding " + std::to_string(i)
+                    + " is not an EasyGL RenderTarget2D.");
+            if (targets[i]->GetWidth() != renderTargets[0].GetWidth()
+                || targets[i]->GetHeight() != renderTargets[0].GetHeight())
+                throw std::runtime_error(
+                    "EasyGL SetRenderTargets: render targets must have matching dimensions.");
+            if (targets[i]->GetMultiSampleCount()
+                != renderTargets[0].GetAppliedMultiSampleCount())
+                throw std::runtime_error(
+                    "EasyGL SetRenderTargets: render targets must have matching applied "
+                    "sample counts.");
+            for (int previous = 0; previous < i; ++previous)
+                if (targets[i] == targets[previous])
+                    throw std::runtime_error(
+                        "EasyGL SetRenderTargets: the same render target cannot occupy "
+                        "multiple slots.");
+        }
+        if (!supportsIndexedColorMasks_)
+        {
+            for (int i = 1; i < count; ++i)
+                if (currentColorWriteMasks_[i] != currentColorWriteMasks_[0])
+                    throw std::runtime_error(
+                        "EasyGL SetRenderTargets: this GL profile cannot express distinct "
+                        "ColorWriteChannels values for MRT slots.");
+        }
 
-        // MRT: unbind whatever single RT/cube-face was previously active (mip regen if needed).
-        // MRT + per-target mipmaps is not supported (Task 336) — MRT targets never get tracked
-        // as currentRt2D_/currentRtCube_, so switching away from MRT mode cannot regenerate
-        // their mips; this is an accepted, documented gap, not a silent correctness issue for
-        // the common single-RT case this fix targets.
+        const std::string errorsBeforeSetup = DrainNativeGlErrors();
+        if (!errorsBeforeSetup.empty())
+            throw std::runtime_error(
+                "EasyGL SetRenderTargets: native GL errors were pending before MRT setup: "
+                + errorsBeforeSetup);
+
+        // Finalize every old destination before replacing the ordered set. This resolves each
+        // multisample color buffer and regenerates each requested mip chain.
+        FinalizeCurrentMRT();
         if (currentRt2D_)   currentRt2D_->UnbindAsRenderTarget();
         if (currentRtCube_) currentRtCube_->UnbindAsRenderTarget();
         currentRt2D_   = nullptr;
         currentRtCube_ = nullptr;
 
-        // MRT: build a combined FBO with one color attachment per render target.
-        if (!mrtFboReady_)
-        {
-            mrtFbo_.create();
-            mrtFboReady_ = true;
-        }
+        mrtFbo_.create();
         mrtFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
 
-        constexpr int kMaxMRT = 8;
-        const int n = count < kMaxMRT ? count : kMaxMRT;
-        for (int i = 0; i < n; ++i)
+        // Replace every possible attachment, including slots/depth owned by the previous set.
+        // The FBO is reused, but its identity never stands in for ordered target-set identity.
+        for (int i = 0; i < 4; ++i)
         {
-            const auto* eglRT = static_cast<const EasyGLRenderTargetBackend*>(
-                renderTargets[i].GetRenderTarget2D());
-            const auto colorAttach = static_cast<::metagl::ColorAttachment>(
-                static_cast<GLenum>(::metagl::ColorAttachment::Color0) + static_cast<GLenum>(i));
-            mrtFbo_.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
-                                      ::metagl::to_framebuffer_attachment(colorAttach),
-                                      ::easygl::TextureTarget::Texture2D,
-                                      eglRT->GetEasyGLColorTexture(), 0);
+            const auto color = static_cast<::metagl::ColorAttachment>(
+                static_cast<GLenum>(::metagl::ColorAttachment::Color0)
+                + static_cast<GLenum>(i));
+            ::metagl::glFramebufferRenderbuffer(
+                ::metagl::FramebufferTarget::Framebuffer,
+                ::metagl::to_framebuffer_attachment(color),
+                ::metagl::RenderbufferTarget::Renderbuffer,
+                ::metagl::RenderbufferId{0});
+        }
+        for (const auto attachment : {
+                 ::metagl::FramebufferAttachment::Depth,
+                 ::metagl::FramebufferAttachment::Stencil,
+                 ::metagl::FramebufferAttachment::DepthStencil})
+        {
+            ::metagl::glFramebufferRenderbuffer(
+                ::metagl::FramebufferTarget::Framebuffer, attachment,
+                ::metagl::RenderbufferTarget::Renderbuffer,
+                ::metagl::RenderbufferId{0});
         }
 
-        ::easygl::DrawBuffer drawBufs[kMaxMRT];
-        for (int i = 0; i < n; ++i) {
-            const auto colorAttach = static_cast<::metagl::ColorAttachment>(
-                static_cast<GLenum>(::metagl::ColorAttachment::Color0) + static_cast<GLenum>(i));
-            drawBufs[i] = ::metagl::to_draw_buffer(colorAttach);
+        std::array<::easygl::DrawBuffer, 4> drawBuffers{};
+        for (int i = 0; i < count; ++i)
+        {
+            const auto color = static_cast<::metagl::ColorAttachment>(
+                static_cast<GLenum>(::metagl::ColorAttachment::Color0)
+                + static_cast<GLenum>(i));
+            const auto attachment = ::metagl::to_framebuffer_attachment(color);
+            targets[i]->AttachColorToMRT(mrtFbo_, attachment);
+            drawBuffers[i] = ::metagl::to_draw_buffer(color);
         }
-        mrtFbo_.set_draw_buffers(std::span<const ::easygl::DrawBuffer>(drawBufs, n));
+        targets[0]->AttachDepthToMRT(mrtFbo_);
+        mrtFbo_.set_draw_buffers(
+            std::span<const ::easygl::DrawBuffer>(
+                drawBuffers.data(), static_cast<std::size_t>(count)));
+        mrtFbo_.set_read_buffer(
+            ::metagl::to_read_buffer(::metagl::ColorAttachment::Color0));
+
+        const auto status = mrtFbo_.check_status();
+        const std::string setupErrors = DrainNativeGlErrors();
+        if (status != ::metagl::FramebufferStatus::Complete
+            || !setupErrors.empty())
+        {
+            BindDefaultFramebuffer();
+            currentRtWidth_ = 0;
+            currentRtHeight_ = 0;
+            throw std::runtime_error(
+                "EasyGL SetRenderTargets: MRT framebuffer setup failed for "
+                + std::to_string(count) + " targets; status="
+                + std::string(::metagl::to_string(status))
+                + "; GL errors="
+                + (setupErrors.empty() ? std::string("none") : setupErrors));
+        }
+
+        currentMrtTargets_ = targets;
+        currentMrtCount_ = count;
+        currentRtWidth_ = renderTargets[0].GetWidth();
+        currentRtHeight_ = renderTargets[0].GetHeight();
+        ApplyCurrentColorWriteMasks();
     }
 
     namespace
@@ -1948,12 +2177,57 @@ void main()
     // Graphics state
     // -------------------------------------------------------------------------
 
+    void EasyGLGraphicsBackend::ApplyCurrentColorWriteMasks()
+    {
+        const int slot0 = currentColorWriteMasks_[0];
+        device.set_color_mask(
+            ColorWriteHasRed(slot0), ColorWriteHasGreen(slot0),
+            ColorWriteHasBlue(slot0), ColorWriteHasAlpha(slot0));
+        if (supportsIndexedColorMasks_)
+        {
+            for (int i = 0; i < maxMrtTargets_; ++i)
+            {
+                const int mask = currentColorWriteMasks_[i];
+                device.set_color_mask(
+                    static_cast<unsigned int>(i),
+                    ColorWriteHasRed(mask), ColorWriteHasGreen(mask),
+                    ColorWriteHasBlue(mask), ColorWriteHasAlpha(mask));
+            }
+        }
+    }
+
+    void EasyGLGraphicsBackend::ForceAllColorWriteMasks()
+    {
+        device.set_color_mask(true, true, true, true);
+        if (supportsIndexedColorMasks_)
+            for (int i = 0; i < maxMrtTargets_; ++i)
+                device.set_color_mask(
+                    static_cast<unsigned int>(i), true, true, true, true);
+    }
+
+    bool EasyGLGraphicsBackend::HasRestrictedActiveColorWriteMask() const
+    {
+        const int activeCount = currentMrtCount_ > 0 ? currentMrtCount_ : 1;
+        for (int i = 0; i < activeCount; ++i)
+            if (currentColorWriteMasks_[i] != 15) return true;
+        return false;
+    }
+
     void EasyGLGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                  int colorDstBlend, int alphaDstBlend,
                                                  int colorBlendFunc, int alphaBlendFunc,
                                                  const BlendWriteState& writeState)
     {
         if (metagl::IsContextLost()) return;
+        if (!supportsIndexedColorMasks_ && currentMrtCount_ > 1)
+        {
+            for (int i = 1; i < currentMrtCount_; ++i)
+                if (writeState.colorWriteChannels[i]
+                    != writeState.colorWriteChannels[0])
+                    throw std::runtime_error(
+                        "EasyGL ApplyBlendState: this GL profile cannot express distinct "
+                        "ColorWriteChannels values for active MRT slots.");
+        }
         // Blend::One=0, Blend::Zero=1 → Opaque preset: src=One, dst=Zero → effectively no blending
         const bool blendEnabled = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
                                     alphaSrcBlend == 0 && alphaDstBlend == 1);
@@ -1967,14 +2241,9 @@ void main()
                 ToEasyGLBlendEquation(colorBlendFunc),
                 ToEasyGLBlendEquation(alphaBlendFunc));
         }
-        // REMED-GFX-077: BlendState.ColorWriteChannels (slot 0) → glColorMask (global device state,
-        // GL ES 2.0+). glColorMask is not per-attachment, so independent MRT masks
-        // (ColorWriteChannels1/2/3) would need the indexed glColorMaski (ES 3.2+) — deferred as a
-        // documented capability gap. The mask is cached so Clear() can neutralise it (below).
-        const int cw = writeState.colorWriteChannels[0];
-        currentColorWriteMask_ = cw;
-        device.set_color_mask(ColorWriteHasRed(cw), ColorWriteHasGreen(cw),
-                              ColorWriteHasBlue(cw), ColorWriteHasAlpha(cw));
+        for (int i = 0; i < 4; ++i)
+            currentColorWriteMasks_[i] = writeState.colorWriteChannels[i];
+        ApplyCurrentColorWriteMasks();
         // BlendState.MultiSampleMask: EasyGL could express a coverage mask via glSampleMaski
         // (GL ES 3.1+, requires GL_SAMPLE_MASK enable). It is left at the all-ones default here —
         // a non-default coverage mask on the GL/GLES profile is a documented capability gap, not
@@ -4277,12 +4546,10 @@ void main()
         // REMED-GFX-077: neutralise a non-default BlendState.ColorWriteChannels across the clear
         // (XNA Clear ignores it, glClear respects glColorMask) — mirrors the set_depth_mask(true)
         // override just above. No-op fast path when the mask is the default All.
-        const bool maskActive = (currentColorWriteMask_ != 15);
-        if (maskActive) device.set_color_mask(true, true, true, true);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth);
-        if (maskActive)
-            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
-                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
+        if (maskActive) ApplyCurrentColorWriteMasks();
     }
 
     // Task 871: glClear(GL_STENCIL_BUFFER_BIT) is itself masked by the currently-active
@@ -4315,12 +4582,10 @@ void main()
         device.set_clear_stencil(stencil);
         device.set_stencil_mask(0xFFFFFFFFu);
         // REMED-GFX-077: XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
-        const bool maskActive = (currentColorWriteMask_ != 15);
-        if (maskActive) device.set_color_mask(true, true, true, true);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Stencil);
-        if (maskActive)
-            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
-                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
+        if (maskActive) ApplyCurrentColorWriteMasks();
     }
 
     void EasyGLGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
@@ -4333,12 +4598,10 @@ void main()
         device.set_stencil_mask(0xFFFFFFFFu);
         // REMED-GFX-077: XNA Clear ignores BlendState.ColorWriteChannels; glClear respects glColorMask.
         // (Clear(const Color&) routes here via ClearOptions Target|DepthBuffer|Stencil.)
-        const bool maskActive = (currentColorWriteMask_ != 15);
-        if (maskActive) device.set_color_mask(true, true, true, true);
+        const bool maskActive = HasRestrictedActiveColorWriteMask();
+        if (maskActive) ForceAllColorWriteMasks();
         device.clear(::easygl::ClearFlags::Color | ::easygl::ClearFlags::Depth | ::easygl::ClearFlags::Stencil);
-        if (maskActive)
-            device.set_color_mask(ColorWriteHasRed(currentColorWriteMask_), ColorWriteHasGreen(currentColorWriteMask_),
-                                  ColorWriteHasBlue(currentColorWriteMask_), ColorWriteHasAlpha(currentColorWriteMask_));
+        if (maskActive) ApplyCurrentColorWriteMasks();
     }
 
     void EasyGLGraphicsBackend::ClearDepth(float depth)
