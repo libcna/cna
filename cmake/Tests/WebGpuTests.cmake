@@ -96,6 +96,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_EnvMapEmissive COMMAND cna_test_webgpu_envmap_emissive
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-100: EnvironmentMapEffect fog must consume the CPU-prepared World*View vector.
+    # This public-state discriminator covers World/View translation, projection exclusion,
+    # enabled/disabled A->B->A, transform A->B->A/deferred capture, range boundaries, zero range,
+    # complete environment/material composition, and alpha preservation on an sRGB-safe RT path.
+    cna_webgpu_test(cna_test_webgpu_environmentmapeffect_fog examples/webgpu_environmentmapeffect_fog_test.cpp)
+    cna_register_backend_test(NAME WebGPU_EnvironmentMapEffect_Fog COMMAND cna_test_webgpu_environmentmapeffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.
