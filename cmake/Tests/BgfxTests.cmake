@@ -740,6 +740,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_GraphicsDevice_ClearDepth COMMAND cna_test_bgfx_graphicsdevice_clear_depth
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-018: complete public ClearOptions mask contract. Establishes distinct pre-existing
+    # colour/depth/stencil values, covers every flag combination + public overloads, ordered clears,
+    # full-target viewport/scissor independence, backbuffer, Depth24Stencil8/Depth24/None RTs,
+    # target isolation, and A->B->A. One whole-framebuffer snapshot per observable result; run
+    # through both Bgfx renderer routes.
+    cna_bgfx_test(cna_test_bgfx_graphicsdevice_clearoptions
+                  examples/bgfx_graphicsdevice_clearoptions_test.cpp)
+    cna_register_backend_test(NAME Bgfx_GraphicsDevice_ClearOptions COMMAND cna_test_bgfx_graphicsdevice_clearoptions
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=OPENGL")
+    cna_register_backend_test(NAME Bgfx_GraphicsDevice_ClearOptions_Vulkan COMMAND cna_test_bgfx_graphicsdevice_clearoptions
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
+
     # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
     # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
     # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
