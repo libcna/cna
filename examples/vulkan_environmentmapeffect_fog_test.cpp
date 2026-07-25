@@ -37,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -145,6 +146,7 @@ class VulkanEnvironmentMapEffectFogTest : public Game
             dev.Clear(kBlack);
             dev.setBlendStateProperty(BlendState::Opaque);
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
             fx.Apply();
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
             got = readCenter(dev);

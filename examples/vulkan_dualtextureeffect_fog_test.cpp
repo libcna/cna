@@ -32,11 +32,13 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 #include <cstdio>
@@ -51,6 +53,18 @@ static constexpr int kSize = 64;
 static const Color kBlack(0, 0, 0, 255);
 static const Color kBlue(0, 0, 255, 255);
 static const Color kRed(255, 0, 0, 255);
+
+#if defined(CNA_BACKEND_D3D9)
+// D3D9's stock DualTextureEffect declaration includes both texture-coordinate channels.
+// Keeping the two channels equal makes this reachable public fixture backend-independent.
+struct DualTextureGpuVertex
+{
+    float px, py, pz;
+    float u0, v0;
+    float u1, v1;
+};
+static_assert(sizeof(DualTextureGpuVertex) == 28, "dual-texture vertex must be 28 bytes");
+#endif
 
 class DualTextureFogVulkanTest : public Game
 {
@@ -110,10 +124,23 @@ class DualTextureFogVulkanTest : public Game
         const Vector3 tl(-1.0f,  1.0f, z), bl(-1.0f, -1.0f, z);
         const Vector3 br( 1.0f, -1.0f, z), tr( 1.0f,  1.0f, z);
         const Vector2 uv0(0.0f, 0.0f), uv1(0.0f, 1.0f), uv2(1.0f, 1.0f), uv3(1.0f, 0.0f);
+#if defined(CNA_BACKEND_D3D9)
+        const DualTextureGpuVertex quad[6] = {
+            { -1.0f,  1.0f, z, 0.0f, 0.0f, 0.0f, 0.0f },
+            { -1.0f, -1.0f, z, 0.0f, 1.0f, 0.0f, 1.0f },
+            {  1.0f, -1.0f, z, 1.0f, 1.0f, 1.0f, 1.0f },
+            { -1.0f,  1.0f, z, 0.0f, 0.0f, 0.0f, 0.0f },
+            {  1.0f, -1.0f, z, 1.0f, 1.0f, 1.0f, 1.0f },
+            {  1.0f,  1.0f, z, 1.0f, 0.0f, 1.0f, 0.0f },
+        };
+        VertexBuffer vb(dev, 6);
+        vb.SetDataRaw(quad, 6, static_cast<int>(sizeof(DualTextureGpuVertex)));
+#else
         const VertexPositionTexture quad[6] = {
             { tl, uv0 }, { bl, uv1 }, { br, uv2 },
             { tl, uv0 }, { br, uv2 }, { tr, uv3 },
         };
+#endif
 
         Color got(0, 0, 0, 0);
         for (int i = 0; i < 20; ++i)
@@ -123,7 +150,13 @@ class DualTextureFogVulkanTest : public Game
             // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's
             // winding is culled under FNA's real default RasterizerState.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
+#if defined(CNA_BACKEND_D3D9)
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+#else
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
+#endif
             got = readCenter(dev);
             if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
                 break; // skip blank/black frames

@@ -29,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -115,6 +116,7 @@ class AlphaTestFogVulkanTest : public Game
         // quad winding used throughout this pixel-test family is culled once the real default
         // RasterizerState reaches the GPU.
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.setDepthStencilStateProperty(DepthStencilState::None);
         fx.Apply();
 
         const Vector3 tl(-1.0f,  1.0f, z), bl(-1.0f, -1.0f, z);

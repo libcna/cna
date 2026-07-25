@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -100,28 +101,32 @@ class VulkanViewSpaceFogTest : public Game
     }
 
     // Render a full-screen colored3d quad (BasicEffect, DiffuseColor = blue) for one scene.
-    Color RenderColored(GraphicsDevice& dev, const Ref::Scene& s)
+    // Taking the effect by reference lets the contract checks below exercise A→B→A mutations on
+    // one public effect instance, rather than accidentally proving only constructor defaults.
+    Color RenderColoredWithEffect(GraphicsDevice& dev, BasicEffect& fx, const Ref::Scene& s,
+                                  float fogStart = Ref::kFogStart, float fogEnd = Ref::kFogEnd)
     {
-        BasicEffect fx(dev);
         fx.setWorldProperty(s.world);
         fx.setViewProperty(s.view);
         fx.setProjectionProperty(Ref::Ortho());
         fx.setLightingEnabledProperty(false);
         fx.setTextureEnabledProperty(false);
-        fx.VertexColorEnabled = false;
+        fx.VertexColorEnabled = true;
         fx.setDiffuseColorProperty(Ref::kGeomRGB);
         fx.setFogEnabledProperty(s.fogEnabled);
         fx.setFogColorProperty(Ref::kFogRGB);
-        fx.setFogStartProperty(Ref::kFogStart);
-        fx.setFogEndProperty(Ref::kFogEnd);
+        fx.setFogStartProperty(fogStart);
+        fx.setFogEndProperty(fogEnd);
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.setDepthStencilStateProperty(DepthStencilState::None);
         fx.Apply();
 
-        const Color ignored(0, 255, 0, 255);
+        const Color vertexWhite(255, 255, 255, 255);
         const float z = s.objZ;
         const VertexPositionColor quad[6] = {
-            { Vector3(-1,  1, z), ignored }, { Vector3(-1, -1, z), ignored }, { Vector3(1, -1, z), ignored },
-            { Vector3(-1,  1, z), ignored }, { Vector3( 1, -1, z), ignored }, { Vector3(1,  1, z), ignored },
+            { Vector3(-1,  1, z), vertexWhite }, { Vector3(-1, -1, z), vertexWhite },
+            { Vector3(1, -1, z), vertexWhite }, { Vector3(-1,  1, z), vertexWhite },
+            { Vector3(1, -1, z), vertexWhite }, { Vector3(1,  1, z), vertexWhite },
         };
 
         Color got(0, 0, 0, 0);
@@ -135,6 +140,12 @@ class VulkanViewSpaceFogTest : public Game
                 break;
         }
         return got;
+    }
+
+    Color RenderColored(GraphicsDevice& dev, const Ref::Scene& s)
+    {
+        BasicEffect fx(dev);
+        return RenderColoredWithEffect(dev, fx, s);
     }
 
     // SkinnedEffect pre-skin discriminator: bone0 translates the vertex by (0,0,boneZ), the view
@@ -185,6 +196,7 @@ class VulkanViewSpaceFogTest : public Game
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.setDepthStencilStateProperty(DepthStencilState::None);
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             got = ReadCenter(dev);
@@ -217,6 +229,51 @@ protected:
             }
             const Color got = RenderColored(dev, s);
             Check(s.label, got, Ref::ColorFor(viewKeep));
+        }
+
+        // ---- Public state lifetime and boundary contract, one BasicEffect instance ----
+        // All draws occur in this one Draw() callback. This catches backends that retain an old
+        // scalar/vector after a public effect mutation, including deferred/snapshotted paths.
+        {
+            const Matrix I = Matrix::getIdentityProperty();
+            BasicEffect fx(dev);
+
+            Ref::Scene half{"fog state A/B/A half", I, Matrix::CreateTranslation(0, 0, -4), 0.0f, false, true};
+            Check("FogEnabled A=false (blue)",
+                  RenderColoredWithEffect(dev, fx, half), Ref::ColorFor(1.0f));
+            half.fogEnabled = true;
+            Check("FogEnabled B=true (purple)",
+                  RenderColoredWithEffect(dev, fx, half), Ref::ColorFor(0.5f));
+            half.fogEnabled = false;
+            Check("FogEnabled A=false again (blue)",
+                  RenderColoredWithEffect(dev, fx, half), Ref::ColorFor(1.0f));
+
+            Ref::Scene transformA{"transform A", I, Matrix::CreateTranslation(0, 0, -2), 0.0f, true, false};
+            Ref::Scene transformB{"transform B", I, Matrix::CreateTranslation(0, 0, -6), 0.0f, true, true};
+            Check("transform A near (blue)",
+                  RenderColoredWithEffect(dev, fx, transformA), Ref::ColorFor(1.0f));
+            Check("transform B far (red)",
+                  RenderColoredWithEffect(dev, fx, transformB), Ref::ColorFor(0.0f));
+            Check("transform A again (blue)",
+                  RenderColoredWithEffect(dev, fx, transformA), Ref::ColorFor(1.0f));
+
+            const struct Boundary { const char* label; float viewZ; float keep; } boundaries[] = {
+                {"before FogStart", -1.0f, 1.0f},
+                {"at FogStart",     -2.0f, 1.0f},
+                {"between",         -4.0f, 0.5f},
+                {"at FogEnd",       -6.0f, 0.0f},
+                {"after FogEnd",    -7.0f, 0.0f},
+            };
+            for (const Boundary& b : boundaries)
+            {
+                Ref::Scene s{b.label, I, Matrix::CreateTranslation(0, 0, b.viewZ), 0.0f, true, false};
+                Check(b.label, RenderColoredWithEffect(dev, fx, s), Ref::ColorFor(b.keep));
+            }
+
+            Ref::Scene zeroRange{"FogStart == FogEnd", I, Matrix::CreateTranslation(0, 0, -4),
+                                 0.0f, true, false};
+            Check("FogStart == FogEnd is fully fogged",
+                  RenderColoredWithEffect(dev, fx, zeroRange, 4.0f, 4.0f), Ref::ColorFor(0.0f));
         }
 
         // ---- SkinnedEffect pre-skin discriminator ----

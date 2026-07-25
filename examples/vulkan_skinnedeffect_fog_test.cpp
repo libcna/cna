@@ -40,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
@@ -139,6 +140,7 @@ class SkinnedEffectFogVulkanTest : public Game
         vb.SetDataRaw(verts, 6, static_cast<int>(sizeof(SkinnedGpuVertex)));
 
         dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.setDepthStencilStateProperty(DepthStencilState::None);
         Color got(0, 0, 0, 0);
         for (int i = 0; i < 20; ++i)
         {

@@ -125,6 +125,25 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_register_backend_test(NAME D3D11_AlphaTest_Fog COMMAND ${_d3d11_alphatest_fog_cmd}
         TIMEOUT 60 LABELS "D3D11")
 
+    # REMED-GFX-061: representative public coverage for the remaining fog-capable XNA stock
+    # effects. These use the same view-space-vector source and final RGB-only fog composition as
+    # the canonical BasicEffect/SkinnedEffect fixture above; keeping them as focused family checks
+    # avoids duplicating the full transformed-camera battery for every material path.
+    cna_d3d11_test(cna_test_d3d11_dualtexture_fog examples/vulkan_dualtextureeffect_fog_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_dualtexture_fog_cmd cna_test_d3d11_dualtexture_fog)
+    cna_register_backend_test(NAME D3D11_DualTextureEffect_Fog COMMAND ${_d3d11_dualtexture_fog_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_environmentmap_fog examples/vulkan_environmentmapeffect_fog_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_environmentmap_fog_cmd cna_test_d3d11_environmentmap_fog)
+    cna_register_backend_test(NAME D3D11_EnvironmentMapEffect_Fog COMMAND ${_d3d11_environmentmap_fog_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_skinnedeffect_fog examples/vulkan_skinnedeffect_fog_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_skinnedeffect_fog_cmd cna_test_d3d11_skinnedeffect_fog)
+    cna_register_backend_test(NAME D3D11_SkinnedEffect_Fog COMMAND ${_d3d11_skinnedeffect_fog_cmd}
+        TIMEOUT 60 LABELS "D3D11")
+
     # REMED-GFX-072: D3D11 is the XNA-CORRECT ORACLE for SpriteBatch custom-Viewport behavior
     # (D3D11SpriteBatchBackend feeds the sprite2d ViewportSize from the LIVE viewport via
     # RSGetViewports, so its projection is already viewport-relative). This runs the SAME conformance

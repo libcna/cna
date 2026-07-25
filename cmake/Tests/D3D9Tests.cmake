@@ -77,6 +77,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_DrawEx COMMAND ${_d3d9_drawex_cmd}
         TIMEOUT 60 LABELS "D3D9")
 
+    # REMED-GFX-061: public stock-effect fog contract. The shared transformed-camera fixture
+    # discriminates FNA's CPU-prepared view-space FogVector from the obsolete scalar/object-space
+    # model, including post-skin position handling. The focused family fixtures cover the other
+    # XNA fog-capable stock effects through reachable public effect state.
+    cna_d3d9_test(cna_test_d3d9_viewspace_fog examples/vulkan_viewspace_fog_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_viewspace_fog_cmd cna_test_d3d9_viewspace_fog)
+    cna_register_backend_test(NAME D3D9_ViewSpaceFog COMMAND ${_d3d9_viewspace_fog_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_alphatest_fog examples/vulkan_alphatest_fog_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_alphatest_fog_cmd cna_test_d3d9_alphatest_fog)
+    cna_register_backend_test(NAME D3D9_AlphaTest_Fog COMMAND ${_d3d9_alphatest_fog_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_dualtexture_fog examples/vulkan_dualtextureeffect_fog_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_dualtexture_fog_cmd cna_test_d3d9_dualtexture_fog)
+    cna_register_backend_test(NAME D3D9_DualTextureEffect_Fog COMMAND ${_d3d9_dualtexture_fog_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_environmentmap_fog examples/vulkan_environmentmapeffect_fog_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_environmentmap_fog_cmd cna_test_d3d9_environmentmap_fog)
+    cna_register_backend_test(NAME D3D9_EnvironmentMapEffect_Fog COMMAND ${_d3d9_environmentmap_fog_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_skinnedeffect_fog examples/vulkan_skinnedeffect_fog_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_skinnedeffect_fog_cmd cna_test_d3d9_skinnedeffect_fog)
+    cna_register_backend_test(NAME D3D9_SkinnedEffect_Fog COMMAND ${_d3d9_skinnedeffect_fog_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
     # D9-83: real hardware instancing via SetStreamSourceFreq (CNA's own NOXNA Instanced3D shader).
     cna_d3d9_test(cna_test_d3d9_instanced examples/d3d9_instanced_test.cpp)
     cna_d3d9_ctest_command(_d3d9_instanced_cmd cna_test_d3d9_instanced)
