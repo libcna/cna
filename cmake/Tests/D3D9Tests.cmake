@@ -49,6 +49,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_Smoke COMMAND ${_d3d9_smoke_cmd}
         TIMEOUT 60 LABELS "D3D9")
 
+    # REMED-GFX-092: deterministic, backend-instance-local HRESULT injection for D3D9 state,
+    # target/depth binding, depth allocation, retry, rollback, and lost-device mapping.  The
+    # native success path is still exercised by D3D9_Smoke and this test's setup/retry operations.
+    cna_d3d9_test(cna_test_d3d9_hresult examples/d3d9_hresult_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_hresult_cmd cna_test_d3d9_hresult)
+    cna_register_backend_test(NAME D3D9_HResultHandling COMMAND ${_d3d9_hresult_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
     # REMED-GFX-089: backend-neutral public GraphicsDevice/DepthStencilState contract.
     # A(Default)->B(DepthRead)->C(None)->A on the backbuffer, using only BasicEffect and the
     # normal public draw API. The smoke test independently covers the offscreen native surface.
