@@ -125,6 +125,13 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
     )
 
+    # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
+    # public operation. CNA's backend intentionally keeps wgpu-native PRIVATE, so expose it only
+    # to this test executable in the WebGPU configuration.
+    if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+        target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
+    endif()
+
     if(CNA_ENABLE_NET)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
     endif()
