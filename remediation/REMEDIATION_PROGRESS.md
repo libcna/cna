@@ -2425,7 +2425,7 @@ existing task.
 | REMED-DEVICES-004 | `devices-asan` preset's `CNA_DEVICES_GTEST_FILTER` run (all 50 `tests/CNA/Devices/*.cpp` cases) exits process code 1 despite **all 50 gtest cases reporting PASSED** — AddressSanitizer reports 12032 bytes leaked in 16 allocations. Bisected precisely: excluding `CameraTests.*` alone makes the same run exit 0 with the other 46 tests still passing; within `CameraTests`, the leak is specific to the 4 `TryAcquireFrame*` cases (which construct a real `Texture2D`/`GraphicsDevice` for pixel upload), not the other 4 `CameraTests` cases. Every leak's stack trace bottoms out in `libdrm.so.2`/`<unknown module>` (GL/DRI driver initialization), not any `CNA::Devices::Camera`/`CameraTests` source line. **Extended under `devices-tsan`:** the same run there (exit 66, TSan's own convention) reports 8 data-race warnings, **all 8 in the identical shape** — `pthread_barrier_init`/`pthread_barrier_destroy` racing inside `libgallium-25.0.7-2.so`/`libEGL_mesa.so` during real `GraphicsDevice`/`EasyGLGraphicsBackend` construction/teardown, triggered by the exact same `CameraTests.TryAcquireFrame*` cases (confirmed via full stack traces: `GraphicsDevice::GraphicsDevice()`/`::Dispose()`/`::~GraphicsDevice()` → Mesa/EGL internals, never a `CNA::Devices::Camera`/`CameraTests.cpp` frame) — the same root class as the ASan leak, not a second, independent finding | MEDIUM | P3 | `REMED-BUILD-011`'s own devices-asan/devices-tsan verification runs (this tranche) | NOT STARTED — recorded, not fixed (out of BUILD_TEST_CI scope; both the ASan leak and the TSan races point at Mesa/libgallium/libEGL driver-internal synchronization during real GL context construction/teardown, not `CNA::Devices::Camera` code — matches this project's own already-documented Wave 1 decision that ASan/TSan+real-GPU-rendering paths are known-noisy and intentionally out of sanitizer-coverage scope. DEVICES lane should still confirm this directly before permanently dismissing it, since a driver false positive vs. a real bug in `Camera.cpp`'s own texture-upload/device-lifecycle path have very different remediations) |
 | REMED-BUILD-016 | This project's `-fsanitize=undefined` build configuration (`cmake-build-media-asan`'s ad hoc flags, and by the same shape `devices-ubsan` in `CMakePresets.json`) does not include `-fsanitize=float-cast-overflow`. GCC (unlike Clang, which bundles it into `undefined`) requires this check named explicitly. Confirmed empirically while verifying `REMED-CORE-004`: the exact UB that task fixed (`static_cast<bytecs>(NaN * 255.0f)` etc.) produced **zero** sanitizer output under the project's own `cmake-build-media-asan`, and only reproduced (12 distinct runtime-error reports) once `float-cast-overflow` was added explicitly to an ad hoc standalone build. Any out-of-range/NaN float→integer cast anywhere in the codebase currently passes this project's own UBSan coverage silently | MEDIUM | P1 (suggested — same leverage precedent as `REMED-BUILD-001`/`-002`: a build-config fix that makes an entire defect class newly detectable project-wide) | `REMED-CORE-004`'s own UBSan verification pass | NOT STARTED — recorded, not fixed (BUILD_TEST_CI-owned: `CMakePresets.json` and this session's own ad hoc `cmake-build-*-asan` `CMAKE_CXX_FLAGS` convention) |
 | REMED-GFX-057 | `src/Microsoft/Xna/Framework/Graphics/SpriteBatch.cpp`'s `DrawString`/`Draw` (`static_cast<intcs>(dw * scale)`/`static_cast<intcs>(dh * scale)` ~line 311, the `Vector2`-scale siblings ~line 329, and the glyph-width/height `std::lround(...)`-wrapped casts ~lines 514-515) share the identical unguarded-float-to-`intcs`-cast root cause `Color::Lerp`/`Color::Multiply` had before `REMED-CORE-004`: a NaN or extreme `scale`/`Vector2 scale` argument reaching `DrawString`/`Draw` is undefined behavior with no guard | MEDIUM | P2 (suggested — same defect class as `REMED-CORE-004`, UB not memory corruption; fold into whichever GRAPHICS batch next touches `SpriteBatch.cpp`) | `REMED-CORE-004`'s own "verify all constructors/operators touched by the same root cause" sweep, extended past `Color.cpp` to other unguarded-float-cast sites project-wide | NOT STARTED — recorded, not fixed (GRAPHICS-owned file, out of the CORE lane's scope) |
-| REMED-GFX-059 | The SdlGpu backend emits a Vulkan validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw (confirmed via `VK_LAYER_KHRONOS_validation` under `SDL_GPU`). Confirmed **pre-existing** and independent of `REMED-GFX-006`: the existing `SdlGpu_Skinned` test emits it 6× against unchanged (pre-fix) shaders, and readback pixel values are correct throughout, so it is a render-pass/pipeline attachment-compatibility validation issue in `SdlGpuGraphicsBackend`, not a normal-transform or rendering-correctness defect | LOW-MEDIUM | P2 (SdlGpu-lane; validation-cleanliness, not a visible-output defect) | `REMED-GFX-006` SdlGpu slice (first `VK_LAYER_KHRONOS_validation` run of the new world-normal harness) | NOT STARTED — recorded, not fixed (out of GFX-006's normal-transform scope; SdlGpu-backend owner should reconcile the SDL_GPU render-pass/pipeline attachment description that 02684 flags) |
+| REMED-GFX-059 | The SdlGpu backend emits a Vulkan validation error `VUID-vkCmdDraw-renderPass-02684` on every 3D draw (confirmed via `VK_LAYER_KHRONOS_validation` under `SDL_GPU`). Confirmed **pre-existing** and independent of `REMED-GFX-006`: the existing `SdlGpu_Skinned` test emits it 6× against unchanged (pre-fix) shaders, and readback pixel values are correct throughout, so it is a render-pass/pipeline attachment-compatibility validation issue in `SdlGpuGraphicsBackend`, not a normal-transform or rendering-correctness defect | LOW-MEDIUM | P2 (SdlGpu-lane; validation-cleanliness, not a visible-output defect) | `REMED-GFX-006` SdlGpu slice (first `VK_LAYER_KHRONOS_validation` run of the new world-normal harness) | **DONE via REMED-GFX-097** — the older broad reproducer and GFX-097 have the same exact depth-reference mismatch: the active depthless pass used `VK_ATTACHMENT_UNUSED`, while every stock/custom SDL_GPU pipeline was described with the backend-global supported depth format. GFX-097 threads the active pass's actual depth format/absence through every pipeline family and its cache key. Post-fix `SdlGpu_Skinned` is **3/3** with zero 02684; the former six messages are gone. The separate MRT color-slot 02684 found by GFX-097 is **GFX-098**, not residual GFX-059. |
 | REMED-GFX-060 | Every effect-aware D3D9 draw site hardcoded the vertex/index offsets (`DrawPrimitive(…, 0 /*StartVertex*/)` and `DrawIndexedPrimitive(…, 0 /*BaseVertexIndex*/, 0 /*MinIndex*/, vertexCount, 0 /*StartIndex*/, …)`), silently dropping the XNA `DrawPrimitives(vertexStart)` / `DrawIndexedPrimitives(baseVertex, startIndex)` offsets that `GraphicsDevice` threads through `GpuDrawParams`. Same defect class as `REMED-GFX-020` (D3D11/D3D12), spread across 15 sites in 4 files (`D3D9EffectDraw`/`D3D9PbrDraw`/`D3D9SkinnedVertexColorDraw`/`D3D9InstancedDraw`) | HIGH | P2 | `REMED-GFX-020` Phase-12 cross-backend draw-offset sweep | **DONE (2026-07-21, `aa23eed2`+`d2491a17`)** — fixed + runtime-verified on real DXVK 2.6.0 (new `D3D9_DrawOffset` 0/7→7/7, full D3D9 shard 20/20, D3D11 GFX-020 regression still 6/6). See detail section below. |
 | REMED-GFX-061 | The scalar `GpuDrawParams::fogStart`/`fogEnd` fields and the `IGraphicsBackend.hpp` (~`:454`) fog documentation ("D3D backends … keep using fogStart/fogEnd") are stale/vestigial for the D3D family after the GFX-005/010 view-space-fog campaign: D3D9 custom shaders compute view-space fog in-backend (`ComputeFogVectorEXT`) and D3D11/D3D12 D3DCommon stock effects bake the `fogVector` CPU-side, so the scalar object-space fields are consumed only by the few direct-`DrawPrimitivesEx` callers that set them (and by non-D3D backends that predate GFX-010). Not a rendering defect — a documentation/ABI-hygiene item | LOW | P3 | `REMED-GFX-055` follow-up + `REMED-GFX-060` Phase-11 fog-field decision | NOT STARTED — recorded, not fixed (a precise comment correction is not unquestionably safe and Phase 11 forbids redesigning the fog ABI in the offset tranche; recommended resolution: documentation cleanup + formally mark `fogStart`/`fogEnd` as retained accepted-and-ignored compat fields, not removal, since direct-backend callers still set them) |
 | REMED-GFX-090 | WebGPU's four embedded SkinnedEffect WGSL variants compute `(emissiveColor + lightSum) * diffuseColor`. `SkinnedEffect::FillGpuDrawParams` has already pre-folded the material to `emissiveColor=(Emissive+Ambient*Diffuse)*Alpha` and `diffuseColor=Diffuse*Alpha`, so this incorrectly re-multiplies the ambient/emissive term by diffuse (and Alpha) instead of the FNA formula `lightSum*diffuseColor + emissiveColor`. Existing WebGPU Skinned3D tests use white diffuse and are structurally blind to the divergence. | MEDIUM | P2 | REMED-GFX-088 cross-family shader survey | **DONE and VERIFIED — REAL PRODUCTION SHADER-SEMANTIC DEFECT.** All four handwritten embedded WGSL modules now use `lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz`; the shared CPU pre-fold remains unchanged. New sRGB-safe exact-path regression: **6/25 pre-fix → 27/27 post-fix**, covering all four modules, ambient, emissive, combined, directional, non-white texture, Alpha, vertex colour, A→B→A, and post-draw mutation. WebGPU targeted **3/3 CTests / 44/44 checks**, broader **10/10 / 70/70**, validation clean. D3D11 smoke **163/163**; GFX-006/008/010 and GFX-088 contract regressions green across the applicable backends. No generated shader artifacts; test `3c9a4d5f`, fix `ee0f44c9`. |
@@ -7273,3 +7273,181 @@ its supported depth-backed cube path and is clean; GFX-097 was not fixed here.
 
 Recommended next GRAPHICS task remains **REMED-GFX-061** per the established queue. Do not begin it
 as part of this remediation.
+
+---
+
+### REMED-GFX-097 — SDL_GPU depthless RenderTargetCube pipeline compatibility — DONE (production fix)
+
+**Classification:** **E — REAL PRODUCTION SDL_GPU PIPELINE-COMPATIBILITY DEFECT; multiple related
+CNA omissions.** The canonical case is supported public state and its pixels were correct, but CNA
+supplied SDL_GPU with incompatible render-pass and pipeline target metadata. This combines rubric
+A (every pipeline falsely claimed a depth attachment for a depthless pass) and B (every relevant
+pipeline cache key omitted actual depth attachment presence/format). It is not cube-specific, not
+a test-harness defect, and not an SDL/Vulkan implementation defect.
+
+**Exact Vulkan rule and observed mismatch.** `VUID-vkCmdDraw-renderPass-02684` requires the current
+render pass to be compatible with the render pass specified when the bound graphics pipeline was
+created. Vulkan render-pass compatibility requires corresponding color, input, resolve, and
+depth/stencil attachment references to match; two references are compatible only when their
+formats and sample counts match, or when both are `VK_ATTACHMENT_UNUSED`.
+
+The fresh pre-fix depthless-cube process loaded
+`libVkLayer_khronos_validation.so` and emitted exactly one 02684 on its first SpriteBatch draw:
+
+| Property | Active SDL_GPU render pass | Bound SpriteBatch pipeline |
+|---|---|---|
+| color count / format | 1 / `R8G8B8A8_UNORM` | 1 / `R8G8B8A8_UNORM` |
+| samples | 1 | 1 |
+| depth reference | `VK_ATTACHMENT_UNUSED` | attachment 1 |
+| depth format source | no depth texture; depth pointer `nullptr` | backend-global selected `D24_UNORM_S8_UINT` |
+
+Validation's complete discriminator was:
+`pDepthStencilAttachment->attachment ... first is VK_ATTACHMENT_UNUSED while second is 1`.
+Thus the exact incompatible property was depth/stencil attachment **presence**. Color format/count
+and sample count matched in the canonical case. The same public draw still produced the correct
+marker color on exactly `NegativeZ`, so validation—not a black-pixel heuristic—was the reproducer's
+fatal condition.
+
+**Harness validity and controls.** The minimal public fixture uses one
+`RenderTargetCube(16, DepthFormat::None, 1×)`, one face, one opaque 1×1 texture stretched by
+SpriteBatch, full viewport/scissor, `BlendState::Opaque`, `DepthStencilState::None`, and
+`RasterizerState::CullNone`. All six faces are read independently through SDL_GPU's established
+cube readback. Pre-fix it passed both pixel checks (**2/2**) while CTest failed on the exact VUID.
+The message occurred on the first pipeline use in a fresh process, disproving a reuse-only theory.
+
+`DepthStencilState::None` only disables depth/stencil tests and writes. It does not mean that the
+graphics pipeline was created without a depth/stencil target, and cannot make a pipeline created
+for a depth-backed pass compatible with a depthless one. A depth-backed cube was **14/14** and
+validation-clean pre-fix. A depthless `RenderTarget2D` was pixel-correct (**8/8**) but emitted the
+same depth mismatch, disproving the initial cube-only scope. Singular and plural cube calls share
+GFX-096's delegated target-binding route and therefore reached the same cube pass; post-fix both
+are pixel-identical and clean.
+
+**Exact production root cause.** SDL_GPU pass construction already used the real target:
+
+- backbuffer depth pointer only when `depthStencilTexture_` exists;
+- `RenderTarget2D` depth pointer only when `target->depthTexture` exists;
+- cube-face depth pointer only when `cube->depthTexture` exists.
+
+Pipeline construction did not. SpriteBatch, custom `Effect`, and all stock 3D pipeline families
+unconditionally derived:
+
+`has_depth_stencil_target = depthStencilFormat_ != INVALID`
+
+and:
+
+`depth_stencil_format = depthStencilFormat_`.
+
+`depthStencilFormat_` is the device-supported format selected during backend initialization, not
+the active pass's attachment state. On this route it was valid even when the currently bound
+render target was genuinely depthless.
+
+The common pre-fix pipeline key contained topology, depth test/write/function, color format,
+sample count, and full blend/raster/stencil state, but no actual depth attachment format/presence.
+Custom-effect pipelines similarly keyed color format, sample count, and color-target count without
+depth attachment identity. Pipeline creation consumed depth metadata that pipeline lookup did not
+distinguish, so a depth-backed and depthless pass could also alias after the first-use defect.
+
+**Corrected target metadata and cache identity.** `RenderQueuedDraws` now receives the active
+pass's exact `SDL_GPUTextureFormat depthStencilFormat`: the target's selected format when a real
+depth texture exists, otherwise `SDL_GPU_TEXTUREFORMAT_INVALID`. That value is compiler-forced
+through SpriteBatch, custom Effect, Colored, Textured, ColoredTextured, LitTextured, AlphaTest,
+DualTexture, EnvironmentMap, Skinned, PBR, and SkinnedPBR issue/create paths.
+
+| Pipeline property | Before | After |
+|---|---|---|
+| depth presence input | backend-global capability | current pass attachment |
+| depth format input | backend-global selected format | current pass format or `INVALID` |
+| common cache key | no attachment-presence/format dimension | includes exact depth format; `INVALID` means absent |
+| custom-effect cache key | color format + samples + color count | also includes exact depth format |
+| depth test/write state | public `DepthStencilState` | unchanged and independent of attachment presence |
+
+The pipeline now sets `has_depth_stencil_target` from the passed format and assigns that same
+format to target info. No dummy depth resource, validation suppression, pipeline-per-draw creation,
+device/queue wait, extra Present/submission, or shader change was introduced. The shared
+`IGraphicsBackend` interface and GFX-096 descriptor are unchanged; the fix is SDL_GPU-local.
+
+**Canonical, transition, and cache evidence.** The expanded regression is **24/24**, with zero
+VUIDs:
+
+| Case | Result |
+|---|---|
+| fresh depthless cube first draw | exact selected face; cache `0→1`; clean |
+| depthless RT2D control | exact pixels; reuses cache size 1 |
+| depth-backed cube + `DepthStencilState::None` | exact pixels; distinct cache size 2 |
+| depthless A → depth-backed B → depthless A | both A values and B retained; cache remains 2 |
+| second depthless cube / other face | exact pixels; no object/face cache growth |
+| backbuffer → depthless cube → backbuffer | first use adds at most one compatible entry; repeats do not grow |
+| singular vs plural depthless cube | pixel-equivalent; both clean |
+| all six faces | six exact colors; face-independent pipeline compatibility |
+| depth-backed cube + `DepthStencilState::Default` | exact pixels; clean |
+| depthless cube + depth-testing state | established SDL_GPU behavior retained; clean |
+| depthless 4× request | applied MSAA >1, selected-face resolve exact; clean |
+| AlphaBlend | premultiplied `(100,50,25,128)` over `(20,40,60)` → `(110,70,55,255)` |
+| custom viewport/scissor | exact inside/outside pixels |
+| same-submission producer → consumer | six SpriteBatch-produced faces sampled immediately by EnvironmentMapEffect; exact marker |
+
+The final cache size in the full state sweep is 7: genuine compatibility/state variants for
+depthless/depth-backed/backbuffer, active depth state, MSAA, AlphaBlend, and scissor. The
+discriminating cardinality checks prove that target object and cube face do not enter the key, that
+depthless RT2D and depthless cube share one pipeline, and that A→B→A reuses exactly two
+depth-presence variants. Cache entries remain backend-owned and are destroyed through the existing
+teardown path; no per-frame churn was added.
+
+**Regression and validation evidence.** Every build/test used at most four CPU jobs. Khronos loader
+diagnostics explicitly show the validation layer inserted at instance and device scope.
+
+| Gate | Result |
+|---|---|
+| GFX-097 dedicated | **24/24**, zero validation messages |
+| GFX-096 public SDL_GPU depthless parity | **14/14**, zero validation messages |
+| SDL_GPU ordinary cube / RT2D / RT2D MSAA | **7/7** / **7/7** / **6/6** |
+| GFX-059 `SdlGpu_Skinned` | **3/3**, former 6× depth 02684 now zero |
+| GFX-069 BlendFactor | **8/8**, zero validation |
+| GFX-077 ColorWriteChannels | **7/7**; GFX-086 sample-mask capability boundary unchanged |
+| GFX-081 SpriteBatch rasterizer | **4/4** |
+| render state / custom Effect / stock EnvMap | **16/16** / **3/3** / **3/3** |
+| viewport / scissor / custom SpriteBatch viewport | **14/14** / **17/17** / **8/8** |
+| targeted SDL_GPU shard | **17/17 CTests**; the 16 non-MRT tests are validation-clean |
+| practical full SDL_GPU label | **35/35 CTests** in 20.69 s |
+| ASan dedicated | **24/24**, no invalid access; external Vulkan/driver leak-only baseline 512 B/4 allocations, clean with `detect_leaks=0` |
+
+The full verbose SDL_GPU log contains no residual GFX-059 depth mismatch and no GFX-097 message.
+It does expose two unrelated validation findings in otherwise-passing pre-existing tests:
+`SdlGpu_MRT` emits 10× 02684 for color slots 1/2 (**GFX-098**), and `SdlGpu_Texture3D` emits
+32 image-view/blit VUIDs (**GFX-099**). Those findings explain the full-log total of 42 validation
+errors and were recorded without production changes.
+
+The public depthless cube contract remains cross-backend green: Vulkan **14/14** with Khronos
+validation clean, EasyGL **14/14**, WebGPU **14/14** with no error-scope output, SDL_GPU **14/14**,
+and staged bgfx-OpenGL **6/6** including its explicit cube-MRT rejection boundary. The fix changed
+no shared structure/interface, so a compiler-forced fourteen-backend rebuild was not triggered.
+SDL_GPU production/test targets and the representative Vulkan, EasyGL, WebGPU, and bgfx public
+targets all compile.
+
+**GFX-059 relationship, scope, artifacts, and commits.** GFX-097 is the precise reproducer and
+complete root-cause fix for GFX-059. Both reported the exact depth reference
+`VK_ATTACHMENT_UNUSED` versus attachment 1; GFX-059's original `SdlGpu_Skinned` route is now clean.
+GFX-098 uses the same top-level VUID but differs in corresponding **color** attachments and is not
+merged into GFX-059.
+
+Production shader/generated-artifact diff is zero. `audit/` is untouched. No GFX-061, GFX-092,
+Vulkan DepthBias, WebGPU SpriteBatch BlendState, unrelated SDL_GPU cleanup, or MRT repair was
+begun.
+
+- `5edb23a7 test(Task REMED-GFX-097): reproduce depthless cube pipeline incompatibility`
+- `69254456 fix(Task REMED-GFX-097): key SDL GPU pipelines by depth attachment`
+- `7f034618 test(Task REMED-GFX-097): cover target transitions and pipeline reuse`
+- `docs(remediation): record GFX-097 validation fix` (this record)
+
+New findings:
+
+- **REMED-GFX-098** — SDL_GPU MRT pipeline target-count compatibility: the active
+  three-color pass references slots 0/1/2 while affected bound pipelines expose slots 1/2 as
+  `VK_ATTACHMENT_UNUSED`; `SdlGpu_MRT` pixels remain **5/5**, but validation emits 10× 02684.
+- **REMED-GFX-099** — SDL_GPU Texture3D image-view/mipmap blit validity: the otherwise-passing
+  `SdlGpu_Texture3D` **6/6** emits 32 messages across image-view 02724/02725 and blit
+  00251/00216/00246/00215.
+
+Recommended next GRAPHICS task is **REMED-GFX-098**, the closest remaining SDL_GPU
+pipeline/render-pass compatibility sibling. Do not begin it as part of GFX-097.
