@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 // Task 256: EasyGL pixel-readback test for DrawUserPrimitives with explicit VertexDeclaration.
 //
-// Uses a custom packed vertex struct (12-byte position + 4-byte RGBA color = 16 bytes)
-// and supplies its layout via VertexDeclaration to the raw-pointer overload:
+// Uses a custom packed vertex struct (4-byte RGBA color + 12-byte position = 16 bytes)
+// whose layout deliberately differs from the stride-16 VertexPositionColor layout inferred by
+// the backend.  The supplied VertexDeclaration must therefore reach the backend:
 //   DrawUserPrimitives(PrimitiveType, const void*, vertexOffset, primitiveCount, VertexDeclaration)
 //
 // Two sub-tests:
-//   (1) vertexOffset=0, 2 triangles — full-NDC red quad.
-//   (2) vertexOffset=1, real quad starts after a dummy green vertex.
+//   (1) non-indexed vertexOffset=0, 2 triangles — full-NDC red quad.
+//   (2) non-indexed vertexOffset=1, real quad starts after a dummy green vertex.
+//   (3) indexed 16-bit and 32-bit paths with non-zero vertex/index offsets.
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -32,11 +34,13 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
-// Custom vertex: packed to 16 bytes (same layout as VertexPositionColor GpuVertex).
+// Custom vertex: intentionally the inverse of the inferred stride-16 VPC layout.  Without the
+// explicit declaration, the backend reads this color as a float3 position and position bytes as
+// color, so the red quad cannot be drawn correctly.
 struct MyVertex
 {
-    float x, y, z;
     std::uint8_t r, g, b, a;
+    float x, y, z;
 };
 static_assert(sizeof(MyVertex) == 16, "MyVertex must be 16 bytes");
 
@@ -82,22 +86,37 @@ class DrawUserPrimitivesCustomTest : public Game
 
     VertexDeclaration makeVD()
     {
-        return VertexDeclaration {
-            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
-            VertexElement(12, VertexElementFormat::Color,   VertexElementUsage::Color,    0)
-        };
+        return VertexDeclaration(sizeof(MyVertex), {
+            VertexElement(4, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(0, VertexElementFormat::Color,   VertexElementUsage::Color,    0)
+        });
+    }
+
+    bool hasExpectedDeclaration(const VertexDeclaration& declaration)
+    {
+        const auto& elements = declaration.GetVertexElements();
+        return declaration.getVertexStrideProperty() == static_cast<int>(sizeof(MyVertex))
+            && elements.size() == 2
+            && elements[0].getOffsetProperty() == 4
+            && elements[0].getVertexElementFormatProperty() == VertexElementFormat::Vector3
+            && elements[0].getVertexElementUsageProperty() == VertexElementUsage::Position
+            && elements[0].getUsageIndexProperty() == 0
+            && elements[1].getOffsetProperty() == 0
+            && elements[1].getVertexElementFormatProperty() == VertexElementFormat::Color
+            && elements[1].getVertexElementUsageProperty() == VertexElementUsage::Color
+            && elements[1].getUsageIndexProperty() == 0;
     }
 
     // Sub-test 1: vertexOffset=0, 6 vertices, 2 triangles.
     void testBasic(GraphicsDevice& dev)
     {
         const MyVertex verts[6] = {
-            { -1.f,  1.f, 0.f, 255,   0, 0, 255 },
-            { -1.f, -1.f, 0.f, 255,   0, 0, 255 },
-            {  1.f, -1.f, 0.f, 255,   0, 0, 255 },
-            { -1.f,  1.f, 0.f, 255,   0, 0, 255 },
-            {  1.f, -1.f, 0.f, 255,   0, 0, 255 },
-            {  1.f,  1.f, 0.f, 255,   0, 0, 255 },
+            { 255,   0, 0, 255, -1.f,  1.f, 0.f },
+            { 255,   0, 0, 255, -1.f, -1.f, 0.f },
+            { 255,   0, 0, 255,  1.f, -1.f, 0.f },
+            { 255,   0, 0, 255, -1.f,  1.f, 0.f },
+            { 255,   0, 0, 255,  1.f, -1.f, 0.f },
+            { 255,   0, 0, 255,  1.f,  1.f, 0.f },
         };
 
         dev.Clear(kGreen);
@@ -121,13 +140,13 @@ class DrawUserPrimitivesCustomTest : public Game
     void testVertexOffset(GraphicsDevice& dev)
     {
         const MyVertex verts[7] = {
-            { -1.f,  1.f, 0.f,   0, 255, 0, 255 },  // dummy green
-            { -1.f,  1.f, 0.f, 255,   0, 0, 255 },
-            { -1.f, -1.f, 0.f, 255,   0, 0, 255 },
-            {  1.f, -1.f, 0.f, 255,   0, 0, 255 },
-            { -1.f,  1.f, 0.f, 255,   0, 0, 255 },
-            {  1.f, -1.f, 0.f, 255,   0, 0, 255 },
-            {  1.f,  1.f, 0.f, 255,   0, 0, 255 },
+            {   0, 255, 0, 255, -1.f,  1.f, 0.f },  // dummy green
+            { 255,   0, 0, 255, -1.f,  1.f, 0.f },
+            { 255,   0, 0, 255, -1.f, -1.f, 0.f },
+            { 255,   0, 0, 255,  1.f, -1.f, 0.f },
+            { 255,   0, 0, 255, -1.f,  1.f, 0.f },
+            { 255,   0, 0, 255,  1.f, -1.f, 0.f },
+            { 255,   0, 0, 255,  1.f,  1.f, 0.f },
         };
 
         dev.Clear(kGreen);
@@ -147,6 +166,35 @@ class DrawUserPrimitivesCustomTest : public Game
         check(isRed(got), "DrawUserPrimitives VD offset=1", got);
     }
 
+    template<typename TIndex>
+    void testIndexed(GraphicsDevice& dev, const char* label)
+    {
+        const MyVertex verts[5] = {
+            {   0, 255, 0, 255, -1.f,  1.f, 0.f },  // dummy vertex
+            { 255,   0, 0, 255, -1.f,  1.f, 0.f },
+            { 255,   0, 0, 255, -1.f, -1.f, 0.f },
+            { 255,   0, 0, 255,  1.f, -1.f, 0.f },
+            { 255,   0, 0, 255,  1.f,  1.f, 0.f },
+        };
+        const TIndex indices[7] = { 0, 0, 1, 2, 0, 2, 3 }; // dummy index then a quad
+
+        dev.Clear(kGreen);
+        dev.SetDepthTestEnabled(false);
+        dev.setBlendStateProperty(BlendState::Opaque);
+
+        BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;
+        fx.Apply();
+
+        const auto vd = makeVD();
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.DrawUserIndexedPrimitives(PrimitiveType::TriangleList, verts, 1, 4,
+                                      indices, 1, 2, vd);
+
+        const Color got = readCenter(dev);
+        check(isRed(got), label, got);
+    }
+
 protected:
     void Initialize() override { Game::Initialize(); }
 
@@ -156,8 +204,16 @@ protected:
         done_ = true;
 
         auto& dev = getGraphicsDeviceProperty();
+        const auto vd = makeVD();
+        if (!hasExpectedDeclaration(vd))
+        {
+            std::printf("[FAIL] explicit declaration fields changed before DrawUser dispatch\n");
+            ++fail_;
+        }
         testBasic(dev);
         testVertexOffset(dev);
+        testIndexed<std::uint16_t>(dev, "DrawUserIndexedPrimitives VD 16-bit offsets");
+        testIndexed<std::uint32_t>(dev, "DrawUserIndexedPrimitives VD 32-bit offsets");
 
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();
