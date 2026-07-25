@@ -35,6 +35,7 @@ namespace CNA::Internal::Backends::Software
         explicit SoftwareVertexBufferBackend(int vertexCapacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }

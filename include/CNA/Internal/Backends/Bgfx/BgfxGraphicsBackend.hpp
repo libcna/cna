@@ -314,6 +314,7 @@ namespace CNA::Internal::Backends::Bgfx
         ~BgfxVertexBufferBackend() override;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         [[nodiscard]] int GetVertexCount() const override { return vertexCount; }
     };
 

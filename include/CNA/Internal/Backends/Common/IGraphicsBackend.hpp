@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -36,6 +37,7 @@ namespace CNA::Internal::Backends
     using Effect = Microsoft::Xna::Framework::Graphics::Effect;
     using ImageData = CNA::Internal::Graphics::ImageData;
     using SetDataOptions = Microsoft::Xna::Framework::Graphics::SetDataOptions;
+    using VertexDeclaration = Microsoft::Xna::Framework::Graphics::VertexDeclaration;
     using VertexElement = Microsoft::Xna::Framework::Graphics::VertexElement;
 
     /**
@@ -117,21 +119,18 @@ namespace CNA::Internal::Backends
         }
 
         /**
-         * @brief Task 1080: supplies the caller's own `VertexElement` list (offset/format/usage
-         * per attribute) so a backend can bind genuinely custom vertex layouts generically,
-         * instead of only the fixed set of byte-strides its 3D draw path otherwise recognizes.
+         * @brief Supplies the caller's own complete vertex declaration so a backend can bind
+         * genuinely custom vertex layouts generically instead of only the fixed set of
+         * byte-strides its 3D draw path otherwise recognizes.
          *
-         * Default is a no-op — backends that don't support arbitrary layouts (or don't yet need
-         * to) simply ignore it and keep behaving exactly as before. Called by
-         * `VertexBuffer::SetDataRaw()` immediately before `SetData()`, so a backend that does
-         * override this may rely on the declaration being current by the time `SetData()`/
-         * `SetDataWithOptions()` runs.
+         * Called immediately before `SetData()`/`SetDataWithOptions()`.  This is deliberately a
+         * required backend operation: each implementation must make an explicit decision to use
+         * or ignore a declaration, so a newly added backend cannot silently discard one.
          *
-         * @param elements The vertex declaration's element list, in declaration order. An empty
-         *                 list means "no explicit declaration was supplied" — implementations
-         *                 should fall back to their own pre-existing stride-based behavior.
+         * @param vertexDeclaration Full declaration, including stride and elements in declaration
+         *                          order.
          */
-        virtual void SetVertexDeclaration(const std::vector<VertexElement>& elements) {}
+        virtual void SetVertexDeclaration(const VertexDeclaration& vertexDeclaration) = 0;
 
         [[nodiscard]] virtual int GetVertexCount() const = 0;
     };

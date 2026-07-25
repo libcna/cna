@@ -340,6 +340,7 @@ namespace CNA::Internal::Backends::SdlGpu
         ~SdlGpuVertexBufferBackend() override;
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         /**
          * @brief SDLGPU-23: real `Discard`/`NoOverwrite` streaming hints, not the
          * `IGraphicsBackend` default (which ignores @p options and calls the plain `SetData()`).

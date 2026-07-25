@@ -43,6 +43,7 @@ namespace CNA::Internal::Backends::D3D12
         D3D12VertexBufferBackend(D3D12GraphicsBackend* backend, int vertex_capacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }

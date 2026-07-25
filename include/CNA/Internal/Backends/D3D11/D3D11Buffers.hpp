@@ -34,6 +34,7 @@ namespace CNA::Internal::Backends::D3D11
         D3D11VertexBufferBackend(ID3D11Device* device, ID3D11DeviceContext* context, int vertex_capacity);
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }

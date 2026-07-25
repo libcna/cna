@@ -44,6 +44,7 @@ namespace CNA::Internal::Backends::D3D9
         D3D9VertexBufferBackend& operator=(const D3D9VertexBufferBackend&) = delete;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }

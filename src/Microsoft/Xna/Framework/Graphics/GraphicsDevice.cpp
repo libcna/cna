@@ -992,6 +992,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* src = static_cast<const std::uint8_t*>(vertexData)
                           + static_cast<std::ptrdiff_t>(vertexOffset) * stride;
         auto vb = backend_->CreateVertexBuffer(n);
+        vb->SetVertexDeclaration(vertexDeclaration);
         vb->SetData(src, n, static_cast<std::size_t>(stride));
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -1279,6 +1280,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(vd);
         vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
         auto* idx = static_cast<std::uint16_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint16_t)));
         std::copy(indexData + iOffset, indexData + iOffset + ic, idx);
@@ -1305,6 +1307,7 @@ namespace Microsoft::Xna::Framework::Graphics
         const auto* src  = static_cast<const std::uint8_t*>(vertexData)
                            + static_cast<std::ptrdiff_t>(vOffset) * stride;
         auto vb = backend_->CreateVertexBuffer(numVerts);
+        vb->SetVertexDeclaration(vd);
         vb->SetData(src, numVerts, static_cast<std::size_t>(stride));
         auto* idx = static_cast<std::uint32_t*>(AcquireUserIndexScratch(static_cast<std::size_t>(ic) * sizeof(std::uint32_t)));
         std::copy(indexData + iOffset, indexData + iOffset + ic, idx);

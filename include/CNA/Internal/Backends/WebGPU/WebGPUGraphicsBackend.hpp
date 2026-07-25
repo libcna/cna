@@ -335,6 +335,7 @@ namespace CNA::Internal::Backends::WebGPU
         ~WebGPUVertexBufferBackend() override;
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         void SetDataWithOptions(const void* data, int vertexCount, std::size_t strideInBytes, SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 

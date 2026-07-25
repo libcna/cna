@@ -467,6 +467,7 @@ namespace CNA::Internal::Backends::Vulkan
         ~VulkanVertexBufferBackend() override;
 
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         int  GetVertexCount() const override { return vertexCount_; }
 
         VkBuffer    GetBuffer()    const { return buffer_; }

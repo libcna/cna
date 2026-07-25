@@ -2248,9 +2248,9 @@ void main()
         }
     }
 
-    void EasyGLVertexBufferBackend::SetVertexDeclaration(const std::vector<VertexElement>& elements)
+    void EasyGLVertexBufferBackend::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
-        declarationElements_ = elements;
+        declarationElements_ = vertexDeclaration.GetVertexElements();
     }
 
     void EasyGLVertexBufferBackend::ApplyLayout(std::size_t stride)

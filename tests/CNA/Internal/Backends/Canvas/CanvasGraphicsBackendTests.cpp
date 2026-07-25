@@ -34,6 +34,7 @@ namespace
     struct DummyVertexBuffer final : IVertexBufferBackend
     {
         void SetData(const void*, int, std::size_t) override {}
+        void SetVertexDeclaration(const VertexDeclaration&) override {}
         int GetVertexCount() const override { return 0; }
     };
     struct DummyIndexBuffer final : IIndexBufferBackend

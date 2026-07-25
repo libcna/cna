@@ -385,7 +385,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // before uploading, so backends that support arbitrary layouts (see
         // IVertexBufferBackend::SetVertexDeclaration) can bind genuinely custom vertex formats
         // instead of only recognizing a fixed set of byte-strides.
-        backend_->SetVertexDeclaration(vertexDeclaration_.GetVertexElements());
+        backend_->SetVertexDeclaration(vertexDeclaration_);
         backend_->SetData(data, count, static_cast<std::size_t>(stride));
     }
 
