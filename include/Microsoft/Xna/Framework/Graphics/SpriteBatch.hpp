@@ -164,6 +164,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture Texture to draw.
          * @param x X coordinate in pixels.
          * @param y Y coordinate in pixels.
+         * @throws System::ArgumentOutOfRangeException if @p x or @p y is non-finite or cannot
+         *         be represented by SpriteBatch's Int32 destination rectangle.
          */
         NOXNA void Draw(const Texture2D& texture, float x, float y);
 
@@ -207,6 +209,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture  Texture to draw.
          * @param position Position in screen space.
          * @param color    Tint color.
+         * @throws System::ArgumentOutOfRangeException if @p position is non-finite or cannot
+         *         be represented by SpriteBatch's Int32 destination rectangle.
          */
         void Draw(const Texture2D& texture, Vector2 position, Color color);
         /**
@@ -216,6 +220,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param position        Position in screen space.
          * @param sourceRectangle Optional source rectangle; draws the whole texture if empty.
          * @param color           Tint color.
+         * @throws System::ArgumentOutOfRangeException if @p position is non-finite or cannot
+         *         be represented by SpriteBatch's Int32 destination rectangle.
          */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color);
@@ -231,6 +237,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale           Uniform scale factor.
          * @param effects         Sprite flipping flags.
          * @param layerDepth      Depth value for sort ordering.
+         * @throws System::ArgumentOutOfRangeException if @p position or @p scale is non-finite,
+         *         or if the calculated Int32 destination rectangle is out of range.
          */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color,
@@ -248,6 +256,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale           Non-uniform scale vector.
          * @param effects         Sprite flipping flags.
          * @param layerDepth      Depth value for sort ordering.
+         * @throws System::ArgumentOutOfRangeException if @p position or @p scale is non-finite,
+         *         or if the calculated Int32 destination rectangle is out of range.
          */
         void Draw(const Texture2D& texture, Vector2 position,
                   std::optional<Rectangle> sourceRectangle, Color color,
@@ -304,6 +314,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param color      Tint color.
          * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
          *         render and no defaultCharacter is set.
+         * @throws System::ArgumentOutOfRangeException if @p position is non-finite or the
+         *         calculated Int32 glyph destination is out of range.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -324,6 +336,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param layerDepth Depth value for sort ordering.
          * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
          *         render and no defaultCharacter is set.
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
+         *         range.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -349,6 +364,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param layerDepth Depth value for sort ordering.
          * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
          *         render and no defaultCharacter is set.
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
+         *         range.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const std::string& text,
@@ -367,6 +385,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param text       Text to render.
          * @param position   Top-left position, in pixels.
          * @param color      Tint color.
+         * @throws System::ArgumentOutOfRangeException if @p position is non-finite or the
+         *         calculated Int32 glyph destination is out of range.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,
@@ -384,6 +404,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Uniform scale factor.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
+         *         range.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,
@@ -406,6 +429,9 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Non-uniform scale vector.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
+         *         range.
          */
         void DrawString(const SpriteFont& spriteFont,
                         const System::Text::StringBuilder& text,

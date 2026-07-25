@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 #include <stdexcept>
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -13,12 +14,69 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Utf8Decode.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Collections/Generic/KeyNotFoundException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     using namespace CNA::Internal::Backends;
+
+    namespace
+    {
+        void ValidateFinite(float value, const char* parameterName)
+        {
+            if (!std::isfinite(value))
+            {
+                throw System::ArgumentOutOfRangeException(
+                    parameterName, "SpriteBatch floating-point arguments must be finite.");
+            }
+        }
+
+        void ValidateFinite(Vector2 value, const char* parameterName)
+        {
+            ValidateFinite(value.X, parameterName);
+            ValidateFinite(value.Y, parameterName);
+        }
+
+        [[noreturn]] void ThrowDestinationOutOfRange(const char* parameterName)
+        {
+            throw System::ArgumentOutOfRangeException(
+                parameterName,
+                "The calculated SpriteBatch destination component must be within Int32 range.");
+        }
+
+        intcs TruncateDestinationComponent(float value, const char* parameterName)
+        {
+            const double widened = static_cast<double>(value);
+            if (!std::isfinite(value) ||
+                widened < static_cast<double>(std::numeric_limits<intcs>::lowest()) ||
+                widened > static_cast<double>(std::numeric_limits<intcs>::max()))
+            {
+                ThrowDestinationOutOfRange(parameterName);
+            }
+            return static_cast<intcs>(value);
+        }
+
+        intcs RoundDestinationComponent(float value, const char* parameterName)
+        {
+            if (!std::isfinite(value))
+            {
+                ThrowDestinationOutOfRange(parameterName);
+            }
+
+            // Round in floating point first, then range-check the rounded value. Calling lround
+            // before the check would merely move the platform-dependent overflow to float->long
+            // on targets where long is 32-bit.
+            const double rounded = std::round(static_cast<double>(value));
+            if (rounded < static_cast<double>(std::numeric_limits<intcs>::lowest()) ||
+                rounded > static_cast<double>(std::numeric_limits<intcs>::max()))
+            {
+                ThrowDestinationOutOfRange(parameterName);
+            }
+            return static_cast<intcs>(rounded);
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Construction
@@ -236,10 +294,14 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!backend_) return;
+        ValidateFinite(x, "x");
+        ValidateFinite(y, "y");
+        const intcs destinationX = TruncateDestinationComponent(x, "x");
+        const intcs destinationY = TruncateDestinationComponent(y, "y");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
-                   Rectangle(static_cast<int>(x), static_cast<int>(y), w, h),
+                   Rectangle(destinationX, destinationY, w, h),
                    Rectangle(0, 0, w, h),
                    Color(255, 255, 255, 255),
                    0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
@@ -283,10 +345,13 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!backend_) return;
+        ValidateFinite(position, "position");
+        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
+        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
-                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y), w, h),
+                   Rectangle(destinationX, destinationY, w, h),
                    Rectangle(0, 0, w, h),
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
@@ -296,13 +361,16 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!backend_) return;
+        ValidateFinite(position, "position");
+        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
+        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
         pushSprite(texture,
-                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y), dw, dh),
+                   Rectangle(destinationX, destinationY, dw, dh),
                    src, color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
@@ -313,14 +381,21 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!backend_) return;
+        ValidateFinite(position, "position");
+        ValidateFinite(scale, "scale");
+        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
+        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
+        const intcs destinationWidth =
+            TruncateDestinationComponent(static_cast<float>(dw) * scale, "scale");
+        const intcs destinationHeight =
+            TruncateDestinationComponent(static_cast<float>(dh) * scale, "scale");
         pushSprite(texture,
-                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y),
-                             static_cast<intcs>(dw * scale), static_cast<intcs>(dh * scale)),
+                   Rectangle(destinationX, destinationY, destinationWidth, destinationHeight),
                    src, color, rotation, origin, effects, layerDepth);
     }
 
@@ -331,14 +406,21 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!backend_) return;
+        ValidateFinite(position, "position");
+        ValidateFinite(scale, "scale");
+        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
+        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
+        const intcs destinationWidth =
+            TruncateDestinationComponent(static_cast<float>(dw) * scale.X, "scale");
+        const intcs destinationHeight =
+            TruncateDestinationComponent(static_cast<float>(dh) * scale.Y, "scale");
         pushSprite(texture,
-                   Rectangle(static_cast<intcs>(position.X), static_cast<intcs>(position.Y),
-                             static_cast<intcs>(dw * scale.X), static_cast<intcs>(dh * scale.Y)),
+                   Rectangle(destinationX, destinationY, destinationWidth, destinationHeight),
                    src, color, rotation, origin, effects, layerDepth);
     }
 
@@ -426,6 +508,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
         const Texture2D& texture = spriteFont.textureValue_;
         if (texture.getWidthProperty() == 0) return;
+
+        ValidateFinite(position, "position");
+        ValidateFinite(rotation, "rotation");
+        ValidateFinite(origin, "origin");
+        ValidateFinite(scale, "scale");
 
         const float sinR = std::sin(rotation);
         const float cosR = std::cos(rotation);
@@ -520,11 +607,16 @@ namespace Microsoft::Xna::Framework::Graphics
             const float rotX    = scaledX * cosR - scaledY * sinR;
             const float rotY    = scaledX * sinR + scaledY * cosR;
 
+            const intcs destinationX =
+                RoundDestinationComponent(position.X + rotX, "position");
+            const intcs destinationY =
+                RoundDestinationComponent(position.Y + rotY, "position");
+            const intcs destinationWidth =
+                RoundDestinationComponent(static_cast<float>(cGlyph.Width) * scale.X, "scale");
+            const intcs destinationHeight =
+                RoundDestinationComponent(static_cast<float>(cGlyph.Height) * scale.Y, "scale");
             const Rectangle dest(
-                static_cast<intcs>(std::lround(position.X + rotX)),
-                static_cast<intcs>(std::lround(position.Y + rotY)),
-                static_cast<intcs>(std::lround(static_cast<float>(cGlyph.Width)  * scale.X)),
-                static_cast<intcs>(std::lround(static_cast<float>(cGlyph.Height) * scale.Y)));
+                destinationX, destinationY, destinationWidth, destinationHeight);
 
             pushSprite(texture, dest, cGlyph, color,
                        rotation, Vector2::Zero, effects, layerDepth);
