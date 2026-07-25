@@ -169,13 +169,19 @@ class RasterizerStateCullModeCameraTest : public Game
         if (ok) ++pass_; else ++fail_;
     }
 
-    // Scans the WHOLE framebuffer for a pixel matching `target`; never hardcodes a screen
-    // coordinate. Returns std::nullopt if not found anywhere (geometry off-screen or not drawn).
-    std::optional<Rectangle> FindPixel(GraphicsDevice& dev, const Color& target)
+    std::vector<Color> ReadFramebuffer(GraphicsDevice& dev)
     {
         std::vector<Color> buf(static_cast<size_t>(kSize) * kSize, Color(0, 0, 0, 0));
         Rectangle full(0, 0, kSize, kSize);
         dev.GetBackBufferData(&full, buf.data(), 0, static_cast<int>(buf.size()));
+        return buf;
+    }
+
+    // Scans the WHOLE framebuffer for a pixel matching `target`; never hardcodes a screen
+    // coordinate. Returns std::nullopt if not found anywhere (geometry off-screen or not drawn).
+    std::optional<Rectangle> FindPixel(GraphicsDevice& dev, const Color& target)
+    {
+        const std::vector<Color> buf = ReadFramebuffer(dev);
         for (int y = 0; y < kSize; ++y)
         {
             for (int x = 0; x < kSize; ++x)
@@ -187,11 +193,10 @@ class RasterizerStateCullModeCameraTest : public Game
         return std::nullopt;
     }
 
-    Color SampleAt(GraphicsDevice& dev, const Rectangle& px)
+    static Color SampleAt(const std::vector<Color>& buf, const Rectangle& px)
     {
-        Color c(0, 0, 0, 0);
-        dev.GetBackBufferData(&px, &c, 0, 1);
-        return c;
+        return buf[static_cast<size_t>(px.getTopProperty()) * kSize
+                   + px.getLeftProperty()];
     }
 
     void DrawTri(GraphicsDevice& dev, const Tri& t, const Color& color)
@@ -259,8 +264,13 @@ class RasterizerStateCullModeCameraTest : public Game
         auto checkUnderMode = [&](CullMode mode, const char* modeName)
         {
             renderBoth(mode);
-            Color gotA = SampleAt(dev, *pxA);
-            Color gotB = SampleAt(dev, *pxB);
+            // One full-frame read samples both triangles. Bgfx's asynchronous screenshot path
+            // advances a frame per GetBackBufferData call; two separate 1x1 reads made the second
+            // probe observe a later clear-only frame on its Vulkan renderer and falsely looked
+            // like the counter-clockwise triangle was always culled.
+            const std::vector<Color> frame = ReadFramebuffer(dev);
+            Color gotA = SampleAt(frame, *pxA);
+            Color gotB = SampleAt(frame, *pxB);
             bool aVisible = ColorClose(gotA, kRed);
             bool bVisible = ColorClose(gotB, kGreen);
 

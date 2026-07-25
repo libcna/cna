@@ -129,12 +129,18 @@ class RasterizerStateCullModeIndexedBasicEffectTest : public Game
         if (ok) ++pass_; else ++fail_;
     }
 
-    template <typename Pred>
-    std::optional<Rectangle> FindPixelIf(GraphicsDevice& dev, Pred pred)
+    std::vector<Color> ReadFramebuffer(GraphicsDevice& dev)
     {
         std::vector<Color> buf(static_cast<size_t>(kSize) * kSize, Color(0, 0, 0, 0));
         Rectangle full(0, 0, kSize, kSize);
         dev.GetBackBufferData(&full, buf.data(), 0, static_cast<int>(buf.size()));
+        return buf;
+    }
+
+    template <typename Pred>
+    std::optional<Rectangle> FindPixelIf(GraphicsDevice& dev, Pred pred)
+    {
+        const std::vector<Color> buf = ReadFramebuffer(dev);
         for (int y = 0; y < kSize; ++y)
             for (int x = 0; x < kSize; ++x)
                 if (pred(buf[static_cast<size_t>(y) * kSize + x]))
@@ -142,11 +148,10 @@ class RasterizerStateCullModeIndexedBasicEffectTest : public Game
         return std::nullopt;
     }
 
-    Color SampleAt(GraphicsDevice& dev, const Rectangle& px)
+    static Color SampleAt(const std::vector<Color>& buf, const Rectangle& px)
     {
-        Color c(0, 0, 0, 0);
-        dev.GetBackBufferData(&px, &c, 0, 1);
-        return c;
+        return buf[static_cast<size_t>(px.getTopProperty()) * kSize
+                   + px.getLeftProperty()];
     }
 
 protected:
@@ -286,8 +291,13 @@ protected:
         auto checkMode = [&](CullMode mode, const char* modeName)
         {
             renderBoth(mode);
-            Color gotA = SampleAt(dev, *pxA);
-            Color gotB = SampleAt(dev, *pxB);
+            // One full-frame read samples both triangles. Bgfx's asynchronous screenshot path
+            // advances a frame per GetBackBufferData call; two separate 1x1 reads made the second
+            // probe observe a later clear-only frame on its Vulkan renderer and falsely looked
+            // like the counter-clockwise triangle was always culled.
+            const std::vector<Color> frame = ReadFramebuffer(dev);
+            Color gotA = SampleAt(frame, *pxA);
+            Color gotB = SampleAt(frame, *pxB);
             bool aVisible = IsDominantRed(gotA);
             bool bVisible = IsDominantGreen(gotB);
 
