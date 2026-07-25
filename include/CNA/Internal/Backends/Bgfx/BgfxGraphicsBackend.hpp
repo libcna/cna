@@ -3,6 +3,7 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include <bgfx/bgfx.h>
 #include <SDL3/SDL.h>
+#include <array>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
@@ -398,6 +399,10 @@ namespace CNA::Internal::Backends::Bgfx
         uint16_t currentRtWidth_ = 0;
         uint16_t currentRtHeight_ = 0;
         uint32_t clearRgba = 0x000000ff;
+        // REMED-GFX-018: exact clear mask owned by the currently-active ordered view. bgfx clear
+        // state is per-view and last-wins until frame(), so this cannot be inferred from the view
+        // id (clear operations may themselves own segment views). Draw-only views use CLEAR_NONE.
+        uint16_t currentViewClearFlags_ = BGFX_CLEAR_NONE;
         // Task 871: threaded into EnsureViewState()'s bgfx::setViewClear() call, replacing a
         // previously-hardcoded stencil clear value of 0.
         uint8_t clearStencilValue_ = 0;
@@ -475,13 +480,19 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ViewId segmentTargetBaseId_ = 0;                       ///< base view id of the bound target
         bgfx::FrameBufferHandle segmentTargetFbo_ = BGFX_INVALID_HANDLE; ///< bound target's fbo (invalid=backbuffer)
         bgfx::ViewId segmentNextId_ = Detail::kFirstSegmentViewId;  ///< next free per-frame segment id
-        bool     segmentActive_ = false;                            ///< has the first draw on this binding happened?
+        bool     segmentActive_ = false;                            ///< has the first operation on this binding happened?
+        // REMED-GFX-018: a target base view can be rebound within one un-advanced frame (A->B->A).
+        // Reusing and reconfiguring that base view would retroactively change A's first operation,
+        // because bgfx resolves per-view framebuffer/clear state only at frame(). Remember which
+        // base ids were consumed and force a fresh ordered segment on a same-frame rebind.
+        std::array<bool, Detail::kFirstSegmentViewId> segmentBaseUsed_ = {};
+        bool segmentNeedsFreshView_ = false;
         // The active view's viewport identity. The FIRST viewport on a target uses its BASE view (view 0 /
         // RT id) exactly as before this task -- a custom viewport still shrinks that base view's rect
         // (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065. A draw whose
-        // viewport differs from the active view's starts the next ordered segment view (which clears its
-        // own depth+stencil, since bgfx's per-view clear was scoped to the first viewport's rect); once
-        // off the base view we never return to it (that would reorder it before the segments).
+        // viewport differs from the active view's starts the next ordered draw-only segment view. Since
+        // GFX-018 records Clear on its own full-target ordered view, draw segments preserve colour,
+        // depth, and stencil; once off the base view we never return to it (that would reorder it).
         bool     segCurIsBase_ = true;   ///< is the active view the target's base view (vs a segment)?
         bool     segCurHasVp_ = false;   ///< active view's custom-viewport flag
         uint16_t segCurX_ = 0, segCurY_ = 0, segCurW_ = 0, segCurH_ = 0;  ///< active view's custom viewport
@@ -748,6 +759,10 @@ namespace CNA::Internal::Backends::Bgfx
 
     private:
         void EnsureViewState();
+        // REMED-GFX-018: record one public Clear operation as an ordered full-target bgfx view
+        // with exactly the requested BGFX_CLEAR_* mask. A later clear always gets a new segment,
+        // so clears and draws remain interleavable in CNA submission order.
+        void RecordClear(uint16_t clearFlags);
 
         // REMED-GFX-065: select the view id this draw/batch must submit to, allocating an ordered
         // per-frame viewport-segment view when the viewport changed on the current target (see the

@@ -755,10 +755,10 @@ namespace CNA::Internal::Backends::Bgfx
     {
         bgfx::setViewFrameBuffer(viewId_, fbo);
         bgfx::setViewRect(viewId_, 0, 0, static_cast<uint16_t>(width), static_cast<uint16_t>(height));
-        // For PreserveContents, suppress the per-view clear that bgfx would otherwise
-        // carry over from the previous frame (set by a DiscardContents RT or explicit Clear).
-        if (preserveContents)
-            bgfx::setViewClear(viewId_, BGFX_CLEAR_NONE, 0, 1.0f, 0);
+        // REMED-GFX-018: do not mutate this base view's clear state here. A same-frame A->B->A
+        // rebind would retroactively overwrite A's already-recorded clear because bgfx view state
+        // is resolved only at frame(). The owning graphics backend assigns CLEAR_NONE or the exact
+        // requested mask when the first draw/clear on this binding receives its ordered view.
     }
 
     void BgfxRenderTargetBackend::UnbindAsRenderTarget()
@@ -1473,28 +1473,60 @@ namespace CNA::Internal::Backends::Bgfx
         float orthoWithTransform[16];
         bx::mtxMul(orthoWithTransform, transformColMajor, ortho);
         bgfx::setViewTransform(spriteViewId, nullptr, orthoWithTransform);
-        // Task 871: BGFX_CLEAR_STENCIL and the real requested stencil value were previously
-        // never included here -- a requested stencil clear silently did nothing.
-        // Task 950: clearDepthValue_ replaces a previously-hardcoded 1.0f.
-        // REMED-GFX-065: a per-frame viewport-segment view (id >= kFirstSegmentViewId) must PRESERVE the
-        // contents drawn by the earlier segment(s) of this frame -- only the target's base view performs
-        // the requested clear. Suppress the clear on segment views so they LOAD rather than clear.
-        const uint16_t clearFlags = (spriteViewId >= Detail::kFirstSegmentViewId)
-            ? static_cast<uint16_t>(BGFX_CLEAR_NONE)
-            : static_cast<uint16_t>(BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL);
-        bgfx::setViewClear(spriteViewId, clearFlags, clearRgba, clearDepthValue_, clearStencilValue_);
+        // REMED-GFX-018: the active ordered view owns its exact clear mask. Segment ids no longer
+        // imply CLEAR_NONE: a Clear after a draw is itself recorded on a segment view, while a
+        // viewport/transform-only segment explicitly owns CLEAR_NONE. Keeping the mask alongside
+        // the current view also prevents later EnsureViewState calls from widening a colour-only,
+        // depth-only, or stencil-only request.
+        bgfx::setViewClear(spriteViewId, currentViewClearFlags_,
+                           clearRgba, clearDepthValue_, clearStencilValue_);
+    }
+
+    void BgfxGraphicsBackend::RecordClear(uint16_t clearFlags)
+    {
+        // A clear is a full-target ordered operation. The first operation on a target may use its
+        // base view; every later clear needs a fresh monotonically-increasing segment so bgfx
+        // cannot move it before earlier draws or collapse two clear masks/values last-wins.
+        const bool useBaseView = !segmentActive_ && !segmentNeedsFreshView_;
+        if (useBaseView)
+        {
+            currentViewId_ = spriteViewId = segmentTargetBaseId_;
+            segCurIsBase_ = true;
+            if (segmentTargetBaseId_ < segmentBaseUsed_.size())
+                segmentBaseUsed_[segmentTargetBaseId_] = true;
+        }
+        else
+        {
+            const bgfx::ViewId segmentId = AllocateSegmentViewId();
+            bgfx::setViewFrameBuffer(segmentId, segmentTargetFbo_);
+            currentViewId_ = spriteViewId = segmentId;
+            segCurIsBase_ = false;
+        }
+
+        segmentActive_ = true;
+        segmentNeedsFreshView_ = false;
+        segCurHasVp_ = false; // Clear ignores GraphicsDevice.Viewport and always owns the full target.
+        segCurX_ = segCurY_ = segCurW_ = segCurH_ = 0;
+        segCurSpriteTransformValid_ = false;
+        currentViewClearFlags_ = clearFlags;
+
+        EnsureViewState();
+        bgfx::touch(spriteViewId);
     }
 
     void BgfxGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         clearRgba = ToRgba(ToByte(r), ToByte(g), ToByte(b), ToByte(a));
-        EnsureViewState();
-        bgfx::touch(spriteViewId);
+        RecordClear(BGFX_CLEAR_COLOR);
     }
 
     void BgfxGraphicsBackend::Present()
     {
-        EnsureViewState();
+        // If the current target was rebound after its base view had already been consumed this
+        // frame, configuring that base merely for Present would retroactively clobber the earlier
+        // operation. The next real draw/clear will allocate its required fresh segment.
+        if (!segmentNeedsFreshView_)
+            EnsureViewState();
         bgfx::frame();
         spriteVpValid_ = false; // REMED-GFX-072: sprite viewport is per-frame; clear for the next one.
         EndFrameSegments();     // REMED-GFX-065: recycle the per-frame viewport-segment view ids.
@@ -2016,15 +2048,15 @@ namespace CNA::Internal::Backends::Bgfx
 
     // REMED-GFX-065: allocate the next ordered per-frame viewport-segment view id. Monotonic so bgfx's
     // ascending-view-id execution order == CNA submission order for a target's segments. Recycled every
-    // frame by EndFrameSegments(). Exhausting the reserved [kFirstSegmentViewId, 255) range throws a
-    // clear error rather than silently wrapping (which would corrupt an earlier view's state) -- a
-    // deliberate, deterministic hard cap on distinct viewport changes per target-chain per frame.
+    // frame by EndFrameSegments(). GFX-018 also uses this pool for ordered clear operations and target
+    // rebinds. Exhausting the reserved [kFirstSegmentViewId, 255) range throws a clear error rather than
+    // silently wrapping (which would corrupt an earlier view's state).
     bgfx::ViewId BgfxGraphicsBackend::AllocateSegmentViewId()
     {
         if (segmentNextId_ >= Detail::kBackbufferFlushViewId)
-            throw std::runtime_error("Bgfx: exhausted per-frame viewport-segment view ids (more than "
-                                     "63 distinct GraphicsDevice.Viewport changes on one target in a "
-                                     "single frame -- REMED-GFX-065)");
+            throw std::runtime_error(
+                "Bgfx: exhausted per-frame ordered view-segment ids (more than 63 viewport/"
+                "transform/clear/target-rebind segments in one frame -- REMED-GFX-065/GFX-018)");
         return segmentNextId_++;
     }
 
@@ -2035,6 +2067,10 @@ namespace CNA::Internal::Backends::Bgfx
         segmentTargetBaseId_ = baseId;
         segmentTargetFbo_    = fbo;
         segmentActive_       = false;
+        segmentNeedsFreshView_ =
+            baseId < segmentBaseUsed_.size() && segmentBaseUsed_[baseId];
+        currentViewId_ = spriteViewId = baseId;
+        currentViewClearFlags_ = BGFX_CLEAR_NONE;
     }
 
     // REMED-GFX-065: recycle the per-frame segment id pool and fall back to the current target's base
@@ -2044,8 +2080,11 @@ namespace CNA::Internal::Backends::Bgfx
     {
         segmentNextId_  = Detail::kFirstSegmentViewId;
         segmentActive_  = false;
+        segmentNeedsFreshView_ = false;
+        segmentBaseUsed_.fill(false);
         currentViewId_  = segmentTargetBaseId_;
         spriteViewId    = segmentTargetBaseId_;
+        currentViewClearFlags_ = BGFX_CLEAR_NONE;
     }
 
     // REMED-GFX-065: resolve whether the active GraphicsDevice.Viewport is a genuine CUSTOM sub-region
@@ -2067,11 +2106,9 @@ namespace CNA::Internal::Backends::Bgfx
     // rect (REMED-GFX-063), so a single-viewport frame is byte-identical to pre-GFX-065 (one view, no
     // extra state). Only a SECOND, DIFFERENT viewport in the same frame routes to a freshly-allocated
     // ordered segment view (same framebuffer, higher id so bgfx's ascending-view-id execution keeps
-    // submission order). Because bgfx's per-view clear is scoped to the view rect, the base view only
-    // cleared the FIRST viewport's region; each segment therefore clears its OWN depth+stencil (to the
-    // frame's clear values) so the new viewport's 3D draws depth-test against a fresh buffer rather than
-    // a stale one -- while preserving colour (the earlier segments' pixels). Consecutive draws sharing
-    // the active view's viewport reuse it (no id churn). Once off the base we never return to it.
+    // submission order). GFX-018 gives every public Clear its own full-target ordered view, so draw-only
+    // viewport/transform segments load and preserve ALL attachments. Consecutive draws sharing the
+    // active view's viewport reuse it (no id churn). Once off the base we never return to it.
     void BgfxGraphicsBackend::SelectViewportSegment(bool spritePath)
     {
         uint16_t fullW = 0, fullH = 0;
@@ -2098,14 +2135,32 @@ namespace CNA::Internal::Backends::Bgfx
 
         if (!segmentActive_)
         {
-            // First draw/batch on this target-binding -> the base view already bound (view 0 / RT id).
-            // ApplyViewportOverride() / EnsureViewState() shrink/offset it for a custom viewport exactly
-            // as before REMED-GFX-065; nothing is allocated for a single-viewport frame.
+            // First draw/batch on this binding normally uses the base view. On a same-frame target
+            // rebind, however, that base has already recorded an earlier operation and must not be
+            // reconfigured last-wins; continue on a fresh ordered segment instead (GFX-018).
+            if (segmentNeedsFreshView_)
+            {
+                const bgfx::ViewId segmentId = AllocateSegmentViewId();
+                bgfx::setViewFrameBuffer(segmentId, segmentTargetFbo_);
+                currentViewId_ = spriteViewId = segmentId;
+                segCurIsBase_ = false;
+            }
+            else
+            {
+                currentViewId_ = spriteViewId = segmentTargetBaseId_;
+                segCurIsBase_ = true;
+                if (segmentTargetBaseId_ < segmentBaseUsed_.size())
+                    segmentBaseUsed_[segmentTargetBaseId_] = true;
+            }
+
             segmentActive_ = true;
-            currentViewId_ = spriteViewId = segmentTargetBaseId_;
-            segCurIsBase_  = true;
+            segmentNeedsFreshView_ = false;
             segCurHasVp_   = hasVp;
             segCurX_ = viewportX_; segCurY_ = viewportY_; segCurW_ = viewportW_; segCurH_ = viewportH_;
+            currentViewClearFlags_ = BGFX_CLEAR_NONE;
+            bgfx::setViewRect(currentViewId_, 0, 0, fullW, fullH);
+            bgfx::setViewClear(currentViewId_, BGFX_CLEAR_NONE,
+                               clearRgba, clearDepthValue_, clearStencilValue_);
             commitSpriteTransform();
             return;
         }
@@ -2136,14 +2191,14 @@ namespace CNA::Internal::Backends::Bgfx
         const bgfx::ViewId segId = AllocateSegmentViewId();
         bgfx::setViewFrameBuffer(segId, segmentTargetFbo_);
         // Default to the target's FULL rect (the sprite path keeps this + an offset ortho; a custom 3D
-        // viewport shrinks it in ApplyViewportOverride). Clear this segment's DEPTH+STENCIL to the frame's
-        // clear values (the base view's clear was scoped to the FIRST viewport, so this region's depth is
-        // otherwise stale/accumulated), but PRESERVE colour so earlier segments' pixels survive. The
-        // sprite path resets this to CLEAR_NONE in EnsureViewState (sprites don't depth-test), so a
-        // transform-only sprite segment loads the earlier segments' colour and never clears depth.
+        // viewport shrinks it in ApplyViewportOverride). This is a draw-only view and therefore LOADS
+        // every attachment. GFX-018 records full-target clears on their own ordered views, so viewport
+        // segmentation no longer needs (and must not perform) an implicit depth/stencil clear that
+        // could destroy state the public ClearOptions mask was required to preserve.
         bgfx::setViewRect(segId, 0, 0, fullW, fullH);
-        bgfx::setViewClear(segId, static_cast<uint16_t>(BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL),
-                           0, clearDepthValue_, clearStencilValue_);
+        currentViewClearFlags_ = BGFX_CLEAR_NONE;
+        bgfx::setViewClear(segId, BGFX_CLEAR_NONE,
+                           clearRgba, clearDepthValue_, clearStencilValue_);
         currentViewId_ = spriteViewId = segId;
         segCurIsBase_  = false;
         segCurHasVp_   = hasVp;
@@ -2256,41 +2311,44 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
+        clearRgba = ToRgba(ToByte(r), ToByte(g), ToByte(b), ToByte(a));
         clearDepthValue_ = depth;
-        Clear(r, g, b, a);
+        RecordClear(static_cast<uint16_t>(BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH));
     }
 
-    void BgfxGraphicsBackend::ClearDepth(float depth) { clearDepthValue_ = depth; /* Bgfx depth-only clear not yet implemented */ }
+    void BgfxGraphicsBackend::ClearDepth(float depth)
+    {
+        clearDepthValue_ = depth;
+        RecordClear(BGFX_CLEAR_DEPTH);
+    }
 
-    // Task 871: mirrors Clear()'s own shape (EnsureViewState() + touch actually applies the new
-    // bgfx::setViewClear() flags/value this frame) rather than ClearDepth()'s pre-existing no-op
-    // shape, since stencil clearing needs to genuinely take effect for this task's fix to matter.
     void BgfxGraphicsBackend::ClearStencil(int stencil)
     {
         clearStencilValue_ = static_cast<uint8_t>(stencil);
-        EnsureViewState();
-        bgfx::touch(spriteViewId);
+        RecordClear(BGFX_CLEAR_STENCIL);
     }
 
     void BgfxGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
     {
         clearDepthValue_ = depth;
         clearStencilValue_ = static_cast<uint8_t>(stencil);
-        EnsureViewState();
-        bgfx::touch(spriteViewId);
+        RecordClear(static_cast<uint16_t>(BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL));
     }
 
     void BgfxGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
+        clearRgba = ToRgba(ToByte(r), ToByte(g), ToByte(b), ToByte(a));
         clearStencilValue_ = static_cast<uint8_t>(stencil);
-        Clear(r, g, b, a);
+        RecordClear(static_cast<uint16_t>(BGFX_CLEAR_COLOR | BGFX_CLEAR_STENCIL));
     }
 
     void BgfxGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
     {
+        clearRgba = ToRgba(ToByte(r), ToByte(g), ToByte(b), ToByte(a));
         clearDepthValue_ = depth;
         clearStencilValue_ = static_cast<uint8_t>(stencil);
-        Clear(r, g, b, a);
+        RecordClear(static_cast<uint16_t>(
+            BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH | BGFX_CLEAR_STENCIL));
     }
 
     void BgfxGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3DState(); }
