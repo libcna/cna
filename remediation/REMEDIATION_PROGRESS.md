@@ -7939,3 +7939,128 @@ did not change.
 `git diff --check` passes, `audit/` is untouched, and the working tree is clean after the
 documentation commit. Recommended next GRAPHICS task is **REMED-GFX-100**, the proven WebGPU
 EnvironmentMap view-space fog discrepancy. Do not begin it as part of GFX-061.
+
+---
+## REMED-GFX-100 — WebGPU EnvironmentMap view-space fog migration (2026-07-25)
+
+**Status and classification: DONE — MIXED DEFECT: REAL PRODUCTION SHADER-SEMANTIC DEFECT plus
+DEAD INTERNAL SHARED-STATE DEBT.** The visible defect was real: WebGPU EnvironmentMap fog used a
+raw object-space Z endpoint calculation while every corrected stock-effect family used the
+authoritative CPU-prepared World×View vector. The corresponding shared scalar endpoints became
+dead state once that reader was migrated. The new test was a valid production reproducer; this
+task found no test-harness defect.
+
+### Exact source trace and public contract
+
+Before the fix, EnvironmentMapEffect::FillGpuDrawParams already prepared the FNA vector but
+FillEnvMapParams discarded it for fog: UBO floats 24–27 held fogColor plus fogEnabled, and floats
+28–29 held fogStart/fogEnd. The one handwritten embedded WGSL EnvironmentMap module then did:
+
+    fogKeep = fogEnabled ? clamp((fogEnd - input.position.z) /
+                                 max(fogEnd - fogStart, 1e-6), 0, 1) : 1
+
+input.position is VertexPositionNormalTexture object space. Thus World translation, View
+translation/rotation, and the real zero-range encoding were not represented. There is exactly one
+EnvironmentMap WGSL variant: one position/normal/texture vertex layout, one runtime-uniform
+lighting/environment shader, no vertex-colour, fog, texture, or lighting permutation. All its
+reachable settings use this module and its one environment pipeline.
+
+The corrected upload stores fogColor at UBO floats 24–26 (float 27 is explicit padding) and the
+prepared fogVector at floats 28–31. Its vertex stage now computes:
+
+    fogKeep = 1 - clamp(dot(vec4(input.position, 1), fogVector), 0, 1)
+
+The public CPU path prepares s=1/(FogStart-FogEnd) and
+fogVector={WorldView.M13*s, WorldView.M23*s, WorldView.M33*s, (WorldView.M43+FogStart)*s} once
+per effect application. Projection is absent. Disabled FogEnabled uploads {0,0,0,0} and therefore
+keeps 1; enabled FogStart==FogEnd uploads {0,0,0,1} and therefore keeps 0. No separate WebGPU
+enable scalar or endpoint representation remains.
+
+| Value | public source / CPU preparation | WebGPU field and shader role |
+| --- | --- | --- |
+| FogStart, FogEnd | public effect properties; only form CPU fogVector | no GpuDrawParams or UBO scalar consumer remains |
+| FogColor | public FogColor | UBO 24–26; fragment mix(fogColor, rgb, fogKeep) |
+| FogVector | World×View preparation above | UBO 28–31; vertex dot against object position |
+| object position | vertex buffer | fog-dot operand; interpolated fogKeep output |
+| world position / normal | World and normal matrix | eye/reflection and lighting only; unchanged |
+| clip position | World×View×Projection | rasterization only; never fog |
+
+The reachable EnvironmentMap operation order is retained exactly: directional light sum times the
+CPU-prepared diffuse colour plus the pre-folded (EmissiveColor + AmbientLightColor*DiffuseColor)
+term; multiply that RGB by texture RGB; compute combined alpha as diffuse alpha times texture alpha;
+blend environment RGB (and add the existing environment specular term) using EnvironmentMapAmount
+or Fresnel; interpolate that **complete** RGB with FogColor by fogKeep; return the unchanged
+combined alpha. World, View, Projection, Alpha, diffuse/emissive/ambient, all three lights,
+texture, environment map, environment amount, and Fresnel factor remain publicly reachable. Fog
+changes RGB only.
+
+### Reproducer and semantic verification
+
+New WebGPU_EnvironmentMapEffect_Fog uses the public effect API, Opaque blending, DepthNone,
+CullNone, a full deterministic viewport/scissor, a 72×72 RenderTarget2D, and point sampling. The
+target can present sRGB-encoded readback bytes, so the test calibrates expected storage bytes on
+the same target with a known full-environment replacement; it never treats encoded bytes as linear.
+Pre-fix it was **13/25**, with the twelve intended failures all showing object-Z rather than
+view-depth fog. Post-fix it is **25/25**.
+
+- **World discriminator:** identical object Z=0 with World Z=-4 becomes half fog; pre-fix it was
+  unfogged because object Z was unchanged.
+- **View discriminator:** a View Z=-4 case and a nontrivial LookAt rotation/translation change fog
+  at the same geometry; pre-fix they stayed object-Z based.
+- **Projection:** two orthographic widths keep World×View depth fixed and produce equivalent fog.
+- **Deferred snapshots:** one effect instance queues transform A, B, then A and produces A→B→A;
+  EnvMapDrawCommand owns its 60-float uniform array by value. Fog disabled/enabled/disabled
+  similarly produces unfogged→fogged→unfogged, proving the zero vector does not retain B state.
+- **Range:** before/start/between/end/beyond FogStart/FogEnd match keep factors 1/1/0.5/0/0. The
+  zero range is fully fogged, with no WGSL division.
+- **Composition / alpha:** non-white texture (128,64,192,160), non-white cube (51,204,102,192),
+  nontrivial diffuse, ambient, emissive, directional light, environment amount, Fresnel/specular,
+  and Alpha verify fog follows the complete composition; separate RGB and alpha checks preserve
+  alpha 80.
+
+The focused WebGPU shard is **10/10 CTests** (the new 25/25 test plus EnvironmentMap, emissive,
+BasicEffect, Skinned, AlphaTest, DualTexture, lit and RenderTarget coverage). A separate broad
+representative WebGPU shard is **15/15 CTests** covering coloured/textured/instanced rendering,
+state, PBR/SkinnedPBR, cube targets, SpriteBatch render targets, mip generation, viewport, and
+colour writes. Native wgpu-native runs created the shader/pipeline and completed without
+validation/uncaptured-error/device-loss output; the only host log was the unrelated Vulkan
+presentation DRI3 capability notice.
+
+### Shared state, backends, and scope
+
+GpuDrawParams is an ordinary CPU internal structure, not a directly uploaded or serialized ABI.
+After compiler-forced migration there are no reads of its fogStart/fogEnd, so both fields and the
+seven dead writes in BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect,
+SkinnedEffect, PbrEffect, and SkinnedPbrEffect are removed. Its size changes **5048→5040** bytes;
+fogVector and following members shift **8** bytes (fogVector **4948→4940**, textureEnabled
+**4964→4956**). No static layout assertion existed or needs changing. The WebGPU EnvMap UBO remains
+240 bytes with the same 15-vec4 physical layout; only its semantic fields changed.
+
+All fourteen backend library targets compile with at most four jobs: ASCII, Bgfx, Canvas, D3D9,
+D3D11, D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulkan, and WebGPU. No D3D
+source or generated shader artifact changed; the GFX-061 D3D layout/compile gate is therefore
+green. Practical public fog CTests are Vulkan **6/6**, EasyGL **6/6**, Bgfx **7/7**, and SDL_GPU
+**4/4**, including their capable EnvironmentMap paths. The relevant effect unit shard is
+**196/196** across seven suites (including GFX-007/GFX-008 material/lighting, GFX-010 fog,
+GFX-088 Skinned, and PBR/SkinnedPBR upload contracts); GFX-090's WebGPU Skinned material coverage
+is in the targeted shard and remains green.
+
+Fog is dynamic uniform data and never enters the WebGPU graphics-pipeline key; the migration adds
+no key dimension, allocation, draw, pass, texture sample, shader permutation, matrix inverse,
+synchronization, or per-draw work. It removes two shared floats and seven scalar writes, without
+overstating that small CPU saving. The narrow sibling inventory finds no remaining production raw
+object-Z endpoint fog or GpuDrawParams scalar-endpoint reader. Remaining fogStart/fogEnd matches
+are public effect properties, CPU vector preparation, documentation, or public tests. No new
+remediation finding was allocated.
+
+No generated artifact changed: the corrected source is the handwritten embedded WGSL itself.
+audit/ remains untouched.
+
+**Commits:**
+
+- b5959d92 test(Task REMED-GFX-100): reproduce WebGPU EnvironmentMap object-space fog
+- 265a7aac fix(Task REMED-GFX-100): migrate EnvironmentMap fog to prepared view-space vector
+- 8d1ed866 refactor(Task REMED-GFX-100): remove obsolete shared fog scalar state
+- docs(remediation): record GFX-100 WebGPU fog verification (this record)
+
+Recommended next GRAPHICS task: **REMED-GFX-092** (recommendation only; not begun here).
