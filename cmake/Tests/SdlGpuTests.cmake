@@ -57,6 +57,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
         TIMEOUT 60 LABELS "SdlGpu"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-097: a depthless cube-face SpriteBatch draw must use a graphics pipeline whose
+    # target info also has no depth/stencil target. Pixel checks prove exact face selection; make
+    # the Vulkan compatibility VUID independently fatal so validation-cleanliness cannot be hidden
+    # by otherwise-correct pixels.
+    cna_sdlgpu_test(cna_test_sdlgpu_depthless_cube_spritebatch_compatibility
+                    examples/sdlgpu_depthless_cube_spritebatch_compatibility_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_DepthlessCube_SpriteBatchCompatibility
+        COMMAND cna_test_sdlgpu_depthless_cube_spritebatch_compatibility
+        TIMEOUT 60 LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    set_tests_properties(SdlGpu_DepthlessCube_SpriteBatchCompatibility PROPERTIES
+        FAIL_REGULAR_EXPRESSION "VUID-vkCmdDraw-renderPass-02684")
+
     # plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
     cna_sdlgpu_test(cna_test_sdlgpu_mrt examples/sdlgpu_mrt_test.cpp)
     cna_register_backend_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt
