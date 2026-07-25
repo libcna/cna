@@ -2370,7 +2370,7 @@ since the project's own default preset doesn't enable that specific check).
 | REMED-GFX-036 | P2 | NOT STARTED | | | |
 | REMED-GFX-037 | P2 | NOT STARTED | | | |
 | REMED-GFX-038 | P2 | NOT STARTED | | | |
-| REMED-GFX-039 | P2 | NOT STARTED | | | |
+| REMED-GFX-039 | P2 | **DONE and VERIFIED** | test `9d9207df`, fix `8a308f3d`, docs (this entry) | feature/audit | The live gap inventory first confirmed that GFX-096 had already closed default/null `SetRenderTargets`; GFX-039 therefore covers only the remaining public-contract cases. Parameterized `RenderTargetBinding` and `VertexBufferBinding` constructors now reject null resources, vertex bindings reject negative offsets/frequencies, non-default `VertexDeclaration` constructors reject empty elements and explicit nonpositive strides, `SetVertexBuffers` rejects null bindings and clears singular state on empty input, and pixel/vertex texture collections reject sampling an active render target while permitting producer-to-consumer sampling after unbind. Focused EasyGL validation is 100/100; Software and Headless are 96/96 each; the untouched DrawUser declaration boundary is 32/32. Render-target producer/consumer and GFX-094–096 cube/plural checks pass on Vulkan, EasyGL, SDL_GPU, WebGPU, and Bgfx, with applicable Vulkan validation and WebGPU/native error scopes clean; all fourteen backend libraries compile with `-j4`. |
 | REMED-GFX-040 | P2 | **DONE and VERIFIED** | test `9fe60849`, fix `e211f062`, docs (this entry) | feature/audit | All four public Model-family integer indexers (`ModelBoneCollection`, `ModelMeshCollection`, `ModelMeshPartCollection`, and `ModelEffectCollection`) now reject negative and upper-bound indices with `System::ArgumentOutOfRangeException` naming `index` before any unsigned conversion. Six focused regressions cover empty/populated boundaries plus first/last identity, order, Count, bone/mesh ownership, mesh-part ownership, and effect association. Model usage 93/93, headless model loading 14/14, ASan 93/93, UBSan 93/93; all 14 backend libraries compile with `-j4`. |
 | REMED-GFX-041 | P2 | NOT STARTED | | | |
 | REMED-GFX-042 | P2 | NOT STARTED | | | |
@@ -8183,7 +8183,7 @@ Historical close-time recommendation: **REMED-GFX-012**. **Superseded by the 202
 GRAPHICS inventory checkpoint:** GFX-012 was already DONE in `21f6c4af` + `6985b2fe` and its
 `Vulkan_SpriteBatch_TransformMatrix` regression is 3/3. All earlier “recommended next” lines in
 individual closure reports are historical evidence, not a live queue. The current recommended next
-task is **REMED-GFX-039**; GFX-004, GFX-040, and GFX-054 are now DONE.
+task is **REMED-GFX-043**; GFX-004, GFX-039, GFX-040, and GFX-054 are now DONE.
 
 ---
 
@@ -8428,4 +8428,4 @@ Recommended next GRAPHICS task: **REMED-GFX-040**. Recommendation only; not begu
 - `e211f062 fix(Task REMED-GFX-040): validate Model collection indices`
 - `docs(remediation): record GFX-040 verification` (this record)
 
-Recommended next GRAPHICS task: **REMED-GFX-039**. Recommendation only; not begun.
+Recommended next GRAPHICS task: **REMED-GFX-043**. GFX-039 is DONE and VERIFIED.
