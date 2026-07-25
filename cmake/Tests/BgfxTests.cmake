@@ -755,14 +755,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_DualTextureEffect_VertexColor COMMAND cna_test_bgfx_dualtextureeffect_vertexcolor
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # Task 765 (Phase 72 Bgfx gap closure): CullMode (None/CullClockwiseFace/
-    # CullCounterClockwiseFace) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task
-    # 323/324/325; that file reads back 2 columns in one frame, incompatible with Bgfx's
-    # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
+    # REMED-GFX-017: complete public winding contract on Bgfx. The fixture covers None,
+    # CullClockwiseFace, CullCounterClockwiseFace, the GraphicsDevice/RasterizerState defaults,
+    # opposite-winding colored geometry, backbuffer + RenderTarget2D, A->B->A state capture,
+    # target transitions, BasicEffect/direct 3D, and SpriteBatch state isolation. Run the same
+    # permanent regression through both Bgfx renderer routes; a host without usable Vulkan may
+    # fall back to OpenGL, which the backend reports explicitly in its native startup output.
     cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode
                   examples/bgfx_rasterizerstate_cullmode_test.cpp)
     cna_register_backend_test(NAME Bgfx_RasterizerState_CullMode COMMAND cna_test_bgfx_rasterizerstate_cullmode
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=OPENGL")
+    cna_register_backend_test(NAME Bgfx_RasterizerState_CullMode_Vulkan COMMAND cna_test_bgfx_rasterizerstate_cullmode
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
 
     # XNA culling-compatibility audit: real-camera CullMode reproducer, verbatim reuse of the
     # shared backend-agnostic source (first tried on Bgfx as-is; see the audit doc for whether
