@@ -485,7 +485,8 @@ namespace CNA::Internal::Backends::SdlGpu
         NOXNA [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
-                                                                          int colorTargetCount = 1);
+                                                                          int colorTargetCount,
+                                                                          const std::array<int, 4>& colorWriteMasks);
         /** @brief Returns a snapshot of the current 128-byte uniform block. NOXNA — internal use
          * only (called once per queued sprite, so later `SetUniform*` calls on the live effect
          * object don't retroactively change an already-queued sprite's rendered result). */
@@ -672,9 +673,9 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             bool blendEnabled = false;
             BlendKeyParams blend;
-            // REMED-GFX-077: raw XNA ColorWriteChannels (slot 0; bit0=R..bit3=A). Baked into the
-            // SDL_GPUColorTargetBlendState (static → part of the pipeline cache key). 15 = All.
-            int colorWriteMask = 15;
+            // REMED-GFX-077/-098: slot-aligned XNA ColorWriteChannels (bit0=R..bit3=A), baked
+            // into the corresponding SDL_GPU target description and cache identity. 15 = All.
+            std::array<int, 4> colorWriteMasks{{15, 15, 15, 15}};
             int cullMode = 0;   // XNA CullMode ordinal; 0 = None
             bool wireframe = false;
             StencilKeyParams stencil;
@@ -1306,6 +1307,7 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
+                                                                          int colorTargetCount,
                                                                           bool depthTest, bool depthWrite, int depthFunc,
                                                                           const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU, int addressV);
@@ -1336,19 +1338,19 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColored3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineTextured3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColoredTextured3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineLitTextured3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true). params != nullptr: DrawPrimitivesEx's real GpuDrawParams path.
         void QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -1370,11 +1372,11 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
             std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineDualTexture3D(
             std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -1383,11 +1385,11 @@ namespace CNA::Internal::Backends::SdlGpu
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
         void IssueAlphaTestDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const AlphaTestDrawCommand& command,
                                SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                               SDL_GPUTextureFormat depthStencilFormat,
+                               SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                                SDL_GPUGraphicsPipeline*& boundPipeline);
         void IssueDualTextureDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const DualTextureDrawCommand& command,
                                  SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                                 SDL_GPUTextureFormat depthStencilFormat,
+                                 SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                                  SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-9: EnvironmentMapEffect (SDLGPU-33).
@@ -1396,13 +1398,13 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineEnvMap3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueueEnvMapDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
         void IssueEnvMapDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const EnvMapDrawCommand& command,
                             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                            SDL_GPUTextureFormat depthStencilFormat,
+                            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                             SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34). GetOrCreatePipelineSkinned3D's `hasVertexColor`
@@ -1413,13 +1415,13 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
             bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
         void IssueSkinnedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const SkinnedDrawCommand& command,
                              SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                             SDL_GPUTextureFormat depthStencilFormat,
+                             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                              SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF). `skinned` selects
@@ -1433,13 +1435,13 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
             bool skinned, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-            SDL_GPUTextureFormat depthStencilFormat, const RenderStateSnapshot& renderState);
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount, const RenderStateSnapshot& renderState);
         void QueuePbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
                           PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
         void IssuePbrDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const PbrDrawCommand& command,
                          SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                         SDL_GPUTextureFormat depthStencilFormat,
+                         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                          SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
@@ -1449,15 +1451,15 @@ namespace CNA::Internal::Backends::SdlGpu
         void UploadSceneDrawData(SDL_GPUCommandBuffer* cmd);
         void IssueColoredDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const ColoredDrawCommand& command,
                              SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                             SDL_GPUTextureFormat depthStencilFormat,
+                             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                              SDL_GPUGraphicsPipeline*& boundPipeline);
         void IssueTexturedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const TexturedDrawCommand& command,
                               SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                              SDL_GPUTextureFormat depthStencilFormat,
+                              SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                               SDL_GPUGraphicsPipeline*& boundPipeline);
         void IssueLitTexturedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const LitTexturedDrawCommand& command,
                                  SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                                 SDL_GPUTextureFormat depthStencilFormat,
+                                 SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
                                  SDL_GPUGraphicsPipeline*& boundPipeline);
         // Adversarial-review finding #4 (draw ordering): replaces the old fixed
         // "all Colored3D, then all Textured3D, ... then all Sprites" sequence with a single pass
@@ -1679,7 +1681,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // pre-baked/immutable, not a live pipeline-state-object mechanism. Captured into a
         // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
         BlendKeyParams blendParams_;
-        int colorWriteMask_ = 15;  ///< REMED-GFX-077: current BlendState.ColorWriteChannels (slot 0); 15 = All
+        std::array<int, 4> colorWriteMasks_{{15, 15, 15, 15}};  ///< REMED-GFX-077/-098: current per-MRT-slot masks
         int cullMode_ = 2;         ///< XNA CullMode ordinal; 2 = CullCounterClockwiseFace (RasterizerState's real default)
         bool fillModeWireframe_ = false;
         StencilKeyParams stencilParams_;  ///< readMask/writeMask live here now, see StencilKeyParams's own doc comment
