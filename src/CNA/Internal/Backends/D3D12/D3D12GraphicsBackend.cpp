@@ -1379,8 +1379,8 @@ namespace CNA::Internal::Backends::D3D12
         perDraw.VertexColorEnabled = 1.0f;
 
         D3DFogConstants fog{};
-        // REMED-GFX-005/010: fog disabled here (FogColorEnabled.w stays 0); the zero-init
-        // FogStartEnd is already an all-zero fog vector, so no explicit default is needed.
+        // REMED-GFX-005/010/061: the zero-initialized FogVector authoritatively disables fog;
+        // no separate enable scalar or explicit default is needed.
 
         ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
         ID3D12Resource* fogCB = GetOrCreateFogConstantBufferEXT();
@@ -1478,8 +1478,8 @@ namespace CNA::Internal::Backends::D3D12
         perDraw.VertexColorEnabled = 1.0f;
 
         D3DFogConstants fog{};
-        // REMED-GFX-005/010: fog disabled here (FogColorEnabled.w stays 0); the zero-init
-        // FogStartEnd is already an all-zero fog vector, so no explicit default is needed.
+        // REMED-GFX-005/010/061: the zero-initialized FogVector authoritatively disables fog;
+        // no separate enable scalar or explicit default is needed.
 
         ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
         ID3D12Resource* fogCB = GetOrCreateFogConstantBufferEXT();
@@ -1781,16 +1781,15 @@ namespace CNA::Internal::Backends::D3D12
             perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
 
             D3DFogConstants fog{};
-            fog.FogColorEnabled[0] = params.fogColor[0];
-            fog.FogColorEnabled[1] = params.fogColor[1];
-            fog.FogColorEnabled[2] = params.fogColor[2];
-            fog.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
-            // REMED-GFX-005/010: upload the FNA view-space fog vector (World*View 3rd column)
-            // into the repurposed FogStartEnd slot; the shader dots it with the object/post-skin pos.
-            fog.FogStartEnd[0] = params.fogVector[0];
-            fog.FogStartEnd[1] = params.fogVector[1];
-            fog.FogStartEnd[2] = params.fogVector[2];
-            fog.FogStartEnd[3] = params.fogVector[3];
+            fog.FogColor[0] = params.fogColor[0];
+            fog.FogColor[1] = params.fogColor[1];
+            fog.FogColor[2] = params.fogColor[2];
+            // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
+            // shader dots it with the object or post-skin position.
+            fog.FogVector[0] = params.fogVector[0];
+            fog.FogVector[1] = params.fogVector[1];
+            fog.FogVector[2] = params.fogVector[2];
+            fog.FogVector[3] = params.fogVector[3];
 
             ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
             ID3D12Resource* fogCB     = GetOrCreateFogConstantBufferEXT();
@@ -1840,16 +1839,15 @@ namespace CNA::Internal::Backends::D3D12
             c.EnvMapSpecularFresnel[1] = params.envMapSpecular[1];
             c.EnvMapSpecularFresnel[2] = params.envMapSpecular[2];
             c.EnvMapSpecularFresnel[3] = params.fresnelFactor;
-            c.FogColorEnabled[0] = params.fogColor[0];
-            c.FogColorEnabled[1] = params.fogColor[1];
-            c.FogColorEnabled[2] = params.fogColor[2];
-            c.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
-            // REMED-GFX-005/010: upload the FNA view-space fog vector (World*View 3rd column)
-            // into the repurposed FogStartEnd slot; the shader dots it with the object/post-skin pos.
-            c.FogStartEnd[0] = params.fogVector[0];
-            c.FogStartEnd[1] = params.fogVector[1];
-            c.FogStartEnd[2] = params.fogVector[2];
-            c.FogStartEnd[3] = params.fogVector[3];
+            c.FogColor[0] = params.fogColor[0];
+            c.FogColor[1] = params.fogColor[1];
+            c.FogColor[2] = params.fogColor[2];
+            // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
+            // shader dots it with the object or post-skin position.
+            c.FogVector[0] = params.fogVector[0];
+            c.FogVector[1] = params.fogVector[1];
+            c.FogVector[2] = params.fogVector[2];
+            c.FogVector[3] = params.fogVector[3];
             c.Light1Dir[0] = params.light1Dir[0];
             c.Light1Dir[1] = params.light1Dir[1];
             c.Light1Dir[2] = params.light1Dir[2];
@@ -1924,16 +1922,15 @@ namespace CNA::Internal::Backends::D3D12
             lights.Light2Diffuse[0] = params.light2Diffuse[0];
             lights.Light2Diffuse[1] = params.light2Diffuse[1];
             lights.Light2Diffuse[2] = params.light2Diffuse[2];
-            lights.FogColorEnabled[0] = params.fogColor[0];
-            lights.FogColorEnabled[1] = params.fogColor[1];
-            lights.FogColorEnabled[2] = params.fogColor[2];
-            lights.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
-            // REMED-GFX-005/010: upload the FNA view-space fog vector (World*View 3rd column)
-            // into the repurposed FogStartEnd slot; the shader dots it with the object/post-skin pos.
-            lights.FogStartEnd[0] = params.fogVector[0];
-            lights.FogStartEnd[1] = params.fogVector[1];
-            lights.FogStartEnd[2] = params.fogVector[2];
-            lights.FogStartEnd[3] = params.fogVector[3];
+            lights.FogColor[0] = params.fogColor[0];
+            lights.FogColor[1] = params.fogColor[1];
+            lights.FogColor[2] = params.fogColor[2];
+            // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
+            // shader dots it with the object or post-skin position.
+            lights.FogVector[0] = params.fogVector[0];
+            lights.FogVector[1] = params.fogVector[1];
+            lights.FogVector[2] = params.fogVector[2];
+            lights.FogVector[3] = params.fogVector[3];
 
             ID3D12Resource* perDrawCB = GetOrCreatePbrPerDrawConstantBufferEXT();
             ID3D12Resource* lightsCB  = GetOrCreatePbrLightsConstantBufferEXT();
@@ -2012,16 +2009,15 @@ namespace CNA::Internal::Backends::D3D12
                            static_cast<std::size_t>(boneCount) * 16u * sizeof(float));
 
             D3DSkinnedExtraConstants extra{};
-            extra.FogColorEnabled[0] = params.fogColor[0];
-            extra.FogColorEnabled[1] = params.fogColor[1];
-            extra.FogColorEnabled[2] = params.fogColor[2];
-            extra.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
-            // REMED-GFX-005/010: upload the FNA view-space fog vector (World*View 3rd column)
-            // into the repurposed FogStartEnd slot; the shader dots it with the object/post-skin pos.
-            extra.FogStartEnd[0] = params.fogVector[0];
-            extra.FogStartEnd[1] = params.fogVector[1];
-            extra.FogStartEnd[2] = params.fogVector[2];
-            extra.FogStartEnd[3] = params.fogVector[3];
+            extra.FogColor[0] = params.fogColor[0];
+            extra.FogColor[1] = params.fogColor[1];
+            extra.FogColor[2] = params.fogColor[2];
+            // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
+            // shader dots it with the object or post-skin position.
+            extra.FogVector[0] = params.fogVector[0];
+            extra.FogVector[1] = params.fogVector[1];
+            extra.FogVector[2] = params.fogVector[2];
+            extra.FogVector[3] = params.fogVector[3];
             extra.Light1Dir[0] = params.light1Dir[0];
             extra.Light1Dir[1] = params.light1Dir[1];
             extra.Light1Dir[2] = params.light1Dir[2];
@@ -2123,16 +2119,15 @@ namespace CNA::Internal::Backends::D3D12
             lighting.SpecularColorPower[1] = params.specularColor[1];
             lighting.SpecularColorPower[2] = params.specularColor[2];
             lighting.SpecularColorPower[3] = params.specularPower;
-            lighting.FogColorEnabled[0] = params.fogColor[0];
-            lighting.FogColorEnabled[1] = params.fogColor[1];
-            lighting.FogColorEnabled[2] = params.fogColor[2];
-            lighting.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
-            // REMED-GFX-005/010: upload the FNA view-space fog vector (World*View 3rd column)
-            // into the repurposed FogStartEnd slot; the shader dots it with the object/post-skin pos.
-            lighting.FogStartEnd[0] = params.fogVector[0];
-            lighting.FogStartEnd[1] = params.fogVector[1];
-            lighting.FogStartEnd[2] = params.fogVector[2];
-            lighting.FogStartEnd[3] = params.fogVector[3];
+            lighting.FogColor[0] = params.fogColor[0];
+            lighting.FogColor[1] = params.fogColor[1];
+            lighting.FogColor[2] = params.fogColor[2];
+            // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
+            // shader dots it with the object or post-skin position.
+            lighting.FogVector[0] = params.fogVector[0];
+            lighting.FogVector[1] = params.fogVector[1];
+            lighting.FogVector[2] = params.fogVector[2];
+            lighting.FogVector[3] = params.fogVector[3];
 
             ID3D12Resource* perDrawCB  = GetOrCreatePerDrawConstantBufferEXT();
             ID3D12Resource* lightingCB = GetOrCreateLightingConstantBufferEXT();
@@ -2155,16 +2150,15 @@ namespace CNA::Internal::Backends::D3D12
             perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
 
             D3DFogConstants fog{};
-            fog.FogColorEnabled[0] = params.fogColor[0];
-            fog.FogColorEnabled[1] = params.fogColor[1];
-            fog.FogColorEnabled[2] = params.fogColor[2];
-            fog.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
-            // REMED-GFX-005/010: upload the FNA view-space fog vector (World*View 3rd column)
-            // into the repurposed FogStartEnd slot; the shader dots it with the object/post-skin pos.
-            fog.FogStartEnd[0] = params.fogVector[0];
-            fog.FogStartEnd[1] = params.fogVector[1];
-            fog.FogStartEnd[2] = params.fogVector[2];
-            fog.FogStartEnd[3] = params.fogVector[3];
+            fog.FogColor[0] = params.fogColor[0];
+            fog.FogColor[1] = params.fogColor[1];
+            fog.FogColor[2] = params.fogColor[2];
+            // REMED-GFX-005/010/061: upload the authoritative FNA view-space fog vector; the
+            // shader dots it with the object or post-skin position.
+            fog.FogVector[0] = params.fogVector[0];
+            fog.FogVector[1] = params.fogVector[1];
+            fog.FogVector[2] = params.fogVector[2];
+            fog.FogVector[3] = params.fogVector[3];
 
             ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
             ID3D12Resource* fogCB     = GetOrCreateFogConstantBufferEXT();

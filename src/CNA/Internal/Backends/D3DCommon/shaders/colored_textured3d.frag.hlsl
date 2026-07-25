@@ -20,8 +20,8 @@ cbuffer PerDraw : register(b0)
 // constant buffer (GLSL set=0 binding=1) -- PerDraw above has zero spare bytes.
 cbuffer FogParams : register(b1)
 {
-    float4 FogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    float4 FogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    float4 FogColor;  // xyz = FogColor, w = reserved padding
+    float4 FogVector;      // CPU-prepared FNA view-space fog vector
 };
 
 struct PSInput
@@ -37,6 +37,6 @@ float4 main(PSInput input) : SV_Target
     float4 tex = (TextureEnabled > 0.5) ? uTexture.Sample(uTextureSampler, input.UV) : float4(1.0, 1.0, 1.0, 1.0);
     float4 outColor = tex * input.Tint;
     // Task 899: mix toward FogColor as FogFactor -> 0 (matches the established Task 888 formula).
-    outColor.rgb = lerp(FogColorEnabled.xyz, outColor.rgb, input.FogFactor);
+    outColor.rgb = lerp(FogColor.xyz, outColor.rgb, input.FogFactor);
     return outColor;
 }

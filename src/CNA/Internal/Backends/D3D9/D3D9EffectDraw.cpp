@@ -141,33 +141,6 @@ namespace CNA::Internal::Backends::D3D9
         struct Vec4Pad { float v[4]; };
         Vec4Pad Pad3(const float v3[3]) { return Vec4Pad{{v3[0], v3[1], v3[2], 0.0f}}; }
 
-        /// FNA's EffectHelpers.SetFogVector, using world*view (not the full WVP) -- shared by every
-        /// effect that has a FogVector constant (BasicEffect, AlphaTestEffect, DualTextureEffect,
-        /// EnvironmentMapEffect). When fog is disabled FNA resets this to zero, and
-        /// dot(position, 0) is always 0 (no fog), so the zero-initialized default already matches
-        /// "disabled" with no extra branching at the call site.
-        Vec4Pad ComputeFogVectorEXT(const Matrix& world, const Matrix& view, bool fogEnabled,
-                                    float fogStart, float fogEnd)
-        {
-            Vec4Pad fogVector{{0.0f, 0.0f, 0.0f, 0.0f}};
-            if (!fogEnabled) return fogVector;
-
-            const Matrix worldView = world * view;
-            if (fogStart == fogEnd)
-            {
-                fogVector.v[3] = 1.0f; // degenerate case: force 100% fogged (FNA's own SetFogVector)
-            }
-            else
-            {
-                const float scale = 1.0f / (fogStart - fogEnd);
-                fogVector.v[0] = worldView.M13 * scale;
-                fogVector.v[1] = worldView.M23 * scale;
-                fogVector.v[2] = worldView.M33 * scale;
-                fogVector.v[3] = (worldView.M43 + fogStart) * scale;
-            }
-            return fogVector;
-        }
-
         /// D9-81 (corrected during D9-82b -- see that row's own updated note): a light with BOTH
         /// diffuse and specular still (0,0,0) contributes exactly zero to Lighting.fxh's
         /// ComputeLights() regardless of whether that zero came from Enabled=false or from an
@@ -243,8 +216,8 @@ namespace CNA::Internal::Backends::D3D9
             // NoFog compiled variant at all (confirmed directly in the .fx source: only 4 VSArray
             // entries and 1 relevant PSArray entry exist for this whole bucket), so both cases
             // below intentionally reference the identical register table -- the shared
-            // ComputeFogVectorEXT() FogVector already produces a no-op fog contribution when
-            // fogEnabled is false, which is how the single compiled shader covers both cases.
+            // GpuDrawParams::fogVector is zero when fog is disabled, producing a no-op fog
+            // contribution and allowing the single compiled shader to cover both cases.
             case 28: [[fallthrough]];
             case 29: return {kBasicEffect_VSBasicPixelLightingTx_Registers,
                               static_cast<int>(std::size(kBasicEffect_VSBasicPixelLightingTx_Registers)),
@@ -675,8 +648,7 @@ namespace CNA::Internal::Backends::D3D9
         // silently no-ops for every non-pixel-lit bucket's PS table, which has no such name.
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DiffuseColor", params.diffuseColor);
 
-        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
-        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", params.fogVector);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
         if (params.lightingEnabled)
@@ -842,8 +814,7 @@ namespace CNA::Internal::Backends::D3D9
         // (unlike BasicEffect's lit path, there is nothing to fold in here).
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
 
-        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
-        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", params.fogVector);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
         // AlphaTest: GpuDrawParams::alphaTest is already exactly the real {refVal,tolerance,
@@ -911,8 +882,7 @@ namespace CNA::Internal::Backends::D3D9
         // same pattern as AlphaTestEffect, no adjustment needed (no lighting/emissive concept here).
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
 
-        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
-        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", params.fogVector);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
         // PSDualTexture's real formula (DualTextureEffect.fx): color = SampleTex(Texture,uv0);
@@ -1021,8 +991,7 @@ namespace CNA::Internal::Backends::D3D9
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2DiffuseColor",
                                          Pad3(params.light2Diffuse).v);
 
-        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
-        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", params.fogVector);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
@@ -1157,8 +1126,7 @@ namespace CNA::Internal::Backends::D3D9
 
         UploadBonesVS(device_.Get(), regs.vs, regs.vsCount, params);
 
-        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
-        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", params.fogVector);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
         device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));

@@ -15,8 +15,8 @@ cbuffer EnvMapParams : register(b2)
     float4 Light0DiffFresnelEn;  // xyz = light diffuse, w = fresnelEnabled (0/1)
     float4 EnvMapSpecFresnelF;   // xyz = envMapSpecular, w = fresnelFactor
     // Task 899's noted cheap leftover: fog packed into this constant buffer's spare tail bytes.
-    float4 FogColorEnabled;      // xyz = FogColor, w = fogEnabled
-    float4 FogStartEnd;          // x = fogStart, y = fogEnd, zw = unused
+    float4 FogColor;      // xyz = FogColor, w = reserved padding
+    float4 FogVector;          // CPU-prepared FNA view-space fog vector
     // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
     float4 Light1DirPad;
     float4 Light1DiffPad;
@@ -62,6 +62,6 @@ float4 main(PSInput input) : SV_Target
     // combinedAlpha before use -- the base lerp's envSample.rgb was still unscaled here.
     float3 rgb = lerp(baseColor, envSample.rgb * combinedAlpha, blendFactor) + EnvMapSpecFresnelF.xyz * envSample.a * combinedAlpha;
     // Mix toward FogColor as FogFactor -> 0 (matches the established Task 888 formula).
-    rgb = lerp(FogColorEnabled.xyz, rgb, input.FogFactor);
+    rgb = lerp(FogColor.xyz, rgb, input.FogFactor);
     return float4(rgb, combinedAlpha);
 }

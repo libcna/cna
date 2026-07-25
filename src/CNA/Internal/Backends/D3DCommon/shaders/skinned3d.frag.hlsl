@@ -18,8 +18,8 @@ cbuffer PerDraw : register(b0)
 
 cbuffer FogParams : register(b2)
 {
-    float4 FogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    float4 FogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    float4 FogColor;  // xyz = FogColor, w = reserved padding
+    float4 FogVector;      // CPU-prepared FNA view-space fog vector
     // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
     float4 Light1DirPad;
     float4 Light1DiffPad;
@@ -65,6 +65,6 @@ float4 main(PSInput input) : SV_Target
     float4 outColor = float4(litRGB * tex.rgb, DiffuseColor.a * tex.a);
     outColor.rgb += specularRGB * outColor.a;
     // Task 899: mix toward FogColor as FogFactor -> 0 (matches the established Task 888 formula).
-    outColor.rgb = lerp(FogColorEnabled.xyz, outColor.rgb, input.FogFactor);
+    outColor.rgb = lerp(FogColor.xyz, outColor.rgb, input.FogFactor);
     return outColor;
 }

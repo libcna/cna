@@ -30,8 +30,8 @@ cbuffer LitLightParams : register(b1)
     float4 Light1SpecularPad;
     float4 Light2SpecularPad;
     float4 SpecularColorPower;
-    float4 FogColorEnabled;
-    float4 FogStartEnd;
+    float4 FogColor;
+    float4 FogVector;
 };
 
 struct PSInput
@@ -53,6 +53,6 @@ float4 main(PSInput input) : SV_Target
     float4 color = float4(input.LitRGB, input.Tint.a) * tex;
     color.rgb += input.SpecularRGB * color.a;
 
-    color.rgb = lerp(FogColorEnabled.xyz, color.rgb, input.FogFactor);
+    color.rgb = lerp(FogColor.xyz, color.rgb, input.FogFactor);
     return color;
 }

@@ -54,11 +54,12 @@ namespace CNA::Internal::Backends::D3DCommon
     /// header only fixes the byte layout, not the register slot a given draw call binds it to.
     struct alignas(16) D3DFogConstants
     {
-        float FogColorEnabled[4];   ///< offset 0: xyz = FogColor, w = fogEnabled (>0.5 = enabled)
-        float FogStartEnd[4];       ///< offset 16: x = fogStart, y = fogEnd, zw = unused
+        float FogColor[4];   ///< offset 0: xyz = FogColor, w = reserved padding
+        float FogVector[4];  ///< offset 16: CPU-prepared FNA view-space fog vector
     };
     static_assert(sizeof(D3DFogConstants) == 32, "D3DFogConstants must match FogParams's real 32-byte HLSL cbuffer size");
-    static_assert(offsetof(D3DFogConstants, FogStartEnd) == 16, "D3DFogConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DFogConstants, FogColor) == 0, "D3DFogConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DFogConstants, FogVector) == 16, "D3DFogConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DFogConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
     /// Matches lit_textured3d.vert.hlsl's `cbuffer LitLightParams : register(b1)` byte-for-byte
@@ -82,14 +83,15 @@ namespace CNA::Internal::Backends::D3DCommon
         float Light1Specular[4];       ///< offset 176
         float Light2Specular[4];       ///< offset 192
         float SpecularColorPower[4];   ///< offset 208: xyz = SpecularColor, w = SpecularPower
-        float FogColorEnabled[4];      ///< offset 224: xyz = FogColor, w = fogEnabled
-        float FogStartEnd[4];          ///< offset 240: x = fogStart, y = fogEnd, zw = unused
+        float FogColor[4];            ///< offset 224: xyz = FogColor, w = reserved padding
+        float FogVector[4];           ///< offset 240: CPU-prepared FNA view-space fog vector
     };
     static_assert(sizeof(D3DLightingConstants) == 256, "D3DLightingConstants must match LitLightParams's real 256-byte HLSL cbuffer size");
     static_assert(offsetof(D3DLightingConstants, World) == 80, "D3DLightingConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DLightingConstants, EyePosition) == 144, "D3DLightingConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DLightingConstants, SpecularColorPower) == 208, "D3DLightingConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DLightingConstants, FogColorEnabled) == 224, "D3DLightingConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DLightingConstants, FogColor) == 224, "D3DLightingConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DLightingConstants, FogVector) == 240, "D3DLightingConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DLightingConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
     /// DX-64: matches alpha_test3d.vert.hlsl / alpha_test3d.frag.hlsl's shared
@@ -144,8 +146,8 @@ namespace CNA::Internal::Backends::D3DCommon
     /// for lit_textured3d).
     struct alignas(16) D3DSkinnedExtraConstants
     {
-        float FogColorEnabled[4];      ///< offset 0:   xyz = FogColor, w = fogEnabled
-        float FogStartEnd[4];          ///< offset 16:  x = fogStart, y = fogEnd, zw = unused
+        float FogColor[4];            ///< offset 0:   xyz = FogColor, w = reserved padding
+        float FogVector[4];           ///< offset 16:  CPU-prepared FNA view-space fog vector
         float Light1Dir[4];            ///< offset 32:  xyz + pad
         float Light1Diffuse[4];        ///< offset 48
         float Light2Dir[4];            ///< offset 64
@@ -159,6 +161,8 @@ namespace CNA::Internal::Backends::D3DCommon
         float EmissiveColor[4];        ///< offset 240: REMED-GFX-008 pre-folded (emissive + ambient*diffuse)*alpha
     };
     static_assert(sizeof(D3DSkinnedExtraConstants) == 256, "D3DSkinnedExtraConstants must match skinned3d's real 256-byte FogParams cbuffer size");
+    static_assert(offsetof(D3DSkinnedExtraConstants, FogColor) == 0, "D3DSkinnedExtraConstants FogColor offset mismatch vs HLSL");
+    static_assert(offsetof(D3DSkinnedExtraConstants, FogVector) == 16, "D3DSkinnedExtraConstants FogVector offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, EmissiveColor) == 240, "D3DSkinnedExtraConstants EmissiveColor offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, Light1Dir) == 32, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DSkinnedExtraConstants, World) == 96, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
@@ -192,8 +196,8 @@ namespace CNA::Internal::Backends::D3DCommon
         float Light0Dir[4];          ///< offset 48:  xyz + pad
         float Light0DiffuseFresnel[4]; ///< offset 64: xyz = Light0Diffuse, w = fresnelEnabled (0/1)
         float EnvMapSpecularFresnel[4]; ///< offset 80: xyz = envMapSpecular, w = fresnelFactor
-        float FogColorEnabled[4];    ///< offset 96:  xyz = FogColor, w = fogEnabled
-        float FogStartEnd[4];        ///< offset 112: x = fogStart, y = fogEnd, zw = unused
+        float FogColor[4];          ///< offset 96:  xyz = FogColor, w = reserved padding
+        float FogVector[4];         ///< offset 112: CPU-prepared FNA view-space fog vector
         float Light1Dir[4];          ///< offset 128: xyz + pad
         float Light1Diffuse[4];      ///< offset 144
         float Light2Dir[4];          ///< offset 160: xyz + pad
@@ -201,7 +205,8 @@ namespace CNA::Internal::Backends::D3DCommon
     };
     static_assert(sizeof(D3DEnvMapConstants) == 192, "D3DEnvMapConstants must match EnvMapParams's real 192-byte HLSL cbuffer size");
     static_assert(offsetof(D3DEnvMapConstants, EmissiveAmount) == 32, "D3DEnvMapConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DEnvMapConstants, FogColorEnabled) == 96, "D3DEnvMapConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DEnvMapConstants, FogColor) == 96, "D3DEnvMapConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DEnvMapConstants, FogVector) == 112, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, Light1Dir) == 128, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DEnvMapConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
@@ -252,12 +257,12 @@ namespace CNA::Internal::Backends::D3DCommon
         float Light1Diffuse[4];     ///< offset 64
         float Light2Dir[4];         ///< offset 80:  xyz + pad
         float Light2Diffuse[4];     ///< offset 96
-        float FogColorEnabled[4];   ///< offset 112: xyz = FogColor, w = fogEnabled
-        float FogStartEnd[4];       ///< offset 128: x = fogStart, y = fogEnd, zw = unused
+        float FogColor[4];          ///< offset 112: xyz = FogColor, w = reserved padding
+        float FogVector[4];         ///< offset 128: CPU-prepared FNA view-space fog vector
     };
     static_assert(sizeof(D3DPbrLightConstants) == 144, "D3DPbrLightConstants must match PbrLights's real 144-byte HLSL cbuffer size");
     static_assert(offsetof(D3DPbrLightConstants, Light0Dir) == 16, "D3DPbrLightConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DPbrLightConstants, FogColorEnabled) == 112, "D3DPbrLightConstants field offset mismatch vs HLSL");
-    static_assert(offsetof(D3DPbrLightConstants, FogStartEnd) == 128, "D3DPbrLightConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrLightConstants, FogColor) == 112, "D3DPbrLightConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrLightConstants, FogVector) == 128, "D3DPbrLightConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DPbrLightConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 }

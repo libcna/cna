@@ -34,8 +34,8 @@ cbuffer PbrLights : register(b2)
     float4 Light1DiffusePad;
     float4 Light2DirPad;
     float4 Light2DiffusePad;
-    float4 FogColorEnabled;
-    float4 FogStartEnd;
+    float4 FogColor;
+    float4 FogVector;
 };
 
 struct PSInput
@@ -100,6 +100,6 @@ float4 main(PSInput input) : SV_Target
     float3 emissive = EmissiveRoughness.xyz * uEmissiveMap.Sample(uEmissiveMapSampler, input.UV).rgb;
 
     float4 outColor = float4(ambient + Lo + emissive, alpha);
-    outColor.rgb = lerp(FogColorEnabled.xyz, outColor.rgb, input.FogFactor);
+    outColor.rgb = lerp(FogColor.xyz, outColor.rgb, input.FogFactor);
     return outColor;
 }

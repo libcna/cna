@@ -21,8 +21,8 @@ cbuffer PbrLights : register(b1)
     float4 Light1DiffusePad;
     float4 Light2DirPad;
     float4 Light2DiffusePad;
-    float4 FogColorEnabled; // xyz = FogColor, w = fogEnabled
-    float4 FogStartEnd;     // x = fogStart, y = fogEnd, zw = unused
+    float4 FogColor; // xyz = FogColor, w = reserved padding
+    float4 FogVector;     // CPU-prepared FNA view-space fog vector
 };
 
 struct VSInput
@@ -77,12 +77,10 @@ VSOutput main(VSInput input)
     // skinned3d.vert.hlsl) -- not EasyGL's own differently-derived formula (Task 1111's own note);
     // this file follows the D3D11 backend's existing convention, same "don't invent a new one"
     // discipline the rest of this port already applies.
-    // REMED-GFX-005/010: FNA view-space fog. FogStartEnd now carries EffectHelpers.SetFogVector
+    // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
     // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.
-    output.FogFactor = (FogColorEnabled.w > 0.5)
-        ? 1.0 - saturate(dot(float4(input.Position, 1.0), FogStartEnd))
-        : 1.0;
+    output.FogFactor = 1.0 - saturate(dot(float4(input.Position, 1.0), FogVector));
 
     return output;
 }

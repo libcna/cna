@@ -25,8 +25,8 @@ cbuffer PerDraw : register(b0)
 
 cbuffer FogParams : register(b2)
 {
-    float4 FogColorEnabled;
-    float4 FogStartEnd;
+    float4 FogColor;
+    float4 FogVector;
     float4 Light1DirPad;
     float4 Light1DiffPad;
     float4 Light2DirPad;
@@ -74,6 +74,6 @@ float4 main(PSInput input) : SV_Target
     float4 outColor = float4(litRGB * tex.rgb, DiffuseColor.a * tex.a * vc.a);
     outColor.rgb += specularRGB * outColor.a;
     outColor.rgb *= vc.rgb;
-    outColor.rgb = lerp(FogColorEnabled.xyz, outColor.rgb, input.FogFactor);
+    outColor.rgb = lerp(FogColor.xyz, outColor.rgb, input.FogFactor);
     return outColor;
 }

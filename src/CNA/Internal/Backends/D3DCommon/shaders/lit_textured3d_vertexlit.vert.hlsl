@@ -34,8 +34,8 @@ cbuffer LitLightParams : register(b1)
     float4 Light1SpecularPad;
     float4 Light2SpecularPad;
     float4 SpecularColorPower;
-    float4 FogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    float4 FogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    float4 FogColor;  // xyz = FogColor, w = reserved padding
+    float4 FogVector;      // CPU-prepared FNA view-space fog vector
 };
 
 struct VSInput
@@ -97,12 +97,10 @@ VSOutput main(VSInput input)
 
     output.LitRGB = lightSum * DiffuseColor.rgb + EmissiveColorPad.xyz;
 
-    // REMED-GFX-005/010: FNA view-space fog. FogStartEnd now carries EffectHelpers.SetFogVector
+    // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
     // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.
-    output.FogFactor = (FogColorEnabled.w > 0.5)
-        ? 1.0 - saturate(dot(float4(input.Position, 1.0), FogStartEnd))
-        : 1.0;
+    output.FogFactor = 1.0 - saturate(dot(float4(input.Position, 1.0), FogVector));
 
     return output;
 }

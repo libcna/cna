@@ -18,8 +18,8 @@ cbuffer PerDraw : register(b0)
 // constant buffer (GLSL set=0 binding=1) -- PerDraw above has zero spare bytes.
 cbuffer FogParams : register(b1)
 {
-    float4 FogColorEnabled;  // xyz = FogColor, w = fogEnabled
-    float4 FogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    float4 FogColor;  // xyz = FogColor, w = reserved padding
+    float4 FogVector;      // CPU-prepared FNA view-space fog vector
 };
 
 struct VSInput
@@ -48,13 +48,10 @@ VSOutput main(VSInput input)
     // Mix vertex color and diffuse based on VertexColorEnabled flag.
     output.Tint = (VertexColorEnabled > 0.5) ? input.Color * DiffuseColor : DiffuseColor;
 
-    // Task 899: fog factor from raw object-space Z (matches the established Task 888 formula).
-    // REMED-GFX-005/010: FNA view-space fog. FogStartEnd now carries EffectHelpers.SetFogVector
+    // REMED-GFX-005/010/061: FNA view-space fog. FogVector carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
     // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.
-    output.FogFactor = (FogColorEnabled.w > 0.5)
-        ? 1.0 - saturate(dot(float4(input.Position, 1.0), FogStartEnd))
-        : 1.0;
+    output.FogFactor = 1.0 - saturate(dot(float4(input.Position, 1.0), FogVector));
 
     return output;
 }

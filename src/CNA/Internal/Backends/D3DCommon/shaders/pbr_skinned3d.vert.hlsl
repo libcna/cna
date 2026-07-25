@@ -29,8 +29,8 @@ cbuffer PbrLights : register(b2)
     float4 Light1DiffusePad;
     float4 Light2DirPad;
     float4 Light2DiffusePad;
-    float4 FogColorEnabled;
-    float4 FogStartEnd;
+    float4 FogColor;
+    float4 FogVector;
 };
 
 struct VSInput
@@ -91,12 +91,10 @@ VSOutput main(VSInput input)
     output.UV = input.UV;
     output.WorldPos = mul(skinnedPos, World).xyz;
 
-    // REMED-GFX-005/010: FNA view-space fog. FogStartEnd now carries EffectHelpers.SetFogVector
+    // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector
     // (World*View 3rd column baked CPU-side); keep = 1 - saturate(dot(pos, fogVector)) is the
     // corrected (non-mirrored) FNA factor in eye-space Z, not object-space. Zero vector = no fog.
-    output.FogFactor = (FogColorEnabled.w > 0.5)
-        ? 1.0 - saturate(dot(float4(skinnedPos.xyz, 1.0), FogStartEnd))
-        : 1.0;
+    output.FogFactor = 1.0 - saturate(dot(float4(skinnedPos.xyz, 1.0), FogVector));
 
     return output;
 }

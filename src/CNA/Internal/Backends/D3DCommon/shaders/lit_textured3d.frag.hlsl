@@ -32,10 +32,10 @@ cbuffer LitLightParams : register(b1)
     float4 Light2SpecularPad;
     float4 SpecularColorPower;  // xyz = material SpecularColor, w = SpecularPower
     // Task 888: fog, packed into the constant buffer's previously-unused trailing 32 bytes.
-    // Vertex-stage computes FogFactor from FogColorEnabled.w/FogStartEnd; only FogColorEnabled.xyz
+    // Vertex-stage computes FogFactor from FogVector; only FogColor.xyz
     // needed here.
-    float4 FogColorEnabled;     // xyz = FogColor, w = fogEnabled
-    float4 FogStartEnd;         // x = fogStart, y = fogEnd, zw = unused
+    float4 FogColor;     // xyz = FogColor, w = reserved padding
+    float4 FogVector;         // CPU-prepared FNA view-space fog vector
 };
 
 struct PSInput
@@ -87,6 +87,6 @@ float4 main(PSInput input) : SV_Target
         color = input.Tint * tex;
     }
     // Task 888: mix toward FogColor as FogFactor -> 0 (matches EasyGL's established formula).
-    color.rgb = lerp(FogColorEnabled.xyz, color.rgb, input.FogFactor);
+    color.rgb = lerp(FogColor.xyz, color.rgb, input.FogFactor);
     return color;
 }
