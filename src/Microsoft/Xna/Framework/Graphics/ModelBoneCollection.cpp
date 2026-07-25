@@ -2,12 +2,17 @@
 #include <stdexcept>
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     ModelBone* ModelBoneCollection::operator[](int index) const
     {
-        return bones_.at(static_cast<std::size_t>(index));
+        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+        System::ArgumentOutOfRangeException::ThrowIfGreaterThanOrEqual(
+            index, static_cast<int>(bones_.size()), "index"
+        );
+        return bones_[static_cast<std::size_t>(index)];
     }
 
     ModelBone* ModelBoneCollection::operator[](const std::string& name) const

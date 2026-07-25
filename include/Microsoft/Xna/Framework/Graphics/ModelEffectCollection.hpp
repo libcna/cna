@@ -19,6 +19,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Retrieves an Effect by index.
          * @param index The zero-based index of the effect to retrieve.
          * @return Pointer to the Effect at the specified index.
+         * @throws System::ArgumentOutOfRangeException if index is outside the collection.
          */
         [[nodiscard]] Effect* operator[](int index) const;
 

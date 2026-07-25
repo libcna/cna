@@ -2,12 +2,17 @@
 #include <stdexcept>
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     ModelMesh* ModelMeshCollection::operator[](int index) const
     {
-        return meshes_.at(static_cast<std::size_t>(index));
+        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+        System::ArgumentOutOfRangeException::ThrowIfGreaterThanOrEqual(
+            index, static_cast<int>(meshes_.size()), "index"
+        );
+        return meshes_[static_cast<std::size_t>(index)];
     }
 
     ModelMesh* ModelMeshCollection::operator[](const std::string& name) const

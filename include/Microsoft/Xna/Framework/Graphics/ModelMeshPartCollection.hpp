@@ -19,6 +19,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Retrieves a ModelMeshPart by index.
          * @param index The zero-based index of the part to retrieve.
          * @return Pointer to the ModelMeshPart at the specified index.
+         * @throws System::ArgumentOutOfRangeException if index is outside the collection.
          */
         [[nodiscard]] ModelMeshPart* operator[](int index) const;
 

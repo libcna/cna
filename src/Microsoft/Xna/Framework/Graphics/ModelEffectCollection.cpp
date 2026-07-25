@@ -3,10 +3,16 @@
 
 #include <algorithm>
 
+#include "System/ArgumentOutOfRangeException.hpp"
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     Effect* ModelEffectCollection::operator[](int index) const
     {
+        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+        System::ArgumentOutOfRangeException::ThrowIfGreaterThanOrEqual(
+            index, static_cast<int>(effects_.size()), "index"
+        );
         return effects_[static_cast<std::size_t>(index)];
     }
 

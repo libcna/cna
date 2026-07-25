@@ -20,6 +20,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Retrieves a ModelMesh by index.
          * @param index The zero-based index of the mesh to retrieve.
          * @return Pointer to the ModelMesh at the specified index.
+         * @throws System::ArgumentOutOfRangeException if index is outside the collection.
          */
         [[nodiscard]] ModelMesh* operator[](int index) const;
 

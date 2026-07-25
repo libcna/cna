@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
 {
     ModelMeshPart* ModelMeshPartCollection::operator[](int index) const
     {
+        System::ArgumentOutOfRangeException::ThrowIfNegative(index, "index");
+        System::ArgumentOutOfRangeException::ThrowIfGreaterThanOrEqual(
+            index, static_cast<int>(parts_.size()), "index"
+        );
         return parts_[static_cast<std::size_t>(index)];
     }
 

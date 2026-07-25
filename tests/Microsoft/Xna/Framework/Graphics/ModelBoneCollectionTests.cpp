@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -16,7 +17,7 @@ TEST(ModelBoneCollectionTest, DefaultConstructorCountIsZero)
 TEST(ModelBoneCollectionTest, IndexOutOfRangeThrows)
 {
     ModelBoneCollection col;
-    EXPECT_THROW(col[0], std::out_of_range);
+    EXPECT_THROW((void) col[0], System::ArgumentOutOfRangeException);
 }
 
 TEST(ModelBoneCollectionTest, NameLookupNotFoundThrows)

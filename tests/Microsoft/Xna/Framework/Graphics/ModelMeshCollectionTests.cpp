@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using namespace Microsoft::Xna::Framework::Graphics;
 
@@ -24,7 +25,7 @@ TEST(ModelMeshCollectionTest, DefaultConstructorCountIsZero)
 TEST(ModelMeshCollectionTest, IndexOutOfRangeThrows)
 {
     ModelMeshCollection col;
-    EXPECT_THROW({ [[maybe_unused]] auto* m = col[0]; }, std::out_of_range);
+    EXPECT_THROW((void) col[0], System::ArgumentOutOfRangeException);
 }
 
 TEST(ModelMeshCollectionTest, NameLookupNotFoundThrows)
