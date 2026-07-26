@@ -19,6 +19,194 @@ namespace CNA::Internal::Backends::SdlGpu
 {
     namespace
     {
+        enum class ConstructionShader : std::size_t
+        {
+            SpriteVertex,
+            SpriteFragment,
+            ColoredVertex,
+            ColoredFragment,
+            TexturedVertex,
+            ColoredTexturedVertex,
+            TexturedFragment,
+            LitTexturedVertex,
+            LitTexturedFragment,
+            AlphaTestVertex,
+            AlphaTestColoredVertex,
+            AlphaTestFragment,
+            DualTextureVertex,
+            DualTextureColoredVertex,
+            DualTextureFragment,
+            EnvMapVertex,
+            EnvMapFragment,
+            SkinnedVertex,
+            SkinnedColoredVertex,
+            SkinnedColoredFragment,
+            PbrVertex,
+            PbrSkinnedVertex,
+            PbrFragment,
+            Count
+        };
+
+        [[nodiscard]] const char* FailurePointName(SdlGpuFailurePointEXT point)
+        {
+            switch (point)
+            {
+                case SdlGpuFailurePointEXT::DeviceCreation: return "device creation";
+                case SdlGpuFailurePointEXT::WindowClaim: return "window claiming";
+                case SdlGpuFailurePointEXT::SwapchainSetup: return "swapchain setup";
+                case SdlGpuFailurePointEXT::DepthStencilFormatQuery: return "depth/stencil format query";
+                case SdlGpuFailurePointEXT::SpriteVertexShaderCreation: return "sprite vertex shader creation";
+                case SdlGpuFailurePointEXT::SpriteFragmentShaderCreation: return "sprite fragment shader creation";
+                case SdlGpuFailurePointEXT::ColoredVertexShaderCreation: return "colored vertex shader creation";
+                case SdlGpuFailurePointEXT::ColoredFragmentShaderCreation: return "colored fragment shader creation";
+                case SdlGpuFailurePointEXT::TexturedVertexShaderCreation: return "textured vertex shader creation";
+                case SdlGpuFailurePointEXT::ColoredTexturedVertexShaderCreation: return "colored-textured vertex shader creation";
+                case SdlGpuFailurePointEXT::TexturedFragmentShaderCreation: return "textured fragment shader creation";
+                case SdlGpuFailurePointEXT::LitTexturedVertexShaderCreation: return "lit-textured vertex shader creation";
+                case SdlGpuFailurePointEXT::LitTexturedFragmentShaderCreation: return "lit-textured fragment shader creation";
+                case SdlGpuFailurePointEXT::AlphaTestVertexShaderCreation: return "alpha-test vertex shader creation";
+                case SdlGpuFailurePointEXT::AlphaTestColoredVertexShaderCreation: return "alpha-test colored vertex shader creation";
+                case SdlGpuFailurePointEXT::AlphaTestFragmentShaderCreation: return "alpha-test fragment shader creation";
+                case SdlGpuFailurePointEXT::DualTextureVertexShaderCreation: return "dual-texture vertex shader creation";
+                case SdlGpuFailurePointEXT::DualTextureColoredVertexShaderCreation: return "dual-texture colored vertex shader creation";
+                case SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation: return "dual-texture fragment shader creation";
+                case SdlGpuFailurePointEXT::EnvMapVertexShaderCreation: return "environment-map vertex shader creation";
+                case SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation: return "environment-map fragment shader creation";
+                case SdlGpuFailurePointEXT::SkinnedVertexShaderCreation: return "skinned vertex shader creation";
+                case SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation: return "skinned-colored vertex shader creation";
+                case SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation: return "skinned-colored fragment shader creation";
+                case SdlGpuFailurePointEXT::PbrVertexShaderCreation: return "PBR vertex shader creation";
+                case SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation: return "skinned PBR vertex shader creation";
+                case SdlGpuFailurePointEXT::PbrFragmentShaderCreation: return "PBR fragment shader creation";
+                case SdlGpuFailurePointEXT::WindowMetricsInitialization: return "window metrics initialization";
+                case SdlGpuFailurePointEXT::BackendRegistration: return "backend registration";
+                case SdlGpuFailurePointEXT::AfterBackendRegistration: return "post-registration commit";
+                case SdlGpuFailurePointEXT::FrameCommandBufferAcquisition: return "frame command-buffer acquisition";
+                case SdlGpuFailurePointEXT::GraphicsPipelineCreation: return "graphics pipeline creation";
+                case SdlGpuFailurePointEXT::SamplerCreation: return "sampler creation";
+                case SdlGpuFailurePointEXT::DefaultWhiteTextureCreation: return "default white texture creation";
+                case SdlGpuFailurePointEXT::DefaultFlatNormalTextureCreation: return "default flat-normal texture creation";
+                case SdlGpuFailurePointEXT::None: return "none";
+            }
+            return "unknown";
+        }
+
+        void NotifyResource(const SdlGpuTestHooksEXT& hooks, SdlGpuResourceKindEXT resource,
+                            SdlGpuResourceEventEXT event) noexcept
+        {
+            if (hooks.resourceEvent != nullptr)
+                hooks.resourceEvent(hooks.context, resource, event);
+        }
+
+        void InjectFailure(const SdlGpuTestHooksEXT& hooks, bool& injected,
+                           SdlGpuFailurePointEXT point)
+        {
+            if (!injected && hooks.failAt == point)
+            {
+                injected = true;
+                throw std::runtime_error(
+                    std::string("CNA SDL_GPU: injected failure during ") + FailurePointName(point));
+            }
+        }
+
+        class FrameCommandBufferOwner
+        {
+        public:
+            FrameCommandBufferOwner(SDL_GPUCommandBuffer* commandBuffer,
+                                    const SdlGpuTestHooksEXT& testHooks)
+                : commandBuffer_(commandBuffer), hooks_(testHooks)
+            {
+                NotifyResource(hooks_, SdlGpuResourceKindEXT::FrameCommandBuffer,
+                               SdlGpuResourceEventEXT::Acquired);
+            }
+
+            FrameCommandBufferOwner(const FrameCommandBufferOwner&) = delete;
+            FrameCommandBufferOwner& operator=(const FrameCommandBufferOwner&) = delete;
+
+            ~FrameCommandBufferOwner()
+            {
+                FinishForFailure();
+            }
+
+            [[nodiscard]] SDL_GPUCommandBuffer* Get() const { return commandBuffer_; }
+
+            void SwapchainAcquisitionStarted() { mustSubmit_ = true; }
+
+            [[nodiscard]] bool Submit()
+            {
+                if (finished_)
+                    return true;
+                finished_ = true;
+                const bool result = SDL_SubmitGPUCommandBuffer(commandBuffer_);
+                NotifyResource(hooks_, SdlGpuResourceKindEXT::FrameCommandBuffer,
+                               SdlGpuResourceEventEXT::Released);
+                return result;
+            }
+
+            void FinishForFailure() noexcept
+            {
+                if (finished_)
+                    return;
+                finished_ = true;
+                if (mustSubmit_)
+                    (void)SDL_SubmitGPUCommandBuffer(commandBuffer_);
+                else
+                    (void)SDL_CancelGPUCommandBuffer(commandBuffer_);
+                NotifyResource(hooks_, SdlGpuResourceKindEXT::FrameCommandBuffer,
+                               SdlGpuResourceEventEXT::Released);
+            }
+
+        private:
+            SDL_GPUCommandBuffer* commandBuffer_ = nullptr;
+            SdlGpuTestHooksEXT hooks_{};
+            bool mustSubmit_ = false;
+            bool finished_ = false;
+        };
+
+        class RenderPassOwner
+        {
+        public:
+            explicit RenderPassOwner(SDL_GPURenderPass* pass) : pass_(pass) {}
+            RenderPassOwner(const RenderPassOwner&) = delete;
+            RenderPassOwner& operator=(const RenderPassOwner&) = delete;
+            ~RenderPassOwner() { End(); }
+
+            [[nodiscard]] SDL_GPURenderPass* Get() const { return pass_; }
+            void End() noexcept
+            {
+                if (pass_ != nullptr)
+                {
+                    SDL_EndGPURenderPass(pass_);
+                    pass_ = nullptr;
+                }
+            }
+
+        private:
+            SDL_GPURenderPass* pass_ = nullptr;
+        };
+
+        class CopyPassOwner
+        {
+        public:
+            explicit CopyPassOwner(SDL_GPUCopyPass* pass) : pass_(pass) {}
+            CopyPassOwner(const CopyPassOwner&) = delete;
+            CopyPassOwner& operator=(const CopyPassOwner&) = delete;
+            ~CopyPassOwner() { End(); }
+
+            [[nodiscard]] SDL_GPUCopyPass* Get() const { return pass_; }
+            void End() noexcept
+            {
+                if (pass_ != nullptr)
+                {
+                    SDL_EndGPUCopyPass(pass_);
+                    pass_ = nullptr;
+                }
+            }
+
+        private:
+            SDL_GPUCopyPass* pass_ = nullptr;
+        };
+
         // Mirrors WebGPUGraphicsBackend::SamplerCacheIndex's exact indexing scheme so both
         // backends' sampler caches read the same way: filterIndex*9 + u*3 + v, 18 entries total.
         [[nodiscard]] int SamplerCacheIndex(int filter, int addressU, int addressV)
@@ -540,8 +728,145 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    SdlGpuGraphicsBackend::SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                  CnaPresentationMode presentationMode, int swapInterval)
+    struct SdlGpuGraphicsBackend::ConstructionResources
+    {
+        SDL_Window* window = nullptr;  // Borrowed from the caller; never destroyed here.
+        SDL_GPUDevice* device = nullptr;
+        bool windowClaimed = false;
+        bool backendRegistered = false;
+        bool failureInjected = false;
+        bool debugModeEnabled = false;
+        int swapInterval = 1;
+        int physicalWidth = 0;
+        int physicalHeight = 0;
+        SDL_GPUTextureFormat depthStencilFormat = SDL_GPU_TEXTUREFORMAT_INVALID;
+        SdlGpuTestHooksEXT hooks{};
+        std::array<SDL_GPUShader*, static_cast<std::size_t>(ConstructionShader::Count)> shaders{};
+
+        ConstructionResources(SDL_Window* constructionWindow, const SdlGpuTestHooksEXT& testHooks)
+            : window(constructionWindow), hooks(testHooks)
+        {
+        }
+
+        ConstructionResources(const ConstructionResources&) = delete;
+        ConstructionResources& operator=(const ConstructionResources&) = delete;
+
+        ~ConstructionResources()
+        {
+            if (backendRegistered)
+                IGraphicsBackend::UnregisterForWindow(window);
+
+            for (auto it = shaders.rbegin(); it != shaders.rend(); ++it)
+            {
+                if (*it != nullptr)
+                {
+                    SDL_ReleaseGPUShader(device, *it);
+                    NotifyResource(hooks, SdlGpuResourceKindEXT::Shader,
+                                   SdlGpuResourceEventEXT::Released);
+                }
+            }
+
+            if (windowClaimed)
+            {
+                SDL_ReleaseWindowFromGPUDevice(device, window);
+                NotifyResource(hooks, SdlGpuResourceKindEXT::WindowClaim,
+                               SdlGpuResourceEventEXT::Released);
+            }
+            if (device != nullptr)
+            {
+                SDL_DestroyGPUDevice(device);
+                NotifyResource(hooks, SdlGpuResourceKindEXT::Device,
+                               SdlGpuResourceEventEXT::Released);
+            }
+        }
+
+        void FailAt(SdlGpuFailurePointEXT point)
+        {
+            InjectFailure(hooks, failureInjected, point);
+        }
+
+        SDL_GPUShader* CreateShader(ConstructionShader slot, SdlGpuFailurePointEXT failurePoint,
+                                    const SDL_GPUShaderCreateInfo& createInfo,
+                                    const char* diagnostic)
+        {
+            FailAt(failurePoint);
+            SDL_GPUShader* shader = SDL_CreateGPUShader(device, &createInfo);
+            if (shader == nullptr)
+                throw std::runtime_error(std::string(diagnostic) + SDL_GetError());
+            shaders[static_cast<std::size_t>(slot)] = shader;
+            NotifyResource(hooks, SdlGpuResourceKindEXT::Shader,
+                           SdlGpuResourceEventEXT::Acquired);
+            return shader;
+        }
+
+        void CommitTo(SdlGpuGraphicsBackend& owner) noexcept
+        {
+            owner.device_ = device;
+            owner.debugModeEnabled_ = debugModeEnabled;
+            owner.swapInterval_ = swapInterval;
+            owner.physicalWidth_ = physicalWidth;
+            owner.physicalHeight_ = physicalHeight;
+            owner.depthStencilFormat_ = depthStencilFormat;
+            owner.testHooks_ = hooks;
+            owner.testFailureInjected_ = failureInjected;
+            owner.registeredForWindow_ = backendRegistered;
+
+            owner.spriteVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SpriteVertex)];
+            owner.spriteFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SpriteFragment)];
+            owner.coloredVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::ColoredVertex)];
+            owner.coloredFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::ColoredFragment)];
+            owner.texturedVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::TexturedVertex)];
+            owner.coloredTexturedVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::ColoredTexturedVertex)];
+            owner.texturedFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::TexturedFragment)];
+            owner.litTexturedVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::LitTexturedVertex)];
+            owner.litTexturedFragmentShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::LitTexturedFragment)];
+            owner.alphaTestVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::AlphaTestVertex)];
+            owner.alphaTestColoredVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::AlphaTestColoredVertex)];
+            owner.alphaTestFragmentShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::AlphaTestFragment)];
+            owner.dualTextureVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::DualTextureVertex)];
+            owner.dualTextureColoredVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::DualTextureColoredVertex)];
+            owner.dualTextureFragmentShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::DualTextureFragment)];
+            owner.envMapVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::EnvMapVertex)];
+            owner.envMapFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::EnvMapFragment)];
+            owner.skinnedVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::SkinnedVertex)];
+            owner.skinnedColoredVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::SkinnedColoredVertex)];
+            owner.skinnedColoredFragmentShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::SkinnedColoredFragment)];
+            owner.pbrVertexShader_ = shaders[static_cast<std::size_t>(ConstructionShader::PbrVertex)];
+            owner.pbrSkinnedVertexShader_ =
+                shaders[static_cast<std::size_t>(ConstructionShader::PbrSkinnedVertex)];
+            owner.pbrFragmentShader_ = shaders[static_cast<std::size_t>(ConstructionShader::PbrFragment)];
+
+            shaders.fill(nullptr);
+            device = nullptr;
+            windowClaimed = false;
+            backendRegistered = false;
+        }
+    };
+
+    SdlGpuGraphicsBackend::SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth,
+                                                  int virtualHeight,
+                                                  CnaPresentationMode presentationMode,
+                                                  int swapInterval)
+        : SdlGpuGraphicsBackend(window, virtualWidth, virtualHeight, presentationMode,
+                                swapInterval, SdlGpuTestHooksEXT{})
+    {
+    }
+
+    SdlGpuGraphicsBackend::SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth,
+                                                  int virtualHeight,
+                                                  CnaPresentationMode presentationMode,
+                                                  int swapInterval,
+                                                  const SdlGpuTestHooksEXT& testHooks)
         : window_(window),
           virtualWidth_(virtualWidth),
           virtualHeight_(virtualHeight),
@@ -549,6 +874,8 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         if (window_ == nullptr)
             throw std::invalid_argument("CNA SDL_GPU: SDL window cannot be null");
+
+        ConstructionResources resources(window_, testHooks);
 
         // plan_sdlgpu.md SDLGPU-6: request SPIR-V first -- the only shader format this device's
         // vendored SDL3 compiles a driver for on Linux (Vulkan). DXBC/DXIL/MSL support (Windows/
@@ -558,41 +885,64 @@ namespace CNA::Internal::Backends::SdlGpu
         // convenience, never a hard requirement) -- a debug build asks the Vulkan driver for
         // SDL_gpu's own validation layer, a release build does not.
 #ifndef NDEBUG
-        debugModeEnabled_ = true;
+        resources.debugModeEnabled = true;
 #else
-        debugModeEnabled_ = false;
+        resources.debugModeEnabled = false;
 #endif
-        device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, debugModeEnabled_, /*name=*/nullptr);
-        if (device_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
+        resources.FailAt(SdlGpuFailurePointEXT::DeviceCreation);
+        resources.device = SDL_CreateGPUDevice(
+            SDL_GPU_SHADERFORMAT_SPIRV, resources.debugModeEnabled, /*name=*/nullptr);
+        if (resources.device == nullptr)
+            throw std::runtime_error(
+                std::string("CNA SDL_GPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
+        NotifyResource(testHooks, SdlGpuResourceKindEXT::Device,
+                       SdlGpuResourceEventEXT::Acquired);
 
-        if (!SDL_ClaimWindowForGPUDevice(device_, window_))
+        resources.FailAt(SdlGpuFailurePointEXT::WindowClaim);
+        if (!SDL_ClaimWindowForGPUDevice(resources.device, window_))
         {
             const std::string error = SDL_GetError();
-            SDL_DestroyGPUDevice(device_);
-            device_ = nullptr;
-            throw std::runtime_error("CNA SDL_GPU: SDL_ClaimWindowForGPUDevice failed: " + error);
+            throw std::runtime_error(
+                "CNA SDL_GPU: SDL_ClaimWindowForGPUDevice failed: " + error);
+        }
+        resources.windowClaimed = true;
+        NotifyResource(testHooks, SdlGpuResourceKindEXT::WindowClaim,
+                       SdlGpuResourceEventEXT::Acquired);
+
+        resources.FailAt(SdlGpuFailurePointEXT::SwapchainSetup);
+        resources.swapInterval = std::max(0, swapInterval);
+        ConfigureSwapchain(resources.device, window_, resources.swapInterval);
+
+        resources.FailAt(SdlGpuFailurePointEXT::DepthStencilFormatQuery);
+        resources.depthStencilFormat = QueryDepthStencilFormat(resources.device);
+
+        CreateSpriteResources(resources);
+        CreateColoredResources(resources);
+        CreateTexturedResources(resources);
+        CreateLitTexturedResources(resources);
+        CreateAlphaTestResources(resources);
+        CreateDualTextureResources(resources);
+        CreateEnvMapResources(resources);
+        CreateSkinnedResources(resources);
+        CreatePbrResources(resources);
+
+        resources.FailAt(SdlGpuFailurePointEXT::WindowMetricsInitialization);
+        if (!SDL_GetWindowSizeInPixels(
+                window_, &resources.physicalWidth, &resources.physicalHeight))
+        {
+            const std::string error = SDL_GetError();
+            throw std::runtime_error(
+                "CNA SDL_GPU: SDL_GetWindowSizeInPixels failed: " + error);
         }
 
-        SetSwapInterval(swapInterval);
-        QueryDepthStencilFormat();
-        CreateSpriteResources();
-        CreateColoredResources();
-        CreateTexturedResources();
-        CreateLitTexturedResources();
-        CreateAlphaTestResources();
-        CreateDualTextureResources();
-        CreateEnvMapResources();
-        CreateSkinnedResources();
-        CreatePbrResources();
-
-        int w = 0;
-        int h = 0;
-        SDL_GetWindowSizeInPixels(window_, &w, &h);
-        physicalWidth_ = w;
-        physicalHeight_ = h;
-
+        resources.FailAt(SdlGpuFailurePointEXT::BackendRegistration);
         IGraphicsBackend::RegisterForWindow(window_, this);
+        resources.backendRegistered = true;
+        resources.FailAt(SdlGpuFailurePointEXT::AfterBackendRegistration);
+
+        // Every operation above may throw. Raw member handles become owning only here, after all
+        // fallible initialization and registration have succeeded.
+        resources.CommitTo(*this);
 
         SDL_Log("[SDL_GPU] Backend initialised (%dx%d), debug mode %s",
                 physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled");
@@ -600,7 +950,11 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SdlGpuGraphicsBackend::~SdlGpuGraphicsBackend()
     {
-        IGraphicsBackend::UnregisterForWindow(window_);
+        if (registeredForWindow_)
+        {
+            IGraphicsBackend::UnregisterForWindow(window_);
+            registeredForWindow_ = false;
+        }
         ReleaseSceneDrawBuffers();
         DestroyPbrResources();
         DestroySkinnedResources();
@@ -622,37 +976,41 @@ namespace CNA::Internal::Backends::SdlGpu
         if (device_ != nullptr)
         {
             SDL_ReleaseWindowFromGPUDevice(device_, window_);
+            NotifyResourceEvent(SdlGpuResourceKindEXT::WindowClaim,
+                                SdlGpuResourceEventEXT::Released);
             SDL_DestroyGPUDevice(device_);
+            NotifyResourceEvent(SdlGpuResourceKindEXT::Device,
+                                SdlGpuResourceEventEXT::Released);
+            device_ = nullptr;
         }
     }
 
-    void SdlGpuGraphicsBackend::QueryDepthStencilFormat()
+    SDL_GPUTextureFormat SdlGpuGraphicsBackend::QueryDepthStencilFormat(SDL_GPUDevice* device)
     {
         // plan_sdlgpu.md: SDL_gpu guarantees at most one of D24_UNORM_S8_UINT/D32_FLOAT_S8_UINT
         // per device -- must query, never assume either is available. Queried once here (not
         // lazily inside EnsureDepthStencilTexture) so pipeline creation has a stable answer for
         // SDL_GPUGraphicsPipelineTargetInfo before any frame has actually rendered.
-        if (SDL_GPUTextureSupportsFormat(device_, SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+        if (SDL_GPUTextureSupportsFormat(device, SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
                                           SDL_GPU_TEXTURETYPE_2D,
                                           SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
         {
-            depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+            return SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
         }
-        else if (SDL_GPUTextureSupportsFormat(device_, SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+        if (SDL_GPUTextureSupportsFormat(device, SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
                                                SDL_GPU_TEXTURETYPE_2D,
                                                SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET))
         {
-            depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+            return SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
         }
-        else
-        {
-            // Genuine SDL_gpu/device capability gap, not a "not implemented yet" stub -- warn
-            // and keep running with no depth/stencil attachment rather than throw.
-            CNA::Logger::Warn(
-                "CNA SDL_GPU: no combined depth+stencil texture format is supported by this "
-                "device; depth/stencil clearing and depth-tested draws will have no effect.",
-                CNA::LogCategory::GPU);
-        }
+
+        // Genuine SDL_gpu/device capability gap, not a "not implemented yet" stub -- warn
+        // and keep running with no depth/stencil attachment rather than throw.
+        CNA::Logger::Warn(
+            "CNA SDL_GPU: no combined depth+stencil texture format is supported by this "
+            "device; depth/stencil clearing and depth-tested draws will have no effect.",
+            CNA::LogCategory::GPU);
+        return SDL_GPU_TEXTUREFORMAT_INVALID;
     }
 
     void SdlGpuGraphicsBackend::QueueTextureRelease(SDL_GPUTexture* texture)
@@ -704,30 +1062,36 @@ namespace CNA::Internal::Backends::SdlGpu
         if (!framePending_)
             return true;
 
+        MaybeFailForTest(SdlGpuFailurePointEXT::FrameCommandBufferAcquisition);
         SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
         if (cmd == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+        FrameCommandBufferOwner commandBuffer(cmd, testHooks_);
 
-        SDL_GPUTexture* swapchainTexture = nullptr;
-        Uint32 swapchainWidth = 0;
-        Uint32 swapchainHeight = 0;
-        const bool acquired = SDL_WaitAndAcquireGPUSwapchainTexture(
-            cmd, window_, &swapchainTexture, &swapchainWidth, &swapchainHeight);
-        if (!acquired)
+        try
         {
-            // Per SDL_gpu.h: it is an error to cancel a command buffer once
-            // SDL_WaitAndAcquireGPUSwapchainTexture has been called on it -- must always submit.
-            const std::string error = SDL_GetError();
-            SDL_SubmitGPUCommandBuffer(cmd);
-            throw std::runtime_error("CNA SDL_GPU: SDL_WaitAndAcquireGPUSwapchainTexture failed: " + error);
-        }
+            SDL_GPUTexture* swapchainTexture = nullptr;
+            Uint32 swapchainWidth = 0;
+            Uint32 swapchainHeight = 0;
+            // Per SDL_gpu.h, a command buffer that has attempted swapchain acquisition must be
+            // submitted rather than cancelled, including every exceptional exit below.
+            commandBuffer.SwapchainAcquisitionStarted();
+            const bool acquired = SDL_WaitAndAcquireGPUSwapchainTexture(
+                cmd, window_, &swapchainTexture, &swapchainWidth, &swapchainHeight);
+            if (!acquired)
+            {
+                const std::string error = SDL_GetError();
+                (void)commandBuffer.Submit();
+                throw std::runtime_error(
+                    "CNA SDL_GPU: SDL_WaitAndAcquireGPUSwapchainTexture failed: " + error);
+            }
 
-        if (swapchainTexture == nullptr)
-        {
-            // Documented, non-error case (e.g. a minimized window) -- still must submit.
-            SDL_SubmitGPUCommandBuffer(cmd);
-            return false;
-        }
+            if (swapchainTexture == nullptr)
+            {
+                // Documented, non-error case (e.g. a minimized window) -- still must submit.
+                (void)commandBuffer.Submit();
+                return false;
+            }
 
         physicalWidth_ = static_cast<int>(swapchainWidth);
         physicalHeight_ = static_cast<int>(swapchainHeight);
@@ -775,6 +1139,7 @@ namespace CNA::Internal::Backends::SdlGpu
         const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
             cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
+        RenderPassOwner passOwner(pass);
         // REMED-GFX-068: the scissor (like the viewport, REMED-GFX-064) is applied PER DRAW inside
         // RenderQueuedDraws from each queued draw's own captured state, not once per pass here -- a
         // per-pass read of the live scissor would apply the post-unbind full-backbuffer rect (see
@@ -788,7 +1153,7 @@ namespace CNA::Internal::Backends::SdlGpu
                           depthStencilTexture_ != nullptr
                               ? depthStencilFormat_
                               : SDL_GPU_TEXTUREFORMAT_INVALID);
-        SDL_EndGPURenderPass(pass);
+        passOwner.End();
 
         // Cube mip regen is real GPU work -- must happen on this command buffer BEFORE submission
         // (per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass, but
@@ -807,8 +1172,10 @@ namespace CNA::Internal::Backends::SdlGpu
             }
         }
 
-        if (!SDL_SubmitGPUCommandBuffer(cmd))
-            throw std::runtime_error(std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
+            if (!commandBuffer.Submit())
+                throw std::runtime_error(
+                    std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer failed: ") +
+                    SDL_GetError());
 
         // Whatever was pending has now been handed to the GPU (recorded into a submitted command
         // buffer) -- any render target destroyed earlier this frame can have its own GPU texture
@@ -839,8 +1206,18 @@ namespace CNA::Internal::Backends::SdlGpu
             cube->clearStencilPending[face] = false;
         }
         usedRenderTargetCubeFacesThisFrame_.clear();
-        framePending_ = false;
-        return true;
+            framePending_ = false;
+            return true;
+        }
+        catch (...)
+        {
+            // Finish the real SDL command resource before releasing transient buffers. The RAII
+            // render/copy-pass owners below guarantee no pass remains open. Keep queued commands
+            // intact so the same frame can be retried after the one-shot injected/native error.
+            commandBuffer.FinishForFailure();
+            ReleaseSceneDrawBuffers(false);
+            throw;
+        }
     }
 
     namespace
@@ -893,13 +1270,14 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, colorTargets.data(), static_cast<Uint32>(colorTargetCount),
-                                                          hasDepth ? &depthStencilTarget : nullptr);
+                                                         hasDepth ? &depthStencilTarget : nullptr);
+        RenderPassOwner passOwner(pass);
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{target.get(), nullptr, -1};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount,
                           hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID,
                           colorTargetCount);
-        SDL_EndGPURenderPass(pass);
+        passOwner.End();
 
         // Per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass --
         // matches FNA3D's OPENGL_ResolveTarget semantics (mip chain regenerated once this target's
@@ -966,11 +1344,12 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
+        RenderPassOwner passOwner(pass);
         // REMED-GFX-068: scissor applied per draw in RenderQueuedDraws (see the swapchain pass note).
         const DrawTarget dt{nullptr, cube.get(), face};
         RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount,
                           hasDepth ? depthStencilFormat_ : SDL_GPU_TEXTUREFORMAT_INVALID);
-        SDL_EndGPURenderPass(pass);
+        passOwner.End();
     }
 
     void SdlGpuGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -1132,29 +1511,107 @@ namespace CNA::Internal::Backends::SdlGpu
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
-    void SdlGpuGraphicsBackend::SetSwapInterval(int interval)
+    void SdlGpuGraphicsBackend::ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window,
+                                                    int interval)
     {
-        interval = std::max(0, interval);
-        swapInterval_ = interval;
-
         // plan_sdlgpu.md: SDL_gpu has no "half-rate" present mode -- XNA's PresentInterval.Two
         // (swapInterval==2) falls back to plain VSYNC, same as swapInterval==1.
         SDL_GPUPresentMode presentMode = SDL_GPU_PRESENTMODE_VSYNC;
         if (interval == 0)
         {
-            if (SDL_WindowSupportsGPUPresentMode(device_, window_, SDL_GPU_PRESENTMODE_IMMEDIATE))
+            if (SDL_WindowSupportsGPUPresentMode(device, window, SDL_GPU_PRESENTMODE_IMMEDIATE))
                 presentMode = SDL_GPU_PRESENTMODE_IMMEDIATE;
-            else if (SDL_WindowSupportsGPUPresentMode(device_, window_, SDL_GPU_PRESENTMODE_MAILBOX))
+            else if (SDL_WindowSupportsGPUPresentMode(device, window, SDL_GPU_PRESENTMODE_MAILBOX))
                 presentMode = SDL_GPU_PRESENTMODE_MAILBOX;
         }
 
-        if (!SDL_SetGPUSwapchainParameters(device_, window_, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, presentMode))
+        if (!SDL_SetGPUSwapchainParameters(
+                device, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, presentMode))
         {
             // Genuine per-device/driver capability gap, not a "not implemented yet" stub.
             CNA::Logger::Warn(
                 std::string("CNA SDL_GPU: SDL_SetGPUSwapchainParameters failed: ") + SDL_GetError(),
                 CNA::LogCategory::GPU);
         }
+    }
+
+    void SdlGpuGraphicsBackend::SetSwapInterval(int interval)
+    {
+        interval = std::max(0, interval);
+        ConfigureSwapchain(device_, window_, interval);
+        swapInterval_ = interval;
+    }
+
+    void SdlGpuGraphicsBackend::MaybeFailForTest(SdlGpuFailurePointEXT point)
+    {
+        InjectFailure(testHooks_, testFailureInjected_, point);
+    }
+
+    void SdlGpuGraphicsBackend::NotifyResourceEvent(
+        SdlGpuResourceKindEXT resource, SdlGpuResourceEventEXT event) const noexcept
+    {
+        NotifyResource(testHooks_, resource, event);
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::CreateGraphicsPipeline(
+        const SDL_GPUGraphicsPipelineCreateInfo& createInfo, const char* diagnostic)
+    {
+        MaybeFailForTest(SdlGpuFailurePointEXT::GraphicsPipelineCreation);
+        SDL_GPUGraphicsPipeline* pipeline =
+            SDL_CreateGPUGraphicsPipeline(device_, &createInfo);
+        if (pipeline == nullptr)
+            throw std::runtime_error(std::string(diagnostic) + SDL_GetError());
+        NotifyResourceEvent(SdlGpuResourceKindEXT::GraphicsPipeline,
+                            SdlGpuResourceEventEXT::Acquired);
+        return pipeline;
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::CacheGraphicsPipeline(
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*>& cache,
+        std::size_t key, SDL_GPUGraphicsPipeline* pipeline)
+    {
+        try
+        {
+            const auto [it, inserted] = cache.emplace(key, pipeline);
+            if (!inserted)
+                ReleaseGraphicsPipeline(pipeline);
+            return it->second;
+        }
+        catch (...)
+        {
+            ReleaseGraphicsPipeline(pipeline);
+            throw;
+        }
+    }
+
+    void SdlGpuGraphicsBackend::ReleaseGraphicsPipeline(
+        SDL_GPUGraphicsPipeline* pipeline) noexcept
+    {
+        if (pipeline == nullptr)
+            return;
+        SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        NotifyResourceEvent(SdlGpuResourceKindEXT::GraphicsPipeline,
+                            SdlGpuResourceEventEXT::Released);
+    }
+
+    void SdlGpuGraphicsBackend::ReleaseShader(SDL_GPUShader*& shader) noexcept
+    {
+        if (shader == nullptr)
+            return;
+        SDL_ReleaseGPUShader(device_, shader);
+        shader = nullptr;
+        NotifyResourceEvent(SdlGpuResourceKindEXT::Shader,
+                            SdlGpuResourceEventEXT::Released);
+    }
+
+    void SdlGpuGraphicsBackend::ReleaseSampler(SDL_GPUSampler*& sampler) noexcept
+    {
+        if (sampler == nullptr)
+            return;
+        SDL_ReleaseGPUSampler(device_, sampler);
+        sampler = nullptr;
+        NotifyResourceEvent(SdlGpuResourceKindEXT::Sampler,
+                            SdlGpuResourceEventEXT::Released);
     }
 
     bool SdlGpuGraphicsBackend::TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const
@@ -1519,11 +1976,8 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuGraphicsBackend::CreateSpriteResources()
+    void SdlGpuGraphicsBackend::CreateSpriteResources(ConstructionResources& resources)
     {
-        if (spriteVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSprite2dVertSpv);
         vsInfo.code_size = Shaders::kSprite2dVertSpv_size;
@@ -1531,9 +1985,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 1;
-        spriteVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (spriteVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sprite vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::SpriteVertex,
+            SdlGpuFailurePointEXT::SpriteVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create sprite vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSprite2dFragSpv);
@@ -1542,41 +1997,26 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
-        spriteFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (spriteFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, spriteVertexShader_);
-            spriteVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sprite fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::SpriteFragment,
+            SdlGpuFailurePointEXT::SpriteFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create sprite fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroySpriteResources()
     {
         for (auto& [key, pipeline] : spritePipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         spritePipelines_.clear();
         for (SDL_GPUSampler*& sampler : samplerCache_)
-        {
-            if (sampler != nullptr)
-                SDL_ReleaseGPUSampler(device_, sampler);
-            sampler = nullptr;
-        }
+            ReleaseSampler(sampler);
         if (spriteVertexBuffer_ != nullptr)
         {
             SDL_ReleaseGPUBuffer(device_, spriteVertexBuffer_);
             spriteVertexBuffer_ = nullptr;
         }
-        if (spriteFragmentShader_ != nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, spriteFragmentShader_);
-            spriteFragmentShader_ = nullptr;
-        }
-        if (spriteVertexShader_ != nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, spriteVertexShader_);
-            spriteVertexShader_ = nullptr;
-        }
+        ReleaseShader(spriteFragmentShader_);
+        ReleaseShader(spriteVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreateSpritePipeline(
@@ -1639,11 +2079,10 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sprite pipeline: ") + SDL_GetError());
-        spritePipelines_[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(pipelineInfo,
+                                   "CNA SDL_GPU: failed to create sprite pipeline: ");
+        return CacheGraphicsPipeline(spritePipelines_, key, pipeline);
     }
 
     SDL_GPUSampler* SdlGpuGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
@@ -1662,10 +2101,25 @@ namespace CNA::Internal::Backends::SdlGpu
         createInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
         createInfo.max_lod = 32.0f;
 
-        samplerCache_[index] = SDL_CreateGPUSampler(device_, &createInfo);
-        if (samplerCache_[index] == nullptr)
+        MaybeFailForTest(SdlGpuFailurePointEXT::SamplerCreation);
+        SDL_GPUSampler* sampler = SDL_CreateGPUSampler(device_, &createInfo);
+        if (sampler == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sampler: ") + SDL_GetError());
-        return samplerCache_[index];
+        NotifyResourceEvent(SdlGpuResourceKindEXT::Sampler,
+                            SdlGpuResourceEventEXT::Acquired);
+        samplerCache_[index] = sampler;
+        return sampler;
+    }
+
+    void SdlGpuGraphicsBackend::InitializeSpritePipelineAndSamplerForTestEXT()
+    {
+        const SDL_GPUTextureFormat colorFormat =
+            SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        (void)GetOrCreateSpritePipeline(
+            colorFormat, SDL_GPU_SAMPLECOUNT_1, depthStencilFormat_, 1,
+            /*depthTest=*/false, /*depthWrite=*/false, /*depthFunc=*/3,
+            CaptureRenderState());
+        (void)GetOrCreateSampler(/*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1);
     }
 
     void SdlGpuGraphicsBackend::UploadSpriteVertexData(SDL_GPUCommandBuffer* cmd)
@@ -1706,13 +2160,14 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_UnmapGPUTransferBuffer(device_, transferBuffer);
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        CopyPassOwner copyPassOwner(copyPass);
         SDL_GPUTransferBufferLocation source{};
         source.transfer_buffer = transferBuffer;
         SDL_GPUBufferRegion destRegion{};
         destRegion.buffer = spriteVertexBuffer_;
         destRegion.size = requiredBytes;
         SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, true);
-        SDL_EndGPUCopyPass(copyPass);
+        copyPassOwner.End();
 
         SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
     }
@@ -1939,11 +2394,8 @@ namespace CNA::Internal::Backends::SdlGpu
         return PrimitiveVertexCount(primitive, primitiveCount);
     }
 
-    void SdlGpuGraphicsBackend::CreateColoredResources()
+    void SdlGpuGraphicsBackend::CreateColoredResources(ConstructionResources& resources)
     {
-        if (coloredVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kColored3dVertSpv);
         vsInfo.code_size = Shaders::kColored3dVertSpv_size;
@@ -1951,9 +2403,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
-        coloredVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (coloredVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create colored3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::ColoredVertex,
+            SdlGpuFailurePointEXT::ColoredVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kColored3dFragSpv);
@@ -1961,22 +2414,19 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.entrypoint = "main";
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-        coloredFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (coloredFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, coloredVertexShader_);
-            coloredVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create colored3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::ColoredFragment,
+            SdlGpuFailurePointEXT::ColoredFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create colored3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroyColoredResources()
     {
         for (auto& [key, pipeline] : coloredPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         coloredPipelines_.clear();
-        if (coloredFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, coloredFragmentShader_); coloredFragmentShader_ = nullptr; }
-        if (coloredVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, coloredVertexShader_); coloredVertexShader_ = nullptr; }
+        ReleaseShader(coloredFragmentShader_);
+        ReleaseShader(coloredVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineColored3D(
@@ -2020,18 +2470,14 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create colored3d pipeline: ") + SDL_GetError());
-        coloredPipelines_[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(pipelineInfo,
+                                   "CNA SDL_GPU: failed to create colored3d pipeline: ");
+        return CacheGraphicsPipeline(coloredPipelines_, key, pipeline);
     }
 
-    void SdlGpuGraphicsBackend::CreateTexturedResources()
+    void SdlGpuGraphicsBackend::CreateTexturedResources(ConstructionResources& resources)
     {
-        if (texturedVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kTextured3dVertSpv);
         vsInfo.code_size = Shaders::kTextured3dVertSpv_size;
@@ -2039,9 +2485,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
-        texturedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (texturedVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create textured3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::TexturedVertex,
+            SdlGpuFailurePointEXT::TexturedVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create textured3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo cvsInfo{};
         cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kColoredTextured3dVertSpv);
@@ -2050,13 +2497,10 @@ namespace CNA::Internal::Backends::SdlGpu
         cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         cvsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
-        coloredTexturedVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
-        if (coloredTexturedVertexShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, texturedVertexShader_);
-            texturedVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create colored_textured3d vertex shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::ColoredTexturedVertex,
+            SdlGpuFailurePointEXT::ColoredTexturedVertexShaderCreation, cvsInfo,
+            "CNA SDL_GPU: failed to create colored_textured3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kTextured3dFragSpv);
@@ -2066,28 +2510,23 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
         fsInfo.num_uniform_buffers = 1;
-        texturedFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (texturedFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, coloredTexturedVertexShader_);
-            coloredTexturedVertexShader_ = nullptr;
-            SDL_ReleaseGPUShader(device_, texturedVertexShader_);
-            texturedVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create textured3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::TexturedFragment,
+            SdlGpuFailurePointEXT::TexturedFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create textured3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroyTexturedResources()
     {
         for (auto& [key, pipeline] : texturedPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         texturedPipelines_.clear();
         for (auto& [key, pipeline] : coloredTexturedPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         coloredTexturedPipelines_.clear();
-        if (texturedFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, texturedFragmentShader_); texturedFragmentShader_ = nullptr; }
-        if (coloredTexturedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, coloredTexturedVertexShader_); coloredTexturedVertexShader_ = nullptr; }
-        if (texturedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, texturedVertexShader_); texturedVertexShader_ = nullptr; }
+        ReleaseShader(texturedFragmentShader_);
+        ReleaseShader(coloredTexturedVertexShader_);
+        ReleaseShader(texturedVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineTextured3D(
@@ -2131,11 +2570,10 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create textured3d pipeline: ") + SDL_GetError());
-        texturedPipelines_[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(pipelineInfo,
+                                   "CNA SDL_GPU: failed to create textured3d pipeline: ");
+        return CacheGraphicsPipeline(texturedPipelines_, key, pipeline);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineColoredTextured3D(
@@ -2180,18 +2618,15 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create colored_textured3d pipeline: ") + SDL_GetError());
-        coloredTexturedPipelines_[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(
+                pipelineInfo,
+                "CNA SDL_GPU: failed to create colored_textured3d pipeline: ");
+        return CacheGraphicsPipeline(coloredTexturedPipelines_, key, pipeline);
     }
 
-    void SdlGpuGraphicsBackend::CreateLitTexturedResources()
+    void SdlGpuGraphicsBackend::CreateLitTexturedResources(ConstructionResources& resources)
     {
-        if (litTexturedVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kLitTextured3dVertSpv);
         vsInfo.code_size = Shaders::kLitTextured3dVertSpv_size;
@@ -2199,9 +2634,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 3;  // + FogParams (REMED-GFX-009)
-        litTexturedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (litTexturedVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create lit_textured3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::LitTexturedVertex,
+            SdlGpuFailurePointEXT::LitTexturedVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create lit_textured3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kLitTextured3dFragSpv);
@@ -2211,22 +2647,19 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
         fsInfo.num_uniform_buffers = 2;
-        litTexturedFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (litTexturedFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, litTexturedVertexShader_);
-            litTexturedVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create lit_textured3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::LitTexturedFragment,
+            SdlGpuFailurePointEXT::LitTexturedFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create lit_textured3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroyLitTexturedResources()
     {
         for (auto& [key, pipeline] : litTexturedPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         litTexturedPipelines_.clear();
-        if (litTexturedFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, litTexturedFragmentShader_); litTexturedFragmentShader_ = nullptr; }
-        if (litTexturedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, litTexturedVertexShader_); litTexturedVertexShader_ = nullptr; }
+        ReleaseShader(litTexturedFragmentShader_);
+        ReleaseShader(litTexturedVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineLitTextured3D(
@@ -2271,11 +2704,11 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create lit_textured3d pipeline: ") + SDL_GetError());
-        litTexturedPipelines_[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(
+                pipelineInfo,
+                "CNA SDL_GPU: failed to create lit_textured3d pipeline: ");
+        return CacheGraphicsPipeline(litTexturedPipelines_, key, pipeline);
     }
 
     void SdlGpuGraphicsBackend::QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -2427,11 +2860,8 @@ namespace CNA::Internal::Backends::SdlGpu
         framePending_ = true;
     }
 
-    void SdlGpuGraphicsBackend::CreateAlphaTestResources()
+    void SdlGpuGraphicsBackend::CreateAlphaTestResources(ConstructionResources& resources)
     {
-        if (alphaTestVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTest3dVertSpv);
         vsInfo.code_size = Shaders::kAlphaTest3dVertSpv_size;
@@ -2439,9 +2869,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
-        alphaTestVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (alphaTestVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::AlphaTestVertex,
+            SdlGpuFailurePointEXT::AlphaTestVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create alpha_test3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo cvsInfo{};
         cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTestColored3dVertSpv);
@@ -2450,13 +2881,10 @@ namespace CNA::Internal::Backends::SdlGpu
         cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         cvsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
-        alphaTestColoredVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
-        if (alphaTestColoredVertexShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, alphaTestVertexShader_);
-            alphaTestVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test_colored3d vertex shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::AlphaTestColoredVertex,
+            SdlGpuFailurePointEXT::AlphaTestColoredVertexShaderCreation, cvsInfo,
+            "CNA SDL_GPU: failed to create alpha_test_colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTest3dFragSpv);
@@ -2466,28 +2894,23 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 1;
         fsInfo.num_uniform_buffers = 1;
-        alphaTestFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (alphaTestFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, alphaTestColoredVertexShader_);
-            alphaTestColoredVertexShader_ = nullptr;
-            SDL_ReleaseGPUShader(device_, alphaTestVertexShader_);
-            alphaTestVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::AlphaTestFragment,
+            SdlGpuFailurePointEXT::AlphaTestFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create alpha_test3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroyAlphaTestResources()
     {
         for (auto& [key, pipeline] : alphaTestPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         alphaTestPipelines_.clear();
         for (auto& [key, pipeline] : alphaTestColoredPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         alphaTestColoredPipelines_.clear();
-        if (alphaTestFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, alphaTestFragmentShader_); alphaTestFragmentShader_ = nullptr; }
-        if (alphaTestColoredVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, alphaTestColoredVertexShader_); alphaTestColoredVertexShader_ = nullptr; }
-        if (alphaTestVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, alphaTestVertexShader_); alphaTestVertexShader_ = nullptr; }
+        ReleaseShader(alphaTestFragmentShader_);
+        ReleaseShader(alphaTestColoredVertexShader_);
+        ReleaseShader(alphaTestVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
@@ -2537,11 +2960,11 @@ namespace CNA::Internal::Backends::SdlGpu
                 (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
             pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-            SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-            if (pipeline == nullptr)
-                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test_colored3d pipeline: ") + SDL_GetError());
-            alphaTestColoredPipelines_[key] = pipeline;
-            return pipeline;
+            SDL_GPUGraphicsPipeline* pipeline =
+                CreateGraphicsPipeline(
+                    pipelineInfo,
+                    "CNA SDL_GPU: failed to create alpha_test_colored3d pipeline: ");
+            return CacheGraphicsPipeline(alphaTestColoredPipelines_, key, pipeline);
         }
 
         const std::size_t key = HashCombine(static_cast<std::size_t>(stride),
@@ -2580,18 +3003,15 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test3d pipeline: ") + SDL_GetError());
-        alphaTestPipelines_[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(
+                pipelineInfo,
+                "CNA SDL_GPU: failed to create alpha_test3d pipeline: ");
+        return CacheGraphicsPipeline(alphaTestPipelines_, key, pipeline);
     }
 
-    void SdlGpuGraphicsBackend::CreateDualTextureResources()
+    void SdlGpuGraphicsBackend::CreateDualTextureResources(ConstructionResources& resources)
     {
-        if (dualTextureVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTexture3dVertSpv);
         vsInfo.code_size = Shaders::kDualTexture3dVertSpv_size;
@@ -2599,9 +3019,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
-        dualTextureVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (dualTextureVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::DualTextureVertex,
+            SdlGpuFailurePointEXT::DualTextureVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create dual_texture3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo cvsInfo{};
         cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTextureColored3dVertSpv);
@@ -2610,13 +3031,10 @@ namespace CNA::Internal::Backends::SdlGpu
         cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         cvsInfo.num_uniform_buffers = 2;  // + FogParams (REMED-GFX-009)
-        dualTextureColoredVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
-        if (dualTextureColoredVertexShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, dualTextureVertexShader_);
-            dualTextureVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture_colored3d vertex shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::DualTextureColoredVertex,
+            SdlGpuFailurePointEXT::DualTextureColoredVertexShaderCreation, cvsInfo,
+            "CNA SDL_GPU: failed to create dual_texture_colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTexture3dFragSpv);
@@ -2625,28 +3043,23 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 2;
-        dualTextureFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (dualTextureFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, dualTextureColoredVertexShader_);
-            dualTextureColoredVertexShader_ = nullptr;
-            SDL_ReleaseGPUShader(device_, dualTextureVertexShader_);
-            dualTextureVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::DualTextureFragment,
+            SdlGpuFailurePointEXT::DualTextureFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create dual_texture3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroyDualTextureResources()
     {
         for (auto& [key, pipeline] : dualTexturePipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         dualTexturePipelines_.clear();
         for (auto& [key, pipeline] : dualTextureColoredPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         dualTextureColoredPipelines_.clear();
-        if (dualTextureFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, dualTextureFragmentShader_); dualTextureFragmentShader_ = nullptr; }
-        if (dualTextureColoredVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, dualTextureColoredVertexShader_); dualTextureColoredVertexShader_ = nullptr; }
-        if (dualTextureVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, dualTextureVertexShader_); dualTextureVertexShader_ = nullptr; }
+        ReleaseShader(dualTextureFragmentShader_);
+        ReleaseShader(dualTextureColoredVertexShader_);
+        ReleaseShader(dualTextureVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineDualTexture3D(
@@ -2703,18 +3116,15 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture3d pipeline: ") + SDL_GetError());
-        cache[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(
+                pipelineInfo,
+                "CNA SDL_GPU: failed to create dual_texture3d pipeline: ");
+        return CacheGraphicsPipeline(cache, key, pipeline);
     }
 
-    void SdlGpuGraphicsBackend::CreateEnvMapResources()
+    void SdlGpuGraphicsBackend::CreateEnvMapResources(ConstructionResources& resources)
     {
-        if (envMapVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kEnvMap3dVertSpv);
         vsInfo.code_size = Shaders::kEnvMap3dVertSpv_size;
@@ -2722,9 +3132,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 3;  // + FogParams (REMED-GFX-009)
-        envMapVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (envMapVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create env_map3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::EnvMapVertex,
+            SdlGpuFailurePointEXT::EnvMapVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create env_map3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kEnvMap3dFragSpv);
@@ -2734,22 +3145,19 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 2;  // uTexture (2D) + uEnvMap (cube)
         fsInfo.num_uniform_buffers = 2;
-        envMapFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (envMapFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, envMapVertexShader_);
-            envMapVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create env_map3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::EnvMapFragment,
+            SdlGpuFailurePointEXT::EnvMapFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create env_map3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroyEnvMapResources()
     {
         for (auto& [key, pipeline] : envMapPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         envMapPipelines_.clear();
-        if (envMapFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, envMapFragmentShader_); envMapFragmentShader_ = nullptr; }
-        if (envMapVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, envMapVertexShader_); envMapVertexShader_ = nullptr; }
+        ReleaseShader(envMapFragmentShader_);
+        ReleaseShader(envMapVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineEnvMap3D(
@@ -2795,18 +3203,15 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create env_map3d pipeline: ") + SDL_GetError());
-        envMapPipelines_[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(
+                pipelineInfo,
+                "CNA SDL_GPU: failed to create env_map3d pipeline: ");
+        return CacheGraphicsPipeline(envMapPipelines_, key, pipeline);
     }
 
-    void SdlGpuGraphicsBackend::CreateSkinnedResources()
+    void SdlGpuGraphicsBackend::CreateSkinnedResources(ConstructionResources& resources)
     {
-        if (skinnedVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinned3dVertSpv);
         vsInfo.code_size = Shaders::kSkinned3dVertSpv_size;
@@ -2815,9 +3220,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
         vsInfo.num_storage_buffers = 1;  // BoneBlock (4608 bytes) -- see SkinnedDrawCommand's doc comment
-        skinnedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (skinnedVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::SkinnedVertex,
+            SdlGpuFailurePointEXT::SkinnedVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create skinned3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo colVsInfo{};
         colVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinnedColored3dVertSpv);
@@ -2827,13 +3233,10 @@ namespace CNA::Internal::Backends::SdlGpu
         colVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         colVsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
         colVsInfo.num_storage_buffers = 1;  // BoneBlock
-        skinnedColoredVertexShader_ = SDL_CreateGPUShader(device_, &colVsInfo);
-        if (skinnedColoredVertexShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, skinnedVertexShader_);
-            skinnedVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned_colored3d vertex shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::SkinnedColoredVertex,
+            SdlGpuFailurePointEXT::SkinnedColoredVertexShaderCreation, colVsInfo,
+            "CNA SDL_GPU: failed to create skinned_colored3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo colFsInfo{};
         colFsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinnedColored3dFragSpv);
@@ -2843,28 +3246,23 @@ namespace CNA::Internal::Backends::SdlGpu
         colFsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         colFsInfo.num_samplers = 1;
         colFsInfo.num_uniform_buffers = 2;
-        skinnedColoredFragmentShader_ = SDL_CreateGPUShader(device_, &colFsInfo);
-        if (skinnedColoredFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, skinnedColoredVertexShader_);
-            skinnedColoredVertexShader_ = nullptr;
-            SDL_ReleaseGPUShader(device_, skinnedVertexShader_);
-            skinnedVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned_colored3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::SkinnedColoredFragment,
+            SdlGpuFailurePointEXT::SkinnedColoredFragmentShaderCreation, colFsInfo,
+            "CNA SDL_GPU: failed to create skinned_colored3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroySkinnedResources()
     {
         for (auto& [key, pipeline] : skinnedPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         skinnedPipelines_.clear();
         for (auto& [key, pipeline] : skinnedColoredPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         skinnedColoredPipelines_.clear();
-        if (skinnedColoredFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, skinnedColoredFragmentShader_); skinnedColoredFragmentShader_ = nullptr; }
-        if (skinnedColoredVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, skinnedColoredVertexShader_); skinnedColoredVertexShader_ = nullptr; }
-        if (skinnedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, skinnedVertexShader_); skinnedVertexShader_ = nullptr; }
+        ReleaseShader(skinnedColoredFragmentShader_);
+        ReleaseShader(skinnedColoredVertexShader_);
+        ReleaseShader(skinnedVertexShader_);
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineSkinned3D(
@@ -2920,35 +3318,66 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned3d pipeline: ") + SDL_GetError());
-        cache[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(
+                pipelineInfo,
+                "CNA SDL_GPU: failed to create skinned3d pipeline: ");
+        return CacheGraphicsPipeline(cache, key, pipeline);
     }
 
     void SdlGpuGraphicsBackend::EnsureDefaultPbrTextures()
     {
+        if (defaultWhiteTexture_ != nullptr && defaultFlatNormalTexture_ != nullptr)
+            return;
+
+        struct StagedDefaultTexture
+        {
+            std::unique_ptr<SdlGpuTextureBackend> texture;
+            SdlGpuTestHooksEXT hooks;
+
+            ~StagedDefaultTexture()
+            {
+                if (texture != nullptr)
+                {
+                    texture.reset();
+                    NotifyResource(hooks, SdlGpuResourceKindEXT::DefaultTexture,
+                                   SdlGpuResourceEventEXT::Released);
+                }
+            }
+        };
+
+        StagedDefaultTexture whiteStage{{}, testHooks_};
+        StagedDefaultTexture flatNormalStage{{}, testHooks_};
+
         if (defaultWhiteTexture_ == nullptr)
         {
+            MaybeFailForTest(SdlGpuFailurePointEXT::DefaultWhiteTextureCreation);
             ImageData white{1, 1, {255, 255, 255, 255}, 1};
-            defaultWhiteTexture_ = std::make_unique<SdlGpuTextureBackend>(*this, white);
+            whiteStage.texture = std::make_unique<SdlGpuTextureBackend>(*this, white);
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Acquired);
         }
         if (defaultFlatNormalTexture_ == nullptr)
         {
+            MaybeFailForTest(SdlGpuFailurePointEXT::DefaultFlatNormalTextureCreation);
             // (128,128,255,255) decodes (via the shader's rgb*2-1) to a tangent-space normal of
             // ~(0,0,1) -- the unperturbed geometric normal -- mirrors EasyGLGraphicsBackend::
             // EnsureDefaultFlatNormalTexture()'s identical encoding exactly.
             ImageData flatNormal{1, 1, {128, 128, 255, 255}, 1};
-            defaultFlatNormalTexture_ = std::make_unique<SdlGpuTextureBackend>(*this, flatNormal);
+            flatNormalStage.texture =
+                std::make_unique<SdlGpuTextureBackend>(*this, flatNormal);
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Acquired);
         }
+
+        if (whiteStage.texture != nullptr)
+            defaultWhiteTexture_ = std::move(whiteStage.texture);
+        if (flatNormalStage.texture != nullptr)
+            defaultFlatNormalTexture_ = std::move(flatNormalStage.texture);
     }
 
-    void SdlGpuGraphicsBackend::CreatePbrResources()
+    void SdlGpuGraphicsBackend::CreatePbrResources(ConstructionResources& resources)
     {
-        if (pbrVertexShader_ != nullptr)
-            return;
-
         SDL_GPUShaderCreateInfo vsInfo{};
         vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbr3dVertSpv);
         vsInfo.code_size = Shaders::kPbr3dVertSpv_size;
@@ -2956,9 +3385,10 @@ namespace CNA::Internal::Backends::SdlGpu
         vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         vsInfo.num_uniform_buffers = 3;  // PC, LitLightParams + FogParams (REMED-GFX-009)
-        pbrVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
-        if (pbrVertexShader_ == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr3d vertex shader: ") + SDL_GetError());
+        resources.CreateShader(
+            ConstructionShader::PbrVertex,
+            SdlGpuFailurePointEXT::PbrVertexShaderCreation, vsInfo,
+            "CNA SDL_GPU: failed to create pbr3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo skinnedVsInfo{};
         skinnedVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbrSkinned3dVertSpv);
@@ -2968,13 +3398,10 @@ namespace CNA::Internal::Backends::SdlGpu
         skinnedVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
         skinnedVsInfo.num_uniform_buffers = 3;  // PC, SkinnedLightParams + FogParams (REMED-GFX-009)
         skinnedVsInfo.num_storage_buffers = 1;  // BoneBlock
-        pbrSkinnedVertexShader_ = SDL_CreateGPUShader(device_, &skinnedVsInfo);
-        if (pbrSkinnedVertexShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, pbrVertexShader_);
-            pbrVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr_skinned3d vertex shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::PbrSkinnedVertex,
+            SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedVsInfo,
+            "CNA SDL_GPU: failed to create pbr_skinned3d vertex shader: ");
 
         SDL_GPUShaderCreateInfo fsInfo{};
         fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbr3dFragSpv);
@@ -2984,32 +3411,37 @@ namespace CNA::Internal::Backends::SdlGpu
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
         fsInfo.num_samplers = 5;  // base color, normal, metallic-roughness, emissive, occlusion
         fsInfo.num_uniform_buffers = 3;  // PC, LitLightParams, PbrParams
-        pbrFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
-        if (pbrFragmentShader_ == nullptr)
-        {
-            SDL_ReleaseGPUShader(device_, pbrSkinnedVertexShader_);
-            pbrSkinnedVertexShader_ = nullptr;
-            SDL_ReleaseGPUShader(device_, pbrVertexShader_);
-            pbrVertexShader_ = nullptr;
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr3d fragment shader: ") + SDL_GetError());
-        }
+        resources.CreateShader(
+            ConstructionShader::PbrFragment,
+            SdlGpuFailurePointEXT::PbrFragmentShaderCreation, fsInfo,
+            "CNA SDL_GPU: failed to create pbr3d fragment shader: ");
     }
 
     void SdlGpuGraphicsBackend::DestroyPbrResources()
     {
         for (auto& [key, pipeline] : pbrPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         pbrPipelines_.clear();
         for (auto& [key, pipeline] : pbrSkinnedPipelines_)
-            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+            ReleaseGraphicsPipeline(pipeline);
         pbrSkinnedPipelines_.clear();
-        if (pbrFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, pbrFragmentShader_); pbrFragmentShader_ = nullptr; }
-        if (pbrSkinnedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, pbrSkinnedVertexShader_); pbrSkinnedVertexShader_ = nullptr; }
-        if (pbrVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, pbrVertexShader_); pbrVertexShader_ = nullptr; }
+        ReleaseShader(pbrFragmentShader_);
+        ReleaseShader(pbrSkinnedVertexShader_);
+        ReleaseShader(pbrVertexShader_);
         // Destroyed here (not left to ~SdlGpuGraphicsBackend()'s generic pendingTextureReleases_
         // sweep) since these are owned SdlGpuTextureBackend instances, not raw handles.
-        defaultFlatNormalTexture_.reset();
-        defaultWhiteTexture_.reset();
+        if (defaultFlatNormalTexture_ != nullptr)
+        {
+            defaultFlatNormalTexture_.reset();
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Released);
+        }
+        if (defaultWhiteTexture_ != nullptr)
+        {
+            defaultWhiteTexture_.reset();
+            NotifyResourceEvent(SdlGpuResourceKindEXT::DefaultTexture,
+                                SdlGpuResourceEventEXT::Released);
+        }
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelinePbr3D(
@@ -3062,11 +3494,10 @@ namespace CNA::Internal::Backends::SdlGpu
             (depthStencilFormat != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat;
 
-        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (pipeline == nullptr)
-            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr3d pipeline: ") + SDL_GetError());
-        cache[key] = pipeline;
-        return pipeline;
+        SDL_GPUGraphicsPipeline* pipeline =
+            CreateGraphicsPipeline(pipelineInfo,
+                                   "CNA SDL_GPU: failed to create pbr3d pipeline: ");
+        return CacheGraphicsPipeline(cache, key, pipeline);
     }
 
     void SdlGpuGraphicsBackend::QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -3600,6 +4031,7 @@ namespace CNA::Internal::Backends::SdlGpu
             return;
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        CopyPassOwner copyPassOwner(copyPass);
 
         auto uploadOne = [&](const std::vector<std::uint8_t>& data, SDL_GPUBufferUsageFlags usage) -> SDL_GPUBuffer*
         {
@@ -3718,7 +4150,7 @@ namespace CNA::Internal::Backends::SdlGpu
             }
         }
 
-        SDL_EndGPUCopyPass(copyPass);
+        copyPassOwner.End();
     }
 
     void SdlGpuGraphicsBackend::IssueColoredDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
@@ -3973,58 +4405,67 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuGraphicsBackend::ReleaseSceneDrawBuffers()
+    void SdlGpuGraphicsBackend::ReleaseSceneDrawBuffers(bool clearCommands)
     {
+        auto release = [&](SDL_GPUBuffer*& buffer)
+        {
+            if (buffer != nullptr)
+            {
+                SDL_ReleaseGPUBuffer(device_, buffer);
+                buffer = nullptr;
+            }
+        };
+
         for (ColoredDrawCommand& command : coloredDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
         }
-        coloredDrawCommands_.clear();
+        if (clearCommands) coloredDrawCommands_.clear();
         for (TexturedDrawCommand& command : texturedDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
         }
-        texturedDrawCommands_.clear();
+        if (clearCommands) texturedDrawCommands_.clear();
         for (LitTexturedDrawCommand& command : litTexturedDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
         }
-        litTexturedDrawCommands_.clear();
+        if (clearCommands) litTexturedDrawCommands_.clear();
         for (AlphaTestDrawCommand& command : alphaTestDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
         }
-        alphaTestDrawCommands_.clear();
+        if (clearCommands) alphaTestDrawCommands_.clear();
         for (DualTextureDrawCommand& command : dualTextureDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
         }
-        dualTextureDrawCommands_.clear();
+        if (clearCommands) dualTextureDrawCommands_.clear();
         for (EnvMapDrawCommand& command : envMapDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
         }
-        envMapDrawCommands_.clear();
+        if (clearCommands) envMapDrawCommands_.clear();
         for (SkinnedDrawCommand& command : skinnedDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
-            if (command.uploadedBoneBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedBoneBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
+            release(command.uploadedBoneBuffer);
         }
-        skinnedDrawCommands_.clear();
+        if (clearCommands) skinnedDrawCommands_.clear();
         for (PbrDrawCommand& command : pbrDrawCommands_)
         {
-            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
-            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
-            if (command.uploadedBoneBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedBoneBuffer);
+            release(command.uploadedVertexBuffer);
+            release(command.uploadedIndexBuffer);
+            release(command.uploadedBoneBuffer);
         }
-        pbrDrawCommands_.clear();
+        if (clearCommands) pbrDrawCommands_.clear();
     }
 
     void SdlGpuGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
@@ -4178,7 +4619,18 @@ namespace CNA::Internal::Backends::SdlGpu
         if (texture_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create Texture2D: ") + SDL_GetError());
 
-        UpdatePixels(data.pixels.data(), width_ * 4);
+        try
+        {
+            UpdatePixels(data.pixels.data(), width_ * 4);
+        }
+        catch (...)
+        {
+            // A throwing constructor never runs ~SdlGpuTextureBackend(). Release the native
+            // texture here while preserving the upload exception and its SDL diagnostic.
+            SDL_ReleaseGPUTexture(owner_->Device(), texture_);
+            texture_ = nullptr;
+            throw;
+        }
     }
 
     SdlGpuTextureBackend::~SdlGpuTextureBackend()

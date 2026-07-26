@@ -19,6 +19,87 @@ namespace CNA::Internal::Backends::SdlGpu
     class SdlGpuRenderTargetBackend;
     class SdlGpuRenderTargetCubeBackend;
 
+    /**
+     * @brief Scoped, backend-instance-local failure points used by the SDL_GPU lifetime
+     * regression. NOXNA.
+     *
+     * These hooks deliberately sit above SDL rather than replacing it: successful stages still
+     * acquire real SDL_GPU resources, and a selected later stage throws before making its native
+     * call. Production construction uses None and pays only one predictable branch per stage.
+     */
+    enum class SdlGpuFailurePointEXT : std::uint8_t
+    {
+        None,
+        DeviceCreation,
+        WindowClaim,
+        SwapchainSetup,
+        DepthStencilFormatQuery,
+        SpriteVertexShaderCreation,
+        SpriteFragmentShaderCreation,
+        ColoredVertexShaderCreation,
+        ColoredFragmentShaderCreation,
+        TexturedVertexShaderCreation,
+        ColoredTexturedVertexShaderCreation,
+        TexturedFragmentShaderCreation,
+        LitTexturedVertexShaderCreation,
+        LitTexturedFragmentShaderCreation,
+        AlphaTestVertexShaderCreation,
+        AlphaTestColoredVertexShaderCreation,
+        AlphaTestFragmentShaderCreation,
+        DualTextureVertexShaderCreation,
+        DualTextureColoredVertexShaderCreation,
+        DualTextureFragmentShaderCreation,
+        EnvMapVertexShaderCreation,
+        EnvMapFragmentShaderCreation,
+        SkinnedVertexShaderCreation,
+        SkinnedColoredVertexShaderCreation,
+        SkinnedColoredFragmentShaderCreation,
+        PbrVertexShaderCreation,
+        PbrSkinnedVertexShaderCreation,
+        PbrFragmentShaderCreation,
+        WindowMetricsInitialization,
+        BackendRegistration,
+        AfterBackendRegistration,
+        FrameCommandBufferAcquisition,
+        GraphicsPipelineCreation,
+        SamplerCreation,
+        DefaultWhiteTextureCreation,
+        DefaultFlatNormalTextureCreation
+    };
+
+    /** @brief Resource categories reported by SdlGpuTestHooksEXT. NOXNA. */
+    enum class SdlGpuResourceKindEXT : std::uint8_t
+    {
+        Device,
+        WindowClaim,
+        Shader,
+        FrameCommandBuffer,
+        GraphicsPipeline,
+        Sampler,
+        DefaultTexture
+    };
+
+    /** @brief Acquisition/release edge reported by SdlGpuTestHooksEXT. NOXNA. */
+    enum class SdlGpuResourceEventEXT : std::uint8_t
+    {
+        Acquired,
+        Released
+    };
+
+    /**
+     * @brief Optional per-instance test injection and resource-lifetime observation. NOXNA.
+     *
+     * `context` must outlive the backend when `resourceEvent` is supplied. The callback is
+     * noexcept so cleanup can preserve the exception that triggered it.
+     */
+    struct SdlGpuTestHooksEXT
+    {
+        SdlGpuFailurePointEXT failAt = SdlGpuFailurePointEXT::None;
+        void* context = nullptr;
+        void (*resourceEvent)(void* context, SdlGpuResourceKindEXT resource,
+                              SdlGpuResourceEventEXT event) noexcept = nullptr;
+    };
+
     /** @brief `SDL_gpu`-backed `Texture2D`. Plain 2D, `SAMPLER` usage only (no mip chain yet). */
     class SdlGpuTextureBackend final : public ITextureBackend
     {
@@ -991,6 +1072,13 @@ namespace CNA::Internal::Backends::SdlGpu
          */
         SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                               CnaPresentationMode presentationMode, int swapInterval);
+        /**
+         * @brief Test-only constructor with scoped failure injection and destruction callbacks.
+         * NOXNA. Public backend selection APIs continue to use the ordinary overload above.
+         */
+        NOXNA SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
+                                    CnaPresentationMode presentationMode, int swapInterval,
+                                    const SdlGpuTestHooksEXT& testHooks);
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
         ~SdlGpuGraphicsBackend() override;
 
@@ -1246,8 +1334,15 @@ namespace CNA::Internal::Backends::SdlGpu
         {
             return spritePipelines_.size();
         }
+        /**
+         * @brief Drives the ordinary lazy stock-sprite pipeline and sampler factories without
+         * requiring swapchain presentation. Test-only GFX-028 failure/retry probe. NOXNA.
+         */
+        NOXNA void InitializeSpritePipelineAndSamplerForTestEXT();
 
     private:
+        struct ConstructionResources;
+
         struct LogicalViewport
         {
             float x = 0.0f;
@@ -1269,7 +1364,19 @@ namespace CNA::Internal::Backends::SdlGpu
         // not here, since pipeline creation needs a stable answer before any frame has rendered.
         void EnsureDepthStencilTexture(Uint32 width, Uint32 height);
         // Queries the best available combined depth+stencil format once, at construction time.
-        void QueryDepthStencilFormat();
+        static SDL_GPUTextureFormat QueryDepthStencilFormat(SDL_GPUDevice* device);
+        static void ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window, int interval);
+        void MaybeFailForTest(SdlGpuFailurePointEXT point);
+        void NotifyResourceEvent(SdlGpuResourceKindEXT resource,
+                                 SdlGpuResourceEventEXT event) const noexcept;
+        [[nodiscard]] SDL_GPUGraphicsPipeline* CreateGraphicsPipeline(
+            const SDL_GPUGraphicsPipelineCreateInfo& createInfo, const char* diagnostic);
+        [[nodiscard]] SDL_GPUGraphicsPipeline* CacheGraphicsPipeline(
+            std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*>& cache,
+            std::size_t key, SDL_GPUGraphicsPipeline* pipeline);
+        void ReleaseGraphicsPipeline(SDL_GPUGraphicsPipeline* pipeline) noexcept;
+        void ReleaseShader(SDL_GPUShader*& shader) noexcept;
+        void ReleaseSampler(SDL_GPUSampler*& sampler) noexcept;
 
         // Real architectural fix for a render-target-destroyed-before-flush use-after-free: a
         // RenderTarget2D/RenderTargetCube's destructor already purges itself from
@@ -1295,7 +1402,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // DepthStencilState.None disables tests/writes but does NOT erase pipeline target
         // metadata: REMED-GFX-097 therefore passes the active pass's actual depth format (or
         // INVALID for no attachment) into creation and cache selection.
-        void CreateSpriteResources();
+        void CreateSpriteResources(ConstructionResources& resources);
         void DestroySpriteResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat,
                                                                           SDL_GPUSampleCount sampleCount,
@@ -1322,11 +1429,11 @@ namespace CNA::Internal::Backends::SdlGpu
                              SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d.
-        void CreateColoredResources();
+        void CreateColoredResources(ConstructionResources& resources);
         void DestroyColoredResources();
-        void CreateTexturedResources();   ///< also creates colored_textured3d's vertex shader (shares textured3d's fragment shader)
+        void CreateTexturedResources(ConstructionResources& resources);   ///< also creates colored_textured3d's vertex shader (shares textured3d's fragment shader)
         void DestroyTexturedResources();
-        void CreateLitTexturedResources();
+        void CreateLitTexturedResources(ConstructionResources& resources);
         void DestroyLitTexturedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColored3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
@@ -1358,9 +1465,9 @@ namespace CNA::Internal::Backends::SdlGpu
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
 
         // Phase SDLGPU-7: AlphaTestEffect / DualTextureEffect.
-        void CreateAlphaTestResources();
+        void CreateAlphaTestResources(ConstructionResources& resources);
         void DestroyAlphaTestResources();
-        void CreateDualTextureResources();
+        void CreateDualTextureResources(ConstructionResources& resources);
         void DestroyDualTextureResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
             std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
@@ -1386,7 +1493,7 @@ namespace CNA::Internal::Backends::SdlGpu
                                  SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-9: EnvironmentMapEffect (SDLGPU-33).
-        void CreateEnvMapResources();
+        void CreateEnvMapResources(ConstructionResources& resources);
         void DestroyEnvMapResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineEnvMap3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
@@ -1403,7 +1510,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34). GetOrCreatePipelineSkinned3D's `hasVertexColor`
         // selects the stride-56 skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair
         // instead of the stride-52 skinnedVertexShader_/litTexturedFragmentShader_ pair.
-        void CreateSkinnedResources();
+        void CreateSkinnedResources(ConstructionResources& resources);
         void DestroySkinnedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
             bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
@@ -1422,7 +1529,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // EnsureDefaultPbrTextures() lazily creates the 1x1 fallback textures the 4 optional maps
         // bind when the effect leaves them unset, mirroring EasyGLGraphicsBackend::
         // EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture()'s identical role.
-        void CreatePbrResources();
+        void CreatePbrResources(ConstructionResources& resources);
         void DestroyPbrResources();
         void EnsureDefaultPbrTextures();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
@@ -1468,7 +1575,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // Releases every transient buffer UploadSceneDrawData created, and clears all 3 queues --
         // safe to call immediately after SDL_SubmitGPUCommandBuffer (SDL_gpu defers the actual
         // free until the GPU is done, per SDL_ReleaseGPUBuffer's own documented contract).
-        void ReleaseSceneDrawBuffers();
+        void ReleaseSceneDrawBuffers(bool clearCommands = true);
         [[nodiscard]] SDL_GPUPrimitiveType ToTopology(PrimitiveType primitive) const;
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
@@ -1516,6 +1623,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
+        SdlGpuTestHooksEXT testHooks_{};
+        bool testFailureInjected_ = false;
+        bool registeredForWindow_ = false;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
         /// SDLGPU-6: whether SDL_CreateGPUDevice's debug_mode was requested (an #ifndef NDEBUG
