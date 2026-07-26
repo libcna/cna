@@ -43,6 +43,52 @@ namespace CNA::Internal::Backends::Software
             float nx = 0.0f, ny = 0.0f, nz = 1.0f;
         };
 
+        /// REMED-GFX-030: complete public depth state captured for one Software draw. Keeping all
+        /// three fields together prevents the rasterizer from consulting a later live state and
+        /// makes DepthRead (test on, write off) distinct from both Default and None.
+        struct RasterDepthState
+        {
+            bool testEnabled = true;
+            bool writeEnabled = true;
+            int compareFunction = 3; // CompareFunction::LessEqual
+        };
+
+        /// REMED-GFX-030: XNA/FNA compares the incoming fragment depth (left operand) with the
+        /// currently stored depth (right operand). Every public CompareFunction is mapped explicitly;
+        /// an invalid ordinal is rejected instead of silently falling back to a different relation.
+        bool DepthComparisonPasses(float incoming, float stored, int compareFunction)
+        {
+            switch (compareFunction)
+            {
+                case 0: return true;                 // Always
+                case 1: return false;                // Never
+                case 2: return incoming <  stored;   // Less
+                case 3: return incoming <= stored;   // LessEqual
+                case 4: return incoming == stored;   // Equal
+                case 5: return incoming >= stored;   // GreaterEqual
+                case 6: return incoming >  stored;   // Greater
+                case 7: return incoming != stored;   // NotEqual
+                default:
+                    throw std::runtime_error(
+                        "SoftwareGraphicsBackend: unsupported depth CompareFunction ordinal");
+            }
+        }
+
+        bool DepthFragmentPasses(const RasterDepthState& state, float incoming, float stored)
+        {
+            return !state.testEnabled ||
+                   DepthComparisonPasses(incoming, stored, state.compareFunction);
+        }
+
+        void WritePassingDepth(SoftwareFramebuffer& fb, const RasterDepthState& state,
+                               std::size_t pixelIndex, float depth)
+        {
+            // As on the correct EasyGL/D3D paths, disabling the depth test disables the complete
+            // depth operation even if a custom state happens to retain writeEnable=true.
+            if (state.testEnabled && state.writeEnabled)
+                fb.depthBuffer[pixelIndex] = depth;
+        }
+
         /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
         /// by W (SOFTWARE-83). Clip space is still linear -- position and attributes can both be
         /// interpolated with a plain lerp here, unlike the post-divide RasterVertex above.
@@ -443,7 +489,7 @@ namespace CNA::Internal::Backends::Software
         /// byte-identical for the Solid fill and reused verbatim by the WireFrame line walk. The clip
         /// guard is a no-op for the fill loop (its bounding box is already clamped to `clip`) and the
         /// safety net for the line walk.
-        inline void WriteColoredFragment(SoftwareFramebuffer& fb, bool depthTestEnabled,
+        inline void WriteColoredFragment(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
                                          const RasterClipRect& clip, int x, int y,
                                          float depth, float invW, float pr, float pg, float pb, float pa,
                                          int colorWriteMask, unsigned int multiSampleMask)
@@ -457,12 +503,14 @@ namespace CNA::Internal::Backends::Software
                 return;
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
-            if (depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
+            // REMED-GFX-030: comparison precedes every color/depth write.
+            if (!DepthFragmentPasses(depthState, depth, fb.depthBuffer[pixelIndex]))
                 return;
             const float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
-            // ColorWriteChannels controls only colour writes, never depth).
-            fb.depthBuffer[pixelIndex] = depth;
+            // ColorWriteChannels controls only colour writes, never depth). REMED-GFX-030: a
+            // passing fragment updates depth only when DepthBufferWriteEnable is true.
+            WritePassingDepth(fb, depthState, pixelIndex, depth);
             const std::size_t colorIndex = pixelIndex * 4;
             // REMED-GFX-077: gate each channel by BlendState.ColorWriteChannels — a masked-off channel
             // keeps its existing destination byte (identity), the XNA semantic.
@@ -473,12 +521,12 @@ namespace CNA::Internal::Backends::Software
         }
 
         /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
-        /// with a per-pixel depth test against `fb.depthBuffer` when `depthTestEnabled` and
+        /// with a per-pixel depth test/write against `fb.depthBuffer` per `depthState` and
         /// backface culling per `cullMode` (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
         /// REMED-GFX-082: when `wireframe`, only the edges selected by `edgeMask` are rasterized
         /// (line walk) instead of the interior fill -- culling and the zero-area reject are shared, so
         /// a culled/degenerate triangle emits no wire either.
-        void RasterizeTriangle(SoftwareFramebuffer& fb, bool depthTestEnabled, int cullMode,
+        void RasterizeTriangle(SoftwareFramebuffer& fb, const RasterDepthState& depthState, int cullMode,
                                float depthBias, float slopeScaleDepthBias,
                                const RasterClipRect& clip,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
@@ -506,7 +554,7 @@ namespace CNA::Internal::Backends::Software
                         const float invW  = A.invW  + t * (B.invW  - A.invW);
                         float depth = A.depth + t * (B.depth - A.depth);
                         if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
-                        WriteColoredFragment(fb, depthTestEnabled, clip, x, y, depth, invW,
+                        WriteColoredFragment(fb, depthState, clip, x, y, depth, invW,
                                              A.r + t * (B.r - A.r), A.g + t * (B.g - A.g),
                                              A.b + t * (B.b - A.b), A.a + t * (B.a - A.a),
                                              colorWriteMask, multiSampleMask);
@@ -558,7 +606,7 @@ namespace CNA::Internal::Backends::Software
                     float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
                     if (hasBias) depth = std::clamp(depth + biasOffset, 0.0f, 1.0f);  // REMED-GFX-083
                     const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
-                    WriteColoredFragment(fb, depthTestEnabled, clip, x, y, depth, invW,
+                    WriteColoredFragment(fb, depthState, clip, x, y, depth, invW,
                                          lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r,
                                          lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g,
                                          lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b,
@@ -751,7 +799,7 @@ namespace CNA::Internal::Backends::Software
             bool useEnvMap;
             bool needUV;
             bool blendEnabled;
-            bool depthTestEnabled;
+            RasterDepthState depthState; // REMED-GFX-030: per-draw test/write/function snapshot
             int colorWriteMask;           // REMED-GFX-077: raw XNA ColorWriteChannels (bit0=R..bit3=A)
             unsigned int multiSampleMask; // REMED-GFX-077: single-sample ⇒ only bit 0 is meaningful
         };
@@ -774,7 +822,8 @@ namespace CNA::Internal::Backends::Software
                 return;
             const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
                                            static_cast<std::size_t>(x);
-            if (ctx.depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
+            // REMED-GFX-030: comparison precedes shading and every color/depth write.
+            if (!DepthFragmentPasses(ctx.depthState, depth, fb.depthBuffer[pixelIndex]))
                 return;
 
             float r = pr / invW, g = pg / invW, b = pb / invW, a = pa / invW;
@@ -854,7 +903,8 @@ namespace CNA::Internal::Backends::Software
 
             // Depth is written independently of the colour write mask (REMED-GFX-077 Phase 11:
             // ColorWriteChannels never gates depth — only the colour channels below).
-            fb.depthBuffer[pixelIndex] = depth;
+            // REMED-GFX-030: DepthRead reaches this point but leaves stored depth untouched.
+            WritePassingDepth(fb, ctx.depthState, pixelIndex, depth);
 
             const std::size_t colorIndex = pixelIndex * 4;
             // REMED-GFX-077: final colour channels (opaque store or blended result). Each channel is
@@ -901,7 +951,8 @@ namespace CNA::Internal::Backends::Software
         /// per-light diffuse lighting is computed for either (design decision 6: no lighting
         /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
         /// same simplification already used for the plain BasicEffect path.
-        void RasterizeTriangleShaded(SoftwareFramebuffer& fb, bool depthTestEnabled, bool blendEnabled,
+        void RasterizeTriangleShaded(SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+                                     bool blendEnabled,
                                      int cullMode, float depthBias, float slopeScaleDepthBias,
                                      const GpuDrawParams& params, const RasterClipRect& clip,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2,
@@ -915,7 +966,7 @@ namespace CNA::Internal::Backends::Software
             const bool useEnvMap = params.envMapping && envMap != nullptr;
             const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
             const ShadedContext ctx{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
-                                    needUV, blendEnabled, depthTestEnabled, colorWriteMask, multiSampleMask};
+                                    needUV, blendEnabled, depthState, colorWriteMask, multiSampleMask};
 
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
@@ -1312,7 +1363,10 @@ namespace CNA::Internal::Backends::Software
         const RasterVertex rv2 = MakeScreenSpaceVertex(c2.X, c2.Y, layerDepth, r, g, b, a, u2, v2);
         const RasterVertex rv3 = MakeScreenSpaceVertex(c3.X, c3.Y, layerDepth, r, g, b, a, u1, v2);
 
-        const bool depthTestEnabled = owner_.IsDepthTestEnabled();
+        // REMED-GFX-030: snapshot the complete depth tuple for this submitted sprite draw.
+        const RasterDepthState depthState{owner_.IsDepthTestEnabled(),
+                                          owner_.IsDepthWriteEnabled(),
+                                          owner_.GetDepthCompareFunction()};
         const bool blendEnabled = owner_.IsBlendEnabled();
         const int cullMode = owner_.GetCullMode();
         // REMED-GFX-080: effective raster clip = framebuffer ∩ Viewport ∩ (ScissorRectangle when
@@ -1336,10 +1390,10 @@ namespace CNA::Internal::Backends::Software
         // A quad is flat (constant layerDepth -> zero depth slope), so only the constant term applies.
         const float depthBias = owner_.GetDepthBias();
         const float slopeScaleDepthBias = owner_.GetSlopeScaleDepthBias();
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
+        RasterizeTriangleShaded(fb, depthState, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv0, rv1, rv2,
                                 owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(), wire, kEdgeAll);
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
+        RasterizeTriangleShaded(fb, depthState, blendEnabled, cullMode, depthBias, slopeScaleDepthBias,
                                 spriteParams, clip, rv2, rv3, rv0,
                                 owner_.GetColorWriteMask(), owner_.GetMultiSampleMask(), wire, kEdgeAll);
     }
@@ -1508,10 +1562,18 @@ namespace CNA::Internal::Backends::Software
         multiSampleMask_ = writeState.multiSampleMask;
     }
 
-    void SoftwareGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool, int, bool, int, int, int, int, int,
-                                                         int, int, bool, int, int, int, int)
+    void SoftwareGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                                         bool, int, int, int, int, int, int, int, bool,
+                                                         int, int, int, int)
     {
+        // REMED-GFX-030: every public CompareFunction has ordinal 0..7. Reject an invalid value at
+        // state application rather than carrying it into the hot fragment path or approximating it.
+        if (depthFunc < 0 || depthFunc > 7)
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::ApplyDepthStencilState: unsupported depth CompareFunction ordinal");
         depthTestEnabled_ = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+        depthCompareFunction_ = depthFunc;
     }
 
     void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
@@ -1635,7 +1697,7 @@ namespace CNA::Internal::Backends::Software
 
     void SoftwareGraphicsBackend::SetDepthTestEnabled(bool enabled) { depthTestEnabled_ = enabled; }
     void SoftwareGraphicsBackend::SetBlendEnabled(bool) {}
-    void SoftwareGraphicsBackend::SetDepthWriteEnabled(bool) {}
+    void SoftwareGraphicsBackend::SetDepthWriteEnabled(bool enabled) { depthWriteEnabled_ = enabled; }
 
     std::unique_ptr<IVertexBufferBackend> SoftwareGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
@@ -1673,6 +1735,8 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
+        const RasterDepthState depthState{
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
         // REMED-GFX-079: map NDC over the active GraphicsDevice.Viewport (X/Y offset, Width/Height
         // sub-scale, MinDepth/MaxDepth range) and clip rasterization to framebuffer ∩ Viewport --
         // a default full-target viewport reduces to the pre-GFX-079 full-framebuffer mapping.
@@ -1713,10 +1777,10 @@ namespace CNA::Internal::Backends::Software
             // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+            RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                               rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
@@ -1742,6 +1806,8 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
+        const RasterDepthState depthState{
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
         // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
@@ -1793,10 +1859,10 @@ namespace CNA::Internal::Backends::Software
             // masks that shared edge -- only the real polygon boundary rv0-rv1-rv2-rv3 is drawn.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+            RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                               rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
+                RasterizeTriangle(fb, depthState, cullMode_, depthBias_, slopeScaleDepthBias_, clip,
                                   rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }
     }
@@ -1837,6 +1903,8 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
+        const RasterDepthState depthState{
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
         // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
@@ -1876,11 +1944,11 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }
@@ -1919,6 +1987,8 @@ namespace CNA::Internal::Backends::Software
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
+        const RasterDepthState depthState{
+            depthTestEnabled_, depthWriteEnabled_, depthCompareFunction_}; // REMED-GFX-030 draw snapshot
         // REMED-GFX-079: see DrawColoredPrimitives -- the active viewport transform + clip.
         int vpX = 0, vpY = 0, vpW = 0, vpH = 0;
         float vpMinDepth = 0.0f, vpMaxDepth = 1.0f;
@@ -1971,11 +2041,11 @@ namespace CNA::Internal::Backends::Software
             // triangles of a near-plane clipped quad mask their shared rv0-rv2 diagonal edge.
             const bool wire = (fillMode_ == 1);
             const unsigned mask0 = (clippedCount == 4) ? (kEdgeV0V1 | kEdgeV1V2) : kEdgeAll;
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+            RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                     depthBias_, slopeScaleDepthBias_, params,
                                     clip, rv[0], rv[1], rv[2], colorWriteMask_, multiSampleMask_, wire, mask0);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_,
+                RasterizeTriangleShaded(fb, depthState, blendEnabled_, cullMode_,
                                         depthBias_, slopeScaleDepthBias_, params,
                                         clip, rv[0], rv[2], rv[3], colorWriteMask_, multiSampleMask_, wire, kEdgeV1V2 | kEdgeV2V0);
         }

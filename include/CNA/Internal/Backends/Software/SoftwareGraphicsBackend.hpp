@@ -320,6 +320,13 @@ namespace CNA::Internal::Backends::Software
         /// SpriteBatch::Begin() applies its BlendState the same way any other draw does.
         [[nodiscard]] bool IsBlendEnabled() const { return blendEnabled_; }
         [[nodiscard]] bool IsDepthTestEnabled() const { return depthTestEnabled_; }
+        /// REMED-GFX-030: whether passing fragments may update the active target's depth buffer.
+        /// Kept independent from depth testing so DepthRead can compare against existing depth
+        /// without modifying it. A disabled depth test suppresses both comparison and storage.
+        [[nodiscard]] bool IsDepthWriteEnabled() const { return depthWriteEnabled_; }
+        /// REMED-GFX-030: raw XNA CompareFunction ordinal used for the depth comparison
+        /// (Always=0 through NotEqual=7). Captured with the other two depth fields for each draw.
+        [[nodiscard]] int GetDepthCompareFunction() const { return depthCompareFunction_; }
         /// REMED-GFX-077: raw XNA ColorWriteChannels of the current BlendState (slot 0; Software has
         /// one active colour buffer). Used by SoftwareSpriteBatchBackend so its quads honour the
         /// per-channel write mask the same way any other draw does. 15 (All) = every channel.
@@ -385,6 +392,15 @@ namespace CNA::Internal::Backends::Software
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         bool depthTestEnabled_ = true;
+        /// REMED-GFX-030: DepthStencilState.DepthBufferWriteEnable. Defaults to true with the
+        /// Software backend's existing default test-enable and LessEqual function, matching
+        /// DepthStencilState::Default. A passing fragment writes only when test AND write are enabled;
+        /// disabled depth testing performs neither comparison nor storage (the GL/D3D/XNA contract).
+        bool depthWriteEnabled_ = true;
+        /// REMED-GFX-030: raw CompareFunction ordinal. 3 = LessEqual, the public Default/DepthRead/
+        /// None preset function. ApplyDepthStencilState validates all public values 0..7 rather than
+        /// silently approximating an unknown value.
+        int depthCompareFunction_ = 3;
         /// Opaque (false) vs. simplified AlphaBlend (true) -- design decision 7. Defaults to
         /// false, matching real XNA/FNA's own default GraphicsDevice.BlendState (Opaque).
         bool blendEnabled_ = false;
