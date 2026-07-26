@@ -249,6 +249,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME WebGPU_SpriteBatch_CustomViewport COMMAND cna_test_webgpu_spritebatch_custom_viewport
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-102: every SpriteBatch.Begin() BlendState must be captured by value and select a
+    # compatible static sprite pipeline; BlendFactor remains per-batch dynamic state. The public
+    # sRGB-aware regression distinguishes presets, custom colour/alpha equations, constants, and
+    # static/dynamic A->B->A timing within one render-target pass.
+    cna_webgpu_test(cna_test_webgpu_spritebatch_blendstate
+                    examples/webgpu_spritebatch_blendstate_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SpriteBatch_BlendState
+        COMMAND cna_test_webgpu_spritebatch_blendstate
+        TIMEOUT 60 LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # REMED-GFX-077: BlendState.ColorWriteChannels (RT0) via WGPUColorTargetState.writeMask +
     # BlendState.MultiSampleMask via WGPUMultisampleState.mask (both in Make3DPipelineKey). The 3D
     # keyed pipeline path is used deliberately -- the fixed internal SpriteBatch pipeline does not
