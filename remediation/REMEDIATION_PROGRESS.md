@@ -2461,7 +2461,7 @@ existing task.
 | REMED-GFX-109 | Bgfx same-handle index updates before a deferred frame overwrite bytes needed by earlier queued draws. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX BUFFER-VERSIONING/CAPTURE CORRECTION.** |
 | REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT SOFTWARE ADDRESSING/BOUNDS CORRECTION.** |
 | REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **OPEN — INDEPENDENT SHARED BGFX TOPOLOGY-MAPPING CORRECTION.** |
-| REMED-GFX-112 | Vulkan's indexed strip control emits an unaligned 32-bit index-buffer binding-offset validation message while pixels pass. | MEDIUM | P2 | REMED-GFX-106 semantic controls | **OPEN — INDEPENDENT VULKAN REPRODUCTION REQUIRED.** |
+| REMED-GFX-112 | Vulkan's indexed strip control emits an unaligned 32-bit index-buffer binding-offset validation message while pixels pass. | MEDIUM | P2 | REMED-GFX-106 semantic controls | **DONE — DEFERRED NATIVE INDEX-ARENA OFFSETS ALIGNED PER FORMAT (2026-07-26).** |
 
 #### REMED-BUILD-010 detail
 
@@ -8743,6 +8743,115 @@ GFX-103 and was subsequently completed in its own remediation.
 - `b4c3dcf8 fix(Task REMED-GFX-103): make empty vertex uploads safe and aligned`
 - `05d8eaa9 test(Task REMED-GFX-103): cover vertex upload ranges`
 - `docs(remediation): record GFX-103 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-112 — Vulkan indexed-strip binding-offset validation (DONE 2026-07-26)
+
+### Exact pre-fix reproduction
+
+The GFX-106 `Uint16 -> Uint32 -> Uint16` deferred triangle-strip control rendered all three
+distinctive red/lime/blue samples correctly, but Vulkan validation reported:
+
+```text
+vkCmdBindIndexBuffer(): offset (6) does not fall on alignment (VK_INDEX_TYPE_UINT32) boundary.
+The Vulkan spec states: The sum of offset and the base address of the range of VkDeviceMemory object that is backing buffer, must be a multiple of the size of the type indicated by indexType (https://docs.vulkan.org/spec/latest/chapters/drawing.html#VUID-vkCmdBindIndexBuffer-offset-08783)
+```
+
+Temporary reproduction instrumentation captured the exact native state before any correction.
+Handle values are process-local; these are the values from the recorded failing run:
+
+- The first persistent 16-bit source was `VkBuffer 0x380000000038`, created for 5 logical
+  indices/10 bytes. Its one-primitive `TriangleStrip` used `startIndex=2`, logical source byte
+  offset 4, `baseVertex=0`, and exactly 3 indices/6 bytes. Deferred replay copied those exact
+  bytes to native arena range `[0,6)`.
+- The failing dynamic 32-bit source was `VkBuffer 0x3a000000003a`, created for 4 logical
+  indices/16 bytes. The public call was `TriangleStrip`, `baseVertex=0`, `minVertexIndex=3`,
+  `numVertices=4`, `startIndex=0`, and `primitiveCount=2`: exactly 4 indices/16 bytes from
+  logical source range `[0,16)`.
+- The public source buffer was not bound at replay. The actual `vkCmdBindIndexBuffer` handle was
+  the current shared deferred arena, `VkBuffer 0x500000000050`, with buffer size 1,048,576 bytes,
+  a 1,048,576-byte `VkDeviceMemory` allocation, and memory binding offset zero. Replay used
+  `VK_INDEX_TYPE_UINT32`, native binding offset 6,
+  `VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP`, and then
+  `vkCmdDrawIndexed(indexCount=4, firstIndex=0, vertexOffset=0)`.
+- The final persistent 16-bit source was `VkBuffer 0x3c000000003c`, 5 indices/10 bytes,
+  `startIndex=0`, and `baseVertex=7`; it replayed at native offset 22 and proved that
+  `baseVertex` remained independent of the binding placement.
+
+Because the arena buffer was bound to memory at offset zero, the failing 32-bit address was
+`0 + 6`, which is not divisible by the four-byte size of `VK_INDEX_TYPE_UINT32`. This is exactly
+the rule named by `VUID-vkCmdBindIndexBuffer-offset-08783`. The arena was amply sized, the
+persistent/dynamic uploads were exact, `startIndex` had already selected the correct element
+slice, and pixel output proved that width/count/base translation survived capture.
+
+### Root cause and correction
+
+The defect was in deferred replay's native index-arena placement/binding offset, not public
+buffer allocation, source upload padding, `startIndex` translation, or pipeline selection.
+Replay packed each captured `ibData` vector immediately after the previous one. An odd count of
+16-bit indices therefore left the cursor at `2 mod 4`; the following 32-bit draw copied and bound
+its exact data at that unaligned cursor.
+
+Replay now:
+
+- derives a two- or four-byte native alignment from each captured `VkIndexType`;
+- rounds only the private arena placement up to that alignment;
+- checks the aligned native range against the unchanged 1 MiB arena;
+- zero-fills only the internal gap, then copies the exact logical index bytes;
+- binds the aligned native offset and advances the private cursor past the exact copied bytes;
+- submits the unchanged logical index count with `firstIndex=0` and the independently captured
+  `baseVertex`.
+
+Public `startIndex` remains an index-element offset and is still applied once while taking the
+deferred snapshot. Public index count, element width, capacity, and source bytes are not rounded
+or widened. No pipeline key, buffer identity, wait, frame, `Present`, submission, or backend
+architecture changed.
+
+### Permanent regression and verification
+
+The Vulkan debug messenger now retains complete warning/error messages for internal native
+validation tests. The exact A -> B -> A reproducer snapshots that stream and uses a fatal
+assertion, so the former VUID fails the test rather than merely appearing in console output.
+Permanent exact-pixel controls cover:
+
+- 32-bit `TriangleStrip` with both zero and nonzero public `startIndex`;
+- independent positive `baseVertex` and the existing negative-base public rejection;
+- persistent, dynamic, typed DrawUser, and explicit-declaration DrawUser indexed paths;
+- 16-bit and 32-bit strips, including the original odd-16 -> 32 -> odd-16 arena sequence;
+- different buffers, offsets, formats, and counts in deferred A -> B -> A order;
+- caller mutation plus public-buffer destruction after queueing;
+- exact red/lime/blue/background samples proving that internal padding is not drawn;
+- exact triangle-list, triangle-strip, line-list, and line-strip output under the same fatal
+  Vulkan validation capture.
+
+The completed GFX-104 exact-slice/`startIndex`/`baseVertex` contract and GFX-105 strip-pipeline
+compatibility controls remain green. Final results:
+
+- Vulkan native validation shard: **36/36**, with no warning/error message;
+- Vulkan indexed instancing, indexed culling, and vertex/index readback integrations: **3/3**
+  tests, including their exact **1/1**, **6/6**, and **20/20** internal checks;
+- Vulkan AddressSanitizer: **36/36**, with external Vulkan-driver leak detection disabled and no
+  address error;
+- WebGPU: **44/44** relevant GFX-104/GFX-105/indexed controls;
+- EasyGL: **35/35** relevant indexed controls;
+- SDL_GPU: **28/28** practical strip/count/buffer controls;
+- Bgfx OpenGL: **29/29** practical indexed controls, and Bgfx Vulkan route: **3/3**;
+- Software: **30 passed, 1 intentional unsupported-strip skip**;
+- D3D9 and D3D11 through Wine: **9/9** exact indexed pixels each.
+
+All fourteen backend libraries compile incrementally with at most four jobs: ASCII, Bgfx, Canvas,
+D3D9, D3D11, D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulkan, and WebGPU.
+Every used build cache had `CNA_USE_CCACHE=ON` and a ccache compiler launcher. No build directory
+was cleaned and no build tree was created under `/tmp`.
+
+**Commits:**
+
+- `4114a048 test(Task REMED-GFX-112): make index binding validation fatal`
+- `494b3db3 fix(Task REMED-GFX-112): align deferred index arena offsets`
+- `d923adc0 test(Task REMED-GFX-112): cover indexed strip replay paths`
+- `a77498f3 test(Task REMED-GFX-112): retain indexed topology controls`
+- `docs(remediation): record GFX-112 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
 
