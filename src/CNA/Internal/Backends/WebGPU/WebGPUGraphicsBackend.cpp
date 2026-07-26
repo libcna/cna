@@ -116,8 +116,11 @@ namespace CNA::Internal::Backends::WebGPU
             state.completed = true;
         }
 
-        void OnUncapturedError(WGPUDevice const*, WGPUErrorType type, WGPUStringView message, void*, void*)
+        void OnUncapturedError(WGPUDevice const*, WGPUErrorType type, WGPUStringView message,
+                               void* userdata1, void*)
         {
+            if (userdata1 != nullptr)
+                static_cast<std::atomic<std::size_t>*>(userdata1)->fetch_add(1);
             std::cerr << "CNA WebGPU uncaptured error (" << static_cast<int>(type) << "): "
                       << ToString(message) << '\n';
         }
@@ -1808,6 +1811,10 @@ namespace CNA::Internal::Backends::WebGPU
     {
         if (begun_)
             throw std::logic_error("CNA WebGPU SpriteBatch.Begin called twice without End");
+        // REMED-GFX-102: SpriteBatch::Begin has already atomically applied its by-value
+        // BlendState (including BlendFactor) to GraphicsDevice. Capture that complete normalized
+        // state now, before Deferred sorting postpones the backend Draw calls until End().
+        blendSnapshot_ = owner_->CaptureSpriteBlendSnapshot();
         begun_ = true;
     }
 
@@ -1859,7 +1866,8 @@ namespace CNA::Internal::Backends::WebGPU
         if (samplable == nullptr)
             throw std::invalid_argument("CNA WebGPU: SpriteBatch received a texture from another graphics backend");
         owner_->QueueSprite(texture, *samplable, destinationRectangle, sourceRectangle, color, rotation,
-                            origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_);
+                            origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
+                            blendSnapshot_);
     }
 
     WebGPUGraphicsBackend::WebGPUGraphicsBackend(SDL_Window* window,
@@ -2052,6 +2060,7 @@ namespace CNA::Internal::Backends::WebGPU
         descriptor.label = StringView("CNA WebGPU Device");
         descriptor.defaultQueue.label = StringView("CNA WebGPU Queue");
         descriptor.uncapturedErrorCallbackInfo.callback = OnUncapturedError;
+        descriptor.uncapturedErrorCallbackInfo.userdata1 = &uncapturedErrorCount_;
         descriptor.deviceLostCallbackInfo.callback = OnDeviceLost;
         WGPURequestDeviceCallbackInfo callback{};
         callback.mode = WGPUCallbackMode_AllowProcessEvents;
@@ -2146,7 +2155,7 @@ namespace CNA::Internal::Backends::WebGPU
         surfaceConfigured_ = true;
         RecreateDepthTexture();
         RecreateMsaaColorTexture();
-        if (formatChanged || spritePipelineBlend_ == nullptr)
+        if (formatChanged || spriteShader_ == nullptr)
             CreateSpriteResources();
         if (formatChanged || coloredShader_ == nullptr)
             CreateColoredResources();
@@ -2230,14 +2239,16 @@ namespace CNA::Internal::Backends::WebGPU
     void WebGPUGraphicsBackend::DestroySpriteResources()
     {
         if (spriteVertexBuffer_ != nullptr) wgpuBufferRelease(spriteVertexBuffer_);
-        if (spritePipelineOpaque_ != nullptr) wgpuRenderPipelineRelease(spritePipelineOpaque_);
-        if (spritePipelineBlend_ != nullptr) wgpuRenderPipelineRelease(spritePipelineBlend_);
+        for (auto& [key, pipeline] : spritePipelines_)
+        {
+            (void) key;
+            if (pipeline != nullptr) wgpuRenderPipelineRelease(pipeline);
+        }
+        spritePipelines_.clear();
         if (spritePipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(spritePipelineLayout_);
         if (spriteBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(spriteBindGroupLayout_);
         if (spriteShader_ != nullptr) wgpuShaderModuleRelease(spriteShader_);
         spriteVertexBuffer_ = nullptr;
-        spritePipelineOpaque_ = nullptr;
-        spritePipelineBlend_ = nullptr;
         spritePipelineLayout_ = nullptr;
         spriteBindGroupLayout_ = nullptr;
         spriteShader_ = nullptr;
@@ -2304,6 +2315,75 @@ struct VertexOutput {
         pipelineLayoutDescriptor.bindGroupLayouts = &spriteBindGroupLayout_;
         spritePipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
 
+        // REMED-GFX-102: pipelines are now created lazily once per complete STATIC compatibility
+        // key by GetOrCreateSpritePipeline(). This function creates only the shared shader/layout
+        // resources; there are no longer two fixed opaque/straight-alpha pipelines.
+        if (spriteShader_ == nullptr || spriteBindGroupLayout_ == nullptr ||
+            spritePipelineLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create SpriteBatch shared GPU resources");
+    }
+
+    WebGPUSpriteBlendSnapshot WebGPUGraphicsBackend::CaptureSpriteBlendSnapshot() const
+    {
+        WebGPUSpriteBlendSnapshot snapshot;
+        snapshot.blendEnabled = blendEnabled_;
+        snapshot.colorSrc = blendParams_.colorSrc;
+        snapshot.colorDst = blendParams_.colorDst;
+        snapshot.alphaSrc = blendParams_.alphaSrc;
+        snapshot.alphaDst = blendParams_.alphaDst;
+        snapshot.colorFunc = blendParams_.colorFunc;
+        snapshot.alphaFunc = blendParams_.alphaFunc;
+        snapshot.colorWriteMask = colorWriteMask_ & 0xF;
+        snapshot.multiSampleMask = sampleMask_;
+        snapshot.blendFactorR = blendFactorR_;
+        snapshot.blendFactorG = blendFactorG_;
+        snapshot.blendFactorB = blendFactorB_;
+        snapshot.blendFactorA = blendFactorA_;
+
+        // Target compatibility is captured by VALUE too. Object/face identity is deliberately
+        // absent: compatible backbuffers, RenderTarget2D instances, and cube faces reuse a cache
+        // entry. Render-target switches flush pending commands before changing these pointers.
+        if (currentRenderTarget_ != nullptr)
+        {
+            snapshot.targetFormat = currentRenderTarget_->ColorFormat();
+            snapshot.sampleCount = static_cast<std::uint32_t>(
+                std::max(1, currentRenderTarget_->GetMultiSampleCount()));
+        }
+        else if (currentRenderTargetCubeFace_ != nullptr)
+        {
+            snapshot.targetFormat = currentRenderTargetCubeFace_->ColorFormat();
+            snapshot.sampleCount = 1;
+        }
+        else
+        {
+            snapshot.targetFormat = surfaceFormat_;
+            snapshot.sampleCount = static_cast<std::uint32_t>(std::max(1, sampleCount_));
+        }
+        return snapshot;
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreateSpritePipeline(
+        const WebGPUSpriteBlendSnapshot& snapshot)
+    {
+        SpritePipelineKey key;
+        key.blendEnabled = snapshot.blendEnabled;
+        key.colorSrc = snapshot.colorSrc;
+        key.colorDst = snapshot.colorDst;
+        key.alphaSrc = snapshot.alphaSrc;
+        key.alphaDst = snapshot.alphaDst;
+        key.colorFunc = snapshot.colorFunc;
+        key.alphaFunc = snapshot.alphaFunc;
+        key.colorWriteMask = snapshot.colorWriteMask & 0xF;
+        key.multiSampleMask = snapshot.multiSampleMask;
+        key.targetFormat = snapshot.targetFormat;
+        key.sampleCount = snapshot.sampleCount;
+
+        if (const auto found = spritePipelines_.find(key); found != spritePipelines_.end())
+            return found->second;
+        if (spriteShader_ == nullptr || spritePipelineLayout_ == nullptr ||
+            snapshot.targetFormat == WGPUTextureFormat_Undefined || snapshot.sampleCount == 0)
+            throw std::runtime_error("CNA WebGPU: invalid SpriteBatch pipeline compatibility state");
+
         std::array<WGPUVertexAttribute, 3> attributes{};
         attributes[0].format = WGPUVertexFormat_Float32x3;
         attributes[0].offset = offsetof(SpriteVertex, position);
@@ -2321,12 +2401,15 @@ struct VertexOutput {
         vertexBufferLayout.attributes = attributes.data();
 
         WGPUColorTargetState target{};
-        target.format = surfaceFormat_;
-        // REMED-GFX-077: the SpriteBatch pipeline is a fixed, create-once object (it also ignores
-        // the BlendState's factors — the WebGPU sprite-BlendState counterpart finding). It is built
-        // at resource-init time with the default write mask; full per-Begin ColorWriteChannels for
-        // sprites is deferred to that same counterpart task. The keyed 3D pipelines below honour it.
-        target.writeMask = WGPUColorWriteMask_All; // fixed sprite pipeline
+        target.format = snapshot.targetFormat;
+        target.writeMask = static_cast<WGPUColorWriteMask>(snapshot.colorWriteMask & 0xF);
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        const BlendKeyParams blendParams{
+            snapshot.colorSrc, snapshot.colorDst, snapshot.alphaSrc, snapshot.alphaDst,
+            snapshot.colorFunc, snapshot.alphaFunc
+        };
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = snapshot.blendEnabled ? &blendState : nullptr;
         WGPUFragmentState fragment{};
         fragment.module = spriteShader_;
         fragment.entryPoint = StringView("fs_main");
@@ -2343,11 +2426,8 @@ struct VertexOutput {
         pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = WGPUCullMode_None;
-        // WEBGPU-58: this backend's single backend-GLOBAL MSAA sample count (see sampleCount_'s
-        // own comment) -- 1 outside MSAA, identical to every one of these pipelines' behaviour
-        // before MSAA existed.
-        pipeline.multisample.count = static_cast<std::uint32_t>(sampleCount_);
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max(); // REMED-GFX-077: fixed sprite pipeline (see above)
+        pipeline.multisample.count = snapshot.sampleCount;
+        pipeline.multisample.mask = snapshot.multiSampleMask;
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
@@ -2360,29 +2440,22 @@ struct VertexOutput {
         depthStencil.depthCompare = WGPUCompareFunction_Always;
         pipeline.depthStencil = &depthStencil;
 
-        // Task WEBGPU-91 finding: the sprite fragment shader outputs straight (non-premultiplied)
-        // color -- textureSample(...) * input.color, matching Vulkan's own sprite2d.frag.glsl
-        // exactly. Vulkan pairs that with SRC_ALPHA/ONE_MINUS_SRC_ALPHA (a straight-alpha "over"
-        // blend); this backend previously used ONE/ONE_MINUS_SRC_ALPHA (a premultiplied-alpha
-        // blend equation), which silently ignored partial source alpha entirely for colour (only
-        // alpha=0 or alpha=255 ever looked correct -- any translucent tint rendered fully opaque).
-        // Matching Vulkan's factors here, not premultiplying in the shader, keeps both backends
-        // consistent with the same non-premultiplied shader source.
-        WGPUBlendState blend{};
-        blend.color.operation = WGPUBlendOperation_Add;
-        blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
-        blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
-        blend.alpha.operation = WGPUBlendOperation_Add;
-        blend.alpha.srcFactor = WGPUBlendFactor_One;
-        blend.alpha.dstFactor = WGPUBlendFactor_Zero;
-        target.blend = &blend;
-        spritePipelineBlend_ = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        target.blend = nullptr;
-        spritePipelineOpaque_ = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-
-        if (spriteShader_ == nullptr || spriteBindGroupLayout_ == nullptr || spritePipelineLayout_ == nullptr ||
-            spritePipelineBlend_ == nullptr || spritePipelineOpaque_ == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create SpriteBatch GPU resources");
+        // BlendState::AlphaBlend reaches FillWGPUBlendState as One/InverseSourceAlpha for both
+        // colour/alpha, preserving CNA/XNA's premultiplied-alpha convention. NonPremultiplied is
+        // the explicit SourceAlpha variant; no shader mutation is needed or made.
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create keyed SpriteBatch pipeline");
+        spritePipelines_.emplace(key, created);
+        SDL_Log("[WebGPU][GFX-102] Sprite pipeline cache miss -> size=%zu blend=%d "
+                "color=(%d,%d,%d) alpha=(%d,%d,%d) writeMask=0x%X sampleMask=0x%08X "
+                "format=%d samples=%u",
+                spritePipelines_.size(), snapshot.blendEnabled ? 1 : 0,
+                snapshot.colorSrc, snapshot.colorDst, snapshot.colorFunc,
+                snapshot.alphaSrc, snapshot.alphaDst, snapshot.alphaFunc,
+                snapshot.colorWriteMask & 0xF, snapshot.multiSampleMask,
+                static_cast<int>(snapshot.targetFormat), snapshot.sampleCount);
+        return created;
     }
 
     void WebGPUGraphicsBackend::DestroyColoredResources()
@@ -4809,7 +4882,8 @@ struct VSOut {
                                              const Matrix& transform,
                                              int textureFilter,
                                              int addressU,
-                                             int addressV)
+                                             int addressV,
+                                             const WebGPUSpriteBlendSnapshot& blendSnapshot)
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
             return;
@@ -4890,6 +4964,7 @@ struct VSOut {
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
+        command.blend = blendSnapshot;
         command.viewportCustom = customViewport;
         if (customViewport)
         {
@@ -4937,7 +5012,9 @@ struct VSOut {
     }
 
     void WebGPUGraphicsBackend::RenderSprites(WGPURenderPassEncoder pass, std::uint32_t targetWidth,
-                                              std::uint32_t targetHeight)
+                                              std::uint32_t targetHeight,
+                                              WGPUTextureFormat targetFormat,
+                                              std::uint32_t targetSampleCount)
     {
         if (spriteCommands_.empty())
             return;
@@ -4959,7 +5036,6 @@ struct VSOut {
         for (const SpriteCommand& command : spriteCommands_)
             vertices.insert(vertices.end(), command.vertices.begin(), command.vertices.end());
         wgpuQueueWriteBuffer(queue_, spriteVertexBuffer_, 0, vertices.data(), vertices.size() * sizeof(SpriteVertex));
-        wgpuRenderPassEncoderSetPipeline(pass, blendEnabled_ ? spritePipelineBlend_ : spritePipelineOpaque_);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, 0, vertices.size() * sizeof(SpriteVertex));
 
         // REMED-GFX-072: does any sprite carry a custom Viewport? If so, drive the rasterizer
@@ -4972,9 +5048,33 @@ struct VSOut {
         for (const SpriteCommand& c : spriteCommands_)
             if (c.viewportCustom) { anyCustomViewport = true; break; }
 
+        WGPURenderPipeline boundPipeline = nullptr;
         for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
         {
             const SpriteCommand& command = spriteCommands_[i];
+            if (command.blend.targetFormat != targetFormat ||
+                command.blend.sampleCount != targetSampleCount)
+            {
+                throw std::runtime_error(
+                    "CNA WebGPU: queued SpriteBatch target compatibility changed before replay");
+            }
+
+            // REMED-GFX-102: cache lookup happens per static-state transition; native pipeline
+            // creation happens only on a cache miss for a previously unseen complete key. It is
+            // never unconditional/per-sprite creation, and the dynamic BlendFactor RGBA value is
+            // intentionally absent from GetOrCreateSpritePipeline's key.
+            const WGPURenderPipeline pipeline = GetOrCreateSpritePipeline(command.blend);
+            if (pipeline != boundPipeline)
+            {
+                wgpuRenderPassEncoderSetPipeline(pass, pipeline);
+                boundPipeline = pipeline;
+            }
+            const WGPUColor blendConstant{
+                command.blend.blendFactorR, command.blend.blendFactorG,
+                command.blend.blendFactorB, command.blend.blendFactorA
+            };
+            wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+
             if (anyCustomViewport)
             {
                 if (command.viewportCustom)
@@ -5050,22 +5150,22 @@ struct VSOut {
                                                 int colorBlendFunc, int alphaBlendFunc,
                                                 const BlendWriteState& writeState)
     {
-        // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending. Mirrors
-        // VulkanGraphicsBackend::ApplyBlendState()'s identical derivation exactly.
+        // REMED-GFX-102 normalization: blending is disabled only for the complete Opaque identity
+        // (One/Zero/Add independently for colour and alpha). Looking only at the factors would
+        // incorrectly erase a custom ReverseSubtract/Min/Max equation that happens to retain
+        // Opaque's factors.
         blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
-                          alphaSrcBlend == 0 && alphaDstBlend == 1);
+                          alphaSrcBlend == 0 && alphaDstBlend == 1 &&
+                          colorBlendFunc == 0 && alphaBlendFunc == 0);
         blendParams_.colorSrc  = colorSrcBlend;
         blendParams_.colorDst  = colorDstBlend;
         blendParams_.alphaSrc  = alphaSrcBlend;
         blendParams_.alphaDst  = alphaDstBlend;
         blendParams_.colorFunc = colorBlendFunc;
         blendParams_.alphaFunc = alphaBlendFunc;
-        // REMED-GFX-077: both are STATIC wgpu-native pipeline state, baked into the keyed 3D
-        // pipelines (WGPUColorTargetState.writeMask / WGPUMultisampleState.mask, folded into
-        // Make3DPipelineKey). wgpu-native's mask field is a real, functional sample coverage mask.
-        // D3D12 draws are single-target here, so only ColorWriteChannels slot 0 applies (MRT is the
-        // separate WEBGPU-85/86/87 follow-up). The fixed SpriteBatch pipeline does not honour it —
-        // deferred to the WebGPU sprite-BlendState counterpart finding (see CreateSpriteResources).
+        // REMED-GFX-077/GFX-102: both are STATIC wgpu-native pipeline state. The generic 3D caches
+        // and the keyed SpriteBatch cache include them; only active attachment slot 0 applies
+        // because WebGPU MRT remains a separate capability boundary.
         colorWriteMask_ = writeState.colorWriteChannels[0];
         sampleMask_ = writeState.multiSampleMask;
     }
@@ -5297,7 +5397,8 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, fullW, fullH);
+        RenderSprites(pass, fullW, fullH, surfaceFormat_,
+                      static_cast<std::uint32_t>(std::max(1, sampleCount_)));
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -5429,7 +5530,8 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, fullW, fullH);
+        RenderSprites(pass, fullW, fullH, target->ColorFormat(),
+                      static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount())));
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
@@ -5552,7 +5654,7 @@ struct VSOut {
         RenderPbrDraws(pass);
         RenderSkinnedDraws(pass);
         RenderSkinnedPbrDraws(pass);
-        RenderSprites(pass, fullW, fullH);
+        RenderSprites(pass, fullW, fullH, target->ColorFormat(), 1);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
 
