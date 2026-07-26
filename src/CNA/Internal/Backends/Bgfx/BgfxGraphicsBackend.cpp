@@ -2619,15 +2619,28 @@ namespace CNA::Internal::Backends::Bgfx
         BindSamplerSlot(0, texColor3DSampler_,          params.texture0,                defaultWhiteTexture3D_);
     }
 
+    /// REMED-GFX-111: the single shared topology mapper for every Bgfx draw path. bgfx carries
+    /// topology as per-submission state bits (BGFX_STATE_PT_*), never as a cached pipeline object,
+    /// so each draw's own value is captured at its own bgfx::setState() call.
+    ///
+    /// Every CNA topology is now named explicitly. TriangleList is bgfx's zero-valued default, and
+    /// leaving it as an unnamed `default:` fall-through is exactly how PointListEXT used to inherit
+    /// triangle-list state: an indexed one-point draw consumed the correct single index but
+    /// rasterized nothing, and a multi-point draw filled the area spanned by its first three
+    /// vertices. Point size is deliberately left at zero: bgfx's OpenGL renderer resolves that to
+    /// glPointSize(1) and every other renderer rasterizes one-pixel points, matching XNA's
+    /// PointListEXT, which exposes no point-size state.
     static uint64_t ToTopologyFlag(PrimitiveType p)
     {
         switch (p)
         {
+        case PrimitiveType::TriangleList:  return 0; // bgfx's default primitive state
         case PrimitiveType::TriangleStrip: return BGFX_STATE_PT_TRISTRIP;
         case PrimitiveType::LineList:      return BGFX_STATE_PT_LINES;
         case PrimitiveType::LineStrip:     return BGFX_STATE_PT_LINESTRIP;
-        default:                           return 0; // default = triangle list
+        case PrimitiveType::PointListEXT:  return BGFX_STATE_PT_POINTS;
         }
+        return 0;
     }
 
     static uint32_t IndexCountForPrimitives(PrimitiveType primitive, int primitiveCount)
