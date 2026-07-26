@@ -2454,7 +2454,7 @@ existing task.
 | REMED-GFX-102 | WebGPU `SpriteBatch` selected only fixed opaque or fixed straight-alpha pipelines from the live blend-enabled bit; queued commands omitted the full state and dynamic factor, producing silent state loss and last-live-value behavior. | MEDIUM | P2 | GFX-069/070/071/077 were the completed prerequisites and generic WebGPU 3D blending supplied the proven translation reference | **DONE.** The public regression in `4b734d1e` proved the defect pre-fix (`3/14` pixel assertions passed): `CreateSpriteResources()` hard-coded two pipelines, `RenderSprites()` selected once from live `blendEnabled_`, and commands/pass setup lacked by-value blend/write/sample/factor state. Production fix `9e89d491` captures a normalized complete `BlendState` plus `BlendFactor` per `Begin`, replays the captured dynamic constant per batch, and lazily caches sprite pipelines by colour/alpha factors and functions, active-attachment write mask, `MultiSampleMask`, target format, applied sample count, and existing static sprite state. Dynamic factor RGBA and render-target/texture/sprite identities are excluded. Coverage expansion `7d609325` is `35/35` on wgpu-native: all presets, custom/separate equations, factor/inverse, A→B→A, post-`Begin` mutation isolation, independent channel masks, 4x MSAA masks, non-MSAA, backbuffer/`RenderTarget2D`, target→backbuffer→target, 64 factor values with stable cache `8→8`, compatible targets reusing cache `10→11→11→11→11`, and zero validation/device errors. Required WebGPU controls passed `9/9`; practical Vulkan/EasyGL/SDL_GPU/Bgfx/Software/D3D9/D3D11 controls passed `36/36`; all fourteen backend libraries compiled sequentially with `-j4`. No shader or public API changes, per-draw pipeline creation, extra submissions/waits/frames/`Present`, or independent production finding. |
 | REMED-GFX-103 | VertexBuffer's typed SetData overloads formed `data + startIndex`, passed an empty packed vector's `data()`, called zero-length `memcpy`, and dispatched the empty upload; WebGPU rejected a null vertex pointer before count and a non-null empty upload allocated/wrote/mutated backend state. DynamicVertexBuffer shares the same implementation. | MEDIUM | P2 | REMED-GFX-054 narrow VertexBuffer sibling inventory | **DONE 2026-07-26 — shared validation now precedes an empty no-op; logical zero capacity and exact shadows are preserved; WebGPU real writes use internal four-byte native padding; focused native, sanitizer, rendering, regression, and eight-backend parity runs pass.** |
 | REMED-GFX-104 | WebGPU deferred indexed replay preserves exact logical bytes/counts and snapshots `startIndex`/`baseVertex`; native allocation/write padding is internal, zero initialized, and compliant with wgpu-native's four-byte queue-copy rule. | MEDIUM | P2 | REMED-GFX-103 indexed-draw verification | **DONE 2026-07-26 — ODD/EVEN 16-BIT, 32-BIT, STATIC/DYNAMIC, DRAWUSER, A→B→A, LIFETIME, PIXEL, NATIVE-SCOPE, SANITIZER, AND PARITY COVERAGE PASS.** |
-| REMED-GFX-105 | WebGPU indexed triangle-strip replay binds a `Uint16` index buffer to a render pipeline whose `stripIndexFormat` is `None`, producing a native command-encoder validation error. | MEDIUM | P2 | REMED-GFX-104 native-scope expansion | **OPEN — RECORDED SEPARATELY; NOT BEGUN OR CHANGED UNDER GFX-104.** |
+| REMED-GFX-105 | WebGPU indexed triangle-strip replay binds a `Uint16` index buffer to a render pipeline whose `stripIndexFormat` is `None`, producing a native command-encoder validation error. | MEDIUM | P2 | REMED-GFX-104 native-scope expansion | **DONE 2026-07-26 — DEFERRED INDEXED STRIPS NOW SELECT/CACHE THE PIPELINE BY CAPTURED `UINT16`/`UINT32`; NON-INDEXED STRIPS AND LIST/POINT TOPOLOGIES REMAIN `UNDEFINED`; NATIVE VALIDATION, EXACT PIXELS, CACHE CARDINALITY, SANITIZERS, AND BACKEND CONTROLS PASS.** |
 | REMED-GFX-106 | Bgfx and Software produce backend-specific indexed pixel failures for nonzero indexed parameters and/or deferred multi-draw controls that pass WebGPU, Vulkan, EasyGL, D3D9, and D3D11. | MEDIUM | P2 | REMED-GFX-104 backend parity | **OPEN — RECORDED FOR INDEPENDENT REPRODUCTION; NO NON-WEBGPU BACKEND CHANGE.** |
 
 #### REMED-BUILD-010 detail
@@ -8863,5 +8863,129 @@ does not alter pipeline creation and uses list topologies for its odd-count alig
 - `4fdc6259 fix(Task REMED-GFX-104): preserve deferred indexed draw ranges`
 - `f796cff9 test(Task REMED-GFX-104): cover deferred indexed rendering`
 - `docs(remediation): record GFX-104 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-105 — WebGPU indexed triangle-strip pipeline format (DONE 2026-07-26)
+
+### Exact pre-fix mismatch
+
+A minimal persistent `IndexBuffer` draw reproduced the finding with one two-primitive
+`TriangleStrip`:
+
+- active native topology: `WGPUPrimitiveTopology_TriangleStrip`;
+- draw kind: indexed;
+- actual bound index format: `WGPUIndexFormat_Uint16`;
+- selected pipeline `stripIndexFormat`: `WGPUIndexFormat_Undefined` (`None` in the native
+  diagnostic);
+- pipeline state: newly created from an initially empty Colored3D cache. A compatible subsequent
+  draw reused the same incomplete key and therefore the same invalid pipeline.
+
+The complete wgpu-native diagnostic was:
+
+```text
+Error in wgpuQueueSubmit: Validation Error
+
+Caused by:
+  In a draw command, kind: Draw
+    For indexed drawing with strip topology, RenderPipeline with 'CNA WebGPU Colored3D Pipeline' label's strip index format None must match index buffer format Uint16
+```
+
+This was not merely a harmless validation warning or a silent pixel discrepancy. The native queue
+submission was rejected and the pre-fix process aborted before readback, so the draw produced no
+valid pixel result.
+
+### CNA/FNA and native contracts
+
+- CNA/FNA `TriangleStrip` retains its public primitive-count contract: `primitiveCount + 2`
+  logical vertices or indices are consumed. The public index element type remains exactly
+  `SixteenBits` or `ThirtyTwoBits`; 16-bit data is not widened.
+- Persistent and dynamic indexed draws use the bound buffer's declared index width. DrawUser uses
+  its typed 16-/32-bit index overload and captures the selected source slice in its transient
+  deferred command.
+- `startIndex` remains native `firstIndex`, while a nonnegative `baseVertex` remains the signed
+  native base-vertex addend. CNA's existing public validation rejects every negative
+  `baseVertex`; there is therefore no public-reachable “valid negative” case to reinterpret.
+- The installed WebGPU/wgpu-native contract requires an indexed `LineStrip` or `TriangleStrip`
+  pipeline to declare `Uint16` or `Uint32` matching the bound index-buffer format. A non-indexed
+  strip uses `Undefined`. Point/list topologies also use `Undefined` because strip restart state
+  is inapplicable to them.
+- GFX-104's exact logical index bytes, logical binding length, draw count, `startIndex`, and
+  `baseVertex` remain intact. Only the internal queue-write allocation/size is four-byte aligned,
+  with a zero-initialized tail outside the logical binding and draw count.
+
+### Correction
+
+A single file-local WebGPU helper derives the required strip format from each deferred command's
+captured native topology, indexed flag/data presence, and captured `index32` value. The same
+captured width drives both `wgpuRenderPassEncoderSetIndexBuffer` and pipeline selection. All ten
+deferred indexed command/replay families use it: colored, textured, lit textured, alpha test,
+dual texture, environment map, instanced, PBR, skinned, and skinned PBR.
+
+All twelve generic WebGPU 3D pipeline variants now receive the canonical strip format and assign
+it to `WGPUPrimitiveState::stripIndexFormat`. Their existing pipeline identity includes that
+canonical value:
+
+- indexed strip `Uint16` and indexed strip `Uint32` are the only width-distinct variants;
+- a non-indexed strip is the separate native-compatible `Undefined` variant;
+- triangle lists, line lists, point lists, and other non-strip cases canonicalize both index
+  widths to `Undefined`, so they do not gain unnecessary width variants;
+- buffer handles, buffer object identity, live bindings, and a “last index format” never
+  participate.
+
+No public primitive semantics, logical index format/count, shader, pipeline architecture, extra
+submission, wait, frame, `Present`, or non-WebGPU production backend changed.
+
+### Permanent regression and verification
+
+`IndexedDrawDeferredTests.cpp` permanently covers:
+
+- persistent `IndexBuffer`, `DynamicIndexBuffer`, and both typed/explicit-declaration
+  `DrawUserIndexedPrimitives` paths;
+- indexed `TriangleStrip` with 16-bit and 32-bit indices, including
+  `Uint16 -> Uint32 -> Uint16`;
+- `TriangleList -> TriangleStrip -> TriangleList`, plus a non-indexed strip;
+- odd valid strip index counts 3 and 5 and an even count 4;
+- multiple deferred draws, caller-array/buffer mutation and disposal before replay, nonzero
+  `startIndex`, positive `baseVertex`, and the existing negative-base rejection contract;
+- exact distinctive red/lime/blue/yellow/background pixels, not only validation silence;
+- alternating strip winding under counter-clockwise versus clockwise culling;
+- both `RenderTarget2D` and backbuffer output;
+- a cold-cache one-variant minimal draw, exactly two variants for compatible
+  `Uint16 -> Uint32 -> Uint16` persistent/dynamic buffer objects, exactly four variants for
+  list/Undefined plus strip Undefined/Uint16/Uint32, and no index-width variants for indexed
+  triangle/line lists;
+- nested fatal validation/out-of-memory scopes that report their complete native status, type,
+  and message, plus an unchanged uncaptured-error counter.
+
+The final native WebGPU shard is **42/42**: all 13 indexed deferred/strip tests, all 11 GFX-054
+IndexBuffer regressions, all 13 GFX-103 VertexBuffer regressions, and all five indexed
+primitive-count tests. The GFX-043 explicit `VertexDeclaration` integration regression is
+**4/4**. Existing WebGPU Colored3D, DrawPrimitivesEx, graphics-state/culling, and
+render-target/backbuffer controls are **22/22**. All native scopes and uncaptured-error checks are
+clean.
+
+The exact-pixel basic 16-/32-bit strip control passes WebGPU, Vulkan, EasyGL, D3D9, and D3D11
+(the D3D controls ran through Wine). Bgfx and SDL_GPU pass the same indexed commands as practical
+no-throw controls. Headless passes its no-output control. Software v1 intentionally supports
+indexed `TriangleList` only, so its strip control is an explicit skip while its deferred indexed
+list control passes.
+
+Focused sanitizers are clean:
+
+- Vulkan AddressSanitizer: **32/32** relevant indexed, GFX-054, and GFX-103 tests;
+- Software UndefinedBehaviorSanitizer, including `float-cast-overflow`: **28/29 passed** with only
+  the intentional unsupported-strip skip.
+
+All fourteen backend libraries compile sequentially with at most four jobs: ASCII, Bgfx, Canvas,
+D3D9, D3D11, D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulkan, and WebGPU.
+
+**Commits:**
+
+- `1a4ae14a test(Task REMED-GFX-105): reproduce indexed strip validation`
+- `6c64bde0 fix(Task REMED-GFX-105): key indexed strip pipelines by format`
+- `bca78ec2 test(Task REMED-GFX-105): cover indexed strip compatibility`
+- `fd668025 test(Task REMED-GFX-105): add backend strip controls`
+- `docs(remediation): record GFX-105 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
