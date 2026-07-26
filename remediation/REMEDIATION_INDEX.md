@@ -193,7 +193,7 @@ Indirect: `REMED-BUILD-001` and `REMED-BUILD-004` — both adversarial-input fuz
 
 `REMED-GFX-001` · `REMED-DEVICES-001` · `REMED-CONTENT-001` (confirmed **stack corruption**) ·
 `REMED-CONTENT-003` · `REMED-CONTENT-006` · `REMED-MEDIA-001` · `REMED-MEDIA-002` · `REMED-GFX-004` ·
-`REMED-GFX-028` · `REMED-GFX-029` · `REMED-DEVICES-002` · `REMED-NET-007`
+`REMED-GFX-028` (**DONE 2026-07-26**) · `REMED-GFX-029` · `REMED-DEVICES-002` · `REMED-NET-007`
 
 ## By affected backend
 
@@ -206,7 +206,7 @@ A backend's count is not a quality ranking — the most-tested backends surface 
 | **D3D11 / D3D12** | 8 | Mostly via shared `D3DCommon` — one fix closes both. D3D12 additionally: stencil/scissor inert, occlusion overwrite, 1-CTest coverage gap |
 | **EasyGL** | 6 | Default Linux/Emscripten backend. UAF, MRT, skinned normal, PBR normal variant |
 | **Bgfx** | 7 | Cull mode, ClearOptions, fog, skinned normal, env-map, 2 unannotated failing tests |
-| **SdlGpu** | 7 | Fog absent entirely, GLSL dialect, constructor leak, skinned normal, env-map, cube mips, depth bias |
+| **SdlGpu** | 7 | Fog absent entirely, GLSL dialect, constructor leak (**GFX-028 DONE: transactional ownership**), skinned normal, env-map, cube mips, depth bias |
 | **WebGPU** | 4 | Texture2D crash (non-catchable panic), SpriteBatch clip space, skinned normal, env-map |
 | **D3D9** | 3 (+`GFX-060` post-audit) | Object-space fog in custom shaders, PBR skinned normal. Vendored stock effects immune by construction. **`REMED-GFX-060`** (DONE): draw paths dropped `DrawPrimitives`/`DrawIndexedPrimitives` vertex offsets (15 sites, the D3D9 counterpart of GFX-020) — runtime-verified on Wine+DXVK9 |
 | **SdlRenderer** | 3 | Fullscreen crash, stale test expectations, depth-decision ambiguity |
