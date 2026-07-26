@@ -317,6 +317,14 @@ namespace CNA::Internal::Backends::Bgfx
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         void SetVertexDeclaration(const VertexDeclaration&) override {}
         [[nodiscard]] int GetVertexCount() const override { return vertexCount; }
+        /// REMED-GFX-109: records that bgfx draw state now references this native version.
+        /// The next real SetData must rotate to a different native allocation because bgfx
+        /// executes every dynamic-buffer update before any draws in the submitted frame.
+        void MarkSubmitted() const noexcept { submittedSinceUpdate_ = true; }
+
+    private:
+        int capacity_ = 0;
+        mutable bool submittedSinceUpdate_ = false;
     };
 
     /// bgfx dynamic index buffer (16-bit).
@@ -338,6 +346,12 @@ namespace CNA::Internal::Backends::Bgfx
         void SetData32(const void* data, int index_count) override;
         [[nodiscard]] int  GetIndexCount()  const override { return indexCount; }
         [[nodiscard]] bool IsThirtyTwoBit() const override { return is32bit; }
+        /// REMED-GFX-109: see BgfxVertexBufferBackend::MarkSubmitted().
+        void MarkSubmitted() const noexcept { submittedSinceUpdate_ = true; }
+
+    private:
+        int capacity_ = 0;
+        mutable bool submittedSinceUpdate_ = false;
     };
 
     class BgfxSpriteBatchBackend : public ISpriteBatchBackend

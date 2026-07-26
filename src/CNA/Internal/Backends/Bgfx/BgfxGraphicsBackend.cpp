@@ -2445,6 +2445,7 @@ namespace CNA::Internal::Backends::Bgfx
     }
 
     BgfxVertexBufferBackend::BgfxVertexBufferBackend(int capacity)
+        : capacity_(capacity)
     {
         layout = MakeBgfxLayout(16);
         handle = bgfx::createDynamicVertexBuffer(
@@ -2461,21 +2462,38 @@ namespace CNA::Internal::Backends::Bgfx
     void BgfxVertexBufferBackend::SetData(const void* data, int vertex_count, std::size_t stride_in_bytes)
     {
         vertexCount = vertex_count;
-        if (stride_in_bytes != stride)
+        const bool layoutChanged = stride_in_bytes != stride;
+        if (layoutChanged)
         {
             stride = stride_in_bytes;
             layout = MakeBgfxLayout(stride_in_bytes);
-            if (bgfx::isValid(handle)) bgfx::destroy(handle);
-            handle = bgfx::createDynamicVertexBuffer(
-                static_cast<uint32_t>(vertex_count),
+        }
+
+        // REMED-GFX-109: bgfx records resource updates in the frame's pre-command buffer, then
+        // executes the complete pre-command buffer before submitting any draw. Consequently
+        // update(A handle, B bytes) after a draw that captured A's handle overwrites the bytes
+        // observed by that earlier draw. Rotate only when the current native version has already
+        // been referenced by a draw (or when its layout changes); multiple updates before a draw
+        // and multiple draws between updates keep one version.
+        if (layoutChanged || submittedSinceUpdate_ || !bgfx::isValid(handle))
+        {
+            const auto replacement = bgfx::createDynamicVertexBuffer(
+                static_cast<uint32_t>(capacity_),
                 layout,
                 BGFX_BUFFER_ALLOW_RESIZE);
+            if (!bgfx::isValid(replacement))
+                throw std::runtime_error(
+                    "Bgfx: failed to allocate an immutable vertex-buffer update version.");
+            const auto previous = handle;
+            handle = replacement;
+            if (bgfx::isValid(previous)) bgfx::destroy(previous);
         }
         if (!bgfx::isValid(handle) || !data || vertex_count <= 0) return;
         const uint32_t byteSize = static_cast<uint32_t>(vertex_count) * static_cast<uint32_t>(stride_in_bytes);
         cpuData.assign(static_cast<const uint8_t*>(data),
                        static_cast<const uint8_t*>(data) + byteSize);
         bgfx::update(handle, 0, bgfx::copy(data, byteSize));
+        submittedSinceUpdate_ = false;
     }
 
     std::unique_ptr<IVertexBufferBackend> BgfxGraphicsBackend::CreateVertexBuffer(int capacity)
@@ -2486,7 +2504,7 @@ namespace CNA::Internal::Backends::Bgfx
     // --- BgfxIndexBufferBackend ---
 
     BgfxIndexBufferBackend::BgfxIndexBufferBackend(int capacity, bool thirtyTwoBit)
-        : is32bit(thirtyTwoBit)
+        : is32bit(thirtyTwoBit), capacity_(capacity)
     {
         const uint16_t flags = is32bit ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
                                        : BGFX_BUFFER_ALLOW_RESIZE;
@@ -2502,20 +2520,54 @@ namespace CNA::Internal::Backends::Bgfx
     {
         indexCount = index_count;
         if (!data || index_count <= 0) { cpuData.clear(); return; }
+
+        // REMED-GFX-109: preserve the native bytes referenced by every already-submitted draw.
+        // Both public IndexBuffer and DynamicIndexBuffer use this same backend object.
+        if (submittedSinceUpdate_ || !bgfx::isValid(handle))
+        {
+            const uint16_t flags = is32bit
+                ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
+                : BGFX_BUFFER_ALLOW_RESIZE;
+            const auto replacement = bgfx::createDynamicIndexBuffer(
+                static_cast<uint32_t>(capacity_), flags);
+            if (!bgfx::isValid(replacement))
+                throw std::runtime_error(
+                    "Bgfx: failed to allocate an immutable index-buffer update version.");
+            const auto previous = handle;
+            handle = replacement;
+            if (bgfx::isValid(previous)) bgfx::destroy(previous);
+        }
         const auto* bytes = static_cast<const uint8_t*>(data);
         cpuData.assign(bytes, bytes + static_cast<std::size_t>(index_count) * 2u);
-        if (!bgfx::isValid(handle)) return;
         bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 2u));
+        submittedSinceUpdate_ = false;
     }
 
     void BgfxIndexBufferBackend::SetData32(const void* data, int index_count)
     {
         indexCount = index_count;
         if (!data || index_count <= 0) { cpuData.clear(); return; }
+
+        // Keep the handle's declared native format unchanged here. Public 32-bit creation is the
+        // separate REMED-GFX-108 contract and is intentionally not absorbed by this versioning fix.
+        if (submittedSinceUpdate_ || !bgfx::isValid(handle))
+        {
+            const uint16_t flags = is32bit
+                ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
+                : BGFX_BUFFER_ALLOW_RESIZE;
+            const auto replacement = bgfx::createDynamicIndexBuffer(
+                static_cast<uint32_t>(capacity_), flags);
+            if (!bgfx::isValid(replacement))
+                throw std::runtime_error(
+                    "Bgfx: failed to allocate an immutable index-buffer update version.");
+            const auto previous = handle;
+            handle = replacement;
+            if (bgfx::isValid(previous)) bgfx::destroy(previous);
+        }
         const auto* bytes = static_cast<const uint8_t*>(data);
         cpuData.assign(bytes, bytes + static_cast<std::size_t>(index_count) * 4u);
-        if (!bgfx::isValid(handle)) return;
         bgfx::update(handle, 0, bgfx::copy(data, static_cast<uint32_t>(index_count) * 4u));
+        submittedSinceUpdate_ = false;
     }
 
     std::unique_ptr<IIndexBufferBackend> BgfxGraphicsBackend::CreateIndexBuffer16(int capacity)
@@ -2595,6 +2647,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        vb.MarkSubmitted();
         // Task 766: FillMode::WireFrame -- re-expand triangle vertices into a line-list edge
         // buffer (bgfx has no native polygon-fill-mode toggle, unlike D3D9/Vulkan).
         bgfx::TransientIndexBuffer wireTib;
@@ -2641,12 +2694,17 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(vertexColorEn3DUnif_, vceOn);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        vb.MarkSubmitted();
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(&ib, primitive, primitiveCount, 0, 0, 0, wireTib);
-        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
-        else              bgfx::setIndexBuffer(ib.handle);
+        if (useWireframe) {
+            bgfx::setIndexBuffer(&wireTib);
+        } else {
+            bgfx::setIndexBuffer(ib.handle);
+            ib.MarkSubmitted();
+        }
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
         bgfx::setState((colorWriteFlags_
@@ -2691,6 +2749,7 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        vb.MarkSubmitted();
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
         const bool useWireframe = wireframe_
@@ -3107,13 +3166,18 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
         bgfx::setVertexBuffer(0, vb.handle);
+        vb.MarkSubmitted();
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
                                       params.baseVertex, 0, wireTib);
-        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
-        else              bgfx::setIndexBuffer(ib.handle);
+        if (useWireframe) {
+            bgfx::setIndexBuffer(&wireTib);
+        } else {
+            bgfx::setIndexBuffer(ib.handle);
+            ib.MarkSubmitted();
+        }
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
         const uint64_t state = (colorWriteFlags_
@@ -3526,13 +3590,18 @@ namespace CNA::Internal::Backends::Bgfx
         SetDepthBiasUniform();
 
         bgfx::setVertexBuffer(0, vb.handle);
+        vb.MarkSubmitted();
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
                                       params.baseVertex, 0, wireTib);
-        if (useWireframe) bgfx::setIndexBuffer(&wireTib);
-        else              bgfx::setIndexBuffer(ib.handle);
+        if (useWireframe) {
+            bgfx::setIndexBuffer(&wireTib);
+        } else {
+            bgfx::setIndexBuffer(ib.handle);
+            ib.MarkSubmitted();
+        }
         bgfx::setInstanceDataBuffer(&idb);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);
