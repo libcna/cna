@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <exception>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -395,6 +396,12 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::Reset(const PresentationParameters& presentationParameters, GraphicsAdapter* adapter)
     {
+        const PresentationParameters previousPresentationParameters =
+            presentationParameters_.Clone();
+        GraphicsAdapter* const previousAdapter = adapter_;
+        const int previousVirtualWidth = virtualWidth_;
+        const int previousVirtualHeight = virtualHeight_;
+
         DeviceResetting.Raise(this, System::EventArgs::Empty);
 
         presentationParameters_ = presentationParameters;
@@ -410,12 +417,45 @@ namespace Microsoft::Xna::Framework::Graphics
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(virtualHeight_);
 
-        applyPresentationParametersToWindow();
+        try
+        {
+            applyPresentationParametersToWindow();
+
+            if (backend_ != nullptr)
+                backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
+        }
+        catch (...)
+        {
+            // REMED-GFX-029: a backend resize is a failed Reset, not a partially successful one.
+            // Restore all public presentation bookkeeping before rethrowing the original native
+            // diagnostic. Viewport/scissor, active target, and depth state have not been touched
+            // yet at this point. The DX3 transaction guarantees its native A surface set is still
+            // live, so restoring the former window/presentation values makes the entire
+            // GraphicsDevice state agree with that same A set.
+            const std::exception_ptr resizeFailure = std::current_exception();
+            presentationParameters_ = previousPresentationParameters;
+            adapter_ = previousAdapter;
+            virtualWidth_ = previousVirtualWidth;
+            virtualHeight_ = previousVirtualHeight;
+            Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(
+                previousVirtualWidth);
+            Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayHeightProperty(
+                previousVirtualHeight);
+            try
+            {
+                applyPresentationParametersToWindow();
+            }
+            catch (...)
+            {
+                // Do not replace the precise resize-stage failure with a secondary window
+                // rollback diagnostic. The stored presentation state is already restored.
+                SDL_ClearError();
+            }
+            std::rethrow_exception(resizeFailure);
+        }
 
         if (backend_ != nullptr)
         {
-            backend_->SetVirtualResolution(virtualWidth_, virtualHeight_);
-
             // Task 902: reconfigure the backend's actual MSAA sample count in place, mirroring
             // FNA's own PresentationParameters.MultiSampleCount = FNA3D_GetMaxMultiSampleCount(...)
             // write-back of the real, device-clamped value after FNA3D_ResetBackbuffer().
@@ -1573,6 +1613,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // updates the GPU-side viewport too, not just the C++-side Viewport property.
         if (backend_)
             backend_->SetViewport(0, 0, width, height, 0.0f, 1.0f);
+
+        // A real backbuffer-size change resets both rectangles to the complete new target. Keep
+        // the no-size-change early return above so a normal Present() and a same-dimension reset
+        // still preserve game-defined sub-viewports/scissors.
+        setScissorRectangleProperty(Rectangle(0, 0, width, height));
     }
 
     void GraphicsDevice::SetVirtualResolution(int width, int height)
@@ -1582,16 +1627,18 @@ namespace Microsoft::Xna::Framework::Graphics
             return;
         }
 
-        virtualWidth_ = width;
-        virtualHeight_ = height;
-
-        presentationParameters_.setBackBufferWidthProperty(width);
-        presentationParameters_.setBackBufferHeightProperty(height);
-
         if (backend_ != nullptr)
         {
             backend_->SetVirtualResolution(width, height);
         }
+
+        // Commit public dimensions only after the backend has accepted its complete replacement
+        // set. A throwing resize therefore cannot make PresentationParameters report dimensions
+        // that the live native surfaces do not have.
+        virtualWidth_ = width;
+        virtualHeight_ = height;
+        presentationParameters_.setBackBufferWidthProperty(width);
+        presentationParameters_.setBackBufferHeightProperty(height);
 
         UpdateViewportFromWindow();
     }

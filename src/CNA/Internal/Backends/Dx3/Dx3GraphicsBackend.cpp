@@ -561,37 +561,15 @@ namespace CNA::Internal::Backends::Dx3
             ReleaseDirectDraw();
         }
 
-        // Releases the current primary/shadow-backbuffer surfaces (if any) and recreates both at
-        // (width, height): SetDisplayMode(width, height, 32) (design decision 4: 32bpp only) ->
-        // primary CreateSurface (DDSCAPS_PRIMARYSURFACE) -> shadow CreateSurface
-        // (DDSCAPS_OFFSCREENPLAIN, sized width x height).
+        // Transactionally replaces the primary/shadow-backbuffer pair at (width, height).
+        // The explicitly-sized shadow can be created and validated without changing DirectDraw's
+        // display mode. Only then is the new display mode applied and its matching primary
+        // created. Until both surfaces and all dependent state validate, the member pointers and
+        // logical dimensions continue to describe the old working set. A post-display-mode
+        // failure restores the former mode before the temporary owners unwind. Successful commit
+        // swaps the complete pair first, then releases the old pair exactly once.
         void CreateSurfaces(int width, int height, bool injectResizeFailure)
         {
-            ReleaseSurface(backBuffer, Dx3ResourceKindEXT::ShadowBackBuffer);
-            ReleaseSurface(primary, Dx3ResourceKindEXT::PrimarySurface);
-
-            if (injectResizeFailure)
-                MaybeFail(Dx3ResizeFailurePointEXT::DisplayModeBinding);
-            HRESULT hr = dd->SetDisplayMode(static_cast<DWORD>(width), static_cast<DWORD>(height), 32);
-            if (FAILED(hr)) ThrowHr("IDirectDraw::SetDisplayMode", hr);
-
-            DDSURFACEDESC primaryDesc{};
-            primaryDesc.dwSize = sizeof(DDSURFACEDESC);
-            primaryDesc.dwFlags = DDSD_CAPS;
-            primaryDesc.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
-            if (injectResizeFailure)
-                MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceCreation);
-            hr = dd->CreateSurface(&primaryDesc, &primary, nullptr);
-            if (FAILED(hr)) ThrowHr("IDirectDraw::CreateSurface(primary)", hr);
-            NotifyResource(
-                testHooks, Dx3ResourceKindEXT::PrimarySurface,
-                Dx3ResourceEventEXT::Acquired, primary);
-            if (injectResizeFailure)
-                MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceValidation);
-            ValidateResizeSurface(
-                primary, width, height, DDSCAPS_PRIMARYSURFACE,
-                "IDirectDrawSurface::GetSurfaceDesc(primary)");
-
             DDSURFACEDESC backDesc{};
             backDesc.dwSize = sizeof(DDSURFACEDESC);
             backDesc.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
@@ -600,25 +578,128 @@ namespace CNA::Internal::Backends::Dx3
             backDesc.dwHeight = static_cast<DWORD>(height);
             if (injectResizeFailure)
                 MaybeFail(Dx3ResizeFailurePointEXT::ShadowBackBufferCreation);
-            hr = dd->CreateSurface(&backDesc, &backBuffer, nullptr);
+
+            LPDIRECTDRAWSURFACE replacementBackBuffer = nullptr;
+            HRESULT hr = dd->CreateSurface(&backDesc, &replacementBackBuffer, nullptr);
             if (FAILED(hr))
-            {
-                ReleaseSurface(primary, Dx3ResourceKindEXT::PrimarySurface);
                 ThrowHr("IDirectDraw::CreateSurface(shadow backbuffer)", hr);
-            }
             NotifyResource(
                 testHooks, Dx3ResourceKindEXT::ShadowBackBuffer,
-                Dx3ResourceEventEXT::Acquired, backBuffer);
+                Dx3ResourceEventEXT::Acquired, replacementBackBuffer);
+
+            struct TemporarySurfaceOwner
+            {
+                Impl* owner = nullptr;
+                LPDIRECTDRAWSURFACE surface = nullptr;
+                Dx3ResourceKindEXT kind{};
+
+                TemporarySurfaceOwner(
+                    Impl* resourceOwner, LPDIRECTDRAWSURFACE ownedSurface,
+                    Dx3ResourceKindEXT resourceKind) noexcept
+                    : owner(resourceOwner), surface(ownedSurface), kind(resourceKind)
+                {
+                }
+
+                ~TemporarySurfaceOwner()
+                {
+                    if (owner != nullptr)
+                        owner->ReleaseSurface(surface, kind);
+                }
+
+                TemporarySurfaceOwner(const TemporarySurfaceOwner&) = delete;
+                TemporarySurfaceOwner& operator=(const TemporarySurfaceOwner&) = delete;
+
+                [[nodiscard]] LPDIRECTDRAWSURFACE Take() noexcept
+                {
+                    LPDIRECTDRAWSURFACE result = surface;
+                    surface = nullptr;
+                    return result;
+                }
+            };
+
+            TemporarySurfaceOwner replacementBackOwner{
+                this, replacementBackBuffer, Dx3ResourceKindEXT::ShadowBackBuffer};
             if (injectResizeFailure)
                 MaybeFail(Dx3ResizeFailurePointEXT::ShadowBackBufferValidation);
             ValidateResizeSurface(
-                backBuffer, width, height, DDSCAPS_OFFSCREENPLAIN,
+                replacementBackBuffer, width, height, DDSCAPS_OFFSCREENPLAIN,
                 "IDirectDrawSurface::GetSurfaceDesc(shadow backbuffer)");
-            if (injectResizeFailure)
-                MaybeFail(Dx3ResizeFailurePointEXT::SurfaceSetCommit);
 
-            logicalWidth = width;
-            logicalHeight = height;
+            if (injectResizeFailure)
+                MaybeFail(Dx3ResizeFailurePointEXT::DisplayModeBinding);
+            hr = dd->SetDisplayMode(
+                static_cast<DWORD>(width), static_cast<DWORD>(height), 32);
+            if (FAILED(hr))
+                ThrowHr("IDirectDraw::SetDisplayMode", hr);
+
+            const int previousWidth = logicalWidth;
+            const int previousHeight = logicalHeight;
+            bool restoreDisplayMode = previousWidth > 0 && previousHeight > 0;
+            try
+            {
+                DDSURFACEDESC primaryDesc{};
+                primaryDesc.dwSize = sizeof(DDSURFACEDESC);
+                primaryDesc.dwFlags = DDSD_CAPS;
+                primaryDesc.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+                if (injectResizeFailure)
+                    MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceCreation);
+
+                LPDIRECTDRAWSURFACE replacementPrimary = nullptr;
+                hr = dd->CreateSurface(&primaryDesc, &replacementPrimary, nullptr);
+                if (FAILED(hr))
+                    ThrowHr("IDirectDraw::CreateSurface(primary)", hr);
+                NotifyResource(
+                    testHooks, Dx3ResourceKindEXT::PrimarySurface,
+                    Dx3ResourceEventEXT::Acquired, replacementPrimary);
+                TemporarySurfaceOwner replacementPrimaryOwner{
+                    this, replacementPrimary, Dx3ResourceKindEXT::PrimarySurface};
+
+                if (injectResizeFailure)
+                    MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceValidation);
+                ValidateResizeSurface(
+                    replacementPrimary, width, height, DDSCAPS_PRIMARYSURFACE,
+                    "IDirectDrawSurface::GetSurfaceDesc(primary)");
+
+                if (replacementPrimary == replacementBackBuffer)
+                    throw std::runtime_error(
+                        "CNA DX3: replacement primary aliases the shadow backbuffer");
+                if ((currentTargetSurface == nullptr &&
+                     (currentTargetWidth != 0 || currentTargetHeight != 0)) ||
+                    (currentTargetSurface != nullptr &&
+                     (currentTargetWidth <= 0 || currentTargetHeight <= 0)))
+                {
+                    throw std::runtime_error(
+                        "CNA DX3: invalid active render-target state during resize");
+                }
+
+                if (injectResizeFailure)
+                    MaybeFail(Dx3ResizeFailurePointEXT::SurfaceSetCommit);
+
+                LPDIRECTDRAWSURFACE oldBackBuffer = backBuffer;
+                LPDIRECTDRAWSURFACE oldPrimary = primary;
+                backBuffer = replacementBackOwner.Take();
+                primary = replacementPrimaryOwner.Take();
+                logicalWidth = width;
+                logicalHeight = height;
+                restoreDisplayMode = false;
+
+                // Commit is complete before either old identity is released.
+                ReleaseSurface(oldBackBuffer, Dx3ResourceKindEXT::ShadowBackBuffer);
+                ReleaseSurface(oldPrimary, Dx3ResourceKindEXT::PrimarySurface);
+            }
+            catch (...)
+            {
+                if (restoreDisplayMode)
+                {
+                    // Preserve the original resize diagnostic even if a native implementation
+                    // cannot restore its former mode. free-direct's SetDisplayMode is infallible,
+                    // but the HRESULT check keeps the transaction correct for the COM contract.
+                    (void)dd->SetDisplayMode(
+                        static_cast<DWORD>(previousWidth),
+                        static_cast<DWORD>(previousHeight), 32);
+                }
+                throw;
+            }
         }
     };
 
