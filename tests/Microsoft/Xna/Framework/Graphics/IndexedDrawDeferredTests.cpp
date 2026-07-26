@@ -514,7 +514,8 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 #endif
 }
 
-#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
+#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
+    defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
     defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
