@@ -1060,6 +1060,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             bool depthTest = false;
@@ -1094,6 +1096,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             bool depthTest = false;
@@ -1175,6 +1179,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
@@ -1257,6 +1263,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             bool depthTest = false;
@@ -1317,6 +1325,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             bool depthTest = false;
@@ -1387,6 +1397,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> transformUniforms{};  ///< group 0 binding 0: mvp (16) + world (16)
             std::array<float, 60> envMapUniforms{};     ///< group 0 binding 1: 15 vec4f (240 bytes)
@@ -1467,6 +1479,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             std::uint32_t instanceCount = 1;
             /// Real per-vertex/per-instance buffer strides (not hardcoded), so the pipeline's own
             /// WGPUVertexBufferLayout::arrayStride genuinely matches each buffer's declared
@@ -1530,6 +1544,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
@@ -1612,6 +1628,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
@@ -1681,6 +1699,8 @@ namespace CNA::Internal::Backends::WebGPU
             bool index32 = false;
             std::uint32_t vertexCount = 0;
             std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};

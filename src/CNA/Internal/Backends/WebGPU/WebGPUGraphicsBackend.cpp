@@ -4297,6 +4297,8 @@ struct VertexOutput {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -4389,7 +4391,9 @@ struct VertexOutput {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU EnvMap3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -4622,7 +4626,9 @@ struct VertexOutput {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU Instanced3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, command.instanceCount, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, command.instanceCount,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -6291,6 +6297,9 @@ struct VSOut {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex =
+                params != nullptr ? static_cast<std::uint32_t>(params->startIndex) : 0;
+            command.baseVertex = params != nullptr ? params->baseVertex : 0;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(vertexStart);
         }
@@ -6530,6 +6539,8 @@ struct VSOut {
         command.index32 = webgpuIb.IsThirtyTwoBit();
         command.indexData = webgpuIb.ShadowData();
         command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+        command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+        command.baseVertex = params.baseVertex;
 
         // [0..15]=View*Projection (not a full MVP -- world comes from the per-instance stream),
         // [16..31]=diffuseColor+the same unused-here tail fields as colored3d.wgsl. FillExtUniforms()
@@ -6587,7 +6598,9 @@ struct VSOut {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU Colored3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -6668,7 +6681,9 @@ struct VSOut {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU Textured3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -6760,7 +6775,9 @@ struct VSOut {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU LitTextured3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -6828,6 +6845,8 @@ struct VSOut {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -6901,7 +6920,9 @@ struct VSOut {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU AlphaTest3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -6967,6 +6988,8 @@ struct VSOut {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -7043,7 +7066,9 @@ struct VSOut {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU DualTexture3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -7110,6 +7135,8 @@ struct VSOut {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -7172,6 +7199,8 @@ struct VSOut {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -7589,6 +7618,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -7691,7 +7722,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU Pbr3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -8452,6 +8485,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -8545,7 +8580,9 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU Skinned3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
@@ -8959,6 +8996,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
             command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
                                   static_cast<std::uint32_t>(params.vertexStart);
         }
@@ -9071,7 +9110,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
                 WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
                     device_, queue_, pass, "CNA WebGPU SkinnedPbr3D IndexBuffer",
                     command.indexData, command.index32);
-                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                wgpuRenderPassEncoderDrawIndexed(
+                    pass, command.indexCount, 1,
+                    command.firstIndex, command.baseVertex, 0);
                 pendingBufferReleases_.push_back(indexBuffer);
             }
             else
