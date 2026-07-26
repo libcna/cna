@@ -27,12 +27,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_Effects COMMAND cna_test_software_effects
         TIMEOUT 30 LABELS "Software")
 
-    # REMED-GFX-089 deterministic reference: shared public GraphicsDevice depth source.
-    # Default/None/restored-Default are asserted; DepthRead is recorded but skipped because
-    # Software v1's fixed-LessEqual/write-on-pass limitation is already documented by GFX-083.
+    # REMED-GFX-089 deterministic shared public GraphicsDevice depth contract. REMED-GFX-030
+    # closes Software's former fixed-LessEqual/write-on-pass boundary, so DepthRead is asserted too.
     cna_software_test(cna_test_software_depth_contract examples/graphicsdevice_depth_contract_test.cpp)
     cna_register_backend_test(NAME Software_GraphicsDevice_DepthContract
         COMMAND cna_test_software_depth_contract
+        TIMEOUT 30 LABELS "Software")
+
+    # REMED-GFX-030: full Software depth-state contract -- test/write disabled combinations, all
+    # eight CompareFunction values, strict/inclusive equality, A->B->A capture, complete clears,
+    # colored+shaded paths, viewport/bias interaction, and isolated backbuffer/RT depth storage.
+    cna_software_test(cna_test_software_depthstate examples/software_depthstate_test.cpp)
+    cna_register_backend_test(NAME Software_DepthState COMMAND cna_test_software_depthstate
         TIMEOUT 30 LABELS "Software")
 
     cna_software_test(cna_test_software_culling examples/software_culling_test.cpp)

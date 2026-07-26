@@ -12,9 +12,8 @@
 // B: DepthRead, same order -> GREEN (near did not write depth, so far also passes clear depth=1).
 // C: None, same order -> GREEN (depth disabled; painter's order).
 // A2: Default again -> RED (A->B->C->A state restoration).
-// The Software v1 backend has a documented GFX-083 boundary: it implements a fixed
-// LessEqual/write-on-pass depth path and does not expose independent depth-write state.
-// Its shared run therefore records B but does not claim support for that unsupported state.
+// REMED-GFX-030 closes Software's former fixed-LessEqual/write-on-pass boundary, so all backends
+// registered for this shared public contract now assert all four outcomes without a skip.
 //
 // Identity World/View/Projection means clip-space W=1 and post-divide depths remain 0.2/0.8;
 // the default Viewport MinDepth/MaxDepth=0/1 maps them unchanged. Opaque blending, all colour
@@ -111,23 +110,15 @@ protected:
         const Color defaultA2 = render(DepthStencilState::Default);
 
         int passed = 0;
-        int expected = 4;
+        constexpr int expected = 4;
         auto check = [&](bool ok, const char* label) {
             std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
             if (ok) ++passed;
         };
         check(IsExact(defaultA, kNear),
               "A Default: near red writes depth and rejects farther green");
-#if defined(CNA_BACKEND_SOFTWARE)
-        --expected;
-        std::printf(
-            "[SKIP] B DepthRead: Software v1 has the documented GFX-083 "
-            "fixed-LessEqual/write-on-pass boundary (observed %d/%d)\n",
-            depthRead.getRProperty(), depthRead.getGProperty());
-#else
         check(IsExact(depthRead, kFar),
               "B DepthRead: near does not write depth, so farther green passes clear depth");
-#endif
         check(IsExact(none, kFar),
               "C None: depth test disabled, so farther green wins by painter's order");
         check(IsExact(defaultA2, kNear),
