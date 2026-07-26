@@ -13,11 +13,21 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
@@ -28,12 +38,22 @@
 #endif
 
 using CNA::GraphicsCapability;
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
+using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+using Microsoft::Xna::Framework::Graphics::VertexElement;
+using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 namespace
 {
@@ -48,6 +68,18 @@ namespace
                 GTEST_SKIP() << "Backend explicitly does not support index buffers";
         }
     };
+
+    VertexDeclaration PositionColorDeclaration()
+    {
+        return VertexDeclaration(
+            16,
+            {
+                VertexElement(
+                    0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(
+                    12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            });
+    }
 
 #ifdef CNA_BACKEND_WEBGPU
     struct WebGpuErrorScopeState
@@ -357,6 +389,41 @@ TEST_F(IndexBufferEmptyDataTest, WebGpuNativeErrorScopesStayClean)
     EXPECT_NO_THROW(real32.SetData(&one32, 1));
 
     PopAndExpectClean(*backend);
+    PopAndExpectClean(*backend);
+}
+
+TEST_F(IndexBufferEmptyDataTest, WebGpuDeferredThreeIndexDrawKeepsNativeScopeClean)
+{
+    RequireIndexBuffers();
+
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+
+    const std::array<VertexPositionColor, 3> vertices{
+        VertexPositionColor(Vector3(-0.5f, -0.5f, 0), Color::Red),
+        VertexPositionColor(Vector3(0.5f, -0.5f, 0), Color::Lime),
+        VertexPositionColor(Vector3(0, 0.5f, 0), Color::Blue),
+    };
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 3);
+    indexBuffer.SetData(indices.data(), 3);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    effect.Apply();
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+    device.Present();
+
     PopAndExpectClean(*backend);
 }
 #endif
