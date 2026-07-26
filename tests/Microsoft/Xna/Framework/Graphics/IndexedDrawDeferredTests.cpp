@@ -449,9 +449,13 @@ namespace
 #endif
 }
 
+// REMED-GFX-110 adds CNA_BACKEND_SOFTWARE: the CPU raster paths owe the same public addressing
+// contract as the GPU backends -- startIndex as an index-element offset, baseVertex added exactly
+// once, primitiveCount limiting the consumed range, and hints that never change addressing.
 #if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
     defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_EASYGL) || \
-    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11)
+    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
+    defined(CNA_BACKEND_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     RequireIndexedRendering();
@@ -638,7 +642,7 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawTreatsVertexRangesAsHints)
 #if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
     defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11)
+    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     RequireIndexedRendering();
@@ -2658,6 +2662,63 @@ TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopol
         device.DrawIndexedPrimitives(
             PrimitiveType::PointListEXT, 0, 0, 4, 0, 4),
         std::runtime_error);
+}
+
+// REMED-GFX-110: the CPU raster paths address real host storage, so a decoded index that leaves
+// the bound vertex buffer must be rejected deterministically instead of forming an out-of-range
+// pointer. The public arguments below are all individually legal; only the decoded address is not.
+TEST_F(IndexedDrawDeferredTest, SoftwareRejectsDecodedVertexAddressesOutsideTheBoundBuffer)
+{
+    RequireIndexedRendering();
+
+    const auto triangle = CenterTriangle(Color::White);
+    const std::array<VertexPositionColor, 3> vertices{
+        triangle[0], triangle[1], triangle[2],
+    };
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 3);
+
+    const std::array<std::uint16_t, 3> pastEnd{0, 1, 7};
+    IndexBuffer pastEndBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    pastEndBuffer.SetData(pastEnd.data(), 3);
+
+    const std::array<std::uint16_t, 3> inRange{0, 1, 2};
+    IndexBuffer basedBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    basedBuffer.SetData(inRange.data(), 3);
+
+    const std::array<std::uint32_t, 3> wrapping{
+        0, 1, std::numeric_limits<std::uint32_t>::max()};
+    IndexBuffer wrappingBuffer(
+        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+    wrappingBuffer.SetData(wrapping.data(), 3);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+
+    device.SetIndexBuffer(&pastEndBuffer);
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 0, 0, 3, 0, 1),
+        System::ArgumentOutOfRangeException);
+
+    device.SetIndexBuffer(&basedBuffer);
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1),
+        System::ArgumentOutOfRangeException);
+
+    device.SetIndexBuffer(&wrappingBuffer);
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(PrimitiveType::TriangleList, 1, 0, 2, 0, 1),
+        System::ArgumentOutOfRangeException);
+
+    // No rejected draw may have written a pixel.
+    ExpectExactColor(
+        ReadCenter(device), Color::Black,
+        "rejected Software indexed draws write nothing");
 }
 #endif
 

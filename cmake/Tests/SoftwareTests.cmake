@@ -107,6 +107,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_register_backend_test(NAME Software_DepthBias COMMAND cna_test_software_depthbias
         TIMEOUT 30 LABELS "Software")
 
+    # REMED-GFX-110: the indexed raster paths must honor the exact public indexed-draw contract --
+    # startIndex as an index-ELEMENT offset, baseVertex added exactly once to every decoded index,
+    # primitiveCount deciding the exact topology-derived consumed count, both index widths, static
+    # and dynamic buffers, minVertexIndex/numVertices staying hints, and deterministic rejection of
+    # invalid ranges and of decoded vertex addresses outside the bound vertex buffer. Pre-fix both
+    # loops read from element zero, ignored baseVertex, and never bounds-checked the vertex fetch.
+    cna_software_test(cna_test_software_indexed_addressing examples/software_indexed_addressing_test.cpp)
+    cna_register_backend_test(NAME Software_IndexedAddressing COMMAND cna_test_software_indexed_addressing
+        TIMEOUT 30 LABELS "Software")
+
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
