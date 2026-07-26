@@ -2460,8 +2460,13 @@ existing task.
 | REMED-GFX-108 | Bgfx declared 32-bit index buffers inherit the default 16-bit backend creation path. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — PUBLIC STATIC/DYNAMIC 32-BIT HANDLES AND EVERY GFX-109 REPLACEMENT RETAIN EXACT `0x1800` NATIVE FLAGS; HIGH-INDEX PIXELS, GFX-107 RANGES, VERSIONING, RETIREMENT, VALIDATION, AND PARITY PASS.** |
 | REMED-GFX-109 | Bgfx persistent vertex/index updates after queued draws could overwrite the native bytes needed by those draws before deferred frame execution. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — SUBMITTED BUFFER HANDLES ARE VERSIONED UNTIL BGFX'S DEFERRED RETIREMENT FENCE; EXACT OPENGL/VULKAN A→B→A COVERAGE PASSES.** |
 | REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`, and never bounds-checks the decoded vertex address. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — EXACT ELEMENT-OFFSET RANGES, BASE VERTEX APPLIED ONCE, TOPOLOGY-DERIVED COUNTS, HINTS LEFT AS HINTS, AND 64-BIT RANGE/ADDRESS VALIDATION BEFORE ANY VERTEX READ.** |
-| REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **OPEN — INDEPENDENT SHARED BGFX TOPOLOGY-MAPPING CORRECTION.** |
+| REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **DONE 2026-07-26 — THE ONE SHARED MAPPER NOW NAMES ALL FIVE TOPOLOGIES AND RETURNS `BGFX_STATE_PT_POINTS`; INDEXED, NON-INDEXED, DRAWUSER, 16-/32-BIT, A→B→A, TARGET, DEPTH, CULL, VIEWPORT/SCISSOR/BLEND AND CARDINALITY COVERAGE PASSES ON BOTH RENDERER ROUTES.** |
 | REMED-GFX-112 | Vulkan's indexed strip control emits an unaligned 32-bit index-buffer binding-offset validation message while pixels pass. | MEDIUM | P2 | REMED-GFX-106 semantic controls | **DONE — DEFERRED NATIVE INDEX-ARENA OFFSETS ALIGNED PER FORMAT (2026-07-26).** |
+| REMED-GFX-113 | Bgfx non-indexed draws bind the whole bound vertex buffer, ignoring the public `vertexStart` and `primitiveCount` for every topology. | MEDIUM | P2 | REMED-GFX-111 count verification | **OPEN — BGFX COUNTERPART OF REMED-GFX-020/060; PROVEN BY AN EXACT-PIXEL POINT RANGE CONTROL.** |
+| REMED-GFX-114 | Vulkan, D3D9, D3D11 and D3D12 route `PointListEXT` through their triangle-list default and count zero vertices for it. | MEDIUM | P2 | REMED-GFX-111 cross-backend controls | **OPEN — SAME DEFECT CLASS AS REMED-GFX-111 IN FOUR OTHER BACKENDS; 0/13 MEASURED ON VULKAN, D3D11 AND D3D9.** |
+| REMED-GFX-115 | Bgfx Vulkan point pipelines emit `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because the SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-111 validation inspection | **OPEN — SHADER-DECLARATION GAP IN 15 BGFX 3D VERTEX SHADERS; PIXELS CORRECT ON THE TESTED DRIVER, SIZE FORMALLY UNDEFINED.** |
+| REMED-GFX-116 | WebGPU's deferred 3D render pass resolves `GraphicsDevice.Viewport` live at flush time instead of capturing it per queued draw. | MEDIUM | P2 | REMED-GFX-111 viewport control | **OPEN — SAME CLASS AS REMED-GFX-062/063/064/065; THE SPRITEBATCH PATH WAS FIXED UNDER REMED-GFX-072, THE 3D PATH WAS NOT.** |
+| REMED-GFX-117 | SDL_GPU passes literal `0` for `first_index`/`vertex_offset` at all eight native indexed draw sites, dropping public `startIndex`/`baseVertex`. | MEDIUM | P2 | REMED-GFX-111 SDL_GPU control | **OPEN — SDL_GPU COUNTERPART OF REMED-GFX-020/060/107.** |
 
 #### REMED-BUILD-010 detail
 
@@ -9861,5 +9866,285 @@ D3D9, D3D11, D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulka
 - `bca78ec2 test(Task REMED-GFX-105): cover indexed strip compatibility`
 - `fd668025 test(Task REMED-GFX-105): add backend strip controls`
 - `docs(remediation): record GFX-105 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-111 — Bgfx PointListEXT topology mapping (DONE 2026-07-26)
+
+### Classification
+
+This is a **real, single-root-cause Bgfx production defect in one shared topology mapper**, not a
+count, addressing, pipeline-cache, shader or test problem, and not an unsupported-topology
+rejection.
+
+`ToTopologyFlag(PrimitiveType)` in `BgfxGraphicsBackend.cpp` named only `TriangleStrip`,
+`LineList` and `LineStrip`, then sent everything else to `default: return 0`. `0` is not "no
+topology" in bgfx — the `BGFX_STATE_PT_*` field occupies bits 48-50 (`BGFX_STATE_PT_MASK =
+0x0007000000000000`) and its zero value **is** triangle list. `PointListEXT` therefore inherited
+triangle-list primitive state.
+
+The mapper is the only topology source for all five Bgfx draw paths, so the defect was never
+limited to the indexed path that REMED-GFX-106 discovered:
+
+| Call site | Path |
+|---|---|
+| `DrawColoredPrimitives` | legacy non-indexed (`DrawUserPrimitives` untyped/typed overloads) |
+| `DrawIndexedColoredPrimitives` | legacy indexed (`DrawUserIndexedPrimitives`) |
+| `DrawPrimitivesEx` | effect-aware non-indexed (`DrawPrimitives`, declaration DrawUser overloads) |
+| `DrawIndexedPrimitivesEx` | effect-aware indexed (`DrawIndexedPrimitives`) |
+| `DrawInstancedPrimitivesEx` | instanced indexed |
+
+`bgfx::setState(...)` is the only other place primitive bits could enter, and the remaining call
+site (`SubmitSprite`, line ~1690) carries no `BGFX_STATE_PT_*` bits at all because SpriteBatch is
+always a triangle list. The Bgfx backend has no second topology mapper.
+
+Everything adjacent was already correct and was **not** changed:
+
+- `IndexCountForPrimitives(PointListEXT, n)` already returned `n`, so the indexed range count was
+  right; only the primitive state was wrong.
+- `ExpandWireframeIndices` already returns `false` for every non-triangle topology, so
+  `FillMode.WireFrame` never converted points into lines — the `useWireframe ? BGFX_STATE_PT_LINES
+  : ToTopologyFlag(primitive)` expression selects the mapper for points in both fill modes.
+- REMED-GFX-107's exact index range/base-vertex binding and REMED-GFX-108's native
+  `BGFX_BUFFER_INDEX32` creation apply unchanged to point topology.
+
+### Exact pre-fix native state
+
+| Item | Pre-fix | Post-fix |
+|---|---|---|
+| `PrimitiveType` | `PointListEXT` | `PointListEXT` |
+| Bgfx primitive state bits | `0` (`BGFX_STATE_PT_MASK` field value 0 = triangle list) | `BGFX_STATE_PT_POINTS` = `0x0004000000000000` |
+| Point-size state bits | `0` | `0` (unchanged) |
+| `IndexCountForPrimitives` | `primitiveCount` | `primitiveCount` (unchanged) |
+| Index range bound | `startIndex` / `primitiveCount` elements | unchanged |
+| Vertex range bound | indexed: `baseVertex` .. end; non-indexed: whole buffer | unchanged |
+| Rendered pixels, 4-point non-indexed draw | **47800 lit pixels** — exactly the area of the triangle formed by vertices 0/1/2 (analytic area 48000); none of the four requested points exists | 4 lit pixels, one per requested point |
+| Rendered pixels, 1-point indexed draw | **0 lit pixels** | 1 lit pixel at the requested pixel centre |
+
+### Public contract established for PointListEXT
+
+XNA/FNA define it as "treats each vertex as a single point; vertex n defines point n; N points are
+drawn". The reconciled CNA contract, now locked by permanent tests:
+
+| Question | Answer |
+|---|---|
+| `primitiveCount` | equals the number of points |
+| Non-indexed consumed vertices | `primitiveCount`, starting at `vertexStart` |
+| Indexed consumed index elements | `primitiveCount`, starting at `startIndex` (an ELEMENT offset, never bytes) |
+| Fetched vertex | decoded index + `baseVertex`, added exactly once |
+| `minVertexIndex` / `numVertices` | validation hints only; never addressing, never truncation |
+| `vertexOffset` (DrawUser) | offsets the caller array; the packed temporary is exactly sized |
+| DrawUser support | fully supported, including the explicit-`VertexDeclaration` and 32-bit index overloads |
+| Point size | not public XNA/CNA state. Each point covers at least the pixel containing its window position; total coverage is small and bounded. No point-size API was added |
+| Culling / fill mode | points carry no winding, so no `CullMode` removes them and `FillMode.WireFrame` is a no-op for them |
+| Depth / viewport / scissor / blend / render targets | identical to every other topology |
+
+Point-list mapping does **not** inherit triangle-list winding or culling semantics: the fix changes
+only the primitive-state bits, and `cullFlags_` is applied identically for every topology (a GPU
+never applies face culling to point primitives).
+
+### Production fix
+
+One function, one behavioural change:
+
+```
+case PrimitiveType::TriangleList:  return 0; // bgfx's default primitive state
+case PrimitiveType::TriangleStrip: return BGFX_STATE_PT_TRISTRIP;
+case PrimitiveType::LineList:      return BGFX_STATE_PT_LINES;
+case PrimitiveType::LineStrip:     return BGFX_STATE_PT_LINESTRIP;
+case PrimitiveType::PointListEXT:  return BGFX_STATE_PT_POINTS;
+```
+
+The switch is now exhaustive over `PrimitiveType`, with `TriangleList` spelled out rather than left
+to a fall-through, so no future topology can silently inherit bgfx's zero-valued default. Every
+non-`PointListEXT` input maps to exactly the value it mapped to before, so any draw that does not
+use `PointListEXT` is bit-identical.
+
+The installed bgfx revision is `572868c0` (2026-07-15), whose `include/bgfx/defines.h` exposes
+`BGFX_STATE_PT_POINTS = 0x0004000000000000`. Point size is left at zero deliberately:
+`renderer_gl.cpp` resolves the point-size field with `bx::max(1, …)` and calls `glPointSize(1)`,
+and the Vulkan/D3D11/Metal renderers rasterize one-pixel points. Measured coverage is exactly one
+pixel per point on both Bgfx renderers.
+
+No `BGFX_STATE_POINT_SIZE` bit, no public point-size API, no geometry expansion, no buffer
+conversion, no extra submission, no wait, no extra frame, no `Present`, no per-draw allocation and
+no shader change were introduced.
+
+### Draw counts, addressing, and index widths
+
+Indexed point addressing is exact and unchanged from REMED-GFX-107/108:
+
+| Case | Result |
+|---|---|
+| `startIndex = 0`, count = 4 | four points, one pixel each |
+| `startIndex = 2`, count = 1 | exactly the third point; the other three colours absent |
+| `startIndex = 2`, `baseVertex = 2`, count = 3, hints `minVertexIndex=0`/`numVertices=6` | exactly the three intended points; all five decoys (one shared colour) absent |
+| 16-bit static, 16-bit dynamic, public 32-bit static | identical exact results; the 32-bit handle still reports `IsThirtyTwoBit()` and native flags `BGFX_BUFFER_ALLOW_RESIZE \| BGFX_BUFFER_INDEX32` |
+| `DrawUserPrimitives(vertexOffset = 2, count = 3)` | exactly three points; decoys before and after absent; same for the explicit-declaration overload |
+| `DrawUserIndexedPrimitives(vertexOffset = 2, numVertices = 5, indexOffset = 2, count = 3)` | exactly three points for both 16- and 32-bit caller indices |
+
+`startIndex` is never interpreted as bytes and `minVertexIndex` is never used as an address.
+
+Non-indexed `vertexStart`/`primitiveCount` is the one count question Bgfx still answers wrongly,
+and it is **not** a point defect: `DrawPrimitivesEx` binds the whole bound vertex buffer for every
+topology. Recorded as **REMED-GFX-113** (below) and deliberately not fixed here. Its exact-range
+counterpart test is active on EasyGL and WebGPU
+(`NonIndexedPointListHonorsVertexStartAndExactCount`), and the Bgfx boundary is pinned by
+`BgfxNonIndexedPointRangeCurrentlyCoversTheWholeBoundBuffer`, which still asserts REMED-GFX-111's
+own result — all seven bound vertices become points, none becomes area geometry.
+
+### State A → B → A, targets, depth and rasterizer
+
+- `PointListEXT → TriangleList → PointListEXT → LineList → PointListEXT` in one frame: every point
+  renders, the interleaved triangle still fills its area, the interleaved line still draws its
+  segment, and the midpoints between the two red and the two blue points stay background — no
+  last-live-topology behaviour and no extra geometry.
+- One-point range → four-point range → one-point range, each read once: exact points, exact
+  exclusions, and a coverage budget of one and four points respectively.
+- Backbuffer → `RenderTarget2D` → backbuffer in one frame, plus producer → unbind → point-sampled
+  readback of the target: each segment keeps only its own point.
+- `DepthStencilState.Default`: a nearer point wins over a farther one and a point behind the stored
+  depth is rejected. `DepthStencilState.DepthRead`: a point passes the test but writes no depth, so
+  a later slightly-farther point still passes — proven by a third point that would have been
+  rejected against a written depth. Run on a `Depth24` render target.
+- `CullNone`, `CullClockwiseFace`, `CullCounterClockwiseFace` and `FillMode.WireFrame` all render
+  every point. REMED-GFX-017 culling and REMED-GFX-018 `ClearOptions` behaviour are unchanged.
+- Custom `Viewport` places the point at the sub-viewport position and not at its full-viewport
+  position; `ScissorTestEnable` clips the outside point and keeps the inside one; `BlendState`
+  `Additive` produces the exact per-channel sum of two coincident points.
+
+### Pipeline / state cache
+
+Bgfx represents topology as **submission state**, not as a graphics-pipeline cache key: the bits
+are part of the `bgfx::setState()` value captured for each individual `bgfx::submit()`. There is no
+CNA-side Bgfx pipeline cache, so there is no cardinality to record for topology. What is measured
+instead is native resource cardinality
+(`BgfxPointDrawsAllocateNoPerDrawNativeResources`): over 24 frames of
+point/triangle/point/line/point draws the live dynamic vertex/index handle counts never exceed the
+one-object baseline and return exactly to the process baseline after disposal. Target object
+identity never enters topology identity, and a topology change allocates nothing.
+
+### Renderer routes and validation
+
+- **Bgfx OpenGL** (Xvfb `:99`, OpenGL 2.1): `PointListPrimitiveTest` **1/15 → 15/15**.
+- **Bgfx Vulkan** (real AMD Radeon on `:0`): **15/15**, with `active renderer: Vulkan` confirmed on
+  all 15 device creations — no silent OpenGL fallback. The `:99` route does fall back to OpenGL 2.1
+  and was not counted as Vulkan coverage.
+- **Vulkan validation output.** CNA's bgfx callback implements `traceVargs` as a no-op and bgfx's
+  own debug-report callback suppresses the legacy `PointSizeMissing` message, so the layer was
+  configured to log directly to a file (`VK_LAYER_SETTINGS_PATH`, `debug_action =
+  VK_DBG_LAYER_ACTION_LOG_MSG`, `report_flags = info,warn,perf,error`). The layer's own
+  "Khronos Validation Layer Active" banner confirms it ran. Result: the 101-test Bgfx indexed /
+  empty-buffer / declaration suite produces **zero** validation errors, warnings and performance
+  messages on Vulkan, and the 15-test point suite produces exactly **one** distinct message —
+  `VUID-VkGraphicsPipelineCreateInfo-topology-08773` on shader module `vs_colored3d`: the SPIR-V
+  vertex shader writes no `PointSize` while the pipeline topology is `POINT_LIST`. Points still
+  rasterize correctly on this driver, but the size is formally undefined without `maintenance5`.
+  This is a shader-declaration gap across all 15 Bgfx 3D vertex shaders, not a topology-mapping
+  gap; it is recorded as **REMED-GFX-115** and is the only known non-clean validation result.
+
+### Cross-backend controls
+
+| Backend | Result |
+|---|---|
+| Bgfx OpenGL | **15/15** (pre-fix 1/15) |
+| Bgfx Vulkan (genuine) | **15/15** |
+| EasyGL | **14/14** — already mapped `::easygl::PrimitiveType::Points` with `draw_arrays(vertexStart, exact count)`; this is the reference that proved the fixture itself is sound while Bgfx was still failing |
+| WebGPU | **14/14** — already mapped `WGPUPrimitiveTopology_PointList` with exact counts |
+| SDL_GPU | **1/1** — maps `SDL_GPU_PRIMITIVETYPE_POINTLIST` with exact counts. No backbuffer readback exists, so its exact-pixel control runs through `RenderTarget2D::GetData` and covers indexed and non-indexed point draws with decoys and a nonzero `vertexStart` |
+| Software | **1/1** — keeps its explicit documented v1 `TriangleList`-only rejection on all four public entry points (`DrawPrimitives`, `DrawIndexedPrimitives`, `DrawUserPrimitives`, `DrawUserIndexedPrimitives`). The boundary is retained, never converted into approximate geometry |
+| Headless | renders nothing by design; its `PrimitiveVertexCount` already handles `PointListEXT`, and no pixel claim is made for it |
+| Vulkan | **0/13** — `ToVkTopology` has no `PointListEXT` case; recorded as REMED-GFX-114 |
+| D3D11 (Wine + DXVK) | **0/13** — `ToD3D11Topology` has no `PointListEXT` case; REMED-GFX-114 |
+| D3D9 (Wine + DXVK9) | **0/13** — `ToD3D9Topology` has no `PointListEXT` case; REMED-GFX-114 |
+| D3D12 | inspection only (`ToD3D12Topology`, same shape); runtime remains blocked by REMED-BUILD-012 |
+
+Only Bgfx production changed. The Vulkan/D3D controls were run by temporarily widening the test
+guard, observing the failure, and reverting the guard; no red test was committed.
+
+### Regression gates
+
+- Bgfx indexed / empty-buffer / declaration suite (REMED-GFX-043, 054, 103, 104, 105, 107, 108,
+  109, 110 shared coverage): **101/101** on Bgfx OpenGL and **101/101** on genuine Bgfx Vulkan.
+- Eleven Bgfx binary gates on **both** renderer routes: `multi_viewport` (GFX-065),
+  `spritebatch_transform` (GFX-084), `rasterizerstate_cullmode` (GFX-017),
+  `graphicsdevice_clearoptions` (GFX-018), `rendertarget_viewport` (GFX-063), `viewport_subregion`,
+  `rendertarget_scissor`, `rendertarget_orientation` (GFX-067), `rendertarget_effect_texture`
+  (GFX-078), `spritebatch_begin_rasterizerstate` (GFX-081) and `scissor` — all PASS.
+- Full Bgfx binary shard: **124/128**. The four failures (`rendertarget2d_msaa`,
+  `rendertargetcube_msaa`, `rendertargetcube_mip`, `rendertargetcube_depthformat`) reproduce on
+  both `:99` and the real GPU, contain no `PointListEXT`, and are pre-existing.
+- Full Bgfx `CnaTests`: **5710 passed of 5719**. The four failures (`CnjEffectTest.
+  LoadsRealCnjFixture`, `CnjStockEffectTest.CustomGlslEffectStillWorks`,
+  `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`,
+  `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`) were re-run
+  against the pre-fix backend and fail identically — verified pre-existing, not caused here.
+- Software `PointListPrimitiveTest` + `IndexedDrawDeferredTest`: **17/17** (REMED-GFX-110 intact).
+- Headless: **3/3** shared tests.
+
+### Sanitizers
+
+Focused ASan and UBSan runs over the complete point suite plus the whole indexed suite (one point,
+multiple points, indexed and non-indexed, range boundaries, 16-/32-bit indices, A→B→A topology
+switching): **42/42 each**, with zero `runtime error` lines under UBSan and zero
+`ERROR: AddressSanitizer` reports.
+
+### Allocated independent findings
+
+None of these can honestly be folded into a topology-mapping correction; each is a distinct root
+cause with its own defect class.
+
+- **REMED-GFX-113** — Bgfx non-indexed draws bind the whole bound vertex buffer and ignore
+  `vertexStart`/`primitiveCount`, for every topology. The Bgfx counterpart of REMED-GFX-020 and
+  REMED-GFX-060. Bgfx's own wireframe path already honours both arguments, which isolates the
+  omission to the solid `bgfx::setVertexBuffer(0, handle)` binding.
+- **REMED-GFX-114** — Vulkan, D3D9, D3D11 and D3D12 route `PointListEXT` through their triangle-list
+  default; their `VertexCountForPrimitives` helpers additionally return `0` for it. Proven 0/13 on
+  Vulkan, D3D11 and D3D9.
+- **REMED-GFX-115** — Bgfx Vulkan point pipelines emit
+  `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because the SPIR-V vertex shaders write no
+  `PointSize`. Needs `gl_PointSize` under `BGFX_SHADER_LANGUAGE_SPIRV` in 15 vertex shaders plus
+  `bgfx_shaders.hpp` regeneration.
+- **REMED-GFX-116** — WebGPU's deferred 3D render pass resolves `GraphicsDevice.Viewport` from live
+  backend state once per pass instead of capturing it per queued draw (its SpriteBatch path was
+  fixed under REMED-GFX-072; the 3D path was not). Same class as REMED-GFX-062/063/064/065.
+- **REMED-GFX-117** — SDL_GPU passes literal `0` for `first_index` and `vertex_offset` at all eight
+  `SDL_DrawGPUIndexedPrimitives` sites, dropping public `startIndex`/`baseVertex`. The SDL_GPU
+  counterpart of REMED-GFX-020/060/107.
+
+Two test-harness assumptions were also corrected while verifying, both proven against EasyGL rather
+than assumed: the explicit-`VertexDeclaration` DrawUser overload must be fed an exactly packed
+16-byte source (C++ `VertexPositionColor` is wider than the declared stride), and a render target
+must not be sampled in the same frame that wrote it. A third harness detail matters for future
+tasks: the backbuffer is now read **before** a custom `Viewport` is restored, because restoring
+first lets a backend that resolves viewport state per pass rather than per draw pass silently —
+which is exactly how REMED-GFX-116 was found.
+
+### Build directories, ccache and storage policy
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-bgfx` | BGFX | yes | reused |
+| `cmake-build-bgfx-asan` | BGFX + ASan | yes | reused |
+| `cmake-build-bgfx-ubsan` | BGFX + UBSan | yes | reused |
+| `cmake-build-debug` (EasyGL) · `cmake-build-webgpu` · `cmake-build-vulkan` · `cmake-build-software` · `cmake-build-sdlgpu` · `cmake-build-headless` · `cmake-build-sdlrenderer` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-dx3` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other eleven | yes | reused |
+
+No new build directory was created, no clean build was required, no build directory was deleted,
+cleaned or recreated, and no build tree was created under `/tmp`, `/var/tmp` or `/dev/shm`. `/tmp`
+was used only for small logs, the Vulkan layer-settings file and its validation log. All builds ran
+at `-j4` or less (sanitizer trees at `-j3`).
+
+All fourteen backend libraries compile incrementally: ASCII, Bgfx, Canvas, D3D9, D3D11, D3D12, DX3,
+EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan and WebGPU. `CnaTests` additionally
+rebuilds in every tree that enables it, including the three mingw cross builds. No shader source
+and no generated artifact changed.
+
+**Commits:**
+
+- `c90ce0f1 test(Task REMED-GFX-111): reproduce Bgfx PointListEXT topology failure`
+- `e75905ae fix(Task REMED-GFX-111): map Bgfx PointListEXT to native points`
+- `0d38fcb8 test(Task REMED-GFX-111): cover point-list draw paths and parity`
+- `63ae63c4 test(Task REMED-GFX-111): add SDL_GPU point parity and viewport capture order`
+- `docs(remediation): record GFX-111 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
