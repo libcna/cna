@@ -21,6 +21,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Dx3_Smoke COMMAND cna_test_dx3_smoke
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
+    # REMED-GFX-029: transactional primary/shadow-backbuffer replacement, stage-by-stage
+    # failure injection, native identity/destruction accounting, and public resize-state checks.
+    cna_dx3_test(cna_test_dx3_resize_transaction examples/dx3_resize_transaction_test.cpp)
+    cna_register_backend_test(NAME Dx3_ResizeTransaction COMMAND cna_test_dx3_resize_transaction
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3;REMED-GFX-029")
+
     # plan_dx3.md Phase X3 (DX3-20..DX3-28): texture/render-target backend CTest.
     cna_dx3_test(cna_test_dx3_texture_rendertarget examples/dx3_texture_rendertarget_test.cpp)
     cna_register_backend_test(NAME Dx3_TextureRenderTarget COMMAND cna_test_dx3_texture_rendertarget

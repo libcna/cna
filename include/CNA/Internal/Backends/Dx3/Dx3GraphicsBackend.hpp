@@ -13,10 +13,71 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include <SDL3/SDL.h>
+#include <cstdint>
 #include <memory>
 
 namespace CNA::Internal::Backends::Dx3
 {
+    /**
+     * @brief Resize-only failure points used by the DX3 transaction regression. NOXNA.
+     *
+     * Hooks are copied into one backend instance and never shared globally. Initial construction
+     * is deliberately not injectable through these points; they apply only to later
+     * SetVirtualResolution() replacement attempts.
+     */
+    enum class Dx3ResizeFailurePointEXT : std::uint8_t
+    {
+        None,
+        ShadowBackBufferCreation,
+        ShadowBackBufferValidation,
+        DisplayModeBinding,
+        PrimarySurfaceCreation,
+        PrimarySurfaceValidation,
+        SurfaceSetCommit
+    };
+
+    /** @brief Native DX3 resource categories reported by Dx3TestHooksEXT. NOXNA. */
+    enum class Dx3ResourceKindEXT : std::uint8_t
+    {
+        DirectDraw,
+        PrimarySurface,
+        ShadowBackBuffer
+    };
+
+    /** @brief Native acquisition/release edge reported by Dx3TestHooksEXT. NOXNA. */
+    enum class Dx3ResourceEventEXT : std::uint8_t
+    {
+        Acquired,
+        Released
+    };
+
+    /**
+     * @brief Per-instance resize injection and exact native-resource lifetime observation. NOXNA.
+     *
+     * `context` must outlive the backend while `resourceEvent` is installed. `identity` is the
+     * native COM interface pointer and is for identity comparison only; a Released identity must
+     * never be dereferenced.
+     */
+    struct Dx3TestHooksEXT
+    {
+        Dx3ResizeFailurePointEXT failAt = Dx3ResizeFailurePointEXT::None;
+        void* context = nullptr;
+        void (*resourceEvent)(void* context, Dx3ResourceKindEXT resource,
+                              Dx3ResourceEventEXT event, const void* identity) noexcept = nullptr;
+    };
+
+    /** @brief Snapshot used by the resize regression to prove native identity preservation. NOXNA. */
+    struct Dx3TestStateEXT
+    {
+        const void* directDraw = nullptr;
+        const void* primarySurface = nullptr;
+        const void* shadowBackBuffer = nullptr;
+        const void* activeRenderTarget = nullptr;
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        int presentationMode = 0;
+    };
+
     /**
      * DX3 graphics backend (plan_dx3.md): a CPU 2D compositor that uses free-direct's
      * IDirectDraw/IDirectDrawSurface as its pixel storage/present mechanism. Real DirectDraw
@@ -51,6 +112,8 @@ namespace CNA::Internal::Backends::Dx3
     {
     public:
         explicit Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args);
+        /** @brief Test-only constructor with instance-local lifetime observation. NOXNA. */
+        Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args, const Dx3TestHooksEXT& testHooks);
         ~Dx3GraphicsBackend() override;
 
         Dx3GraphicsBackend(const Dx3GraphicsBackend&) = delete;
@@ -64,6 +127,10 @@ namespace CNA::Internal::Backends::Dx3
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         SDL_Window* GetWindowInternal() const override;
+        /** @brief Replaces this instance's resize-only test hooks and rearms one failure. NOXNA. */
+        void SetTestHooksEXT(const Dx3TestHooksEXT& testHooks);
+        /** @brief Returns native identities and resize-dependent backend state. NOXNA. */
+        [[nodiscard]] Dx3TestStateEXT GetTestStateEXT() const;
         // free-direct manages its own internal SDL_Renderer privately (created lazily inside
         // PresentPrimary, against the same SDL_Window* this backend hands to
         // SetCooperativeLevel) -- it is never exposed to CNA, so this always returns nullptr,

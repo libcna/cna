@@ -29,6 +29,75 @@ namespace CNA::Internal::Backends::Dx3
                                       std::to_string(static_cast<unsigned long>(hr)));
         }
 
+        [[nodiscard]] const char* ResizeFailurePointName(Dx3ResizeFailurePointEXT point)
+        {
+            switch (point)
+            {
+                case Dx3ResizeFailurePointEXT::ShadowBackBufferCreation:
+                    return "shadow-backbuffer creation";
+                case Dx3ResizeFailurePointEXT::ShadowBackBufferValidation:
+                    return "shadow-backbuffer validation";
+                case Dx3ResizeFailurePointEXT::DisplayModeBinding:
+                    return "display-mode binding";
+                case Dx3ResizeFailurePointEXT::PrimarySurfaceCreation:
+                    return "primary-surface creation";
+                case Dx3ResizeFailurePointEXT::PrimarySurfaceValidation:
+                    return "primary-surface validation";
+                case Dx3ResizeFailurePointEXT::SurfaceSetCommit:
+                    return "surface-set commit";
+                case Dx3ResizeFailurePointEXT::None:
+                    return "none";
+            }
+            return "unknown";
+        }
+
+        void NotifyResource(const Dx3TestHooksEXT& hooks, Dx3ResourceKindEXT resource,
+                            Dx3ResourceEventEXT event, const void* identity) noexcept
+        {
+            if (hooks.resourceEvent != nullptr)
+                hooks.resourceEvent(hooks.context, resource, event, identity);
+        }
+
+        void ValidateResizeSurface(LPDIRECTDRAWSURFACE surface, int width, int height,
+                                   DWORD requiredCaps, const char* diagnostic)
+        {
+            if (surface == nullptr)
+                throw std::runtime_error(std::string(diagnostic) + ": null surface");
+
+            DDSURFACEDESC desc{};
+            desc.dwSize = sizeof(DDSURFACEDESC);
+            const HRESULT hr = surface->GetSurfaceDesc(&desc);
+            if (FAILED(hr))
+                ThrowHr(diagnostic, hr);
+
+            const bool dimensionsMatch =
+                desc.dwWidth == static_cast<DWORD>(width) &&
+                desc.dwHeight == static_cast<DWORD>(height);
+            const bool capsMatch = (desc.ddsCaps.dwCaps & requiredCaps) == requiredCaps;
+            const bool formatMatches =
+                (desc.dwFlags & DDSD_PIXELFORMAT) != 0 &&
+                desc.ddpfPixelFormat.dwRGBBitCount == 32;
+            if (!dimensionsMatch || !capsMatch || !formatMatches)
+            {
+                throw std::runtime_error(
+                    std::string(diagnostic) + ": replacement surface descriptor mismatch");
+            }
+
+            if ((requiredCaps & DDSCAPS_OFFSCREENPLAIN) != 0)
+            {
+                const bool storageValid =
+                    (desc.dwFlags & (DDSD_LPSURFACE | DDSD_PITCH)) ==
+                        (DDSD_LPSURFACE | DDSD_PITCH) &&
+                    desc.lpSurface != nullptr &&
+                    desc.lPitch >= static_cast<LONG>(static_cast<std::size_t>(width) * 4u);
+                if (!storageValid)
+                {
+                    throw std::runtime_error(
+                        std::string(diagnostic) + ": replacement surface has no valid storage");
+                }
+            }
+        }
+
         // ---- 3D pipeline: DirectDraw is 2D-only. All 3D calls throw. ----
         // Callers can check GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD) ahead
         // of time instead of relying on this throw -- see SupportsCapability() in the header.
@@ -393,6 +462,8 @@ namespace CNA::Internal::Backends::Dx3
 
     struct Dx3GraphicsBackend::Impl
     {
+        explicit Impl(const Dx3TestHooksEXT& hooks) : testHooks(hooks) {}
+
         // NOTE: SDL_Window is NOT owned by the backend -- same convention as every other
         // window-based CNA backend (GraphicsDevice/platform layer owns it).
         SDL_Window* window = nullptr;
@@ -423,6 +494,8 @@ namespace CNA::Internal::Backends::Dx3
         int logicalWidth = 0;
         int logicalHeight = 0;
         CnaPresentationMode presentationMode = CnaPresentationMode::Overscan;
+        Dx3TestHooksEXT testHooks{};
+        bool testFailureInjected = false;
 
         // Phase X5 (design decision 6): the real, distinct blend mode detected from
         // ApplyBlendState's raw factors (DetectBlendMode) -- gates the SpriteBatch identity fast
@@ -448,22 +521,57 @@ namespace CNA::Internal::Backends::Dx3
             else { w = logicalWidth; h = logicalHeight; }
         }
 
+        void MaybeFail(Dx3ResizeFailurePointEXT point)
+        {
+            if (!testFailureInjected && testHooks.failAt == point)
+            {
+                testFailureInjected = true;
+                throw std::runtime_error(
+                    std::string("CNA DX3: injected resize failure during ") +
+                    ResizeFailurePointName(point));
+            }
+        }
+
+        void ReleaseSurface(LPDIRECTDRAWSURFACE& surface, Dx3ResourceKindEXT kind) noexcept
+        {
+            if (surface == nullptr)
+                return;
+            LPDIRECTDRAWSURFACE released = surface;
+            surface = nullptr;
+            released->Release();
+            NotifyResource(testHooks, kind, Dx3ResourceEventEXT::Released, released);
+        }
+
+        void ReleaseDirectDraw() noexcept
+        {
+            if (dd == nullptr)
+                return;
+            LPDIRECTDRAW released = dd;
+            dd = nullptr;
+            released->Release();
+            NotifyResource(
+                testHooks, Dx3ResourceKindEXT::DirectDraw,
+                Dx3ResourceEventEXT::Released, released);
+        }
+
         ~Impl()
         {
-            if (backBuffer) backBuffer->Release();
-            if (primary) primary->Release();
-            if (dd) dd->Release();
+            ReleaseSurface(backBuffer, Dx3ResourceKindEXT::ShadowBackBuffer);
+            ReleaseSurface(primary, Dx3ResourceKindEXT::PrimarySurface);
+            ReleaseDirectDraw();
         }
 
         // Releases the current primary/shadow-backbuffer surfaces (if any) and recreates both at
         // (width, height): SetDisplayMode(width, height, 32) (design decision 4: 32bpp only) ->
         // primary CreateSurface (DDSCAPS_PRIMARYSURFACE) -> shadow CreateSurface
         // (DDSCAPS_OFFSCREENPLAIN, sized width x height).
-        void CreateSurfaces(int width, int height)
+        void CreateSurfaces(int width, int height, bool injectResizeFailure)
         {
-            if (backBuffer) { backBuffer->Release(); backBuffer = nullptr; }
-            if (primary) { primary->Release(); primary = nullptr; }
+            ReleaseSurface(backBuffer, Dx3ResourceKindEXT::ShadowBackBuffer);
+            ReleaseSurface(primary, Dx3ResourceKindEXT::PrimarySurface);
 
+            if (injectResizeFailure)
+                MaybeFail(Dx3ResizeFailurePointEXT::DisplayModeBinding);
             HRESULT hr = dd->SetDisplayMode(static_cast<DWORD>(width), static_cast<DWORD>(height), 32);
             if (FAILED(hr)) ThrowHr("IDirectDraw::SetDisplayMode", hr);
 
@@ -471,8 +579,18 @@ namespace CNA::Internal::Backends::Dx3
             primaryDesc.dwSize = sizeof(DDSURFACEDESC);
             primaryDesc.dwFlags = DDSD_CAPS;
             primaryDesc.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+            if (injectResizeFailure)
+                MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceCreation);
             hr = dd->CreateSurface(&primaryDesc, &primary, nullptr);
             if (FAILED(hr)) ThrowHr("IDirectDraw::CreateSurface(primary)", hr);
+            NotifyResource(
+                testHooks, Dx3ResourceKindEXT::PrimarySurface,
+                Dx3ResourceEventEXT::Acquired, primary);
+            if (injectResizeFailure)
+                MaybeFail(Dx3ResizeFailurePointEXT::PrimarySurfaceValidation);
+            ValidateResizeSurface(
+                primary, width, height, DDSCAPS_PRIMARYSURFACE,
+                "IDirectDrawSurface::GetSurfaceDesc(primary)");
 
             DDSURFACEDESC backDesc{};
             backDesc.dwSize = sizeof(DDSURFACEDESC);
@@ -480,13 +598,24 @@ namespace CNA::Internal::Backends::Dx3
             backDesc.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN;
             backDesc.dwWidth = static_cast<DWORD>(width);
             backDesc.dwHeight = static_cast<DWORD>(height);
+            if (injectResizeFailure)
+                MaybeFail(Dx3ResizeFailurePointEXT::ShadowBackBufferCreation);
             hr = dd->CreateSurface(&backDesc, &backBuffer, nullptr);
             if (FAILED(hr))
             {
-                primary->Release();
-                primary = nullptr;
+                ReleaseSurface(primary, Dx3ResourceKindEXT::PrimarySurface);
                 ThrowHr("IDirectDraw::CreateSurface(shadow backbuffer)", hr);
             }
+            NotifyResource(
+                testHooks, Dx3ResourceKindEXT::ShadowBackBuffer,
+                Dx3ResourceEventEXT::Acquired, backBuffer);
+            if (injectResizeFailure)
+                MaybeFail(Dx3ResizeFailurePointEXT::ShadowBackBufferValidation);
+            ValidateResizeSurface(
+                backBuffer, width, height, DDSCAPS_OFFSCREENPLAIN,
+                "IDirectDrawSurface::GetSurfaceDesc(shadow backbuffer)");
+            if (injectResizeFailure)
+                MaybeFail(Dx3ResizeFailurePointEXT::SurfaceSetCommit);
 
             logicalWidth = width;
             logicalHeight = height;
@@ -494,7 +623,13 @@ namespace CNA::Internal::Backends::Dx3
     };
 
     Dx3GraphicsBackend::Dx3GraphicsBackend(const GraphicsBackendCreateArgs& args)
-        : impl_(std::make_unique<Impl>())
+        : Dx3GraphicsBackend(args, Dx3TestHooksEXT{})
+    {
+    }
+
+    Dx3GraphicsBackend::Dx3GraphicsBackend(
+        const GraphicsBackendCreateArgs& args, const Dx3TestHooksEXT& testHooks)
+        : impl_(std::make_unique<Impl>(testHooks))
     {
         if (!args.window) throw std::runtime_error("Dx3GraphicsBackend initialized with null window.");
         impl_->window = args.window;
@@ -502,6 +637,9 @@ namespace CNA::Internal::Backends::Dx3
 
         HRESULT hr = DirectDrawCreate(nullptr, &impl_->dd, nullptr);
         if (FAILED(hr)) ThrowHr("DirectDrawCreate", hr);
+        NotifyResource(
+            impl_->testHooks, Dx3ResourceKindEXT::DirectDraw,
+            Dx3ResourceEventEXT::Acquired, impl_->dd);
 
         // Design decision 2: free-direct's SetCooperativeLevel does
         // sdlWindow_ = reinterpret_cast<SDL_Window*>(hwnd) internally -- HWND is CNA's own already-
@@ -511,7 +649,7 @@ namespace CNA::Internal::Backends::Dx3
 
         const int width = args.virtualWidth > 0 ? args.virtualWidth : 640;
         const int height = args.virtualHeight > 0 ? args.virtualHeight : 480;
-        impl_->CreateSurfaces(width, height);
+        impl_->CreateSurfaces(width, height, false);
     }
 
     Dx3GraphicsBackend::~Dx3GraphicsBackend() = default;
@@ -573,7 +711,7 @@ namespace CNA::Internal::Backends::Dx3
         // a resolution change after the first Present() will keep presenting at the *old* physical
         // scale until free-direct itself is extended to support that (out of scope here, design
         // decision 8: cannot silently extend free-direct's own surface beyond what it implements).
-        impl_->CreateSurfaces(width, height);
+        impl_->CreateSurfaces(width, height, true);
     }
 
     void Dx3GraphicsBackend::SetPresentationMode(int mode)
@@ -584,6 +722,24 @@ namespace CNA::Internal::Backends::Dx3
         // real physical-scaling behavior without modifying free-direct itself (out of scope, design
         // decision 8). The mode is still stored so GetViewportSize()/logical-resolution bookkeeping
         // stays consistent with what the game requested.
+    }
+
+    void Dx3GraphicsBackend::SetTestHooksEXT(const Dx3TestHooksEXT& testHooks)
+    {
+        impl_->testHooks = testHooks;
+        impl_->testFailureInjected = false;
+    }
+
+    Dx3TestStateEXT Dx3GraphicsBackend::GetTestStateEXT() const
+    {
+        return Dx3TestStateEXT{
+            impl_->dd,
+            impl_->primary,
+            impl_->backBuffer,
+            impl_->currentTargetSurface,
+            impl_->logicalWidth,
+            impl_->logicalHeight,
+            static_cast<int>(impl_->presentationMode)};
     }
 
     SDL_Window* Dx3GraphicsBackend::GetWindowInternal() const
