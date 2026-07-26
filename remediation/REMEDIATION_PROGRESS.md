@@ -2459,7 +2459,7 @@ existing task.
 | REMED-GFX-107 | Bgfx effect-aware indexed draws bind complete buffers instead of the requested first index, base vertex, and topology-derived index count. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — EXACT ELEMENT RANGE, BASE-VERTEX BINDING, TOPOLOGY COUNT, SAFE HINT VALIDATION, AND DEFERRED CAPTURE VERIFIED.** |
 | REMED-GFX-108 | Bgfx declared 32-bit index buffers inherit the default 16-bit backend creation path. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — PUBLIC STATIC/DYNAMIC 32-BIT HANDLES AND EVERY GFX-109 REPLACEMENT RETAIN EXACT `0x1800` NATIVE FLAGS; HIGH-INDEX PIXELS, GFX-107 RANGES, VERSIONING, RETIREMENT, VALIDATION, AND PARITY PASS.** |
 | REMED-GFX-109 | Bgfx persistent vertex/index updates after queued draws could overwrite the native bytes needed by those draws before deferred frame execution. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — SUBMITTED BUFFER HANDLES ARE VERSIONED UNTIL BGFX'S DEFERRED RETIREMENT FENCE; EXACT OPENGL/VULKAN A→B→A COVERAGE PASSES.** |
-| REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT SOFTWARE ADDRESSING/BOUNDS CORRECTION.** |
+| REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`, and never bounds-checks the decoded vertex address. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — EXACT ELEMENT-OFFSET RANGES, BASE VERTEX APPLIED ONCE, TOPOLOGY-DERIVED COUNTS, HINTS LEFT AS HINTS, AND 64-BIT RANGE/ADDRESS VALIDATION BEFORE ANY VERTEX READ.** |
 | REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **OPEN — INDEPENDENT SHARED BGFX TOPOLOGY-MAPPING CORRECTION.** |
 | REMED-GFX-112 | Vulkan's indexed strip control emits an unaligned 32-bit index-buffer binding-offset validation message while pixels pass. | MEDIUM | P2 | REMED-GFX-106 semantic controls | **DONE — DEFERRED NATIVE INDEX-ARENA OFFSETS ALIGNED PER FORMAT (2026-07-26).** |
 
@@ -8743,6 +8743,216 @@ GFX-103 and was subsequently completed in its own remediation.
 - `b4c3dcf8 fix(Task REMED-GFX-103): make empty vertex uploads safe and aligned`
 - `05d8eaa9 test(Task REMED-GFX-103): cover vertex upload ranges`
 - `docs(remediation): record GFX-103 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-110 — Software indexed startIndex/baseVertex addressing and bounds (DONE 2026-07-26)
+
+### Classification
+
+This is a **real Software backend defect with two independent parts**, not one omission and not a
+shared public-contract problem:
+
+1. **Addressing.** `SoftwareGraphicsBackend::DrawIndexedPrimitivesEx` received the public
+   `GpuDrawParams.startIndex` and `.baseVertex` and discarded both. Its raster loop read
+   `readIndex(i * 3 + k)` — always from element zero — and fetched `vbBase + index * stride` with
+   no base addend, so **every** indexed draw rendered the element-zero prefix of the bound buffers.
+   `DrawIndexedColoredPrimitives` has the same loop shape but carries no `GpuDrawParams` and is
+   reachable only from the zero-offset `DrawUserIndexedPrimitives(const void*, …)` path, so its
+   addressing was never wrong in practice; it shared the second defect below.
+2. **Bounds.** Neither path validated the decoded vertex address at all. Their only guard,
+   `primitiveCount * 3 > ib.GetIndexCount()`, omitted `startIndex` and said nothing about the
+   vertex buffer, so any index outside the bound vertex buffer formed an out-of-range pointer into
+   the CPU vertex storage. A 32-bit index near `UINT32_MAX` reached ~68 GB past the allocation and
+   **segfaulted**.
+
+Everything else in the indexed contract was already correct on Software and is preserved: 16- and
+32-bit decoding, `primitiveCount`-derived consumed counts, `DrawUserIndexedPrimitives` slice
+copying, the explicit `TriangleList`-only capability boundary, and the public `GraphicsDevice`
+range validation added by REMED-GFX-107.
+
+### Exact pre-fix behavior (reproduced before any production change)
+
+Four separated NDC slots, twelve vertices (slot *i* = vertices 3*i*..3*i*+2, colours Lime, Yellow,
+Red, Blue), an identity twelve-element index buffer, and valid visible decoys before, inside, and
+after every requested range. Each row records one public `DrawIndexedPrimitives` call.
+
+| Case | topology / width | verts | idx | startIndex | baseVertex | min/num | primCount | consumed | expected decoded | actual decoded | actual pixel |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A2 | TriangleList / 16 | 12 | 12 | 3 | 0 | 0/12 | 1 | 3 | {3,4,5} | {0,1,2} | Lime `(0,255,0,255)` at slot 0 instead of Yellow at slot 1 |
+| A3 | TriangleList / 16 | 12 | 12 | 6 | 0 | 0/12 | 1 | 3 | {6,7,8} | {0,1,2} | Lime at slot 0 instead of Red at slot 2 |
+| A4 | TriangleList / 16 | 12 | 12 | 9 | 0 | 0/12 | 1 | 3 | {9,10,11} | {0,1,2} | Lime at slot 0 instead of Blue at slot 3 |
+| B1 | TriangleList / 16 | 12 | 12 | 3 | 0 | 0/12 | 2 | 6 | {3..8} | {0..5} | slots 0+1 lit instead of slots 1+2 |
+| C2 | TriangleList / 16 | 12 | 3 | 0 | 3 | 0/9 | 1 | 3 | {3,4,5} | {0,1,2} | Lime at slot 0 instead of Yellow at slot 1 |
+| C3 | TriangleList / 16 | 12 | 3 | 0 | 6 | 0/6 | 1 | 3 | {6,7,8} | {0,1,2} | Lime at slot 0 instead of Red at slot 2 |
+| C4 | TriangleList / 16 | 12 | 3 | 0 | 9 | 0/3 | 1 | 3 | {9,10,11} | {0,1,2} | Lime at slot 0 instead of Blue at slot 3 |
+| D1 | TriangleList / 16 | 12 | 12 | 3 | 3 | 0/9 | 1 | 3 | {6,7,8} | {0,1,2} | Lime at slot 0 instead of Red at slot 2 |
+| E1 | TriangleList / 16 | 12 | 12 | 6 | 0 | 6/3 | 1 | 3 | {6,7,8} | {0,1,2} | Lime at slot 0 — the hint was not used as an address either |
+| F1 | TriangleList / 32 | 12 | 12 | 3 | 0 | 0/12 | 1 | 3 | {3,4,5} | {0,1,2} | Lime at slot 0 — element 0, so `startIndex` was **not** read as bytes |
+| G1–G3 | TriangleList / 16+32 | 12 | 12 | 3 | 3 | 0/9 | 1 | 3 | {6,7,8} | {0,1,2} | dynamic index and dynamic vertex buffers behave identically to static |
+| H1 | three calls, two vertex + two index buffers | 12 | 12/9 | 0, 2, 9 | 0, 1, 0 | — | 1, 2, 1 | 3, 6, 3 | slots 0, 1+2, 3 | slot 0, slots 0+1, slot 0 | slot 2 and slot 3 stayed black |
+| J1 | TriangleList / 16, bound `RenderTarget2D` | 12 | 12 | 3 | 3 | 0/9 | 1 | 3 | {6,7,8} | {0,1,2} | same defect off-screen |
+| M1 | TriangleList / 16 | 6 | 3 `{0,1,7}` | 0 | 0 | 0/6 | 1 | 3 | rejected | 7 fetched | out-of-range read, no rejection |
+| M3 | TriangleList / 32 | 6 | 3 `{0,1,UINT32_MAX}` | 0 | 1 | 0/5 | 1 | 3 | rejected | `UINT32_MAX` fetched | **SEGV**, ASan: `SEGV on unknown address 0x50900000e214` in `BuildGenericClipVertex` ← `DrawIndexedPrimitivesEx` ← `GraphicsDevice::DrawIndexedPrimitives` |
+
+Independent conclusions from those rows, each proven rather than assumed:
+
+- `startIndex` was **ignored outright**, not interpreted as bytes (byte interpretation at 16-bit
+  width would select element 1 or a misaligned value; at 32-bit width it would select 256) and not
+  replaced by `minVertexIndex` (E1 supplied `minVertexIndex = 6` and still drew element 0).
+- `baseVertex` was **ignored outright**, not applied twice (twice at `baseVertex = 3` would light
+  slot 2, not slot 0) and not taken from `minVertexIndex`.
+- `primitiveCount` **already** produced the exact topology-derived consumed count (B1 consumed six
+  elements, not the whole buffer) — it simply counted from element zero.
+- Index width decoding was **already correct** for both widths; the loss is width-independent.
+- The **bounds** omission is a separate defect from the addressing omission: it affects
+  `DrawIndexedColoredPrimitives` too, where `startIndex`/`baseVertex` are structurally zero.
+
+Pre-fix results in the shared suite: `PersistentDrawHonorsNonzeroStartIndex`,
+`PersistentDrawHonorsPositiveBaseVertexWithSixteenBitIndices`, and
+`PersistentDynamicDrawCombinesStartBaseCountAndHints` failed on Software;
+`PersistentDrawTreatsVertexRangesAsHints` and `PersistentDrawHonorsThirtyTwoBitIndexElements`
+passed (both use `startIndex = 0`, `baseVertex = 0`), and
+`SoftwareRejectsDecodedVertexAddressesOutsideTheBoundBuffer` crashed the runner.
+
+### Corrected addressing formula
+
+Both indexed raster paths now share one helper block, so they cannot drift apart again:
+
+```text
+consumed element  = startIndex + localIndex          (an index ELEMENT offset, never bytes)
+decoded index     = the 16- or 32-bit value at that element, per the buffer's declared width
+fetched vertex    = decoded index + baseVertex       (added exactly once)
+```
+
+`DrawIndexedPrimitivesEx` supplies `params.startIndex` / `params.baseVertex`;
+`DrawIndexedColoredPrimitives` supplies the constants `0` / `0`, which is its actual contract (no
+`GpuDrawParams`, reached only from the zero-offset DrawUser path). No public API, no
+`IGraphicsBackend` signature, and no other backend changed.
+
+### Topology counts
+
+`IndexedElementCount` computes the exact consumed count in 64-bit for every public topology
+(`3n`, `n+2`, `2n`, `n+1`, `n`). Software v1 supports **only indexed `TriangleList`**, so
+`3 * primitiveCount` is the only count it can reach; `TriangleStrip`, `LineList`, `LineStrip`, and
+`PointListEXT` keep their existing explicit `std::runtime_error` capability rejection, which is
+evaluated **before** the new range validation and is asserted to rasterize nothing (K1/K2). No
+topology capability was added under this task, and no unsupported topology is approximated.
+
+### Validation and bounds
+
+A validation pass runs before a single vertex byte is read, so an out-of-range index can never form
+an invalid pointer. It throws the public `System::ArgumentOutOfRangeException` (never
+`std::out_of_range` or an implementation type) for:
+
+- negative `startIndex`, negative `baseVertex`;
+- a consumed range that leaves the bound index buffer (`startIndex` past the end, or
+  `startIndex + consumedCount` past the end);
+- any decoded index plus `baseVertex` below zero or past the bound vertex buffer.
+
+Every calculation is 64-bit, so neither an extreme `primitiveCount` nor an index near
+`UINT32_MAX` can wrap into an apparently valid address. Negative `baseVertex` remains rejected by
+CNA's public contract at `GraphicsDevice::DrawIndexedPrimitives` before backend dispatch; the CPU
+paths re-assert it rather than trust it, and that boundary is documented rather than widened.
+`minVertexIndex` / `numVertices` stay validation hints — they are deliberately not consulted by the
+addressing code, so a loose hint does not widen the consumed range and a narrow one does not trim a
+decoded address (E1–E4).
+
+The `GraphicsDevice`-level range validation added by REMED-GFX-107 already rejected every invalid
+public argument combination (negative `startIndex`/`baseVertex`/`minVertexIndex`, non-positive
+`numVertices`/`primitiveCount`, `startIndex` past the buffer, `startIndex + consumed` past the
+buffer, `baseVertex`/hint ranges past the vertex buffer, and `primitiveCount = INT_MAX` overflow).
+That result is preserved and permanently asserted from Software (L1, 12/12 cases).
+
+### Results
+
+Permanent Software regression `examples/software_indexed_addressing_test.cpp`
+(ctest `Software_IndexedAddressing`): **41/41**, pre-fix **7/38 with a segfault**.
+
+| Group | Result |
+|---|---|
+| `startIndex` first/middle/final valid ranges (A1–A4) | exact |
+| `primitiveCount` limits the consumed range, decoys both sides (B1–B2) | exact |
+| positive `baseVertex` 0/3/6/9 (C1–C4) | exact |
+| combined `startIndex` + `baseVertex` (D1–D3) | exact |
+| exact / loose / narrow / combined hints (E1–E4) | addressing unchanged by hints |
+| 32-bit element offset, base, count, exact boundary (F1–F4) | exact |
+| `DynamicIndexBuffer` 16- and 32-bit, `DynamicVertexBuffer` (G1–G3) | exact |
+| A → B → A, three calls, two vertex and two index buffers (H1) | exact per-call parameters |
+| `DrawUserIndexedPrimitives` raw and typed oracles (I1–I2) | unchanged and exact |
+| `RenderTarget2D` addressing + backbuffer isolation (J1–J2) | exact |
+| unsupported topologies rejected and rasterize nothing (K1–K2) | deterministic |
+| twelve invalid public ranges (L1) | all `ArgumentOutOfRangeException` |
+| decoded address past end, base-pushed past end, `UINT32_MAX` (M1–M4) | rejected, no pixels written |
+| depth `Default` and `DepthRead` with exact ranges (N1–N2) | GFX-030 semantics preserved |
+| post-draw index rewrite, twin-buffer aliasing, buffer destruction (O1–O3) | immediate-execution model holds |
+
+Shared indexed suite on Software (`IndexedDrawDeferredTest` + `DrawUserIndexedPrimitives*` +
+`IndexBufferEmptyData*`): **62 passed, 1 intentional strip skip**. Software is now enabled in the
+shared `PersistentDrawHonorsNonzeroStartIndex`,
+`PersistentDrawHonorsPositiveBaseVertexWithSixteenBitIndices`,
+`PersistentDynamicDrawCombinesStartBaseCountAndHints`, `PersistentDrawTreatsVertexRangesAsHints`,
+and `PersistentDrawHonorsThirtyTwoBitIndexElements` regressions.
+
+Full Software `ctest -L Software`: **16/16** (GFX-030 depth state, GFX-043 declaration transport,
+GFX-073/079 viewport, GFX-080 scissor, GFX-081 SpriteBatch rasterizer state, GFX-082 wireframe,
+GFX-083 depth bias, culling, clipping, colour-write channels, dual/envmap/skinned, and the new
+indexed addressing test). Full Software `CnaTests`: **5645 passed, 42 skipped, 3 failed** — the
+three failures (`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame`,
+`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`,
+`XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`) are **pre-existing
+and unrelated**, confirmed by rebuilding the previous Software backend and observing the identical
+three failures. They touch no indexed draw path.
+
+### Cross-backend controls
+
+Equivalent indexed addressing controls, all green, with no production change outside Software:
+
+- Bgfx OpenGL **64/64** and Bgfx Vulkan **64/64** (GFX-107/108/109 behavior untouched);
+- Vulkan **56/56** (GFX-112 alignment preserved);
+- WebGPU **60/60** (GFX-104/105 preserved);
+- EasyGL **54/54**;
+- SDL_GPU **41/41**;
+- D3D9 **52/52** and D3D11 **52/52** through Wine/DXVK;
+- Headless **40/40**.
+
+No new backend issue was observed, so none was absorbed into GFX-110 and no new remediation finding
+was opened.
+
+### Sanitizers
+
+- Software **UBSan** (`CNA_SANITIZE=undefined`, `halt_on_error=1:print_stacktrace=1`): the
+  permanent regression **41/41** and the indexed gtest set **74/74 + 1 skip**, zero runtime errors —
+  no signed overflow, no unsigned wrap, no invalid shift in the topology-count or addressing
+  arithmetic.
+- Software **ASan** (`CNA_SANITIZE=address`, `halt_on_error=1:abort_on_error=1`): the permanent
+  regression **41/41**, zero reports. The same binary built against the previous backend aborts
+  with `SEGV on unknown address 0x50900000e214` inside `BuildGenericClipVertex` called from
+  `DrawIndexedPrimitivesEx`, which is the exact invalid access this task removes.
+
+### Builds
+
+Every build reused an existing stable in-repository directory incrementally with ccache enabled,
+except one new directory created deliberately:
+
+| Directory | Backend | ccache | Note |
+|---|---|---|---|
+| `cmake-build-software` | SOFTWARE | yes | reused |
+| `cmake-build-software-ubsan` | SOFTWARE | yes | reused |
+| `cmake-build-software-asan` | SOFTWARE | yes | **new** — no Software ASan tree existed, and the pre-fix defect is an invalid memory access that only ASan diagnoses precisely |
+| `cmake-build-headless` · `cmake-build-vulkan` · `cmake-build-bgfx` · `cmake-build-webgpu` · `cmake-build-sdlgpu` · `cmake-build-sdlrenderer` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-dx3` · `cmake-build-debug` (EasyGL) · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other thirteen | yes | reused |
+
+All fourteen backend libraries compile incrementally at `-j4`: ASCII, Bgfx, Canvas, D3D9, D3D11,
+D3D12, DX3, EasyGL, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan, and WebGPU. No clean build
+was required, no build directory was deleted or recreated, and no build tree was created under
+`/tmp`, `/var/tmp`, or `/dev/shm`. No shader source or generated artifact changed.
+
+**Commits:**
+
+- `f76dd54b test(Task REMED-GFX-110): reproduce Software indexed addressing defects`
+- `e5a2404c fix(Task REMED-GFX-110): apply exact Software indexed ranges and base vertex`
+- `6158e2d4 test(Task REMED-GFX-110): cover indexed bounds and parity`
+- `docs(remediation): record GFX-110 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
 
