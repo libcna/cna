@@ -1,24 +1,28 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-104/105/106/112: deferred indexed-draw correctness, native alignment,
-// indexed triangle-strip pipeline compatibility, and backend parameter parity.
+// REMED-GFX-104/105/106/109/112: deferred indexed-draw correctness, native alignment,
+// indexed triangle-strip pipeline compatibility, buffer-version ownership, and backend parity.
 
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <cstdint>
 #include <cstdlib>
+#include <iostream>
 #include <string>
 #include <vector>
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
@@ -35,8 +39,12 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
+#ifdef CNA_BACKEND_BGFX
+#include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
+#endif
 #ifdef CNA_BACKEND_WEBGPU
 #include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
 #endif
@@ -53,6 +61,7 @@ using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
+using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
@@ -584,6 +593,605 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
     ExpectExactColor(pixels.AtNdc(-0.98f), Color::Black, "deferred range background");
 }
 
+TEST_F(IndexedDrawDeferredTest, DeferredStaticVertexAtoBtoAPreservesEveryQueuedVersion)
+{
+    RequireIndexedRendering();
+
+    auto sourceA = CenterTriangle(Color::Red);
+    auto sourceB = CenterTriangle(Color::Lime);
+    auto overwrittenBeforeFirstDraw = CenterTriangle(Color::Blue);
+    VertexBuffer buffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+
+    // Two uploads before any draw reuse one writable native version. Once a draw observes A,
+    // later SetData calls must leave that version immutable until frame execution.
+    buffer.SetData(overwrittenBeforeFirstDraw.data(), 3);
+    {
+        const auto destroyedAfterSetData = sourceA;
+        buffer.SetData(destroyedAfterSetData.data(), 3);
+    }
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&buffer);
+
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.68f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+    // Multiple draws between updates intentionally share A's one immutable native version.
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    buffer.SetData(sourceB.data(), 3);
+    effect.setWorldProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    buffer.SetData(sourceA.data(), 3);
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    // SetData owns its source immediately, and bgfx's queued retirement keeps all native
+    // versions alive even after the public object is disposed before frame execution.
+    sourceA.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    sourceB.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    overwrittenBeforeFirstDraw.fill(
+        VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    device.SetVertexBuffer(nullptr);
+    buffer.Dispose();
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.68f), Color::Red, "static vertex A");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "static vertex B");
+    ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "static vertex A restore");
+}
+
+#if !defined(CNA_BACKEND_D3D9) && !defined(CNA_BACKEND_D3D11)
+TEST_F(IndexedDrawDeferredTest, DeferredDynamicVertexAtoBtoAPreservesEveryQueuedVersion)
+{
+    RequireIndexedRendering();
+
+    auto sourceA = CenterTriangle(Color::Blue);
+    auto sourceB = CenterTriangle(Color::Yellow);
+    DynamicVertexBuffer buffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    buffer.SetData(sourceA.data(), 0, 3, SetDataOptions::Discard);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&buffer);
+
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.68f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+    buffer.SetData(sourceB.data(), 0, 3, SetDataOptions::NoOverwrite);
+
+    effect.setWorldProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+    buffer.SetData(sourceA.data(), 0, 3, SetDataOptions::Discard);
+
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    sourceA.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    sourceB.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    device.SetVertexBuffer(nullptr);
+    buffer.Dispose();
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.68f), Color::Blue, "dynamic vertex A");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Yellow, "dynamic vertex B");
+    ExpectExactColor(pixels.AtNdc(0.68f), Color::Blue, "dynamic vertex A restore");
+}
+#endif
+
+TEST_F(IndexedDrawDeferredTest, DeferredDistinctIdenticalVertexBuffersRemainIndependent)
+{
+    RequireIndexedRendering();
+
+    const auto identical = CenterTriangle(Color::Blue);
+    auto changed = CenterTriangle(Color::Red);
+    VertexBuffer first(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    VertexBuffer second(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    first.SetData(identical.data(), 3);
+    second.SetData(identical.data(), 3);
+    first.SetData(changed.data(), 3);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    device.Clear(Color::Black);
+
+    device.SetVertexBuffer(&first);
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.55f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    device.SetVertexBuffer(&second);
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.55f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    changed.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    device.SetVertexBuffer(nullptr);
+    first.Dispose();
+    second.Dispose();
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.55f), Color::Red, "updated first buffer");
+    ExpectExactColor(pixels.AtNdc(0.55f), Color::Blue, "independent identical buffer");
+}
+
+#if !defined(CNA_BACKEND_D3D9) && !defined(CNA_BACKEND_D3D11)
+TEST_F(IndexedDrawDeferredTest, DeferredDynamicIndexAtoBtoAPreservesEveryQueuedVersion)
+{
+    RequireIndexedRendering();
+
+    const auto red = CenterTriangle(Color::Red);
+    const auto lime = CenterTriangle(Color::Lime);
+    const std::array<VertexPositionColor, 6> vertices{
+        red[0], red[1], red[2], lime[0], lime[1], lime[2],
+    };
+    auto sourceA = std::array<std::uint16_t, 3>{0, 1, 2};
+    auto sourceB = std::array<std::uint16_t, 3>{3, 4, 5};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 6, BufferUsage::None);
+    DynamicIndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 6);
+    indexBuffer.SetData(sourceA.data(), 0, 3, SetDataOptions::Discard);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.68f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 6, 0, 1);
+    indexBuffer.SetData(sourceB.data(), 0, 3, SetDataOptions::NoOverwrite);
+
+    effect.setWorldProperty(Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    effect.Apply();
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 6, 0, 1);
+    indexBuffer.SetData(sourceA.data(), 0, 3, SetDataOptions::Discard);
+
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 6, 0, 1);
+
+    sourceA.fill(5);
+    sourceB.fill(0);
+    device.SetIndexBuffer(nullptr);
+    device.SetVertexBuffer(nullptr);
+    indexBuffer.Dispose();
+    vertexBuffer.Dispose();
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.68f), Color::Red, "dynamic index A");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "dynamic index B");
+    ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "dynamic index A restore");
+}
+#endif
+
+#endif
+
+#ifdef CNA_BACKEND_BGFX
+TEST_F(IndexedDrawDeferredTest, BgfxThirtyTwoBitBackendAtoBtoARendersExactPixels)
+{
+    RequireIndexedRendering();
+
+    struct PackedPositionColor
+    {
+        float x;
+        float y;
+        float z;
+        std::uint8_t r;
+        std::uint8_t g;
+        std::uint8_t b;
+        std::uint8_t a;
+    };
+    static_assert(sizeof(PackedPositionColor) == 16);
+
+    const auto red = CenterTriangle(Color::Red);
+    const auto lime = CenterTriangle(Color::Lime);
+    std::array<PackedPositionColor, 6> vertices{};
+    const auto pack = [](const VertexPositionColor& source)
+    {
+        return PackedPositionColor{
+            source.Position.X,
+            source.Position.Y,
+            source.Position.Z,
+            source.Color.getRProperty(),
+            source.Color.getGProperty(),
+            source.Color.getBProperty(),
+            source.Color.getAProperty(),
+        };
+    };
+    for (std::size_t i = 0; i < red.size(); ++i)
+    {
+        vertices[i] = pack(red[i]);
+        vertices[i + 3] = pack(lime[i]);
+    }
+
+    auto sourceA = std::array<std::uint32_t, 3>{0, 1, 2};
+    auto sourceB = std::array<std::uint32_t, 3>{3, 4, 5};
+    CNA::Internal::Backends::Bgfx::BgfxVertexBufferBackend vertexBuffer(6);
+    CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend indexBuffer(3, true);
+    vertexBuffer.SetData(vertices.data(), 6, sizeof(PackedPositionColor));
+    indexBuffer.SetData32(sourceA.data(), 3);
+
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    ASSERT_TRUE(indexBuffer.IsThirtyTwoBit());
+
+    const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+    device.Clear(Color::Black);
+    const std::uint16_t versionA = indexBuffer.handle.idx;
+    backend->DrawIndexedColoredPrimitives(
+        vertexBuffer,
+        indexBuffer,
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.68f, 0.0f, 0.0f),
+        identity,
+        identity,
+        PrimitiveType::TriangleList,
+        1);
+
+    indexBuffer.SetData32(sourceB.data(), 3);
+    const std::uint16_t versionB = indexBuffer.handle.idx;
+    EXPECT_NE(versionA, versionB);
+    EXPECT_TRUE(indexBuffer.IsThirtyTwoBit());
+    backend->DrawIndexedColoredPrimitives(
+        vertexBuffer,
+        indexBuffer,
+        identity,
+        identity,
+        identity,
+        PrimitiveType::TriangleList,
+        1);
+
+    indexBuffer.SetData32(sourceA.data(), 3);
+    const std::uint16_t versionA2 = indexBuffer.handle.idx;
+    EXPECT_NE(versionB, versionA2);
+    EXPECT_NE(versionA, versionA2);
+    EXPECT_TRUE(indexBuffer.IsThirtyTwoBit());
+    backend->DrawIndexedColoredPrimitives(
+        vertexBuffer,
+        indexBuffer,
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.68f, 0.0f, 0.0f),
+        identity,
+        identity,
+        PrimitiveType::TriangleList,
+        1);
+
+    sourceA.fill(5);
+    sourceB.fill(0);
+    vertices.fill({});
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.68f), Color::Red, "native Uint32 A");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "native Uint32 B");
+    ExpectExactColor(pixels.AtNdc(0.68f), Color::Red, "native Uint32 A restore");
+}
+
+TEST_F(IndexedDrawDeferredTest, BgfxBufferVersionsSurviveRenderTargetTransition)
+{
+    RequireIndexedRendering();
+
+    auto sourceA = CenterTriangle(Color::Red);
+    auto sourceB = CenterTriangle(Color::Lime);
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    vertexBuffer.SetData(sourceA.data(), 3);
+    RenderTarget2D target(
+        device,
+        96,
+        96,
+        false,
+        SurfaceFormat::Color,
+        DepthFormat::None,
+        0,
+        RenderTargetUsage::PreserveContents);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(-0.48f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    vertexBuffer.SetData(sourceB.data(), 3);
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.48f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    // Switching targets creates an ordered view segment but must not submit, recycle, or mutate
+    // either version that the target's two queued draws already reference.
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    device.Clear(Color::Black);
+    vertexBuffer.SetData(sourceA.data(), 3);
+    effect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::CreateTranslation(0.58f, 0.0f, 0.0f));
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+
+    sourceA.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    sourceB.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    device.SetVertexBuffer(nullptr);
+    vertexBuffer.Dispose();
+
+    // One readback submits the complete target-A -> target-B -> backbuffer-A frame. Verify the
+    // restored A draw now, before using the target as a texture in the following frame.
+    const BackbufferSnapshot directBackbuffer = ReadBackbufferOnce(device);
+    ExpectExactColor(
+        directBackbuffer.AtNdc(0.58f), Color::Red,
+        "backbuffer segment retained restored vertex A");
+
+    // Sample the RenderTarget2D through the normal BasicEffect texture path into the left half of
+    // the next backbuffer. This verifies the target's exact queued pixels without relying on
+    // Texture2D's upload shadow (rendered target pixels exist only on the GPU).
+    const std::array<Microsoft::Xna::Framework::Graphics::VertexPositionTexture, 6>
+        targetQuad{
+            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
+                Vector3(-1.0f, 1.0f, 0.0f),
+                Microsoft::Xna::Framework::Vector2(0.0f, 0.0f)),
+            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
+                Vector3(-1.0f, -1.0f, 0.0f),
+                Microsoft::Xna::Framework::Vector2(0.0f, 1.0f)),
+            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
+                Vector3(0.0f, -1.0f, 0.0f),
+                Microsoft::Xna::Framework::Vector2(1.0f, 1.0f)),
+            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
+                Vector3(-1.0f, 1.0f, 0.0f),
+                Microsoft::Xna::Framework::Vector2(0.0f, 0.0f)),
+            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
+                Vector3(0.0f, -1.0f, 0.0f),
+                Microsoft::Xna::Framework::Vector2(1.0f, 1.0f)),
+            Microsoft::Xna::Framework::Graphics::VertexPositionTexture(
+                Vector3(0.0f, 1.0f, 0.0f),
+                Microsoft::Xna::Framework::Vector2(1.0f, 0.0f)),
+        };
+    BasicEffect sampleEffect(device);
+    sampleEffect.setWorldProperty(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    sampleEffect.setViewProperty(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    sampleEffect.setProjectionProperty(
+        Microsoft::Xna::Framework::Matrix::getIdentityProperty());
+    sampleEffect.setTextureEnabledProperty(true);
+    sampleEffect.setTextureProperty(&target);
+    device.Clear(Color::Black);
+    sampleEffect.Apply();
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, targetQuad.data(), 0, 2);
+
+    const BackbufferSnapshot backbufferPixels = ReadBackbufferOnce(device);
+    ExpectExactColor(
+        backbufferPixels.AtNdc(-0.74f), Color::Red,
+        "target segment retained vertex A");
+    ExpectExactColor(
+        backbufferPixels.AtNdc(-0.26f), Color::Lime,
+        "target segment retained vertex B");
+}
+
+TEST_F(IndexedDrawDeferredTest, BgfxDrawUserBuffersOwnCopiedSourceBytes)
+{
+    RequireIndexedRendering();
+
+    auto left = TriangleAt(-0.65f, Color::Red);
+    auto center = TriangleAt(0.0f, Color::Lime);
+    auto right = TriangleAt(0.65f, Color::Blue);
+    std::array<std::uint16_t, 4> centerIndices{99, 0, 1, 2};
+    std::array<std::uint16_t, 4> rightIndices{99, 0, 1, 2};
+    struct CompactPositionColor
+    {
+        float x;
+        float y;
+        float z;
+        std::uint8_t r;
+        std::uint8_t g;
+        std::uint8_t b;
+        std::uint8_t a;
+    };
+    static_assert(sizeof(CompactPositionColor) == 16);
+    std::array<CompactPositionColor, 3> compactRight{};
+    for (std::size_t i = 0; i < right.size(); ++i)
+    {
+        compactRight[i] = {
+            right[i].Position.X,
+            right[i].Position.Y,
+            right[i].Position.Z,
+            right[i].Color.getRProperty(),
+            right[i].Color.getGProperty(),
+            right[i].Color.getBProperty(),
+            right[i].Color.getAProperty(),
+        };
+    }
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList,
+        left.data(), 0, 1);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList,
+        center.data(), 0, 3,
+        centerIndices.data(), 1, 1);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleList,
+        compactRight.data(), 0, 3,
+        rightIndices.data(), 1, 1,
+        PositionColorDeclaration());
+
+    left.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    center.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    right.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    centerIndices.fill(0);
+    rightIndices.fill(0);
+    compactRight.fill({});
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(
+        pixels.AtNdc(-0.65f), Color::Red,
+        "non-indexed typed DrawUser copy");
+    ExpectExactColor(
+        pixels.AtNdc(0.0f), Color::Lime,
+        "indexed typed DrawUser copy");
+    ExpectExactColor(
+        pixels.AtNdc(0.65f), Color::Blue,
+        "explicit-declaration DrawUser copy");
+}
+
+TEST_F(IndexedDrawDeferredTest, BgfxNativeBufferVersionCountsRemainBounded)
+{
+    RequireIndexedRendering();
+
+    // Let initialization-time deferred destroys settle before recording the process-wide bgfx
+    // handle allocator's baseline.
+    device.Present();
+    device.Present();
+    const bgfx::Stats* stats = bgfx::getStats();
+    ASSERT_NE(nullptr, stats);
+    const std::uint16_t processVertexBaseline = stats->numDynamicVertexBuffers;
+    const std::uint16_t processIndexBaseline = stats->numDynamicIndexBuffers;
+
+    auto verticesA = CenterTriangle(Color::White);
+    auto verticesB = CenterTriangle(Color::Lime);
+    const auto indicesA = std::array<std::uint16_t, 3>{0, 1, 2};
+    const auto indicesB = std::array<std::uint16_t, 3>{0, 2, 1};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(verticesA.data(), 3);
+    indexBuffer.SetData(indicesA.data(), 3);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    // Retire the vertex buffer's constructor-layout allocation before measuring its steady
+    // one-object baseline.
+    device.Present();
+    device.Present();
+    stats = bgfx::getStats();
+    ASSERT_NE(nullptr, stats);
+    const std::uint16_t liveVertexBaseline = stats->numDynamicVertexBuffers;
+    const std::uint16_t liveIndexBaseline = stats->numDynamicIndexBuffers;
+    EXPECT_EQ(processVertexBaseline + 1u, liveVertexBaseline);
+    EXPECT_EQ(processIndexBaseline + 1u, liveIndexBaseline);
+
+    std::uint16_t warmVertexHighWater = liveVertexBaseline;
+    std::uint16_t warmIndexHighWater = liveIndexBaseline;
+    std::uint16_t finalVertexCount = liveVertexBaseline;
+    std::uint16_t finalIndexCount = liveIndexBaseline;
+    for (int frame = 0; frame < 32; ++frame)
+    {
+        device.Clear(Color::Black);
+        vertexBuffer.SetData(verticesA.data(), 3);
+        indexBuffer.SetData(indicesA.data(), 3);
+        device.DrawIndexedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+        device.DrawIndexedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+
+        vertexBuffer.SetData(verticesB.data(), 3);
+        indexBuffer.SetData(indicesB.data(), 3);
+        device.DrawIndexedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+
+        vertexBuffer.SetData(verticesA.data(), 3);
+        indexBuffer.SetData(indicesA.data(), 3);
+        device.DrawIndexedPrimitives(
+            PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+        device.Present();
+
+        stats = bgfx::getStats();
+        ASSERT_NE(nullptr, stats);
+        finalVertexCount = stats->numDynamicVertexBuffers;
+        finalIndexCount = stats->numDynamicIndexBuffers;
+        if (frame < 4)
+        {
+            warmVertexHighWater = std::max(
+                warmVertexHighWater, finalVertexCount);
+            warmIndexHighWater = std::max(
+                warmIndexHighWater, finalIndexCount);
+        }
+        else
+        {
+            EXPECT_LE(finalVertexCount, warmVertexHighWater);
+            EXPECT_LE(finalIndexCount, warmIndexHighWater);
+        }
+    }
+
+    // The current object versions are the only survivors after bgfx's normal frame-fence
+    // retirement window; repeated A -> B -> A updates do not accumulate permanent allocations.
+    device.Present();
+    device.Present();
+    device.Present();
+    stats = bgfx::getStats();
+    ASSERT_NE(nullptr, stats);
+    EXPECT_EQ(liveVertexBaseline, stats->numDynamicVertexBuffers);
+    EXPECT_EQ(liveIndexBaseline, stats->numDynamicIndexBuffers);
+    EXPECT_LE(finalVertexCount, warmVertexHighWater);
+    EXPECT_LE(finalIndexCount, warmIndexHighWater);
+    const std::uint16_t retiredVertexCount = stats->numDynamicVertexBuffers;
+    const std::uint16_t retiredIndexCount = stats->numDynamicIndexBuffers;
+
+    device.SetIndexBuffer(nullptr);
+    device.SetVertexBuffer(nullptr);
+    indexBuffer.Dispose();
+    vertexBuffer.Dispose();
+    device.Present();
+    device.Present();
+    device.Present();
+    stats = bgfx::getStats();
+    ASSERT_NE(nullptr, stats);
+    EXPECT_EQ(processVertexBaseline, stats->numDynamicVertexBuffers);
+    EXPECT_EQ(processIndexBaseline, stats->numDynamicIndexBuffers);
+    std::cout
+        << "REMED-GFX-109 bgfx dynamic-handle cardinality: process baseline V/I="
+        << processVertexBaseline << "/" << processIndexBaseline
+        << ", two live public buffers=" << liveVertexBaseline << "/"
+        << liveIndexBaseline
+        << ", 32-frame warm high-water=" << warmVertexHighWater << "/"
+        << warmIndexHighWater
+        << ", post-fence live=" << retiredVertexCount << "/"
+        << retiredIndexCount
+        << ", post-dispose=" << stats->numDynamicVertexBuffers << "/"
+        << stats->numDynamicIndexBuffers << "\n";
+}
+#endif
+
+#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
+    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclaration)
 {
     RequireIndexedRendering();
