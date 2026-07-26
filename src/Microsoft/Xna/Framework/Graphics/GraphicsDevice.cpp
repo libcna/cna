@@ -644,9 +644,6 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount
     )
     {
-        (void)minVertexIndex;
-        (void)numVertices;
-
         if (backend_ == nullptr)
             return;
 
@@ -662,6 +659,28 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         System::ArgumentOutOfRangeException::ThrowIfNegative(startIndex, "startIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegative(baseVertex, "baseVertex");
+        System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
+        System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
+
+        const int consumedIndexCount = PrimitiveVerts(primitiveType, primitiveCount);
+        const int availableIndexCount = currentIndexBuffer_->GetBackend().GetIndexCount();
+        if (startIndex > availableIndexCount ||
+            consumedIndexCount > availableIndexCount - startIndex)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "The requested primitive range exceeds the bound index buffer.");
+        }
+
+        const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+        if (baseVertex > availableVertexCount ||
+            minVertexIndex > availableVertexCount - baseVertex ||
+            numVertices > availableVertexCount - baseVertex - minVertexIndex)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "numVertices", std::to_string(numVertices),
+                "The declared vertex range exceeds the bound vertex buffer.");
+        }
 
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
@@ -669,6 +688,8 @@ namespace Microsoft::Xna::Framework::Graphics
         currentEffect_->FillGpuDrawParams(p);
         p.startIndex = startIndex;
         p.baseVertex = baseVertex;
+        p.minVertexIndex = minVertexIndex;
+        p.numVertices = numVertices;
         applySamplerStatesToBackend();
         backend_->DrawIndexedPrimitivesEx(
             currentVertexBuffer_->GetBackend(),

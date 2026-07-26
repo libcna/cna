@@ -2622,6 +2622,24 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    static uint32_t IndexCountForPrimitives(PrimitiveType primitive, int primitiveCount)
+    {
+        switch (primitive)
+        {
+        case PrimitiveType::TriangleList:
+            return static_cast<uint32_t>(primitiveCount * 3);
+        case PrimitiveType::TriangleStrip:
+            return static_cast<uint32_t>(primitiveCount + 2);
+        case PrimitiveType::LineList:
+            return static_cast<uint32_t>(primitiveCount * 2);
+        case PrimitiveType::LineStrip:
+            return static_cast<uint32_t>(primitiveCount + 1);
+        case PrimitiveType::PointListEXT:
+            return static_cast<uint32_t>(primitiveCount);
+        }
+        return 0;
+    }
+
     void BgfxGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb_in,
                                                     const Matrix& world, const Matrix& view,
                                                     const Matrix& projection,
@@ -3165,17 +3183,28 @@ namespace CNA::Internal::Backends::Bgfx
         float fogParams4[4] = { params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3] };
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
-        bgfx::setVertexBuffer(0, vb.handle);
-        vb.MarkSubmitted();
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(&ib, primitive, primitiveCount, params.startIndex,
                                       params.baseVertex, 0, wireTib);
+        // REMED-GFX-107: bgfx has no draw-time base-vertex argument. Starting the vertex
+        // binding at baseVertex gives every decoded index the required signed addend. The
+        // public minVertexIndex/numVertices values are range hints, not another address:
+        // binding the complete safe remainder preserves valid geometry without rebasing indices.
+        const uint32_t vertexStart = useWireframe
+            ? 0u
+            : static_cast<uint32_t>(params.baseVertex);
+        const uint32_t vertexCount = static_cast<uint32_t>(vb.vertexCount) - vertexStart;
+        bgfx::setVertexBuffer(0, vb.handle, vertexStart, vertexCount);
+        vb.MarkSubmitted();
         if (useWireframe) {
             bgfx::setIndexBuffer(&wireTib);
         } else {
-            bgfx::setIndexBuffer(ib.handle);
+            bgfx::setIndexBuffer(
+                ib.handle,
+                static_cast<uint32_t>(params.startIndex),
+                IndexCountForPrimitives(primitive, primitiveCount));
             ib.MarkSubmitted();
         }
         ApplyScissorOverride();

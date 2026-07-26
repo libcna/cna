@@ -609,6 +609,10 @@ namespace CNA::Internal::Backends
         int startIndex  = 0;
         /// Value added to each index before vertex fetch (maps to glDrawElementsBaseVertex / vkCmdDrawIndexed `vertexOffset`).
         int baseVertex  = 0;
+        /// Lowest decoded index expected by the caller, relative to `baseVertex`.
+        int minVertexIndex = 0;
+        /// Size of the caller-declared decoded-index range beginning at `minVertexIndex`.
+        int numVertices = 0;
         /// Task 1079: when non-null, a `ShaderEffect`-compiled custom program is currently bound
         /// (`Effect::GetEffectBackendPtr()`) and the backend should bind/draw with it directly
         /// instead of selecting one of its own built-in stride-dispatched shaders. Null for every
