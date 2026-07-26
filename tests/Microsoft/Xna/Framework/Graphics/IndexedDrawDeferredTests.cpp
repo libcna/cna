@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-104/105: deferred indexed-draw correctness, native alignment, and
-// indexed triangle-strip pipeline compatibility.
+// REMED-GFX-104/105/106: deferred indexed-draw correctness, native alignment,
+// indexed triangle-strip pipeline compatibility, and backend parameter parity.
 
 #include <algorithm>
 #include <array>
@@ -227,6 +227,22 @@ namespace
         EXPECT_EQ(expected.getAProperty(), actual.getAProperty()) << label;
     }
 
+    std::size_t CountExactColor(
+        const BackbufferSnapshot& snapshot,
+        const Color& expected)
+    {
+        return static_cast<std::size_t>(std::count_if(
+            snapshot.pixels.begin(),
+            snapshot.pixels.end(),
+            [&](const Color& pixel)
+            {
+                return pixel.getRProperty() == expected.getRProperty() &&
+                       pixel.getGProperty() == expected.getGProperty() &&
+                       pixel.getBProperty() == expected.getBProperty() &&
+                       pixel.getAProperty() == expected.getAProperty();
+            }));
+    }
+
     class IndexedDrawDeferredTest : public ::testing::Test
     {
     protected:
@@ -321,23 +337,30 @@ namespace
 
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11)
+    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_BGFX) || \
+    defined(CNA_BACKEND_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     RequireIndexedRendering();
 
-    const auto red = CenterTriangle(Color::Red);
-    const auto green = CenterTriangle(Color::Lime);
-    const std::array<VertexPositionColor, 6> vertices{
-        red[0], red[1], red[2], green[0], green[1], green[2],
+    const auto center = TriangleAt(0.0f, Color::Lime);
+    const auto left = TriangleAt(-0.65f, Color::Red);
+    const auto right = TriangleAt(0.65f, Color::Blue);
+    const std::array<VertexPositionColor, 9> vertices{
+        center[0], center[1], center[2],
+        left[0], left[1], left[2],
+        right[0], right[1], right[2],
     };
-    const std::array<std::uint16_t, 6> indices{0, 1, 2, 3, 4, 5};
+    // The prefix and suffix are valid, visible decoys. Only the middle range may be consumed.
+    const std::array<std::uint16_t, 9> indices{
+        0, 1, 2, 3, 4, 5, 6, 7, 8,
+    };
     VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 6, BufferUsage::None);
+        device, PositionColorDeclaration(), 9, BufferUsage::None);
     IndexBuffer indexBuffer(
-        device, IndexElementSize::SixteenBits, 6, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 6);
-    indexBuffer.SetData(indices.data(), 6);
+        device, IndexElementSize::SixteenBits, 9, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 9);
+    indexBuffer.SetData(indices.data(), 9);
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
@@ -352,10 +375,13 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
         3,
         1);
 
-    EXPECT_TRUE(ColorNear(ReadCenter(device), Color::Lime));
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.65f), Color::Red, "selected nonzero startIndex");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Black, "unselected index prefix");
+    ExpectExactColor(pixels.AtNdc(0.65f), Color::Black, "unselected index suffix");
 }
 
-TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertex)
+TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixteenBitIndices)
 {
     RequireIndexedRendering();
 
@@ -364,11 +390,11 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertex)
     const std::array<VertexPositionColor, 6> vertices{
         red[0], red[1], red[2], blue[0], blue[1], blue[2],
     };
-    const std::array<std::uint32_t, 3> indices{0, 1, 2};
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
     VertexBuffer vertexBuffer(
         device, PositionColorDeclaration(), 6, BufferUsage::None);
     IndexBuffer indexBuffer(
-        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
     vertexBuffer.SetData(vertices.data(), 6);
     indexBuffer.SetData(indices.data(), 3);
 
@@ -385,7 +411,44 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertex)
         0,
         1);
 
-    EXPECT_TRUE(ColorNear(ReadCenter(device), Color::Blue));
+    ExpectExactColor(
+        ReadCenter(device), Color::Blue,
+        "positive baseVertex with 16-bit indices");
+}
+
+TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
+{
+    RequireIndexedRendering();
+
+    const auto red = CenterTriangle(Color::Red);
+    const auto blue = CenterTriangle(Color::Blue);
+    const std::array<VertexPositionColor, 6> vertices{
+        red[0], red[1], red[2], blue[0], blue[1], blue[2],
+    };
+    const std::array<std::uint32_t, 3> indices{3, 4, 5};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 6, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 6);
+    indexBuffer.SetData(indices.data(), 3);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList,
+        0,
+        3,
+        3,
+        0,
+        1);
+
+    ExpectExactColor(
+        ReadCenter(device), Color::Blue,
+        "32-bit index element width");
 }
 #endif
 
@@ -427,7 +490,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11)
+    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_BGFX)
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
@@ -437,7 +500,8 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
+    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE) || \
+    defined(CNA_BACKEND_BGFX)
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     RequireIndexedRendering();
@@ -497,10 +561,11 @@ TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
     dynamicB.Dispose();
     vertexBuffer.Dispose();
 
-    EXPECT_TRUE(ColorNear(ReadAtNdc(device, -0.65f), Color::Red));
-    EXPECT_TRUE(ColorNear(ReadAtNdc(device, 0.0f), Color::Lime));
-    EXPECT_TRUE(ColorNear(ReadAtNdc(device, 0.65f), Color::Blue));
-    EXPECT_TRUE(ColorNear(ReadAtNdc(device, -0.98f), Color::Black));
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.65f), Color::Red, "deferred A first range");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "deferred B count/range");
+    ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "deferred A second range");
+    ExpectExactColor(pixels.AtNdc(-0.98f), Color::Black, "deferred range background");
 }
 
 TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclaration)
@@ -565,9 +630,10 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
     indices32.fill(0);
     compactCenter.fill({});
 
-    EXPECT_TRUE(ColorNear(ReadAtNdc(device, -0.65f), Color::Red));
-    EXPECT_TRUE(ColorNear(ReadAtNdc(device, 0.0f), Color::Lime));
-    EXPECT_TRUE(ColorNear(ReadAtNdc(device, 0.65f), Color::Blue));
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.65f), Color::Red, "DrawUser Uint16 offset A");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "DrawUser declaration offset B");
+    ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "DrawUser Uint32 offset C");
 }
 #endif
 
@@ -658,6 +724,133 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     PopAndExpectClean(*backend);
     EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
 #endif
+}
+#endif
+
+#ifdef CNA_BACKEND_BGFX
+TEST_F(IndexedDrawDeferredTest, BgfxIndexedTopologiesRenderExactDistinctGeometry)
+{
+    RequireIndexedRendering();
+
+    std::vector<VertexPositionColor> vertices;
+    AppendVertices(vertices, TriangleAt(-0.75f, Color::Red));
+    AppendVertices(vertices, StripQuadAt(-0.25f, Color::Lime));
+    vertices.emplace_back(Vector3(0.25f, -0.45f, 0.5f), Color::Blue);
+    vertices.emplace_back(Vector3(0.25f,  0.45f, 0.5f), Color::Blue);
+    vertices.emplace_back(Vector3(0.55f, 0.0f, 0.5f), Color::Yellow);
+    vertices.emplace_back(Vector3(0.75f, 0.0f, 0.5f), Color::Yellow);
+    vertices.emplace_back(Vector3(0.95f, 0.0f, 0.5f), Color::Yellow);
+
+    const std::array<std::uint16_t, 3> triangleList{0, 1, 2};
+    const std::array<std::uint16_t, 4> triangleStrip{3, 4, 5, 6};
+    const std::array<std::uint16_t, 2> lineList{7, 8};
+    const std::array<std::uint16_t, 3> lineStrip{9, 10, 11};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(),
+        static_cast<int>(vertices.size()), BufferUsage::None);
+    IndexBuffer triangleListBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    IndexBuffer triangleStripBuffer(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    IndexBuffer lineListBuffer(
+        device, IndexElementSize::SixteenBits, 2, BufferUsage::None);
+    IndexBuffer lineStripBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
+    triangleListBuffer.SetData(triangleList.data(), 3);
+    triangleStripBuffer.SetData(triangleStrip.data(), 4);
+    lineListBuffer.SetData(lineList.data(), 2);
+    lineStripBuffer.SetData(lineStrip.data(), 3);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+
+    device.SetIndexBuffer(&triangleListBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+    device.SetIndexBuffer(&triangleStripBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 3, 4, 0, 2);
+    device.SetIndexBuffer(&lineListBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::LineList, 0, 7, 2, 0, 1);
+    device.SetIndexBuffer(&lineStripBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::LineStrip, 0, 9, 3, 0, 2);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.75f), Color::Red, "indexed triangle list");
+    ExpectExactColor(pixels.AtNdc(-0.25f), Color::Lime, "indexed triangle strip");
+    ExpectExactColor(pixels.AtNdc(0.25f), Color::Blue, "indexed line list");
+    ExpectExactColor(pixels.AtNdc(0.65f), Color::Yellow, "indexed line strip first segment");
+    ExpectExactColor(pixels.AtNdc(0.85f), Color::Yellow, "indexed line strip second segment");
+}
+
+TEST_F(IndexedDrawDeferredTest, BgfxIndexedPointListRendersOneExactPixel)
+{
+    RequireIndexedRendering();
+
+    const std::array<VertexPositionColor, 1> vertices{
+        VertexPositionColor(Vector3(0.0f, 0.0f, 0.5f), Color::White),
+    };
+    const std::array<std::uint16_t, 1> indices{0};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 1);
+    indexBuffer.SetData(indices.data(), 1);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::PointListEXT, 0, 0, 1, 0, 1);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    EXPECT_EQ(1u, CountExactColor(pixels, Color::White));
+}
+#endif
+
+#ifdef CNA_BACKEND_SOFTWARE
+TEST_F(IndexedDrawDeferredTest, SoftwareExplicitlyRejectsUnsupportedIndexedTopologies)
+{
+    RequireIndexedRendering();
+
+    const auto vertices = StripQuadAt(0.0f, Color::White);
+    const std::array<std::uint16_t, 4> indices{0, 1, 2, 3};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 4, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 4);
+    indexBuffer.SetData(indices.data(), 4);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(
+            PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2),
+        std::runtime_error);
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(
+            PrimitiveType::LineList, 0, 0, 4, 0, 2),
+        std::runtime_error);
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(
+            PrimitiveType::LineStrip, 0, 0, 4, 0, 3),
+        std::runtime_error);
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(
+            PrimitiveType::PointListEXT, 0, 0, 4, 0, 4),
+        std::runtime_error);
 }
 #endif
 
