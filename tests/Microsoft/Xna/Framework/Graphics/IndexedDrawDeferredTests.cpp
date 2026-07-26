@@ -10,6 +10,7 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -606,6 +607,100 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
     ExpectExactColor(
         ReadCenter(device), Color::Blue,
         "32-bit index element width");
+}
+#endif
+
+#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
+    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_EASYGL) || \
+    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11) || \
+    defined(CNA_BACKEND_SOFTWARE)
+TEST_F(IndexedDrawDeferredTest, PublicStaticThirtyTwoBitIndicesAbove65535RenderExactGeometry)
+{
+    RequireIndexedRendering();
+
+    constexpr std::uint32_t highVertex = 65536u;
+    const auto falselyDecoded = CenterTriangle(Color::Lime);
+    const auto genuinelyThirtyTwoBit = CenterTriangle(Color::Blue);
+    std::vector<VertexPositionColor> vertices(
+        static_cast<std::size_t>(highVertex) + 3u,
+        VertexPositionColor(Vector3(4.0f, 4.0f, 0.5f), Color::Black));
+    std::copy(falselyDecoded.begin(), falselyDecoded.end(), vertices.begin());
+    std::copy(
+        genuinelyThirtyTwoBit.begin(),
+        genuinelyThirtyTwoBit.end(),
+        vertices.begin() + highVertex);
+
+    // On a falsely 16-bit native handle, the first three little-endian words are 0, 1, 2,
+    // selecting the visible lime decoy. Genuine 32-bit decoding selects the high blue triangle.
+    const std::array<std::uint32_t, 3> indices{
+        highVertex,
+        highVertex + 2u,
+        highVertex + 1u,
+    };
+    VertexBuffer vertexBuffer(
+        device,
+        PositionColorDeclaration(),
+        static_cast<int>(vertices.size()),
+        BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
+    indexBuffer.SetData(indices.data(), 3);
+
+    EXPECT_EQ(
+        IndexElementSize::ThirtyTwoBits,
+        indexBuffer.getIndexElementSizeProperty());
+    EXPECT_EQ(3, indexBuffer.getIndexCountProperty());
+    std::array<std::uint32_t, 3> shadow{};
+    indexBuffer.GetData(shadow.data(), 3);
+    EXPECT_EQ(indices, shadow);
+
+#ifdef CNA_BACKEND_BGFX
+    auto* native =
+        dynamic_cast<CNA::Internal::Backends::Bgfx::BgfxIndexBufferBackend*>(
+            &indexBuffer.GetBackend());
+    ASSERT_NE(nullptr, native);
+    static_assert(std::is_same_v<
+                  decltype(native->handle),
+                  bgfx::DynamicIndexBufferHandle>);
+    ASSERT_TRUE(bgfx::isValid(native->handle));
+    EXPECT_TRUE(native->IsThirtyTwoBit());
+    const std::uint16_t creationFlags =
+        native->IsThirtyTwoBit()
+            ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
+            : BGFX_BUFFER_ALLOW_RESIZE;
+    EXPECT_NE(0u, creationFlags & BGFX_BUFFER_INDEX32);
+    ASSERT_EQ(indices.size() * sizeof(std::uint32_t), native->cpuData.size());
+    EXPECT_EQ(
+        0,
+        std::memcmp(indices.data(), native->cpuData.data(), native->cpuData.size()));
+    std::cout
+        << "REMED-GFX-108 public static: logical format=ThirtyTwoBits"
+        << ", logical count=3, logical bytes=" << sizeof(indices)
+        << ", native handle=DynamicIndexBufferHandle"
+        << ", native creation flags=0x" << std::hex << creationFlags << std::dec
+        << ", uploaded bytes=" << native->cpuData.size()
+        << ", draw=TriangleList startIndex=0 baseVertex=0 primitiveCount=1"
+        << "\n";
+#endif
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList,
+        0,
+        static_cast<int>(highVertex),
+        3,
+        0,
+        1);
+
+    ExpectExactColor(
+        ReadCenter(device),
+        Color::Blue,
+        "public static Uint32 values above 65535");
 }
 #endif
 
