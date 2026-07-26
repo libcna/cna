@@ -1721,12 +1721,25 @@ namespace CNA::Internal::Backends::WebGPU
                                                         std::size_t strideInBytes,
                                                         SetDataOptions)
     {
-        if (data == nullptr || vertexCount < 0 || strideInBytes == 0)
+        if (vertexCount < 0 || strideInBytes == 0)
             throw std::invalid_argument("CNA WebGPU: invalid vertex buffer upload");
-        if (vertexCapacity_ > 0 && vertexCount > vertexCapacity_)
+        if (vertexCount == 0)
+            return;
+        if (data == nullptr)
+            throw std::invalid_argument("CNA WebGPU: invalid vertex buffer upload");
+        if (vertexCount > vertexCapacity_)
             throw std::out_of_range("CNA WebGPU: vertex buffer upload exceeds declared capacity");
 
-        const std::uint64_t required = Align4(static_cast<std::uint64_t>(vertexCount) * strideInBytes);
+        const auto unsignedCount = static_cast<std::uint64_t>(vertexCount);
+        if (strideInBytes > std::numeric_limits<std::uint64_t>::max() / unsignedCount)
+            throw std::out_of_range("CNA WebGPU: vertex buffer upload byte count overflow");
+        const std::uint64_t logicalBytes = unsignedCount * strideInBytes;
+        if (logicalBytes > std::numeric_limits<std::uint64_t>::max() - 3u ||
+            logicalBytes > std::numeric_limits<std::size_t>::max())
+        {
+            throw std::out_of_range("CNA WebGPU: vertex buffer upload byte count overflow");
+        }
+        const std::uint64_t required = Align4(logicalBytes);
         if (buffer_ == nullptr || required > capacityBytes_)
         {
             if (buffer_ != nullptr)
@@ -1738,13 +1751,21 @@ namespace CNA::Internal::Backends::WebGPU
             buffer_ = wgpuDeviceCreateBuffer(owner_->Device(), &descriptor);
             capacityBytes_ = required;
         }
-        wgpuQueueWriteBuffer(owner_->Queue(), buffer_, 0, data,
-                             static_cast<std::size_t>(vertexCount) * strideInBytes);
-        vertexCount_ = vertexCount;
-        stride_ = strideInBytes;
 
         const auto* bytes = static_cast<const std::uint8_t*>(data);
-        shadowData_.assign(bytes, bytes + static_cast<std::size_t>(vertexCount) * strideInBytes);
+        // wgpuQueueWriteBuffer requires a four-byte-aligned copy size. Keep native padding
+        // internal: the public count, stride, and deferred-draw shadow retain exactly the logical
+        // bytes supplied by the caller.
+        shadowData_.clear();
+        shadowData_.reserve(static_cast<std::size_t>(required));
+        shadowData_.insert(
+            shadowData_.end(), bytes, bytes + static_cast<std::size_t>(logicalBytes));
+        shadowData_.resize(static_cast<std::size_t>(required), 0);
+        wgpuQueueWriteBuffer(
+            owner_->Queue(), buffer_, 0, shadowData_.data(), static_cast<std::size_t>(required));
+        shadowData_.resize(static_cast<std::size_t>(logicalBytes));
+        vertexCount_ = vertexCount;
+        stride_ = strideInBytes;
     }
 
     WebGPUIndexBufferBackend::WebGPUIndexBufferBackend(WebGPUGraphicsBackend& owner,

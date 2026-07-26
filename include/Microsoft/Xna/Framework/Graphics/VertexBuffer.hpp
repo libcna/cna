@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -22,7 +23,14 @@ namespace CNA::Internal::Backends
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /** @brief GPU vertex buffer for storing vertex data. */
+    /**
+     * @brief GPU vertex buffer for storing vertex data.
+     *
+     * CNA's current typed and raw overloads upload at destination byte offset zero. A validated
+     * zero-element upload is a no-op and may use a null source pointer; a real upload requires a
+     * non-null source and must fit the buffer's logical vertex capacity. Native allocation
+     * padding never changes that public capacity.
+     */
     class VertexBuffer : public GraphicsResource
     {
     public:
@@ -319,6 +327,44 @@ namespace Microsoft::Xna::Framework::Graphics
         void Dispose(bool disposing) override;
 
     private:
+        [[nodiscard]] bool ValidateSetDataRange(const void* data,
+                                                int startIndex,
+                                                int elementCount,
+                                                std::size_t sourceElementSize,
+                                                std::size_t uploadStride,
+                                                bool rawUpload) const;
+        void UploadValidatedData(const void* data,
+                                 int elementCount,
+                                 std::size_t uploadStride,
+                                 SetDataOptions options,
+                                 bool useOptions);
+
+        void SetDataInternal(const VertexPositionColor* data,
+                             int startIndex,
+                             int elementCount,
+                             SetDataOptions options,
+                             bool useOptions);
+        void SetDataInternal(const VertexPositionColorTexture* data,
+                             int startIndex,
+                             int elementCount,
+                             SetDataOptions options,
+                             bool useOptions);
+        void SetDataInternal(const VertexPositionNormalTexture* data,
+                             int startIndex,
+                             int elementCount,
+                             SetDataOptions options,
+                             bool useOptions);
+        void SetDataInternal(const VertexPositionTexture* data,
+                             int startIndex,
+                             int elementCount,
+                             SetDataOptions options,
+                             bool useOptions);
+        void SetDataInternal(const VertexPositionNormalTextureSkinned* data,
+                             int startIndex,
+                             int elementCount,
+                             SetDataOptions options,
+                             bool useOptions);
+
         std::unique_ptr<CNA::Internal::Backends::IVertexBufferBackend> backend_;
         VertexDeclaration vertexDeclaration_;
         BufferUsage bufferUsage_{BufferUsage::None};

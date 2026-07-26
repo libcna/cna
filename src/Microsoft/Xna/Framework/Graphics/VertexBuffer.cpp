@@ -2,17 +2,95 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-#include <cassert>
 #include <cstdint>
-#include <cstring>
+#include <limits>
 #include <vector>
 
 namespace Microsoft::Xna::Framework::Graphics
 {
+    namespace
+    {
+        std::unique_ptr<CNA::Internal::Backends::IVertexBufferBackend>
+        CreateVertexBufferBackend(GraphicsDevice& device, int vertexCount)
+        {
+            if (vertexCount < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "vertexCount", std::to_string(vertexCount),
+                    "The vertex count must be non-negative.");
+            }
+            return device.GetBackend().CreateVertexBuffer(vertexCount);
+        }
+
+        std::size_t CheckedByteCount(int elementCount,
+                                     std::size_t elementSize,
+                                     const char* parameterName)
+        {
+            if (elementCount < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    parameterName, std::to_string(elementCount),
+                    "The element count must be non-negative.");
+            }
+            const auto unsignedCount = static_cast<std::size_t>(elementCount);
+            if (elementSize != 0 &&
+                unsignedCount > std::numeric_limits<std::size_t>::max() / elementSize)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    parameterName, std::to_string(elementCount),
+                    "The requested byte range is too large.");
+            }
+            return unsignedCount * elementSize;
+        }
+
+        std::size_t CheckedByteOffset(int startIndex, std::size_t elementSize)
+        {
+            if (startIndex < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "startIndex", std::to_string(startIndex),
+                    "The start index must be non-negative.");
+            }
+            const auto unsignedStart = static_cast<std::size_t>(startIndex);
+            if (elementSize != 0 &&
+                unsignedStart > std::numeric_limits<std::size_t>::max() / elementSize)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "startIndex", std::to_string(startIndex),
+                    "The requested byte offset is too large.");
+            }
+            return unsignedStart * elementSize;
+        }
+
+        std::size_t VertexElementSize(VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single: return 4;
+                case VertexElementFormat::Vector2: return 8;
+                case VertexElementFormat::Vector3: return 12;
+                case VertexElementFormat::Vector4: return 16;
+                case VertexElementFormat::Color:
+                case VertexElementFormat::Byte4:
+                case VertexElementFormat::Short2:
+                case VertexElementFormat::NormalizedShort2:
+                case VertexElementFormat::HalfVector2:
+                    return 4;
+                case VertexElementFormat::Short4:
+                case VertexElementFormat::NormalizedShort4:
+                case VertexElementFormat::HalfVector4:
+                    return 8;
+            }
+            return 0;
+        }
+    }
+
     VertexBuffer::VertexBuffer(GraphicsDevice& device, int vertexCount)
         : VertexBuffer(device, VertexDeclaration{}, vertexCount, BufferUsage::None, false)
     {
@@ -32,7 +110,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                BufferUsage bufferUsage,
                                bool /*dynamic*/)
         : GraphicsResource(&device)
-        , backend_(device.GetBackend().CreateVertexBuffer(vertexCount))
+        , backend_(CreateVertexBufferBackend(device, vertexCount))
         , vertexDeclaration_(vertexDeclaration)
         , bufferUsage_(bufferUsage)
         , vertexCount_(vertexCount)
@@ -51,10 +129,119 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GetTypeNameCPP(VertexBuffer, "Microsoft.Xna.Framework.Graphics.VertexBuffer")
 
-    void VertexBuffer::SetData(const VertexPositionColor* data, int count)
+    bool VertexBuffer::ValidateSetDataRange(const void* data,
+                                            int startIndex,
+                                            int elementCount,
+                                            std::size_t sourceElementSize,
+                                            std::size_t uploadStride,
+                                            bool rawUpload) const
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("VertexBuffer");
+
+        // Validate the source range and both byte products before the empty return. The pointer
+        // itself is intentionally untouched here: a non-negative startIndex on a zero-element
+        // raw-pointer range cannot be compared with caller-owned storage and is never evaluated.
+        (void) CheckedByteOffset(startIndex, sourceElementSize);
+        (void) CheckedByteCount(elementCount, sourceElementSize, "elementCount");
+        (void) CheckedByteCount(elementCount, uploadStride, "elementCount");
+
+        if (uploadStride == 0 ||
+            uploadStride > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "stride", std::to_string(uploadStride),
+                "The vertex stride must be a positive Int32 byte count.");
+        }
+
+        const auto& declarationElements = vertexDeclaration_.GetVertexElements();
+        if (!declarationElements.empty())
+        {
+            if (rawUpload &&
+                vertexDeclaration_.getVertexStrideProperty() !=
+                    static_cast<int>(uploadStride))
+            {
+                throw System::ArgumentException(
+                    "The raw upload stride must match the VertexBuffer's VertexDeclaration.",
+                    "stride");
+            }
+
+            // Typed CNA vertices are packed into their compact GPU layout because the C++ object
+            // types contain ABI-only vtable/padding bytes. Their declarations can therefore have
+            // an inflated public C++ stride, but every declared element still has to fit in the
+            // compact bytes actually sent to the backend.
+            for (const VertexElement& element : declarationElements)
+            {
+                const int offset = element.getOffsetProperty();
+                const std::size_t elementSize =
+                    VertexElementSize(element.getVertexElementFormatProperty());
+                if (offset < 0 || elementSize == 0 ||
+                    static_cast<std::size_t>(offset) > uploadStride ||
+                    elementSize > uploadStride - static_cast<std::size_t>(offset))
+                {
+                    throw System::ArgumentException(
+                        "The VertexDeclaration contains an element outside the uploaded vertex stride.",
+                        "data");
+                }
+            }
+        }
+
+        // Destination byte offset is implicitly zero in CNA's currently exposed overloads.
+        // At logical capacity zero that is exactly the logical end, so an empty upload is legal.
+        // GFX-025 owns the separate public destination-offset overload work.
+        if (elementCount == 0)
+            return false;
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
+        if (elementCount > vertexCount_)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "elementCount", std::to_string(elementCount),
+                "The upload exceeds the VertexBuffer's logical capacity.");
+        }
+        return true;
+    }
+
+    void VertexBuffer::UploadValidatedData(const void* data,
+                                           int elementCount,
+                                           std::size_t uploadStride,
+                                           SetDataOptions options,
+                                           bool useOptions)
+    {
+        // GFX-043: propagate this buffer's complete declaration before every real upload. The
+        // shared empty branch returns before this method, so even declaration propagation is not
+        // a backend call for an empty operation.
+        backend_->SetVertexDeclaration(vertexDeclaration_);
+        if (useOptions)
+            backend_->SetDataWithOptions(data, elementCount, uploadStride, options);
+        else
+            backend_->SetData(data, elementCount, uploadStride);
+
+        const std::size_t byteCount =
+            CheckedByteCount(elementCount, uploadStride, "elementCount");
+        const auto* bytes = static_cast<const std::uint8_t*>(data);
+        cpuShadow_.assign(bytes, bytes + byteCount);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionColor* data, int count)
+    {
+        SetDataInternal(data, 0, count, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionColor* data,
+                               int startIndex,
+                               int elementCount)
+    {
+        SetDataInternal(
+            data, startIndex, elementCount, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetDataInternal(const VertexPositionColor* data,
+                                       int startIndex,
+                                       int elementCount,
+                                       SetDataOptions options,
+                                       bool useOptions)
+    {
         // VertexPositionColor contains a Color member that inherits from a virtual
         // base class (IPackedVector), so sizeof(Color) == 16 (vtable + data + padding)
         // and sizeof(VertexPositionColor) == 32, not 16. The EasyGL 3D shader pipeline
@@ -66,26 +253,29 @@ namespace Microsoft::Xna::Framework::Graphics
         };
         static_assert(sizeof(GpuVertex) == 16, "GpuVertex must be exactly 16 bytes");
 
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            packed[i].x = data[i].Position.X;
-            packed[i].y = data[i].Position.Y;
-            packed[i].z = data[i].Position.Z;
-            packed[i].r = data[i].Color.getRProperty();
-            packed[i].g = data[i].Color.getGProperty();
-            packed[i].b = data[i].Color.getBProperty();
-            packed[i].a = data[i].Color.getAProperty();
+        if (!ValidateSetDataRange(data,
+                                  startIndex,
+                                  elementCount,
+                                  sizeof(VertexPositionColor),
+                                  sizeof(GpuVertex),
+                                  false))
+        {
+            return;
         }
-        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
 
-        // Task 930: cache the compact GPU-layout bytes for a future GetData() call.
-        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
-        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
-    }
-
-    void VertexBuffer::SetData(const VertexPositionColor* data, int startIndex, int elementCount)
-    {
-        SetData(data + startIndex, elementCount);
+        const VertexPositionColor* source = data + startIndex;
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            packed[i].x = source[i].Position.X;
+            packed[i].y = source[i].Position.Y;
+            packed[i].z = source[i].Position.Z;
+            packed[i].r = source[i].Color.getRProperty();
+            packed[i].g = source[i].Color.getGProperty();
+            packed[i].b = source[i].Color.getBProperty();
+            packed[i].a = source[i].Color.getAProperty();
+        }
+        UploadValidatedData(
+            packed.data(), elementCount, sizeof(GpuVertex), options, useOptions);
     }
 
     void VertexBuffer::GetData(VertexPositionColor* data, int count)
@@ -116,8 +306,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetData(const VertexPositionColorTexture* data, int count)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+        SetDataInternal(data, 0, count, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionColorTexture* data,
+                               int startIndex,
+                               int elementCount)
+    {
+        SetDataInternal(
+            data, startIndex, elementCount, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetDataInternal(const VertexPositionColorTexture* data,
+                                       int startIndex,
+                                       int elementCount,
+                                       SetDataOptions options,
+                                       bool useOptions)
+    {
         // VertexPositionColorTexture has a virtual base (IVertexType) so its sizeof
         // includes a vtable pointer. Pack into the GPU layout: float3 + ubyte4 + float2 = 24 bytes.
         struct GpuVertex {
@@ -127,27 +332,31 @@ namespace Microsoft::Xna::Framework::Graphics
         };
         static_assert(sizeof(GpuVertex) == 24, "GpuVertex (VPC+T) must be 24 bytes");
 
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            packed[i].x = data[i].Position.X;
-            packed[i].y = data[i].Position.Y;
-            packed[i].z = data[i].Position.Z;
-            packed[i].r = data[i].Color.getRProperty();
-            packed[i].g = data[i].Color.getGProperty();
-            packed[i].b = data[i].Color.getBProperty();
-            packed[i].a = data[i].Color.getAProperty();
-            packed[i].u = data[i].TextureCoordinate.X;
-            packed[i].v = data[i].TextureCoordinate.Y;
+        if (!ValidateSetDataRange(data,
+                                  startIndex,
+                                  elementCount,
+                                  sizeof(VertexPositionColorTexture),
+                                  sizeof(GpuVertex),
+                                  false))
+        {
+            return;
         }
-        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
 
-        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
-        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
-    }
-
-    void VertexBuffer::SetData(const VertexPositionColorTexture* data, int startIndex, int elementCount)
-    {
-        SetData(data + startIndex, elementCount);
+        const VertexPositionColorTexture* source = data + startIndex;
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            packed[i].x = source[i].Position.X;
+            packed[i].y = source[i].Position.Y;
+            packed[i].z = source[i].Position.Z;
+            packed[i].r = source[i].Color.getRProperty();
+            packed[i].g = source[i].Color.getGProperty();
+            packed[i].b = source[i].Color.getBProperty();
+            packed[i].a = source[i].Color.getAProperty();
+            packed[i].u = source[i].TextureCoordinate.X;
+            packed[i].v = source[i].TextureCoordinate.Y;
+        }
+        UploadValidatedData(
+            packed.data(), elementCount, sizeof(GpuVertex), options, useOptions);
     }
 
     void VertexBuffer::GetData(VertexPositionColorTexture* data, int count)
@@ -179,8 +388,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetData(const VertexPositionNormalTexture* data, int count)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+        SetDataInternal(data, 0, count, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionNormalTexture* data,
+                               int startIndex,
+                               int elementCount)
+    {
+        SetDataInternal(
+            data, startIndex, elementCount, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetDataInternal(const VertexPositionNormalTexture* data,
+                                       int startIndex,
+                                       int elementCount,
+                                       SetDataOptions options,
+                                       bool useOptions)
+    {
         // VertexPositionNormalTexture has a virtual base (IVertexType). Pack into
         // GPU layout: float3 position + float3 normal + float2 texcoord = 32 bytes.
         struct GpuVertex {
@@ -190,26 +414,30 @@ namespace Microsoft::Xna::Framework::Graphics
         };
         static_assert(sizeof(GpuVertex) == 32, "GpuVertex (VPNT) must be 32 bytes");
 
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            packed[i].x  = data[i].Position.X;
-            packed[i].y  = data[i].Position.Y;
-            packed[i].z  = data[i].Position.Z;
-            packed[i].nx = data[i].Normal.X;
-            packed[i].ny = data[i].Normal.Y;
-            packed[i].nz = data[i].Normal.Z;
-            packed[i].u  = data[i].TextureCoordinate.X;
-            packed[i].v  = data[i].TextureCoordinate.Y;
+        if (!ValidateSetDataRange(data,
+                                  startIndex,
+                                  elementCount,
+                                  sizeof(VertexPositionNormalTexture),
+                                  sizeof(GpuVertex),
+                                  false))
+        {
+            return;
         }
-        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
 
-        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
-        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
-    }
-
-    void VertexBuffer::SetData(const VertexPositionNormalTexture* data, int startIndex, int elementCount)
-    {
-        SetData(data + startIndex, elementCount);
+        const VertexPositionNormalTexture* source = data + startIndex;
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            packed[i].x  = source[i].Position.X;
+            packed[i].y  = source[i].Position.Y;
+            packed[i].z  = source[i].Position.Z;
+            packed[i].nx = source[i].Normal.X;
+            packed[i].ny = source[i].Normal.Y;
+            packed[i].nz = source[i].Normal.Z;
+            packed[i].u  = source[i].TextureCoordinate.X;
+            packed[i].v  = source[i].TextureCoordinate.Y;
+        }
+        UploadValidatedData(
+            packed.data(), elementCount, sizeof(GpuVertex), options, useOptions);
     }
 
     void VertexBuffer::GetData(VertexPositionNormalTexture* data, int count)
@@ -241,8 +469,23 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetData(const VertexPositionTexture* data, int count)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+        SetDataInternal(data, 0, count, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionTexture* data,
+                               int startIndex,
+                               int elementCount)
+    {
+        SetDataInternal(
+            data, startIndex, elementCount, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetDataInternal(const VertexPositionTexture* data,
+                                       int startIndex,
+                                       int elementCount,
+                                       SetDataOptions options,
+                                       bool useOptions)
+    {
         // VertexPositionTexture has a virtual base (IVertexType). Pack into
         // GPU layout: float3 position + float2 texcoord = 20 bytes.
         struct GpuVertex {
@@ -251,23 +494,27 @@ namespace Microsoft::Xna::Framework::Graphics
         };
         static_assert(sizeof(GpuVertex) == 20, "GpuVertex (VPT) must be 20 bytes");
 
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            packed[i].x = data[i].Position.X;
-            packed[i].y = data[i].Position.Y;
-            packed[i].z = data[i].Position.Z;
-            packed[i].u = data[i].TextureCoordinate.X;
-            packed[i].v = data[i].TextureCoordinate.Y;
+        if (!ValidateSetDataRange(data,
+                                  startIndex,
+                                  elementCount,
+                                  sizeof(VertexPositionTexture),
+                                  sizeof(GpuVertex),
+                                  false))
+        {
+            return;
         }
-        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
 
-        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
-        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
-    }
-
-    void VertexBuffer::SetData(const VertexPositionTexture* data, int startIndex, int elementCount)
-    {
-        SetData(data + startIndex, elementCount);
+        const VertexPositionTexture* source = data + startIndex;
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            packed[i].x = source[i].Position.X;
+            packed[i].y = source[i].Position.Y;
+            packed[i].z = source[i].Position.Z;
+            packed[i].u = source[i].TextureCoordinate.X;
+            packed[i].v = source[i].TextureCoordinate.Y;
+        }
+        UploadValidatedData(
+            packed.data(), elementCount, sizeof(GpuVertex), options, useOptions);
     }
 
     void VertexBuffer::GetData(VertexPositionTexture* data, int count)
@@ -298,8 +545,24 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetData(const VertexPositionNormalTextureSkinned* data, int count)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
+        SetDataInternal(data, 0, count, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetData(const VertexPositionNormalTextureSkinned* data,
+                               int startIndex,
+                               int elementCount)
+    {
+        SetDataInternal(
+            data, startIndex, elementCount, SetDataOptions::None, false);
+    }
+
+    void VertexBuffer::SetDataInternal(
+        const VertexPositionNormalTextureSkinned* data,
+        int startIndex,
+        int elementCount,
+        SetDataOptions options,
+        bool useOptions)
+    {
         // VertexPositionNormalTextureSkinned has a virtual base (IVertexType). Pack into
         // GPU layout: float3 position + float3 normal + float2 texcoord + float4 weights
         // + byte4 indices = 52 bytes.
@@ -312,34 +575,38 @@ namespace Microsoft::Xna::Framework::Graphics
         };
         static_assert(sizeof(GpuVertex) == 52, "GpuVertex (VPNTSkinned) must be 52 bytes");
 
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i) {
-            packed[i].x  = data[i].Position.X;
-            packed[i].y  = data[i].Position.Y;
-            packed[i].z  = data[i].Position.Z;
-            packed[i].nx = data[i].Normal.X;
-            packed[i].ny = data[i].Normal.Y;
-            packed[i].nz = data[i].Normal.Z;
-            packed[i].u  = data[i].TextureCoordinate.X;
-            packed[i].v  = data[i].TextureCoordinate.Y;
-            packed[i].w0 = data[i].BlendWeight.X;
-            packed[i].w1 = data[i].BlendWeight.Y;
-            packed[i].w2 = data[i].BlendWeight.Z;
-            packed[i].w3 = data[i].BlendWeight.W;
-            packed[i].i0 = data[i].BlendIndices[0];
-            packed[i].i1 = data[i].BlendIndices[1];
-            packed[i].i2 = data[i].BlendIndices[2];
-            packed[i].i3 = data[i].BlendIndices[3];
+        if (!ValidateSetDataRange(data,
+                                  startIndex,
+                                  elementCount,
+                                  sizeof(VertexPositionNormalTextureSkinned),
+                                  sizeof(GpuVertex),
+                                  false))
+        {
+            return;
         }
-        backend_->SetData(packed.data(), count, sizeof(GpuVertex));
 
-        cpuShadow_.resize(packed.size() * sizeof(GpuVertex));
-        std::memcpy(cpuShadow_.data(), packed.data(), cpuShadow_.size());
-    }
-
-    void VertexBuffer::SetData(const VertexPositionNormalTextureSkinned* data, int startIndex, int elementCount)
-    {
-        SetData(data + startIndex, elementCount);
+        const VertexPositionNormalTextureSkinned* source = data + startIndex;
+        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
+        for (int i = 0; i < elementCount; ++i) {
+            packed[i].x  = source[i].Position.X;
+            packed[i].y  = source[i].Position.Y;
+            packed[i].z  = source[i].Position.Z;
+            packed[i].nx = source[i].Normal.X;
+            packed[i].ny = source[i].Normal.Y;
+            packed[i].nz = source[i].Normal.Z;
+            packed[i].u  = source[i].TextureCoordinate.X;
+            packed[i].v  = source[i].TextureCoordinate.Y;
+            packed[i].w0 = source[i].BlendWeight.X;
+            packed[i].w1 = source[i].BlendWeight.Y;
+            packed[i].w2 = source[i].BlendWeight.Z;
+            packed[i].w3 = source[i].BlendWeight.W;
+            packed[i].i0 = source[i].BlendIndices[0];
+            packed[i].i1 = source[i].BlendIndices[1];
+            packed[i].i2 = source[i].BlendIndices[2];
+            packed[i].i3 = source[i].BlendIndices[3];
+        }
+        UploadValidatedData(
+            packed.data(), elementCount, sizeof(GpuVertex), options, useOptions);
     }
 
     void VertexBuffer::GetData(VertexPositionNormalTextureSkinned* data, int count)
@@ -379,81 +646,38 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void VertexBuffer::SetDataRaw(const void* data, int count, int stride)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        // Task 1080: push this buffer's own VertexDeclaration (if any) down to the backend
-        // before uploading, so backends that support arbitrary layouts (see
-        // IVertexBufferBackend::SetVertexDeclaration) can bind genuinely custom vertex formats
-        // instead of only recognizing a fixed set of byte-strides.
-        backend_->SetVertexDeclaration(vertexDeclaration_);
-        backend_->SetData(data, count, static_cast<std::size_t>(stride));
+        const std::size_t uploadStride =
+            stride > 0 ? static_cast<std::size_t>(stride) : 0;
+        if (!ValidateSetDataRange(
+                data, 0, count, uploadStride, uploadStride, true))
+        {
+            return;
+        }
+        UploadValidatedData(
+            data, count, uploadStride, SetDataOptions::None, false);
     }
 
     void VertexBuffer::SetDataWithOptions(const VertexPositionColor* data, int startIndex,
                                           int elementCount, SetDataOptions options)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; };
-        static_assert(sizeof(GpuVertex) == 16);
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
-        for (int i = 0; i < elementCount; ++i) {
-            const auto& v = data[startIndex + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty() };
-        }
-        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
+        SetDataInternal(data, startIndex, elementCount, options, true);
     }
 
     void VertexBuffer::SetDataWithOptions(const VertexPositionColorTexture* data, int startIndex,
                                           int elementCount, SetDataOptions options)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        struct GpuVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-        static_assert(sizeof(GpuVertex) == 24);
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
-        for (int i = 0; i < elementCount; ++i) {
-            const auto& v = data[startIndex + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Color.getRProperty(), v.Color.getGProperty(),
-                          v.Color.getBProperty(), v.Color.getAProperty(),
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
-        }
-        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
+        SetDataInternal(data, startIndex, elementCount, options, true);
     }
 
     void VertexBuffer::SetDataWithOptions(const VertexPositionNormalTexture* data, int startIndex,
                                           int elementCount, SetDataOptions options)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        struct GpuVertex { float x, y, z, nx, ny, nz, u, v; };
-        static_assert(sizeof(GpuVertex) == 32);
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
-        for (int i = 0; i < elementCount; ++i) {
-            const auto& v = data[startIndex + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.Normal.X, v.Normal.Y, v.Normal.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
-        }
-        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
+        SetDataInternal(data, startIndex, elementCount, options, true);
     }
 
     void VertexBuffer::SetDataWithOptions(const VertexPositionTexture* data, int startIndex,
                                           int elementCount, SetDataOptions options)
     {
-        if (getIsDisposedProperty())
-            throw System::ObjectDisposedException("VertexBuffer");
-        struct GpuVertex { float x, y, z, u, v; };
-        static_assert(sizeof(GpuVertex) == 20);
-        std::vector<GpuVertex> packed(static_cast<std::size_t>(elementCount));
-        for (int i = 0; i < elementCount; ++i) {
-            const auto& v = data[startIndex + i];
-            packed[i] = { v.Position.X, v.Position.Y, v.Position.Z,
-                          v.TextureCoordinate.X, v.TextureCoordinate.Y };
-        }
-        backend_->SetDataWithOptions(packed.data(), elementCount, sizeof(GpuVertex), options);
+        SetDataInternal(data, startIndex, elementCount, options, true);
     }
 }
