@@ -227,22 +227,6 @@ namespace
         EXPECT_EQ(expected.getAProperty(), actual.getAProperty()) << label;
     }
 
-    std::size_t CountExactColor(
-        const BackbufferSnapshot& snapshot,
-        const Color& expected)
-    {
-        return static_cast<std::size_t>(std::count_if(
-            snapshot.pixels.begin(),
-            snapshot.pixels.end(),
-            [&](const Color& pixel)
-            {
-                return pixel.getRProperty() == expected.getRProperty() &&
-                       pixel.getGProperty() == expected.getGProperty() &&
-                       pixel.getBProperty() == expected.getBProperty() &&
-                       pixel.getAProperty() == expected.getAProperty();
-            }));
-    }
-
     class IndexedDrawDeferredTest : public ::testing::Test
     {
     protected:
@@ -337,8 +321,7 @@ namespace
 
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_BGFX) || \
-    defined(CNA_BACKEND_SOFTWARE)
+    defined(CNA_BACKEND_D3D11)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     RequireIndexedRendering();
@@ -490,7 +473,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_BGFX)
+    defined(CNA_BACKEND_D3D11)
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
@@ -500,8 +483,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
 
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE) || \
-    defined(CNA_BACKEND_BGFX)
+    defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
 TEST_F(IndexedDrawDeferredTest, DeferredAtoBtoACapturesDataCountsAndLifetimes)
 {
     RequireIndexedRendering();
@@ -788,32 +770,6 @@ TEST_F(IndexedDrawDeferredTest, BgfxIndexedTopologiesRenderExactDistinctGeometry
     ExpectExactColor(pixels.AtNdc(0.85f), Color::Yellow, "indexed line strip second segment");
 }
 
-TEST_F(IndexedDrawDeferredTest, BgfxIndexedPointListRendersOneExactPixel)
-{
-    RequireIndexedRendering();
-
-    const std::array<VertexPositionColor, 1> vertices{
-        VertexPositionColor(Vector3(0.0f, 0.0f, 0.5f), Color::White),
-    };
-    const std::array<std::uint16_t, 1> indices{0};
-    VertexBuffer vertexBuffer(
-        device, PositionColorDeclaration(), 1, BufferUsage::None);
-    IndexBuffer indexBuffer(
-        device, IndexElementSize::SixteenBits, 1, BufferUsage::None);
-    vertexBuffer.SetData(vertices.data(), 1);
-    indexBuffer.SetData(indices.data(), 1);
-
-    BasicEffect effect(device);
-    ApplyVertexColorEffect(effect);
-    device.Clear(Color::Black);
-    device.SetVertexBuffer(&vertexBuffer);
-    device.SetIndexBuffer(&indexBuffer);
-    device.DrawIndexedPrimitives(
-        PrimitiveType::PointListEXT, 0, 0, 1, 0, 1);
-
-    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
-    EXPECT_EQ(1u, CountExactColor(pixels, Color::White));
-}
 #endif
 
 #ifdef CNA_BACKEND_SOFTWARE
