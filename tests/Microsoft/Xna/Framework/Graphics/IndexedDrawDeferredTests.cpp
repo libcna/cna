@@ -827,10 +827,19 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
 }
 #endif
 
-#ifdef CNA_BACKEND_BGFX
-TEST_F(IndexedDrawDeferredTest, BgfxIndexedTopologiesRenderExactDistinctGeometry)
+#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_VULKAN)
+TEST_F(IndexedDrawDeferredTest, IndexedTopologiesRenderExactDistinctGeometry)
 {
     RequireIndexedRendering();
+
+#ifdef CNA_BACKEND_VULKAN
+    auto* vulkanBackend =
+        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, vulkanBackend);
+    const std::size_t validationMessageStart =
+        vulkanBackend->GetValidationMessagesEXT().size();
+#endif
 
     std::vector<VertexPositionColor> vertices;
     AppendVertices(vertices, TriangleAt(-0.75f, Color::Red));
@@ -886,6 +895,10 @@ TEST_F(IndexedDrawDeferredTest, BgfxIndexedTopologiesRenderExactDistinctGeometry
     ExpectExactColor(pixels.AtNdc(0.25f), Color::Blue, "indexed line list");
     ExpectExactColor(pixels.AtNdc(0.65f), Color::Yellow, "indexed line strip first segment");
     ExpectExactColor(pixels.AtNdc(0.85f), Color::Yellow, "indexed line strip second segment");
+
+#ifdef CNA_BACKEND_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
+#endif
 }
 
 #endif
