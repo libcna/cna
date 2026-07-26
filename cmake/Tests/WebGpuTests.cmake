@@ -251,20 +251,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # REMED-GFX-102: every SpriteBatch.Begin() BlendState must be captured by value and select a
     # compatible static sprite pipeline; BlendFactor remains per-batch dynamic state. The public
-    # sRGB-aware regression distinguishes presets, custom colour/alpha equations, constants, and
-    # static/dynamic A->B->A timing within one render-target pass.
+    # sRGB-aware regression distinguishes presets, custom colour/alpha equations, constants,
+    # static/dynamic A->B->A timing, post-Begin mutation, independent channel masks, ordinary 1x
+    # backbuffer/RT2D transitions, target/texture identity reuse, 64 dynamic RGBA values with
+    # stable cache cardinality, and real 4x MultiSampleMask coverage. It also records the native
+    # validation callback count after the existing WebGPU MSAA validation error-scope probe.
     cna_webgpu_test(cna_test_webgpu_spritebatch_blendstate
                     examples/webgpu_spritebatch_blendstate_test.cpp)
+    target_link_libraries(cna_test_webgpu_spritebatch_blendstate PRIVATE WebGPU::WebGPU)
     cna_register_backend_test(NAME WebGPU_SpriteBatch_BlendState
         COMMAND cna_test_webgpu_spritebatch_blendstate
         TIMEOUT 60 LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # REMED-GFX-077: BlendState.ColorWriteChannels (RT0) via WGPUColorTargetState.writeMask +
-    # BlendState.MultiSampleMask via WGPUMultisampleState.mask (both in Make3DPipelineKey). The 3D
-    # keyed pipeline path is used deliberately -- the fixed internal SpriteBatch pipeline does not
-    # consume ColorWriteChannels (WebGPU sprite-BlendState counterpart finding), so a SpriteBatch
-    # scene would not exercise this fix. MultiSampleMask IS compiled in (wgpu-native mask is real).
+    # BlendState.MultiSampleMask via WGPUMultisampleState.mask (both in Make3DPipelineKey). This
+    # remains the generic 3D control; REMED-GFX-102 now independently covers the keyed SpriteBatch
+    # path for both fields. MultiSampleMask IS compiled in (wgpu-native mask is real).
     cna_webgpu_test(cna_test_webgpu_colorwritechannels examples/gfx077_colorwritechannels_3d_test.cpp)
     target_compile_definitions(cna_test_webgpu_colorwritechannels PRIVATE GFX077_MULTISAMPLEMASK_SUPPORTED)
     cna_register_backend_test(NAME WebGPU_ColorWriteChannels COMMAND cna_test_webgpu_colorwritechannels
