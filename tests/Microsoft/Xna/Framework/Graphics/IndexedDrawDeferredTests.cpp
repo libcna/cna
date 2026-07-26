@@ -349,9 +349,9 @@ namespace
 #endif
 }
 
-#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
-    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
-    defined(CNA_BACKEND_D3D11)
+#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_WEBGPU) || \
+    defined(CNA_BACKEND_VULKAN) || defined(CNA_BACKEND_EASYGL) || \
+    defined(CNA_BACKEND_D3D9) || defined(CNA_BACKEND_D3D11)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsNonzeroStartIndex)
 {
     RequireIndexedRendering();
@@ -428,7 +428,11 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertexWithSixtee
         ReadCenter(device), Color::Blue,
         "positive baseVertex with 16-bit indices");
 }
+#endif
 
+#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
+    defined(CNA_BACKEND_D3D11)
 TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsThirtyTwoBitIndexElements)
 {
     RequireIndexedRendering();
