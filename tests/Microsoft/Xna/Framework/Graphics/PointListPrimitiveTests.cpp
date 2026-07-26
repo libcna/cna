@@ -220,12 +220,15 @@ namespace
         }
     };
 
-    FrameSnapshot CaptureBackbuffer(GraphicsDevice& device)
+    /// Reads the whole backbuffer. The explicit-size overload exists so a frame drawn under a
+    /// custom Viewport can be read back before the Viewport is restored -- restoring it first
+    /// would let a backend that resolves viewport state at replay time rather than per draw
+    /// silently pass.
+    FrameSnapshot CaptureBackbuffer(GraphicsDevice& device, int width, int height)
     {
-        const auto& viewport = device.getViewportProperty();
         FrameSnapshot snapshot;
-        snapshot.width = viewport.getWidthProperty();
-        snapshot.height = viewport.getHeightProperty();
+        snapshot.width = width;
+        snapshot.height = height;
         snapshot.pixels.assign(
             static_cast<std::size_t>(snapshot.width) *
                 static_cast<std::size_t>(snapshot.height),
@@ -235,6 +238,30 @@ namespace
             &region,
             snapshot.pixels.data(),
             0,
+            static_cast<int>(snapshot.pixels.size()));
+        return snapshot;
+    }
+
+    FrameSnapshot CaptureBackbuffer(GraphicsDevice& device)
+    {
+        const auto& viewport = device.getViewportProperty();
+        return CaptureBackbuffer(
+            device, viewport.getWidthProperty(), viewport.getHeightProperty());
+    }
+
+    /// Reads a render target's own rendered pixels directly. Used where a backend implements
+    /// render-target readback but no backbuffer readback.
+    FrameSnapshot CaptureRenderTarget(RenderTarget2D& target, int width, int height)
+    {
+        FrameSnapshot snapshot;
+        snapshot.width = width;
+        snapshot.height = height;
+        snapshot.pixels.assign(
+            static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
+            Color::Transparent);
+        const Rectangle region(0, 0, width, height);
+        target.GetData(
+            0, &region, snapshot.pixels.data(), 0,
             static_cast<int>(snapshot.pixels.size()));
         return snapshot;
     }
@@ -1085,8 +1112,8 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
     effect.Apply();
     device.DrawIndexedPrimitives(PrimitiveType::PointListEXT, 0, 0, 4, 0, 1);
 
+    const FrameSnapshot viewportPixels = CaptureBackbuffer(device, width, height);
     device.setViewportProperty(Viewport(0, 0, width, height));
-    const FrameSnapshot viewportPixels = CaptureBackbuffer(device);
     const int expectedX = width / 4 + (width / 2) / 4;
     const int expectedY = height / 4 + (height / 2) / 4;
     EXPECT_TRUE(viewportPixels.HasExactWithin(expectedX, expectedY, 2, Color::Red))
@@ -1309,6 +1336,90 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCurrentlyCoversTheWholeBo
     // REMED-GFX-113 gap, asserted so the follow-up fix is an obvious, deliberate change.
     EXPECT_GT(pixels.CountExact(Color::Magenta), 0)
         << "REMED-GFX-113: Bgfx still binds the whole vertex buffer for non-indexed draws";
+}
+#endif
+
+#ifdef CNA_BACKEND_SDL_GPU
+// SDL_GPU maps PointListEXT to SDL_GPU_PRIMITIVETYPE_POINTLIST and consumes exactly
+// primitiveCount vertices/indices, but implements no backbuffer readback. Its practical exact-pixel
+// control therefore runs through RenderTarget2D::GetData, which this backend does support.
+//
+// Indexed addressing is deliberately exercised only at offset zero here: SDL_GPU passes literal
+// 0/0 for first_index and vertex_offset at every SDL_DrawGPUIndexedPrimitives site, so public
+// startIndex/baseVertex do not reach the native draw (the SDL_GPU counterpart of
+// REMED-GFX-020/060/107, recorded separately as REMED-GFX-117). That is an addressing defect, not a
+// topology defect, and is not corrected here. The non-indexed case below does carry a nonzero
+// vertexStart, which this backend honours.
+TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
+{
+    RequirePointRendering();
+
+    constexpr int kSize = 128;
+    const std::array<PointSpec, 3> wanted{
+        PointSpec{kSize / 4, kSize / 4, Color::Red, 0.5f},
+        PointSpec{kSize / 2, kSize / 2, Color::Lime, 0.5f},
+        PointSpec{3 * kSize / 4, 3 * kSize / 4, Color::Blue, 0.5f},
+    };
+
+    const std::array<VertexPositionColor, 8> vertices{
+        MakePoint(kSize, kSize, PointSpec{kSize / 8, kSize / 8, Color::Magenta, 0.5f}),
+        MakePoint(kSize, kSize, PointSpec{7 * kSize / 8, kSize / 8, Color::Magenta, 0.5f}),
+        MakePoint(kSize, kSize, wanted[0]),
+        MakePoint(kSize, kSize, wanted[1]),
+        MakePoint(kSize, kSize, wanted[2]),
+        MakePoint(kSize, kSize, PointSpec{kSize / 8, 7 * kSize / 8, Color::Magenta, 0.5f}),
+        MakePoint(kSize, kSize, PointSpec{7 * kSize / 8, 7 * kSize / 8, Color::Magenta, 0.5f}),
+        MakePoint(kSize, kSize, PointSpec{kSize / 2, 7 * kSize / 8, Color::Magenta, 0.5f}),
+    };
+    // Exactly the three intended points; every other vertex in the buffer is a decoy that must
+    // stay unlit.
+    const std::array<std::uint16_t, 3> indices{2, 3, 4};
+
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 8, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 8);
+    indexBuffer.SetData(indices.data(), 3);
+
+    RenderTarget2D target(
+        device, kSize, kSize, false, SurfaceFormat::Color, DepthFormat::None, 0,
+        RenderTargetUsage::PreserveContents);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    effect.Apply();
+    device.DrawIndexedPrimitives(PrimitiveType::PointListEXT, 0, 0, 8, 0, 3);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    const FrameSnapshot indexed = CaptureRenderTarget(target, kSize, kSize);
+    ExpectPointRendered(indexed, wanted[0], "SDL_GPU indexed render-target point 0");
+    ExpectPointRendered(indexed, wanted[1], "SDL_GPU indexed render-target point 1");
+    ExpectPointRendered(indexed, wanted[2], "SDL_GPU indexed render-target point 2");
+    ExpectColorAbsent(indexed, Color::Magenta, "SDL_GPU indexed decoy points");
+    ExpectPointCoverageBudget(
+        indexed, Color::Black, 3, "SDL_GPU indexed render-target point coverage");
+
+    // Non-indexed: vertexStart selects the first consumed vertex and primitiveCount limits the
+    // range to exactly three points, with decoys on both sides.
+    device.SetIndexBuffer(nullptr);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::PointListEXT, 2, 3);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    const FrameSnapshot direct = CaptureRenderTarget(target, kSize, kSize);
+    ExpectPointRendered(direct, wanted[0], "SDL_GPU non-indexed render-target point 0");
+    ExpectPointRendered(direct, wanted[1], "SDL_GPU non-indexed render-target point 1");
+    ExpectPointRendered(direct, wanted[2], "SDL_GPU non-indexed render-target point 2");
+    ExpectColorAbsent(direct, Color::Magenta, "SDL_GPU non-indexed decoy points");
+    ExpectPointCoverageBudget(
+        direct, Color::Black, 3, "SDL_GPU non-indexed render-target point coverage");
 }
 #endif
 
