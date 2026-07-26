@@ -971,6 +971,9 @@ TEST_F(PointListPrimitiveTest, PointListRespectsDepthTestingBetweenPoints)
     device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
     device.SetVertexBuffer(nullptr);
     device.SetIndexBuffer(nullptr);
+    // Close the producing frame before the target is read as a texture: a render target sampled in
+    // the same frame that wrote it is not observable on every backend.
+    device.Present();
     SampleTargetToBackbuffer(device, target);
 
     const FrameSnapshot pixels = CaptureBackbuffer(device);
