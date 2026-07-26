@@ -19,6 +19,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-028: every real constructor acquisition is transactional, failed objects never
+    # enter the window registry, and lazy command/pipeline/sampler/fallback failures remain
+    # retryable. Resource callbacks make leaks/double-destruction observable independently of
+    # whether the selected failure point throws.
+    cna_sdlgpu_test(cna_test_sdlgpu_constructor_exception_safety
+                    examples/sdlgpu_constructor_exception_safety_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_ConstructorExceptionSafety
+        COMMAND cna_test_sdlgpu_constructor_exception_safety
+        TIMEOUT 240 LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    set_tests_properties(SdlGpu_ConstructorExceptionSafety PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # plan_sdlgpu.md SDLGPU-22..25: 2D vertical slice -- real Texture2D + SpriteBatch.
     cna_sdlgpu_test(cna_test_sdlgpu_2d examples/sdlgpu_2d_test.cpp)
     cna_register_backend_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d
