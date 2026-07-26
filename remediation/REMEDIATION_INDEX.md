@@ -160,6 +160,12 @@ boundaries, not production defects.
 Listed in `MASTER_REMEDIATION_PLAN.md` in ID order under their priority headings. Rather than
 duplicating them here, the useful cross-cuts:
 
+### Completed P2 remediation
+
+| ID | Resolution |
+|---|---|
+| `REMED-GFX-030` | Software depth-state correctness — **DONE and VERIFIED (2026-07-26)**. The raster path previously discarded `DepthBufferWriteEnable` and reduced every enabled depth test to `LessEqual`; accepted fragments also overwrote depth even when writes or testing were disabled. Software now snapshots enable/write/function for each intended draw, evaluates depth before colour, writes stored depth only after a passing enabled test with writes enabled, and maps all eight public `CompareFunction` values without fallback. `None` remains test/write disabled, `Default` remains enabled/enabled/`LessEqual`, and `DepthRead` now tests existing depth without modifying it. Float depth storage is unchanged; complete active-target clears, GFX-079 viewport-depth mapping, and GFX-083 constant/slope bias behavior are preserved. The public contract is **3/4→4/4** and the permanent Software matrix is **19/38→38/38**, covering disabled/enabled/write-disabled modes, strict/inclusive equality, all comparisons, failed-fragment immutability, A→B→A state capture/restoration, complete clears, backbuffer/RenderTarget2D transitions, and target isolation. Full Software shard **15/15**; focused ASan+UBSan **6/6**; all 14 backend libraries compile at `-j4` or less. Regression `28f2590b`, fix `f8aa0be8`. |
+
 ### Tasks requiring verification before implementation (11)
 
 These rest on static analysis that was never executed, or on an unresolved question. **Reproduce
