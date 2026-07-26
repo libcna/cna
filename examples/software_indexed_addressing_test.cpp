@@ -352,9 +352,14 @@ protected:
                        "F2: 32-bit decoding plus baseVertex=6");
 
             dev.Clear(Color::Black);
-            DrawRange(dev, fx, vbA, ib32, 3, 0, 9, 6, 2);
+            DrawRange(dev, fx, vbA, ib32, 0, 0, 12, 6, 2);
+            CheckScene(dev, kBBW, kBBH, Lit(colorsA, {2, 3}),
+                       "F3: 32-bit startIndex=6 primitiveCount=2 consumes the final six elements");
+
+            dev.Clear(Color::Black);
+            DrawRange(dev, fx, vbA, ib32, 3, 0, 9, 6, 1);
             CheckScene(dev, kBBW, kBBH, Lit(colorsA, {3}),
-                       "F3: 32-bit startIndex=6 baseVertex=3 primitiveCount=2 stops at element 11");
+                       "F4: 32-bit startIndex=6 + baseVertex=3 reaches the last vertex exactly");
         }
 
         // ---- G: dynamic vertex and index buffers behave exactly like the static ones ----------
@@ -405,6 +410,48 @@ protected:
                 colorsA[0], colorsB[1], colorsB[2], colorsA[3]};
             CheckScene(dev, kBBW, kBBH, expected,
                        "H1: A->B->A keeps per-call range, base, count, and buffer identity");
+        }
+
+        // ---- O: Software executes immediately -- later buffer writes cannot rewrite a done draw -
+        {
+            DynamicIndexBuffer mutableIb(dev, IndexElementSize::SixteenBits, 12,
+                                         BufferUsage::None);
+            mutableIb.SetData(identity16.data(), 0, 12, SetDataOptions::Discard);
+
+            dev.Clear(Color::Black);
+            DrawRange(dev, fx, vbA, mutableIb, 0, 0, 12, 0, 1);      // slot 0, from {0,1,2}
+
+            // Rewrite the same handle so its first three elements now select slot 3, then draw a
+            // different range from the new contents. The completed draw above must not change.
+            std::array<std::uint16_t, 12> rewritten = identity16;
+            rewritten[0] = 9; rewritten[1] = 10; rewritten[2] = 11;
+            mutableIb.SetData(rewritten.data(), 0, 12, SetDataOptions::Discard);
+            DrawRange(dev, fx, vbA, mutableIb, 0, 0, 12, 3, 1);      // slot 1, from {3,4,5}
+
+            CheckScene(dev, kBBW, kBBH, Lit(colorsA, {0, 1}),
+                       "O1: an index update after a completed draw does not rewrite its pixels");
+
+            // Two independently created buffers holding the same bytes must not alias.
+            IndexBuffer twinA(dev, IndexElementSize::SixteenBits, 12, BufferUsage::None);
+            IndexBuffer twinB(dev, IndexElementSize::SixteenBits, 12, BufferUsage::None);
+            twinA.SetData(identity16.data(), 12);
+            twinB.SetData(identity16.data(), 12);
+            twinB.SetData(rewritten.data(), 12);
+            dev.Clear(Color::Black);
+            DrawRange(dev, fx, vbA, twinA, 0, 0, 12, 0, 1);          // twinA still selects slot 0
+            CheckScene(dev, kBBW, kBBH, Lit(colorsA, {0}),
+                       "O2: two independent index buffers with equal bytes do not alias");
+
+            // A scoped buffer's pixels survive its destruction (immediate CPU execution).
+            dev.Clear(Color::Black);
+            {
+                IndexBuffer scoped(dev, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+                const std::array<std::uint16_t, 3> scopedIndices{6, 7, 8};
+                scoped.SetData(scopedIndices.data(), 3);
+                DrawRange(dev, fx, vbA, scoped, 0, 0, 12, 0, 1);
+            }
+            CheckScene(dev, kBBW, kBBH, Lit(colorsA, {2}),
+                       "O3: pixels survive the destruction of the buffers that produced them");
         }
 
         // ---- I: DrawUserIndexedPrimitives remains the zero-offset oracle ----------------------
