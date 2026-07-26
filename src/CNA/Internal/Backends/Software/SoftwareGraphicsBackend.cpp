@@ -1,11 +1,14 @@
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Internal::Backends::Software
 {
@@ -1055,6 +1058,103 @@ namespace CNA::Internal::Backends::Software
                 }
             }
         }
+
+        // ---- REMED-GFX-110: indexed addressing and bounds ----
+        //
+        // Shared by both CPU indexed raster paths so they cannot drift apart again. The public
+        // contract reconciled by REMED-GFX-106 is:
+        //
+        //   consumed element  = startIndex + localIndex          (an ELEMENT offset, never bytes)
+        //   decoded index     = 16- or 32-bit value at that element, per the buffer's own width
+        //   fetched vertex    = decoded index + baseVertex       (added exactly once)
+        //
+        // minVertexIndex/numVertices are validation hints: they never add to a decoded index,
+        // never replace startIndex, and never narrow the vertices an index legitimately reaches.
+
+        /// Exact topology-derived consumed index count, computed in 64-bit so an extreme
+        /// primitiveCount cannot wrap. Returns -1 for an unrecognized topology.
+        std::int64_t IndexedElementCount(PrimitiveType primitive, int primitiveCount)
+        {
+            const std::int64_t count = primitiveCount;
+            switch (primitive)
+            {
+                case PrimitiveType::TriangleList:  return count * 3;
+                case PrimitiveType::TriangleStrip: return count + 2;
+                case PrimitiveType::LineList:      return count * 2;
+                case PrimitiveType::LineStrip:     return count + 1;
+                case PrimitiveType::PointListEXT:  return count;
+                default:                           return -1;
+            }
+        }
+
+        /// Reads one index element at its own declared width. `element` is an element ordinal,
+        /// never a byte offset -- the byte position is derived from the width here and nowhere else.
+        std::uint32_t DecodeIndexElement(const std::uint8_t* indexBase, bool thirtyTwoBit,
+                                         std::int64_t element)
+        {
+            if (thirtyTwoBit)
+            {
+                std::uint32_t value;
+                std::memcpy(&value,
+                            indexBase + static_cast<std::size_t>(element) * sizeof(std::uint32_t),
+                            sizeof(std::uint32_t));
+                return value;
+            }
+            std::uint16_t value;
+            std::memcpy(&value,
+                        indexBase + static_cast<std::size_t>(element) * sizeof(std::uint16_t),
+                        sizeof(std::uint16_t));
+            return value;
+        }
+
+        /// Validates the complete consumed range -- including every decoded vertex address --
+        /// before a single vertex byte is read, so an out-of-range index can never form an
+        /// invalid pointer into the CPU vertex storage. All arithmetic is 64-bit, so neither a
+        /// large primitiveCount nor an index near UINT32_MAX can wrap into an apparently valid
+        /// address. Throws the public CNA range exception rather than any implementation type.
+        void ValidateIndexedAddressing(const std::uint8_t* indexBase, bool thirtyTwoBit,
+                                       int availableIndexCount, int availableVertexCount,
+                                       std::int64_t consumedIndexCount, int startIndex,
+                                       int baseVertex)
+        {
+            if (startIndex < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "startIndex", std::to_string(startIndex),
+                    "startIndex must not be negative.");
+            }
+            // CNA's public contract rejects a negative baseVertex before backend dispatch; the
+            // CPU paths address real host storage, so they re-assert it rather than trust it.
+            if (baseVertex < 0)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "baseVertex", std::to_string(baseVertex),
+                    "baseVertex must not be negative.");
+            }
+            if (startIndex > availableIndexCount ||
+                consumedIndexCount > static_cast<std::int64_t>(availableIndexCount) - startIndex)
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "startIndex", std::to_string(startIndex),
+                    "The requested primitive range exceeds the bound index buffer.");
+            }
+            for (std::int64_t local = 0; local < consumedIndexCount; ++local)
+            {
+                const std::int64_t vertexIndex =
+                    static_cast<std::int64_t>(
+                        DecodeIndexElement(indexBase, thirtyTwoBit, startIndex + local)) +
+                    baseVertex;
+                if (vertexIndex < 0 || vertexIndex >= availableVertexCount)
+                {
+                    throw System::ArgumentOutOfRangeException(
+                        "baseVertex", std::to_string(baseVertex),
+                        "Index element " + std::to_string(startIndex + local) +
+                            " plus baseVertex addresses vertex " + std::to_string(vertexIndex) +
+                            ", outside the bound vertex buffer of " +
+                            std::to_string(availableVertexCount) + " vertices.");
+                }
+            }
+        }
     }
 
     // ---- SoftwareFramebuffer ----
@@ -1793,9 +1893,6 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedColoredPrimitives: primitiveCount must be > 0");
         if (primitive != PrimitiveType::TriangleList)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedColoredPrimitives: only TriangleList is supported in v1");
-        if (primitiveCount * 3 > ib.GetIndexCount())
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend::DrawIndexedColoredPrimitives: primitiveCount needs more indices than the bound buffer has");
 
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferBackend&>(ib);
@@ -1803,6 +1900,15 @@ namespace CNA::Internal::Backends::Software
         const std::size_t stride = swVb.Stride();
         const std::uint8_t* ibBase = swIb.Data().data();
         const bool thirtyTwoBit = swIb.IsThirtyTwoBit();
+
+        // REMED-GFX-110: this entry point carries no GpuDrawParams, so its contract is a complete
+        // buffer draw -- first element zero, no base addend. It still validates the exact
+        // topology-derived range and every decoded vertex address through the shared helper.
+        constexpr int kStartIndex = 0;
+        constexpr int kBaseVertex = 0;
+        const std::int64_t consumedIndexCount = IndexedElementCount(primitive, primitiveCount);
+        ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(), vb.GetVertexCount(),
+                                  consumedIndexCount, kStartIndex, kBaseVertex);
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
@@ -1823,16 +1929,13 @@ namespace CNA::Internal::Backends::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
-        const auto readIndex = [&](int i) -> std::uint32_t {
-            if (thirtyTwoBit)
-            {
-                std::uint32_t v;
-                std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint32_t), sizeof(std::uint32_t));
-                return v;
-            }
-            std::uint16_t v;
-            std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint16_t), sizeof(std::uint16_t));
-            return v;
+        // REMED-GFX-110: element = startIndex + local (never a byte offset), vertex = decoded
+        // index + baseVertex (added exactly once). Every address below was validated above.
+        const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
+            const std::int64_t vertexIndex =
+                static_cast<std::int64_t>(
+                    DecodeIndexElement(ibBase, thirtyTwoBit, kStartIndex + local)) + kBaseVertex;
+            return vbBase + static_cast<std::size_t>(vertexIndex) * stride;
         };
 
         for (int i = 0; i < primitiveCount; ++i)
@@ -1840,8 +1943,7 @@ namespace CNA::Internal::Backends::Software
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint32_t idx = readIndex(i * 3 + k);
-                const std::uint8_t* raw = vbBase + static_cast<std::size_t>(idx) * stride;
+                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
                 cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
 
@@ -1969,9 +2071,6 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: dualTexture=true but texture1 is null");
         if (params.envMapping && params.envMap == nullptr)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: envMapping=true but envMap is null");
-        if (primitiveCount * 3 > ib.GetIndexCount())
-            throw std::runtime_error(
-                "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: primitiveCount needs more indices than the bound buffer has");
 
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferBackend&>(ib);
@@ -1984,6 +2083,15 @@ namespace CNA::Internal::Backends::Software
         const std::uint8_t* vbBase = swVb.Data().data();
         const std::uint8_t* ibBase = swIb.Data().data();
         const bool thirtyTwoBit = swIb.IsThirtyTwoBit();
+
+        // REMED-GFX-110: this path receives the public startIndex/baseVertex. Both were previously
+        // dropped, so every indexed draw rendered the element-zero prefix of the bound buffers.
+        // minVertexIndex/numVertices stay hints -- they are deliberately not consulted here.
+        const int startIndex = params.startIndex;
+        const int baseVertex = params.baseVertex;
+        const std::int64_t consumedIndexCount = IndexedElementCount(primitive, primitiveCount);
+        ValidateIndexedAddressing(ibBase, thirtyTwoBit, ib.GetIndexCount(), vb.GetVertexCount(),
+                                  consumedIndexCount, startIndex, baseVertex);
 
         const Matrix combined = world * view * projection;
         SoftwareFramebuffer& fb = CurrentFramebuffer();
@@ -2004,16 +2112,13 @@ namespace CNA::Internal::Backends::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 scissorTestEnable_, scX, scY, scW, scH);
 
-        const auto readIndex = [&](int i) -> std::uint32_t {
-            if (thirtyTwoBit)
-            {
-                std::uint32_t val;
-                std::memcpy(&val, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint32_t), sizeof(std::uint32_t));
-                return val;
-            }
-            std::uint16_t val;
-            std::memcpy(&val, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint16_t), sizeof(std::uint16_t));
-            return val;
+        // REMED-GFX-110: element = startIndex + local (never a byte offset), vertex = decoded
+        // index + baseVertex (added exactly once). Every address below was validated above.
+        const auto fetchVertex = [&](std::int64_t local) -> const std::uint8_t* {
+            const std::int64_t vertexIndex =
+                static_cast<std::int64_t>(
+                    DecodeIndexElement(ibBase, thirtyTwoBit, startIndex + local)) + baseVertex;
+            return vbBase + static_cast<std::size_t>(vertexIndex) * stride;
         };
 
         for (int i = 0; i < primitiveCount; ++i)
@@ -2021,8 +2126,7 @@ namespace CNA::Internal::Backends::Software
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
-                const std::uint32_t idx = readIndex(i * 3 + k);
-                const std::uint8_t* raw = vbBase + static_cast<std::size_t>(idx) * stride;
+                const std::uint8_t* raw = fetchVertex(static_cast<std::int64_t>(i) * 3 + k);
                 cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
