@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -606,6 +607,38 @@ namespace Microsoft::Xna::Framework::Graphics
                 proj  = m->getProjectionProperty();
             }
         }
+
+        int CheckedIndexedElementCount(PrimitiveType primitiveType, int primitiveCount)
+        {
+            std::int64_t count = 0;
+            switch (primitiveType)
+            {
+            case PrimitiveType::TriangleList:
+                count = static_cast<std::int64_t>(primitiveCount) * 3;
+                break;
+            case PrimitiveType::TriangleStrip:
+                count = static_cast<std::int64_t>(primitiveCount) + 2;
+                break;
+            case PrimitiveType::LineList:
+                count = static_cast<std::int64_t>(primitiveCount) * 2;
+                break;
+            case PrimitiveType::LineStrip:
+                count = static_cast<std::int64_t>(primitiveCount) + 1;
+                break;
+            case PrimitiveType::PointListEXT:
+                count = primitiveCount;
+                break;
+            default:
+                throw System::InvalidOperationException("Unrecognized primitive type!");
+            }
+            if (count > std::numeric_limits<int>::max())
+            {
+                throw System::ArgumentOutOfRangeException(
+                    "primitiveCount", std::to_string(primitiveCount),
+                    "The requested primitive range is too large.");
+            }
+            return static_cast<int>(count);
+        }
     }
 
     void GraphicsDevice::DrawPrimitives(PrimitiveType primitiveType, int vertexStart, int primitiveCount)
@@ -662,7 +695,8 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegative(minVertexIndex, "minVertexIndex");
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
 
-        const int consumedIndexCount = PrimitiveVerts(primitiveType, primitiveCount);
+        const int consumedIndexCount =
+            CheckedIndexedElementCount(primitiveType, primitiveCount);
         const int availableIndexCount = currentIndexBuffer_->GetBackend().GetIndexCount();
         if (startIndex > availableIndexCount ||
             consumedIndexCount > availableIndexCount - startIndex)
