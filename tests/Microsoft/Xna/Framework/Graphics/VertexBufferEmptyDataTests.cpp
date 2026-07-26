@@ -7,29 +7,58 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
+#include <vector>
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/ObjectDisposedException.hpp"
+
+#ifdef CNA_BACKEND_EASYGL
+#include "CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.hpp"
+#endif
+
+#ifdef CNA_BACKEND_WEBGPU
+#include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
+#endif
 
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
+using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DynamicVertexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::IndexElementSize;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
@@ -37,6 +66,10 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture;
+using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
+using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTextureSkinned;
+using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 
 namespace
 {
@@ -62,6 +95,68 @@ namespace
             });
     }
 
+    VertexDeclaration PositionTextureDeclaration()
+    {
+        return VertexDeclaration(
+            20,
+            {
+                VertexElement(
+                    0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(
+                    12, VertexElementFormat::Vector2,
+                    VertexElementUsage::TextureCoordinate, 0),
+            });
+    }
+
+    VertexDeclaration PositionColorTextureDeclaration()
+    {
+        return VertexDeclaration(
+            24,
+            {
+                VertexElement(
+                    0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(
+                    12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+                VertexElement(
+                    16, VertexElementFormat::Vector2,
+                    VertexElementUsage::TextureCoordinate, 0),
+            });
+    }
+
+    VertexDeclaration PositionNormalTextureDeclaration()
+    {
+        return VertexDeclaration(
+            32,
+            {
+                VertexElement(
+                    0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(
+                    12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(
+                    24, VertexElementFormat::Vector2,
+                    VertexElementUsage::TextureCoordinate, 0),
+            });
+    }
+
+    VertexDeclaration SkinnedDeclaration()
+    {
+        return VertexDeclaration(
+            52,
+            {
+                VertexElement(
+                    0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(
+                    12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+                VertexElement(
+                    24, VertexElementFormat::Vector2,
+                    VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(
+                    32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+                VertexElement(
+                    48, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0),
+            });
+    }
+
     class VertexBufferEmptyDataTest : public ::testing::Test
     {
     protected:
@@ -73,6 +168,53 @@ namespace
                 GTEST_SKIP() << "Backend explicitly does not support vertex buffers";
         }
     };
+
+#ifdef CNA_BACKEND_WEBGPU
+    struct WebGpuErrorScopeState
+    {
+        bool completed = false;
+        WGPUPopErrorScopeStatus status = WGPUPopErrorScopeStatus_Error;
+        WGPUErrorType type = WGPUErrorType_Unknown;
+        std::string message;
+    };
+
+    void OnWebGpuErrorScope(WGPUPopErrorScopeStatus status,
+                            WGPUErrorType type,
+                            WGPUStringView message,
+                            void* userdata1,
+                            void*)
+    {
+        auto& state = *static_cast<WebGpuErrorScopeState*>(userdata1);
+        state.status = status;
+        state.type = type;
+        if (message.data != nullptr)
+        {
+            if (message.length == WGPU_STRLEN)
+                state.message = message.data;
+            else
+                state.message.assign(message.data, message.length);
+        }
+        state.completed = true;
+    }
+
+    void PopAndExpectClean(
+        CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend& backend)
+    {
+        WebGpuErrorScopeState state;
+        WGPUPopErrorScopeCallbackInfo callback{};
+        callback.mode = WGPUCallbackMode_AllowProcessEvents;
+        callback.callback = OnWebGpuErrorScope;
+        callback.userdata1 = &state;
+        wgpuDevicePopErrorScope(backend.Device(), callback);
+        for (int attempt = 0; attempt < 10000 && !state.completed; ++attempt)
+            wgpuInstanceProcessEvents(backend.Instance());
+
+        ASSERT_TRUE(state.completed) << "wgpu-native did not complete the error scope";
+        EXPECT_EQ(WGPUPopErrorScopeStatus_Success, state.status) << state.message;
+        EXPECT_EQ(WGPUErrorType_NoError, state.type) << state.message;
+        EXPECT_TRUE(state.message.empty()) << state.message;
+    }
+#endif
 }
 
 TEST_F(VertexBufferEmptyDataTest, ZeroCapacityConstructionPreservesLogicalCapacity)
@@ -108,29 +250,128 @@ TEST_F(VertexBufferEmptyDataTest, ZeroCountAcceptsNullForStaticAndDynamicBuffers
         SetDataOptions::Discard));
 }
 
-TEST_F(VertexBufferEmptyDataTest, EmptyRawAndTypedUploadsDoNotReplaceRealData)
+TEST_F(VertexBufferEmptyDataTest, EmptyVectorAndSourceEndSlicesAreTrueNoOps)
+{
+    RequireVertexBuffers();
+
+    std::vector<VertexPositionColor> emptyTyped;
+    std::vector<std::uint8_t> emptyRaw;
+    const std::array<VertexPositionColor, 2> source{
+        VertexPositionColor(Vector3(1.0f, 2.0f, 3.0f), Color(4, 5, 6, 7)),
+        VertexPositionColor(Vector3(8.0f, 9.0f, 10.0f), Color(11, 12, 13, 14)),
+    };
+    VertexBuffer typedBuffer(device, PositionColorDeclaration(), 2, BufferUsage::None);
+    DynamicVertexBuffer dynamicBuffer(
+        device, PositionColorDeclaration(), 2, BufferUsage::None);
+    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 2, BufferUsage::None);
+
+    EXPECT_NO_THROW(typedBuffer.SetData(emptyTyped.data(), 0));
+    EXPECT_NO_THROW(typedBuffer.SetData(emptyTyped.data(), 0, 0));
+    EXPECT_NO_THROW(dynamicBuffer.SetData(
+        emptyTyped.data(), 0, 0, SetDataOptions::Discard));
+    EXPECT_NO_THROW(rawBuffer.SetDataRaw(emptyRaw.data(), 0, 13));
+
+    typedBuffer.SetData(source.data(), static_cast<int>(source.size()));
+    dynamicBuffer.SetData(
+        source.data(), 0, static_cast<int>(source.size()), SetDataOptions::Discard);
+    ASSERT_EQ(2, typedBuffer.GetBackend().GetVertexCount());
+    ASSERT_EQ(2, dynamicBuffer.GetBackend().GetVertexCount());
+
+    // A zero-length slice whose source start is exactly one-past-the-source end is valid.
+    EXPECT_NO_THROW(typedBuffer.SetData(
+        source.data(), static_cast<int>(source.size()), 0));
+    EXPECT_NO_THROW(dynamicBuffer.SetData(
+        source.data(), static_cast<int>(source.size()), 0,
+        SetDataOptions::NoOverwrite));
+    EXPECT_NO_THROW(typedBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 0));
+    EXPECT_EQ(2, typedBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(2, dynamicBuffer.GetBackend().GetVertexCount());
+
+    std::array<VertexPositionColor, 2> staticResult{};
+    std::array<VertexPositionColor, 2> dynamicResult{};
+    typedBuffer.GetData(staticResult.data(), 2);
+    dynamicBuffer.GetData(dynamicResult.data(), 2);
+    EXPECT_EQ(source, staticResult);
+    EXPECT_EQ(source, dynamicResult);
+}
+
+TEST_F(VertexBufferEmptyDataTest, EmptyUploadBetweenAAndBDoesNotClearEitherBufferKind)
+{
+    RequireVertexBuffers();
+
+    const std::array<VertexPositionColor, 3> uploadA{
+        VertexPositionColor(Vector3(1.0f, 2.0f, 3.0f), Color(4, 5, 6, 7)),
+        VertexPositionColor(Vector3(8.0f, 9.0f, 10.0f), Color(11, 12, 13, 14)),
+        VertexPositionColor(Vector3(15.0f, 16.0f, 17.0f), Color(18, 19, 20, 21)),
+    };
+    const std::array<VertexPositionColor, 4> sourceB{
+        VertexPositionColor(Vector3(-1.0f, -2.0f, -3.0f), Color(1, 2, 3, 4)),
+        VertexPositionColor(Vector3(22.0f, 23.0f, 24.0f), Color(25, 26, 27, 28)),
+        VertexPositionColor(Vector3(29.0f, 30.0f, 31.0f), Color(32, 33, 34, 35)),
+        VertexPositionColor(Vector3(36.0f, 37.0f, 38.0f), Color(39, 40, 41, 42)),
+    };
+    const std::array<VertexPositionColor, 3> uploadB{
+        sourceB[1], sourceB[2], sourceB[3],
+    };
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 3, BufferUsage::None);
+    DynamicVertexBuffer dynamicBuffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+
+    staticBuffer.SetData(uploadA.data(), 3);
+    dynamicBuffer.SetData(uploadA.data(), 0, 3, SetDataOptions::Discard);
+    staticBuffer.SetData(uploadA.data(), 3, 0);
+    dynamicBuffer.SetData(
+        static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+        SetDataOptions::NoOverwrite);
+
+    std::array<VertexPositionColor, 3> result{};
+    staticBuffer.GetData(result.data(), 3);
+    EXPECT_EQ(uploadA, result);
+    dynamicBuffer.GetData(result.data(), 3);
+    EXPECT_EQ(uploadA, result);
+
+    // startIndex is a source-array index. CNA's current overloads always replace from
+    // implicit destination byte offset zero; GFX-025 owns adding destination-offset APIs.
+    staticBuffer.SetData(sourceB.data(), 1, 3);
+    dynamicBuffer.SetData(sourceB.data(), 1, 3, SetDataOptions::NoOverwrite);
+    staticBuffer.GetData(result.data(), 3);
+    EXPECT_EQ(uploadB, result);
+    dynamicBuffer.GetData(result.data(), 3);
+    EXPECT_EQ(uploadB, result);
+    EXPECT_EQ(3, staticBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(3, dynamicBuffer.GetBackend().GetVertexCount());
+}
+
+TEST_F(VertexBufferEmptyDataTest, NullIsLegalOnlyForEmptyUploads)
 {
     RequireVertexBuffers();
 
     const VertexPositionColor vertex(Vector3(1.0f, 2.0f, 3.0f), Color(4, 5, 6, 7));
-    VertexBuffer typedBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
-    typedBuffer.SetData(&vertex, 1);
-    ASSERT_EQ(1, typedBuffer.GetBackend().GetVertexCount());
-
-    EXPECT_NO_THROW(typedBuffer.SetData(&vertex, 0));
-    EXPECT_EQ(1, typedBuffer.GetBackend().GetVertexCount());
-
-    const std::array<std::uint8_t, 13> raw{
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
+    DynamicVertexBuffer dynamicBuffer(
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
     VertexBuffer rawBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
-    rawBuffer.SetDataRaw(raw.data(), 1, 13);
-    ASSERT_EQ(1, rawBuffer.GetBackend().GetVertexCount());
 
-    EXPECT_NO_THROW(rawBuffer.SetDataRaw(raw.data(), 0, 13));
-    EXPECT_EQ(1, rawBuffer.GetBackend().GetVertexCount());
+    EXPECT_THROW(
+        staticBuffer.SetData(static_cast<const VertexPositionColor*>(nullptr), 1),
+        System::ArgumentNullException);
+    EXPECT_THROW(
+        dynamicBuffer.SetData(
+            static_cast<const VertexPositionColor*>(nullptr), 0, 1,
+            SetDataOptions::NoOverwrite),
+        System::ArgumentNullException);
+    EXPECT_THROW(
+        rawBuffer.SetDataRaw(nullptr, 1, 13),
+        System::ArgumentNullException);
+
+    EXPECT_NO_THROW(staticBuffer.SetData(&vertex, 0));
+    EXPECT_NO_THROW(dynamicBuffer.SetData(
+        static_cast<const VertexPositionColor*>(nullptr), 1, 0,
+        SetDataOptions::Discard));
+    EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 13));
 }
 
-TEST_F(VertexBufferEmptyDataTest, NonemptyUploadIntoZeroCapacityIsRejected)
+TEST_F(VertexBufferEmptyDataTest, LogicalEndAndBeyondCapacityRemainDistinct)
 {
     RequireVertexBuffers();
 
@@ -138,12 +379,316 @@ TEST_F(VertexBufferEmptyDataTest, NonemptyUploadIntoZeroCapacityIsRejected)
     VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
     DynamicVertexBuffer dynamicBuffer(
         device, PositionColorDeclaration(), 0, BufferUsage::None);
+    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 0, BufferUsage::None);
 
-    EXPECT_THROW(
-        staticBuffer.SetData(&vertex, 1), System::ArgumentOutOfRangeException);
-    EXPECT_THROW(
-        dynamicBuffer.SetData(&vertex, 0, 1, SetDataOptions::NoOverwrite),
-        System::ArgumentOutOfRangeException);
+    // These overloads have an implicit destination byte offset of zero. For a zero-capacity
+    // buffer that offset is exactly the logical end, where an empty range is valid.
+    EXPECT_NO_THROW(staticBuffer.SetData(
+        static_cast<const VertexPositionColor*>(nullptr), 0));
+    EXPECT_NO_THROW(dynamicBuffer.SetData(
+        static_cast<const VertexPositionColor*>(nullptr), 0, 0,
+        SetDataOptions::Discard));
+    EXPECT_NO_THROW(rawBuffer.SetDataRaw(nullptr, 0, 13));
+
+    // A real range extends beyond that logical end even if a native backend pads its allocation.
+    EXPECT_THROW(staticBuffer.SetData(&vertex, 1),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     &vertex, 0, 1, SetDataOptions::NoOverwrite),
+                 System::ArgumentOutOfRangeException);
+    const std::array<std::uint8_t, 13> raw{};
+    EXPECT_THROW(rawBuffer.SetDataRaw(raw.data(), 1, 13),
+                 System::ArgumentOutOfRangeException);
     EXPECT_EQ(0, staticBuffer.getVertexCountProperty());
     EXPECT_EQ(0, dynamicBuffer.getVertexCountProperty());
+    EXPECT_EQ(0, rawBuffer.getVertexCountProperty());
 }
+
+TEST_F(VertexBufferEmptyDataTest, EmptyRangePreservesPublicValidationOrdering)
+{
+    RequireVertexBuffers();
+
+    const VertexPositionColor vertex(Vector3(1.0f, 2.0f, 3.0f), Color(4, 5, 6, 7));
+    VertexBuffer buffer(device, PositionColorDeclaration(), 1, BufferUsage::None);
+    DynamicVertexBuffer dynamicBuffer(
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
+
+    // Source ranges and declarations are checked before the empty return.
+    EXPECT_THROW(buffer.SetData(&vertex, -1, 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(buffer.SetData(&vertex, -1),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     &vertex, -1, 0, SetDataOptions::Discard),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW((VertexBuffer(
+                     device, PositionColorDeclaration(), -1, BufferUsage::None)),
+                 System::ArgumentOutOfRangeException);
+
+    VertexBuffer rawBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
+    EXPECT_THROW(rawBuffer.SetDataRaw(nullptr, 0, 0),
+                 System::ArgumentOutOfRangeException);
+    EXPECT_THROW(rawBuffer.SetDataRaw(nullptr, 0, 16),
+                 System::ArgumentException);
+
+    const VertexDeclaration incompatible(
+        16,
+        {
+            VertexElement(
+                12, VertexElementFormat::Vector2,
+                VertexElementUsage::TextureCoordinate, 0),
+        });
+    VertexBuffer incompatibleBuffer(device, incompatible, 1, BufferUsage::None);
+    EXPECT_THROW(incompatibleBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), 0),
+                 System::ArgumentException);
+}
+
+TEST_F(VertexBufferEmptyDataTest, DisposedBuffersRejectEmptyUploadsBeforeNoOp)
+{
+    RequireVertexBuffers();
+
+    VertexBuffer staticBuffer(device, PositionColorDeclaration(), 0, BufferUsage::None);
+    DynamicVertexBuffer dynamicBuffer(
+        device, PositionColorDeclaration(), 0, BufferUsage::None);
+    staticBuffer.Dispose();
+    staticBuffer.Dispose();
+    dynamicBuffer.Dispose();
+    dynamicBuffer.Dispose();
+
+    EXPECT_FALSE(staticBuffer.HasBackend());
+    EXPECT_FALSE(dynamicBuffer.HasBackend());
+    EXPECT_THROW(staticBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), -1, 0),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(dynamicBuffer.SetData(
+                     static_cast<const VertexPositionColor*>(nullptr), -1, 0,
+                     SetDataOptions::Discard),
+                 System::ObjectDisposedException);
+}
+
+TEST_F(VertexBufferEmptyDataTest, NonemptyTypedUploadsCoverCompactLayoutsAndSourceSlices)
+{
+    RequireVertexBuffers();
+
+    const std::array<VertexPositionTexture, 3> vpt{
+        VertexPositionTexture(Vector3(-1, -1, 0), Vector2(0, 0)),
+        VertexPositionTexture(Vector3(1, -1, 0), Vector2(1, 0)),
+        VertexPositionTexture(Vector3(0, 1, 0), Vector2(0.5f, 1)),
+    };
+    const std::array<VertexPositionColorTexture, 3> vpct{
+        VertexPositionColorTexture(
+            Vector3(-1, -1, 0), Color(255, 0, 0, 255), Vector2(0, 0)),
+        VertexPositionColorTexture(
+            Vector3(1, -1, 0), Color(0, 255, 0, 255), Vector2(1, 0)),
+        VertexPositionColorTexture(
+            Vector3(0, 1, 0), Color(0, 0, 255, 255), Vector2(0.5f, 1)),
+    };
+    const std::array<VertexPositionNormalTexture, 3> vpnt{
+        VertexPositionNormalTexture(
+            Vector3(-1, -1, 0), Vector3(0, 0, 1), Vector2(0, 0)),
+        VertexPositionNormalTexture(
+            Vector3(1, -1, 0), Vector3(0, 0, 1), Vector2(1, 0)),
+        VertexPositionNormalTexture(
+            Vector3(0, 1, 0), Vector3(0, 0, 1), Vector2(0.5f, 1)),
+    };
+    const std::array<VertexPositionNormalTextureSkinned, 2> skinned{
+        VertexPositionNormalTextureSkinned(
+            Vector3(1, 2, 3), Vector3(0, 0, 1), Vector2(0, 0),
+            Vector4(1, 0, 0, 0), std::array<std::uint8_t, 4>{1, 2, 3, 4}),
+        VertexPositionNormalTextureSkinned(
+            Vector3(4, 5, 6), Vector3(0, 1, 0), Vector2(1, 1),
+            Vector4(0.25f, 0.25f, 0.25f, 0.25f),
+            std::array<std::uint8_t, 4>{5, 6, 7, 8}),
+    };
+
+    VertexBuffer vptBuffer(device, PositionTextureDeclaration(), 2, BufferUsage::None);
+    VertexBuffer vpctBuffer(
+        device, PositionColorTextureDeclaration(), 2, BufferUsage::None);
+    VertexBuffer vpntBuffer(
+        device, PositionNormalTextureDeclaration(), 2, BufferUsage::None);
+    VertexBuffer skinnedBuffer(device, SkinnedDeclaration(), 1, BufferUsage::None);
+    vptBuffer.SetData(vpt.data(), 1, 2);
+    vpctBuffer.SetData(vpct.data(), 1, 2);
+    vpntBuffer.SetData(vpnt.data(), 1, 2);
+    skinnedBuffer.SetData(skinned.data(), 1, 1);
+
+    std::array<VertexPositionTexture, 2> vptResult{};
+    std::array<VertexPositionColorTexture, 2> vpctResult{vpct[0], vpct[0]};
+    std::array<VertexPositionNormalTexture, 2> vpntResult{};
+    VertexPositionNormalTextureSkinned skinnedResult;
+    vptBuffer.GetData(vptResult.data(), 2);
+    vpctBuffer.GetData(vpctResult.data(), 2);
+    vpntBuffer.GetData(vpntResult.data(), 2);
+    skinnedBuffer.GetData(&skinnedResult, 1);
+    EXPECT_EQ((std::array<VertexPositionTexture, 2>{vpt[1], vpt[2]}), vptResult);
+    EXPECT_EQ(
+        (std::array<VertexPositionColorTexture, 2>{vpct[1], vpct[2]}), vpctResult);
+    EXPECT_EQ(
+        (std::array<VertexPositionNormalTexture, 2>{vpnt[1], vpnt[2]}), vpntResult);
+    EXPECT_EQ(skinned[1], skinnedResult);
+    EXPECT_EQ(2, vptBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(2, vpctBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(2, vpntBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(1, skinnedBuffer.GetBackend().GetVertexCount());
+}
+
+TEST_F(VertexBufferEmptyDataTest, DynamicPartialUploadKeepsExactCompactShadow)
+{
+    RequireVertexBuffers();
+
+    const std::array<VertexPositionColorTexture, 3> source{
+        VertexPositionColorTexture(
+            Vector3(-1, -1, 0), Color(255, 0, 0, 255), Vector2(0, 0)),
+        VertexPositionColorTexture(
+            Vector3(1, -1, 0), Color(0, 255, 0, 255), Vector2(1, 0)),
+        VertexPositionColorTexture(
+            Vector3(0, 1, 0), Color(0, 0, 255, 255), Vector2(0.5f, 1)),
+    };
+    DynamicVertexBuffer buffer(
+        device, PositionColorTextureDeclaration(), 2, BufferUsage::None);
+    buffer.SetData(source.data(), 1, 2, SetDataOptions::NoOverwrite);
+
+    std::array<VertexPositionColorTexture, 2> result{source[0], source[0]};
+    buffer.GetData(result.data(), 2);
+    EXPECT_EQ(
+        (std::array<VertexPositionColorTexture, 2>{source[1], source[2]}), result);
+    EXPECT_EQ(2, buffer.GetBackend().GetVertexCount());
+}
+
+TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptOddAndAlignedStrides)
+{
+    RequireVertexBuffers();
+
+    const std::array<std::uint8_t, 13> odd{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    const std::array<std::uint8_t, 16> aligned{
+        16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+    VertexBuffer oddBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
+    VertexBuffer alignedBuffer(
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
+    EXPECT_NO_THROW(oddBuffer.SetDataRaw(odd.data(), 1, 13));
+    EXPECT_NO_THROW(alignedBuffer.SetDataRaw(aligned.data(), 1, 16));
+    EXPECT_EQ(1, oddBuffer.GetBackend().GetVertexCount());
+    EXPECT_EQ(1, alignedBuffer.GetBackend().GetVertexCount());
+
+#ifdef CNA_BACKEND_EASYGL
+    auto* oddEasy =
+        dynamic_cast<CNA::Internal::Backends::EasyGL::EasyGLVertexBufferBackend*>(
+            &oddBuffer.GetBackend());
+    auto* alignedEasy =
+        dynamic_cast<CNA::Internal::Backends::EasyGL::EasyGLVertexBufferBackend*>(
+            &alignedBuffer.GetBackend());
+    ASSERT_NE(nullptr, oddEasy);
+    ASSERT_NE(nullptr, alignedEasy);
+    EXPECT_EQ(OddStrideDeclaration().GetVertexElements(),
+              oddEasy->GetDeclarationElements());
+    EXPECT_EQ(PositionColorDeclaration().GetVertexElements(),
+              alignedEasy->GetDeclarationElements());
+#endif
+}
+
+TEST_F(VertexBufferEmptyDataTest, UploadedVerticesSupportNormalAndIndexedDrawing)
+{
+    RequireVertexBuffers();
+
+    const std::array<VertexPositionColor, 3> vertices{
+        VertexPositionColor(Vector3(-0.5f, -0.5f, 0), Color(255, 0, 0, 255)),
+        VertexPositionColor(Vector3(0.5f, -0.5f, 0), Color(0, 255, 0, 255)),
+        VertexPositionColor(Vector3(0, 0.5f, 0), Color(0, 0, 255, 255)),
+    };
+    const std::array<std::uint32_t, 3> indices{0, 1, 2};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 3);
+    indexBuffer.SetData(indices.data(), 3);
+
+    BasicEffect effect(device);
+    effect.VertexColorEnabled = true;
+    effect.Apply();
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    EXPECT_NO_THROW(device.DrawPrimitives(
+        PrimitiveType::TriangleList, 0, 1));
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 3, 0, 1));
+    EXPECT_NO_THROW(device.Present());
+}
+
+#ifdef CNA_BACKEND_WEBGPU
+TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyOddAndAlignedUploads)
+{
+    RequireVertexBuffers();
+
+    auto* graphicsBackend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, graphicsBackend);
+    wgpuDevicePushErrorScope(graphicsBackend->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(graphicsBackend->Device(), WGPUErrorFilter_Validation);
+
+    VertexBuffer emptyBuffer(
+        device, OddStrideDeclaration(), 0, BufferUsage::None);
+    auto* emptyBackend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
+            &emptyBuffer.GetBackend());
+    ASSERT_NE(nullptr, emptyBackend);
+    ASSERT_EQ(nullptr, emptyBackend->Buffer());
+    ASSERT_TRUE(emptyBackend->ShadowData().empty());
+    emptyBuffer.SetDataRaw(nullptr, 0, 13);
+    EXPECT_EQ(nullptr, emptyBackend->Buffer());
+    EXPECT_TRUE(emptyBackend->ShadowData().empty());
+    EXPECT_EQ(0, emptyBackend->GetVertexCount());
+    EXPECT_EQ(0u, emptyBackend->Stride());
+
+    const std::array<std::uint8_t, 13> odd{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    VertexBuffer oddBuffer(device, OddStrideDeclaration(), 1, BufferUsage::None);
+    oddBuffer.SetDataRaw(odd.data(), 1, 13);
+    auto* oddBackend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
+            &oddBuffer.GetBackend());
+    ASSERT_NE(nullptr, oddBackend);
+    ASSERT_NE(nullptr, oddBackend->Buffer());
+    EXPECT_EQ(1, oddBackend->GetVertexCount());
+    EXPECT_EQ(13u, oddBackend->Stride());
+    EXPECT_EQ(std::vector<std::uint8_t>(odd.begin(), odd.end()),
+              oddBackend->ShadowData());
+    const auto oddShadow = oddBackend->ShadowData();
+    oddBuffer.SetDataRaw(nullptr, 0, 13);
+    EXPECT_EQ(oddShadow, oddBackend->ShadowData());
+    EXPECT_EQ(1, oddBackend->GetVertexCount());
+
+    const std::array<std::uint8_t, 16> aligned{};
+    VertexBuffer alignedBuffer(
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
+    alignedBuffer.SetDataRaw(aligned.data(), 1, 16);
+    auto* alignedBackend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
+            &alignedBuffer.GetBackend());
+    ASSERT_NE(nullptr, alignedBackend);
+    ASSERT_NE(nullptr, alignedBackend->Buffer());
+    EXPECT_EQ(1, alignedBackend->GetVertexCount());
+    EXPECT_EQ(16u, alignedBackend->Stride());
+    EXPECT_EQ(16u, alignedBackend->ShadowData().size());
+
+    const VertexPositionColor typed(
+        Vector3(1, 2, 3), Color(4, 5, 6, 7));
+    VertexBuffer typedBuffer(
+        device, PositionColorDeclaration(), 1, BufferUsage::None);
+    typedBuffer.SetData(&typed, 1);
+    auto* typedBackend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUVertexBufferBackend*>(
+            &typedBuffer.GetBackend());
+    ASSERT_NE(nullptr, typedBackend);
+    EXPECT_EQ(1, typedBackend->GetVertexCount());
+    EXPECT_EQ(16u, typedBackend->Stride());
+    EXPECT_EQ(16u, typedBackend->ShadowData().size());
+
+    PopAndExpectClean(*graphicsBackend);
+    PopAndExpectClean(*graphicsBackend);
+}
+#endif
