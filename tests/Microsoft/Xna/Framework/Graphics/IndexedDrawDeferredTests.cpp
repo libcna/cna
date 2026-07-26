@@ -389,6 +389,52 @@ TEST_F(IndexedDrawDeferredTest, PersistentDrawHonorsPositiveBaseVertex)
 }
 #endif
 
+TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths)
+{
+#ifdef CNA_BACKEND_SOFTWARE
+    GTEST_SKIP() << "Software v1 intentionally supports indexed TriangleList only";
+#else
+    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "Backend explicitly does not support indexed triangle strips";
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+
+    std::vector<VertexPositionColor> vertices;
+    AppendVertices(vertices, StripQuadAt(-0.5f, Color::Red));
+    AppendVertices(vertices, StripQuadAt(0.5f, Color::Blue));
+    const std::array<std::uint16_t, 4> indices16{0, 1, 2, 3};
+    const std::array<std::uint32_t, 4> indices32{4, 5, 6, 7};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 8, BufferUsage::None);
+    IndexBuffer buffer16(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    IndexBuffer buffer32(
+        device, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 8);
+    buffer16.SetData(indices16.data(), 4);
+    buffer32.SetData(indices32.data(), 4);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&buffer16);
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2));
+    device.SetIndexBuffer(&buffer32);
+    EXPECT_NO_THROW(device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 4, 4, 0, 2));
+
+#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
+    defined(CNA_BACKEND_D3D11)
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
+    ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
+#endif
+#endif
+}
+
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
     defined(CNA_BACKEND_D3D11) || defined(CNA_BACKEND_SOFTWARE)
