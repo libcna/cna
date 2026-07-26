@@ -1,5 +1,6 @@
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #include <bgfx/embedded_shader.h>
 #include <bx/math.h>
@@ -2643,6 +2644,61 @@ namespace CNA::Internal::Backends::Bgfx
         return 0;
     }
 
+    /// REMED-GFX-113: the exact vertex range a non-indexed draw owes, resolved once per draw.
+    /// `vertexStart` is a vertex-ELEMENT offset and the consumed count is topology-derived, so the
+    /// binding is [vertexStart, vertexStart + consumed). bgfx's whole-buffer setVertexBuffer
+    /// overload passes (0, UINT32_MAX) and then clamps to the buffer's own allocated size, which
+    /// silently widens every partial range into a whole-buffer draw -- hence the explicit range
+    /// here and the rejection (never a clamp) of a range that leaves the logical buffer.
+    struct BgfxVertexRange
+    {
+        uint32_t start = 0;
+        uint32_t count = 0;
+    };
+
+    static BgfxVertexRange ResolveNonIndexedVertexRange(
+        const BgfxVertexBufferBackend& vb, PrimitiveType primitive,
+        int primitiveCount, int vertexStart)
+    {
+        if (primitiveCount <= 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "primitiveCount must be greater than zero.");
+        }
+        if (vertexStart < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "vertexStart", std::to_string(vertexStart),
+                "vertexStart must not be negative.");
+        }
+        // 64-bit throughout: primitiveCount * 3 and vertexStart + consumed both overflow int for
+        // large public arguments, and an overflowed range must be rejected, not wrapped.
+        std::int64_t consumed = 0;
+        switch (primitive)
+        {
+        case PrimitiveType::TriangleList:
+            consumed = static_cast<std::int64_t>(primitiveCount) * 3; break;
+        case PrimitiveType::TriangleStrip:
+            consumed = static_cast<std::int64_t>(primitiveCount) + 2; break;
+        case PrimitiveType::LineList:
+            consumed = static_cast<std::int64_t>(primitiveCount) * 2; break;
+        case PrimitiveType::LineStrip:
+            consumed = static_cast<std::int64_t>(primitiveCount) + 1; break;
+        case PrimitiveType::PointListEXT:
+            consumed = primitiveCount; break;
+        }
+        const std::int64_t available = static_cast<std::int64_t>(vb.vertexCount);
+        if (vertexStart > available || consumed > available - static_cast<std::int64_t>(vertexStart))
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "The requested primitive range exceeds the bound vertex buffer.");
+        }
+        return BgfxVertexRange{
+            static_cast<uint32_t>(vertexStart), static_cast<uint32_t>(consumed)};
+    }
+
     static uint32_t IndexCountForPrimitives(PrimitiveType primitive, int primitiveCount)
     {
         switch (primitive)
@@ -2787,13 +2843,26 @@ namespace CNA::Internal::Backends::Bgfx
         float fogParams4[4] = { params.fogVector[0], params.fogVector[1], params.fogVector[2], params.fogVector[3] };
         bgfx::setUniform(fogParamsUnif_, fogParams4);
 
-        bgfx::setVertexBuffer(0, vb.handle);
-        vb.MarkSubmitted();
+        // REMED-GFX-113: bind exactly the requested vertex range. The range is resolved (and an
+        // out-of-buffer request rejected) before anything is submitted natively.
+        const BgfxVertexRange range = ResolveNonIndexedVertexRange(
+            vb, primitive, primitiveCount, params.vertexStart);
         // Task 766: see DrawColoredPrimitives above.
         bgfx::TransientIndexBuffer wireTib;
         const bool useWireframe = wireframe_
             && ExpandWireframeIndices(nullptr, primitive, primitiveCount, 0, 0,
                                       params.vertexStart, wireTib);
+        // The wireframe path already expresses the exact range through absolute expanded indices
+        // (ExpandWireframeIndices synthesizes vertexStart + local), so its vertex binding must
+        // still start at element zero for those indices to address the intended vertices.
+        const uint32_t bindStart = useWireframe ? 0u : range.start;
+        const uint32_t bindCount = useWireframe
+            ? static_cast<uint32_t>(vb.vertexCount)
+            : range.count;
+        bgfx::setVertexBuffer(0, vb.handle, bindStart, bindCount);
+        lastNonIndexedBindStartEXT_ = bindStart;
+        lastNonIndexedBindCountEXT_ = bindCount;
+        vb.MarkSubmitted();
         if (useWireframe) bgfx::setIndexBuffer(&wireTib);
         ApplyScissorOverride();
         bgfx::setStencil(stencilFront_, stencilBack_);

@@ -608,7 +608,11 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        int CheckedIndexedElementCount(PrimitiveType primitiveType, int primitiveCount)
+        /// Elements a draw consumes for `primitiveCount` primitives of `primitiveType`, computed in
+        /// 64-bit so an overflowing request is rejected instead of wrapping. Index elements for the
+        /// indexed entry points, vertex elements for the non-indexed ones — the XNA formulas are
+        /// the same for both.
+        int CheckedPrimitiveElementCount(PrimitiveType primitiveType, int primitiveCount)
         {
             std::int64_t count = 0;
             switch (primitiveType)
@@ -655,6 +659,21 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(primitiveCount, "primitiveCount");
         System::ArgumentOutOfRangeException::ThrowIfNegative(vertexStart, "vertexStart");
 
+        // REMED-GFX-113: vertexStart is a vertex-element offset and primitiveCount fixes the exact
+        // topology-derived vertex count, so the pair [vertexStart, vertexStart + consumed) must fit
+        // the bound buffer. Rejecting here keeps every backend's native binding an exact range: a
+        // request that leaves the buffer is an error, never a silently clamped or widened draw.
+        const int consumedVertexCount =
+            CheckedPrimitiveElementCount(primitiveType, primitiveCount);
+        const int availableVertexCount = currentVertexBuffer_->GetBackend().GetVertexCount();
+        if (vertexStart > availableVertexCount ||
+            consumedVertexCount > availableVertexCount - vertexStart)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "primitiveCount", std::to_string(primitiveCount),
+                "The requested primitive range exceeds the bound vertex buffer.");
+        }
+
         Matrix world, view, proj;
         ExtractMatrices(currentEffect_, world, view, proj);
         CNA::Internal::Backends::GpuDrawParams p;
@@ -696,7 +715,7 @@ namespace Microsoft::Xna::Framework::Graphics
         System::ArgumentOutOfRangeException::ThrowIfNegativeOrZero(numVertices, "numVertices");
 
         const int consumedIndexCount =
-            CheckedIndexedElementCount(primitiveType, primitiveCount);
+            CheckedPrimitiveElementCount(primitiveType, primitiveCount);
         const int availableIndexCount = currentIndexBuffer_->GetBackend().GetIndexCount();
         if (startIndex > availableIndexCount ||
             consumedIndexCount > availableIndexCount - startIndex)

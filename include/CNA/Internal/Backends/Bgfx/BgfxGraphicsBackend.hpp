@@ -558,6 +558,11 @@ namespace CNA::Internal::Backends::Bgfx
         // BLOCKED write-up), every 3D submit() call made while a query is active is routed through
         // bgfx's own submit(id, program, occlusionQuery, ...) overload instead of the plain one.
         bgfx::OcclusionQueryHandle activeOcclusionQuery_ = BGFX_INVALID_HANDLE;
+        // REMED-GFX-113: the (startVertex, numVertices) pair handed to the last non-indexed
+        // bgfx::setVertexBuffer call. bgfx exposes no way to read a submitted draw's stream range
+        // back, so the exact native binding is recorded here for the range regression to assert.
+        uint32_t lastNonIndexedBindStartEXT_ = 0;
+        uint32_t lastNonIndexedBindCountEXT_ = 0;
         // Callback registered at bgfx init — captures screenshot data for ReadBackbuffer
         BgfxCnaCallback readbackCallback_;
         // Temporary MRT framebuffer (created on SetRenderTargets with count > 1)

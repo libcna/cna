@@ -1161,14 +1161,16 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 }
 #endif
 
-#if defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_WEBGPU)
+#if defined(CNA_BACKEND_BGFX) || defined(CNA_BACKEND_EASYGL) || \
+    defined(CNA_BACKEND_WEBGPU)
 // Non-indexed point addressing: vertexStart selects the first consumed vertex and primitiveCount
 // limits the consumed range to exactly that many points.
 //
-// Bgfx is deliberately excluded: its non-indexed draws bind the whole bound vertex buffer and
-// ignore both vertexStart and primitiveCount for every topology (the Bgfx counterpart of
-// REMED-GFX-020/REMED-GFX-060, recorded separately as REMED-GFX-113). That is an addressing
-// defect, not a topology defect, and is not corrected here.
+// Bgfx joined this guard with REMED-GFX-113, which replaced its whole-buffer
+// bgfx::setVertexBuffer(0, handle) binding with the exact [vertexStart, vertexStart + consumed)
+// range. The general non-indexed range contract for every topology lives in
+// NonIndexedDrawRangeTests.cpp; this case keeps the point-specific coverage alongside the rest of
+// REMED-GFX-111's topology contract.
 TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount)
 {
     RequirePointRendering();
@@ -1283,13 +1285,12 @@ TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
     EXPECT_EQ(processIndexBaseline, stats->numDynamicIndexBuffers);
 }
 
-// REMED-GFX-113 boundary. Bgfx's non-indexed draws bind the whole bound vertex buffer, so
-// vertexStart and primitiveCount currently do not narrow a non-indexed point draw. The topology
-// itself is still correct here -- every vertex becomes its own point, none of them become
-// triangles -- which is what REMED-GFX-111 owns. The addressing gap is the separately recorded
-// REMED-GFX-113; when that is fixed, this expectation flips to exactly the three intended points
-// (see NonIndexedPointListHonorsVertexStartAndExactCount, already active on EasyGL and WebGPU).
-TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCurrentlyCoversTheWholeBoundBuffer)
+// REMED-GFX-113 result on the exact buffer REMED-GFX-111 used to pin the defect. Bgfx used to bind
+// the whole bound vertex buffer for every non-indexed draw, so all seven vertices became points;
+// the binding is now the exact [vertexStart, vertexStart + primitiveCount) element range and only
+// the three requested points render. The topology itself is REMED-GFX-111's own result and is still
+// asserted here: three point-sized marks, never area geometry.
+TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequestedVertices)
 {
     RequirePointRendering();
 
@@ -1330,12 +1331,13 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCurrentlyCoversTheWholeBo
     ExpectPointRendered(pixels, wanted[0], "requested point 0 renders");
     ExpectPointRendered(pixels, wanted[1], "requested point 1 renders");
     ExpectPointRendered(pixels, wanted[2], "requested point 2 renders");
-    // REMED-GFX-111 result: all seven vertices become points; none becomes area geometry.
+    // REMED-GFX-111 result: every consumed vertex becomes a point, never area geometry.
     ExpectPointCoverageBudget(
-        pixels, Color::Black, 7, "whole-buffer non-indexed point coverage");
-    // REMED-GFX-113 gap, asserted so the follow-up fix is an obvious, deliberate change.
-    EXPECT_GT(pixels.CountExact(Color::Magenta), 0)
-        << "REMED-GFX-113: Bgfx still binds the whole vertex buffer for non-indexed draws";
+        pixels, Color::Black, 3, "exact-range non-indexed point coverage");
+    // REMED-GFX-113 result: the four decoy vertices outside [2, 5) are never consumed.
+    ExpectColorAbsent(
+        pixels, Color::Magenta,
+        "decoy points before and after the requested non-indexed range");
 }
 #endif
 
