@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-104: deferred indexed-draw correctness and WebGPU native alignment.
+// REMED-GFX-104/105: deferred indexed-draw correctness, native alignment, and
+// indexed triangle-strip pipeline compatibility.
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <cstdint>
@@ -22,13 +24,18 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 #ifdef CNA_BACKEND_WEBGPU
 #include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
@@ -41,13 +48,17 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
 using Microsoft::Xna::Framework::Graphics::DepthStencilState;
+using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DynamicIndexBuffer;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
+using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SetDataOptions;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexElement;
@@ -83,6 +94,50 @@ namespace
         return TriangleAt(0.0f, color);
     }
 
+    std::array<VertexPositionColor, 3> StripTriangleAt(
+        float centerX,
+        const Color& color)
+    {
+        return {
+            VertexPositionColor(Vector3(centerX - 0.18f,  0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX - 0.18f, -0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX + 0.18f,  0.00f, 0.5f), color),
+        };
+    }
+
+    std::array<VertexPositionColor, 4> StripQuadAt(
+        float centerX,
+        const Color& color)
+    {
+        return {
+            VertexPositionColor(Vector3(centerX - 0.18f,  0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX - 0.18f, -0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX + 0.18f,  0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX + 0.18f, -0.45f, 0.5f), color),
+        };
+    }
+
+    std::array<VertexPositionColor, 5> FiveVertexStripAt(
+        float centerX,
+        const Color& color)
+    {
+        return {
+            VertexPositionColor(Vector3(centerX - 0.18f,  0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX - 0.18f, -0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX,          0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX,         -0.45f, 0.5f), color),
+            VertexPositionColor(Vector3(centerX + 0.18f,  0.45f, 0.5f), color),
+        };
+    }
+
+    template<std::size_t N>
+    void AppendVertices(
+        std::vector<VertexPositionColor>& destination,
+        const std::array<VertexPositionColor, N>& source)
+    {
+        destination.insert(destination.end(), source.begin(), source.end());
+    }
+
     bool ColorNear(const Color& actual, const Color& expected, int tolerance = 16)
     {
         return std::abs(actual.getRProperty() - expected.getRProperty()) <= tolerance &&
@@ -116,6 +171,60 @@ namespace
         Color pixel = Color::Transparent;
         device.GetBackBufferData(&region, &pixel, 0, 1);
         return pixel;
+    }
+
+    struct BackbufferSnapshot
+    {
+        int width = 0;
+        int height = 0;
+        std::vector<Color> pixels;
+
+        [[nodiscard]] Color AtNdc(float x, float y = 0.0f) const
+        {
+            const int pixelX = std::clamp(
+                static_cast<int>(
+                    (x * 0.5f + 0.5f) * static_cast<float>(width - 1)),
+                0,
+                width - 1);
+            const int pixelY = std::clamp(
+                static_cast<int>(
+                    ((-y) * 0.5f + 0.5f) * static_cast<float>(height - 1)),
+                0,
+                height - 1);
+            return pixels[
+                static_cast<std::size_t>(pixelY) * static_cast<std::size_t>(width) +
+                static_cast<std::size_t>(pixelX)];
+        }
+    };
+
+    BackbufferSnapshot ReadBackbufferOnce(GraphicsDevice& device)
+    {
+        const auto& viewport = device.getViewportProperty();
+        BackbufferSnapshot snapshot;
+        snapshot.width = viewport.getWidthProperty();
+        snapshot.height = viewport.getHeightProperty();
+        snapshot.pixels.assign(
+            static_cast<std::size_t>(snapshot.width) *
+                static_cast<std::size_t>(snapshot.height),
+            Color::Transparent);
+        const Rectangle region(0, 0, snapshot.width, snapshot.height);
+        device.GetBackBufferData(
+            &region,
+            snapshot.pixels.data(),
+            0,
+            static_cast<int>(snapshot.pixels.size()));
+        return snapshot;
+    }
+
+    void ExpectExactColor(
+        const Color& actual,
+        const Color& expected,
+        const char* label)
+    {
+        EXPECT_EQ(expected.getRProperty(), actual.getRProperty()) << label;
+        EXPECT_EQ(expected.getGProperty(), actual.getGProperty()) << label;
+        EXPECT_EQ(expected.getBProperty(), actual.getBProperty()) << label;
+        EXPECT_EQ(expected.getAProperty(), actual.getAProperty()) << label;
     }
 
     class IndexedDrawDeferredTest : public ::testing::Test
@@ -179,9 +288,16 @@ namespace
             wgpuInstanceProcessEvents(backend.Instance());
 
         ASSERT_TRUE(state.completed) << "wgpu-native did not complete the error scope";
-        EXPECT_EQ(WGPUPopErrorScopeStatus_Success, state.status) << state.message;
-        EXPECT_EQ(WGPUErrorType_NoError, state.type) << state.message;
-        EXPECT_TRUE(state.message.empty()) << state.message;
+        ASSERT_EQ(WGPUPopErrorScopeStatus_Success, state.status)
+            << "wgpu-native error-scope status=" << static_cast<int>(state.status)
+            << " type=" << static_cast<int>(state.type)
+            << "\ncomplete message:\n" << state.message;
+        ASSERT_EQ(WGPUErrorType_NoError, state.type)
+            << "wgpu-native error-scope status=" << static_cast<int>(state.status)
+            << " type=" << static_cast<int>(state.type)
+            << "\ncomplete message:\n" << state.message;
+        ASSERT_TRUE(state.message.empty())
+            << "wgpu-native returned a message for a clean scope:\n" << state.message;
     }
 
     template<typename T>
@@ -409,6 +525,122 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 }
 #endif
 
+#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
+    defined(CNA_BACKEND_D3D11)
+TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRangesAndPixels)
+{
+    RequireIndexedRendering();
+
+#ifdef CNA_BACKEND_WEBGPU
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    EXPECT_EQ(0u, backend->GetColoredPipelineCacheSizeEXT());
+    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+#endif
+
+    std::vector<VertexPositionColor> vertices;
+    AppendVertices(vertices, StripTriangleAt(-0.65f, Color::Red));
+    AppendVertices(vertices, StripQuadAt(0.0f, Color::Lime));
+    AppendVertices(vertices, FiveVertexStripAt(0.65f, Color::Blue));
+
+    // Odd 16-bit count with a nonzero firstIndex; even dynamic 32-bit count; then another odd
+    // 16-bit count from a different buffer object with a positive baseVertex.
+    const std::array<std::uint16_t, 5> indices16A{99, 99, 0, 1, 2};
+    const std::array<std::uint32_t, 4> indices32B{3, 4, 5, 6};
+    const std::array<std::uint16_t, 5> indices16C{0, 1, 2, 3, 4};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(),
+        static_cast<int>(vertices.size()), BufferUsage::None);
+    IndexBuffer static16A(
+        device, IndexElementSize::SixteenBits, 5, BufferUsage::None);
+    DynamicIndexBuffer dynamic32B(
+        device, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None);
+    IndexBuffer static16C(
+        device, IndexElementSize::SixteenBits, 5, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), static_cast<int>(vertices.size()));
+    static16A.SetData(indices16A.data(), 5);
+    dynamic32B.SetData(
+        indices32B.data(), 0, 4, SetDataOptions::Discard);
+    static16C.SetData(indices16C.data(), 5);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+
+    device.SetIndexBuffer(&static16A);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 0, 3, 2, 1);
+    device.SetIndexBuffer(&dynamic32B);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 3, 4, 0, 2);
+    device.SetIndexBuffer(&static16C);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 7, 0, 5, 0, 3);
+
+    // Replay owns the bytes, width, range, and base vertex from each command. Ending on Uint16
+    // must not retroactively select that format for the queued Uint32 draw.
+    const std::array<std::uint16_t, 5> degenerate16{0, 0, 0, 0, 0};
+    const std::array<std::uint32_t, 4> degenerate32{0, 0, 0, 0};
+    static16A.SetData(degenerate16.data(), 5);
+    dynamic32B.SetData(
+        degenerate32.data(), 0, 4, SetDataOptions::Discard);
+    static16C.SetData(degenerate16.data(), 5);
+    device.SetIndexBuffer(nullptr);
+    device.SetVertexBuffer(nullptr);
+    static16A.Dispose();
+    dynamic32B.Dispose();
+    static16C.Dispose();
+    vertexBuffer.Dispose();
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.65f), Color::Red, "odd Uint16/startIndex strip");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "even dynamic Uint32 strip");
+    ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "odd Uint16/baseVertex strip");
+    ExpectExactColor(pixels.AtNdc(-0.98f), Color::Black, "strip padding/background");
+
+#ifdef CNA_BACKEND_WEBGPU
+    // Two format-compatible Uint16 buffer objects reuse one pipeline; the intervening Uint32
+    // command creates the sole required additional variant.
+    EXPECT_EQ(2u, backend->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*backend);
+    PopAndExpectClean(*backend);
+    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+#endif
+}
+#endif
+
+TEST_F(IndexedDrawDeferredTest, PublicContractRejectsNegativeIndexedBaseVertex)
+{
+    if (!device.SupportsCapability(GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "Backend explicitly does not support indexed rendering";
+
+    const auto vertices = StripTriangleAt(0.0f, Color::White);
+    const std::array<std::uint16_t, 3> indices{0, 1, 2};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 3, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 3);
+    indexBuffer.SetData(indices.data(), 3);
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+
+    // CNA's current public contract rejects every negative baseVertex before backend dispatch;
+    // positive baseVertex behavior is exercised by the rendering test above.
+    EXPECT_THROW(
+        device.DrawIndexedPrimitives(
+            PrimitiveType::TriangleStrip, -1, 0, 3, 0, 1),
+        System::ArgumentOutOfRangeException);
+}
+
 #ifdef CNA_BACKEND_WEBGPU
 TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexFormat)
 {
@@ -418,6 +650,7 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexForma
         dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
             &device.GetBackend());
     ASSERT_NE(nullptr, backend);
+    EXPECT_EQ(0u, backend->GetColoredPipelineCacheSizeEXT());
     const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
     wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
     wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
@@ -444,7 +677,286 @@ TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexForma
     device.DrawIndexedPrimitives(
         PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2);
 
-    EXPECT_TRUE(ColorNear(ReadCenter(device), Color::Lime));
+    ExpectExactColor(ReadCenter(device), Color::Lime, "minimal Uint16 indexed strip");
+    EXPECT_EQ(1u, backend->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*backend);
+    PopAndExpectClean(*backend);
+    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+}
+
+TEST_F(IndexedDrawDeferredTest, WebGpuUserAndNonIndexedStripsUseExactPipelineVariants)
+{
+    RequireIndexedRendering();
+
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+
+    auto listVertices = TriangleAt(-0.75f, Color::Red);
+    auto nonIndexedStrip = StripQuadAt(-0.25f, Color::Yellow);
+    auto strip16 = StripQuadAt(0.25f, Color::Lime);
+    auto strip32 = StripQuadAt(0.75f, Color::Blue);
+    struct CompactPositionColor
+    {
+        float x;
+        float y;
+        float z;
+        std::uint8_t r;
+        std::uint8_t g;
+        std::uint8_t b;
+        std::uint8_t a;
+    };
+    static_assert(sizeof(CompactPositionColor) == 16);
+    std::array<CompactPositionColor, 4> compactStrip32{};
+    for (std::size_t i = 0; i < strip32.size(); ++i)
+    {
+        compactStrip32[i] = {
+            strip32[i].Position.X,
+            strip32[i].Position.Y,
+            strip32[i].Position.Z,
+            strip32[i].Color.getRProperty(),
+            strip32[i].Color.getGProperty(),
+            strip32[i].Color.getBProperty(),
+            strip32[i].Color.getAProperty(),
+        };
+    }
+    std::array<std::uint16_t, 5> indices16{99, 0, 1, 2, 3};
+    std::array<std::uint32_t, 6> indices32{99, 99, 0, 1, 2, 3};
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+
+    // TriangleList -> non-indexed TriangleStrip -> TriangleList: the list pipeline is reused and
+    // the non-indexed strip declares Undefined, not a remembered index format.
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, listVertices.data(), 0, 1);
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleStrip, nonIndexedStrip.data(), 0, 2);
+    listVertices = TriangleAt(-0.75f, Color::White);
+    device.DrawUserPrimitives(
+        PrimitiveType::TriangleList, listVertices.data(), 0, 1);
+
+    // Both typed widths take DrawUser's function-local transient-buffer path. The explicit
+    // declaration on the Uint32 draw also preserves the completed GFX-043 transport contract.
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleStrip,
+        strip16.data(), 0, 4,
+        indices16.data(), 1, 2);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleStrip,
+        static_cast<const void*>(compactStrip32.data()), 0, 4,
+        indices32.data(), 2, 2,
+        PositionColorDeclaration());
+
+    listVertices.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    nonIndexedStrip.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    strip16.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    strip32.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    compactStrip32.fill({});
+    indices16.fill(0);
+    indices32.fill(0);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.75f), Color::White, "list after non-indexed strip");
+    ExpectExactColor(pixels.AtNdc(-0.25f), Color::Yellow, "non-indexed strip");
+    ExpectExactColor(pixels.AtNdc(0.25f), Color::Lime, "DrawUser Uint16 strip");
+    ExpectExactColor(pixels.AtNdc(0.75f), Color::Blue, "DrawUser Uint32 strip");
+
+    // One list/Undefined pipeline plus TriangleStrip Undefined, Uint16, and Uint32.
+    EXPECT_EQ(4u, backend->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*backend);
+    PopAndExpectClean(*backend);
+    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+}
+
+TEST_F(IndexedDrawDeferredTest, WebGpuIndexedListPipelinesIgnoreIndexWidth)
+{
+    RequireIndexedRendering();
+
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+
+    const auto left = TriangleAt(-0.5f, Color::Red);
+    const auto right = TriangleAt(0.5f, Color::Blue);
+    const std::array<VertexPositionColor, 6> vertices{
+        left[0], left[1], left[2], right[0], right[1], right[2],
+    };
+    const std::array<std::uint16_t, 3> triangle16{0, 1, 2};
+    const std::array<std::uint32_t, 3> triangle32{3, 4, 5};
+    const std::array<std::uint16_t, 2> line16{0, 3};
+    const std::array<std::uint32_t, 2> line32{2, 5};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 6, BufferUsage::None);
+    IndexBuffer triangleBuffer16(
+        device, IndexElementSize::SixteenBits, 3, BufferUsage::None);
+    IndexBuffer triangleBuffer32(
+        device, IndexElementSize::ThirtyTwoBits, 3, BufferUsage::None);
+    IndexBuffer lineBuffer16(
+        device, IndexElementSize::SixteenBits, 2, BufferUsage::None);
+    IndexBuffer lineBuffer32(
+        device, IndexElementSize::ThirtyTwoBits, 2, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 6);
+    triangleBuffer16.SetData(triangle16.data(), 3);
+    triangleBuffer32.SetData(triangle32.data(), 3);
+    lineBuffer16.SetData(line16.data(), 2);
+    lineBuffer32.SetData(line32.data(), 2);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+
+    device.SetIndexBuffer(&triangleBuffer16);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 0, 3, 0, 1);
+    device.SetIndexBuffer(&triangleBuffer32);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleList, 0, 3, 3, 0, 1);
+    device.SetIndexBuffer(&lineBuffer16);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::LineList, 0, 0, 6, 0, 1);
+    device.SetIndexBuffer(&lineBuffer32);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::LineList, 0, 0, 6, 0, 1);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "Uint16 triangle list");
+    ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "Uint32 triangle list");
+
+    // Width is irrelevant to list topology: one TriangleList and one LineList pipeline.
+    EXPECT_EQ(2u, backend->GetColoredPipelineCacheSizeEXT());
+    PopAndExpectClean(*backend);
+    PopAndExpectClean(*backend);
+    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+}
+
+TEST_F(IndexedDrawDeferredTest, WebGpuTriangleStripAlternatesWindingBeforeCulling)
+{
+    RequireIndexedRendering();
+
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+
+    std::vector<VertexPositionColor> vertices;
+    AppendVertices(vertices, StripQuadAt(-0.5f, Color::Lime));
+    AppendVertices(vertices, StripQuadAt(0.5f, Color::Red));
+    const std::array<std::uint16_t, 4> leftIndices{0, 1, 2, 3};
+    const std::array<std::uint16_t, 4> rightIndices{4, 5, 6, 7};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 8, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 8);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+
+    indexBuffer.SetData(leftIndices.data(), 4);
+    device.SetIndexBuffer(&indexBuffer);
+    device.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2);
+
+    indexBuffer.SetData(rightIndices.data(), 4);
+    device.setRasterizerStateProperty(RasterizerState::CullClockwise);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 4, 4, 0, 2);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    // Sample one interior point from each alternating triangle in each strip.
+    ExpectExactColor(
+        pixels.AtNdc(-0.58f, 0.20f), Color::Lime,
+        "front-facing strip first triangle");
+    ExpectExactColor(
+        pixels.AtNdc(-0.42f, -0.20f), Color::Lime,
+        "front-facing strip second triangle");
+    ExpectExactColor(
+        pixels.AtNdc(0.42f, 0.20f), Color::Black,
+        "clockwise-cull strip first triangle");
+    ExpectExactColor(
+        pixels.AtNdc(0.58f, -0.20f), Color::Black,
+        "clockwise-cull strip second triangle");
+
+    PopAndExpectClean(*backend);
+    PopAndExpectClean(*backend);
+    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+}
+
+TEST_F(IndexedDrawDeferredTest, WebGpuIndexedStripsRenderToTargetAndBackbuffer)
+{
+    RequireIndexedRendering();
+
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+
+    auto vertices = StripQuadAt(0.0f, Color::Red);
+    const std::array<std::uint16_t, 4> indices16{0, 1, 2, 3};
+    const std::array<std::uint32_t, 4> indices32{0, 1, 2, 3};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 4, BufferUsage::None);
+    IndexBuffer buffer16(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    IndexBuffer buffer32(
+        device, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None);
+    RenderTarget2D target(
+        device, 64, 64, false, SurfaceFormat::Color,
+        DepthFormat::None, 0, RenderTargetUsage::PreserveContents);
+    vertexBuffer.SetData(vertices.data(), 4);
+    buffer16.SetData(indices16.data(), 4);
+    buffer32.SetData(indices32.data(), 4);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.SetVertexBuffer(&vertexBuffer);
+
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    device.SetIndexBuffer(&buffer16);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2);
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color targetPixel = Color::Transparent;
+    const Rectangle targetRegion(32, 32, 1, 1);
+    target.GetData(0, &targetRegion, &targetPixel, 0, 1);
+    ExpectExactColor(targetPixel, Color::Red, "RenderTarget2D Uint16 strip");
+
+    vertices = StripQuadAt(0.0f, Color::Blue);
+    vertexBuffer.SetData(vertices.data(), 4);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&buffer32);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(
+        pixels.AtNdc(0.0f), Color::Blue,
+        "backbuffer Uint32 strip");
+    EXPECT_EQ(2u, backend->GetColoredPipelineCacheSizeEXT());
+
     PopAndExpectClean(*backend);
     PopAndExpectClean(*backend);
     EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
