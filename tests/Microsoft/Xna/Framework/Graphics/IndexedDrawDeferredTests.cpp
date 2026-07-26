@@ -410,6 +410,46 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
 #endif
 
 #ifdef CNA_BACKEND_WEBGPU
+TEST_F(IndexedDrawDeferredTest, WebGpuIndexedTriangleStripMatchesBoundIndexFormat)
+{
+    RequireIndexedRendering();
+
+    auto* backend =
+        dynamic_cast<CNA::Internal::Backends::WebGPU::WebGPUGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, backend);
+    const std::size_t uncapturedBefore = backend->GetUncapturedErrorCountEXT();
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
+    wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
+
+    const std::array<VertexPositionColor, 4> vertices{
+        VertexPositionColor(Vector3(-0.6f, -0.6f, 0.5f), Color::Lime),
+        VertexPositionColor(Vector3(-0.6f,  0.6f, 0.5f), Color::Lime),
+        VertexPositionColor(Vector3( 0.6f, -0.6f, 0.5f), Color::Lime),
+        VertexPositionColor(Vector3( 0.6f,  0.6f, 0.5f), Color::Lime),
+    };
+    const std::array<std::uint16_t, 4> indices{0, 1, 2, 3};
+    VertexBuffer vertexBuffer(
+        device, PositionColorDeclaration(), 4, BufferUsage::None);
+    IndexBuffer indexBuffer(
+        device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
+    vertexBuffer.SetData(vertices.data(), 4);
+    indexBuffer.SetData(indices.data(), 4);
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    device.SetIndexBuffer(&indexBuffer);
+    device.DrawIndexedPrimitives(
+        PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2);
+
+    EXPECT_TRUE(ColorNear(ReadCenter(device), Color::Lime));
+    PopAndExpectClean(*backend);
+    PopAndExpectClean(*backend);
+    EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+}
+
 TEST_F(IndexedDrawDeferredTest, WebGpuNativeScopesCoverLogicalCountsAndInternalPadding)
 {
     RequireIndexedRendering();
