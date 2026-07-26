@@ -2452,7 +2452,8 @@ existing task.
 | REMED-GFX-098 | SDL_GPU MRT pipelines hardcoded one colour target and omitted active target count/state from cache identity. | LOW | P3 | REMED-GFX-097 validation sweep | **DONE — REAL PRODUCTION VALIDITY DEFECT.** Test `ba6f993e`, fix `1ee7ea72`, coverage `aa99e02c`, closure `cd9bc528`. |
 | REMED-GFX-099 | SDL_GPU Texture3D automatic mip generation created invalid per-mip views/blits; the FNA contract is explicitly authored mip levels. | LOW | P3 | REMED-GFX-097 validation sweep | **DONE — CONTRACT/IMPLEMENTATION/TEST DEFECT.** Test `adbb2711`, fix `6ae00c7a`, coverage `9628ed15`, closure `e658e946`. |
 | REMED-GFX-102 | WebGPU `SpriteBatch` selected only fixed opaque or fixed straight-alpha pipelines from the live blend-enabled bit; queued commands omitted the full state and dynamic factor, producing silent state loss and last-live-value behavior. | MEDIUM | P2 | GFX-069/070/071/077 were the completed prerequisites and generic WebGPU 3D blending supplied the proven translation reference | **DONE.** The public regression in `4b734d1e` proved the defect pre-fix (`3/14` pixel assertions passed): `CreateSpriteResources()` hard-coded two pipelines, `RenderSprites()` selected once from live `blendEnabled_`, and commands/pass setup lacked by-value blend/write/sample/factor state. Production fix `9e89d491` captures a normalized complete `BlendState` plus `BlendFactor` per `Begin`, replays the captured dynamic constant per batch, and lazily caches sprite pipelines by colour/alpha factors and functions, active-attachment write mask, `MultiSampleMask`, target format, applied sample count, and existing static sprite state. Dynamic factor RGBA and render-target/texture/sprite identities are excluded. Coverage expansion `7d609325` is `35/35` on wgpu-native: all presets, custom/separate equations, factor/inverse, A→B→A, post-`Begin` mutation isolation, independent channel masks, 4x MSAA masks, non-MSAA, backbuffer/`RenderTarget2D`, target→backbuffer→target, 64 factor values with stable cache `8→8`, compatible targets reusing cache `10→11→11→11→11`, and zero validation/device errors. Required WebGPU controls passed `9/9`; practical Vulkan/EasyGL/SDL_GPU/Bgfx/Software/D3D9/D3D11 controls passed `36/36`; all fourteen backend libraries compiled sequentially with `-j4`. No shader or public API changes, per-draw pipeline creation, extra submissions/waits/frames/`Present`, or independent production finding. |
-| REMED-GFX-103 | VertexBuffer's typed SetData overloads still form `data + startIndex`, pass an empty packed vector's `data()`, call zero-length `memcpy`, and dispatch the empty upload; WebGPU rejects a null vertex pointer before count and a non-null empty upload allocates/writes/mutates backend state. DynamicVertexBuffer shares the same implementation. | MEDIUM | P2 | REMED-GFX-054 narrow VertexBuffer sibling inventory | **OPEN — PROVEN INDEPENDENT SHARED/API-VALIDITY DEFECT; not fixed under GFX-054.** Reproduce and establish the public zero-capacity/zero-count VertexBuffer contract before changing it. |
+| REMED-GFX-103 | VertexBuffer's typed SetData overloads formed `data + startIndex`, passed an empty packed vector's `data()`, called zero-length `memcpy`, and dispatched the empty upload; WebGPU rejected a null vertex pointer before count and a non-null empty upload allocated/wrote/mutated backend state. DynamicVertexBuffer shares the same implementation. | MEDIUM | P2 | REMED-GFX-054 narrow VertexBuffer sibling inventory | **DONE 2026-07-26 — shared validation now precedes an empty no-op; logical zero capacity and exact shadows are preserved; WebGPU real writes use internal four-byte native padding; focused native, sanitizer, rendering, regression, and eight-backend parity runs pass.** |
+| REMED-GFX-104 | WebGPU's deferred indexed-draw path re-uploads an exact logical 16-bit index shadow with `wgpuQueueWriteBuffer`; an odd index count such as three produces a six-byte write that violates the installed four-byte copy-size alignment rule even though the original GFX-054 IndexBuffer upload was padded correctly. | MEDIUM | P2 | REMED-GFX-103 indexed-draw verification | **OPEN — PROVEN SEPARATE INDEX/DEFERRED-COMMAND DEFECT; recorded only and not begun under GFX-103.** |
 
 #### REMED-BUILD-010 detail
 
@@ -8461,11 +8462,12 @@ is protected by the shared early return, SDL_GPU's redundant direct guard remain
 2D-only diagnostic backends continue to reject unsupported index-buffer construction explicitly.
 No texture SetData helper is shared with this change.
 
-The VertexBuffer sibling is independently defective and is allocated as **REMED-GFX-103**:
+The VertexBuffer sibling was independently defective and was allocated as **REMED-GFX-103**:
 typed slice overloads still form `data + startIndex`; empty packed vectors can supply null; the CPU
 shadow still calls zero-length `memcpy`; and WebGPU rejects null before count or performs
 allocation/write/state mutation for a non-null empty upload. DynamicVertexBuffer shares that path.
-It is not fixed or begun here. No other new GFX-054-adjacent finding was proven.
+It was not fixed or begun under GFX-054 and was subsequently completed on 2026-07-26 under its own
+record. No other new GFX-054-adjacent finding was proven.
 
 There is no production shader change and no generated shader/artifact change. `audit/` is
 untouched.
@@ -8600,3 +8602,139 @@ public paths called the only declaration-transport operation.
 - `9bac3683 test(Task REMED-GFX-043): cover explicit DrawUser layouts`
 - `6718307e fix(Task REMED-GFX-043): propagate DrawUser declarations`
 - `docs(remediation): record GFX-043 verification` (this record)
+
+---
+
+## REMED-GFX-103 — VertexBuffer empty-range and WebGPU upload correctness (DONE 2026-07-26)
+
+**Classification: REAL MULTI-LAYER PRODUCTION DEFECT — shared C++ range handling,
+public validation/capacity semantics, and WebGPU copy alignment/state handling.**
+
+### Pre-fix reproduction and reached empty paths
+
+The focused pre-fix probe reproduced every recorded failure and passed only its logical
+zero-capacity construction check. The failing checks jointly proved:
+
+- null and empty-vector typed uploads on static/dynamic buffers reached WebGPU and threw
+  `"CNA WebGPU: invalid vertex buffer upload"`;
+- a non-null raw empty upload reached WebGPU allocation/write handling and replaced the existing
+  backend count/shadow with empty state;
+- a one-vertex, 13-byte-stride upload reached wgpu-native and reported
+  `Copy size 13 does not respect COPY_BUFFER_ALIGNMENT`;
+- nonempty static and dynamic writes into logical zero-capacity storage were admitted.
+
+The shared typed slice overloads evaluated `data + startIndex` before deciding whether the range
+was empty. Typed packing then exposed `vector::data()` from an empty vector, and shadow maintenance
+still called zero-length copy primitives. A zero byte count does not make null pointer arithmetic
+or null arguments to C/C++ copy APIs portable.
+
+The complete capable-backend inventory found the same public empty dispatch feeding:
+
+- D3D9 lock/copy and D3D11 map/copy paths;
+- D3D12 staging allocation, command encoding, and submission;
+- Vulkan mapped-memory copy;
+- EasyGL CPU replacement, GL upload/layout configuration, and state replacement;
+- Bgfx handle/count/layout replacement;
+- SDL_GPU transfer allocation/upload and shadow replacement;
+- Software and Headless pointer-range construction/shadow replacement;
+- WebGPU allocation, queue write, and uploaded count/stride/shadow replacement.
+
+ASCII delegates to its underlying backend. Canvas, DX3, and SDLRenderer reject vertex-buffer
+construction as unsupported and therefore have no reachable upload path. After this remediation a
+valid public empty operation reaches none of the capable backend paths; WebGPU additionally has a
+defensive direct empty return before native or backend-state work.
+
+### Public CNA/FNA contract and ordering
+
+For both `VertexBuffer` and `DynamicVertexBuffer`, zero logical capacity is valid and remains
+observable as zero. Native padding or a minimum native allocation cannot expand public capacity.
+Negative construction capacity is rejected before backend creation, and every nonempty upload must
+fit the logical vertex capacity.
+
+All current public `SetData` overloads replace from implicit destination byte offset zero; this
+task does not add the destination-offset overloads owned by REMED-GFX-025. For a zero-capacity
+buffer, implicit offset zero is exactly the logical end and an empty range is valid. A nonempty
+range from that offset extends beyond the logical end and is rejected. A destination offset beyond
+the logical end is not expressible in the current API and was not invented here.
+
+The shared source of truth validates in this order:
+
+1. disposed state;
+2. nonnegative source `startIndex` and `elementCount`, plus checked byte arithmetic;
+3. positive source stride and declaration/stride compatibility;
+4. the empty return;
+5. non-null source data and logical destination capacity for real data.
+
+Consequently, use after disposal still throws `ObjectDisposedException` before any empty return.
+Negative/overflowing source ranges and incompatible declarations still fail for an empty request.
+Null data is legal exactly when `elementCount == 0`; it deterministically throws for a real
+upload. A raw pointer overload cannot validate the size of its caller-owned allocation, but an
+empty nonnegative source index is never evaluated in pointer arithmetic.
+
+Empty vectors and zero-length source slices, including a start index exactly at the source end,
+are successful no-ops after those validations. They perform no pointer calculation, packing,
+copy, staging allocation, command encoding, submission, declaration propagation, or CPU/backend
+shadow mutation. An empty operation between uploads A and B neither clears A nor interferes with
+B. Dynamic `Discard` and `NoOverwrite` overloads use the same contract; real dynamic uploads still
+update exact compact shadow bytes.
+
+Typed C++ vertex objects may contain ABI padding unrelated to their GPU layout. The typed upload
+path therefore compacts the supported vertex types to their declared GPU strides (16, 20, 24, 32,
+and 52 bytes), while validating that every declared element fits the compact stride. Raw uploads
+require the supplied stride to equal `VertexDeclaration::VertexStride`. Real uploads propagate the
+complete declaration through the GFX-043 backend hook before data upload.
+
+### WebGPU correction
+
+The installed wgpu-native API requires `wgpuQueueWriteBuffer` copy offsets and sizes to be
+four-byte aligned. CNA now keeps the public vertex count, stride, capacity, and WebGPU logical
+shadow exact, but rounds a real native allocation/write size up to four bytes and zero-fills only
+the internal tail. Thus one 13-byte vertex writes 16 native bytes while remaining logically one
+13-byte vertex; naturally aligned 16-byte writes are unchanged. A zero-capacity buffer remains
+lazy with no native handle, and an empty upload neither creates one nor changes count, stride, or
+shadow state.
+
+### Permanent regression and verification
+
+`VertexBufferEmptyDataTest` is **13/13 on WebGPU** and **12/12 on every other tested backend**. It
+permanently covers zero-capacity construction; null/non-null empty uploads; empty typed/raw vectors
+and source-end slices; implicit destination offset at logical end and a real range beyond it;
+nonempty zero-capacity rejection; static/dynamic paths; disposal ordering; declaration/stride
+compatibility; compact 20/24/32/52-byte layouts; source slices and partial dynamic updates;
+A-to-empty-to-B preservation; one-vertex odd 13-byte and aligned 16-byte WebGPU writes; exact
+logical shadows; and successful `DrawPrimitives`, 32-bit indexed drawing, and `Present` after
+upload.
+
+Nested WebGPU validation and out-of-memory error scopes report `NoError`; there is no uncaptured
+validation output for the empty, odd-stride, aligned, or typed one-vertex paths. The focused
+sanitizer runs are clean:
+
+- Vulkan AddressSanitizer on AMD Radeon 780M/RADV, with external-driver leak checking disabled:
+  **12/12**;
+- Software UndefinedBehaviorSanitizer with `halt_on_error=1` and stack traces enabled:
+  **12/12**.
+
+The portable public filter is **12/12** on Vulkan, EasyGL, SDL_GPU, Bgfx, Software, Headless, D3D9,
+and D3D11; D3D9/D3D11 ran through Wine/DXVK. EasyGL's assertions additionally confirm complete
+odd/aligned `VertexDeclaration` element propagation. The focused WebGPU DrawUser, model-loading,
+skinned-model, and vertex-buffer-binding regression shard is **74/74**.
+
+All fourteen backend libraries compile with at most four jobs: ASCII, Bgfx, Canvas, D3D9, D3D11,
+D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulkan, and WebGPU. There is no
+VertexBuffer backend-interface redesign, no destination-offset API addition, and no texture,
+IndexBuffer, shader, or generated-artifact change.
+
+The indexed rendering check separately proved **REMED-GFX-104**: WebGPU's deferred 16-bit indexed
+draw re-upload uses the exact six-byte logical shadow for three indices and violates the same
+four-byte queue-write rule. That IndexBuffer/deferred-command issue is recorded OPEN and was not
+changed or begun here; the GFX-103 indexed rendering regression uses an aligned 32-bit index
+buffer.
+
+**Commits:**
+
+- `977eaf9d test(Task REMED-GFX-103): reproduce empty vertex upload failures`
+- `b4c3dcf8 fix(Task REMED-GFX-103): make empty vertex uploads safe and aligned`
+- `05d8eaa9 test(Task REMED-GFX-103): cover vertex upload ranges`
+- `docs(remediation): record GFX-103 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
