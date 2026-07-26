@@ -2453,7 +2453,9 @@ existing task.
 | REMED-GFX-099 | SDL_GPU Texture3D automatic mip generation created invalid per-mip views/blits; the FNA contract is explicitly authored mip levels. | LOW | P3 | REMED-GFX-097 validation sweep | **DONE — CONTRACT/IMPLEMENTATION/TEST DEFECT.** Test `adbb2711`, fix `6ae00c7a`, coverage `9628ed15`, closure `e658e946`. |
 | REMED-GFX-102 | WebGPU `SpriteBatch` selected only fixed opaque or fixed straight-alpha pipelines from the live blend-enabled bit; queued commands omitted the full state and dynamic factor, producing silent state loss and last-live-value behavior. | MEDIUM | P2 | GFX-069/070/071/077 were the completed prerequisites and generic WebGPU 3D blending supplied the proven translation reference | **DONE.** The public regression in `4b734d1e` proved the defect pre-fix (`3/14` pixel assertions passed): `CreateSpriteResources()` hard-coded two pipelines, `RenderSprites()` selected once from live `blendEnabled_`, and commands/pass setup lacked by-value blend/write/sample/factor state. Production fix `9e89d491` captures a normalized complete `BlendState` plus `BlendFactor` per `Begin`, replays the captured dynamic constant per batch, and lazily caches sprite pipelines by colour/alpha factors and functions, active-attachment write mask, `MultiSampleMask`, target format, applied sample count, and existing static sprite state. Dynamic factor RGBA and render-target/texture/sprite identities are excluded. Coverage expansion `7d609325` is `35/35` on wgpu-native: all presets, custom/separate equations, factor/inverse, A→B→A, post-`Begin` mutation isolation, independent channel masks, 4x MSAA masks, non-MSAA, backbuffer/`RenderTarget2D`, target→backbuffer→target, 64 factor values with stable cache `8→8`, compatible targets reusing cache `10→11→11→11→11`, and zero validation/device errors. Required WebGPU controls passed `9/9`; practical Vulkan/EasyGL/SDL_GPU/Bgfx/Software/D3D9/D3D11 controls passed `36/36`; all fourteen backend libraries compiled sequentially with `-j4`. No shader or public API changes, per-draw pipeline creation, extra submissions/waits/frames/`Present`, or independent production finding. |
 | REMED-GFX-103 | VertexBuffer's typed SetData overloads formed `data + startIndex`, passed an empty packed vector's `data()`, called zero-length `memcpy`, and dispatched the empty upload; WebGPU rejected a null vertex pointer before count and a non-null empty upload allocated/wrote/mutated backend state. DynamicVertexBuffer shares the same implementation. | MEDIUM | P2 | REMED-GFX-054 narrow VertexBuffer sibling inventory | **DONE 2026-07-26 — shared validation now precedes an empty no-op; logical zero capacity and exact shadows are preserved; WebGPU real writes use internal four-byte native padding; focused native, sanitizer, rendering, regression, and eight-backend parity runs pass.** |
-| REMED-GFX-104 | WebGPU's deferred indexed-draw path re-uploads an exact logical 16-bit index shadow with `wgpuQueueWriteBuffer`; an odd index count such as three produces a six-byte write that violates the installed four-byte copy-size alignment rule even though the original GFX-054 IndexBuffer upload was padded correctly. | MEDIUM | P2 | REMED-GFX-103 indexed-draw verification | **OPEN — PROVEN SEPARATE INDEX/DEFERRED-COMMAND DEFECT; recorded only and not begun under GFX-103.** |
+| REMED-GFX-104 | WebGPU deferred indexed replay preserves exact logical bytes/counts and snapshots `startIndex`/`baseVertex`; native allocation/write padding is internal, zero initialized, and compliant with wgpu-native's four-byte queue-copy rule. | MEDIUM | P2 | REMED-GFX-103 indexed-draw verification | **DONE 2026-07-26 — ODD/EVEN 16-BIT, 32-BIT, STATIC/DYNAMIC, DRAWUSER, A→B→A, LIFETIME, PIXEL, NATIVE-SCOPE, SANITIZER, AND PARITY COVERAGE PASS.** |
+| REMED-GFX-105 | WebGPU indexed triangle-strip replay binds a `Uint16` index buffer to a render pipeline whose `stripIndexFormat` is `None`, producing a native command-encoder validation error. | MEDIUM | P2 | REMED-GFX-104 native-scope expansion | **OPEN — RECORDED SEPARATELY; NOT BEGUN OR CHANGED UNDER GFX-104.** |
+| REMED-GFX-106 | Bgfx and Software produce backend-specific indexed pixel failures for nonzero indexed parameters and/or deferred multi-draw controls that pass WebGPU, Vulkan, EasyGL, D3D9, and D3D11. | MEDIUM | P2 | REMED-GFX-104 backend parity | **OPEN — RECORDED FOR INDEPENDENT REPRODUCTION; NO NON-WEBGPU BACKEND CHANGE.** |
 
 #### REMED-BUILD-010 detail
 
@@ -8725,10 +8727,9 @@ VertexBuffer backend-interface redesign, no destination-offset API addition, and
 IndexBuffer, shader, or generated-artifact change.
 
 The indexed rendering check separately proved **REMED-GFX-104**: WebGPU's deferred 16-bit indexed
-draw re-upload uses the exact six-byte logical shadow for three indices and violates the same
-four-byte queue-write rule. That IndexBuffer/deferred-command issue is recorded OPEN and was not
-changed or begun here; the GFX-103 indexed rendering regression uses an aligned 32-bit index
-buffer.
+draw re-upload used the exact six-byte logical shadow for three indices and violated the same
+four-byte queue-write rule. That IndexBuffer/deferred-command issue was not changed or begun under
+GFX-103 and was subsequently completed in its own remediation.
 
 **Commits:**
 
@@ -8736,5 +8737,131 @@ buffer.
 - `b4c3dcf8 fix(Task REMED-GFX-103): make empty vertex uploads safe and aligned`
 - `05d8eaa9 test(Task REMED-GFX-103): cover vertex upload ranges`
 - `docs(remediation): record GFX-103 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-104 — WebGPU deferred indexed-draw capture and native write alignment (DONE 2026-07-26)
+
+The authoritative GFX-104 failure was reproduced before production changes with an ordinary
+persistent `IndexBuffer` containing three 16-bit indices. The initial GFX-054 upload succeeded, but
+deferred replay allocated an eight-byte native buffer and then called `wgpuQueueWriteBuffer` at
+offset zero with the exact six-byte logical shadow. The captured validation-scope message was:
+
+```text
+Validation Error
+
+Caused by:
+  In wgpuQueueWriteBuffer
+    Copy size 6 does not respect `COPY_BUFFER_ALIGNMENT`
+```
+
+The failing parameters were logical index count 3, logical byte count 6, native allocation 8,
+queue-write offset 0 and size 6, `Uint16` binding offset 0 and size 6, and draw count 3.
+wgpu-native's relevant rule is the four-byte queue-copy size alignment. Replaying the corrected
+eight-byte write while retaining a six-byte binding was accepted by the native validation scope,
+so neither the zero binding offset nor the exact two-/six-byte logical binding sizes are the
+defect. Deferred replay has no staging allocation or buffer-copy command; the GFX-054 persistent
+upload path was already correct. Odd 16-bit counts are affected because their byte size is
+`2 mod 4`; even 16-bit counts and all 32-bit counts are naturally aligned.
+
+### Public CNA/FNA contract and reached paths
+
+- `PrimitiveIndexCount(primitiveType, primitiveCount)` remains the exact public logical draw count.
+  It is never rounded up to include native padding.
+- A persistent static or dynamic `IndexBuffer` retains its declared logical index count and exact
+  logical shadow. GFX-054 zero-capacity construction and empty uploads remain unchanged.
+- `startIndex` identifies the first logical element in the bound index range; WebGPU maps it to
+  native `firstIndex`. `baseVertex` remains the signed native base-vertex addend.
+- `minVertexIndex` and `numVertices` remain CNA/FNA range/validation hints; they do not rewrite the
+  index bytes, logical draw count, `firstIndex`, or `baseVertex`.
+- DrawUser's `indexOffset` selects the caller's source slice before its function-local temporary
+  buffer is captured. The captured temporary range is then drawn from native `firstIndex == 0`.
+- A queued command owns an exact copy of the index shadow and its logical parameters. Caller arrays,
+  public buffers, and DrawUser temporaries may change or be disposed before replay without changing
+  an already queued draw.
+
+All ten deferred indexed replay families reached the same bad queue write: environment map,
+instanced, colored, textured, lit textured, alpha test, dual texture, PBR, skinned, and skinned
+PBR. Both ordinary `DrawIndexedPrimitives` and `DrawUserIndexedPrimitives`, and both static and
+dynamic source buffers, converge on those captures. Empty index shadows do not enter the helper and
+therefore create no deferred native index buffer, upload, or binding.
+
+### Correction
+
+A single file-local WebGPU replay helper now creates and binds deferred index buffers:
+
+- native allocation is `Align4(logicalBytes)`;
+- naturally aligned data is written exactly once without a copy;
+- an odd 16-bit logical range is copied to a temporary native byte vector and extended to the
+  aligned size with initialized zero bytes;
+- `wgpuQueueWriteBuffer` receives only a four-byte-aligned size;
+- `wgpuRenderPassEncoderSetIndexBuffer` still receives binding offset zero and the exact logical
+  byte size;
+- `wgpuRenderPassEncoderDrawIndexed` still receives the exact logical index count, plus the
+  command's captured `firstIndex` and `baseVertex`.
+
+The zero-filled native tail is outside both the logical binding range and draw count and therefore
+cannot become a drawable index. No public API, public capacity/count, shader, pipeline-per-count,
+wait, extra frame, `Present`, or per-draw submission was added. The implementation does not add an
+IndexBuffer destination-offset API or change texture, VertexBuffer, or non-WebGPU behavior.
+
+The parameter pixel reproducers also proved that the old WebGPU deferred command reset valid
+nonzero `startIndex` and positive `baseVertex` to zero at replay. Those two public parameters are
+now captured in every one of the same ten command variants and passed to every corresponding
+native indexed draw. This is part of the same deferred indexed-command capture correction; primitive
+count semantics and `minVertexIndex`/`numVertices` behavior are unchanged.
+
+### Permanent regression and verification
+
+`IndexedDrawDeferredTests.cpp` permanently covers:
+
+- 16-bit logical counts 1, 2, 3, 4, 5, 6, and 9, including a one-index draw, a three-index triangle,
+  larger odd multi-primitive triangle lists, and even controls;
+- a three-index 32-bit control;
+- exact WebGPU shadows and logical counts for static and dynamic buffers;
+- native validation and out-of-memory scopes plus an unchanged uncaptured-error count;
+- nonzero `startIndex`, positive `baseVertex`, and valid nontrivial `minVertexIndex`/`numVertices`;
+- persistent indexed drawing and indexed DrawUser with nonzero source offsets;
+- explicit compact `VertexDeclaration` propagation from GFX-043;
+- deferred static A → dynamic B → static A draws with distinct counts, geometry, and pixels;
+- source-array mutation and public-buffer disposal before replay;
+- distinctive pixel assertions proving that padding is not drawn and no last-live-buffer or
+  last-live-count state leaks into earlier commands.
+
+The final WebGPU run passes all 29 focused tests: 5 GFX-104 indexed tests, all 11 GFX-054
+IndexBuffer empty/upload tests, and all 13 GFX-103 VertexBuffer empty/upload tests. The nested
+wgpu-native scopes report no validation or allocation error, and the uncaptured-error count remains
+unchanged. Existing `WebGPU_Colored3D` and `WebGPU_DrawPrimitivesEx` integration tests pass. Forty
+existing DrawUser-indexed argument/count/no-effect and model-loading tests pass, and the EasyGL
+GFX-043 custom-declaration integration test passes.
+
+Pixel parity passes all four portable indexed controls on Vulkan, EasyGL, D3D9, and D3D11. Software
+passes the deferred A→B→A and DrawUser pixel controls plus all nine portable GFX-054 controls.
+SDL_GPU, Bgfx, and Headless each pass 14 practical logical IndexBuffer/DrawUser-count controls;
+SDL_GPU lacks backbuffer readback and Headless has no renderable output. The stronger parity probes
+also exposed separate Bgfx/Software indexed-parameter results, recorded OPEN as REMED-GFX-106
+without changing those backends.
+
+Focused sanitizer runs are clean:
+
+- Vulkan ASan: 25/25 indexed, IndexBuffer-empty, and VertexBuffer-empty tests;
+- Software UBSan: 23/23 deferred indexed, IndexBuffer-empty, and VertexBuffer-empty tests.
+
+All fourteen backend libraries compile with at most four jobs: ASCII, Bgfx, Canvas, D3D9, D3D11,
+D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulkan, and WebGPU.
+
+An attempted five-index `TriangleStrip` validation probe isolated a separate pipeline defect:
+wgpu-native reports that the pipeline's `stripIndexFormat = None` does not match the bound
+`Uint16` index format at command-encoder finish. It is recorded OPEN as REMED-GFX-105; GFX-104
+does not alter pipeline creation and uses list topologies for its odd-count alignment coverage.
+
+**Commits:**
+
+- `b9f72e2e test(Task REMED-GFX-104): reproduce deferred index write alignment`
+- `00810d39 fix(Task REMED-GFX-104): align deferred index writes internally`
+- `3bbd0e04 test(Task REMED-GFX-104): expose deferred index parameter loss`
+- `4fdc6259 fix(Task REMED-GFX-104): preserve deferred indexed draw ranges`
+- `f796cff9 test(Task REMED-GFX-104): cover deferred indexed rendering`
+- `docs(remediation): record GFX-104 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
