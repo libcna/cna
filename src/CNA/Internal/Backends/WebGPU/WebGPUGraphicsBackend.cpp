@@ -100,6 +100,35 @@ namespace CNA::Internal::Backends::WebGPU
             return buffer;
         }
 
+        // REMED-GFX-105: WebGPU enables primitive restart for indexed strip pipelines through
+        // WGPUPrimitiveState::stripIndexFormat. It must match the format passed to
+        // SetIndexBuffer for indexed line/triangle strips, and must remain Undefined for
+        // non-indexed strips and every list/point topology. Both inputs come from the same
+        // deferred command snapshot used by CreateAndBindDeferredIndexBuffer(), never from a
+        // live IndexBuffer object or a backend-global "last format".
+        [[nodiscard]] WGPUIndexFormat RequiredStripIndexFormat(
+            WGPUPrimitiveTopology topology,
+            bool indexed,
+            bool index32)
+        {
+            if (!indexed ||
+                (topology != WGPUPrimitiveTopology_LineStrip &&
+                 topology != WGPUPrimitiveTopology_TriangleStrip))
+            {
+                return WGPUIndexFormat_Undefined;
+            }
+            return index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16;
+        }
+
+        template<typename TCommand>
+        [[nodiscard]] WGPUIndexFormat RequiredStripIndexFormat(const TCommand& command)
+        {
+            return RequiredStripIndexFormat(
+                command.topology,
+                command.indexed && !command.indexData.empty(),
+                command.index32);
+        }
+
         [[nodiscard]] bool HasPresentMode(const WGPUSurfaceCapabilities& capabilities, WGPUPresentMode mode)
         {
             for (std::size_t i = 0; i < capabilities.presentModeCount; ++i)
@@ -357,21 +386,34 @@ namespace CNA::Internal::Backends::WebGPU
             }
         }
 
-        // Encodes (topology, depth test/write/func, blend enable+params, cull mode, wireframe,
-        // depth bias, slope-scale depth bias, and a caller-supplied salt for any extra dimension --
-        // e.g. stride for AlphaTest3D/DualTexture3D) into a single uint64_t pipeline cache key.
+        // Encodes (topology, strip-index compatibility, depth test/write/func, blend enable+params,
+        // cull mode, wireframe, depth bias, slope-scale depth bias, and a caller-supplied salt for
+        // any extra dimension -- e.g. stride for AlphaTest3D/DualTexture3D) into a single uint64_t
+        // pipeline cache key.
         // Mirrors VulkanGraphicsBackend::Make3DKey()/PackBlendBits()'s own role: when blend is
         // disabled, the (irrelevant) blend factors always collapse to the same bits so different
         // disabled BlendStates don't create duplicate pipelines.
-        [[nodiscard]] std::uint64_t Make3DPipelineKey(WGPUPrimitiveTopology topology, bool depthTest, bool depthWrite,
-                                                       int depthFunc, bool blend,
-                                                       const WebGPUGraphicsBackend::BlendKeyParams& bp,
-                                                       int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias,
-                                                       std::uint64_t salt,
-                                                       int colorWriteMask, std::uint32_t sampleMask)
+        [[nodiscard]] std::uint64_t Make3DPipelineKey(
+            WGPUPrimitiveTopology topology,
+            WGPUIndexFormat stripIndexFormat,
+            bool depthTest,
+            bool depthWrite,
+            int depthFunc,
+            bool blend,
+            const WebGPUGraphicsBackend::BlendKeyParams& bp,
+            int cullMode,
+            bool wireframe,
+            float depthBias,
+            float slopeScaleDepthBias,
+            std::uint64_t salt,
+            int colorWriteMask,
+            std::uint32_t sampleMask)
         {
             std::uint64_t key = static_cast<std::uint64_t>(topology);
+            // REMED-GFX-105: RequiredStripIndexFormat() canonicalizes this to Undefined for
+            // list/point topologies and non-indexed strips, so only WebGPU-incompatible strip
+            // formats create distinct pipeline variants. Buffer identity never participates.
+            key = key * 31u + static_cast<std::uint64_t>(stripIndexFormat);
             key = key * 31u + (depthTest ? 1u : 0u);
             key = key * 31u + (depthWrite ? 1u : 0u);
             key = key * 31u + static_cast<std::uint64_t>(depthFunc);
@@ -2613,13 +2655,15 @@ struct VertexOutput {
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
+                                                                            WGPUIndexFormat stripIndexFormat,
                                                                             bool depthTest, bool depthWrite,
                                                                             int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
@@ -2656,6 +2700,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -2844,13 +2889,15 @@ struct VertexOutput {
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineTextured3D(WGPUPrimitiveTopology topology,
+                                                                            WGPUIndexFormat stripIndexFormat,
                                                                             bool depthTest, bool depthWrite,
                                                                             int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
@@ -2887,6 +2934,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -2926,13 +2974,15 @@ struct VertexOutput {
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
+                                                                                    WGPUIndexFormat stripIndexFormat,
                                                                                     bool depthTest, bool depthWrite,
                                                                                     int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
@@ -2972,6 +3022,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -3273,13 +3324,15 @@ struct VertexOutput {
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineLitTextured3D(WGPUPrimitiveTopology topology,
+                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                 bool depthTest, bool depthWrite,
                                                                                 int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
@@ -3319,6 +3372,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -3358,12 +3412,14 @@ struct VertexOutput {
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineLitTextured3DVertexLit(
-        WGPUPrimitiveTopology topology, bool depthTest, bool depthWrite, int depthFunc,
+        WGPUPrimitiveTopology topology, WGPUIndexFormat stripIndexFormat,
+        bool depthTest, bool depthWrite, int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
@@ -3403,6 +3459,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -3581,13 +3638,15 @@ struct VertexOutput {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineAlphaTest3D(std::size_t stride,
                                                                               WGPUPrimitiveTopology topology,
+                                                                              WGPUIndexFormat stripIndexFormat,
                                                                               bool depthTest, bool depthWrite,
                                                                               int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
                                                      static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_);
@@ -3667,6 +3726,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -3868,13 +3928,15 @@ struct VertexOutput {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineDualTexture3D(std::size_t stride,
                                                                                 WGPUPrimitiveTopology topology,
+                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                 bool depthTest, bool depthWrite,
                                                                                 int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
                                                      static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_);
@@ -3939,6 +4001,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -4178,13 +4241,15 @@ struct VertexOutput {
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineEnvMap3D(WGPUPrimitiveTopology topology,
+                                                                          WGPUIndexFormat stripIndexFormat,
                                                                           bool depthTest, bool depthWrite,
                                                                           int depthFunc,
                                                bool blend, const BlendKeyParams& blendParams,
                                                int cullMode, bool wireframe,
                                                float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
@@ -4224,6 +4289,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
@@ -4376,7 +4442,10 @@ struct VertexOutput {
             texBindDescriptor.entries = texEntries.data();
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
-            WGPURenderPipeline pipe = GetOrCreatePipelineEnvMap3D(command.topology, command.depthTest,
+            WGPURenderPipeline pipe = GetOrCreatePipelineEnvMap3D(
+                                                                  command.topology,
+                                                                  RequiredStripIndexFormat(command),
+                                                                  command.depthTest,
                                                                   command.depthWrite, command.depthFunc,
                                                                   command.blend, command.blendParams,
                                                                   command.cullMode, command.wireframe,
@@ -4482,13 +4551,15 @@ struct VertexOutput {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineInstanced3D(
         std::size_t pvStride, std::size_t instVbStride, WGPUPrimitiveTopology topology,
+        WGPUIndexFormat stripIndexFormat,
         bool depthTest, bool depthWrite, int depthFunc,
         bool blend, const BlendKeyParams& blendParams,
         int cullMode, bool wireframe, float depthBias, float slopeScaleDepthBias)
     {
         const std::uint64_t salt = static_cast<std::uint64_t>(pvStride) * 1000003u +
                                     static_cast<std::uint64_t>(instVbStride);
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_);
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
@@ -4545,6 +4616,7 @@ struct VertexOutput {
         pipeline.vertex.bufferCount = vertexBufferLayouts.size();
         pipeline.vertex.buffers = vertexBufferLayouts.data();
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
@@ -4611,7 +4683,9 @@ struct VertexOutput {
             WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
 
             WGPURenderPipeline pipe = GetOrCreatePipelineInstanced3D(command.pvStride, command.instVbStride,
-                                                                     command.topology, command.depthTest,
+                                                                     command.topology,
+                                                                     RequiredStripIndexFormat(command),
+                                                                     command.depthTest,
                                                                      command.depthWrite, command.depthFunc,
                                                                      command.blend, command.blendParams,
                                                                      command.cullMode, command.wireframe,
@@ -6584,7 +6658,10 @@ struct VSOut {
             bindDescriptor.entries = &bindEntry;
             WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
 
-            WGPURenderPipeline pipe = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
+            WGPURenderPipeline pipe = GetOrCreatePipelineColored3D(
+                                                                   command.topology,
+                                                                   RequiredStripIndexFormat(command),
+                                                                   command.depthTest,
                                                                    command.depthWrite, command.depthFunc,
                                                                    command.blend, command.blendParams,
                                                                    command.cullMode, command.wireframe,
@@ -6661,12 +6738,18 @@ struct VSOut {
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
             WGPURenderPipeline pipe = command.hasVertexColor
-                ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest,
+                ? GetOrCreatePipelineColoredTextured3D(
+                                                       command.topology,
+                                                       RequiredStripIndexFormat(command),
+                                                       command.depthTest,
                                                        command.depthWrite, command.depthFunc,
                                                        command.blend, command.blendParams,
                                                        command.cullMode, command.wireframe,
                                                        command.depthBias, command.slopeScaleDepthBias)
-                : GetOrCreatePipelineTextured3D(command.topology, command.depthTest,
+                : GetOrCreatePipelineTextured3D(
+                                                command.topology,
+                                                RequiredStripIndexFormat(command),
+                                                command.depthTest,
                                                 command.depthWrite, command.depthFunc,
                                                 command.blend, command.blendParams,
                                                 command.cullMode, command.wireframe,
@@ -6755,12 +6838,18 @@ struct VSOut {
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
             WGPURenderPipeline pipe = command.preferVertexLit
-                ? GetOrCreatePipelineLitTextured3DVertexLit(command.topology, command.depthTest,
+                ? GetOrCreatePipelineLitTextured3DVertexLit(
+                                                             command.topology,
+                                                             RequiredStripIndexFormat(command),
+                                                             command.depthTest,
                                                              command.depthWrite, command.depthFunc,
                                                              command.blend, command.blendParams,
                                                              command.cullMode, command.wireframe,
                                                              command.depthBias, command.slopeScaleDepthBias)
-                : GetOrCreatePipelineLitTextured3D(command.topology, command.depthTest,
+                : GetOrCreatePipelineLitTextured3D(
+                                                    command.topology,
+                                                    RequiredStripIndexFormat(command),
+                                                    command.depthTest,
                                                     command.depthWrite, command.depthFunc,
                                                     command.blend, command.blendParams,
                                                     command.cullMode, command.wireframe,
@@ -6904,7 +6993,10 @@ struct VSOut {
             texBindDescriptor.entries = texEntries.data();
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
-            WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(command.stride, command.topology,
+            WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(
+                                                                     command.stride,
+                                                                     command.topology,
+                                                                     RequiredStripIndexFormat(command),
                                                                      command.depthTest, command.depthWrite,
                                                                      command.depthFunc,
                                                                      command.blend, command.blendParams,
@@ -7051,7 +7143,9 @@ struct VSOut {
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
             WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor ? 24 : 20,
-                                                                       command.topology, command.depthTest,
+                                                                       command.topology,
+                                                                       RequiredStripIndexFormat(command),
+                                                                       command.depthTest,
                                                                        command.depthWrite, command.depthFunc,
                                                                        command.blend, command.blendParams,
                                                                        command.cullMode, command.wireframe,
@@ -7435,13 +7529,15 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelinePbr3D(WGPUPrimitiveTopology topology,
+                                                                         WGPUIndexFormat stripIndexFormat,
                                                                          bool depthTest, bool depthWrite,
                                                                          int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = pbrPipelines_.find(key); it != pbrPipelines_.end())
@@ -7487,6 +7583,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -7707,7 +7804,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             texBindDescriptor.entries = texEntries.data();
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
-            WGPURenderPipeline pipe = GetOrCreatePipelinePbr3D(command.topology, command.depthTest,
+            WGPURenderPipeline pipe = GetOrCreatePipelinePbr3D(
+                                                               command.topology,
+                                                               RequiredStripIndexFormat(command),
+                                                               command.depthTest,
                                                                command.depthWrite, command.depthFunc,
                                                                command.blend, command.blendParams,
                                                                command.cullMode, command.wireframe,
@@ -8317,6 +8417,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineSkinned3D(std::size_t stride, bool preferVertexLit,
                                                                              WGPUPrimitiveTopology topology,
+                                                                             WGPUIndexFormat stripIndexFormat,
                                                                              bool depthTest, bool depthWrite,
                                                                              int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
@@ -8324,7 +8425,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                                                     float depthBias, float slopeScaleDepthBias)
     {
         const bool hasVertexColor = (stride == 56);
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         auto& cache = preferVertexLit
@@ -8392,6 +8494,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -8565,7 +8668,9 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
             WGPURenderPipeline pipe = GetOrCreatePipelineSkinned3D(command.stride, command.preferVertexLit,
-                                                                    command.topology, command.depthTest,
+                                                                    command.topology,
+                                                                    RequiredStripIndexFormat(command),
+                                                                    command.depthTest,
                                                                     command.depthWrite, command.depthFunc,
                                                                     command.blend, command.blendParams,
                                                                     command.cullMode, command.wireframe,
@@ -8837,13 +8942,15 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineSkinnedPbr3D(WGPUPrimitiveTopology topology,
+                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                 bool depthTest, bool depthWrite,
                                                                                 int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
                                                     float depthBias, float slopeScaleDepthBias)
     {
-        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+        const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
+                                                     depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
         if (auto it = skinnedPbrPipelines_.find(key); it != skinnedPbrPipelines_.end())
@@ -8893,6 +9000,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         pipeline.vertex.bufferCount = 1;
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
+        pipeline.primitive.stripIndexFormat = stripIndexFormat;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
         pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
         // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
@@ -9095,7 +9203,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             texBindDescriptor.entries = texEntries.data();
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
-            WGPURenderPipeline pipe = GetOrCreatePipelineSkinnedPbr3D(command.topology, command.depthTest,
+            WGPURenderPipeline pipe = GetOrCreatePipelineSkinnedPbr3D(
+                                                                      command.topology,
+                                                                      RequiredStripIndexFormat(command),
+                                                                      command.depthTest,
                                                                       command.depthWrite, command.depthFunc,
                                                                       command.blend, command.blendParams,
                                                                       command.cullMode, command.wireframe,

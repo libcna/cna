@@ -564,6 +564,12 @@ namespace CNA::Internal::Backends::WebGPU
         {
             return spritePipelines_.size();
         }
+        /// REMED-GFX-105 diagnostic used to prove format-compatible index-buffer objects reuse a
+        /// Colored3D pipeline while Uint16/Uint32 indexed strips require exactly two variants.
+        [[nodiscard]] std::size_t GetColoredPipelineCacheSizeEXT() const noexcept
+        {
+            return coloredPipelines_.size();
+        }
         /// Native validation callback count since device creation. The GFX-102 regression checks
         /// this after all render-target/backbuffer/MSAA transitions and logs the exact total.
         [[nodiscard]] std::size_t GetUncapturedErrorCountEXT() const noexcept
@@ -791,6 +797,7 @@ namespace CNA::Internal::Backends::WebGPU
                            std::uint32_t targetSampleCount);
         void RenderColoredDraws(WGPURenderPassEncoder pass);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
+                                                                       WGPUIndexFormat stripIndexFormat,
                                                                        bool depthTest, bool depthWrite,
                                                                        int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1131,12 +1138,14 @@ namespace CNA::Internal::Backends::WebGPU
         void CreateTexturedResources();
         void DestroyTexturedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineTextured3D(WGPUPrimitiveTopology topology,
+                                                                        WGPUIndexFormat stripIndexFormat,
                                                                         bool depthTest, bool depthWrite,
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
                                                        float depthBias, float slopeScaleDepthBias);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
+                                                                               WGPUIndexFormat stripIndexFormat,
                                                                                bool depthTest, bool depthWrite,
                                                                                int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1211,6 +1220,7 @@ namespace CNA::Internal::Backends::WebGPU
         void CreateLitTexturedResources();
         void DestroyLitTexturedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineLitTextured3D(WGPUPrimitiveTopology topology,
+                                                                           WGPUIndexFormat stripIndexFormat,
                                                                            bool depthTest, bool depthWrite,
                                                                            int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1223,6 +1233,7 @@ namespace CNA::Internal::Backends::WebGPU
         /// texturedBindGroupLayout_ unchanged (identical UBO/binding shape to the per-pixel-lit
         /// shader) -- only a new shader module and a new pipeline cache are needed.
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineLitTextured3DVertexLit(WGPUPrimitiveTopology topology,
+                                                                                    WGPUIndexFormat stripIndexFormat,
                                                                                     bool depthTest, bool depthWrite,
                                                                                     int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1291,6 +1302,7 @@ namespace CNA::Internal::Backends::WebGPU
         void DestroyAlphaTestResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride,
                                                                         WGPUPrimitiveTopology topology,
+                                                                        WGPUIndexFormat stripIndexFormat,
                                                                         bool depthTest, bool depthWrite,
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1353,6 +1365,7 @@ namespace CNA::Internal::Backends::WebGPU
         void DestroyDualTextureResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineDualTexture3D(std::size_t stride,
                                                                           WGPUPrimitiveTopology topology,
+                                                                          WGPUIndexFormat stripIndexFormat,
                                                                           bool depthTest, bool depthWrite,
                                                                           int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1439,6 +1452,7 @@ namespace CNA::Internal::Backends::WebGPU
         /// CreateEnvMapResources()/ClearAllPipelineCaches()).
         void EnsureEnvMapDefaultTextures();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineEnvMap3D(WGPUPrimitiveTopology topology,
+                                                                      WGPUIndexFormat stripIndexFormat,
                                                                       bool depthTest, bool depthWrite,
                                                                       int depthFunc,
                                                    bool blend, const BlendKeyParams& blendParams,
@@ -1507,6 +1521,7 @@ namespace CNA::Internal::Backends::WebGPU
         void DestroyInstancedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineInstanced3D(std::size_t pvStride, std::size_t instVbStride,
                                                                          WGPUPrimitiveTopology topology,
+                                                                         WGPUIndexFormat stripIndexFormat,
                                                                          bool depthTest, bool depthWrite, int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
@@ -1579,6 +1594,7 @@ namespace CNA::Internal::Backends::WebGPU
         /// unbound. Idempotent; safe to call from every QueuePbrDraw().
         void EnsurePbrDefaultTextures();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelinePbr3D(WGPUPrimitiveTopology topology,
+                                                                    WGPUIndexFormat stripIndexFormat,
                                                                     bool depthTest, bool depthWrite,
                                                                     int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1661,6 +1677,7 @@ namespace CNA::Internal::Backends::WebGPU
         void DestroySkinnedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinned3D(std::size_t stride, bool preferVertexLit,
                                                                         WGPUPrimitiveTopology topology,
+                                                                        WGPUIndexFormat stripIndexFormat,
                                                                         bool depthTest, bool depthWrite,
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
@@ -1731,6 +1748,7 @@ namespace CNA::Internal::Backends::WebGPU
         void CreateSkinnedPbrResources();
         void DestroySkinnedPbrResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinnedPbr3D(WGPUPrimitiveTopology topology,
+                                                                           WGPUIndexFormat stripIndexFormat,
                                                                            bool depthTest, bool depthWrite,
                                                                            int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
