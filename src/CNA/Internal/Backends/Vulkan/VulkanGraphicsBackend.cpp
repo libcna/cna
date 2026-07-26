@@ -6918,8 +6918,18 @@ namespace CNA::Internal::Backends::Vulkan
                     continue;
                 }
                 if (draw.vbData.empty()) continue;
+                VkDeviceSize nativeIbOff = ibOff;
+                if (!draw.ibData.empty()) {
+                    const VkDeviceSize indexAlignment =
+                        draw.indexType == VK_INDEX_TYPE_UINT32
+                            ? sizeof(uint32_t)
+                            : sizeof(uint16_t);
+                    nativeIbOff =
+                        (ibOff + indexAlignment - 1) & ~(indexAlignment - 1);
+                }
                 if (vbOff + draw.vbData.size() > kFrame3DVBSize) continue;
-                if (!draw.ibData.empty() && ibOff + draw.ibData.size() > kFrame3DIBSize) continue;
+                if (!draw.ibData.empty()
+                    && nativeIbOff + draw.ibData.size() > kFrame3DIBSize) continue;
                 if (draw.useInstanced && instVbOff + draw.instVbData.size() > kFrame3DInstVBSize) continue;
 
                 // Task 447/854: this draw is definitely about to be recorded -- open/close real
@@ -6945,9 +6955,18 @@ namespace CNA::Internal::Backends::Vulkan
 
                 std::memcpy(static_cast<uint8_t*>(frame3DVBPtr_[currentFrame_]) + vbOff,
                             draw.vbData.data(), draw.vbData.size());
-                if (!draw.ibData.empty())
-                    std::memcpy(static_cast<uint8_t*>(frame3DIBPtr_[currentFrame_]) + ibOff,
+                if (!draw.ibData.empty()) {
+                    // REMED-GFX-112: each deferred draw keeps exact logical bytes/counts. Only
+                    // its placement in the shared native arena is padded so vkCmdBindIndexBuffer's
+                    // offset remains aligned to that draw's VkIndexType.
+                    if (nativeIbOff > ibOff)
+                        std::memset(
+                            static_cast<uint8_t*>(frame3DIBPtr_[currentFrame_]) + ibOff,
+                            0,
+                            static_cast<std::size_t>(nativeIbOff - ibOff));
+                    std::memcpy(static_cast<uint8_t*>(frame3DIBPtr_[currentFrame_]) + nativeIbOff,
                                 draw.ibData.data(), draw.ibData.size());
+                }
                 if (draw.useInstanced && !draw.instVbData.empty())
                     std::memcpy(static_cast<uint8_t*>(frame3DInstVBPtr_[currentFrame_]) + instVbOff,
                                 draw.instVbData.data(), draw.instVbData.size());
@@ -7252,9 +7271,10 @@ namespace CNA::Internal::Backends::Vulkan
                     vkCmdBindVertexBuffers(cb, 1, 1, &frame3DInstVB_[currentFrame_], &instVbOff);
                 }
                 if (!draw.ibData.empty()) {
-                    vkCmdBindIndexBuffer(cb, frame3DIB_[currentFrame_], ibOff, draw.indexType);
+                    vkCmdBindIndexBuffer(
+                        cb, frame3DIB_[currentFrame_], nativeIbOff, draw.indexType);
                     vkCmdDrawIndexed(cb, draw.drawCount, draw.instanceCount, 0, draw.baseVertex, 0);
-                    ibOff += static_cast<VkDeviceSize>(draw.ibData.size());
+                    ibOff = nativeIbOff + static_cast<VkDeviceSize>(draw.ibData.size());
                 } else {
                     vkCmdDraw(cb, draw.drawCount, draw.instanceCount, 0, 0);
                 }
