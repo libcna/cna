@@ -327,7 +327,7 @@ namespace CNA::Internal::Backends::Bgfx
         mutable bool submittedSinceUpdate_ = false;
     };
 
-    /// bgfx dynamic index buffer (16-bit).
+    /// bgfx dynamic index buffer with a construction-time-fixed 16- or 32-bit element width.
     class BgfxIndexBufferBackend : public IIndexBufferBackend
     {
     public:
@@ -346,11 +346,17 @@ namespace CNA::Internal::Backends::Bgfx
         void SetData32(const void* data, int index_count) override;
         [[nodiscard]] int  GetIndexCount()  const override { return indexCount; }
         [[nodiscard]] bool IsThirtyTwoBit() const override { return is32bit; }
+        /// Returns the exact flags supplied for this handle and every immutable replacement.
+        [[nodiscard]] std::uint16_t GetNativeCreationFlagsEXT() const noexcept
+        {
+            return nativeCreationFlags_;
+        }
         /// REMED-GFX-109: see BgfxVertexBufferBackend::MarkSubmitted().
         void MarkSubmitted() const noexcept { submittedSinceUpdate_ = true; }
 
     private:
         int capacity_ = 0;
+        std::uint16_t nativeCreationFlags_ = BGFX_BUFFER_ALLOW_RESIZE;
         mutable bool submittedSinceUpdate_ = false;
     };
 
@@ -732,6 +738,7 @@ namespace CNA::Internal::Backends::Bgfx
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;

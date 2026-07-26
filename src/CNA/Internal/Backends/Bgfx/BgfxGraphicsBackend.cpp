@@ -2504,11 +2504,15 @@ namespace CNA::Internal::Backends::Bgfx
     // --- BgfxIndexBufferBackend ---
 
     BgfxIndexBufferBackend::BgfxIndexBufferBackend(int capacity, bool thirtyTwoBit)
-        : is32bit(thirtyTwoBit), capacity_(capacity)
+        : is32bit(thirtyTwoBit)
+        , capacity_(capacity)
+        , nativeCreationFlags_(
+              BGFX_BUFFER_ALLOW_RESIZE |
+              (thirtyTwoBit ? BGFX_BUFFER_INDEX32 : BGFX_BUFFER_NONE))
     {
-        const uint16_t flags = is32bit ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
-                                       : BGFX_BUFFER_ALLOW_RESIZE;
-        handle = bgfx::createDynamicIndexBuffer(static_cast<uint32_t>(capacity), flags);
+        handle = bgfx::createDynamicIndexBuffer(
+            static_cast<uint32_t>(capacity),
+            nativeCreationFlags_);
     }
 
     BgfxIndexBufferBackend::~BgfxIndexBufferBackend()
@@ -2518,6 +2522,9 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxIndexBufferBackend::SetData16(const void* data, int index_count)
     {
+        if (is32bit)
+            throw std::runtime_error(
+                "BgfxIndexBufferBackend: SetData16 called on a 32-bit index buffer.");
         indexCount = index_count;
         if (!data || index_count <= 0) { cpuData.clear(); return; }
 
@@ -2525,11 +2532,8 @@ namespace CNA::Internal::Backends::Bgfx
         // Both public IndexBuffer and DynamicIndexBuffer use this same backend object.
         if (submittedSinceUpdate_ || !bgfx::isValid(handle))
         {
-            const uint16_t flags = is32bit
-                ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
-                : BGFX_BUFFER_ALLOW_RESIZE;
             const auto replacement = bgfx::createDynamicIndexBuffer(
-                static_cast<uint32_t>(capacity_), flags);
+                static_cast<uint32_t>(capacity_), nativeCreationFlags_);
             if (!bgfx::isValid(replacement))
                 throw std::runtime_error(
                     "Bgfx: failed to allocate an immutable index-buffer update version.");
@@ -2545,18 +2549,17 @@ namespace CNA::Internal::Backends::Bgfx
 
     void BgfxIndexBufferBackend::SetData32(const void* data, int index_count)
     {
+        if (!is32bit)
+            throw std::runtime_error(
+                "BgfxIndexBufferBackend: SetData32 called on a 16-bit index buffer.");
         indexCount = index_count;
         if (!data || index_count <= 0) { cpuData.clear(); return; }
 
-        // Keep the handle's declared native format unchanged here. Public 32-bit creation is the
-        // separate REMED-GFX-108 contract and is intentionally not absorbed by this versioning fix.
+        // Keep the handle's declared native format unchanged across REMED-GFX-109 versioning.
         if (submittedSinceUpdate_ || !bgfx::isValid(handle))
         {
-            const uint16_t flags = is32bit
-                ? BGFX_BUFFER_INDEX32 | BGFX_BUFFER_ALLOW_RESIZE
-                : BGFX_BUFFER_ALLOW_RESIZE;
             const auto replacement = bgfx::createDynamicIndexBuffer(
-                static_cast<uint32_t>(capacity_), flags);
+                static_cast<uint32_t>(capacity_), nativeCreationFlags_);
             if (!bgfx::isValid(replacement))
                 throw std::runtime_error(
                     "Bgfx: failed to allocate an immutable index-buffer update version.");
@@ -2573,6 +2576,11 @@ namespace CNA::Internal::Backends::Bgfx
     std::unique_ptr<IIndexBufferBackend> BgfxGraphicsBackend::CreateIndexBuffer16(int capacity)
     {
         return std::make_unique<BgfxIndexBufferBackend>(capacity, false);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> BgfxGraphicsBackend::CreateIndexBuffer32(int capacity)
+    {
+        return std::make_unique<BgfxIndexBufferBackend>(capacity, true);
     }
 
     // --- 3D draw calls ---
