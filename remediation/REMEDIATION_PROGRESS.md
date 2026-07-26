@@ -2456,7 +2456,7 @@ existing task.
 | REMED-GFX-104 | WebGPU deferred indexed replay preserves exact logical bytes/counts and snapshots `startIndex`/`baseVertex`; native allocation/write padding is internal, zero initialized, and compliant with wgpu-native's four-byte queue-copy rule. | MEDIUM | P2 | REMED-GFX-103 indexed-draw verification | **DONE 2026-07-26 — ODD/EVEN 16-BIT, 32-BIT, STATIC/DYNAMIC, DRAWUSER, A→B→A, LIFETIME, PIXEL, NATIVE-SCOPE, SANITIZER, AND PARITY COVERAGE PASS.** |
 | REMED-GFX-105 | WebGPU indexed triangle-strip replay binds a `Uint16` index buffer to a render pipeline whose `stripIndexFormat` is `None`, producing a native command-encoder validation error. | MEDIUM | P2 | REMED-GFX-104 native-scope expansion | **DONE 2026-07-26 — DEFERRED INDEXED STRIPS NOW SELECT/CACHE THE PIPELINE BY CAPTURED `UINT16`/`UINT32`; NON-INDEXED STRIPS AND LIST/POINT TOPOLOGIES REMAIN `UNDEFINED`; NATIVE VALIDATION, EXACT PIXELS, CACHE CARDINALITY, SANITIZERS, AND BACKEND CONTROLS PASS.** |
 | REMED-GFX-106 | Bgfx and Software produce backend-specific indexed pixel failures for nonzero indexed parameters and/or deferred multi-draw controls that pass WebGPU, Vulkan, EasyGL, D3D9, and D3D11. | MEDIUM | P2 | REMED-GFX-104 backend parity | **DONE 2026-07-26 AS A RECONCILED PARENT — SIX INDEPENDENT FINDINGS ARE ALLOCATED AS REMED-GFX-107..112; NO CHILD PRODUCTION FIX WAS COMBINED INTO THIS TASK.** |
-| REMED-GFX-107 | Bgfx effect-aware indexed draws bind complete buffers instead of the requested first index, base vertex, and topology-derived index count. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX RANGE-BINDING CORRECTION.** |
+| REMED-GFX-107 | Bgfx effect-aware indexed draws bind complete buffers instead of the requested first index, base vertex, and topology-derived index count. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — EXACT ELEMENT RANGE, BASE-VERTEX BINDING, TOPOLOGY COUNT, SAFE HINT VALIDATION, AND DEFERRED CAPTURE VERIFIED.** |
 | REMED-GFX-108 | Bgfx declared 32-bit index buffers inherit the default 16-bit backend creation path. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX NATIVE FORMAT CORRECTION.** |
 | REMED-GFX-109 | Bgfx persistent vertex/index updates after queued draws could overwrite the native bytes needed by those draws before deferred frame execution. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — SUBMITTED BUFFER HANDLES ARE VERSIONED UNTIL BGFX'S DEFERRED RETIREMENT FENCE; EXACT OPENGL/VULKAN A→B→A COVERAGE PASSES.** |
 | REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT SOFTWARE ADDRESSING/BOUNDS CORRECTION.** |
@@ -8967,6 +8967,167 @@ black, while the later lime B and final blue A samples were exact.
 - `524fc3bf` — `test(Task REMED-GFX-109): expose Bgfx buffer update aliasing`
 - `f117d12d` — `fix(Task REMED-GFX-109): version submitted Bgfx buffers`
 - `b71a4276` — `test(Task REMED-GFX-109): cover immutable Bgfx buffer versions`
+
+## REMED-GFX-107 — Bgfx indexed range/base/count binding (DONE 2026-07-26)
+
+### Classification and exact pre-fix reproduction
+
+The defect was a set of related omissions in Bgfx's effect-aware persistent indexed path, not one
+ambiguous offset conversion:
+
+| Contract dimension | Pre-fix classification |
+|---|---|
+| Index-buffer start offset | **Defective.** The whole-handle overload implicitly selected element zero; captured `startIndex` was never passed to Bgfx. |
+| Index count | **Defective.** The whole-handle overload submitted every uploaded index, so prefix/suffix primitives were not excluded. |
+| Vertex-buffer start/count | **Defective for base addressing.** The whole vertex buffer was always bound at start zero. |
+| `baseVertex` | **Defective.** It was captured but never applied to persistent effect-aware vertex fetch. |
+| Primitive-to-index-count mapping | **Omitted in this path.** No topology-derived count reached `setIndexBuffer`; the formulas themselves were established independently. |
+| Deferred parameter capture | **Partially complete.** `startIndex`, `baseVertex`, `primitive`, and `primitiveCount` were already values; `minVertexIndex` and `numVertices` were not present in `GpuDrawParams` and therefore were not retained. |
+| Index width | **Not the GFX-107 cause.** A correctly flagged native Bgfx buffer decodes its existing 16-/32-bit width; public 32-bit creation remains REMED-GFX-108. |
+
+The first regression commit activated two public Bgfx tests before any production correction.
+Both failed on Bgfx OpenGL with exact distinctive geometry:
+
+| Case | PrimitiveType | Width | `startIndex` | `baseVertex` | `minVertexIndex` | `numVertices` | `primitiveCount` | Expected consumed indices | Actual old `setIndexBuffer` first/count | Actual old `setVertexBuffer` start/count | Resulting submitted geometry and exact pixel result |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Nonzero start | TriangleList | 16-bit | 3 | 0 | 3 | 3 | 1 | 3 | 0 / 9 | 0 / 9 | Prefix lime, intended red, and suffix blue triangles were all submitted. The intended left sample was red, but the forbidden center was lime `(0,255,0,255)` and the forbidden right sample was blue `(0,0,255,255)` instead of black. |
+| Positive base | TriangleList | 16-bit | 0 | 3 | 0 | 3 | 1 | 3 | 0 / 3 | 0 / 6 | Indices `0,1,2` fetched the unbased red triangle. The center pixel was red `(255,0,0,255)` instead of the expected based blue `(0,0,255,255)`. |
+
+The old native calls also deterministically classify the combined fixture without conflating the
+causes: TriangleList/16-bit, `startIndex=3`, `baseVertex=3`, `minVertexIndex=3`,
+`numVertices=3`, `primitiveCount=1` required three indices, while the old calls were index
+`0/9` and vertex `0/12`. That submits unbased lime/yellow/red geometry instead of only the based
+red selection. The permanent combined regression now checks all four decoy locations exactly.
+
+### Production correction and native bindings
+
+- `GraphicsDevice::DrawIndexedPrimitives` computes the consumed element count with checked
+  64-bit arithmetic, validates the index and declared vertex ranges before backend dispatch, and
+  copies `startIndex`, `baseVertex`, `minVertexIndex`, and `numVertices` into `GpuDrawParams`.
+  `primitive` and `primitiveCount` remain value parameters. No later live `GraphicsDevice` state
+  participates in replay.
+- The solid Bgfx path calls
+  `setIndexBuffer(handle, startIndex, topologyElementCount)`. Both arguments are index elements,
+  never byte offsets.
+- Bgfx has no separate draw-time base-vertex argument. The solid path therefore calls
+  `setVertexBuffer(0, handle, baseVertex, uploadedVertexCount-baseVertex)`. Starting the native
+  binding applies the public addend to every decoded index.
+- `minVertexIndex` cannot safely become the native vertex start without rebasing every index, and
+  `numVertices` cannot safely trim a binding when actual decoded indices or `baseVertex` require a
+  broader interval. They are retained and validated as public hints, while Bgfx binds the safe
+  remainder of the uploaded vertex buffer. Correct geometry wins over over-trimming.
+- Wireframe expansion already decodes only the requested index range and applies `baseVertex` to
+  its copied transient indices. It consequently keeps vertex start zero and binds the exact
+  transient index buffer; double-applying base addressing was avoided.
+
+Exact representative post-fix bindings are:
+
+| Regression case | Post-fix Bgfx index first/count | Post-fix Bgfx vertex start/count | Exact result |
+|---|---:|---:|---|
+| 16-bit static, start only (`3/0/1`) | 3 / 3 | 0 / 9 | Only the red middle triangle; both visible decoys remain black. |
+| 16-bit static, base only (`0/3/1`) | 0 / 3 | 3 / 3 | The decoded indices select the blue based triangle. |
+| 16-bit dynamic, start + base + count (`3/3/1`) | 3 / 3 | 3 / 9 | Only the intended red triangle; unbased prefix, based prefix, and based suffix remain black. |
+| Exact, loose, and deliberately narrow hints | 0 / 3 | 0 / 6 | All three calls preserve the decoded blue geometry; hints neither readdress nor truncate it. |
+| Correctly flagged backend-level 32-bit fixture (`3/3/1`) | 3 / 3 | 3 / 9 | Only the intended red triangle; all 32-bit decoys remain black. |
+
+The consumed index count is now established for every CNA indexed topology:
+
+| PrimitiveType | Consumed index elements for `primitiveCount = n` | Native Bgfx range |
+|---|---:|---|
+| TriangleList | `3n` | `startIndex / 3n` |
+| TriangleStrip | `n + 2` | `startIndex / (n + 2)` |
+| LineList | `2n` | `startIndex / 2n` |
+| LineStrip | `n + 1` | `startIndex / (n + 1)` |
+| PointListEXT | `n` | `startIndex / n` |
+
+PointListEXT's **range count** is correct here. Its Bgfx primitive-state mapping remains the
+separate REMED-GFX-111 defect and was not changed.
+
+### Public contract, pixels, and lifetime results
+
+- Public `DrawIndexedPrimitives` passes for `startIndex` zero/nonzero, positive
+  `baseVertex`, combined addressing, first/middle/final valid ranges, exact/loose/narrow valid
+  hints, and exact `primitiveCount` limiting. CNA's current public contract has no valid negative
+  `baseVertex`: every negative case is rejected before backend dispatch.
+- `primitiveCount=0`, negative `startIndex`/`baseVertex`/`minVertexIndex`, nonpositive
+  `numVertices`, start past the buffer, topology-derived ranges past the buffer, declared vertex
+  ranges past the buffer after base addition, and count arithmetic overflow all throw
+  `ArgumentOutOfRangeException` before native submission. Nothing is clamped.
+- Static `IndexBuffer` and `DynamicIndexBuffer` both pass with 16-bit elements. Public Bgfx
+  32-bit creation is deliberately not enabled or fixed; the correctly flagged backend-level
+  fixture proves GFX-107's 32-bit range/base/count behavior without absorbing REMED-GFX-108.
+- `DrawIndexedPrimitives` and `DrawUserIndexedPrimitives` are verified separately. DrawUser
+  remains unchanged and passes its odd byte offsets, both widths, topology counts, source
+  ownership, and explicit `VertexDeclaration` controls.
+- The Bgfx-only indexed A→B→A test makes three distinct public calls with different
+  `startIndex`, `baseVertex`, `primitiveCount`, index-buffer object, and immutable native buffer
+  version. CNA exposes no public indexed multi-draw API; this is three ordinary calls, not one
+  native multi-draw. Exact red/lime/blue pixels prove value capture. Caller arrays are
+  overwritten, a queued static index buffer is updated, both independent index buffers and the
+  vertex buffer are disposed before replay, and no aliasing or lifetime fault occurs.
+- Target→backbuffer→target in one frame preserves Bgfx view segmentation: the backbuffer is exact
+  blue with target geometry absent; the sampled `RenderTarget2D` is exact red/yellow with prefix
+  and suffix decoys black. No frame flush, wait, extra frame, Present, or latency mechanism was
+  added.
+- REMED-GFX-109 versioning remains bounded and retires exactly once. On both renderers, native
+  vertex/index counts were process baseline `0/0`, live `1/1`, warm high-water `1/1`,
+  post-fence `1/1`, and post-dispose `0/0`.
+
+### Backend, segmentation, sanitizer, and build controls
+
+- Bgfx OpenGL: **20/20** focused indexed tests and **21/21** empty-upload tests pass with exact
+  pixels.
+- Bgfx Vulkan: **20/20** focused indexed tests and **21/21** empty-upload tests pass with exact
+  pixels. The direct 131-line run requested and activated Vulkan under
+  `VK_LAYER_KHRONOS_validation`; it contains no VUID, validation warning, or validation error.
+  The only renderer diagnostic is the benign absent RenderDoc library warning.
+- On both Bgfx routes, `cna_test_bgfx_multi_viewport` passes **15/15** (REMED-GFX-065),
+  `cna_test_bgfx_spritebatch_transform` passes **21/21** (REMED-GFX-084), and
+  `cna_test_bgfx_rendertarget_effect_texture` passes **32/32**. Explicit DrawUser
+  `VertexDeclaration` propagation (REMED-GFX-043), empty uploads (REMED-GFX-054/GFX-103), and
+  GFX-109 lifetime/cardinality remain green.
+- Exact indexed controls pass on native Vulkan **17/17**, WebGPU **22/22**, EasyGL **16/16**,
+  D3D9/DXVK **14/14**, and D3D11/DXVK **14/14**. WebGPU's GFX-104 capture and GFX-105 strip
+  pipeline controls are included. SDL_GPU passes its **3/3** practical strip/range-validation
+  controls; exact backbuffer pixels remain unavailable through that backend's public readback.
+  Software passes **9** applicable indexed controls with one intentional unsupported-strip skip;
+  its separate public start/base defect remains REMED-GFX-110.
+- Focused Bgfx OpenGL ASan and UBSan indexed selections each pass **20/20** with no finding.
+  ASan used `detect_leaks=0:halt_on_error=1`; UBSan used
+  `halt_on_error=1:print_stacktrace=1`.
+- All fourteen backend-library targets compile incrementally with `-j4`: ASCII, Bgfx, Canvas,
+  D3D9, D3D11, D3D12, EasyGL, DX3, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan, and WebGPU.
+
+Persistent build directories used were:
+
+- `cmake-build-ascii`
+- `cmake-build-bgfx`
+- `cmake-build-bgfx-asan`
+- `cmake-build-bgfx-ubsan`
+- `cmake-build-canvas`
+- `cmake-build-d3d9-mingw`
+- `cmake-build-d3d11-mingw`
+- `cmake-build-d3d12-mingw`
+- `cmake-build-debug` (EasyGL)
+- `cmake-build-dx3`
+- `cmake-build-headless`
+- `cmake-build-sdlgpu`
+- `cmake-build-sdlrenderer`
+- `cmake-build-software`
+- `cmake-build-vulkan`
+- `cmake-build-webgpu`
+
+Every directory retained `CNA_USE_CCACHE=ON`. Final ccache statistics were 44,273 cacheable calls
+of 44,491 total (99.51%), 8,615 hits, 35,658 misses, and 218 uncacheable calls; the 5.0 GiB cache
+was full. No build directory was cleaned, no clean build was performed, and no build tree was
+created under `/tmp`, `/var/tmp`, or `/dev/shm`; `/tmp` held only validation/test logs.
+
+### Commits
+
+- `28c29504` — `test(Task REMED-GFX-107): expose Bgfx indexed range omissions`
+- `2cfbee09` — `fix(Task REMED-GFX-107): bind exact Bgfx indexed draws`
+- `d170fcac` — `test(Task REMED-GFX-107): cover complete indexed binding contract`
+- `docs(remediation): record GFX-107 completion` (this record)
 
 ## REMED-GFX-106 — Bgfx/Software indexed parity reconciliation (DONE AS A RECONCILED PARENT 2026-07-26)
 
