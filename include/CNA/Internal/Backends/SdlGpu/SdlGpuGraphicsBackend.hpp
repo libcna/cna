@@ -554,13 +554,17 @@ namespace CNA::Internal::Backends::SdlGpu
          * fragment shader (the only kind of shader in this codebase that can genuinely write more
          * than one attachment) really render simultaneous MRT. @p depthStencilFormat is
          * `SDL_GPU_TEXTUREFORMAT_INVALID` when the active pass is genuinely depthless; it is part
-         * of pipeline compatibility and cache identity (REMED-GFX-097). Null if
-         * `CompileProgram()` did not succeed. NOXNA — internal use only. */
+         * of pipeline compatibility and cache identity (REMED-GFX-097). @p depthBias and
+         * @p slopeScaleDepthBias are the queued sprite's by-value rasterizer snapshot and are
+         * pipeline-static identity/state (REMED-GFX-051). Null if `CompileProgram()` did not
+         * succeed. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
                                                                           SDL_GPUSampleCount sampleCount,
                                                                           SDL_GPUTextureFormat depthStencilFormat,
                                                                           int colorTargetCount,
-                                                                          const std::array<int, 4>& colorWriteMasks);
+                                                                          const std::array<int, 4>& colorWriteMasks,
+                                                                          float depthBias,
+                                                                          float slopeScaleDepthBias);
         /** @brief Number of cached custom-effect pipelines. Test-only cache-identity
          * introspection for REMED-GFX-051. NOXNA. */
         NOXNA [[nodiscard]] std::size_t GetPipelineCacheSizeEXT() const
@@ -738,17 +742,18 @@ namespace CNA::Internal::Backends::SdlGpu
             int readMask = 0xFF, writeMask = 0xFF;
         };
 
-        // SDLGPU-18/19/20: snapshot of BlendState/the stencil half of DepthStencilState/
-        // RasterizerState's cull+fill fields, captured at Queue*Draw time -- mirrors DrawTarget's
+        // SDLGPU-18/19/20 + REMED-GFX-051: snapshot of BlendState/the stencil half of
+        // DepthStencilState/RasterizerState's pipeline-static fields, captured at Queue*Draw time
+        // -- mirrors DrawTarget's
         // own "one shared struct field per DrawCommand" precedent. depthTest/depthWrite/depthFunc
         // stay as each DrawCommand's own pre-existing, separate fields (unchanged) since those
         // predate this and are already correctly threaded through; this struct only carries the
-        // NEW dimensions this task adds. ScissorTestEnable/DepthBias/SlopeScaleDepthBias are
-        // deliberately NOT here -- the scissor rect+enable are per-draw pass state carried in
-        // QueuedDrawRef instead (REMED-GFX-068, applied via SDL_SetGPUScissor in ApplyScissorForRef,
-        // exactly like the viewport), not baked into the pipeline; and SDL_gpu has no
-        // per-draw-dynamic depth-bias equivalent to Vulkan's vkCmdSetDepthBias (only a pipeline-baked
-        // one), so depth bias is a documented, deliberate deferral (see plan_sdlgpu.md's SDLGPU-20 row).
+        // dimensions added by those remediations. ScissorTestEnable is deliberately NOT here:
+        // its rect+enable are per-draw pass state carried in QueuedDrawRef instead
+        // (REMED-GFX-068, applied via SDL_SetGPUScissor in ApplyScissorForRef, exactly like the
+        // viewport), not baked into the pipeline. SDL_GPU depth bias has no dynamic setter, so
+        // both public bias floats must live here and be replayed into the pipeline selected for
+        // this exact queued draw (REMED-GFX-051).
         struct RenderStateSnapshot
         {
             bool blendEnabled = false;
@@ -758,6 +763,8 @@ namespace CNA::Internal::Backends::SdlGpu
             std::array<int, 4> colorWriteMasks{{15, 15, 15, 15}};
             int cullMode = 0;   // XNA CullMode ordinal; 0 = None
             bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             StencilKeyParams stencil;
             // SDL_gpu exposes this as a genuine per-draw dynamic value (SDL_SetGPUStencilReference),
             // not a pipeline-baked one -- captured per-command like the rest of this snapshot. (The
@@ -1169,12 +1176,10 @@ namespace CNA::Internal::Backends::SdlGpu
          * @brief Real `RasterizerState` mapping (`SDLGPU-20`) -- `cullMode`/`fillMode` are baked
          * into every 3D/sprite pipeline's `SDL_GPURasterizerState`; `scissorTestEnable` is captured
          * per draw and applied via `SDL_SetGPUScissor` (`REMED-GFX-068`, see `SetScissorRect()`).
-         * `depthBias`/
-         * `slopeScaleDepthBias` are stored but deliberately NOT yet applied: unlike Vulkan's
-         * `vkCmdSetDepthBias` (a true per-draw dynamic state), `SDL_gpu` only exposes depth bias as
-         * pipeline-baked `SDL_GPURasterizerState` fields, which would require folding two floats
-         * into the pipeline cache key -- a real, documented deferral (see `plan_sdlgpu.md`'s
-         * `SDLGPU-20` row), not a silent drop.
+         * `depthBias`/`slopeScaleDepthBias` are captured per queued draw and baked into
+         * `SDL_GPURasterizerState` because SDL 3.5 exposes no dynamic depth-bias command
+         * (REMED-GFX-051). Zero/signed-zero and non-polygon topologies normalize to disabled
+         * native bias; triangle pipelines key the explicit enable bit and both factor values.
          */
         void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
                                   float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
@@ -1827,7 +1832,7 @@ namespace CNA::Internal::Backends::SdlGpu
         int viewportH_ = 0;
         float viewportMinDepth_ = 0.0f;
         float viewportMaxDepth_ = 1.0f;
-        // Stored but deliberately not yet applied -- see ApplyRasterizerState's own doc comment.
+        // REMED-GFX-051: captured by value into RenderStateSnapshot for deferred replay.
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
 

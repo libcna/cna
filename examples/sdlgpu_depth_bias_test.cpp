@@ -182,10 +182,13 @@ class SdlGpuDepthBiasTest final : public Game
         return effect;
     }
 
-    static std::array<VertexPositionColor, 3> Triangle(bool sloped, const Color& color)
+    static std::array<VertexPositionColor, 3> Triangle(
+        bool sloped, const Color& color, float flatDepth = 0.5f)
     {
-        const float topDepth = sloped ? -0.25f : 0.0f;
-        const float bottomDepth = sloped ? 0.25f : 0.0f;
+        // SDL_GPU's cross-backend clip-space depth is 0..1. Keep flat tests at 0.5 so both
+        // positive and negative bias have room to move without near/far clamping.
+        const float topDepth = sloped ? 0.25f : flatDepth;
+        const float bottomDepth = sloped ? 0.75f : flatDepth;
         return {{
             {Vector3(0.0f, 0.82f, topDepth), color},
             {Vector3(0.82f, -0.72f, bottomDepth), color},
@@ -194,9 +197,9 @@ class SdlGpuDepthBiasTest final : public Game
     }
 
     static void DrawTriangle(GraphicsDevice& device, bool sloped, const Color& color,
-                             bool indexed = false)
+                             bool indexed = false, float flatDepth = 0.5f)
     {
-        const auto vertices = Triangle(sloped, color);
+        const auto vertices = Triangle(sloped, color, flatDepth);
         const auto effect = ApplyColorEffect(device);
         if (!indexed)
         {
@@ -225,8 +228,8 @@ class SdlGpuDepthBiasTest final : public Game
     static void DrawLine(GraphicsDevice& device, const Color& color)
     {
         const VertexPositionColor vertices[2] = {
-            {Vector3(-0.82f, 0.0f, 0.0f), color},
-            {Vector3(0.82f, 0.0f, 0.0f), color},
+            {Vector3(-0.82f, 0.0f, 0.5f), color},
+            {Vector3(0.82f, 0.0f, 0.5f), color},
         };
         const auto effect = ApplyColorEffect(device);
         device.DrawUserPrimitives(PrimitiveType::LineList, vertices, 0, 1);
@@ -321,7 +324,9 @@ class SdlGpuDepthBiasTest final : public Game
     {
         BeginTarget(device, target, DepthStencilState::Default);
         device.setRasterizerStateProperty(BiasState(0.0f, 0.0f));
-        DrawTriangle(device, false, kRed);
+        // Stock/custom sprite shaders emit clip-space z=0. Use the same reference depth here;
+        // only positive bias is asserted for SpriteBatch, so near-plane clamping is irrelevant.
+        DrawTriangle(device, false, kRed, /*indexed=*/false, /*flatDepth=*/0.0f);
 
         SpriteBatch sprites(device);
         SamplerState point = SamplerState::PointClamp;

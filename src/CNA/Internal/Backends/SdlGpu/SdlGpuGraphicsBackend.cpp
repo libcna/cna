@@ -9,8 +9,10 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -327,6 +329,80 @@ namespace CNA::Internal::Backends::SdlGpu
             return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
         }
 
+        struct PipelineDepthBias
+        {
+            bool enabled = false;
+            float constantFactor = 0.0f;
+            float slopeFactor = 0.0f;
+        };
+
+        [[nodiscard]] bool IsPolygonTopology(SDL_GPUPrimitiveType topology)
+        {
+            return topology == SDL_GPU_PRIMITIVETYPE_TRIANGLELIST
+                || topology == SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP;
+        }
+
+        // XNA/FNA depth bias is polygon offset: independent line/point primitives have no
+        // polygon slope and do not receive the D3D/OpenGL/Vulkan rasterizer bias. Normalize them
+        // to disabled so irrelevant public values neither alter native state nor fragment caches.
+        // For triangles, signed zero is canonicalized to +0 and the explicit SDL enable bit is
+        // true iff either public factor is nonzero. NaN/Inf remain unmodified rather than being
+        // silently approximated; SDL/its native driver remains the capability/validation authority.
+        [[nodiscard]] PipelineDepthBias NormalizeDepthBias(
+            SDL_GPUPrimitiveType topology, float depthBias, float slopeScaleDepthBias)
+        {
+            if (!IsPolygonTopology(topology))
+                return {};
+
+            PipelineDepthBias result;
+            result.constantFactor = depthBias == 0.0f ? 0.0f : depthBias;
+            result.slopeFactor =
+                slopeScaleDepthBias == 0.0f ? 0.0f : slopeScaleDepthBias;
+            result.enabled =
+                result.constantFactor != 0.0f || result.slopeFactor != 0.0f;
+            return result;
+        }
+
+        [[nodiscard]] std::size_t HashDepthBias(
+            std::size_t key, SDL_GPUPrimitiveType topology,
+            float depthBias, float slopeScaleDepthBias)
+        {
+            const PipelineDepthBias bias =
+                NormalizeDepthBias(topology, depthBias, slopeScaleDepthBias);
+            key = HashCombine(key, bias.enabled ? 1u : 0u);
+            if (bias.enabled)
+            {
+                key = HashCombine(
+                    key, static_cast<std::size_t>(
+                             std::bit_cast<std::uint32_t>(bias.constantFactor)));
+                // Clamp is a pipeline-static SDL field too, but CNA exposes no clamp property:
+                // it is fixed at 0 for every pipeline and therefore is not an identity axis.
+                key = HashCombine(
+                    key, static_cast<std::size_t>(
+                             std::bit_cast<std::uint32_t>(bias.slopeFactor)));
+            }
+            return key;
+        }
+
+        void FillDepthBiasState(
+            SDL_GPURasterizerState& out, SDL_GPUPrimitiveType topology,
+            float depthBias, float slopeScaleDepthBias)
+        {
+            const PipelineDepthBias bias =
+                NormalizeDepthBias(topology, depthBias, slopeScaleDepthBias);
+            out.enable_depth_bias = bias.enabled;
+            if (bias.enabled)
+            {
+                // SDL_GPU names these native polygon-offset factors, not normalized depth
+                // offsets. CNA/XNA DepthBias is already expressed as the constant factor in
+                // minimum-resolvable-depth (r) units, while SlopeScaleDepthBias is already the
+                // slope factor, so both map directly. SDL/the native driver applies r and m.
+                out.depth_bias_constant_factor = bias.constantFactor;
+                out.depth_bias_clamp = 0.0f;
+                out.depth_bias_slope_factor = bias.slopeFactor;
+            }
+        }
+
         // Packs (topology, depthTest, depthWrite, depthFunc, colorFormat, sampleCount,
         // depthStencilFormat, full RenderStateSnapshot) into one cache key. INVALID means the
         // active pass has no depth/stencil attachment. Disabled dimensions (blend off, stencil off,
@@ -374,6 +450,8 @@ namespace CNA::Internal::Backends::SdlGpu
                 key = HashCombine(key, static_cast<std::size_t>(rs.colorWriteMasks[i] & 0xF));
             key = HashCombine(key, static_cast<std::size_t>(rs.cullMode));
             key = HashCombine(key, rs.wireframe ? 1u : 0u);
+            key = HashDepthBias(
+                key, topology, rs.depthBias, rs.slopeScaleDepthBias);
             key = HashCombine(key, rs.stencil.enable ? 1u : 0u);
             if (rs.stencil.enable)
             {
@@ -472,11 +550,16 @@ namespace CNA::Internal::Backends::SdlGpu
         // Fills a pipeline's real cull/fill-mode rasterizer state (SDLGPU-20) from a
         // RenderStateSnapshot. front_face stays hardcoded COUNTER_CLOCKWISE everywhere in this
         // backend (see ToCullMode's own doc comment).
-        void FillRasterizerState(SDL_GPURasterizerState& out, const SdlGpuGraphicsBackend::RenderStateSnapshot& rs)
+        void FillRasterizerState(
+            SDL_GPURasterizerState& out,
+            const SdlGpuGraphicsBackend::RenderStateSnapshot& rs,
+            SDL_GPUPrimitiveType topology)
         {
             out.fill_mode = rs.wireframe ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
             out.cull_mode = ToCullMode(rs.cullMode);
             out.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+            FillDepthBiasState(
+                out, topology, rs.depthBias, rs.slopeScaleDepthBias);
         }
 
         // Mirrors VulkanGraphicsBackend's CalculateVulkanRTMipLevels / Texture2D.cpp's
@@ -1705,8 +1788,9 @@ namespace CNA::Internal::Backends::SdlGpu
         cullMode_ = cullMode;
         fillModeWireframe_ = (fillMode == 1);  // XNA FillMode::WireFrame = 1
         scissorEnabled_ = scissorTestEnable;
-        // Stored but deliberately not yet applied -- see this method's own header doc comment
-        // (SDL_gpu has no per-draw-dynamic depth-bias equivalent to Vulkan's vkCmdSetDepthBias).
+        // REMED-GFX-051: store the raw XNA/FNA factors. CaptureRenderState snapshots them into
+        // every queued command; pipeline selection/creation performs the topology/zero
+        // normalization because SDL 3.5 exposes bias only as graphics-pipeline-static state.
         depthBias_ = depthBias;
         slopeScaleDepthBias_ = slopeScaleDepthBias;
     }
@@ -1871,6 +1955,8 @@ namespace CNA::Internal::Backends::SdlGpu
         rs.colorWriteMasks = colorWriteMasks_; // REMED-GFX-077/-098
         rs.cullMode = cullMode_;
         rs.wireframe = fillModeWireframe_;
+        rs.depthBias = depthBias_;
+        rs.slopeScaleDepthBias = slopeScaleDepthBias_;
         rs.stencil = stencilParams_;
         rs.stencilReference = referenceStencil_;
         return rs;
@@ -2066,7 +2152,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         // SDLGPU-19: real DepthStencilState mapping -- SpriteBatch.Begin() defaults to
         // DepthStencilState.None (depth test/write both off) when the game passes no explicit
@@ -2188,7 +2276,10 @@ namespace CNA::Internal::Backends::SdlGpu
         if (command.customEffect != nullptr)
         {
             SDL_GPUGraphicsPipeline* pipeline = command.customEffect->GetOrCreatePipeline(
-                colorFormat, sampleCount, depthStencilFormat, colorTargetCount, command.renderState.colorWriteMasks);
+                colorFormat, sampleCount, depthStencilFormat, colorTargetCount,
+                command.renderState.colorWriteMasks,
+                command.renderState.depthBias,
+                command.renderState.slopeScaleDepthBias);
             if (pipeline == nullptr)
                 return;  // compile/pipeline-creation failure -- skip, matches IsValid()-gated sibling backends
             if (pipeline != boundPipeline)
@@ -2461,7 +2552,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);  // SDLGPU-20
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);  // SDLGPU-20 / REMED-GFX-051
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);  // SDLGPU-19
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -2561,7 +2654,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -2609,7 +2704,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -2695,7 +2792,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -2951,7 +3050,9 @@ namespace CNA::Internal::Backends::SdlGpu
             pipelineInfo.vertex_input_state.vertex_attributes = attrs;
             pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
             pipelineInfo.primitive_type = topology;
-            FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+            FillRasterizerState(
+                pipelineInfo.rasterizer_state, renderState,
+                pipelineInfo.primitive_type);
             pipelineInfo.multisample_state.sample_count = sampleCount;
             FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
             pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -2994,7 +3095,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -3107,7 +3210,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = numAttrs;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -3194,7 +3299,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -3309,7 +3416,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = hasVertexColor ? 6 : 5;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -3485,7 +3594,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
         pipelineInfo.primitive_type = topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        FillRasterizerState(
+            pipelineInfo.rasterizer_state, renderState,
+            pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
@@ -5673,7 +5784,9 @@ namespace CNA::Internal::Backends::SdlGpu
                                                                        SDL_GPUSampleCount sampleCount,
                                                                        SDL_GPUTextureFormat depthStencilFormat,
                                                                        int colorTargetCount,
-                                                                       const std::array<int, 4>& colorWriteMasks)
+                                                                       const std::array<int, 4>& colorWriteMasks,
+                                                                       float depthBias,
+                                                                       float slopeScaleDepthBias)
     {
         if (!valid_)
             return nullptr;
@@ -5690,6 +5803,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // the same active attachment slots represented by this pipeline's target descriptions.
         for (int i = 0; i < colorTargetCount; ++i)
             key = HashCombine(key, static_cast<std::size_t>(colorWriteMasks[i] & 0xF));
+        key = HashDepthBias(
+            key, SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+            depthBias, slopeScaleDepthBias);
         const auto it = pipelines_.find(key);
         if (it != pipelines_.end())
             return it->second;
@@ -5741,6 +5857,12 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
         pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
         pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        // Preserve this custom SpriteBatch family's established hardcoded fill/cull behavior;
+        // REMED-GFX-051 adds only the pipeline-static bias state common to every triangle family.
+        FillDepthBiasState(
+            pipelineInfo.rasterizer_state,
+            pipelineInfo.primitive_type,
+            depthBias, slopeScaleDepthBias);
         pipelineInfo.multisample_state.sample_count = sampleCount;
         pipelineInfo.depth_stencil_state.enable_depth_test = false;
         pipelineInfo.depth_stencil_state.enable_depth_write = false;
