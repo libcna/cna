@@ -40,6 +40,9 @@
 #ifdef CNA_BACKEND_WEBGPU
 #include "CNA/Internal/Backends/WebGPU/WebGPUGraphicsBackend.hpp"
 #endif
+#ifdef CNA_BACKEND_VULKAN
+#include "CNA/Internal/Backends/Vulkan/VulkanGraphicsBackend.hpp"
+#endif
 
 using CNA::GraphicsCapability;
 using Microsoft::Xna::Framework::Color;
@@ -315,6 +318,24 @@ namespace
             indices.data(), backend->ShadowData().data(),
             backend->ShadowData().size()));
         EXPECT_EQ(static_cast<int>(indices.size()), backend->GetIndexCount());
+    }
+#endif
+
+#ifdef CNA_BACKEND_VULKAN
+    void AssertNoNewVulkanValidationMessages(
+        const CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend& backend,
+        std::size_t firstMessage)
+    {
+        const auto& messages = backend.GetValidationMessagesEXT();
+        std::string completeMessages;
+        for (std::size_t i = firstMessage; i < messages.size(); ++i)
+        {
+            completeMessages += "\n--- Vulkan validation message ---\n";
+            completeMessages += messages[i];
+        }
+        ASSERT_EQ(firstMessage, messages.size())
+            << "Vulkan validation warning/error made fatal by REMED-GFX-112:"
+            << completeMessages;
     }
 #endif
 }
@@ -636,6 +657,14 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_OutOfMemory);
     wgpuDevicePushErrorScope(backend->Device(), WGPUErrorFilter_Validation);
 #endif
+#ifdef CNA_BACKEND_VULKAN
+    auto* vulkanBackend =
+        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, vulkanBackend);
+    const std::size_t validationMessageStart =
+        vulkanBackend->GetValidationMessagesEXT().size();
+#endif
 
     std::vector<VertexPositionColor> vertices;
     AppendVertices(vertices, StripTriangleAt(-0.65f, Color::Red));
@@ -705,6 +734,9 @@ TEST_F(IndexedDrawDeferredTest, IndexedTriangleStripAtoBtoAPreservesWidthsRanges
     PopAndExpectClean(*backend);
     PopAndExpectClean(*backend);
     EXPECT_EQ(uncapturedBefore, backend->GetUncapturedErrorCountEXT());
+#endif
+#ifdef CNA_BACKEND_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
 #endif
 }
 #endif

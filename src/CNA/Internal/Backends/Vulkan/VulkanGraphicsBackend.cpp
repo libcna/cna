@@ -1545,6 +1545,7 @@ namespace CNA::Internal::Backends::Vulkan
             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         info.pfnUserCallback = DebugCallback;
+        info.pUserData = this;
         auto fn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
             vkGetInstanceProcAddr(instance_, "vkCreateDebugUtilsMessengerEXT"));
         if (!fn || fn(instance_, &info, nullptr, &debugMessenger_) != VK_SUCCESS)
@@ -1553,10 +1554,14 @@ namespace CNA::Internal::Backends::Vulkan
 
     VKAPI_ATTR VkBool32 VKAPI_CALL VulkanGraphicsBackend::DebugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT sev, VkDebugUtilsMessageTypeFlagsEXT,
-        const VkDebugUtilsMessengerCallbackDataEXT* d, void*)
+        const VkDebugUtilsMessengerCallbackDataEXT* d, void* userData)
     {
-        if (sev >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+        if (sev >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+            auto* backend = static_cast<VulkanGraphicsBackend*>(userData);
+            if (backend != nullptr && d != nullptr && d->pMessage != nullptr)
+                backend->validationMessages_.emplace_back(d->pMessage);
             SDL_Log("[Vulkan Validation] %s", d->pMessage);
+        }
         return VK_FALSE;
     }
 

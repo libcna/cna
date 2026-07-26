@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <map>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include <stdexcept>
@@ -907,6 +908,18 @@ namespace CNA::Internal::Backends::Vulkan
         {
             return lastMrtPipelineColorCountEXT_;
         }
+        /**
+         * @brief Returns every warning/error emitted by the active Vulkan validation messenger.
+         *
+         * Used by native validation regressions to turn asynchronous debug output into a
+         * deterministic test failure while retaining the complete layer message.
+         *
+         * @return Validation messages captured since backend construction.
+         */
+        [[nodiscard]] const std::vector<std::string>& GetValidationMessagesEXT() const noexcept
+        {
+            return validationMessages_;
+        }
 
         SDL_Window*  GetWindowInternal()   const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
@@ -991,6 +1004,7 @@ namespace CNA::Internal::Backends::Vulkan
         SDL_Window*      window_         = nullptr;
         VkInstance       instance_       = VK_NULL_HANDLE;
         VkDebugUtilsMessengerEXT debugMessenger_ = VK_NULL_HANDLE;
+        std::vector<std::string> validationMessages_;
         VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
         VkDevice         device_         = VK_NULL_HANDLE;
