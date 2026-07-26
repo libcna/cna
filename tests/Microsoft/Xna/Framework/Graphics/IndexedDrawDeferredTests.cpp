@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-104/105/106: deferred indexed-draw correctness, native alignment,
+// REMED-GFX-104/105/106/112: deferred indexed-draw correctness, native alignment,
 // indexed triangle-strip pipeline compatibility, and backend parameter parity.
 
 #include <algorithm>
@@ -466,20 +466,29 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
     device.setRasterizerStateProperty(RasterizerState::CullNone);
     device.setDepthStencilStateProperty(DepthStencilState::None);
 
+#ifdef CNA_BACKEND_VULKAN
+    auto* vulkanBackend =
+        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, vulkanBackend);
+    const std::size_t validationMessageStart =
+        vulkanBackend->GetValidationMessagesEXT().size();
+#endif
+
     std::vector<VertexPositionColor> vertices;
     AppendVertices(vertices, StripQuadAt(-0.5f, Color::Red));
     AppendVertices(vertices, StripQuadAt(0.5f, Color::Blue));
     const std::array<std::uint16_t, 4> indices16{0, 1, 2, 3};
-    const std::array<std::uint32_t, 4> indices32{4, 5, 6, 7};
+    const std::array<std::uint32_t, 5> indices32{0, 4, 5, 6, 7};
     VertexBuffer vertexBuffer(
         device, PositionColorDeclaration(), 8, BufferUsage::None);
     IndexBuffer buffer16(
         device, IndexElementSize::SixteenBits, 4, BufferUsage::None);
     IndexBuffer buffer32(
-        device, IndexElementSize::ThirtyTwoBits, 4, BufferUsage::None);
+        device, IndexElementSize::ThirtyTwoBits, 5, BufferUsage::None);
     vertexBuffer.SetData(vertices.data(), 8);
     buffer16.SetData(indices16.data(), 4);
-    buffer32.SetData(indices32.data(), 4);
+    buffer32.SetData(indices32.data(), 5);
 
     BasicEffect effect(device);
     ApplyVertexColorEffect(effect);
@@ -490,7 +499,7 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
         PrimitiveType::TriangleStrip, 0, 0, 4, 0, 2));
     device.SetIndexBuffer(&buffer32);
     EXPECT_NO_THROW(device.DrawIndexedPrimitives(
-        PrimitiveType::TriangleStrip, 0, 4, 4, 0, 2));
+        PrimitiveType::TriangleStrip, 0, 4, 4, 1, 2));
 
 #if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
     defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
@@ -498,6 +507,9 @@ TEST_F(IndexedDrawDeferredTest, BasicIndexedTriangleStripSupportsBothIndexWidths
     const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
     ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "basic Uint16 strip");
     ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "basic Uint32 strip");
+#endif
+#ifdef CNA_BACKEND_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
 #endif
 #endif
 }
@@ -637,6 +649,80 @@ TEST_F(IndexedDrawDeferredTest, DrawUserIndexedCapturesOddOffsetsWidthsAndDeclar
     ExpectExactColor(pixels.AtNdc(-0.65f), Color::Red, "DrawUser Uint16 offset A");
     ExpectExactColor(pixels.AtNdc(0.0f), Color::Lime, "DrawUser declaration offset B");
     ExpectExactColor(pixels.AtNdc(0.65f), Color::Blue, "DrawUser Uint32 offset C");
+}
+#endif
+
+#if defined(CNA_BACKEND_WEBGPU) || defined(CNA_BACKEND_VULKAN) || \
+    defined(CNA_BACKEND_EASYGL) || defined(CNA_BACKEND_D3D9) || \
+    defined(CNA_BACKEND_D3D11)
+TEST_F(IndexedDrawDeferredTest, DrawUserIndexedTriangleStripsPreserveWidthsOffsetsAndSources)
+{
+    RequireIndexedRendering();
+
+#ifdef CNA_BACKEND_VULKAN
+    auto* vulkanBackend =
+        dynamic_cast<CNA::Internal::Backends::Vulkan::VulkanGraphicsBackend*>(
+            &device.GetBackend());
+    ASSERT_NE(nullptr, vulkanBackend);
+    const std::size_t validationMessageStart =
+        vulkanBackend->GetValidationMessagesEXT().size();
+#endif
+
+    auto left = StripTriangleAt(-0.5f, Color::Red);
+    const auto right = StripQuadAt(0.5f, Color::Blue);
+    struct CompactPositionColor
+    {
+        float x;
+        float y;
+        float z;
+        std::uint8_t r;
+        std::uint8_t g;
+        std::uint8_t b;
+        std::uint8_t a;
+    };
+    static_assert(sizeof(CompactPositionColor) == 16);
+    std::array<CompactPositionColor, 4> compactRight{};
+    for (std::size_t i = 0; i < right.size(); ++i)
+    {
+        compactRight[i] = {
+            right[i].Position.X,
+            right[i].Position.Y,
+            right[i].Position.Z,
+            right[i].Color.getRProperty(),
+            right[i].Color.getGProperty(),
+            right[i].Color.getBProperty(),
+            right[i].Color.getAProperty(),
+        };
+    }
+    std::array<std::uint16_t, 4> indices16{99, 0, 1, 2};
+    std::array<std::uint32_t, 6> indices32{99, 99, 0, 1, 2, 3};
+
+    BasicEffect effect(device);
+    ApplyVertexColorEffect(effect);
+    device.Clear(Color::Black);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleStrip,
+        left.data(), 0, 3,
+        indices16.data(), 1, 1);
+    device.DrawUserIndexedPrimitives(
+        PrimitiveType::TriangleStrip,
+        static_cast<const void*>(compactRight.data()), 0, 4,
+        indices32.data(), 2, 2,
+        PositionColorDeclaration());
+
+    left.fill(VertexPositionColor(Vector3(4, 4, 0.5f), Color::Black));
+    compactRight.fill({});
+    indices16.fill(0);
+    indices32.fill(0);
+
+    const BackbufferSnapshot pixels = ReadBackbufferOnce(device);
+    ExpectExactColor(pixels.AtNdc(-0.5f), Color::Red, "DrawUser Uint16 strip");
+    ExpectExactColor(pixels.AtNdc(0.5f), Color::Blue, "DrawUser Uint32 strip");
+    ExpectExactColor(pixels.AtNdc(0.0f), Color::Black, "DrawUser strip padding/background");
+
+#ifdef CNA_BACKEND_VULKAN
+    AssertNoNewVulkanValidationMessages(*vulkanBackend, validationMessageStart);
+#endif
 }
 #endif
 
