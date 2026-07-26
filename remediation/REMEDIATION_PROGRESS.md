@@ -2457,7 +2457,7 @@ existing task.
 | REMED-GFX-105 | WebGPU indexed triangle-strip replay binds a `Uint16` index buffer to a render pipeline whose `stripIndexFormat` is `None`, producing a native command-encoder validation error. | MEDIUM | P2 | REMED-GFX-104 native-scope expansion | **DONE 2026-07-26 — DEFERRED INDEXED STRIPS NOW SELECT/CACHE THE PIPELINE BY CAPTURED `UINT16`/`UINT32`; NON-INDEXED STRIPS AND LIST/POINT TOPOLOGIES REMAIN `UNDEFINED`; NATIVE VALIDATION, EXACT PIXELS, CACHE CARDINALITY, SANITIZERS, AND BACKEND CONTROLS PASS.** |
 | REMED-GFX-106 | Bgfx and Software produce backend-specific indexed pixel failures for nonzero indexed parameters and/or deferred multi-draw controls that pass WebGPU, Vulkan, EasyGL, D3D9, and D3D11. | MEDIUM | P2 | REMED-GFX-104 backend parity | **DONE 2026-07-26 AS A RECONCILED PARENT — SIX INDEPENDENT FINDINGS ARE ALLOCATED AS REMED-GFX-107..112; NO CHILD PRODUCTION FIX WAS COMBINED INTO THIS TASK.** |
 | REMED-GFX-107 | Bgfx effect-aware indexed draws bind complete buffers instead of the requested first index, base vertex, and topology-derived index count. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — EXACT ELEMENT RANGE, BASE-VERTEX BINDING, TOPOLOGY COUNT, SAFE HINT VALIDATION, AND DEFERRED CAPTURE VERIFIED.** |
-| REMED-GFX-108 | Bgfx declared 32-bit index buffers inherit the default 16-bit backend creation path. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX NATIVE FORMAT CORRECTION.** |
+| REMED-GFX-108 | Bgfx declared 32-bit index buffers inherit the default 16-bit backend creation path. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — PUBLIC STATIC/DYNAMIC 32-BIT HANDLES AND EVERY GFX-109 REPLACEMENT RETAIN EXACT `0x1800` NATIVE FLAGS; HIGH-INDEX PIXELS, GFX-107 RANGES, VERSIONING, RETIREMENT, VALIDATION, AND PARITY PASS.** |
 | REMED-GFX-109 | Bgfx persistent vertex/index updates after queued draws could overwrite the native bytes needed by those draws before deferred frame execution. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — SUBMITTED BUFFER HANDLES ARE VERSIONED UNTIL BGFX'S DEFERRED RETIREMENT FENCE; EXACT OPENGL/VULKAN A→B→A COVERAGE PASSES.** |
 | REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT SOFTWARE ADDRESSING/BOUNDS CORRECTION.** |
 | REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **OPEN — INDEPENDENT SHARED BGFX TOPOLOGY-MAPPING CORRECTION.** |
@@ -8967,6 +8967,138 @@ black, while the later lime B and final blue A samples were exact.
 - `524fc3bf` — `test(Task REMED-GFX-109): expose Bgfx buffer update aliasing`
 - `f117d12d` — `fix(Task REMED-GFX-109): version submitted Bgfx buffers`
 - `b71a4276` — `test(Task REMED-GFX-109): cover immutable Bgfx buffer versions`
+
+## REMED-GFX-108 — Bgfx 32-bit index-buffer creation (DONE 2026-07-26)
+
+### Classification, reproduction, and root cause
+
+This was a **real Bgfx backend creation defect**. Public logical storage and GFX-107's corrected
+range binding were already sound. A red-first public `IndexBuffer` regression recorded the exact
+pre-fix state:
+
+| Observation | Pre-fix result |
+|---|---|
+| Public declaration | `IndexElementSize::ThirtyTwoBits`; static `IndexBuffer`; logical count `3`; logical byte size `12` |
+| Uploaded/shadow bytes | Exact `uint32_t {65536, 65538, 65537}` bytes; no public truncation |
+| Native type | `bgfx::DynamicIndexBufferHandle`, as used by the existing Bgfx static/dynamic buffer architecture |
+| Flags passed to `bgfx::createDynamicIndexBuffer` | `BGFX_BUFFER_ALLOW_RESIZE` = `0x0800` |
+| Missing flag | `BGFX_BUFFER_INDEX32` = `0x1000`; required combined flags were `0x1800` |
+| Draw | `TriangleList`, `startIndex=0`, `baseVertex=0`, `primitiveCount=1`, high vertex range beginning at `65536` |
+| Visible result | Incorrect exact lime decoy from false 16-bit words `0,1,2`, instead of the exact blue triangle addressed by genuine 32-bit values |
+
+The public `IndexBuffer` constructor correctly selected `IGraphicsBackend::CreateIndexBuffer32`
+for `ThirtyTwoBits`, but Bgfx implemented only `CreateIndexBuffer16`. The interface default
+therefore delegated the 32-bit request to Bgfx's 16-bit factory, constructing
+`BgfxIndexBufferBackend(capacity, false)`. The backend copied all four bytes per logical element
+but created a native 16-bit decoder, so correct bytes were interpreted as the wrong element
+stream. GFX-107's backend-level fixture passed because it explicitly constructed the same backend
+with `thirtyTwoBit=true`, isolating GFX-108 to public native creation rather than range, base, or
+count binding.
+
+The installed bgfx API 150 exposes
+`createDynamicIndexBuffer(uint32_t num, uint16_t flags)` and fixes index width at handle creation;
+`update(DynamicIndexBufferHandle, uint32_t startIndex, const Memory*)` does not change that width.
+Its exact creation matrix for CNA's shared dynamic-handle implementation is:
+
+| Public class/width | Native handle | Exact native creation flags |
+|---|---|---|
+| Static 16-bit `IndexBuffer` | `DynamicIndexBufferHandle` | `BGFX_BUFFER_ALLOW_RESIZE` = `0x0800` |
+| Dynamic 16-bit `DynamicIndexBuffer` | `DynamicIndexBufferHandle` | `BGFX_BUFFER_ALLOW_RESIZE` = `0x0800` |
+| Static 32-bit `IndexBuffer` | `DynamicIndexBufferHandle` | `BGFX_BUFFER_ALLOW_RESIZE \| BGFX_BUFFER_INDEX32` = `0x1800` |
+| Dynamic 32-bit `DynamicIndexBuffer` | `DynamicIndexBufferHandle` | `BGFX_BUFFER_ALLOW_RESIZE \| BGFX_BUFFER_INDEX32` = `0x1800` |
+
+### Correction and representation invariants
+
+- `BgfxGraphicsBackend` now explicitly overrides `CreateIndexBuffer32` and constructs the existing
+  backend with fixed 32-bit width. The 16-bit factory remains explicit and unchanged.
+- `BgfxIndexBufferBackend` computes and stores the exact construction flags once. Initial creation
+  and both GFX-109 replacement paths reuse that stored value verbatim, so resize/recreation,
+  repeated `SetData`, update-after-queued-draw, and A→B→A cannot revert `0x1800` to `0x0800`.
+- Width-mismatched direct backend updates now throw. A 32-bit public buffer is never converted or
+  truncated to 16-bit, and a 16-bit public buffer is never widened to 32-bit.
+- Public static and dynamic buffers retain their declared `IndexElementSize`, logical index count,
+  and exact two- or four-byte-per-element size. `GetData` and the Bgfx CPU shadow match the caller's
+  bytes exactly. One-element 16-/32-bit uploads remain exactly `2/4` bytes.
+- GFX-054 empty uploads remain public no-ops: null zero-count calls retain handle identity, native
+  flags, logical count, and shadow bytes. GFX-103 vertex empty behavior is unchanged.
+- The fix did not change the public index format, buffer architecture, draw submission, cache keys,
+  or GFX-043 explicit `VertexDeclaration` propagation. Independent equal-content static/dynamic
+  buffer objects remain independently versioned while using the same compatible pipeline state;
+  neither pipeline nor buffer cache identity was made dependent on public buffer object identity.
+
+### Permanent public regression
+
+- Public static and dynamic 32-bit buffers are inspected at native creation and after every
+  replacement. Static/dynamic 16-bit controls prove exact `0x0800`; static/dynamic 32-bit controls
+  prove exact `0x1800`.
+- The distinctive high-index case requires vertices `65536..65538`. A falsely 16-bit handle
+  visibly selects the low lime decoy, while the corrected public handle renders the exact blue
+  geometry. Small and one-index controls preserve exact counts, bytes, shadows, and flags.
+- Ordinary repeated updates before use retain the writable handle. The first update after a queued
+  draw creates an immutable successor; public static and dynamic A→B→A each produce three distinct
+  native versions, every version retains `0x1800`, and all six red/lime/red samples are exact after
+  caller-source mutation and public disposal.
+- The complete GFX-107 public 32-bit range regression uses only ordinary CNA buffers. It proves
+  `startIndex=3`, positive `baseVertex=3`, exact one-triangle `primitiveCount`, excluded prefix and
+  suffix decoys, and zero-offset exact/loose/deliberately narrow `minVertexIndex`/`numVertices`
+  hints, with every decoded index above 65535.
+- Target→backbuffer→target replay uses three public 32-bit versions and proves exact range pixels
+  in both the backbuffer and a `RenderTarget2D`. Existing 16-/32-bit DrawUser ownership and explicit
+  declaration controls still pass.
+- Public 32-bit static/dynamic coverage renders exact `TriangleList`, `TriangleStrip`, `LineList`,
+  and `LineStrip` geometry. `PointListEXT` mapping remains exclusively REMED-GFX-111.
+
+### GFX-109 versioning, retirement, and native cardinality
+
+The submitted-handle ownership model from GFX-109 is unchanged. Queued draws retain the native
+version containing their call-time bytes; no wait, flush, extra frame, new `Present`, or
+per-draw permanent native buffer was added. Disposal after queued use remains safe, and every
+version follows the existing exactly-once frame-fenced destruction path.
+
+The public 32-bit cardinality regression ran 32 repeated A→B→A update/draw cycles on both Bgfx
+renderers. Process baseline dynamic vertex/index handles were `0/0`; one live public vertex/index
+pair was `1/1`; warm high-water was `1/1`; post-fence live handles were `1/1`; and post-disposal
+counts returned to `0/0`. Native replacement flags were asserted as `0x1800` in every cycle.
+Clean execution without a Bgfx handle-lifetime assertion, stable high-water, and return to the
+exact process baseline prove bounded allocation and exactly-once retirement.
+
+### Renderer, validation, parity, sanitizer, and build results
+
+- Bgfx OpenGL and genuine Bgfx Vulkan each pass **48/48** combined indexed and empty-buffer tests:
+  all **27/27** indexed regressions plus nine GFX-054 index-empty and twelve GFX-103 vertex-empty
+  controls. Both routes pass exact high-index, range, topology, A→B→A, target/backbuffer, disposal,
+  shadow-byte, native-flag, and cardinality assertions.
+- Bgfx Vulkan ran on the desktop Wayland route with `CNA_BGFX_RENDERER=Vulkan` and
+  `VK_LAYER_KHRONOS_validation`. Its complete 259-line output contains 48
+  `active renderer: Vulkan` confirmations and zero VUID, validation warning, validation error,
+  test failure, or generic error matches.
+- Practical indexed controls pass on native Vulkan **19/19** with validation and no messages,
+  WebGPU **23/23** (including GFX-104 logical-byte/padding and GFX-105 strip-pipeline controls),
+  EasyGL **17/17**, SDL_GPU **4/4**, Software **10 passed plus one intentional unsupported-strip
+  skip**, D3D9/DXVK **15/15**, and D3D11/DXVK **15/15**.
+- Focused Bgfx OpenGL ASan and UBSan selections each pass **18/18** with no sanitizer finding.
+  ASan used `detect_leaks=0:halt_on_error=1`; UBSan used
+  `halt_on_error=1:print_stacktrace=1`.
+- All fourteen backend-library targets compile incrementally with at most four jobs: ASCII, Bgfx,
+  Canvas, D3D9, D3D11, D3D12, EasyGL, DX3, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan, and
+  WebGPU. Used persistent directories were `cmake-build-ascii`, `cmake-build-bgfx`,
+  `cmake-build-canvas`, `cmake-build-d3d9-mingw`, `cmake-build-d3d11-mingw`,
+  `cmake-build-d3d12-mingw`, `cmake-build-debug`, `cmake-build-dx3`,
+  `cmake-build-headless`, `cmake-build-sdlgpu`, `cmake-build-sdlrenderer`,
+  `cmake-build-software`, `cmake-build-vulkan`, `cmake-build-webgpu`,
+  `cmake-build-bgfx-asan`, and `cmake-build-bgfx-ubsan`.
+- Every used cache reports `CNA_USE_CCACHE=ON`. Final ccache statistics were 44,439 cacheable calls,
+  8,625 hits, 35,814 misses, and 5.0/5.0 GiB local storage. No existing build directory was
+  cleaned, and no build tree was created under `/tmp`, `/var/tmp`, or `/dev/shm`.
+
+### Commits
+
+- `b4d4de2f` — `test(Task REMED-GFX-108): expose public Bgfx index width`
+- `a80a095f` — `fix(Task REMED-GFX-108): create native 32-bit Bgfx indices`
+- `081335b1` — `test(Task REMED-GFX-108): cover public 32-bit Bgfx buffers`
+- `docs(remediation): record GFX-108 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
 
 ## REMED-GFX-107 — Bgfx indexed range/base/count binding (DONE 2026-07-26)
 
