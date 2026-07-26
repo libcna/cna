@@ -191,6 +191,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_RenderState COMMAND cna_test_sdlgpu_renderstate
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # REMED-GFX-051: RasterizerState.DepthBias/SlopeScaleDepthBias are pipeline-static in SDL 3.5.
+    # Exact/near-coplanar flat+sloped triangles prove both signs and combined bias through stock
+    # effects, indexed/non-indexed draws, SpriteBatch, RT/backbuffer, deferred A->B->A state, and
+    # target-independent cache identity. Any Vulkan validation category is fatal.
+    cna_sdlgpu_test(cna_test_sdlgpu_depth_bias examples/sdlgpu_depth_bias_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_DepthBias COMMAND cna_test_sdlgpu_depth_bias
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    set_tests_properties(SdlGpu_DepthBias PROPERTIES
+        FAIL_REGULAR_EXPRESSION "Validation (Error|Warning);VUID-")
+
     # plan_sdlgpu.md SDLGPU-21: dynamic SamplerState for direct 3D draws.
     cna_sdlgpu_test(cna_test_sdlgpu_samplerstate examples/sdlgpu_samplerstate_test.cpp)
     cna_register_backend_test(NAME SdlGpu_SamplerState COMMAND cna_test_sdlgpu_samplerstate

@@ -561,6 +561,12 @@ namespace CNA::Internal::Backends::SdlGpu
                                                                           SDL_GPUTextureFormat depthStencilFormat,
                                                                           int colorTargetCount,
                                                                           const std::array<int, 4>& colorWriteMasks);
+        /** @brief Number of cached custom-effect pipelines. Test-only cache-identity
+         * introspection for REMED-GFX-051. NOXNA. */
+        NOXNA [[nodiscard]] std::size_t GetPipelineCacheSizeEXT() const
+        {
+            return pipelines_.size();
+        }
         /** @brief Returns a snapshot of the current 128-byte uniform block. NOXNA — internal use
          * only (called once per queued sprite, so later `SetUniform*` calls on the live effect
          * object don't retroactively change an already-queued sprite's rendered result). */
@@ -1333,6 +1339,12 @@ namespace CNA::Internal::Backends::SdlGpu
         NOXNA [[nodiscard]] std::size_t GetSpritePipelineCacheSizeEXT() const
         {
             return spritePipelines_.size();
+        }
+        /** @brief Number of cached stock colored-3D pipelines. Test-only pipeline-static
+         * rasterizer-state introspection for REMED-GFX-051. NOXNA. */
+        NOXNA [[nodiscard]] std::size_t GetColoredPipelineCacheSizeEXT() const
+        {
+            return coloredPipelines_.size();
         }
         /**
          * @brief Drives the ordinary lazy stock-sprite pipeline and sampler factories without
