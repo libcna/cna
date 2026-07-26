@@ -2458,7 +2458,7 @@ existing task.
 | REMED-GFX-106 | Bgfx and Software produce backend-specific indexed pixel failures for nonzero indexed parameters and/or deferred multi-draw controls that pass WebGPU, Vulkan, EasyGL, D3D9, and D3D11. | MEDIUM | P2 | REMED-GFX-104 backend parity | **DONE 2026-07-26 AS A RECONCILED PARENT — SIX INDEPENDENT FINDINGS ARE ALLOCATED AS REMED-GFX-107..112; NO CHILD PRODUCTION FIX WAS COMBINED INTO THIS TASK.** |
 | REMED-GFX-107 | Bgfx effect-aware indexed draws bind complete buffers instead of the requested first index, base vertex, and topology-derived index count. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX RANGE-BINDING CORRECTION.** |
 | REMED-GFX-108 | Bgfx declared 32-bit index buffers inherit the default 16-bit backend creation path. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX NATIVE FORMAT CORRECTION.** |
-| REMED-GFX-109 | Bgfx same-handle index updates before a deferred frame overwrite bytes needed by earlier queued draws. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX BUFFER-VERSIONING/CAPTURE CORRECTION.** |
+| REMED-GFX-109 | Bgfx persistent vertex/index updates after queued draws could overwrite the native bytes needed by those draws before deferred frame execution. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **DONE 2026-07-26 — SUBMITTED BUFFER HANDLES ARE VERSIONED UNTIL BGFX'S DEFERRED RETIREMENT FENCE; EXACT OPENGL/VULKAN A→B→A COVERAGE PASSES.** |
 | REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT SOFTWARE ADDRESSING/BOUNDS CORRECTION.** |
 | REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **OPEN — INDEPENDENT SHARED BGFX TOPOLOGY-MAPPING CORRECTION.** |
 | REMED-GFX-112 | Vulkan's indexed strip control emits an unaligned 32-bit index-buffer binding-offset validation message while pixels pass. | MEDIUM | P2 | REMED-GFX-106 semantic controls | **DONE — DEFERRED NATIVE INDEX-ARENA OFFSETS ALIGNED PER FORMAT (2026-07-26).** |
@@ -8854,6 +8854,119 @@ was cleaned and no build tree was created under `/tmp`.
 - `docs(remediation): record GFX-112 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-109 — Bgfx deferred persistent-buffer snapshot ownership (DONE 2026-07-26)
+
+### Classification and public contract
+
+- The defect affected persistent **vertex buffers and index buffers**. Public static and dynamic
+  buffer classes share the same Bgfx dynamic-handle backends, so all four combinations were
+  affected. Indexed and non-indexed draws were affected through persistent vertex binding;
+  indexed and instanced draws were additionally affected through persistent index binding.
+- Sixteen-bit indices were affected. A correctly created native 32-bit index buffer was affected
+  by the same version-aliasing mechanism; permanent backend-level coverage verifies that the
+  replacement preserves `BGFX_BUFFER_INDEX32`. The separate public 32-bit creation defect remains
+  REMED-GFX-108 and was not changed here.
+- The hazard began when a buffer had already been bound by a queued draw and was then updated
+  while that draw could still be in flight. It therefore included same-frame repeated `SetData`,
+  updates across Begin/End or Bgfx view segments, render-target transitions, and reuse in a later
+  frame before Bgfx had retired the earlier submission. Multiple updates before any draw were not
+  semantically hazardous, and multiple draws between updates correctly share one byte version.
+- DrawUser vertex/index buffers were already safe: each call copies the source into a distinct
+  temporary Bgfx buffer and queues that handle's normal deferred destruction. Sprite, wireframe
+  index-copy, instance-data, and other backend-managed transient regions likewise already own
+  immutable per-frame bytes. The persistent vertex side of wireframe and persistent buffers used
+  by instanced draws were affected and are now marked when bound.
+- Both the Bgfx OpenGL and Bgfx Vulkan routes were affected because this ordering is in Bgfx core,
+  before renderer-specific execution. The repository uses bgfx.cmake
+  `572868c0cb952add48019d267223453958e958b8` with bgfx
+  `759bdeb936ea95e4ac13d1ba8d4ce2e91c5c17d2` (API 150).
+- CNA/FNA `SetData` owns the uploaded bytes when the call returns: the caller may mutate or destroy
+  the source array. A deferred draw must observe the buffer contents current when that draw was
+  queued. Consequently `SetData(A) → draw A → SetData(B) → draw B` must execute in that exact
+  semantic order even though submission is deferred.
+
+### Root cause and old ownership model
+
+Each Bgfx persistent buffer object owned one mutable `DynamicVertexBufferHandle` or
+`DynamicIndexBufferHandle`. A queued draw retained only that live native handle; it did not retain
+an immutable copy of `cpuData`, and the mutable CPU shadow was not consulted during draw replay.
+In the installed Bgfx version, `bgfx::update(Dynamic*)` records uploads in the frame's pre-command
+stream. All such updates execute before renderer draw submission, and the OpenGL and Vulkan
+renderers update the same native allocation in place. Thus:
+
+`upload A → queue draw(handle) → upload B → queue draw(handle)`
+
+could reach the renderer as:
+
+`native update A → native update B → draw(handle) → draw(handle)`.
+
+The pre-fix public regression reproduced that result on both routes: the first red A sample was
+black, while the later lime B and final blue A samples were exact.
+
+### Corrected ownership model
+
+- `BgfxVertexBufferBackend` and `BgfxIndexBufferBackend` now remember their allocation shape and
+  whether their current native handle has been submitted by a persistent draw.
+- Draw binding marks the exact handle in the legacy colored, indexed colored, effect-aware
+  `DrawPrimitives`, effect-aware `DrawIndexedPrimitives`, and instanced paths. Explicit
+  `VertexDeclaration` propagation remains unchanged.
+- `SetData` reuses the current handle while it is still writable. The first update after a draw
+  allocates one same-capacity/same-layout replacement, switches the public object to it, queues
+  destruction of the submitted handle through Bgfx's existing deferred frame retirement, and
+  uploads into the replacement. Index replacement retains the 16-/32-bit native format flag.
+- This creates one version per **observed update interval**, not one permanent allocation per
+  draw. Multiple updates before a draw coalesce on one writable handle; multiple draws between
+  updates share one immutable submitted handle. There is no `bgfx::frame`, Present, renderer-wide
+  flush, device wait, synchronization wait, added frame of latency, or permanent duplicate per
+  draw.
+
+### Permanent regression and results
+
+- Exact public pixel tests cover persistent index A→B→A and static/dynamic vertex A→B→A,
+  multiple pre-draw updates, multiple draws from one version, independent equal-content buffer
+  objects, one-buffer-only mutation, source mutation and source-scope destruction after `SetData`,
+  disposal after queued use, 16-bit dynamic indices, non-indexed and indexed rendering, and
+  backbuffer/`RenderTarget2D` transitions.
+- A Bgfx-only backend-level test covers correctly flagged 32-bit index A→B→A without absorbing the
+  separate public creation work in REMED-GFX-108. Bgfx controls continue to cover both native index
+  widths, topology/range behavior that does not depend on the still-open REMED-GFX-107 offsets,
+  empty uploads, and explicit DrawUser `VertexDeclaration` propagation. Nonzero `startIndex` and
+  positive `baseVertex` remain cross-backend controls only; REMED-GFX-107 was not changed here.
+- DrawUser ownership coverage mutates its non-indexed and indexed source arrays after submission
+  and verifies exact red/lime/blue pixels, including the explicit-declaration overload.
+- OpenGL and Vulkan each pass the 33-test focused indexed/empty-upload selection. All A→B→A
+  samples are exact. Vulkan ran with `VK_LAYER_KHRONOS_validation`; the complete 215-line output
+  contained no VUID, validation warning, or validation error.
+- Bgfx view/transform/target controls also pass on both routes:
+  `cna_test_bgfx_multi_viewport` 15/15,
+  `cna_test_bgfx_spritebatch_transform` 21/21, and
+  `cna_test_bgfx_rendertarget_effect_texture` 32/32.
+- Resource cardinality across 32 repeated A→B→A frames was:
+  process baseline vertex/index `0/0`, two live public buffers `1/1`, warm high-water `1/1`,
+  post-fence `1/1`, and post-dispose `0/0` on both Bgfx routes. This proves that versions retire
+  through the existing frame fence and do not grow without bound.
+
+### Controls, sanitizers, and builds
+
+- Equivalent semantic controls pass on Vulkan 9/9 (with validation), WebGPU 9/9, EasyGL 9/9,
+  Software 5/5, D3D9/DXVK 7/7, and D3D11/DXVK 7/7. The two D3D dynamic-streaming variants expose
+  those backends' separate pre-existing semantics and are not attributed to Bgfx. SDL_GPU cannot
+  run the exact shared pixel suite because its public `ReadBackbuffer` is not implemented; its
+  practical draw-order control passes 2/2.
+- Focused Bgfx ASan and UBSan selections each pass 9/9 with no sanitizer finding. ASan used
+  leak detection disabled for the graphics process and halt-on-error enabled; UBSan used
+  halt-on-error and stack traces.
+- All fourteen backend-library targets compile incrementally with `-j4`: ASCII, Bgfx, Canvas,
+  D3D11, D3D12, D3D9, EasyGL, DX3, Headless, SDL_GPU, SDL_Renderer, Software, Vulkan, and WebGPU.
+  Persistent build directories and ccache were reused; no build directory was cleaned and no
+  build tree was created under `/tmp`, `/var/tmp`, or `/dev/shm`.
+
+### Commits
+
+- `524fc3bf` — `test(Task REMED-GFX-109): expose Bgfx buffer update aliasing`
+- `f117d12d` — `fix(Task REMED-GFX-109): version submitted Bgfx buffers`
+- `b71a4276` — `test(Task REMED-GFX-109): cover immutable Bgfx buffer versions`
 
 ## REMED-GFX-106 — Bgfx/Software indexed parity reconciliation (DONE AS A RECONCILED PARENT 2026-07-26)
 
