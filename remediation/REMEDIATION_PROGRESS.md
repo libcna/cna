@@ -2455,7 +2455,13 @@ existing task.
 | REMED-GFX-103 | VertexBuffer's typed SetData overloads formed `data + startIndex`, passed an empty packed vector's `data()`, called zero-length `memcpy`, and dispatched the empty upload; WebGPU rejected a null vertex pointer before count and a non-null empty upload allocated/wrote/mutated backend state. DynamicVertexBuffer shares the same implementation. | MEDIUM | P2 | REMED-GFX-054 narrow VertexBuffer sibling inventory | **DONE 2026-07-26 — shared validation now precedes an empty no-op; logical zero capacity and exact shadows are preserved; WebGPU real writes use internal four-byte native padding; focused native, sanitizer, rendering, regression, and eight-backend parity runs pass.** |
 | REMED-GFX-104 | WebGPU deferred indexed replay preserves exact logical bytes/counts and snapshots `startIndex`/`baseVertex`; native allocation/write padding is internal, zero initialized, and compliant with wgpu-native's four-byte queue-copy rule. | MEDIUM | P2 | REMED-GFX-103 indexed-draw verification | **DONE 2026-07-26 — ODD/EVEN 16-BIT, 32-BIT, STATIC/DYNAMIC, DRAWUSER, A→B→A, LIFETIME, PIXEL, NATIVE-SCOPE, SANITIZER, AND PARITY COVERAGE PASS.** |
 | REMED-GFX-105 | WebGPU indexed triangle-strip replay binds a `Uint16` index buffer to a render pipeline whose `stripIndexFormat` is `None`, producing a native command-encoder validation error. | MEDIUM | P2 | REMED-GFX-104 native-scope expansion | **DONE 2026-07-26 — DEFERRED INDEXED STRIPS NOW SELECT/CACHE THE PIPELINE BY CAPTURED `UINT16`/`UINT32`; NON-INDEXED STRIPS AND LIST/POINT TOPOLOGIES REMAIN `UNDEFINED`; NATIVE VALIDATION, EXACT PIXELS, CACHE CARDINALITY, SANITIZERS, AND BACKEND CONTROLS PASS.** |
-| REMED-GFX-106 | Bgfx and Software produce backend-specific indexed pixel failures for nonzero indexed parameters and/or deferred multi-draw controls that pass WebGPU, Vulkan, EasyGL, D3D9, and D3D11. | MEDIUM | P2 | REMED-GFX-104 backend parity | **OPEN — RECORDED FOR INDEPENDENT REPRODUCTION; NO NON-WEBGPU BACKEND CHANGE.** |
+| REMED-GFX-106 | Bgfx and Software produce backend-specific indexed pixel failures for nonzero indexed parameters and/or deferred multi-draw controls that pass WebGPU, Vulkan, EasyGL, D3D9, and D3D11. | MEDIUM | P2 | REMED-GFX-104 backend parity | **DONE 2026-07-26 AS A RECONCILED PARENT — SIX INDEPENDENT FINDINGS ARE ALLOCATED AS REMED-GFX-107..112; NO CHILD PRODUCTION FIX WAS COMBINED INTO THIS TASK.** |
+| REMED-GFX-107 | Bgfx effect-aware indexed draws bind complete buffers instead of the requested first index, base vertex, and topology-derived index count. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX RANGE-BINDING CORRECTION.** |
+| REMED-GFX-108 | Bgfx declared 32-bit index buffers inherit the default 16-bit backend creation path. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX NATIVE FORMAT CORRECTION.** |
+| REMED-GFX-109 | Bgfx same-handle index updates before a deferred frame overwrite bytes needed by earlier queued draws. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT BGFX BUFFER-VERSIONING/CAPTURE CORRECTION.** |
+| REMED-GFX-110 | Software indexed rasterization ignores `startIndex` and positive `baseVertex`. | MEDIUM | P2 | REMED-GFX-106 reconciliation | **OPEN — INDEPENDENT SOFTWARE ADDRESSING/BOUNDS CORRECTION.** |
+| REMED-GFX-111 | Bgfx maps `PointListEXT` through its triangle-list default rather than point topology or an explicit rejection. | LOW-MEDIUM | P2 | REMED-GFX-106 topology matrix | **OPEN — INDEPENDENT SHARED BGFX TOPOLOGY-MAPPING CORRECTION.** |
+| REMED-GFX-112 | Vulkan's indexed strip control emits an unaligned 32-bit index-buffer binding-offset validation message while pixels pass. | MEDIUM | P2 | REMED-GFX-106 semantic controls | **OPEN — INDEPENDENT VULKAN REPRODUCTION REQUIRED.** |
 
 #### REMED-BUILD-010 detail
 
@@ -8737,6 +8743,149 @@ GFX-103 and was subsequently completed in its own remediation.
 - `b4c3dcf8 fix(Task REMED-GFX-103): make empty vertex uploads safe and aligned`
 - `05d8eaa9 test(Task REMED-GFX-103): cover vertex upload ranges`
 - `docs(remediation): record GFX-103 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+## REMED-GFX-106 — Bgfx/Software indexed parity reconciliation (DONE AS A RECONCILED PARENT 2026-07-26)
+
+### Classification
+
+GFX-106 is **not one shared public-contract defect**. Exact reproduction separated the original
+observation into independent production causes:
+
+- Bgfx does not bind the requested indexed range, positive base vertex, or topology-derived index
+  count (REMED-GFX-107).
+- Bgfx does not create a native 32-bit index buffer for the public 32-bit path
+  (REMED-GFX-108).
+- Bgfx does not preserve an earlier draw's index bytes when the same buffer handle is updated and
+  reused before the deferred frame executes (REMED-GFX-109).
+- Software's two indexed triangle-list raster paths independently ignore `startIndex` and
+  `baseVertex` (REMED-GFX-110).
+- Bgfx's shared topology mapper independently approximates `PointListEXT` as triangle-list state
+  (REMED-GFX-111).
+
+The required cross-backend run also exposed a separate Vulkan native validation result, allocated
+as REMED-GFX-112. None of these corrections can honestly be made as one GFX-106 production fix.
+GFX-106 is therefore closed as a reconciled parent, and the independent children remain OPEN.
+No Bgfx, Software, Vulkan, shared draw API, or other production source changed in this task.
+
+There were also two test-harness assumptions. The former `startIndex` pixel probe placed both
+triangles at the same position, so a backend that drew the whole buffer still ended on the expected
+green triangle. The former Bgfx strip control asserted only that the calls did not throw, so its
+32-bit element interpretation was never sampled. Commit `e352f831` temporarily activated distinct
+backend reproducers; `387a5768` retains the strengthened exact shared controls and explicit
+capability-boundary tests without converting an OPEN child defect into an accepted result.
+
+### Exact CNA/FNA contract established
+
+- `baseVertex` is the signed addend applied to each decoded index before vertex fetch. CNA's
+  current public validation rejects negative values, while positive values must be honored.
+- `startIndex` is the first logical index element consumed from the bound buffer. It is an element
+  offset, not a byte offset, vertex offset, or source-array offset.
+- `minVertexIndex` and `numVertices` describe the referenced vertex range for
+  validation/optimization. They do not add to index values, change `startIndex`, or replace the
+  topology-derived index count. GFX-106 used the nontrivial `(3, 3)` range without reinterpreting it.
+- `primitiveCount` remains a primitive count. The exact logical index count is `3*n` for
+  `TriangleList`, `n+2` for `TriangleStrip`, `2*n` for `LineList`, `n+1` for `LineStrip`, and `n`
+  for `PointListEXT`.
+- A buffer declared `SixteenBits` is decoded as 16-bit elements and a buffer declared
+  `ThirtyTwoBits` as 32-bit elements. Width never changes `primitiveCount`, `startIndex`, or
+  `baseVertex`.
+- Each `DrawIndexedPrimitives` call owns the scalar values supplied for that call. If a backend
+  defers execution, a later draw or binding must not replace an earlier draw's range, count, width,
+  buffer identity, or bytes.
+- CNA exposes no public indexed multi-draw API. The tested “multi-draw” case is three separate
+  public `DrawIndexedPrimitives` calls in A → B → A order; it is not a hidden count/offset array API.
+- Typed and explicit-declaration `DrawUserIndexedPrimitives` first copy exactly the caller-selected
+  vertex and index slices. The temporary backend draw starts at index zero with base zero and must
+  remain valid after caller arrays and temporary public objects cease to be live.
+
+### Exact pre-correction results
+
+The distinctive range probe used three separated visible triangles and a nine-element 16-bit
+buffer: lime prefix, red selected middle range, blue suffix. Only red was legal.
+
+- Software rendered the lime prefix `(0,255,0,255)`, left the selected red sample black, and left
+  the suffix black. Its positive-base probe rendered red `(255,0,0,255)` instead of blue
+  `(0,0,255,255)`. Its independent 32-bit-width, A → B → A, DrawUser offset/declaration/lifetime,
+  primitive-count, and empty-buffer controls passed.
+- Bgfx OpenGL and Bgfx Vulkan produced the same results: the selected red triangle rendered, but
+  both forbidden decoys also rendered because the complete index buffer was bound. Positive base
+  rendered red instead of blue. The independent 32-bit persistent probe was black instead of blue;
+  the 32-bit strip sample was `(34,0,221,255)` instead of `(0,0,255,255)`; and the DrawUser 32-bit
+  sample was black while both 16-bit DrawUser samples (including the explicit GFX-043 declaration)
+  were exact.
+- In Bgfx's A → B → A content probe, the first A red sample was black while B lime and the second
+  A blue sample were exact. The first and last calls used an exactly sized three-index range, so
+  range/count/base/width cannot explain that isolated loss; updating the reused A handle before
+  `bgfx::frame()` is the independent cause boundary.
+- Bgfx rendered exact red/lime/blue/yellow pixels for indexed `TriangleList`, `TriangleStrip`,
+  `LineList`, and `LineStrip` on both OpenGL and Vulkan routes. An indexed one-point
+  `PointListEXT` draw produced exactly zero white pixels instead of one because the mapper's
+  default is triangle-list state.
+- Software explicitly threw for indexed `TriangleStrip`, `LineList`, `LineStrip`, and
+  `PointListEXT`; its documented v1 indexed capability remains `TriangleList` only. No unsupported
+  topology was accepted through an approximate geometry path.
+
+### Allocated independent findings
+
+- **REMED-GFX-107:** Bgfx range/base/count binding. The effect-aware path calls the whole-buffer
+  `setVertexBuffer`/`setIndexBuffer` overloads despite receiving `GpuDrawParams.startIndex` and
+  `.baseVertex`; `primitiveCount` reaches topology state but not the index binding count.
+- **REMED-GFX-108:** Bgfx 32-bit creation. `CreateIndexBuffer32` falls through the common default to
+  `CreateIndexBuffer16`, so `SetData32` uploads four-byte values to a native handle created without
+  `BGFX_BUFFER_INDEX32`.
+- **REMED-GFX-109:** Bgfx same-handle content capture. The CPU copies are exact, different buffer
+  objects and DrawUser temporary lifetimes work, but multiple updates of one handle before the
+  deferred frame leave the earlier draw without its call-time bytes.
+- **REMED-GFX-110:** Software addressing and bounds. Both indexed loops call `readIndex(i*3+k)` and
+  fetch `vb[index]`; they need independent `startIndex` addressing, positive-base addition, and
+  matching available-range checks.
+- **REMED-GFX-111:** Bgfx point topology. `ToTopologyFlag` handles triangle strip, line list, and
+  line strip, then uses triangle list as its default. Because this mapper is shared by indexed and
+  non-indexed draws, the correction is broader than GFX-106 parameter parity.
+- **REMED-GFX-112:** Vulkan binding alignment. The indexed 16 → 32 → 16 strip control renders exact
+  pixels but reports `VUID-vkCmdBindIndexBuffer-offset-08783`: offset 6 is not aligned for
+  `VK_INDEX_TYPE_UINT32`. No Vulkan source was inspected or changed under the Bgfx/Software-only
+  GFX-106 scope.
+
+### Permanent controls and verification
+
+`IndexedDrawDeferredTests.cpp` now permanently separates 16-bit positive-base behavior from
+32-bit element-width behavior, uses visible prefix/suffix decoys for `startIndex` and
+`primitiveCount`, reads each deferred scene once, and makes exact RGBA assertions. It also locks
+Bgfx's four working indexed topologies and Software's explicit triangle-list-only boundary.
+
+Shared exact-pixel controls pass:
+
+- WebGPU **14/14**;
+- Vulkan, EasyGL, D3D9, and D3D11 **8/8** each (D3D through Wine);
+- SDL_GPU practical strip/public-validation controls **2/2**.
+
+Final unaffected-backend controls pass:
+
+- Bgfx OpenGL **39/39** indexed count/argument/empty-buffer/topology controls;
+- Bgfx Vulkan **3/3** permanent indexed topology/public-validation controls;
+- Software **40 passed, 1 intentional strip skip** across the complete indexed count, argument,
+  empty-buffer, deferred, DrawUser, and capability-boundary set.
+
+Focused sanitizers pass:
+
+- Software UBSan **25 passed, 1 intentional strip skip**, including GFX-054/GFX-103 empty-buffer
+  controls and the complete permanent Software indexed set;
+- Vulkan ASan **29/29** with external Vulkan-driver leak detection disabled; no address error was
+  reported. The separately allocated native validation message remains visible.
+
+GFX-043 explicit declaration propagation, GFX-054/GFX-103 empty-buffer behavior, GFX-104 logical
+range/alignment semantics, and GFX-105 strip pipeline compatibility were not changed. All fourteen
+backend libraries compile sequentially with at most four jobs: ASCII, Bgfx, Canvas, D3D9, D3D11,
+D3D12, EasyGL, DX3, Headless, SDL_GPU, SDLRenderer, Software, Vulkan, and WebGPU.
+
+**Commits:**
+
+- `e352f831 test(Task REMED-GFX-106): separate indexed parity discrepancies`
+- `387a5768 test(Task REMED-GFX-106): retain exact indexed contract controls`
+- `docs(remediation): reconcile GFX-106 findings` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
 
