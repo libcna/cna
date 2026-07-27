@@ -1,7 +1,9 @@
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 
 #include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -297,12 +299,16 @@ namespace CNA::Internal::Backends::Software
         /// At the very edge of the texture, clamping collapses both interpolation endpoints to the
         /// same texel, so this degrades cleanly to the old nearest-neighbor result right at the
         /// boundary rather than blending with a wrapped-around texel.
-        void SampleBilinear(const SoftwareTextureBackend& texture, float u, float v,
+        ///
+        /// REMED-GFX-124: takes the SoftwareColorSurface capability rather than the concrete
+        /// SoftwareTextureBackend, so a finished RenderTarget2D samples through this exact path --
+        /// same filtering, same clamping, same sampler semantics as any other Software texture.
+        void SampleBilinear(const SoftwareColorSurface& texture, float u, float v,
                            float& r, float& g, float& b, float& a)
         {
-            const int texW = std::max(1, texture.GetWidth());
-            const int texH = std::max(1, texture.GetHeight());
-            const auto& pixels = texture.Pixels();
+            const int texW = std::max(1, texture.ColorWidth());
+            const int texH = std::max(1, texture.ColorHeight());
+            const auto& pixels = texture.ColorPixels();
 
             const float tx = u * static_cast<float>(texW) - 0.5f;
             const float ty = v * static_cast<float>(texH) - 0.5f;
@@ -795,8 +801,10 @@ namespace CNA::Internal::Backends::Software
         struct ShadedContext
         {
             const GpuDrawParams& params;
-            const SoftwareTextureBackend* texture0;
-            const SoftwareTextureBackend* texture1;
+            // REMED-GFX-124: resolved through the SoftwareColorSurface capability, so an ordinary
+            // texture and a finished render target are indistinguishable to every consumer below.
+            const SoftwareColorSurface* texture0;
+            const SoftwareColorSurface* texture1;
             const SoftwareTextureCubeBackend* envMap;
             bool useDualTexture;
             bool useEnvMap;
@@ -962,8 +970,11 @@ namespace CNA::Internal::Backends::Software
                                      int colorWriteMask, unsigned int multiSampleMask,
                                      bool wireframe = false, unsigned edgeMask = kEdgeAll)
         {
-            const auto* texture0 = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
-            const auto* texture1 = dynamic_cast<const SoftwareTextureBackend*>(params.texture1);
+            // REMED-GFX-124: the cast target is the colour-storage capability, not a concrete
+            // backend class, so both a SoftwareTextureBackend and a SoftwareRenderTargetBackend
+            // resolve here. A foreign backend still resolves to nullptr exactly as before.
+            const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
+            const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
             const auto* envMap = dynamic_cast<const SoftwareTextureCubeBackend*>(params.envMap);
             const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
             const bool useEnvMap = params.envMapping && envMap != nullptr;
@@ -1391,6 +1402,60 @@ namespace CNA::Internal::Backends::Software
         framebuffer_.color.assign(rgba, rgba + byteCount);
     }
 
+    void SoftwareRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                              void* data, int dataLength) const
+    {
+        if (data == nullptr)
+            throw System::ArgumentNullException("data");
+        if (level < 0)
+            throw System::ArgumentOutOfRangeException(
+                "level", std::to_string(level), "level must not be negative.");
+        // Software stores level 0 only (no mip generation in v1 -- SoftwareTextureBackend::
+        // UpdatePixelsLevel sets the same precedent). Reject rather than return the caller's
+        // buffer unchanged, so a mip request is never mistaken for a successful readback.
+        if (level > 0)
+            throw System::NotSupportedException(
+                "SoftwareRenderTargetBackend::GetData: the Software backend stores mip level 0 "
+                "only; level " + std::to_string(level) + " was requested.");
+        if (w <= 0 || h <= 0)
+            throw System::ArgumentOutOfRangeException(
+                "w", std::to_string(w) + "x" + std::to_string(h),
+                "The requested rectangle must have a positive width and height.");
+        // 64-bit throughout, so a rectangle near INT_MAX cannot wrap into an apparently valid one.
+        const std::int64_t right = static_cast<std::int64_t>(x) + static_cast<std::int64_t>(w);
+        const std::int64_t bottom = static_cast<std::int64_t>(y) + static_cast<std::int64_t>(h);
+        if (x < 0 || y < 0 ||
+            right > static_cast<std::int64_t>(framebuffer_.width) ||
+            bottom > static_cast<std::int64_t>(framebuffer_.height))
+            throw System::ArgumentOutOfRangeException(
+                "rect",
+                std::to_string(x) + "," + std::to_string(y) + "," + std::to_string(w) + "," +
+                    std::to_string(h),
+                "The requested rectangle leaves the " + std::to_string(framebuffer_.width) + "x" +
+                    std::to_string(framebuffer_.height) + " render target.");
+        const std::int64_t requiredBytes =
+            static_cast<std::int64_t>(w) * static_cast<std::int64_t>(h) * 4;
+        if (static_cast<std::int64_t>(dataLength) < requiredBytes)
+            throw System::ArgumentOutOfRangeException(
+                "dataLength", std::to_string(dataLength),
+                "The destination holds fewer than the " + std::to_string(requiredBytes) +
+                    " bytes the requested rectangle needs.");
+
+        // The colour attachment is the ONLY storage read here -- framebuffer_.depthBuffer is never
+        // consulted, so depth/stencil content can never leak through a colour readback.
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t srcOffset =
+                (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(framebuffer_.width) +
+                 static_cast<std::size_t>(x)) * 4u;
+            std::copy(framebuffer_.color.begin() + static_cast<std::ptrdiff_t>(srcOffset),
+                      framebuffer_.color.begin() + static_cast<std::ptrdiff_t>(srcOffset + rowBytes),
+                      dst + static_cast<std::size_t>(row) * rowBytes);
+        }
+    }
+
     // ---- SoftwareEffectBackend ----
 
     bool SoftwareEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
@@ -1445,8 +1510,6 @@ namespace CNA::Internal::Backends::Software
     {
         if (!begun_)
             throw std::runtime_error("SoftwareSpriteBatchBackend::Draw: Draw() called before Begin()");
-
-        const auto* swTexture = dynamic_cast<const SoftwareTextureBackend*>(&texture);
 
         const float texW = static_cast<float>(std::max(1, texture.GetWidth()));
         const float texH = static_cast<float>(std::max(1, texture.GetHeight()));
@@ -1529,7 +1592,11 @@ namespace CNA::Internal::Backends::Software
         const RasterClipRect clip = ScissorClip(ViewportClip(fb, vpX, vpY, vpW, vpH),
                                                 owner_.IsScissorTestEnabled(), scX, scY, scW, scH);
         GpuDrawParams spriteParams;
-        spriteParams.texture0 = swTexture;
+        // REMED-GFX-124: hand the sprite's texture on as the plain backend handle and let
+        // RasterizeTriangleShaded resolve the colour-storage capability, so this path has no second,
+        // narrower notion of "a Software texture" that could reject a finished render target after
+        // the shared one already accepted it.
+        spriteParams.texture0 = &texture;
         spriteParams.textureEnabled = true;
         // REMED-GFX-082: honor RasterizerState.FillMode for the sprite's two quad triangles too. Each
         // draws ALL THREE of its edges (kEdgeAll), so a wireframe sprite shows its quad outline plus

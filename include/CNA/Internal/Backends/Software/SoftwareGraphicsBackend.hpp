@@ -78,7 +78,38 @@ namespace CNA::Internal::Backends::Software
         std::vector<std::uint8_t> data_;
     };
 
-    class SoftwareTextureBackend : public ITextureBackend
+    /**
+     * @brief Read-only access to one Software resource's RGBA8 colour storage.
+     *
+     * REMED-GFX-124: every Software colour CONSUMER (the rasterizer's texture sampler, the
+     * SpriteBatch quad path, render-target readback) binds to this capability instead of to a
+     * concrete backend class. Before this, the sampler `dynamic_cast`ed straight to
+     * `SoftwareTextureBackend`, which a `SoftwareRenderTargetBackend` is not -- so a finished render
+     * target resolved as a null texture and shaded untextured white, even though its pixels were
+     * sitting in CPU memory the whole time.
+     *
+     * There is exactly ONE colour buffer per resource and this interface only exposes it: a texture
+     * reports its own `pixels_`, a render target reports its framebuffer's `color`. Nothing is
+     * copied, mirrored or resolved to make a target sampleable, and the const reference keeps
+     * consumers from writing through it (a target's colour storage stays writable only through the
+     * raster/Clear paths, so active-target validation cannot be bypassed by holding this).
+     */
+    class SoftwareColorSurface
+    {
+    public:
+        virtual ~SoftwareColorSurface() = default;
+        /** @brief Width in pixels of the colour storage. */
+        [[nodiscard]] virtual int ColorWidth() const = 0;
+        /** @brief Height in pixels of the colour storage. */
+        [[nodiscard]] virtual int ColorHeight() const = 0;
+        /**
+         * @brief The resource's RGBA8 pixels, row-major, top row first, ColorWidth()*4 bytes per row.
+         * @return A reference to the resource's own storage -- never a copy.
+         */
+        [[nodiscard]] virtual const std::vector<std::uint8_t>& ColorPixels() const = 0;
+    };
+
+    class SoftwareTextureBackend : public ITextureBackend, public SoftwareColorSurface
     {
     public:
         explicit SoftwareTextureBackend(const ImageData& data);
@@ -90,9 +121,11 @@ namespace CNA::Internal::Backends::Software
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
-        /// Real RGBA8 pixel storage -- the rasterizer's texture sampler (Phase S5) reads
-        /// directly from here.
-        [[nodiscard]] const std::vector<std::uint8_t>& Pixels() const { return pixels_; }
+        // SoftwareColorSurface -- real RGBA8 pixel storage, which the rasterizer's texture sampler
+        // (Phase S5) reads directly from.
+        [[nodiscard]] int ColorWidth() const override { return width_; }
+        [[nodiscard]] int ColorHeight() const override { return height_; }
+        [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels() const override { return pixels_; }
 
     protected:
         int width_ = 0;
@@ -100,7 +133,7 @@ namespace CNA::Internal::Backends::Software
         std::vector<std::uint8_t> pixels_;
     };
 
-    class SoftwareRenderTargetBackend final : public IRenderTargetBackend
+    class SoftwareRenderTargetBackend final : public IRenderTargetBackend, public SoftwareColorSurface
     {
     public:
         SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap, int multiSampleCount);
@@ -109,11 +142,47 @@ namespace CNA::Internal::Backends::Software
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
+        /**
+         * @brief Copies a sub-rectangle of the rendered colour attachment into @p data as RGBA8.
+         *
+         * REMED-GFX-124: without this override the call reached `ITextureBackend::GetData`'s default
+         * no-op. That was not merely a missing feature -- `Texture2D::GetData`'s render-target
+         * fallback hands the backend a scratch buffer it zero-initialized itself and then converts
+         * those bytes for the caller, so a no-op backend produced a fabricated, fully written,
+         * uniformly transparent-black frame rather than an obviously empty result.
+         *
+         * Reads the colour attachment only; the depth buffer is never consulted. Rows are returned
+         * top-first, matching this backend's framebuffer layout and `ReadBackbuffer`, so no flip is
+         * applied. An unsupported or out-of-range request throws instead of leaving caller memory
+         * silently unchanged.
+         *
+         * @param level      Mip level; Software stores level 0 only.
+         * @param x          Left edge of the requested rectangle, in pixels.
+         * @param y          Top edge of the requested rectangle, in pixels.
+         * @param w          Width of the requested rectangle, in pixels.
+         * @param h          Height of the requested rectangle, in pixels.
+         * @param data       Destination for @p w * @p h tightly packed RGBA8 pixels.
+         * @param dataLength Capacity of @p data in bytes.
+         * @throws System::ArgumentNullException if @p data is null.
+         * @throws System::NotSupportedException if @p level is above 0.
+         * @throws System::ArgumentOutOfRangeException if @p level is negative, the rectangle is
+         *         empty or leaves the target, or @p dataLength is too small for the rectangle.
+         */
+        void GetData(int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
         void BindAsRenderTarget() override { bound_ = true; }
         void UnbindAsRenderTarget() override { bound_ = false; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         { return depthFormatWasRequested; }
+
+        // SoftwareColorSurface -- the SAME storage the rasterizer writes into. A finished target is
+        // sampleable with no resolve, no shadow copy and no extra allocation; there is no second
+        // colour buffer that could drift out of sync with what was rendered.
+        [[nodiscard]] int ColorWidth() const override { return framebuffer_.width; }
+        [[nodiscard]] int ColorHeight() const override { return framebuffer_.height; }
+        [[nodiscard]] const std::vector<std::uint8_t>& ColorPixels() const override
+        { return framebuffer_.color; }
 
         [[nodiscard]] bool IsBound() const { return bound_; }
         [[nodiscard]] SoftwareFramebuffer& Framebuffer() { return framebuffer_; }
