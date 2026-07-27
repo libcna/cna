@@ -2468,11 +2468,13 @@ existing task.
 | REMED-GFX-116 | WebGPU's deferred 3D render pass resolves `GraphicsDevice.Viewport` live at flush time instead of capturing it per queued draw. | MEDIUM | P2 | REMED-GFX-111 viewport control | **OPEN — SAME CLASS AS REMED-GFX-062/063/064/065; THE SPRITEBATCH PATH WAS FIXED UNDER REMED-GFX-072, THE 3D PATH WAS NOT.** |
 | REMED-GFX-117 | SDL_GPU passes literal `0` for `first_index`/`vertex_offset` at all eight native indexed draw sites, dropping public `startIndex`/`baseVertex`. | MEDIUM | P2 | REMED-GFX-111 SDL_GPU control | **DONE 2026-07-27 — ALL EIGHT SITES NOW RESOLVE `first_index = startIndex` (INDEX ELEMENTS) AND `vertex_offset = baseVertex` (APPLIED ONCE) THROUGH ONE SHARED `ResolveIndexedRange`, CARRIED BY VALUE ON EACH DEFERRED DRAW COMMAND; 16-/32-BIT, STATIC/DYNAMIC, ALL FIVE TOPOLOGIES, ALL EIGHT PIPELINE FAMILIES, DRAWUSER, A→B→A, TARGETS, STATE, INVALID-RANGE REJECTION, SANITIZERS, CLEAN VALIDATION AND EIGHT CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-118 | Bgfx `DrawInstancedPrimitivesEx` binds complete vertex and index buffers, dropping public `baseVertex`, `startIndex` and the topology-derived index count. | MEDIUM | P2 | REMED-GFX-113 draw-path inventory | **DONE 2026-07-27 — THE INSTANCED PATH NOW BINDS `setIndexBuffer(handle, startIndex, PrimitiveVerts)` AND `setVertexBuffer(0, handle, baseVertex, remainder)`, THE SAME EXACT-RANGE MODEL REMED-GFX-107 ESTABLISHED; `GraphicsDevice::DrawInstancedPrimitives` GAINED THE MATCHING 64-BIT PUBLIC GUARD PLUS AN INSTANCE-STREAM CAPACITY CHECK; 16-/32-BIT, STATIC/DYNAMIC, EVERY MAPPED TOPOLOGY, A→B→A, TARGETS, STATE, CARDINALITY, BOTH RENDERER ROUTES, SANITIZERS AND FIVE CROSS-BACKEND CONTROLS PASS.** |
-| REMED-GFX-119 | Software's non-indexed raster paths never apply `vertexStart`; they read from element zero and only enforce `primitiveCount` against the buffer size. | MEDIUM | P2 | REMED-GFX-113 cross-backend controls | **OPEN — SOFTWARE COUNTERPART OF REMED-GFX-113'S OFFSET HALF; PINNED BY A COMMITTED CURRENT-BEHAVIOUR TEST.** |
+| REMED-GFX-119 | Software's non-indexed raster paths never apply `vertexStart`; they read from element zero and only enforce `primitiveCount` against the buffer size. | MEDIUM | P2 | REMED-GFX-113 cross-backend controls | **DONE 2026-07-27 — `DrawPrimitivesEx` NOW FETCHES VERTEX `vertexStart + local` FOR `local` IN `[0, PrimitiveElementCount)`, WITH `vertexStart` A VERTEX-ELEMENT OFFSET AND THE STRIDE MULTIPLY ONLY AFTER VALIDATION; BOTH NON-INDEXED CPU PATHS SHARE ONE 64-BIT `ValidateNonIndexedAddressing` THAT REJECTS RATHER THAN CLAMPS BEFORE ANY STORAGE ACCESS; `primitiveCount` WAS MEASURED ALREADY CORRECT AND ONLY THE OFFSET WAS LOST; DRAWUSER PRESERVED AS THE ORACLE; THREE STRIDES, STATIC/DYNAMIC, TWO-BUFFER A→B→A, VALID→INVALID→VALID, TOPOLOGY REJECTION, SANITIZERS AND NINE CROSS-BACKEND CONTROLS PASS.** |
 | REMED-GFX-120 | SDL_GPU's point-topology graphics pipelines raise `VUID-VkGraphicsPipelineCreateInfo-topology-08773` because its SPIR-V vertex shaders write no `PointSize`. | MEDIUM | P2 | REMED-GFX-117 validation inspection | **OPEN — SDL_GPU COUNTERPART OF REMED-GFX-115; PIXELS CORRECT ON THE TESTED DRIVER, POINT SIZE FORMALLY UNDEFINED WITHOUT `maintenance5`.** |
 | REMED-GFX-121 | Bgfx's non-GLSL renderers transpose the per-instance world matrix: `vs_instanced3d.sc` builds it with the raw `mat4(i_data0..i_data3)` constructor instead of bgfx's `mtxFromCols()`. | MEDIUM | P2 | REMED-GFX-118 Vulkan route | **OPEN — A/B-PROVEN PRE-EXISTING; INSTANCE 0 IS CORRECT AND EVERY LATER INSTANCE IS PROJECTED SOMEWHERE UNPREDICTABLE ON GENUINE BGFX VULKAN; PINNED BY A COMMITTED PER-RENDERER TEST.** |
 | REMED-GFX-122 | EasyGL's stock (non-custom-effect) instanced branch ignores `params.startIndex`, `params.baseVertex` and `params.instanceVb` entirely. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — EASYGL COUNTERPART OF REMED-GFX-118 PLUS A DROPPED PER-INSTANCE STREAM; PINNED BY A COMMITTED CURRENT-BEHAVIOUR TEST.** |
 | REMED-GFX-123 | D3D11 and D3D12 issue `DrawIndexedInstanced(indexCount, instanceCount, 0, 0, 0)`, dropping public `startIndex` and `baseVertex` on the instanced path. | MEDIUM | P2 | REMED-GFX-118 cross-backend controls | **OPEN — REMED-GFX-020/060'S OFFSET DEFECT IN THE ONE D3D PATH THOSE TASKS DID NOT COVER; D3D11 MEASURED 3/16 UNDER WINE+DXVK, D3D12 INSPECTION-ONLY.** |
+| REMED-GFX-124 | Software render targets are write-only: `SoftwareRenderTargetBackend` implements no `ITextureBackend::GetData` and is not a `SoftwareTextureBackend`, so a target can be neither read back nor sampled. | MEDIUM | P2 | REMED-GFX-119 render-target control | **OPEN — `RenderTarget2D::GetData` SILENTLY LEAVES THE CALLER'S BUFFER UNTOUCHED (AN ASSERTION CAN PASS ON AN EMPTY FRAME) AND SAMPLING THE TARGET DRAWS UNTEXTURED WHITE; CAST IS `dynamic_cast`, SO NOT UB.** |
+| REMED-GFX-125 | The XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`, which includes the `IVertexType` virtual base's vtable, so the declared `VertexStride` exceeds the GPU layout. | MEDIUM | P2 | REMED-GFX-119 stride coverage | **OPEN — HARMLESS FOR `VertexBuffer::SetData` (IT REPACKS AND UPLOADS ITS OWN STRIDE) BUT WRONG FOR THE EXPLICIT-DECLARATION `DrawUserPrimitives` OVERLOAD, WHICH READS RAW CALLER BYTES AT THE DECLARED STRIDE.** |
 
 #### REMED-BUILD-010 detail
 
@@ -11019,5 +11021,275 @@ settings file). `git clean -xfd` was never run. Every build used `-j4` or fewer.
 - `bd691a09 fix(Task REMED-GFX-118): bind exact Bgfx instanced indexed ranges`
 - `774f1d5f test(Task REMED-GFX-118): cover instancing parameters and deferred capture`
 - `docs(remediation): record GFX-118 completion` (this record)
+
+`git diff --check` is clean and `audit/` is untouched.
+
+---
+
+## REMED-GFX-119 — Software non-indexed vertexStart propagation and bounds (DONE 2026-07-27)
+
+### Classification
+
+**Real defect, MEDIUM, GRAPHICS.** `SoftwareGraphicsBackend::DrawPrimitivesEx` receives the public
+`vertexStart` in `GpuDrawParams` — `GraphicsDevice::DrawPrimitives` has set `p.vertexStart` since
+REMED-GFX-113, and it is the only writer of that field anywhere in the tree — and never read it. It
+addressed the bound buffer with the raw loop ordinal `base + (i * 3 + k) * stride`, so **every
+non-indexed CPU raster draw rendered the element-zero prefix of the bound buffer.** This is the
+Software counterpart of REMED-GFX-113 and the non-indexed sibling of REMED-GFX-110's indexed fix.
+
+The classification was measured, not taken from the finding's title. The fixture is 21 vertices as
+seven single-triangle slots, each slot an exclusive screen region, with magenta decoy geometry on
+both sides of the requested range; a lit slot therefore *is* a consumed primitive, so the recorded
+result names the consumed vertex range rather than one wrong pixel.
+
+| PrimitiveType | logical vertices | vertexStart | primitiveCount | consumed | expected slots | actual slots |
+|---|---|---|---|---|---|---|
+| TriangleList | 21 | 0 | 1 | 3 | 0 | 0 |
+| TriangleList | 21 | 0 | 3 | 9 | 0,1,2 | 0,1,2 |
+| TriangleList | 21 | 0 | 7 | 21 | 0,1,2,3,4,5,6 | 0,1,2,3,4,5,6 |
+| TriangleList | 21 | 9 | 3 | 9 | 3,4,5 | **0,1,2** |
+| TriangleList | 21 | 6 | 3 | 9 | 2,3,4 | **0,1,2** |
+| TriangleList | 21 | 18 | 1 | 3 | 6 | **0** |
+| TriangleList | 21 | 3 | 5 | 15 | 1,2,3,4,5 | **0,1,2,3,4** |
+
+Read off that table, the six required separations are:
+
+1. **A nonzero `vertexStart` is ignored** — the lit set is the element-zero prefix in every offset
+   case.
+2. **`primitiveCount` is independently correct** — the three `vertexStart` 0 cases are exact, and
+   even in the broken cases the consumed *cardinality* is always exactly `primitiveCount`
+   (3 → 3 slots, 1 → 1 slot, 5 → 5 slots). The count half of the contract was never defective.
+3. **The draw begins at vertex zero** — the first lit slot is 0 in every case.
+4. **Unwanted prefix geometry renders** — 16467 magenta pixels for `(6,3)` and 24695 for `(9,3)`.
+5. **Suffix geometry *is* limited by `primitiveCount`** — `(18,1)` lit slot 0 alone, not slots 1–6.
+6. **Nothing else can account for it** — the identical element-zero prefix appeared under CullNone,
+   CullClockwise, depth test and write enabled, AlphaBlend, an explicitly restated full Viewport and
+   Scissor, and a render-target round trip; CullCounterClockwise removed the fixture outright, which
+   proves the cull mode is genuinely applied; and both `DrawUserPrimitives` forms — same rasterizer,
+   same states, same readback — already passed. Neither the rasterizer, the render state, the
+   topology nor the test readback is involved.
+
+### Affected paths — complete inventory
+
+There are exactly seven callers of the two non-indexed backend entry points in the whole tree, and
+`p.vertexStart` has exactly one writer.
+
+| Public entry point | Backend entry point | Receives `vertexStart`? | Verdict |
+|---|---|---|---|
+| `GraphicsDevice::DrawPrimitives` | `DrawPrimitivesEx` | **yes** (`p.vertexStart = vertexStart`) | **AFFECTED — fixed** |
+| `DrawUserPrimitives(type, void*, offset, count)` | `DrawColoredPrimitives` | no — the overload takes no `GpuDrawParams` at all | correct, unchanged |
+| `DrawUserPrimitives(…, VertexPositionColor*, …)` | `DrawPrimitivesEx` | no — default `vertexStart` 0 | correct, unchanged |
+| `DrawUserPrimitives(…, VertexPositionTexture*, …)` | `DrawPrimitivesEx` | no — default 0 | correct, unchanged |
+| `DrawUserPrimitives(…, VertexPositionColorTexture*, …)` | `DrawPrimitivesEx` | no — default 0 | correct, unchanged |
+| `DrawUserPrimitives(…, VertexPositionNormalTexture*, …)` | `DrawPrimitivesEx` | no — default 0 | correct, unchanged |
+| `DrawUserPrimitives(…, explicit VertexDeclaration)` | `DrawPrimitivesEx` | no — default 0 | correct, unchanged |
+
+Every `DrawUser` overload rebases its own source (`data + offset`, or `bytes + offset * stride`) and
+uploads exactly `PrimitiveVerts(type, primitiveCount)` vertices into a temporary buffer, so binding
+that buffer from element zero already *is* the exact range. Applying an offset in the backend as
+well would consume the range twice; all six were left untouched and are retained as the oracle. The
+indexed paths corrected by REMED-GFX-110 are untouched. Software does not override
+`DrawInstancedPrimitivesEx`, so the base class still throws for it.
+
+### Old and corrected addressing
+
+```
+old (DrawPrimitivesEx)        raw = base + (i * 3 + k) * stride
+                              guard: primitiveCount * 3 > vb.GetVertexCount()   // int product, wraps
+
+new (DrawPrimitivesEx)        vertexStart      = params.vertexStart
+                              consumed         = PrimitiveElementCount(primitive, primitiveCount)
+                              ValidateNonIndexedAddressing(vb.GetVertexCount(), consumed, vertexStart)
+                              raw = base + (vertexStart + local) * stride,  local in [0, consumed)
+
+new (DrawColoredPrimitives)   kVertexStart = 0   // no GpuDrawParams; caller already rebased
+                              same validation, same fetch shape
+```
+
+`vertexStart` is a vertex-**element** offset; the stride multiply happens only after the element
+range has been validated, so no invalid pointer into the CPU vertex storage can be formed.
+`IndexedElementCount` was renamed `PrimitiveElementCount` and is now shared by all four paths — XNA
+uses one formula for both kinds of draw, exactly as `GraphicsDevice::CheckedPrimitiveElementCount`
+already documented.
+
+### Topology-count results
+
+Software raster keeps its documented TriangleList-only v1 boundary, so only `TriangleList` is
+implemented and the consumed count is `3 * primitiveCount`. The other four topologies keep their
+explicit `std::runtime_error` rejection and were asserted to render nothing, at both a zero and a
+nonzero offset, rather than being approximated through the triangle path:
+
+| Topology | Software support | Result |
+|---|---|---|
+| TriangleList | yes | `3 * primitiveCount`, exact |
+| TriangleStrip | no | rejected at `vertexStart` 0 and 6, zero pixels |
+| LineList | no | rejected at `vertexStart` 0 and 6, zero pixels |
+| LineStrip | no | rejected at `vertexStart` 0 and 6, zero pixels |
+| PointListEXT | no | rejected at `vertexStart` 0 and 6, zero pixels |
+
+The public `PrimitiveVerts` formulas for all five topologies are still asserted by the unguarded
+`PublicContractValidatesEveryNonIndexedRangeBeforeSubmission`, which runs on every backend.
+
+### Validation rules
+
+`GraphicsDevice::DrawPrimitives` already rejected negative `vertexStart`, non-positive
+`primitiveCount`, a topology-count overflow and any range leaving the bound buffer (REMED-GFX-113).
+The backend now re-asserts the addressing half itself, because the CPU paths address real host
+storage:
+
+| Rejected | Where | Exception |
+|---|---|---|
+| negative `vertexStart` | public + backend | `System::ArgumentOutOfRangeException` |
+| non-positive `primitiveCount` | public + backend | `System::ArgumentOutOfRangeException` / `std::runtime_error` |
+| `vertexStart` past the logical buffer | public + backend | `System::ArgumentOutOfRangeException` |
+| `vertexStart + consumed` past the logical buffer | public + backend | `System::ArgumentOutOfRangeException` |
+| topology-derived count overflow | public + backend | `System::ArgumentOutOfRangeException` |
+| byte-offset multiplication overflow | avoided — the element range is validated in 64-bit before the stride multiply | — |
+| unsupported topology | backend | `std::runtime_error` (unchanged v1 boundary) |
+| unsupported vertex stride | backend | `std::runtime_error` (unchanged) |
+
+Everything is rejected, never clamped, and every check runs before any Software storage is accessed.
+The old backend check threw a `std::runtime_error` from a wrappable `primitiveCount * 3` product;
+it is gone.
+
+### Static / dynamic / DrawUser results
+
+| Path | Result |
+|---|---|
+| static `VertexBuffer`, first/middle/final/interior/whole-buffer ranges | pass |
+| `DynamicVertexBuffer`, nonzero range | pass |
+| `DynamicVertexBuffer` with a `SetData` between two queued draws | pass |
+| static + dynamic buffer alternating A→B→A | pass |
+| `DrawUserPrimitives` typed (`VertexPositionColor`) | pass before and after the fix — oracle |
+| `DrawUserPrimitives` untyped (`void*`, the `DrawColoredPrimitives` caller) | pass before and after — oracle |
+| `DrawUserPrimitives` explicit `VertexDeclaration`, stride 24 | pass before and after — double-apply guard |
+| 20-, 24- and 32-byte layouts requesting the identical element range | pass; all three fail pre-fix |
+
+The stride sweep is what proves the offset scales by the buffer's own declared stride: a hardcoded
+16 satisfies every other test in the file.
+
+### A→B→A
+
+Three draws in one frame, one readback. Single buffer (slots 0 → 3 → 6 at `vertexStart` 0/9/18) and
+two buffers (static A, dynamic B, alternating A → B → A with a different range each time): each draw
+kept its own exact range, no decoy pixel appeared, and the two buffers stayed independent. Software
+executes each draw immediately, so this pins that no range or buffer identity leaks between draws.
+Pre-fix the second and third draws of the two-buffer case both lost their range.
+
+### Invalid range and post-failure reuse
+
+Valid draw → every rejected form (past the end, one primitive too many, negative `vertexStart`,
+zero `primitiveCount`, `TriangleList` with `primitiveCount = INT_MAX`, `PointListEXT` with
+`vertexStart = primitiveCount = INT_MAX`, an unsupported topology) → the identical valid draw again.
+The rejected frame stayed exactly as the clear left it, the second valid draw rendered the same
+range with the same pixel count as the first, and no invalid memory access occurred.
+
+### GFX-030, GFX-110 and other Software regressions
+
+| Regression | Result |
+|---|---|
+| REMED-GFX-030 depth enable/write/CompareFunction, DepthRead, MinDepth/MaxDepth | green |
+| REMED-GFX-083 DepthBias / SlopeScaleDepthBias (`Software_DepthBias`) | green |
+| REMED-GFX-082 FillMode.WireFrame (`Software_Wireframe`) | green |
+| REMED-GFX-079/080 Viewport and ScissorRectangle | green |
+| REMED-GFX-043 explicit `VertexDeclaration` | green |
+| REMED-GFX-103 empty `VertexBuffer` | green |
+| REMED-GFX-110 Software indexed addressing (`Software_IndexedAddressing`) | green, 33/34 with its one documented TriangleStrip skip |
+| `ctest -L Software` | **16/16** |
+| full Software `CnaTests` | **5663 passed of 5708**, 84 skips |
+
+The three full-suite failures are `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly`,
+`GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` and
+`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`. All three were A/B-proven
+pre-existing by rebuilding the two production files at the parent commit and re-running them. A
+fourth, `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`,
+was observed once and proven flaky (pass / fail / pass across three identical runs of the same
+binary); it is a two-process networking test with a 30 s timeout and touches no draw path.
+
+### Sanitizers
+
+Focused ASan and UBSan over the non-indexed range, indexed, explicit-declaration, empty-buffer,
+depth, DrawUser, model and point suites — first/middle/final/invalid ranges, negative `vertexStart`,
+range past the end, topology-count overflow, byte-offset overflow, static and dynamic buffers, three
+strides, and valid → invalid → valid reuse: **358/359 each**, the single failure being the
+pre-existing XNB fuzz test, with zero `ERROR: AddressSanitizer` reports and zero `runtime error`
+lines.
+
+### Cross-backend controls
+
+Only Software production changed. Every other backend ran the same public non-indexed range suite
+from the same file:
+
+| Backend | Result |
+|---|---|
+| Bgfx OpenGL | **17/17** |
+| Bgfx Vulkan | **17/17** |
+| EasyGL | **13/13** |
+| WebGPU | **13/13** |
+| Vulkan | **11/11** |
+| D3D9 (Wine) | **11/11** |
+| D3D11 (Wine + DXVK) | **11/11** |
+| SDL_GPU | **1/1** |
+| Headless | **1/1** |
+| Software | **17/17** (pre-fix 6/15) |
+
+### Allocated independent findings
+
+Neither can honestly be folded into a Software non-indexed addressing correction.
+
+- **REMED-GFX-124** — Software render targets are write-only. `SoftwareRenderTargetBackend`
+  overrides no `ITextureBackend::GetData`, so `RenderTarget2D::GetData` hits the interface's default
+  no-op and silently leaves the caller's buffer untouched; and it is not a `SoftwareTextureBackend`,
+  so the rasterizer's sampler `dynamic_cast`s it to null and draws untextured white instead of the
+  target's contents. Observed directly: a target holding three coloured triangles read back all-zero
+  and sampled as a fully white frame. This task's render-target coverage was rerouted to what
+  Software can actually observe (target isolation plus a round trip), and
+  `NonIndexedRangeHoldsOnRenderTargetAndBackbuffer` skips only its sample-the-target half on this
+  backend.
+- **REMED-GFX-125** — the XNA vertex structs build `getVertexDeclarationStatic()` from `sizeof(T)`,
+  which includes the vtable their `IVertexType` virtual base introduces, so the declared
+  `VertexStride` exceeds the 20/24/32-byte GPU layout the elements describe.
+  `VertexBuffer::SetData` is immune (it repacks into a `GpuVertex` and uploads that stride), but the
+  explicit-declaration `DrawUserPrimitives` overload reads raw caller bytes at the declared stride.
+  Software rejected such a draw outright with its unsupported-stride error, which is the benign
+  outcome; a backend accepting arbitrary strides would read misaligned attributes instead. The
+  stride test packs its source by hand and declares stride 24 explicitly.
+
+### Performance
+
+The correction is checked range selection only. A valid draw adds one 64-bit range check per draw
+and one addition per vertex fetch. No vertex copying, no per-draw heap allocation, no buffer
+recreation, no extra frame, no wait, no synchronization and no cache or pipeline variant keyed on
+`vertexStart`.
+
+### Source, shader and generated artifacts
+
+Two production files changed: `src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp` and
+`include/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp`, plus the one test file. No
+`.sc` shader source, no `bgfx_shaders.hpp`, no HLSL bytecode, no WGSL, no SPIR-V and no other
+generated artifact changed. All fourteen backend libraries compile incrementally.
+
+### Build directories, ccache and storage policy
+
+| Directory | Backend | ccache | Status |
+|---|---|---|---|
+| `cmake-build-software` | SOFTWARE | yes | reused |
+| `cmake-build-software-asan` | SOFTWARE + ASan | yes | reused |
+| `cmake-build-software-ubsan` | SOFTWARE + UBSan | yes | reused |
+| `cmake-build-bgfx` · `cmake-build-debug` (EasyGL) · `cmake-build-vulkan` · `cmake-build-webgpu` · `cmake-build-sdlgpu` · `cmake-build-headless` · `cmake-build-sdlrenderer` · `cmake-build-ascii` · `cmake-build-canvas` · `cmake-build-dx3` · `cmake-build-d3d9-mingw` · `cmake-build-d3d11-mingw` · `cmake-build-d3d12-mingw` | the other thirteen | yes | reused |
+
+No build directory was created, cleaned or recreated; every build was incremental; no build tree was
+created under `/tmp`, `/var/tmp` or `/dev/shm` (only small log files and two throwaway
+`sizeof`-probe translation units in the session scratchpad). `git clean -xfd` was never run and
+`git stash` was never used. Every build used `-j4`. Xvfb `:101` (shared, no auth) served the Software
+and UBSan runs, `:99` the ASan run, and `:0` the Wine D3D9/D3D11 runs; no new Xvfb instance was
+started.
+
+### Commits
+
+- `76260739 test(Task REMED-GFX-119): reproduce Software non-indexed vertex offset loss`
+- `fdf1f5d0 fix(Task REMED-GFX-119): apply Software non-indexed vertex ranges`
+- `a5634131 test(Task REMED-GFX-119): cover range bounds and parity`
+- `docs(remediation): record GFX-119 completion` (this record)
 
 `git diff --check` is clean and `audit/` is untouched.
